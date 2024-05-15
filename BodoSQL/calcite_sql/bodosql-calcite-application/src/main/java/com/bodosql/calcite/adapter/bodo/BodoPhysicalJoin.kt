@@ -81,6 +81,28 @@ class BodoPhysicalJoin(
 
     companion object {
         fun create(
+            cluster: RelOptCluster,
+            traitSet: RelTraitSet,
+            left: RelNode,
+            right: RelNode,
+            condition: RexNode,
+            joinType: JoinRelType,
+            rebalanceOutput: Boolean = false,
+            joinFilterID: Int = -1,
+        ): BodoPhysicalJoin {
+            return BodoPhysicalJoin(
+                cluster,
+                traitSet,
+                left,
+                right,
+                condition,
+                joinType,
+                rebalanceOutput = rebalanceOutput,
+                joinFilterID = joinFilterID,
+            )
+        }
+
+        fun create(
             left: RelNode,
             right: RelNode,
             condition: RexNode,
@@ -88,7 +110,7 @@ class BodoPhysicalJoin(
             joinFilterID: Int = -1,
         ): BodoPhysicalJoin {
             val cluster = left.cluster
-            return BodoPhysicalJoin(cluster, cluster.traitSet(), left, right, condition, joinType, joinFilterID = joinFilterID)
+            return create(cluster, cluster.traitSet(), left, right, condition, joinType, joinFilterID = joinFilterID)
         }
     }
 }

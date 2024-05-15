@@ -2,7 +2,9 @@ package com.bodosql.calcite.rel.core
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalFilter
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalIntersect
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinus
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
@@ -96,7 +98,14 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (input.convention == BodoPhysicalRel.CONVENTION) {
-                BodoPhysicalProject.create(input, childExprs, fieldNames)
+                val output = BodoPhysicalProject.create(input, childExprs, fieldNames)
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else if (input.convention == SnowflakeRel.CONVENTION) {
                 SnowflakeProject.create(
                     input.cluster,
@@ -116,20 +125,25 @@ object BodoPhysicalRelFactories {
                     (input as IcebergRel).getCatalogTable(),
                 )
             } else if (input.convention == PandasRel.CONVENTION) {
-                PandasProject.create(
-                    input.cluster,
-                    input.traitSet,
-                    input,
-                    childExprs,
-                    fieldNames,
-                )
+                val output =
+                    PandasProject.create(
+                        input.cluster,
+                        input.traitSet,
+                        input,
+                        childExprs,
+                        fieldNames,
+                    )
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + input.convention?.name)
             }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) {
-            "TODO createProject: fix Batching property"
-        }
         return retVal
     }
 
@@ -149,7 +163,14 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (input.convention == BodoPhysicalRel.CONVENTION) {
-                BodoPhysicalFilter.create(input.cluster, input, condition)
+                val output = BodoPhysicalFilter.create(input.cluster, input, condition)
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else if (input.convention == SnowflakeRel.CONVENTION) {
                 assert(
                     input is SnowflakeRel,
@@ -164,9 +185,6 @@ object BodoPhysicalRelFactories {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + input.convention?.name)
             }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) {
-            "TODO createProject: fix Batching property"
-        }
         return retVal
     }
 
@@ -196,7 +214,14 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (inputConvention == BodoPhysicalRel.CONVENTION) {
-                BodoPhysicalJoin.create(left, right, condition, joinType)
+                val output = BodoPhysicalJoin.create(left, right, condition, joinType)
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = left.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder's createJoin: unhandled Snowflake operation")
             } else if (inputConvention == IcebergRel.CONVENTION) {
@@ -205,9 +230,6 @@ object BodoPhysicalRelFactories {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + inputConvention?.name)
             }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == left.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) {
-            "TODO createProject: fix Batching property"
-        }
         return retVal
     }
 
@@ -217,8 +239,9 @@ object BodoPhysicalRelFactories {
         all: Boolean,
     ): RelNode {
         assert(inputs.isNotEmpty()) { "Internal Error in Bodo Physical Builder: inputs to SetOp is empty" }
-        val inputConvention = inputs[0].convention
-        val cluster = inputs[0].cluster
+        val firstInput = inputs[0]
+        val inputConvention = firstInput.convention
+        val cluster = firstInput.cluster
         assert(inputConvention != null) { "Internal Error in Bodo Physical Builder: Input does not have any convention" }
         assert(
             inputs.all {
@@ -229,7 +252,14 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (inputConvention == BodoPhysicalRel.CONVENTION) {
-                createPandasSetOp(cluster, kind, inputs, all)
+                val output = createBodoPhysicalSetOp(cluster, kind, inputs, all)
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = firstInput.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 throw BodoSQLCodegenException(
                     "Internal Error in Bodo Physical Builder's createPandasSetOp: unhandled snowflake set operation: " + kind.name,
@@ -242,25 +272,21 @@ object BodoPhysicalRelFactories {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + inputConvention?.name)
             }
 
-        assert(
-            retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == inputs[0].traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE),
-        ) {
-            "TODO createProject: fix Batching property"
-        }
         return retVal
     }
 
-    private fun createPandasSetOp(
+    private fun createBodoPhysicalSetOp(
         cluster: RelOptCluster,
         kind: SqlKind,
         inputs: List<RelNode>,
         all: Boolean,
-    ): RelNode {
+    ): BodoPhysicalRel {
         return when (kind) {
             SqlKind.UNION -> BodoPhysicalUnion.create(cluster, inputs, all)
-            // TODO: add the rest of the set operations
+            SqlKind.INTERSECT -> BodoPhysicalIntersect.create(cluster, inputs, all)
+            SqlKind.MINUS -> BodoPhysicalMinus.create(cluster, inputs, all)
             else -> throw BodoSQLCodegenException(
-                "Internal Error in Bodo Physical Builder's createPandasSetOp: unhandled pandas set operation: " + kind.name,
+                "Internal Error in Bodo Physical Builder's createBodoPhysicalSetOp: unhandled Bodo Physical set operation: " + kind.name,
             )
         }
     }
@@ -281,7 +307,14 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (inputConvention == BodoPhysicalRel.CONVENTION) {
-                BodoPhysicalAggregate.create(input.cluster, input, groupSet, groupSets, aggCalls)
+                val output = BodoPhysicalAggregate.create(input.cluster, input, groupSet, groupSets, aggCalls)
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 SnowflakeAggregate.create(
                     input.cluster,
@@ -298,9 +331,6 @@ object BodoPhysicalRelFactories {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + inputConvention?.name)
             }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) {
-            "TODO createProject: fix Batching property"
-        }
         return retVal
     }
 
@@ -319,7 +349,14 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (inputConvention == BodoPhysicalRel.CONVENTION) {
-                BodoPhysicalSort.create(input, collation, offset, fetch)
+                val output = BodoPhysicalSort.create(input, collation, offset, fetch)
+                // Ensure we have a streaming trait updated.
+                val inputStreamingTrait = input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
+                if (inputStreamingTrait != null) {
+                    output.copy(output.traitSet.replace(output.expectedOutputBatchingProperty(inputStreamingTrait)), output.inputs)
+                } else {
+                    output
+                }
             } else if (inputConvention == SnowflakeRel.CONVENTION) {
                 SnowflakeSort.create(
                     input.cluster,
@@ -336,9 +373,6 @@ object BodoPhysicalRelFactories {
                 throw BodoSQLCodegenException("Internal Error in Bodo Physical Builder: Unknown convention: " + inputConvention?.name)
             }
 
-        assert(retVal.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == input.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)) {
-            "TODO createProject: fix Batching property"
-        }
         return retVal
     }
 
@@ -348,6 +382,14 @@ object BodoPhysicalRelFactories {
         tuples: List<ImmutableList<RexLiteral>>,
     ): RelNode {
         val immutableTuples = ImmutableList.copyOf(tuples)
-        return BodoPhysicalValues.create(cluster, cluster.traitSet().replace(BodoPhysicalRel.CONVENTION), rowType, immutableTuples)
+        val values = BodoPhysicalValues.create(cluster, cluster.traitSet().replace(BodoPhysicalRel.CONVENTION), rowType, immutableTuples)
+        // Values doesn't have an input, but this is still valid for producing a null check.
+        // BodoPhysicalValues will ignore in the input trait being passed in.
+        val inputStreamingTrait = cluster.traitSet().getTrait(BatchingPropertyTraitDef.INSTANCE)
+        return if (inputStreamingTrait != null) {
+            values.copy(values.traitSet.replace(values.expectedOutputBatchingProperty(inputStreamingTrait)), values.inputs)
+        } else {
+            values
+        }
     }
 }

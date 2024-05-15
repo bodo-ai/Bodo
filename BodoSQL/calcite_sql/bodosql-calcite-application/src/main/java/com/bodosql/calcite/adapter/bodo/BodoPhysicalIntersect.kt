@@ -35,4 +35,14 @@ class BodoPhysicalIntersect(
     ) {
         TODO("Not yet implemented")
     }
+
+    companion object {
+        fun create(
+            cluster: RelOptCluster,
+            inputs: List<RelNode>,
+            all: Boolean,
+        ): BodoPhysicalIntersect {
+            return BodoPhysicalIntersect(cluster, cluster.traitSet(), inputs, all)
+        }
+    }
 }

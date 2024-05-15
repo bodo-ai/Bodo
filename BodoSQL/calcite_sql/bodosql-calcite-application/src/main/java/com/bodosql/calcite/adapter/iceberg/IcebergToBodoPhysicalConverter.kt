@@ -202,7 +202,7 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
         val visitor =
             object : RelVisitor() {
                 // Initialize all columns to be in the original location.
-                var colMap: MutableList<Int> = (0..<node.getRowType().fieldCount).toMutableList()
+                var colMap: MutableList<Int> = (0..<node.rowType.fieldCount).toMutableList()
                 var filters: MutableList<RexNode> = mutableListOf()
                 var baseScan: IcebergTableScan? = null
                 var limit: BigDecimal? = null
