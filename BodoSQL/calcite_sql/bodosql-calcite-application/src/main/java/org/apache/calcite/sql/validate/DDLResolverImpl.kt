@@ -140,7 +140,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual drop table operation
-            return catalogTable.ddlExecutor.dropTable(catalogTable.fullPath, node.cascade)
+            return catalogTable.getDDLExecutor().dropTable(catalogTable.fullPath, node.cascade)
         } catch (e: MissingObjectException) {
             if (node.ifExists) {
                 // If drop table doesn't care if the table exists, we still need to validate the
@@ -167,7 +167,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual drop table operation
-            return catalogTable.ddlExecutor.describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
+            return catalogTable.getDDLExecutor().describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Table $tableName does not exist or not authorized to describe.")
         }

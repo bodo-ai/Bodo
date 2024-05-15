@@ -252,7 +252,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
                 // Store the original indices to allow handling renaming.
                 val catalogTable = relInput.getCatalogTable()
                 // Get the fully qualified name.
-                StringLiteral(catalogTable.qualifiedName)
+                StringLiteral(catalogTable.getQualifiedName())
             } else {
                 Expr.None
             }

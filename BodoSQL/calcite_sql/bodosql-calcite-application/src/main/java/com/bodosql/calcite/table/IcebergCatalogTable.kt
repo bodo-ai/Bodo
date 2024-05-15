@@ -1,6 +1,7 @@
 package com.bodosql.calcite.table
 
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan
+import com.bodosql.calcite.application.PythonLoggers
 import com.bodosql.calcite.application.write.IcebergWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.IcebergCatalog
@@ -15,6 +16,7 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.schema.Statistic
 import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.SupportsNamespaces
+import java.util.Locale
 
 class IcebergCatalogTable<T>(
     name: String,
@@ -39,7 +41,40 @@ class IcebergCatalogTable<T>(
         toRelContext: RelOptTable.ToRelContext,
         relOptTable: RelOptTable,
     ): RelNode {
-        return IcebergTableScan.create(toRelContext.cluster, relOptTable, this)
+        val baseRelNode: RelNode = IcebergTableScan.create(toRelContext.cluster, relOptTable, this)
+        if (canSafelyInlineView()) {
+            val viewDefinition = getViewDefinitionString()
+            if (viewDefinition != null) {
+                return tryInlineView(toRelContext, viewDefinition, baseRelNode)
+            } else {
+                val message =
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to inline view %s because we cannot determine its definition.",
+                        getQualifiedName(),
+                    )
+                PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
+            }
+        } else if (isAccessibleView()) {
+            if (isSecureView()) {
+                val message =
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to inline view %s because it is a secure view.",
+                        getQualifiedName(),
+                    )
+                PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
+            } else if (isMaterializedView()) {
+                val message =
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to inline view %s because it is a materialized view.",
+                        getQualifiedName(),
+                    )
+                PythonLoggers.VERBOSE_LEVEL_ONE_LOGGER.info(message)
+            }
+        }
+        return baseRelNode
     }
 
     override fun getStatistic(): Statistic {
@@ -67,7 +102,7 @@ class IcebergCatalogTable<T>(
         return IcebergDDLExecutor(catalog.getIcebergConnection())
     }
 
-    val columnDistinctCount =
+    private val columnDistinctCount =
         com.bodosql.calcite.application.utils.Memoizer.memoize<Int, Double?> { column: Int ->
             this.estimateColumnDistinctCount(
                 column,

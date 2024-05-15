@@ -85,10 +85,10 @@ import org.json.simple.parser.JSONParser;
 
 public class SnowflakeCatalog implements BodoSQLCatalog {
   /**
-   * See the design described on Confluence:
-   * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Catalog
+   * See the design described on Confluence: <a
+   * href="https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Catalog">...</a>
    */
-  private String connectionString;
+  private final String connectionString;
 
   private final String username;
 
@@ -135,9 +135,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
   private @Nullable Integer weekStart;
   private @Nullable Integer weekOfYearPolicy;
-  private @Nullable String currentDatabase;
+  private final @Nullable String currentDatabase;
 
-  private SnowflakeJDBCExecutor ddlExecutor;
+  private final SnowflakeJDBCExecutor ddlExecutor;
 
   /**
    * Create the catalog and store the relevant account information.
@@ -154,7 +154,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String username,
       String password,
       String accountName,
-      String defaultDatabaseName,
+      @Nullable String defaultDatabaseName,
       String warehouseName,
       Properties accountInfo,
       @Nullable String icebergVolume) {
@@ -197,7 +197,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * Get a connection to snowflake via jdbc
    *
    * @return Connection to Snowflake
-   * @throws SQLException
+   * @throws SQLException If database access error occurs
    */
   private Connection getConnection() throws SQLException {
     if (conn == null) {
@@ -345,7 +345,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    *
    * @param shouldRetry If failing to load the Metadata should we retry with a fresh connection?
    * @return DatabaseMetaData for Snowflake
-   * @throws SQLException
+   * @throws SQLException If database connection error occurs
    */
   private DatabaseMetaData getDataBaseMetaData(boolean shouldRetry) throws SQLException {
     try {
@@ -384,7 +384,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param databaseName The name of the database to use to load the table.
    * @param schemaName The name of the schema to use to load the table.
    * @param shouldRetry Should we retry the connection if we see an exception?
-   * @return
+   * @return List of table names
    */
   private Set<String> getTableNamesImpl(
       String databaseName, String schemaName, boolean shouldRetry) {
@@ -525,8 +525,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       if (typeName.contains("(")) {
         String internalFields = typeName.split("\\(|\\)")[1];
         String[] numericParts = internalFields.split(",");
-        precision = Integer.valueOf(numericParts[0].trim());
-        scale = Integer.valueOf(numericParts[1].trim());
+        precision = Integer.parseInt(numericParts[0].trim());
+        scale = Integer.parseInt(numericParts[1].trim());
       } else {
         precision = 38;
         scale = 0;
@@ -570,7 +570,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         String[] typeFields = typeName.split("\\(|\\)");
         if (typeFields.length > 1) {
           // The precision is passed as VARCHAR(N)/CHAR(N)
-          precision = Integer.valueOf(typeFields[1].trim());
+          precision = Integer.parseInt(typeFields[1].trim());
         }
       }
       return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
@@ -590,7 +590,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       if (typeName.contains("(")) {
         // Determine the precision by parsing the type.
         String precisionString = typeName.split("\\(|\\)")[1];
-        precision = Integer.valueOf(precisionString.trim());
+        precision = Integer.parseInt(precisionString.trim());
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
@@ -604,7 +604,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       if (typeName.contains("(")) {
         // Determine the precision by parsing the type.
         String precisionString = typeName.split("\\(|\\)")[1];
-        precision = Integer.valueOf(precisionString.trim());
+        precision = Integer.parseInt(precisionString.trim());
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
@@ -615,7 +615,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       if (typeName.contains("(")) {
         // Determine the precision by parsing the type.
         String precisionString = typeName.split("\\(|\\)")[1];
-        precision = Integer.valueOf(precisionString.trim());
+        precision = Integer.parseInt(precisionString.trim());
       } else {
         precision = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
       }
@@ -628,7 +628,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         String[] typeFields = typeName.split("\\(|\\)");
         if (typeFields.length > 1) {
           // The precision is passed as VARCHAR(N)/CHAR(N)
-          precision = Integer.valueOf(typeFields[1].trim());
+          precision = Integer.parseInt(typeFields[1].trim());
         }
       }
       return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
@@ -784,7 +784,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * <p>MYTESTDB.schema1.(table_identifier) MYTESTDB.schema2.(table_identifier) ...
    * MYTESTDB.non_default_schema_n.(table_identifier)
    *
-   * <p>(see https://docs.snowflake.com/en/sql-reference/name-resolution)
+   * <p>(see <a href="https://docs.snowflake.com/en/sql-reference/name-resolution">...</a>)
    *
    * @param depth The depth at which to find the default.
    * @return List of default Schema to check when attempting to resolve a table in this catalog.
@@ -896,7 +896,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param databaseName The name of the database to use to load the table.
    * @param schemaName The name of the schema to use to load the table.
    * @param shouldRetry Should we retry the connection if we see an exception?
-   * @return
+   * @return Set of function names.
    */
   private Set<String> getFunctionNamesImpl(
       String databaseName, String schemaName, boolean shouldRetry) {
@@ -955,7 +955,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * @param schemaName The name of the schema to use to load the table.
    * @param functionName The name of the function to load.
    * @param shouldRetry Should we retry the connection if we see an exception?
-   * @return
+   * @return Collection of all functions with that name.
    */
   public Collection<org.apache.calcite.schema.Function> getFunctionsImpl(
       String databaseName, String schemaName, String functionName, boolean shouldRetry) {
@@ -1243,13 +1243,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     List<kotlin.Pair<String, Expr>> kwargs = new ArrayList<>();
     args.add(new Expr.StringLiteral(tableName.get(2)));
     args.add(new Expr.StringLiteral(generatePythonConnStr(tableName.subList(0, 2))));
-    kwargs.add(new kotlin.Pair("schema", new Expr.StringLiteral(tableName.get(1))));
-    kwargs.add(new kotlin.Pair("if_exists", new Expr.StringLiteral(ifExists.asToSqlKwArgument())));
+    kwargs.add(new kotlin.Pair<>("schema", new Expr.StringLiteral(tableName.get(1))));
     kwargs.add(
-        new kotlin.Pair(
+        new kotlin.Pair<>("if_exists", new Expr.StringLiteral(ifExists.asToSqlKwArgument())));
+    kwargs.add(
+        new kotlin.Pair<>(
             "_bodo_create_table_type", new Expr.StringLiteral(tableType.asStringKeyword())));
     // CTAS metadata not used for non-streaming writes
-    kwargs.add(new kotlin.Pair("index", new Expr.BooleanLiteral(false)));
+    kwargs.add(new kotlin.Pair<>("index", new Expr.BooleanLiteral(false)));
     return new Expr.Method(varName, "to_sql", args, kwargs);
   }
 
@@ -1319,6 +1320,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       VERBOSE_LEVEL_TWO_LOGGER.warning(
           "Getting Snowflake Iceberg volume base URL failed: " + e.getMessage());
     }
+    assert storage_base_url != null;
     if (storage_base_url.startsWith("azure://")) {
       try {
         URI uri = new URI(storage_base_url);
@@ -1388,7 +1390,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    */
   @Override
   public Expr generateRemoteQuery(String query) {
-    // For correctness we need to verify that Snowflake can support this
+    // For correctness, we need to verify that Snowflake can support this
     // query in its entirely (no BodoSQL specific features). To do this
     // we run an explain, which won't execute the query.
     executeExplainQuery(query);
@@ -1573,8 +1575,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     if (isView) {
       String dotTableName =
           String.join(
-              ".",
-              tableName.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+              ".", tableName.stream().map(this::makeObjectNameQuoted).collect(Collectors.toList()));
       String loggingMessage =
           String.format(
               Locale.ROOT, "Skipping attempt to sample from %s as it is a view", dotTableName);
@@ -1599,8 +1600,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   }
 
   /**
-   * Approximation of the error function ERF. Copied from
-   * https://introcs.cs.princeton.edu/java/21function/ErrorFunction.java.html
+   * Approximation of the error function ERF. Copied from <a
+   * href="https://introcs.cs.princeton.edu/java/21function/ErrorFunction.java.html">...</a>
    */
   public static double erf(double z) {
     double t = 1.0 / (1.0 + 0.5 * Math.abs(z));
@@ -1642,8 +1643,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
   /**
    * Calculates the approximate number of distinct rows based on a sample. See here for algorithm
-   * design description:
-   * https://bodo.atlassian.net/wiki/spaces/B/pages/1468235780/Snowflake+Metadata+Handling#Testing-Proposed-Algorithm-on-Sample-Data
+   * design description: <a
+   * href="https://bodo.atlassian.net/wiki/spaces/B/pages/1468235780/Snowflake+Metadata+Handling#Testing-Proposed-Algorithm-on-Sample-Data">...</a>
    *
    * @param rowCount The number of rows in the full table.
    * @param sampleSize The number of rows in the sample.
@@ -1734,7 +1735,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           if (rs.next()) {
             Long sampleSize = rs.getLong(1);
             Long distinctCount = rs.getLong(2);
-            return new Pair(sampleSize, distinctCount);
+            return new Pair<>(sampleSize, distinctCount);
           }
         }
       }
@@ -1894,7 +1895,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         String unsafeToInline = paramInfo.getString("is_secure");
         String isMaterialized = paramInfo.getString("is_materialized");
         return new InlineViewMetadata(
-            Boolean.valueOf(unsafeToInline), Boolean.valueOf(isMaterialized), queryDefinition);
+            Boolean.parseBoolean(unsafeToInline),
+            Boolean.parseBoolean(isMaterialized),
+            queryDefinition);
       } else {
         return null;
       }
@@ -1910,9 +1913,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * nested permissions make lookups very difficult.
    *
    * @param names A list of two names starting with SCHEMA_NAME and ending with TABLE_NAME.
-   * @return Do we have read support.
+   * @return True if we have read support, false otherwise.
    */
-  public @NotNull boolean canReadTable(List<String> names) {
+  public boolean canReadTable(List<String> names) {
     return canReadTableFn.apply(names);
   }
 
@@ -1923,10 +1926,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * The actual implementation for canReadTable including calls to Snowflake. We add an extra layer
    * of indirection to ensure this function is cached.
    */
-  private @NotNull boolean canReadTableImpl(List<String> names) {
+  private boolean canReadTableImpl(List<String> names) {
     String dotTableName =
         String.join(
-            ".", names.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+            ".", names.stream().map(this::makeObjectNameQuoted).collect(Collectors.toList()));
     try {
       final String query = String.format(Locale.ROOT, "Select * from %s limit 0", dotTableName);
       executeSnowflakeQuery(query, 5);
@@ -1943,7 +1946,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   }
 
   /** Determine if the provided Snowflake table is actually an Iceberg table inside Snowflake. */
-  public @NotNull boolean isIcebergTable(List<String> names) {
+  public boolean isIcebergTable(List<String> names) {
     return isIcebergTableFn.apply(names);
   }
 
@@ -1954,10 +1957,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * The actual implementation for isIcebergTable including calls to Snowflake. We add an extra
    * layer of indirection to ensure this function is cached.
    */
-  private @NotNull boolean isIcebergTableImpl(List<String> names) {
+  private boolean isIcebergTableImpl(List<String> names) {
     String qualifiedName =
         String.join(
-            ".", names.stream().map(x -> makeObjectNameQuoted(x)).collect(Collectors.toList()));
+            ".", names.stream().map(this::makeObjectNameQuoted).collect(Collectors.toList()));
     try {
       final String query = String.format(Locale.ROOT, "DESCRIBE ICEBERG TABLE %s;", qualifiedName);
       executeSnowflakeQuery(query, 5);

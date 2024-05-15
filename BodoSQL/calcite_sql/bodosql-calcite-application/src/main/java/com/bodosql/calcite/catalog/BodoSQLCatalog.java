@@ -8,6 +8,7 @@ import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
+import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
@@ -17,6 +18,7 @@ import java.util.Set;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * See the design described on Confluence:
@@ -128,8 +130,6 @@ public interface BodoSQLCatalog {
   /**
    * Generates the code necessary to produce a read expression from the given catalog.
    *
-   * @param useStreaming Should we generate code to read the table as streaming (currently only
-   *     supported for snowflake tables)
    * @param tableName The path of schema used to reach the table from the root that includes the
    *     table.
    * @param useStreaming Should we generate code to read the table as streaming (currently only
@@ -255,4 +255,14 @@ public interface BodoSQLCatalog {
       Variable columnNamesGlobal);
 
   String getAccountName();
+
+  /**
+   * Load the view metadata information from the catalog. If the table is not a view or no
+   * information can be found this should return NULL.
+   *
+   * @param names A list of two names starting with SCHEMA_NAME and ending with TABLE_NAME.
+   * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
+   */
+  @Nullable
+  InlineViewMetadata tryGetViewMetadata(List<String> names);
 }
