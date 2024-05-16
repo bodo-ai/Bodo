@@ -36,6 +36,7 @@ def iceberg_filesystem_catalog(tmp_path_factory):
     if bodo.get_rank() == 0:
         path = str(tmp_path_factory.mktemp("iceberg"))
     path = MPI.COMM_WORLD.bcast(path)
+    assert Path(path).exists(), "Failed to create filesystem catalog across all ranks"
     return bodosql.FileSystemCatalog(path, "iceberg")
 
 
@@ -122,7 +123,20 @@ def test_create_schema(if_not_exists, iceberg_filesystem_catalog, memory_leak_ch
             py_output=py_output,
             test_str_literal=True,
         )
-        assert schema_path.exists()
+        # TODO(aneesh): [BSE-3262] adding additional logging to this assert
+        # to help with debugging through sporadic nightly failures
+        if not schema_path.exists():
+            msg = "Schema should still exist"
+            r = schema_path
+            while not r.exists():
+                msg += f"\n{r} doesn't exist"
+                if r.parent == r:
+                    break
+                r = r.parent
+            if r.exists():
+                msg += f"\n{r} exists"
+                msg += f"\nchildren: {list(r.iterdir())}"
+            assert schema_path.exists(), msg
 
 
 def test_create_schema_already_exists(iceberg_filesystem_catalog, memory_leak_check):
@@ -141,7 +155,20 @@ def test_create_schema_already_exists(iceberg_filesystem_catalog, memory_leak_ch
                 py_output=py_out,
                 test_str_literal=True,
             )
-        assert schema_path.exists(), "Schema should still exist"
+        # TODO(aneesh): [BSE-3262] adding additional logging to this assert
+        # to help with debugging through sporadic nightly failures
+        if not schema_path.exists():
+            msg = "Schema should still exist"
+            r = schema_path
+            while not r.exists():
+                msg += f"\n{r} doesn't exist"
+                if r.parent == r:
+                    break
+                r = r.parent
+            if r.exists():
+                msg += f"\n{r} exists"
+                msg += f"\nchildren: {list(r.iterdir())}"
+            assert schema_path.exists(), msg
 
 
 def test_create_schema_if_not_exists_already_exists(
