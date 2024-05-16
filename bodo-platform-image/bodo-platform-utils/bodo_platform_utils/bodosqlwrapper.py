@@ -43,6 +43,7 @@ bodo_logger = bodo.user_logging.get_current_bodo_verbose_logger()
 def run_sql_query(
     query_str,
     bc,
+    bind_variables,
 ):
     """Boilerplate function to execute a query string.
 
@@ -53,7 +54,7 @@ def run_sql_query(
 
     print(f"Started executing query:\n{query_str}")
     t0 = time.time()
-    output = bc.sql(query_str)
+    output = bc.sql(query_str, dynamic_params_list=bind_variables)
     execution_time = time.time() - t0
     print(f"Finished executing the query. It took {execution_time} seconds.")
     return output, execution_time
@@ -260,6 +261,7 @@ def run_sql_query_wrapper(
     dispatcher,
     sql_text,
     bc,
+    bind_variables,
     print_output,
     write_metrics,
     args,
@@ -271,6 +273,7 @@ def run_sql_query_wrapper(
         dispatcher: Dispatcher function for the query.
         sql_text (str): Query text to execute
         bc (bodosql.BodoSQLContext): BodoSQLContext to use for query execution.
+        bind_variables(Tuple[Any]): Query bind variables from Python.
         print_output(bool): Flag to print query result.
         write_metrics(bool): Flag to write metrics.
         args: Arguments passed to the script.
@@ -282,6 +285,7 @@ def run_sql_query_wrapper(
     output, execution_time = dispatcher(
         numba.types.literal(sql_text),
         bc,
+        bind_variables,
     )
     if write_metrics:
         metrics_file.write(f"Execution time: {float(execution_time)}\n".encode("utf-8"))
@@ -490,7 +494,12 @@ def main(args):
     # Compile the query
     t0 = time.time()
     dispatcher = bodo.jit(
-        (numba.types.literal(sql_text), typeof_bodo_sql(bc, None)), cache=True
+        (
+            numba.types.literal(sql_text),
+            typeof_bodo_sql(bc, None),
+            bodo.typeof(query_params),
+        ),
+        cache=True,
     )(run_sql_query)
     compilation_time = time.time() - t0
     bodo.barrier()  # Wait for all rankps to finish compilation
@@ -528,6 +537,7 @@ def main(args):
             dispatcher,
             sql_text,
             bc,
+            query_params,
             print_output,
             write_metrics,
             args,
