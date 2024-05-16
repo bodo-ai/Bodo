@@ -24,9 +24,16 @@ class BodoPhysicalJoin(
     right: RelNode,
     condition: RexNode,
     joinType: JoinRelType,
-    val rebalanceOutput: Boolean = false,
-    val joinFilterID: Int = -1,
+    val rebalanceOutput: Boolean,
+    val joinFilterID: Int,
+    val originalJoinFilterKeyLocations: List<Int>,
 ) : JoinBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), ImmutableList.of(), left, right, condition, joinType), BodoPhysicalRel {
+    init {
+        if (joinFilterID != -1) {
+            assert(originalJoinFilterKeyLocations.isNotEmpty())
+        }
+    }
+
     override fun copy(
         traitSet: RelTraitSet,
         conditionExpr: RexNode,
@@ -36,7 +43,20 @@ class BodoPhysicalJoin(
         semiJoinDone: Boolean,
     ): Join {
         assert(BodoJoinConditionUtil.isValidNode(conditionExpr))
-        return BodoPhysicalJoin(cluster, traitSet, left, right, conditionExpr, joinType, rebalanceOutput, joinFilterID)
+        if (originalJoinFilterKeyLocations.isNotEmpty()) {
+            assert(conditionExpr == condition)
+        }
+        return BodoPhysicalJoin(
+            cluster,
+            traitSet,
+            left,
+            right,
+            conditionExpr,
+            joinType,
+            rebalanceOutput,
+            joinFilterID,
+            originalJoinFilterKeyLocations,
+        )
     }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
@@ -61,7 +81,17 @@ class BodoPhysicalJoin(
     }
 
     fun withRebalanceOutput(rebalanceOutput: Boolean): BodoPhysicalJoin {
-        return BodoPhysicalJoin(cluster, traitSet, left, right, condition, joinType, rebalanceOutput, joinFilterID)
+        return BodoPhysicalJoin(
+            cluster,
+            traitSet,
+            left,
+            right,
+            condition,
+            joinType,
+            rebalanceOutput,
+            joinFilterID,
+            originalJoinFilterKeyLocations,
+        )
     }
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
@@ -89,7 +119,11 @@ class BodoPhysicalJoin(
             joinType: JoinRelType,
             rebalanceOutput: Boolean = false,
             joinFilterID: Int = -1,
+            originalJoinFilterKeyLocations: List<Int> = listOf(),
         ): BodoPhysicalJoin {
+            if (originalJoinFilterKeyLocations.isEmpty()) {
+                assert(joinFilterID == -1)
+            }
             return BodoPhysicalJoin(
                 cluster,
                 traitSet,
@@ -99,6 +133,7 @@ class BodoPhysicalJoin(
                 joinType,
                 rebalanceOutput = rebalanceOutput,
                 joinFilterID = joinFilterID,
+                originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
             )
         }
 
@@ -108,9 +143,19 @@ class BodoPhysicalJoin(
             condition: RexNode,
             joinType: JoinRelType,
             joinFilterID: Int = -1,
+            originalJoinFilterKeyLocations: List<Int> = listOf(),
         ): BodoPhysicalJoin {
             val cluster = left.cluster
-            return create(cluster, cluster.traitSet(), left, right, condition, joinType, joinFilterID = joinFilterID)
+            return create(
+                cluster,
+                cluster.traitSet(),
+                left,
+                right,
+                condition,
+                joinType,
+                joinFilterID = joinFilterID,
+                originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
+            )
         }
     }
 }
