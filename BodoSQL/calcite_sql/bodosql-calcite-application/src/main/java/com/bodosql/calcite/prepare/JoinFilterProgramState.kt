@@ -1,10 +1,13 @@
 package com.bodosql.calcite.prepare
 
+import com.google.common.annotations.VisibleForTesting
+
 /**
  * Tracks join state needed to properly execute the join filter program.
  * This is split into its own file to allow more complex unit testing.
  */
-class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoinInfo> {
+@VisibleForTesting
+internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoinInfo> {
     /**
      * The column information need for each join. Each join maintains 1
      * entry in the list per leftKey in the join. If that key is no longer available,

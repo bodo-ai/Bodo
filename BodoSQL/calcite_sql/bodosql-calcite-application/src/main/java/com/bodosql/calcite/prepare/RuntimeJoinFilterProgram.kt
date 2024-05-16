@@ -14,15 +14,13 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
 import com.bodosql.calcite.adapter.common.LimitUtils
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
+import com.google.common.annotations.VisibleForTesting
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
-import org.apache.calcite.rel.core.Aggregate
-import org.apache.calcite.rel.core.Join
-import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.tools.Program
@@ -45,7 +43,8 @@ object RuntimeJoinFilterProgram : Program {
         }
     }
 
-    private class RuntimeJoinFilterShuttle() : RelShuttleImpl() {
+    @VisibleForTesting
+    internal class RuntimeJoinFilterShuttle() : RelShuttleImpl() {
         private var joinFilterID: Int = 0
         private var liveJoins = JoinFilterProgramState()
 
@@ -107,6 +106,7 @@ object RuntimeJoinFilterProgram : Program {
         private fun splitFilterSections(
             canPushPredicate: Predicate<Int>,
             columnTransformFunction: (Int) -> Int,
+            liveJoins: JoinFilterProgramState,
         ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
             val pushLiveJoins = JoinFilterProgramState()
             val outputLiveJoinInfo = JoinFilterProgramState()
@@ -165,79 +165,32 @@ object RuntimeJoinFilterProgram : Program {
             return applyFilters(newNode, outputLiveJoinInfo)
         }
 
-        private fun visit(project: Project): RelNode {
-            // If the project contains an OVER clause we can only push filters
-            // that are shared by all partition by columns.
-            val numCols = project.rowType.fieldCount
-            var pushableColumns =
-                if (project.containsOver()) {
-                    WindowFilterTranspose.getFilterableColumnIndices(project.projects, numCols)
-                } else {
-                    ImmutableBitSet.range(numCols)
-                }
-
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
-                splitFilterSections(
-                    canPushPredicate = { pushableColumns.get(it) && (project.projects[it] is RexInputRef) },
-                    columnTransformFunction = { (project.projects[it] as RexInputRef).index },
-                )
+        private fun visit(project: BodoPhysicalProject): RelNode {
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processProject(project, liveJoins, true)
             return processSingleRel(project, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
         private fun visit(filter: BodoPhysicalFilter): RelNode {
-            // If the filter contains an OVER clause we can only push filters
-            // that are shared by all partition by columns.
-            val numCols = filter.rowType.fieldCount
-            var pushableColumns =
-                if (filter.containsOver()) {
-                    WindowFilterTranspose.getFilterableColumnIndices(listOf(filter.condition), numCols)
-                } else {
-                    ImmutableBitSet.range(numCols)
-                }
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
-                splitFilterSections(
-                    canPushPredicate = { pushableColumns.get(it) },
-                    columnTransformFunction = { it },
-                )
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processFilter(filter, liveJoins)
             return processSingleRel(filter, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
         private fun visit(node: BodoPhysicalMinRowNumberFilter): RelNode {
-            val keptInputs = node.inputsToKeep.toList()
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
-                splitFilterSections(
-                    // Only push columns which are in the partition set.
-                    canPushPredicate = { node.partitionColSet.contains(it) },
-                    // Remap any columns in the filter based upon kept inputs.
-                    columnTransformFunction = { keptInputs[it] },
-                )
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processMinRowNumberFilter(node, liveJoins, true)
             return processSingleRel(node, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
         private fun visit(sort: BodoPhysicalSort): RelNode {
-            val canPush = !LimitUtils.isOrderedLimit(sort)
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
-                splitFilterSections(
-                    canPushPredicate = { canPush },
-                    columnTransformFunction = { it },
-                )
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processSort(sort, liveJoins)
             return processSingleRel(sort, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
-        private fun visit(aggregate: Aggregate): RelNode {
-            // Split the join info into those which must be processed now
-            // and those which can be processed later.
-            val groupByKeys = aggregate.groupSet.toList()
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
-                splitFilterSections(
-                    // Only push columns which are in the group by set.
-                    canPushPredicate = { it < aggregate.groupCount },
-                    columnTransformFunction = { groupByKeys[it] },
-                )
+        private fun visit(aggregate: BodoPhysicalAggregate): RelNode {
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processAggregate(aggregate, liveJoins, true)
             return processSingleRel(aggregate, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
-        private fun visit(join: Join): RelNode {
+        private fun visit(join: BodoPhysicalJoin): RelNode {
             val info = join.analyzeCondition()
             // Note: You must use getRowType() here due to a caching issue.
             val numLeftColumns = join.left.rowType.fieldCount
@@ -376,16 +329,200 @@ object RuntimeJoinFilterProgram : Program {
         }
 
         private fun visit(flatten: BodoPhysicalFlatten): RelNode {
-            val repeatColumns = flatten.repeatColumns.toList()
-            val (pushLiveJoinInfo, outputLiveJoinInfo) =
-                splitFilterSections(
-                    // Only push columns which are copied from the input, not computed.
-                    canPushPredicate = { it < repeatColumns.size },
-                    columnTransformFunction = { repeatColumns[it] },
-                )
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processFlatten(flatten, liveJoins, true)
             return processSingleRel(flatten, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
+        /**
+         * Process a project node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. If updateColumns is true, the columns will be updated
+         * based on the project. If false we will just return the old columns indices, which is used
+         * for cache processing.
+         * @param project The project node to process.
+         * @param liveJoins The current state of the live joins.
+         * @param updateColumns If true, the columns will be updated based on the project. If false, then
+         * the pushed join filters will use the original indices. This is useful for cache processing when we
+         * just want to detect the pushable subset.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processProject(
+            project: BodoPhysicalProject,
+            liveJoins: JoinFilterProgramState,
+            updateColumns: Boolean,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            // If the project contains an OVER clause we can only push filters
+            // that are shared by all partition by columns. These are based
+            // on the input column locations.
+            val numCols = project.input.rowType.fieldCount
+            var pushableColumns =
+                if (project.containsOver()) {
+                    WindowFilterTranspose.getFilterableColumnIndices(project.projects, numCols)
+                } else {
+                    ImmutableBitSet.range(numCols)
+                }
+
+            val columnTransformFunction =
+                if (updateColumns) {
+                    { idx: Int -> (project.projects[idx] as RexInputRef).index }
+                } else {
+                    { idx: Int -> idx }
+                }
+
+            return splitFilterSections(
+                canPushPredicate = {
+                    project.projects[it] is RexInputRef && pushableColumns.get((project.projects[it] as RexInputRef).index)
+                },
+                columnTransformFunction = columnTransformFunction,
+                liveJoins,
+            )
+        }
+
+        /**
+         * Process a filter node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. Filters cannot reorder columns.
+         * @param filter The Filter node to process.
+         * @param liveJoins The current state of the live joins.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processFilter(
+            filter: BodoPhysicalFilter,
+            liveJoins: JoinFilterProgramState,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            // If the filter contains an OVER clause we can only push filters
+            // that are shared by all partition by columns. The input column
+            // and filter column locations must match exactly, so we can just
+            // look at the filter.
+            val numCols = filter.rowType.fieldCount
+            var pushableColumns =
+                if (filter.containsOver()) {
+                    WindowFilterTranspose.getFilterableColumnIndices(listOf(filter.condition), numCols)
+                } else {
+                    ImmutableBitSet.range(numCols)
+                }
+            return splitFilterSections(canPushPredicate = { pushableColumns.get(it) }, columnTransformFunction = { it }, liveJoins)
+        }
+
+        /**
+         * Process a min row number filter node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. If updateColumns is true, the columns will be updated
+         * based on the kept columns. If false we will just return the old columns indices, which is used
+         * for cache processing.
+         * @param node The min row number node to process.
+         * @param liveJoins The current state of the live joins.
+         * @param updateColumns If true, the columns will be updated based on the kept inputs. If false, then
+         * the pushed join filters will use the original indices. This is useful for cache processing when we
+         * just want to detect the pushable subset.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processMinRowNumberFilter(
+            node: BodoPhysicalMinRowNumberFilter,
+            liveJoins: JoinFilterProgramState,
+            updateColumns: Boolean,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            val keptInputs = node.inputsToKeep.toList()
+            val columnTransformFunction =
+                if (updateColumns) {
+                    { idx: Int -> keptInputs[idx] }
+                } else {
+                    { idx: Int -> idx }
+                }
+            return splitFilterSections(
+                // Only push columns which are in the partition set.
+                canPushPredicate = { node.partitionColSet.contains(it) },
+                columnTransformFunction = columnTransformFunction,
+                liveJoins,
+            )
+        }
+
+        /**
+         * Process a sort node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. Sorts cannot reorder columns.
+         * @param sort The Sort node to process.
+         * @param liveJoins The current state of the live joins.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processSort(
+            sort: BodoPhysicalSort,
+            liveJoins: JoinFilterProgramState,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            val canPush = !LimitUtils.isOrderedLimit(sort)
+            return splitFilterSections(
+                canPushPredicate = { canPush },
+                columnTransformFunction = { it },
+                liveJoins,
+            )
+        }
+
+        /**
+         * Process an aggregate node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. If updateColumns is true, the columns will be updated
+         * based on the original key indices. If false we will just return the old columns indices, which is used
+         * for cache processing.
+         * @param aggregate The aggregate node to process.
+         * @param liveJoins The current state of the live joins.
+         * @param updateColumns If true, the columns will be updated based on the aggregate mapping. If false, then
+         * the pushed join filters will use the original indices. This is useful for cache processing when we
+         * just want to detect the pushable subset.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processAggregate(
+            aggregate: BodoPhysicalAggregate,
+            liveJoins: JoinFilterProgramState,
+            updateColumns: Boolean,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            // Split the join info into those which must be processed now
+            // and those which can be processed later.
+            val groupByKeys = aggregate.groupSet.toList()
+            val columnTransformFunction =
+                if (updateColumns) {
+                    { idx: Int -> groupByKeys[idx] }
+                } else {
+                    { idx: Int -> idx }
+                }
+            return splitFilterSections(
+                // Only push columns which are in the group by set.
+                canPushPredicate = { it < aggregate.groupCount },
+                columnTransformFunction = columnTransformFunction,
+                liveJoins,
+            )
+        }
+
+        /**
+         * Process a Flatten node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. If updateColumns is true, the columns will be updated
+         * based on the repeats columns. If false we will just return the old columns indices, which is used
+         * for cache processing.
+         * @param flatten The flatten node to process.
+         * @param liveJoins The current state of the live joins.
+         * @param updateColumns If true, the columns will be updated based on the repeats columns. If false, then
+         * the pushed join filters will use the original indices. This is useful for cache processing when we
+         * just want to detect the pushable subset.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processFlatten(
+            flatten: BodoPhysicalFlatten,
+            liveJoins: JoinFilterProgramState,
+            updateColumns: Boolean,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            val repeatColumns = flatten.repeatColumns.toList()
+            val columnTransformFunction =
+                if (updateColumns) {
+                    { idx: Int -> repeatColumns[idx] }
+                } else {
+                    { idx: Int -> idx }
+                }
+            return splitFilterSections(
+                // Only push columns which are copied from the input, not computed.
+                canPushPredicate = { it < repeatColumns.size },
+                columnTransformFunction = columnTransformFunction,
+                liveJoins,
+            )
+        }
+
+        /**
+         * Apply the filters to the current node to generate a new RuntimeJoinFilter if
+         * necessary.
+         */
         private fun applyFilters(
             rel: RelNode,
             liveJoins: JoinFilterProgramState,
@@ -400,6 +537,62 @@ object RuntimeJoinFilterProgram : Program {
                     filterColumns,
                     areFirstLocations,
                 )
+            }
+        }
+
+        /**
+         * Derive the filters that can be pushed past the current node. This is used for determining
+         * the interaction between caching nodes and runtime join filters currently sitting atop them.
+         * In most cases, this logic is identical to the logic for visiting a node, but without generating
+         * any nodes. In cases where something is always pushable to multiple inputs, the results will differ
+         * because we only care about what can be pushed to any input.
+         *
+         * @param rel The RelNode to process.
+         * @param liveJoins The current state of the live joins.
+         */
+        @VisibleForTesting
+        internal fun getPushableJoinFilters(
+            rel: RelNode,
+            liveJoins: JoinFilterProgramState,
+        ): JoinFilterProgramState {
+            return when (rel) {
+                is BodoPhysicalProject -> {
+                    val (pushed, _) = processProject(rel, liveJoins, false)
+                    pushed
+                }
+
+                is BodoPhysicalFilter -> {
+                    val (pushed, _) = processFilter(rel, liveJoins)
+                    pushed
+                }
+
+                is BodoPhysicalMinRowNumberFilter -> {
+                    val (pushed, _) = processMinRowNumberFilter(rel, liveJoins, false)
+                    pushed
+                }
+
+                is BodoPhysicalSort -> {
+                    val (pushed, _) = processSort(rel, liveJoins)
+                    pushed
+                }
+
+                is BodoPhysicalAggregate -> {
+                    val (pushed, _) = processAggregate(rel, liveJoins, false)
+                    pushed
+                }
+
+                is BodoPhysicalFlatten -> {
+                    val (pushed, _) = processFlatten(rel, liveJoins, false)
+                    pushed
+                }
+                is BodoPhysicalJoin, is BodoPhysicalMinus, is BodoPhysicalIntersect, is BodoPhysicalUnion -> {
+                    // We can push everything past these nodes.
+                    liveJoins
+                }
+                else -> {
+                    // Fallback to pushing nothing.
+                    JoinFilterProgramState()
+                }
             }
         }
     }
