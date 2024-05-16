@@ -408,6 +408,7 @@ abstract class Expr {
     companion object {
         val Zero = IntegerLiteral(0)
         val One = IntegerLiteral(1)
+        val NegativeOne = IntegerLiteral(-1)
     }
 }
 

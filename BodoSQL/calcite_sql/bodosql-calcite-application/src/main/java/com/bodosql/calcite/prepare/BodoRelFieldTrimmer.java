@@ -11,6 +11,7 @@ import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.pandas.PandasToBodoPhysicalConverter;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan;
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter;
+import com.bodosql.calcite.application.utils.RexNormalizer;
 import com.bodosql.calcite.rel.core.CachedSubPlanBase;
 import com.bodosql.calcite.rel.core.Flatten;
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase;
@@ -33,6 +34,7 @@ import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
@@ -418,8 +420,6 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
         new RexPermuteInputsShuttle(mapping, newInputs.get(0), newInputs.get(1));
     RexNode newConditionExpr = conditionExpr.accept(shuttle);
 
-    RelNode newJoin = buildNewJoin(join, newInputs.get(0), newInputs.get(1), newConditionExpr);
-
     switch (join.getJoinType()) {
       case SEMI:
       case ANTI:
@@ -440,6 +440,8 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
         }
         break;
     }
+    RelNode newJoin =
+        buildNewJoin(join, newInputs.get(0), newInputs.get(1), newConditionExpr, mapping);
     return result(newJoin, mapping, join);
   }
 
@@ -454,9 +456,31 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
    * @return The new join.
    */
   private RelNode buildNewJoin(
-      Join oldJoin, RelNode newLeft, RelNode newRight, RexNode newConditionExpr) {
+      Join oldJoin, RelNode newLeft, RelNode newRight, RexNode newConditionExpr, Mapping mapping) {
     if (oldJoin instanceof BodoPhysicalJoin) {
+      // We need to remap the key locations because the condition may have updated.
       BodoPhysicalJoin oldBodoJoin = (BodoPhysicalJoin) oldJoin;
+      int oldFilterID = oldBodoJoin.getJoinFilterID();
+      // Now that we have pruned columns, we may have changed the order of the keys in
+      // the join. As a result, we need to track this information for any RuntimeJoinFilters
+      // to ensure the proper columns are updated.
+      final List<Integer> keyLocationMapping;
+      if (oldFilterID != -1) {
+        JoinInfo oldInfo = oldBodoJoin.analyzeCondition();
+        // Normalize to ensure we get the accurate result. Our JoinBase does this.
+        newConditionExpr =
+            RexNormalizer.normalize(this.relBuilder.getRexBuilder(), newConditionExpr);
+        JoinInfo calculatedInfo = JoinInfo.of(newLeft, newRight, newConditionExpr);
+        keyLocationMapping = new ArrayList();
+        for (int oldLocation : oldBodoJoin.getOriginalJoinFilterKeyLocations()) {
+          int oldKey = oldInfo.leftKeys.get(oldLocation);
+          int newKey = mapping.getTarget(oldKey);
+          int newLocation = calculatedInfo.leftKeys.indexOf(newKey);
+          keyLocationMapping.add(newLocation);
+        }
+      } else {
+        keyLocationMapping = List.of();
+      }
       return BodoPhysicalJoin.Companion.create(
           oldBodoJoin.getCluster(),
           oldBodoJoin.getTraitSet(),
@@ -465,7 +489,8 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
           newConditionExpr,
           oldBodoJoin.getJoinType(),
           oldBodoJoin.getRebalanceOutput(),
-          oldBodoJoin.getJoinFilterID());
+          oldBodoJoin.getJoinFilterID(),
+          keyLocationMapping);
     } else {
       relBuilder.push(newLeft);
       relBuilder.push(newRight);

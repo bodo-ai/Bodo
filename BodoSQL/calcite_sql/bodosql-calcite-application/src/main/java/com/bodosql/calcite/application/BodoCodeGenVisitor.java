@@ -2228,7 +2228,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // Update the join state cache for runtime filters.
     generatedCode
         .getJoinStateCache()
-        .setStreamingJoinStateVariable(node.getJoinFilterID(), joinStateVar);
+        .setStreamingJoinStateInfo(
+            node.getJoinFilterID(), joinStateVar, node.getOriginalJoinFilterKeyLocations());
     return joinStateVar;
   }
 

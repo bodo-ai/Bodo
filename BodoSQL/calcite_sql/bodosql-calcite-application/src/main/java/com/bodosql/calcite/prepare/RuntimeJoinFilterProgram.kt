@@ -287,11 +287,11 @@ object RuntimeJoinFilterProgram : Program {
             }
             // If we have a RIGHT or Inner join we can generate
             // a runtime join filter.
-            val filterKey =
+            val (filterKey, originalLocations) =
                 if (!join.joinType.generatesNullsOnRight()) {
                     val columns = info.leftKeys
                     if (columns.isEmpty()) {
-                        -1
+                        Pair(-1, listOf())
                     } else {
                         val filterKey = joinFilterID++
                         // Add a new join to the left side.
@@ -300,16 +300,24 @@ object RuntimeJoinFilterProgram : Program {
                             columns,
                             List(columns.size) { true },
                         )
-                        filterKey
+                        Pair(filterKey, (0 until columns.size).toList())
                     }
                 } else {
-                    -1
+                    Pair(-1, listOf())
                 }
             liveJoins = leftJoinInfo
             val leftInput = join.left.accept(this)
             liveJoins = rightJoinInfo
             val rightInput = join.right.accept(this)
-            val newJoin = BodoPhysicalJoin.create(leftInput, rightInput, join.condition, join.joinType, joinFilterID = filterKey)
+            val newJoin =
+                BodoPhysicalJoin.create(
+                    leftInput,
+                    rightInput,
+                    join.condition,
+                    join.joinType,
+                    joinFilterID = filterKey,
+                    originalJoinFilterKeyLocations = originalLocations,
+                )
             return applyFilters(newJoin, outputJoinInfo)
         }
 

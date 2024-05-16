@@ -81,13 +81,19 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
                     val joinFilterID = joinFilterIDs[i]
                     val columns = filterColumns[i]
                     val isFirstLocation = filterIsFirstLocations[i]
-                    val stateVar = joinStateCache.getStreamingJoinStateVariable(joinFilterID)
+                    val (stateVar, keyLocations) = joinStateCache.getStreamingJoinInfo(joinFilterID)
                     // If we don't have the state stored assume we have disabled
                     // streaming entirely and this is a no-op.
                     if (stateVar != null) {
-                        val columnsTuple = Expr.Tuple(columns.map { Expr.IntegerLiteral(it) })
+                        val columnOrderedList = MutableList(columns.size) { Expr.NegativeOne }
+                        val isFirstList: MutableList<Expr.BooleanLiteral> = MutableList(isFirstLocation.size) { Expr.BooleanLiteral(false) }
+                        keyLocations.forEachIndexed { index, keyLocation ->
+                            columnOrderedList[keyLocation] = Expr.IntegerLiteral(columns[index])
+                            isFirstList[keyLocation] = Expr.BooleanLiteral(isFirstLocation[index])
+                        }
+                        val columnsTuple = Expr.Tuple(columnOrderedList)
                         val tupleVar = ctx.lowerAsMetaType(columnsTuple)
-                        val isFirstLocationTuple = Expr.Tuple(isFirstLocation.map { Expr.BooleanLiteral(it) })
+                        val isFirstLocationTuple = Expr.Tuple(isFirstList)
                         val isFirstLocationVar = ctx.lowerAsMetaType(isFirstLocationTuple)
                         val call =
                             Expr.Call(
