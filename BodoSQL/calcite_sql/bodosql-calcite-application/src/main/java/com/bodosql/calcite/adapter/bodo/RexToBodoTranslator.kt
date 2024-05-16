@@ -1624,6 +1624,16 @@ open class RexToBodoTranslator(
 
         // Extract all inputs to the current function.
         val operands = visitList(fnOperation.operands)
+
+        // Handle UDFs separately since they each have their own name
+        if (fnOperation.op is SnowflakeNativeUDF) {
+            return visitSnowflakeUDF(
+                fnOperation.operator as SnowflakeNativeUDF,
+                operands,
+                fnOperation.getType(),
+            )
+        }
+
         val dateTimeExprType1: DatetimeFnCodeGen.DateTimeType
         val dateTimeExprType2: DatetimeFnCodeGen.DateTimeType
         val isTime: Boolean
@@ -2172,14 +2182,6 @@ open class RexToBodoTranslator(
                     )
 
                     "GET_IGNORE_CASE" -> return JsonCodeGen.visitGetIgnoreCaseOp(operands, argScalars)
-                    "SNOWFLAKE_NATIVE_UDF" -> {
-                        assert(fnOperation.operator is SnowflakeNativeUDF)
-                        return visitSnowflakeUDF(
-                            fnOperation.operator as SnowflakeNativeUDF,
-                            operands,
-                            fnOperation.getType(),
-                        )
-                    }
 
                     "PARSE_JSON" -> throw BodoSQLCodegenException(
                         (
