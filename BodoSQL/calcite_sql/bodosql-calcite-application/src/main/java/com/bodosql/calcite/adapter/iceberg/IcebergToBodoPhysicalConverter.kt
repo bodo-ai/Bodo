@@ -184,7 +184,7 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
                 "_bodo_columns" to columnsArg,
                 "_bodo_filter" to filtersArg,
                 "_bodo_limit" to limit,
-                "_bodo_sql_op_id" to Expr.IntegerLiteral(ctx.operatorID()),
+                "_bodo_sql_op_id" to ctx.operatorID().toExpr(),
                 "_bodo_read_as_dict" to dictExpr,
             )
 

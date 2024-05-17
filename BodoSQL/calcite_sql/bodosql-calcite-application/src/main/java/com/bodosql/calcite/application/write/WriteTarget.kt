@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.write
 import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
@@ -33,7 +34,7 @@ abstract class WriteTarget(
      * @return A code generation expression for initializing the table.
      */
     abstract fun streamingCreateTableInit(
-        operatorID: Expr.IntegerLiteral,
+        operatorID: OperatorID,
         createTableType: CreateTableType,
     ): Expr
 
@@ -42,7 +43,7 @@ abstract class WriteTarget(
      * @param operatorID The operatorID used for tracking memory allocation.
      * @return A code generation expression for initializing the insert into.
      */
-    abstract fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr
+    abstract fun streamingInsertIntoInit(operatorID: OperatorID): Expr
 
     /**
      * Implement append to a table for a given write target.

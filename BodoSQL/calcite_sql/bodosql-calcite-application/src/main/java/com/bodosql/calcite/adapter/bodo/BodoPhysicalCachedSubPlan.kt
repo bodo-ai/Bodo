@@ -88,7 +88,7 @@ class BodoPhysicalCachedSubPlan private constructor(
                                         stateVar,
                                         Expr.Call(
                                             "bodo.libs.table_builder.init_table_builder_state",
-                                            listOf(Expr.IntegerLiteral(operatorID)),
+                                            listOf(operatorID.toExpr()),
                                             listOf(Pair("use_chunked_builder", Expr.True)),
                                         ),
                                     ),

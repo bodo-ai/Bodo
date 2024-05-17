@@ -76,7 +76,7 @@ class SymbolTable {
 
     // Variable for an accumulator for elapsed time of a stage of an operator
     fun genOperatorStageTimerVar(
-        opID: Int,
+        opID: OperatorID,
         stageID: Int,
     ): Variable {
         return Variable("_op_stage_timer_${opID}_$stageID")
@@ -84,14 +84,14 @@ class SymbolTable {
 
     // Variable for start timestamp for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerStartVar(
-        opID: Int,
+        opID: OperatorID,
         stageID: Int,
     ): Variable {
         return Variable("_start_op_stage_${opID}_$stageID")
     }
 
     fun genOperatorStageRowCountVar(
-        opID: Int,
+        opID: OperatorID,
         stageID: Int,
     ): Variable {
         return Variable("_op_stage_${opID}_${stageID}_output_len")
@@ -99,7 +99,7 @@ class SymbolTable {
 
     // Variable for end timestamp for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerEndVar(
-        opID: Int,
+        opID: OperatorID,
         stageID: Int,
     ): Variable {
         return Variable("_end_op_stage_${opID}_$stageID")
@@ -107,7 +107,7 @@ class SymbolTable {
 
     // Variable for time elapsed for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerElapsedVar(
-        opID: Int,
+        opID: OperatorID,
         stageID: Int,
     ): Variable {
         return Variable("_elapsed_op_stage_${opID}_$stageID")

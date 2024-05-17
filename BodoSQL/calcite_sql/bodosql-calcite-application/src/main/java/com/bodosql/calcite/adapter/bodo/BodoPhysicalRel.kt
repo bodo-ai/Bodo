@@ -5,6 +5,7 @@ import com.bodosql.calcite.application.utils.RelationalOperatorCache
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
+import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.traits.BatchingProperty
@@ -102,7 +103,7 @@ interface BodoPhysicalRel : TimerSupportedRel {
     }
 
     interface BuildContext {
-        fun operatorID(): Int
+        fun operatorID(): OperatorID
 
         /**
          * Returns the Module.Builder used to construct this operation in this context.

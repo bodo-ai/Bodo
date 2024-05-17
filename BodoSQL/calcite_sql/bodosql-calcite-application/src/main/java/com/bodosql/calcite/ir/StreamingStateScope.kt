@@ -6,19 +6,19 @@ class StreamingStateScope {
     /**
      * Helper Class to Store Operator Info and Ranges
      */
-    private class OperatorPipelineRange(val opID: Int, val startPipelineID: Int, val opType: Int? = null) {
+    private class OperatorPipelineRange(val opID: OperatorID, val startPipelineID: Int, val opType: Int? = null) {
         var endPipelineID: Int? = null
         var memEstimate: Int = -1
     }
 
-    private var operators: HashMap<Int, Pair<OperatorPipelineRange, OperatorType>> = HashMap()
+    private var operators: HashMap<OperatorID, Pair<OperatorPipelineRange, OperatorType>> = HashMap()
 
     fun hasOperators(): Boolean {
         return operators.isNotEmpty()
     }
 
     fun startOperator(
-        opID: Int,
+        opID: OperatorID,
         startPipelineID: Int,
         type: OperatorType,
         memoryEstimate: Int = -1,
@@ -31,7 +31,7 @@ class StreamingStateScope {
     }
 
     fun endOperator(
-        opID: Int,
+        opID: OperatorID,
         endPipelineID: Int,
     ) {
         if (!operators.containsKey(opID)) {
@@ -59,7 +59,7 @@ class StreamingStateScope {
                 Op.Stmt(
                     Expr.Call(
                         "bodo.libs.memory_budget.register_operator",
-                        Expr.IntegerLiteral(range.opID),
+                        range.opID.toExpr(),
                         Expr.Attribute(Expr.Raw("bodo.libs.memory_budget.OperatorType"), type.toString()),
                         Expr.IntegerLiteral(range.startPipelineID),
                         Expr.IntegerLiteral(
