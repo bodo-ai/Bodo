@@ -65,11 +65,12 @@ Factors that affect performance when using BodoSQL.
 
 --- 
 
-## API Reference
+## Query Support
 
 A full API reference guide for BodoSQL SQL syntax and functions. Click on each specific topic to see a full list of supported API.
 
-- [Clauses][clauses]
+- [DDL Statements][ddl]
+- [Query Syntax][query-syntax]
 - [Aggregations and Window Functions][aggregation-window-functions]
 - [Array Functions][array-functions]
 - [Casting Functions][casting-conversion-functions]
