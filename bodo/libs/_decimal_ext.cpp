@@ -277,16 +277,88 @@ double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
 arrow::Decimal128 multiply_decimal_scalars_py_entry(
     arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
     int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
-    bool* overflow) {
+    bool* overflow) noexcept {
     try {
-        arrow::Decimal128Scalar val1(v1, arrow::decimal128(p1, s1));
-        arrow::Decimal128Scalar val2(v2, arrow::decimal128(p2, s2));
-        return decimalops::Multiply(val1, val2, out_precision, out_scale,
+        return decimalops::Multiply(v1, v2, s1, s2, out_precision, out_scale,
                                     overflow);
 
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Multiply two decimal arrays element-wise and return an output array
+ * with the specified precision and scale. If overflow is detected during any
+ * multiplication, then the 'overflow' flag is updated to true.
+ *
+ * @param arr1 First nullable decimal array.
+ * @param arr2 Second nullable decimal array.
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @param[out] overflow Overflow flag.
+ * @return std::shared_ptr<array_info> Output nullable decimal array.
+ */
+std::shared_ptr<array_info> multiply_decimal_arrays(
+    const std::shared_ptr<array_info>& arr1,
+    const std::shared_ptr<array_info>& arr2, int64_t out_precision,
+    int64_t out_scale, bool* const overflow) noexcept {
+    int64_t s1 = arr1->scale;
+    int64_t s2 = arr2->scale;
+    // Allocate output array.
+    std::shared_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(arr1->length, Bodo_CTypes::DECIMAL);
+    out_arr->precision = out_precision;
+    out_arr->scale = out_scale;
+
+    // Do an element wise multiplication.
+    *overflow = false;
+    for (size_t i = 0; i < arr1->length; i++) {
+        if (!arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i) ||
+            !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
+        } else {
+            arrow::Decimal128* out_ptr =
+                out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                               arrow::Decimal128>() +
+                i;
+            bool overflow_i;
+            const arrow::Decimal128& d1 =
+                *(arr1->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                              arrow::Decimal128>() +
+                  i);
+            const arrow::Decimal128& d2 =
+                *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                              arrow::Decimal128>() +
+                  i);
+            *out_ptr = decimalops::Multiply(d1, d2, s1, s2, out_precision,
+                                            out_scale, &overflow_i);
+            (*overflow) |= overflow_i;
+        }
+    }
+    return out_arr;
+}
+
+array_info* multiply_decimal_arrays_py_entry(array_info* arr1_,
+                                             array_info* arr2_,
+                                             int64_t out_precision,
+                                             int64_t out_scale,
+                                             bool* overflow) noexcept {
+    try {
+        std::shared_ptr<array_info> arr1 = std::shared_ptr<array_info>(arr1_);
+        std::shared_ptr<array_info> arr2 = std::shared_ptr<array_info>(arr2_);
+        assert(arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr2->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr1->dtype == Bodo_CTypes::DECIMAL &&
+               arr2->dtype == Bodo_CTypes::DECIMAL &&
+               arr1->length == arr2->length);
+        std::shared_ptr<array_info> out_arr = multiply_decimal_arrays(
+            arr1, arr2, out_precision, out_scale, overflow);
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
 }
 
@@ -830,6 +902,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
+    SetAttrStringFromVoidPtr(m, multiply_decimal_arrays_py_entry);
 
     return m;
 }

@@ -1358,7 +1358,7 @@ size_t get_expected_bits_per_entry(bodo_array_type::arr_type_enum arr_type,
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIMEDELTA:
         case Bodo_CTypes::TIMESTAMPTZ:
-            return (nullable + numpy_item_size[c_type]) << 3;
+            return nullable + (numpy_item_size[c_type] * 8);
         case Bodo_CTypes::STRING:
         case Bodo_CTypes::LIST:
         case Bodo_CTypes::MAP:
