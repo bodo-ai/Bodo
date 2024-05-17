@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalCachedSubPlan
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.rel.core.CachedPlanInfo
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
+import org.apache.calcite.plan.BodoRelOptCluster
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
@@ -27,13 +28,17 @@ class CacheSubPlanProgram : Program {
         materializations: MutableList<RelOptMaterialization>,
         lattices: MutableList<RelOptLattice>,
     ): RelNode {
+        val cluster = rel.cluster
         val finder = CacheCandidateFinder()
         finder.go(rel)
         val cacheNodes = finder.cacheNodes
         return if (cacheNodes.isEmpty()) {
             rel
         } else {
-            val visitor = CacheReplacement(cacheNodes)
+            if (cluster !is BodoRelOptCluster) {
+                throw InternalError("Cluster must be a BodoRelOptCluster")
+            }
+            val visitor = CacheReplacement(cluster, cacheNodes)
             rel.accept(visitor)
         }
     }
@@ -64,10 +69,9 @@ class CacheSubPlanProgram : Program {
         }
     }
 
-    private class CacheReplacement(val cacheNodes: Set<Int>) : RelShuttleImpl() {
+    private class CacheReplacement(private val cluster: BodoRelOptCluster, private val cacheNodes: Set<Int>) : RelShuttleImpl() {
         // Ensure we only compute each cache node once.
         private val cacheNodeMap = mutableMapOf<Int, CachedSubPlanBase>()
-        private var cacheID = 0
 
         override fun visit(rel: RelNode): RelNode {
             val id = rel.id
@@ -82,7 +86,7 @@ class CacheSubPlanProgram : Program {
                 if (cacheNodes.contains(id)) {
                     val root = RelRoot.of(node, SqlKind.OTHER)
                     val plan = CachedPlanInfo.create(root, 1)
-                    val cachedSubPlan = BodoPhysicalCachedSubPlan.create(plan, cacheID++)
+                    val cachedSubPlan = BodoPhysicalCachedSubPlan.create(plan, cluster.nextCacheId())
                     cacheNodeMap[id] = cachedSubPlan
                     cachedSubPlan
                 } else {

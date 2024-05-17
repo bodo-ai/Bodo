@@ -42,6 +42,7 @@ import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.config.CalciteSystemProperty;
+import org.apache.calcite.plan.BodoRelOptCluster;
 import org.apache.calcite.plan.BodoRelOptUtil;
 import org.apache.calcite.plan.Context;
 import org.apache.calcite.plan.ConventionTraitDef;
@@ -335,7 +336,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
             this.validatedSqlNode, "validatedSqlNode is null. Need to call #validate() first");
     final RexBuilder rexBuilder = createRexBuilder();
     final RelOptCluster cluster =
-        BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
+        BodoRelOptCluster.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
         new BodoSqlToRelConverter(
@@ -385,7 +386,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
 
     final RexBuilder rexBuilder = createRexBuilder();
     final RelOptCluster cluster =
-        BodoRelOptClusterSetup.create(requireNonNull(planner, "planner"), rexBuilder);
+        BodoRelOptCluster.create(requireNonNull(planner, "planner"), rexBuilder);
     final SqlToRelConverter.Config config = sqlToRelConverterConfig.withTrimUnusedFields(false);
     final SqlToRelConverter sqlToRelConverter =
         new BodoSqlToRelConverter(
