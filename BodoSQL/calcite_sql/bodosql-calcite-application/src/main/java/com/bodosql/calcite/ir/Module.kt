@@ -23,8 +23,8 @@ class Module(private val frame: Frame) {
     /**
      * Builder is used to construct a new module.
      */
-    class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame) {
-        constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame())
+    class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame, private var hideOperatorIDs: Boolean) {
+        constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame(), hideOperatorIDs = false)
 
         private val scope: StreamingStateScope = StreamingStateScope()
 
@@ -41,10 +41,14 @@ class Module(private val frame: Frame) {
             idMapping = minId
         }
 
+        fun setHideOperatorIDs(flag: Boolean) {
+            this.hideOperatorIDs = flag
+        }
+
         /**
          * Generate a new operator ID based on the relnode ID. This makes it possible to determine which relnodes correspond to operators by reading the generated code later.
          */
-        fun newOperatorID(n: RelNode): Int {
+        fun newOperatorID(n: RelNode): OperatorID {
             val opID = idMapping[n.id]!!
             if (!nodeToOperatorCounters.contains(opID)) {
                 nodeToOperatorCounters[opID] = 0
@@ -57,7 +61,7 @@ class Module(private val frame: Frame) {
             // If this assert ever fails in practice, we can increase the multiplier by factors of 10 here.
             assert(newId < multiplier)
 
-            return opID * multiplier + newId
+            return OperatorID(opID * multiplier + newId, hideOperatorIDs)
         }
 
         private val joinStateCache = JoinStateCache()
@@ -232,7 +236,7 @@ class Module(private val frame: Frame) {
          * as it doesn't call currentStreamingPipeline.deleteState
          */
         fun forceEndOperatorAtCurPipeline(
-            opID: Int,
+            opID: OperatorID,
             pipeline: StreamingPipelineFrame,
         ) {
             scope.endOperator(opID, pipeline.pipelineID)

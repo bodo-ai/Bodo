@@ -129,6 +129,12 @@ public class RelationalAlgebraGenerator {
   public static boolean enableRuntimeJoinFilters = false;
 
   /**
+   * Should we insert placeholders for operator IDs to minimize codegen changes with respect to plan
+   * changes *
+   */
+  public static boolean hideOperatorIDs = false;
+
+  /**
    * Which sql dialect should Bodo emulate default from? Currently supported modes: SNOWFLAKE
    * (default) and SPARK.
    */
@@ -510,7 +516,8 @@ public class RelationalAlgebraGenerator {
             this.streamingBatchSize,
             dynamicTypes,
             namedParamTypes,
-            Map.of());
+            Map.of(),
+            this.hideOperatorIDs);
     codegen.generateDDLCode(ddlNode, new GenerateDDLTypes(this.planner.getTypeFactory()));
     return codegen.getGeneratedCode();
   }
@@ -553,7 +560,8 @@ public class RelationalAlgebraGenerator {
             this.streamingBatchSize,
             dynamicTypes,
             namedParamTypes,
-            v.getIDMapping());
+            v.getIDMapping(),
+            this.hideOperatorIDs);
     codegen.go(rel);
     return codegen.getGeneratedCode();
   }

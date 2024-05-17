@@ -123,7 +123,7 @@ class StreamingPipelineFrame(
     }
 
     fun initializeStreamingState(
-        opID: Int,
+        opID: OperatorID,
         assign: Op.Assign,
         type: OperatorType,
         memoryEstimate: Int = -1,
@@ -142,7 +142,7 @@ class StreamingPipelineFrame(
     }
 
     fun deleteStreamingState(
-        opID: Int,
+        opID: OperatorID,
         operation: Op,
     ) {
         scope.endOperator(opID, pipelineID)
