@@ -28,7 +28,7 @@ def login(auth_url, bot_username, bot_password):
 
     # use organization id to switch tenant with superadmin capability
     assert "ORGANIZATION_UUID" in os.environ
-    logging.info("ORGANIZATION_UUID: ", os.environ["ORGANIZATION_UUID"])
+    logging.info("ORGANIZATION_UUID: %s", os.environ["ORGANIZATION_UUID"])
     payload = {"tenantId": os.environ["ORGANIZATION_UUID"]}
     url = f"{auth_url}/identity/resources/users/v1/tenant"
     headers = {
