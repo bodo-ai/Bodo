@@ -61,16 +61,16 @@ def schema_helper(conn_str, schema_name, create=True):
     if create:
         if bodo.get_rank() == 0:
             pd.read_sql(f"CREATE SCHEMA {schema_name}", conn_str)
+            assert check_schema_exists(conn_str, schema_name)
         bodo.barrier()
-        assert check_schema_exists(conn_str, schema_name)
 
     try:
         yield
     finally:
+        bodo.barrier()
         if bodo.get_rank() == 0:
             pd.read_sql(f"DROP SCHEMA IF EXISTS {schema_name}", conn_str)
-        bodo.barrier()
-        assert not check_schema_exists(conn_str, schema_name)
+            assert not check_schema_exists(conn_str, schema_name)
 
 
 @pytest.mark.parametrize("if_not_exists", [True, False])
@@ -559,16 +559,16 @@ def view_helper(conn_str, view_name, create=True):
     if create:
         if bodo.get_rank() == 0:
             pd.read_sql(f"CREATE VIEW {view_name} AS SELECT 0", conn_str)
+            assert check_view_exists(conn_str, view_name)
         bodo.barrier()
-        assert check_view_exists(conn_str, view_name)
 
     try:
         yield
     finally:
+        bodo.barrier()
         if bodo.get_rank() == 0:
             pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn_str)
-        bodo.barrier()
-        assert not check_view_exists(conn_str, view_name)
+            assert not check_view_exists(conn_str, view_name)
 
 
 def test_create_view(test_db_snowflake_catalog, memory_leak_check):
