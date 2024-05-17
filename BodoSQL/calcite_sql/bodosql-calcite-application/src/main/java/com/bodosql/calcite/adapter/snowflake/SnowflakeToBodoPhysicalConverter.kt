@@ -401,7 +401,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
             "_bodo_orig_table_indices" to origTableIndices,
             "_bodo_chunksize" to getStreamingBatchArg(ctx),
             "_bodo_read_as_table" to Expr.BooleanLiteral(true),
-            "_bodo_sql_op_id" to Expr.IntegerLiteral(ctx.operatorID()),
+            "_bodo_sql_op_id" to ctx.operatorID().toExpr(),
         )
     }
 

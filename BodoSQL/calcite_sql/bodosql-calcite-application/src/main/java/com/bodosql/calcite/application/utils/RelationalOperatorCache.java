@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.utils;
 
 import com.bodosql.calcite.ir.BodoEngineTable;
+import com.bodosql.calcite.ir.OperatorID;
 import com.bodosql.calcite.ir.StateVariable;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +19,7 @@ public class RelationalOperatorCache {
   // Maps each cacheID to the original BodoEngineTable
   private final Map<Integer, BodoEngineTable> tableCacheMap;
   // Map cache id to the state variables used by each consumer.
-  private final Map<Integer, Stack<Pair<StateVariable, Integer>>> stateInfoMap;
+  private final Map<Integer, Stack<Pair<StateVariable, OperatorID>>> stateInfoMap;
 
   public RelationalOperatorCache() {
     this.tableCacheMap = new HashMap<>();
@@ -62,8 +63,8 @@ public class RelationalOperatorCache {
    * @param key The cache key.
    * @param stateVars The state variables allocated for each consumer.
    */
-  public void setStateInfo(int key, List<Pair<StateVariable, Integer>> stateVars) {
-    Stack<Pair<StateVariable, Integer>> stack = new Stack<>();
+  public void setStateInfo(int key, List<Pair<StateVariable, OperatorID>> stateVars) {
+    Stack<Pair<StateVariable, OperatorID>> stack = new Stack<>();
     stack.addAll(stateVars);
     stateInfoMap.put(key, stack);
   }
@@ -74,7 +75,7 @@ public class RelationalOperatorCache {
    * @param key The cache key.
    * @return The state variable to use and its operator ID.
    */
-  public Pair<StateVariable, Integer> getStateInfo(int key) {
+  public Pair<StateVariable, OperatorID> getStateInfo(int key) {
     return stateInfoMap.get(key).pop();
   }
 }

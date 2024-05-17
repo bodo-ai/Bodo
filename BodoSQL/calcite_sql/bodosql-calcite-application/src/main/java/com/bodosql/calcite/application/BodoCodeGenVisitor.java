@@ -61,6 +61,7 @@ import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Module;
 import com.bodosql.calcite.ir.Op;
+import com.bodosql.calcite.ir.OperatorID;
 import com.bodosql.calcite.ir.OperatorType;
 import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
@@ -199,7 +200,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
       int batchSize,
       List<RelDataType> dynamicParamTypes,
       Map<String, RelDataType> namedParamTypeMap,
-      Map<Integer, Integer> idMapping) {
+      Map<Integer, Integer> idMapping,
+      boolean hideOperatorIDs) {
     super();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
@@ -210,6 +212,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
     this.generatedCode = new Module.Builder();
+    this.generatedCode.setHideOperatorIDs(hideOperatorIDs);
     this.streamingOptions = new StreamingOptions(batchSize);
     this.dynamicParamTypes = dynamicParamTypes;
     this.namedParamTypeMap = namedParamTypeMap;
@@ -498,7 +501,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     this.visit(node.getInput(0), 0, node);
 
     Variable inputTableVar = tableGenStack.pop();
-    int operatorID = this.generatedCode.newOperatorID(node);
+    OperatorID operatorID = this.generatedCode.newOperatorID(node);
     // Generate the list we are accumulating into.
     Variable batchAccumulatorVariable = this.genBatchAccumulatorVar();
     StreamingPipelineFrame activePipeline = this.generatedCode.getCurrentStreamingPipeline();
@@ -525,9 +528,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
         operatorID,
         new Op.Assign(
             batchAccumulatorVariable,
-            new Expr.Call(
-                "bodo.libs.table_builder.init_table_builder_state",
-                new Expr.IntegerLiteral(operatorID))),
+            new Expr.Call("bodo.libs.table_builder.init_table_builder_state", operatorID.toExpr())),
         OperatorType.ACCUMULATE_TABLE,
         memoryEstimate);
     timer.insertStateEndTimer(0);
@@ -664,7 +665,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // Create the state variables
     StateVariable stateVar = genStateVar();
     kotlin.Pair<String, Expr> isAll = new kotlin.Pair<>("all", new Expr.BooleanLiteral(node.all));
-    int operatorID = this.generatedCode.newOperatorID(node);
+    OperatorID operatorID = this.generatedCode.newOperatorID(node);
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
             operatorID,
@@ -679,7 +680,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_union.init_union_state",
-            List.of(new Expr.IntegerLiteral(operatorID)),
+            List.of(operatorID.toExpr()),
             List.of(isAll));
     Op.Assign unionInit = new Op.Assign(stateVar, stateCall);
 
@@ -1031,7 +1032,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
-    int operatorID = this.generatedCode.newOperatorID(node);
+    OperatorID operatorID = this.generatedCode.newOperatorID(node);
     // TODO: Move to a wrapper function to avoid the timerInfo calls.
     // This requires more information about the high level design of the streaming
     // operators since there are several parts (e.g. state, multiple loop sections,
@@ -1064,8 +1065,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer(0);
-    Expr writeState =
-        writeTarget.streamingCreateTableInit(new Expr.IntegerLiteral(operatorID), createTableType);
+    Expr writeState = writeTarget.streamingCreateTableInit(operatorID, createTableType);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1279,7 +1279,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // Generate Streaming Code in this case
     // Get or create current streaming pipeline
     StreamingPipelineFrame currentPipeline = this.generatedCode.getCurrentStreamingPipeline();
-    int operatorID = this.generatedCode.newOperatorID(node);
+    OperatorID operatorID = this.generatedCode.newOperatorID(node);
 
     // Get column names for write append call
     Variable colNamesGlobal =
@@ -1308,7 +1308,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer(0);
-    Expr writeInitCode = writeTarget.streamingInsertIntoInit(new Expr.IntegerLiteral(operatorID));
+    Expr writeInitCode = writeTarget.streamingInsertIntoInit(operatorID);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1672,7 +1672,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Variable buildTable = tableGenStack.pop();
 
     // Create the state var.
-    int operatorID = generatedCode.newOperatorID(node);
+    OperatorID operatorID = generatedCode.newOperatorID(node);
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
             operatorID,
@@ -1696,7 +1696,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_groupby.init_groupby_state",
-            new Expr.IntegerLiteral(operatorID),
+            operatorID.toExpr(),
             keyIndices,
             fnames,
             offset,
@@ -1833,7 +1833,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Variable buildTable = tableGenStack.pop();
 
     // Create the state var.
-    int operatorID = generatedCode.newOperatorID(node);
+    OperatorID operatorID = generatedCode.newOperatorID(node);
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
             operatorID,
@@ -1908,7 +1908,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     // Insert the state initialization call
     List<Expr> positionalArgs = new ArrayList<>();
-    positionalArgs.add(new Expr.IntegerLiteral(operatorID));
+    positionalArgs.add(operatorID.toExpr());
     positionalArgs.add(partitionGlobal);
     positionalArgs.add(fnamesGlobal);
     positionalArgs.add(inOffsetsGlobal);
@@ -2154,7 +2154,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // There may be a need to pass in several lambdas, so other changes may be
     // needed to avoid
     // constant rewriting.
-    int operatorID = this.generatedCode.newOperatorID(node);
+    OperatorID operatorID = this.generatedCode.newOperatorID(node);
     StreamingRelNodeTimer timerInfo =
         StreamingRelNodeTimer.createStreamingTimer(
             operatorID,
@@ -2171,7 +2171,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   private StateVariable visitStreamingBodoJoinState(
-      BodoPhysicalJoin node, StreamingRelNodeTimer timerInfo, int operatorID) {
+      BodoPhysicalJoin node, StreamingRelNodeTimer timerInfo, OperatorID operatorID) {
     // Extract the Hash Join information
     timerInfo.insertStateStartTimer(0);
     JoinInfo joinInfo = node.analyzeCondition();
@@ -2210,7 +2210,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
         new Expr.Call(
             "bodo.libs.stream_join.init_join_state",
             List.of(
-                new Expr.IntegerLiteral(operatorID),
+                operatorID.toExpr(),
                 keyIndices.right,
                 keyIndices.left,
                 buildNamesGlobal,
@@ -2234,7 +2234,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   private StateVariable visitStreamingBodoJoinBatch(
-      BodoPhysicalJoin node, StreamingRelNodeTimer timerInfo, int operatorID) {
+      BodoPhysicalJoin node, StreamingRelNodeTimer timerInfo, OperatorID operatorID) {
     // Visit the batch side
     this.visit(node.getRight(), 0, node);
     BodoEngineTable buildTable = tableGenStack.pop();
@@ -2260,7 +2260,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
       BodoPhysicalJoin node,
       StateVariable joinStateVar,
       StreamingRelNodeTimer timerInfo,
-      int operatorID) {
+      OperatorID operatorID) {
     // Visit the probe side
     this.visit(node.getLeft(), 1, node);
     timerInfo.insertLoopOperationStartTimer(2);
@@ -2514,7 +2514,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
       // There may be a need to pass in several lambdas, so other changes may be
       // needed to avoid
       // constant rewriting.
-      int operatorID = generatedCode.newOperatorID(node);
+      OperatorID operatorID = generatedCode.newOperatorID(node);
       StreamingRelNodeTimer timerInfo =
           StreamingRelNodeTimer.createStreamingTimer(
               operatorID,
@@ -2558,22 +2558,23 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
   private class BuildContext implements BodoPhysicalRel.BuildContext {
     private final @NotNull TimerSupportedRel node;
-    private final int operatorID;
+    private final OperatorID operatorID;
 
     private final BodoTZInfo defaultTz;
 
-    public BuildContext(@NotNull TimerSupportedRel node, int operatorID, BodoTZInfo defaultTz) {
+    public BuildContext(
+        @NotNull TimerSupportedRel node, OperatorID operatorID, BodoTZInfo defaultTz) {
       this.node = node;
       this.operatorID = operatorID;
       this.defaultTz = defaultTz;
     }
 
     public BuildContext(@NotNull TimerSupportedRel node, BodoTZInfo defaultTz) {
-      this(node, -1, defaultTz);
+      this(node, null, defaultTz);
     }
 
     @Override
-    public int operatorID() {
+    public OperatorID operatorID() {
       return operatorID;
     }
 

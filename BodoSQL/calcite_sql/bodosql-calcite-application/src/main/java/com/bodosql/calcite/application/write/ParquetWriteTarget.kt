@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.write
 
 import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
@@ -22,12 +23,12 @@ class ParquetWriteTarget(
      * @return A code generation expression for initializing the table.
      */
     override fun streamingCreateTableInit(
-        operatorID: Expr.IntegerLiteral,
+        operatorID: OperatorID,
         createTableType: CreateTableType,
     ): Expr {
         return Expr.Call(
             "bodo.io.stream_parquet_write.parquet_writer_init",
-            operatorID,
+            operatorID.toExpr(),
             Expr.StringLiteral(parquetPath),
             // We don't enable users to specify compression yet.
             Expr.StringLiteral("snappy"),
@@ -44,7 +45,7 @@ class ParquetWriteTarget(
      * @param operatorID The operatorID used for tracking memory allocation.
      * @return A code generation expression for initializing the insert into.
      */
-    override fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr {
+    override fun streamingInsertIntoInit(operatorID: OperatorID): Expr {
         return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
     }
 

@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.write
 
 import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.google.common.collect.ImmutableList
@@ -32,12 +33,12 @@ open class IcebergWriteTarget(
      * @return A code generation expression for initializing the table.
      */
     override fun streamingCreateTableInit(
-        operatorID: Expr.IntegerLiteral,
+        operatorID: OperatorID,
         createTableType: CreateTableType,
     ): Expr {
         var args =
             listOf(
-                operatorID,
+                operatorID.toExpr(),
                 Expr.StringLiteral(icebergConnectionString),
                 Expr.StringLiteral(tableName),
                 Expr.StringLiteral(schema.joinToString(separator = "/")),
@@ -60,7 +61,7 @@ open class IcebergWriteTarget(
      * @param operatorID The operatorID used for tracking memory allocation.
      * @return A code generation expression for initializing the insert into.
      */
-    override fun streamingInsertIntoInit(operatorID: Expr.IntegerLiteral): Expr {
+    override fun streamingInsertIntoInit(operatorID: OperatorID): Expr {
         return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
     }
 

@@ -5,6 +5,7 @@ import com.bodosql.calcite.ir.Module
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Op.Assign
 import com.bodosql.calcite.ir.Op.Stmt
+import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.StreamingPipelineFrame
 import com.bodosql.calcite.ir.Variable
 
@@ -20,7 +21,7 @@ private const val REL_NODE_TIMING_VERBOSE_LEVEL = 2
  * because that class is scheduled to be removed when everything is ported to streaming.
  */
 class StreamingRelNodeTimer(
-    private val opID: Int,
+    private val opID: OperatorID,
     private val builder: Module.Builder,
     private val isVerbose: Boolean,
     tracingLevel: Int,
@@ -72,7 +73,7 @@ class StreamingRelNodeTimer(
             Stmt(
                 Expr.Call(
                     "bodo.libs.query_profile_collector.submit_operator_stage_time",
-                    Expr.IntegerLiteral(opID),
+                    opID.toExpr(),
                     Expr.IntegerLiteral(stage),
                     totalTime,
                 ),
@@ -136,7 +137,7 @@ class StreamingRelNodeTimer(
             Stmt(
                 Expr.Call(
                     "bodo.libs.query_profile_collector.submit_operator_stage_row_counts",
-                    Expr.IntegerLiteral(opID),
+                    opID.toExpr(),
                     Expr.IntegerLiteral(stage),
                     accumulator,
                 ),
@@ -188,7 +189,7 @@ class StreamingRelNodeTimer(
         val updateProfiler =
             Expr.Call(
                 "bodo.libs.query_profile_collector.submit_operator_stage_time",
-                Expr.IntegerLiteral(opID),
+                opID.toExpr(),
                 Expr.IntegerLiteral(stage),
                 accumulator,
             )
@@ -217,7 +218,7 @@ class StreamingRelNodeTimer(
         val nodeDetailsVariable = builder.symbolTable.genGenericTempVar()
         frame.addTermination(Assign(nodeDetailsVariable, Expr.StringLiteral(nodeDetails)))
 
-        val totalDurationCall = Expr.Call("bodo.libs.query_profile_collector.get_operator_duration", Expr.IntegerLiteral(opID))
+        val totalDurationCall = Expr.Call("bodo.libs.query_profile_collector.get_operator_duration", opID.toExpr())
         val printMessage =
             String.format(
                 "f'''Execution time for %s {%s}: {%s}'''",
@@ -240,7 +241,7 @@ class StreamingRelNodeTimer(
     companion object {
         @JvmStatic
         fun createStreamingTimer(
-            opID: Int,
+            opID: OperatorID,
             builder: Module.Builder,
             verboseLevel: Int,
             tracingLevel: Int,
