@@ -22,6 +22,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeProject
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.tools.BodoRelBuilder
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.Context
@@ -39,7 +40,6 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.tools.RelBuilderFactory
 import org.apache.calcite.util.ImmutableBitSet
 
@@ -78,7 +78,7 @@ object BodoPhysicalRelFactories {
         )
 
     @JvmField
-    val BODO_PHYSICAL_BUILDER: RelBuilderFactory = RelBuilder.proto(DEFAULT_CONTEXT)
+    val BODO_PHYSICAL_BUILDER: RelBuilderFactory = BodoRelBuilder.proto(DEFAULT_CONTEXT)
 
     private fun createProject(
         input: RelNode,
