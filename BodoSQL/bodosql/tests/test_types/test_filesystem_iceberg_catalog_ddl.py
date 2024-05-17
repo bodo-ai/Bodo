@@ -73,6 +73,7 @@ def ddl_schema(schema_path: Path, create=True):
     try:
         yield
     finally:
+        bodo.barrier()
         if bodo.get_rank() == 0:
             if schema_path.exists():
                 schema_path.rmdir()
@@ -123,20 +124,7 @@ def test_create_schema(if_not_exists, iceberg_filesystem_catalog, memory_leak_ch
             py_output=py_output,
             test_str_literal=True,
         )
-        # TODO(aneesh): [BSE-3262] adding additional logging to this assert
-        # to help with debugging through sporadic nightly failures
-        if not schema_path.exists():
-            msg = "Schema should still exist"
-            r = schema_path
-            while not r.exists():
-                msg += f"\n{r} doesn't exist"
-                if r.parent == r:
-                    break
-                r = r.parent
-            if r.exists():
-                msg += f"\n{r} exists"
-                msg += f"\nchildren: {list(r.iterdir())}"
-            assert schema_path.exists(), msg
+        assert schema_path.exists()
 
 
 def test_create_schema_already_exists(iceberg_filesystem_catalog, memory_leak_check):
@@ -155,20 +143,7 @@ def test_create_schema_already_exists(iceberg_filesystem_catalog, memory_leak_ch
                 py_output=py_out,
                 test_str_literal=True,
             )
-        # TODO(aneesh): [BSE-3262] adding additional logging to this assert
-        # to help with debugging through sporadic nightly failures
-        if not schema_path.exists():
-            msg = "Schema should still exist"
-            r = schema_path
-            while not r.exists():
-                msg += f"\n{r} doesn't exist"
-                if r.parent == r:
-                    break
-                r = r.parent
-            if r.exists():
-                msg += f"\n{r} exists"
-                msg += f"\nchildren: {list(r.iterdir())}"
-            assert schema_path.exists(), msg
+        assert schema_path.exists(), "Schema should still exist"
 
 
 def test_create_schema_if_not_exists_already_exists(
