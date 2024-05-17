@@ -15,6 +15,7 @@ import com.bodosql.calcite.adapter.common.LimitUtils
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import com.google.common.annotations.VisibleForTesting
+import org.apache.calcite.plan.BodoRelOptCluster
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
@@ -36,7 +37,11 @@ object RuntimeJoinFilterProgram : Program {
         lattices: MutableList<RelOptLattice>,
     ): RelNode {
         return if (RelationalAlgebraGenerator.enableRuntimeJoinFilters) {
-            val shuttle = RuntimeJoinFilterShuttle()
+            val cluster = rel.cluster
+            if (cluster !is BodoRelOptCluster) {
+                throw InternalError("Cluster must be a BodoRelOptCluster")
+            }
+            val shuttle = RuntimeJoinFilterShuttle(cluster)
             rel.accept(shuttle)
         } else {
             rel
@@ -44,8 +49,7 @@ object RuntimeJoinFilterProgram : Program {
     }
 
     @VisibleForTesting
-    internal class RuntimeJoinFilterShuttle() : RelShuttleImpl() {
-        private var joinFilterID: Int = 0
+    internal class RuntimeJoinFilterShuttle(private val cluster: BodoRelOptCluster) : RelShuttleImpl() {
         private var liveJoins = JoinFilterProgramState()
 
         override fun visit(rel: RelNode): RelNode {
@@ -293,7 +297,7 @@ object RuntimeJoinFilterProgram : Program {
                     if (columns.isEmpty()) {
                         Pair(-1, listOf())
                     } else {
-                        val filterKey = joinFilterID++
+                        val filterKey = cluster.nextJoinId()
                         // Add a new join to the left side.
                         leftJoinInfo.add(
                             filterKey,

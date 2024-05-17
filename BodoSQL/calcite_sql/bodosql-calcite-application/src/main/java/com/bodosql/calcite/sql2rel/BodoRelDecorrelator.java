@@ -5,6 +5,7 @@ import static java.util.Objects.requireNonNull;
 import com.bodosql.calcite.application.logicalRules.BodoFilterCorrelateRule;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.core.Flatten;
+import com.bodosql.calcite.tools.BodoRelBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.plan.Context;
@@ -60,6 +61,11 @@ import org.immutables.value.Value;
 public class BodoRelDecorrelator extends RelDecorrelator {
   protected BodoRelDecorrelator(CorelMap cm, Context context, RelBuilder relBuilder) {
     super(cm, context, relBuilder);
+  }
+
+  @Override
+  protected RelBuilderFactory relBuilderFactory() {
+    return BodoRelBuilder.proto(relBuilder);
   }
 
   @Override
