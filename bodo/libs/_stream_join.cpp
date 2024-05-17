@@ -2628,6 +2628,16 @@ bool join_build_consume_batch(HashJoinState* join_state,
             global_table_size += table_global_memory_size(
                 join_state->build_shuffle_state.table_buffer->data_table);
             if (global_table_size < get_bcast_join_threshold()) {
+                if (join_state->debug_partitioning && myrank == 0) {
+                    std::cerr
+                        << fmt::format(
+                               "[DEBUG] HashJoin (Op ID: {}): Converting to a "
+                               "broadcast hash join since the global table "
+                               "size ({}) is lower than the threshold",
+                               join_state->op_id,
+                               BytesToHumanReadableString(global_table_size))
+                        << std::endl;
+                }
                 time_pt start_bcast = start_timer();
                 // Mark the build side as replicated.
                 join_state->build_parallel = false;

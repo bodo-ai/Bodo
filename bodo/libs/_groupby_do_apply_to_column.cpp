@@ -12,6 +12,16 @@
 #include "_stl.h"
 #include "arrow/vendored/portable-snippets/safe-math.h"
 
+// Equivalent to arrow::Decimal128::FitsInPrecision(DECIMAL128_MAX_PRECISION).
+// This is used in Groupby-Sum for decimals.
+// We define the value explicitly so that this check can be inlined.
+static inline bool Decimal128FitsInMaxPrecision(
+    const arrow::BasicDecimal128& dec) {
+    static constexpr auto kDecimal128Max =
+        arrow::BasicDecimal128(5421010862427522170LL, 687399551400673280ULL);
+    return arrow::BasicDecimal128::Abs(dec) < kDecimal128Max;
+}
+
 /**
  * This file defines the functions that create the
  * general infrastructure used to apply most operations
@@ -1801,7 +1811,7 @@ void apply_to_column_nullable(
                  */                                                                                                                         \
                 /* https://github.com/apache/arrow/blob/6a28035c2b49b432dc63f5ee7524d76b4ed2d762/cpp/src/arrow/util/int_util_overflow.h#L43 \
                  */                                                                                                                         \
-                arrow::Decimal128 data_val =                                                                                                \
+                const arrow::Decimal128& data_val =                                                                                         \
                     getv<arrow::Decimal128, ArrType>(in_col, i);                                                                            \
                 arrow::Decimal128* out_ptr =                                                                                                \
                     out_col->data1<bodo_array_type::NULLABLE_INT_BOOL,                                                                      \
@@ -1817,8 +1827,7 @@ void apply_to_column_nullable(
                     &result_hi, result_hi, result_lo < out_val.low_bits());                                                                 \
                 arrow::Decimal128 result_decimal =                                                                                          \
                     arrow::Decimal128(result_hi, result_lo);                                                                                \
-                success &=                                                                                                                  \
-                    result_decimal.FitsInPrecision(DECIMAL128_MAX_PRECISION);                                                               \
+                success &= Decimal128FitsInMaxPrecision(result_decimal);                                                                    \
                 *out_ptr = result_decimal;                                                                                                  \
                 out_col->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(                                                                  \
                     i_grp, true);                                                                                                           \

@@ -86,6 +86,10 @@ ll.add_symbol(
     "multiply_decimal_scalars",
     decimal_ext.multiply_decimal_scalars_py_entry,
 )
+ll.add_symbol(
+    "multiply_decimal_arrays",
+    decimal_ext.multiply_decimal_arrays_py_entry,
+)
 
 
 from bodo.utils.indexing import (
@@ -1155,6 +1159,79 @@ def _multiply_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     ret_type = types.Tuple([output_decimal_type, types.bool_])
     return ret_type(d1_t, d2_t, precision_t, scale_t), codegen
+
+
+def multiply_decimal_arrays(d1, d2):  # pragma: no cover
+    pass
+
+
+@overload(multiply_decimal_arrays)
+def overload_multiply_decimal_arrays(d1, d2):
+    """
+    Multiply two decimal arrays together. If overflow occurs,
+    this raises an exception.
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    if not isinstance(d1, DecimalArrayType) or not isinstance(d2, DecimalArrayType):
+        raise BodoError(
+            "multiply_decimal_arrays: DecimalArrayType expected for both inputs"
+        )
+
+    p, s = decimal_multiplication_output_precision_scale(
+        d1.precision, d1.scale, d2.precision, d2.scale
+    )
+    output_decimal_arr_type = DecimalArrayType(p, s)
+
+    def impl(d1, d2):  # pragma: no cover
+        d1_info = array_to_info(d1)
+        d2_info = array_to_info(d2)
+        out_arr_info, overflow = _multiply_decimal_arrays(d1_info, d2_info, p, s)
+        out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
+        delete_info(out_arr_info)
+        if overflow:
+            raise ValueError("Number out of representable range")
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _multiply_decimal_arrays(typingctx, d1_t, d2_t, out_precision_t, out_scale_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        d1, d2, output_precision, output_scale = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="multiply_decimal_arrays"
+        )
+        overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        ret = builder.call(
+            fn,
+            [
+                d1,
+                d2,
+                output_precision,
+                output_scale,
+                overflow_pointer,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        overflow = builder.load(overflow_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+
+    ret_type = types.Tuple([array_info_type, types.bool_])
+    return ret_type(d1_t, d2_t, out_precision_t, out_scale_t), codegen
 
 
 class DecimalArrayType(types.ArrayCompatible):
