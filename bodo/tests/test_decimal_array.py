@@ -709,3 +709,41 @@ def test_decimal_array_multiplication(precision_scale_decimal_array, memory_leak
         dtype=pd.ArrowDtype(pa.decimal128(38, 6)),
     )
     check_func(impl, (arr1, arr2), py_output=py_output)
+
+
+def test_decimal_array_multiplication_overflow_handling():
+    """
+    Test that an appropriate error is raised when one or more
+    decimal multiplications overflow.
+    """
+
+    @bodo.jit(distributed=["arr1", "arr2"])
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.multiply_decimals(arr1, arr2)
+
+    arr1 = pd.array(
+        [
+            "1",
+            "99.9999999",  # This will overflow
+            None,
+            None,
+            "99.9999999",
+            "1",  # This won't overflow
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 36)),
+    )
+    arr2 = pd.array(
+        [
+            "1",
+            "99.9999999",
+            None,
+            None,
+            "99.9999999",
+            "1",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 36)),
+    )
+
+    with pytest.raises(ValueError, match="Number out of representable range"):
+        out = impl(arr1, arr2)
+        print(out)
