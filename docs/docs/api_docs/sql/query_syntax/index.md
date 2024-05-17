@@ -1,6 +1,6 @@
-# Clauses
+# Query Syntax
 
-We currently support the following SQL query statements and clauses with
+We currently support the following SQL query clauses with
 BodoSQL, and are continuously adding support towards completeness. Note
 that BodoSQL ignores casing of keywords, and column and table names,
 except for the final output column name. Therefore,
