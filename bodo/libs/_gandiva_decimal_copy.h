@@ -108,10 +108,10 @@ inline void gdv_xlarge_multiply_and_scale_down(int64_t x_high, uint64_t x_low,
 
 // Multiply when the out_precision is 38, and there is no trimming of the scale
 // i.e the intermediate value is the same as the final value.
-static arrow::BasicDecimal128 MultiplyMaxPrecisionNoScaleDown(
-    const arrow::Decimal128& x, const arrow::Decimal128& y, int32_t out_scale,
-    bool* overflow) {
-    arrow::BasicDecimal128 result;
+static void MultiplyMaxPrecisionNoScaleDown(const arrow::Decimal128& x,
+                                            const arrow::Decimal128& y,
+                                            int32_t out_scale, bool* overflow,
+                                            arrow::Decimal128* result) {
     auto x_abs = arrow::BasicDecimal128::Abs(x);
     auto y_abs = arrow::BasicDecimal128::Abs(y);
 
@@ -120,20 +120,18 @@ static arrow::BasicDecimal128 MultiplyMaxPrecisionNoScaleDown(
     } else {
         // We've verified that the result will fit into 128 bits.
         *overflow = false;
-        result = x * y;
+        *result = x * y;
     }
-    return result;
 }
 
 // Multiply when the out_precision is 38, and there is trimming of the scale i.e
 // the intermediate value could be larger than the final value.
-static arrow::BasicDecimal128 MultiplyMaxPrecisionAndScaleDown(
-    const arrow::Decimal128& x, const arrow::Decimal128& y, int32_t x_scale,
-    int32_t y_scale, int32_t out_scale, bool* overflow) {
-    auto delta_scale = x_scale + y_scale - out_scale;
-
+static void MultiplyMaxPrecisionAndScaleDown(const arrow::Decimal128& x,
+                                             const arrow::Decimal128& y,
+                                             int32_t delta_scale,
+                                             bool* overflow,
+                                             arrow::Decimal128* result) {
     *overflow = false;
-    arrow::BasicDecimal128 result;
     auto x_abs = arrow::BasicDecimal128::Abs(x);
     auto y_abs = arrow::BasicDecimal128::Abs(y);
 
@@ -157,63 +155,58 @@ static arrow::BasicDecimal128 MultiplyMaxPrecisionAndScaleDown(
         gdv_xlarge_multiply_and_scale_down(
             x.high_bits(), x.low_bits(), y.high_bits(), y.low_bits(),
             delta_scale, &result_high, &result_low, overflow);
-        result = arrow::BasicDecimal128(result_high, result_low);
+        *result = arrow::BasicDecimal128(result_high, result_low);
     } else {
-        if (ARROW_PREDICT_TRUE(delta_scale <= 38)) {
-            // The largest value that result can have here is (2^64 - 1) * (2^63
-            // - 1), which is greater than BasicDecimal128::kMaxValue.
-            result = x * y;
-            // Since delta_scale is greater than zero, result can now be at most
-            // ((2^64 - 1) * (2^63 - 1)) / 10, which is less than
-            // BasicDecimal128::kMaxValue, so there cannot be any overflow.
-            result = result.ReduceScaleBy(delta_scale);
-        } else {
-            // We are multiplying decimal(38, 38) by decimal(38, 38). The result
-            // should be a decimal(38, 37), so delta scale = 38 + 38 - 37 = 39.
-            // Since we are not in the 256 bit intermediate value case and we
-            // are scaling down by 39, then we are guaranteed that the result is
-            // 0 (even if we try to round). The largest possible intermediate
-            // result is 38 "9"s. If we scale down by 39, the leftmost 9 is now
-            // two digits to the right of the rightmost "visible" one. The
-            // reason why we have to handle this case separately is because a
-            // scale multiplier with a delta_scale 39 does not fit into 128 bit.
-            result = 0;
-        }
+        // Note: The delta scale is always < 38, so this path is always safe.
+        // The largest value that result can have here is (2^64 - 1) * (2^63
+        // - 1), which is greater than BasicDecimal128::kMaxValue.
+        *result = x * y;
+        // Since delta_scale is greater than zero, result can now be at most
+        // ((2^64 - 1) * (2^63 - 1)) / 10, which is less than
+        // BasicDecimal128::kMaxValue, so there cannot be any overflow.
+        *result = result->ReduceScaleBy(delta_scale);
     }
-    return result;
 }
 
 // Multiply when the out_precision is 38.
-static arrow::BasicDecimal128 MultiplyMaxPrecision(
-    const arrow::Decimal128& x, const arrow::Decimal128& y, int32_t x_scale,
-    int32_t y_scale, int32_t out_scale, bool* overflow) {
-    auto delta_scale = x_scale + y_scale - out_scale;
-    if (delta_scale == 0) {
-        return MultiplyMaxPrecisionNoScaleDown(x, y, out_scale, overflow);
+template <bool rescale>
+inline void MultiplyMaxPrecision(const arrow::Decimal128& x,
+                                 const arrow::Decimal128& y, int32_t out_scale,
+                                 int32_t delta_scale, bool* overflow,
+                                 arrow::Decimal128* result) {
+    if (rescale) {
+        MultiplyMaxPrecisionAndScaleDown(x, y, delta_scale, overflow, result);
     } else {
-        return MultiplyMaxPrecisionAndScaleDown(x, y, x_scale, y_scale,
-                                                out_scale, overflow);
+        MultiplyMaxPrecisionNoScaleDown(x, y, out_scale, overflow, result);
     }
 }
 
-// Bodo change: Added 'inline'
-inline arrow::BasicDecimal128 Multiply(const arrow::Decimal128& x,
-                                       const arrow::Decimal128& y,
-                                       int32_t x_scale, int32_t y_scale,
-                                       int32_t out_precision, int32_t out_scale,
-                                       bool* overflow) noexcept {
-    arrow::BasicDecimal128 result;
+/**
+ * @brief Multiply two decimal values and place the result in result.
+ *
+ * @param x The first input.
+ * @param y The second input.
+ * @param x_scale The scale of x.
+ * @param y_scale The scale of y.
+ * @param out_precision The output precision.
+ * @param out_scale The output scale.
+ * @param overflow[out] Did overflow occur.
+ * @param result[out] The result.
+ */
+template <bool fast_multiply, bool rescale>
+inline void Multiply(const arrow::Decimal128& x, const arrow::Decimal128& y,
+                     int32_t out_scale, int32_t delta_scale, bool* overflow,
+                     arrow::Decimal128* result) noexcept {
     *overflow = false;
-    if (out_precision < kMaxPrecision) {
+    if (fast_multiply) {
         // fast-path multiply
-        result = x * y;
+        *result = x * y;
     } else if (x == 0 || y == 0) {
         // Handle this separately to avoid divide-by-zero errors.
-        result = arrow::BasicDecimal128(0, 0);
+        *result = arrow::BasicDecimal128(0, 0);
     } else {
-        result =
-            MultiplyMaxPrecision(x, y, x_scale, y_scale, out_scale, overflow);
+        MultiplyMaxPrecision<rescale>(x, y, out_scale, delta_scale, overflow,
+                                      result);
     }
-    return result;
 }
 }  // namespace decimalops
