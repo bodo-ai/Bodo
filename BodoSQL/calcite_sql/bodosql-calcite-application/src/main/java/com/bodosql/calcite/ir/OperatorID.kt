@@ -3,7 +3,7 @@ package com.bodosql.calcite.ir
 /**
  * Wrapper for operator IDs. In tests we represent operator IDs by "OPID" instead of the true value to avoid changes in operator ID assignment from causing large diffs when updated expected code
  */
-class OperatorID(val id: Int, val hide: Boolean) {
+class OperatorID(val id: Int, val hide: Boolean) : Comparable<OperatorID> {
     fun toExpr(): Expr {
         if (hide) {
             return Expr.Raw("OPID")
@@ -20,6 +20,10 @@ class OperatorID(val id: Int, val hide: Boolean) {
 
     override fun hashCode(): Int {
         return id.hashCode()
+    }
+
+    override fun compareTo(other: OperatorID): Int {
+        return id.compareTo(other.id)
     }
 
     override fun equals(other: Any?): Boolean {
