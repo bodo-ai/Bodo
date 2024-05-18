@@ -50,6 +50,42 @@ def get_spark(path: str = ".") -> SparkSession:
     return spark
 
 
+def get_spark_tabular(tabular_connection):
+    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+    spark = (
+        SparkSession.builder.appName("Iceberg with Spark")
+        .config(
+            "spark.jars.packages",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.1",
+        )
+        .config("spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog")
+        .config(
+            "spark.sql.catalog.rest_prod.catalog-impl",
+            "org.apache.iceberg.rest.RESTCatalog",
+        )
+        .config("spark.sql.catalog.rest_prod.uri", rest_uri)
+        .config("spark.sql.catalog.rest_prod.credential", tabular_credential)
+        .config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
+        .config("spark.sql.defaultCatalog", "rest_prod")
+        .config(
+            "spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        )
+        .config("spark.sql.session.timeZone", "UTC")
+        # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
+        .config("spark.sql.execution.arrow.enabled", "true")
+        .getOrCreate()
+    )
+
+    # Spark throws a WARNING with a very long stacktrace whenever creating am
+    # Iceberg table with Hadoop because it is initially unable to determine that
+    # it wrote a `version-hint.text` file, even though it does.
+    # Setting the Log Level to "ERROR" hides it
+    spark.sparkContext.setLogLevel("ERROR")
+    spark.sql("use default;")
+    return spark
+
+
 def transform_str(col_name: str, transform: str, val: int) -> str:
     if transform == "identity":
         return col_name

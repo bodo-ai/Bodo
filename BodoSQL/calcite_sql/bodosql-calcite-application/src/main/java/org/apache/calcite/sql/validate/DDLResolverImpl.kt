@@ -1,6 +1,5 @@
 package org.apache.calcite.sql.validate
 
-import com.amazonaws.services.clouddirectory.model.SchemaAlreadyExistsException
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.ddl.DDLExecutionResult
 import com.bodosql.calcite.ddl.MissingObjectException
@@ -14,8 +13,6 @@ import com.bodosql.calcite.sql.validate.DDLResolver
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
-import org.apache.avro.message.MissingSchemaException
-import java.lang.Exception
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.sql.SqlDescribeTable
@@ -25,7 +22,6 @@ import org.apache.calcite.sql.ddl.SqlCreateSchema
 import org.apache.calcite.sql.ddl.SqlDropSchema
 import org.apache.calcite.sql.ddl.SqlCreateView
 import org.apache.calcite.sql.ddl.SqlDdlNodes
-import org.apache.calcite.tools.Planner
 import org.apache.calcite.util.Util
 import java.util.function.Function
 
@@ -179,9 +175,18 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         val parentSchemaPath = Util.skipLast(schemaPath)
         val schema = deriveSchema(parentSchemaPath)
         val catalogSchema = validateSchema(schema, node.kind, schemaName)
-        val validatedQuery = getValidator.apply(catalogSchema.fullPath).validate(node.query);
+
+        // Validate the query in the context of the schema it will be created in (as opposed to the default schema -
+        // this matters if both the default schema and the view's parent schema have tables with the same names, or if a
+        // referenced table only exists in one of the schemas).
+        // We also get the rowType so that schemas for the view can be constructed if needed.
+        val validator = getValidator.apply(catalogSchema.fullPath)
+        val validatedQuery = validator.validate(node.query)
+        val rowDataType = validator.getValidatedNodeType(validatedQuery)
+
+        // Construct a new SqlCreateView node with the validated query and pass it on to the catalog's executor
         val validatedCreate = SqlDdlNodes.createView(node.parserPosition, node.replace, node.name, node.columnList, validatedQuery)
-        catalogSchema.ddlExecutor.createView(schemaPath, validatedCreate)
+        catalogSchema.ddlExecutor.createOrReplaceView(schemaPath, validatedCreate, catalogSchema, rowDataType)
 
         return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$schemaName' successfully created.")))
     }
