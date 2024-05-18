@@ -279,8 +279,24 @@ arrow::Decimal128 multiply_decimal_scalars_py_entry(
     int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
     bool* overflow) noexcept {
     try {
-        return decimalops::Multiply(v1, v2, s1, s2, out_precision, out_scale,
-                                    overflow);
+        arrow::Decimal128 result;
+        bool fast_multiply = out_precision < decimalops::kMaxPrecision;
+        int32_t delta_scale = s1 + s2 - out_scale;
+        bool rescale = delta_scale != 0;
+        if (fast_multiply && rescale) {
+            decimalops::Multiply<true, true>(v1, v2, out_scale, delta_scale,
+                                             overflow, &result);
+        } else if (fast_multiply) {
+            decimalops::Multiply<true, false>(v1, v2, out_scale, delta_scale,
+                                              overflow, &result);
+        } else if (rescale) {
+            decimalops::Multiply<false, true>(v1, v2, out_scale, delta_scale,
+                                              overflow, &result);
+        } else {
+            decimalops::Multiply<false, false>(v1, v2, out_scale, delta_scale,
+                                               overflow, &result);
+        }
+        return result;
 
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -311,34 +327,51 @@ std::shared_ptr<array_info> multiply_decimal_arrays(
         alloc_nullable_array_no_nulls(arr1->length, Bodo_CTypes::DECIMAL);
     out_arr->precision = out_precision;
     out_arr->scale = out_scale;
-
-    // Do an element wise multiplication.
-    *overflow = false;
-    for (size_t i = 0; i < arr1->length; i++) {
-        if (!arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i) ||
-            !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
-            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
-        } else {
-            arrow::Decimal128* out_ptr =
-                out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
-                               arrow::Decimal128>() +
-                i;
-            bool overflow_i;
-            const arrow::Decimal128& d1 =
-                *(arr1->data1<bodo_array_type::NULLABLE_INT_BOOL,
-                              arrow::Decimal128>() +
-                  i);
-            const arrow::Decimal128& d2 =
-                *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,
-                              arrow::Decimal128>() +
-                  i);
-            *out_ptr = decimalops::Multiply(d1, d2, s1, s2, out_precision,
-                                            out_scale, &overflow_i);
-            (*overflow) |= overflow_i;
-        }
+    bool fast_multiply = out_precision < decimalops::kMaxPrecision;
+    int32_t delta_scale = s1 + s2 - out_scale;
+    bool rescale = delta_scale != 0;
+    bool out_overflow = false;
+#ifndef DECIMAL_ARRAY_MULTIPLY
+#define DECIMAL_ARRAY_MULTIPLY(FAST_MULTIPLY, RESCALE)                        \
+    for (size_t i = 0; i < arr1->length; i++) {                               \
+        if (!arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i) ||     \
+            !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {     \
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,      \
+                                                                      false); \
+        } else {                                                              \
+            arrow::Decimal128* out_ptr =                                      \
+                out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,            \
+                               arrow::Decimal128>() +                         \
+                i;                                                            \
+            bool overflow_i;                                                  \
+            const arrow::Decimal128& d1 =                                     \
+                *(arr1->data1<bodo_array_type::NULLABLE_INT_BOOL,             \
+                              arrow::Decimal128>() +                          \
+                  i);                                                         \
+            const arrow::Decimal128& d2 =                                     \
+                *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,             \
+                              arrow::Decimal128>() +                          \
+                  i);                                                         \
+            decimalops::Multiply<FAST_MULTIPLY, RESCALE>(                     \
+                d1, d2, out_scale, delta_scale, &overflow_i, out_ptr);        \
+            out_overflow |= overflow_i;                                       \
+        }                                                                     \
     }
+#endif
+    if (fast_multiply && rescale) {
+        DECIMAL_ARRAY_MULTIPLY(true, true)
+    } else if (fast_multiply) {
+        DECIMAL_ARRAY_MULTIPLY(true, false)
+    } else if (rescale) {
+        DECIMAL_ARRAY_MULTIPLY(false, true)
+    } else {
+        DECIMAL_ARRAY_MULTIPLY(false, false)
+    }
+    *overflow = out_overflow;
     return out_arr;
 }
+
+#undef DECIMAL_ARRAY_MULTIPLY
 
 array_info* multiply_decimal_arrays_py_entry(array_info* arr1_,
                                              array_info* arr2_,
