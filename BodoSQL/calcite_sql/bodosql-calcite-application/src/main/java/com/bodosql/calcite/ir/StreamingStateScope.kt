@@ -52,7 +52,7 @@ class StreamingStateScope {
                 Op.Stmt(Expr.Call("bodo.libs.memory_budget.init_operator_comptroller")),
             )
 
-        for ((_, op) in operators) {
+        for ((_, op) in operators.toSortedMap(compareBy { it })) {
             val range = op.first
             val type = op.second
             inits.add(
