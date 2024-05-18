@@ -1,6 +1,8 @@
 package com.bodosql.calcite.ddl
 
+import com.bodosql.calcite.schema.CatalogSchema
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.sql.ddl.SqlCreateView
 
@@ -62,8 +64,10 @@ interface DDLExecutor {
     ): DDLExecutionResult
 
     @Throws(ViewAlreadyExistsException::class)
-    fun createView(
+    fun createOrReplaceView(
         viewPath: ImmutableList<String>,
         query: SqlCreateView,
+        parentSchema: CatalogSchema,
+        rowType: RelDataType,
     )
 }

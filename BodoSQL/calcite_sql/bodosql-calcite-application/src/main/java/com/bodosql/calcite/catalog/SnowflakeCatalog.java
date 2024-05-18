@@ -2145,7 +2145,11 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     @Override
-    public void createView(@NotNull ImmutableList<String> viewPath, @NotNull SqlCreateView query)
+    public void createOrReplaceView(
+        @NotNull ImmutableList<String> viewPath,
+        @NotNull SqlCreateView query,
+        @NotNull CatalogSchema parentSchema,
+        @NotNull RelDataType rowType)
         throws ViewAlreadyExistsException {
       String queryStr = query.toSqlString(BodoSnowflakeSqlDialect.DEFAULT).getSql();
       try {
