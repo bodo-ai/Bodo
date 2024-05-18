@@ -1,17 +1,28 @@
 package com.bodosql.calcite.ddl
 
+import com.bodosql.calcite.adapter.snowflake.BodoSnowflakeSqlDialect
 import com.bodosql.calcite.catalog.IcebergCatalog
 import com.bodosql.calcite.catalog.IcebergCatalog.Companion.schemaPathToNamespace
 import com.bodosql.calcite.catalog.IcebergCatalog.Companion.tablePathToTableIdentifier
+import com.bodosql.calcite.schema.CatalogSchema
 import com.google.common.collect.ImmutableList
+import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.rel.type.RelDataTypeField
 import org.apache.calcite.sql.ddl.SqlCreateView
+import org.apache.calcite.sql.type.SqlTypeFamily
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.Util
+import org.apache.iceberg.Schema
 import org.apache.iceberg.catalog.Catalog
 import org.apache.iceberg.catalog.Namespace
 import org.apache.iceberg.catalog.SupportsNamespaces
+import org.apache.iceberg.catalog.TableIdentifier
+import org.apache.iceberg.catalog.ViewCatalog
 import org.apache.iceberg.exceptions.AlreadyExistsException
 import org.apache.iceberg.exceptions.NamespaceNotEmptyException
+import org.apache.iceberg.types.Type
+import org.apache.iceberg.types.Types
 
 class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor where T : Catalog, T : SupportsNamespaces {
     override fun createSchema(schemaPath: ImmutableList<String>) {
@@ -103,10 +114,63 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         return DDLExecutionResult(names, columnValues)
     }
 
-    override fun createView(
+    fun relDataTypeToViewSchemaType(dataType: RelDataType): Type {
+        return when {
+            SqlTypeFamily.STRING.contains(dataType) -> Types.StringType.get()
+            SqlTypeFamily.BINARY.contains(dataType) -> Types.BinaryType.get()
+            SqlTypeFamily.TIMESTAMP.contains(dataType) -> {
+                if (dataType.sqlTypeName == SqlTypeName.TIMESTAMP) {
+                    Types.TimestampType.withoutZone()
+                } else {
+                    Types.TimestampType.withZone()
+                }
+            }
+            SqlTypeFamily.TIME.contains(dataType) -> Types.TimeType.get()
+            SqlTypeFamily.INTEGER.contains(dataType) -> Types.IntegerType.get()
+            SqlTypeFamily.DECIMAL.contains(dataType) -> Types.DecimalType.of(dataType.precision, dataType.scale)
+            SqlTypeFamily.NUMERIC.contains(dataType) -> Types.DoubleType.get()
+            SqlTypeFamily.BOOLEAN.contains(dataType) -> Types.BooleanType.get()
+            SqlTypeFamily.ARRAY.contains(dataType) -> Types.ListType.ofOptional(0, relDataTypeToViewSchemaType(dataType.componentType!!))
+            SqlTypeFamily.MAP.contains(
+                dataType,
+            ) ->
+                Types.MapType.ofOptional(
+                    0,
+                    0,
+                    relDataTypeToViewSchemaType(dataType.keyType!!),
+                    relDataTypeToViewSchemaType(dataType.valueType!!),
+                )
+            else -> throw Exception("Unsupported data type $dataType in Iceberg view")
+        }
+    }
+
+    override fun createOrReplaceView(
         viewPath: ImmutableList<String>,
         query: SqlCreateView,
+        parentSchema: CatalogSchema,
+        rowType: RelDataType,
     ) {
-        throw RuntimeException("Unimplemented!")
+        if (icebergConnection is ViewCatalog) {
+            val ns = schemaPathToNamespace(parentSchema.fullPath)
+            val id = TableIdentifier.of(ns, viewPath.last())
+            val viewBuilder = icebergConnection.buildView(id)
+
+            // Construct a schema for the view by converting the RowType of the query
+            var schemaId = 0
+            val schema =
+                Schema(
+                    rowType.fieldList.map<RelDataTypeField, Types.NestedField> {
+                        Types.NestedField.required(schemaId++, it.name, relDataTypeToViewSchemaType(it.type))
+                    },
+                )
+            viewBuilder.withSchema(schema)
+
+            val sqlString = query.query.toSqlString(BodoSnowflakeSqlDialect.DEFAULT).getSql()
+            viewBuilder.withQuery("bodo", sqlString)
+            viewBuilder.withDefaultNamespace(ns)
+            viewBuilder.createOrReplace()
+        } else {
+            throw RuntimeException("CREATE VIEW is unimplemented for the current catalog")
+        }
     }
 }

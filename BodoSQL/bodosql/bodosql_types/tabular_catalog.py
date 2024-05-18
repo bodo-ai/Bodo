@@ -116,16 +116,25 @@ def box_tabular_catalog(typ, val, c):
         c.context.get_constant_generic(c.builder, types.unicode_type, typ.warehouse),
         c.env_manager,
     )
-    token_obj = c.pyapi.from_native_value(
-        types.unicode_type,
-        c.context.get_constant_generic(c.builder, types.unicode_type, typ.token),
-        c.env_manager,
-    )
-    credential_obj = c.pyapi.from_native_value(
-        types.unicode_type,
-        c.context.get_constant_generic(c.builder, types.unicode_type, typ.credential),
-        c.env_manager,
-    )
+    if typ.token is not None:
+        token_obj = c.pyapi.from_native_value(
+            types.unicode_type,
+            c.context.get_constant_generic(c.builder, types.unicode_type, typ.token),
+            c.env_manager,
+        )
+    else:
+        token_obj = c.pyapi.make_none()
+
+    if typ.credential is not None:
+        credential_obj = c.pyapi.from_native_value(
+            types.unicode_type,
+            c.context.get_constant_generic(
+                c.builder, types.unicode_type, typ.credential
+            ),
+            c.env_manager,
+        )
+    else:
+        credential_obj = c.pyapi.make_none()
 
     tabular_catalog_obj = c.pyapi.unserialize(c.pyapi.serialize_object(TabularCatalog))
     res = c.pyapi.call_function_objargs(
