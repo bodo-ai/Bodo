@@ -14,7 +14,12 @@ import pytest
 import s3fs
 
 import bodo
-from bodo.libs.memory import (
+from bodo.memory import (
+    default_buffer_pool_bytes_allocated,
+    default_buffer_pool_bytes_pinned,
+    set_default_buffer_pool_as_arrow_memory_pool,
+)
+from bodo.tests.memory_tester import (
     BufferPool,
     BufferPoolAllocation,
     BufferPoolOptions,
@@ -22,9 +27,7 @@ from bodo.libs.memory import (
     OperatorScratchPool,
     SizeClass,
     StorageOptions,
-    default_buffer_pool,
     get_arrow_memory_pool_wrapper_for_buffer_pool,
-    set_default_buffer_pool_as_arrow_memory_pool,
 )
 from bodo.tests.utils import temp_env_override
 from bodo.utils.typing import BodoWarning
@@ -5177,9 +5180,8 @@ def test_array_unpinned():
         initial_allocated = 0
         initial_pinned = 0
         with bodo.objmode(initial_allocated="int64", initial_pinned="int64"):
-            pool = default_buffer_pool()
-            initial_allocated = pool.bytes_allocated()
-            initial_pinned = pool.bytes_pinned()
+            initial_allocated = default_buffer_pool_bytes_allocated()
+            initial_pinned = default_buffer_pool_bytes_pinned()
 
         # Perform a Dataframe / Table Allocation
         # Seems to use int64 automatically
@@ -5188,10 +5190,11 @@ def test_array_unpinned():
         # Check Metrics before Unpinning
         passed_checks = True
         with bodo.objmode(passed_checks="boolean"):
-            pool = default_buffer_pool()
-            passed_checks = (
-                pool.bytes_allocated() - initial_allocated
-            ) == 64 * 1024 and (pool.bytes_pinned() - initial_pinned) == 64 * 1024
+            bytes_allocated = default_buffer_pool_bytes_allocated()
+            bytes_pinned = default_buffer_pool_bytes_pinned()
+            passed_checks = (bytes_allocated - initial_allocated) == 64 * 1024 and (
+                bytes_pinned - initial_pinned
+            ) == 64 * 1024
         if not passed_checks:
             return False
 
@@ -5202,10 +5205,11 @@ def test_array_unpinned():
 
         # Check Metrics after Unpinning
         with bodo.objmode(passed_checks="boolean"):
-            pool = default_buffer_pool()
-            passed_checks = (
-                pool.bytes_allocated() - initial_allocated
-            ) == 64 * 1024 and (pool.bytes_pinned() - initial_pinned) == 0
+            bytes_allocated = default_buffer_pool_bytes_allocated()
+            bytes_pinned = default_buffer_pool_bytes_pinned()
+            passed_checks = (bytes_allocated - initial_allocated) == 64 * 1024 and (
+                bytes_pinned - initial_pinned
+            ) == 0
         return passed_checks
 
     # TODO: Consider disabling test when bodo.get_size() != 1

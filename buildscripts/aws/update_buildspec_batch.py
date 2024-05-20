@@ -46,38 +46,59 @@ def generate_np2_vars(env_vars):
 # Outputs:
 # A dictionary describing the batch portion of the yaml file
 # containing the cross product of the env_vars and images.
-def construct_batch_field(env_vars, images):
+def construct_batch_field(env_vars, image_path: str):
     build_graph = []
+    add_precache(build_graph, image_path)
+
     merged_env_vars = dict_product(env_vars)
     # Add np=2 separately because we only want one build
     merged_env_vars.extend(generate_np2_vars(env_vars))
     for env_var_group in merged_env_vars:
-        for image_name, image_path in images.items():
-            buildspec = get_buildspec_file(env_var_group, image_path)
-            compute_type = get_compute_type(env_var_group, image_path, buildspec)
-            # Produce a unique identifier for each build instance.
-            # ImageName + _ + var1key + _ + var1value + ...
-            vars_list = []
-            for key, value in env_var_group.items():
-                vars_list.append(
-                    str(key).replace(" ", "_") + "_" + str(value).replace(" ", "_")
-                )
-            vars_list.sort()
-            identifier = image_name.replace(" ", "_") + "_" + "_".join(vars_list)
-            # Now create the env dict portion
-            env_dict = dict()
-            env_dict["compute-type"] = compute_type
-            env_dict["image"] = image_path
-            env_dict["variables"] = env_var_group
-            build_graph.append(
-                {"identifier": identifier, "env": env_dict, "buildspec": buildspec}
+        image_name = "linux"
+
+        buildspec = get_buildspec_file(env_var_group, image_path)
+        compute_type = get_compute_type(env_var_group, image_path, buildspec)
+        # Produce a unique identifier for each build instance.
+        # ImageName + _ + var1key + _ + var1value + ...
+        vars_list = []
+        for key, value in env_var_group.items():
+            vars_list.append(
+                str(key).replace(" ", "_") + "_" + str(value).replace(" ", "_")
             )
+        vars_list.sort()
+        identifier = image_name.replace(" ", "_") + "_" + "_".join(vars_list)
+        # Now create the env dict portion
+        env_dict = dict()
+        env_dict["compute-type"] = compute_type
+        env_dict["image"] = image_path
+        env_dict["variables"] = env_var_group
+        build_graph.append(
+            {
+                "identifier": identifier,
+                "env": env_dict,
+                "buildspec": buildspec,
+                "depend-on": ["linux_PRECACHE"],
+            }
+        )
+
     # IF NP=1 is in the env vars add SonarQube as a last step
     if "NP" in env_vars and 1 in env_vars["NP"]:
         add_sonar(build_graph)
-    # Also add maven unit tests
-    add_maven_unit_tests(build_graph, images)
     return {"build-graph": build_graph}
+
+
+def add_precache(build_graph, image_path):
+    buildspec = "buildscripts/aws/buildspecs/precache_buildspec.yml"
+    compute_type = "BUILD_GENERAL1_LARGE"
+    identifier = "linux_PRECACHE"
+    # Now create the env dict portion
+    env_dict = dict()
+    env_dict["compute-type"] = compute_type
+    env_dict["image"] = image_path
+    env_dict["variables"] = dict()
+    build_graph.append(
+        {"identifier": identifier, "env": env_dict, "buildspec": buildspec}
+    )
 
 
 def add_sonar(build_graph):
@@ -100,21 +121,6 @@ def add_sonar(build_graph):
     )
 
 
-def add_maven_unit_tests(build_graph, images):
-    for image_name, image_path in images.items():
-        buildspec = "buildscripts/aws/buildspecs/maven_unittest_buildspec.yml"
-        compute_type = "BUILD_GENERAL1_LARGE"
-        identifier = image_name.replace(" ", "_") + "_" + "_MAVEN_UNIT_TESTS"
-        # Now create the env dict portion
-        env_dict = dict()
-        env_dict["compute-type"] = compute_type
-        env_dict["image"] = image_path
-        env_dict["variables"] = dict()
-        build_graph.append(
-            {"identifier": identifier, "env": env_dict, "buildspec": buildspec}
-        )
-
-
 # TODO(Nick): Update this function when multiple buildspecs are included with
 # nightly or another reason.
 def get_buildspec_file(env_var_dict, image_path):
@@ -135,9 +141,7 @@ def get_compute_type(env_var_dict, image_path, buildspec):
 
 # Function to generate the batch portion for the CI build
 def generate_CI_buildspec(num_groups):
-    images = {
-        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.9"
-    }
+    image_path = "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.9"
     pytest_starting_marker = "not slow and not weekly"
     pytest_options = [
         pytest_starting_marker + " and " + str(i) for i in range(num_groups)
@@ -147,7 +151,7 @@ def generate_CI_buildspec(num_groups):
         "PYTEST_MARKER": pytest_options,
         "NUMBER_GROUPS_SPLIT": [num_groups],
     }
-    return construct_batch_field(env_vars, images)
+    return construct_batch_field(env_vars, image_path)
 
 
 # TODO: Add support for different buildspec types (nightly, etc).

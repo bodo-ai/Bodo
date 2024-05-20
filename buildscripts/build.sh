@@ -30,9 +30,7 @@ export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
 export CCACHE_PREFIX=sccache
 
 # Bodo Install
-pip install --no-deps --no-build-isolation -ve .
-# Old setuptools method
-# python setup.py develop --no-ccache
+pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
 # NOTE: we need to cd into the directory before building,
 # as the run leaves behind a .egg-info in the working directory,

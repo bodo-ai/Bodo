@@ -73,6 +73,7 @@ cdef class BufferPoolAllocation:
         new_object.set_ptr(other.ptr)
         new_object.set_size(other.size)
         new_object.set_alignment(other.alignment)
+        
         return new_object
 
     @staticmethod
@@ -719,47 +720,6 @@ cdef class BufferPool(IBufferPool):
         return not self.__eq__(other)
 
 
-def default_buffer_pool():
-    """
-    Get the default BufferPool instance.
-    """
-    return BufferPool.default()
-
-
-def get_arrow_memory_pool_wrapper_for_buffer_pool(buffer_pool: BufferPool) -> MemoryPool:
-    """
-    Get an Arrow MemoryPool instance that actually points to
-    and uses a BufferPool instance.
-    This is required since `pa.set_memory_pool` requires a
-    MemoryPool instance. Doing this is safe since our
-    Python and C++ BufferPool classes inherit from
-    Arrow's MemoryPool class.
-    """
-    cdef:
-        MemoryPool pool = MemoryPool.__new__(MemoryPool)
-    pool.init(buffer_pool.get_pool_ptr())
-    return pool
-
-
-def get_arrow_memory_pool_wrapper_for_default_buffer_pool() -> MemoryPool:
-    """
-    Specialization of get_arrow_memory_pool_wrapper_for_buffer_pool
-    to get an Arrow MemoryPool wrapper around the default
-    BufferPool instance.
-    """
-    cdef:
-        BufferPool buffer_pool = BufferPool.default()
-    return get_arrow_memory_pool_wrapper_for_buffer_pool(buffer_pool)
-
-
-def set_default_buffer_pool_as_arrow_memory_pool():
-    """
-    Helper function to set our default BufferPool instance
-    as the default MemoryPool for all PyArrow allocations.
-    """
-    pa.set_memory_pool(get_arrow_memory_pool_wrapper_for_default_buffer_pool())
-
-
 cdef class OperatorBufferPool(IBufferPool):
     """
     Python interface to OperatorBufferPool class defined in C++.
@@ -1217,3 +1177,18 @@ cdef class OperatorScratchPool(IBufferPool):
         Inverse of __eq__.
         """
         return not self.__eq__(other)
+
+
+def get_arrow_memory_pool_wrapper_for_buffer_pool(buffer_pool: BufferPool) -> MemoryPool:
+    """
+    Get an Arrow MemoryPool instance that actually points to
+    and uses a BufferPool instance.
+    This is required since `pa.set_memory_pool` requires a
+    MemoryPool instance. Doing this is safe since our
+    Python and C++ BufferPool classes inherit from
+    Arrow's MemoryPool class.
+    """
+    cdef:
+        MemoryPool pool = MemoryPool.__new__(MemoryPool)
+    pool.init(buffer_pool.get_pool_ptr())
+    return pool

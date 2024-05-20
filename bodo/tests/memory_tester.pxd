@@ -12,7 +12,7 @@ from pyarrow.includes.libarrow cimport CMemoryPool
 from bodo.libs.common cimport *
 
 
-cdef extern from "_memory.h" namespace "bodo" nogil:
+cdef extern from "../libs/_memory.h" namespace "bodo" nogil:
 
     cdef cppclass CSizeClass" bodo::SizeClass":
         CSizeClass(size_t capacity, size_t block_size) except +
@@ -98,7 +98,7 @@ cdef extern from "_memory.h" namespace "bodo" nogil:
         shared_ptr[CBufferPool] Default()
     
 
-cdef extern from "_operator_pool.h" namespace "bodo" nogil:
+cdef extern from "../libs/_operator_pool.h" namespace "bodo" nogil:
 
     cdef cppclass COperatorBufferPool" bodo::OperatorBufferPool"(CIBufferPool):
 
