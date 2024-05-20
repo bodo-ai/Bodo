@@ -1654,7 +1654,7 @@ PyMODINIT_FUNC PyInit_ext(void) {
 #endif
 
     SetAttrStringFromPyInit(m, listagg);
-
+    SetAttrStringFromPyInit(m, memory_cpp);
     return m;
 }
 

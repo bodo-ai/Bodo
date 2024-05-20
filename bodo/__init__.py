@@ -378,11 +378,4 @@ COMPLEX_CASE_THRESHOLD = 100
 
 # Set our Buffer Pool as the default memory pool for PyArrow.
 # Note that this will initialize the Buffer Pool.
-import atexit
-from bodo.libs.memory import (
-    default_buffer_pool,
-    set_default_buffer_pool_as_arrow_memory_pool,
-)
-
-set_default_buffer_pool_as_arrow_memory_pool()
-atexit.register(default_buffer_pool().cleanup)
+import bodo.memory

@@ -1,8 +1,16 @@
 cmake_minimum_required(VERSION 3.23 FATAL_ERROR)
 project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
+# External Packages
+include(FetchContent)
+
 # Debug Helpers
 include(CMakePrintHelpers)
+
+# LTO Support
+include(CheckIPOSupported)
+check_ipo_supported()
+
 
 # ------------------------- Enable Compilation Caches -------------------------
 # Enable CCache or SCCache if Found
@@ -17,7 +25,6 @@ include(CMakePrintHelpers)
 
 find_program(CCACHE_EXECUTABLE "ccache")
 find_program(SCCACHE_EXECUTABLE "sccache")
-
 
 if ((NOT DEFINED ENV{DISABLE_CCACHE}) AND CCACHE_EXECUTABLE)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
@@ -40,6 +47,17 @@ if (DEFINED ENV{BUILD_WITH_V8})
     )
     FetchContent_MakeAvailable(v8)
 endif()
+
+# Download and Build 'fmt' from Git Directly
+set(FMT_TEST OFF CACHE INTERNAL "disabling fmt tests")
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY  https://github.com/fmtlib/fmt.git
+  GIT_TAG         10.2.1
+  EXCLUDE_FROM_ALL
+)
+FetchContent_MakeAvailable(fmt)
+set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 # ----------------------------- Download Apache Datasketches -------------------------
@@ -96,7 +114,10 @@ set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 set(CMAKE_C_FLAGS "")
 set(CMAKE_CXX_FLAGS "")
 
-
+# Enable Link-Time Optimizations (LTO)
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+endif()
 
 
 # ----------------------- Set Compiler Args for Targets -----------------------
@@ -142,10 +163,10 @@ endif()
 # Release Compiler Args
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
   add_compile_options(
-    "-g0"  # Not necessary, but for safety
     "-O3"
     "-ftree-vectorize"
-    $<$<COMPILE_LANGUAGE:CXX>:-fvisibility-inlines-hidden>
+    # Encourages LTO & increase obfuscations
+    $<$<COMPILE_LANGUAGE:CXX>:-fvisibility=hidden>
   )
 endif()
 
@@ -252,20 +273,37 @@ target_link_libraries(tracing PRIVATE mpi)
 install(TARGETS tracing DESTINATION "bodo/utils/")
 
 
-# ---------------------- Cython Target - bodo.io.memory -----------------------
+# ---------------------- Cython Target - bodo.memory -----------------------
 add_custom_command(
-  OUTPUT bodo/libs/memory.cpp
-  DEPENDS bodo/libs/memory.pyx
+  OUTPUT bodo/memory.cpp
+  DEPENDS bodo/memory.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/libs/memory.cpp" "bodo/libs/memory.pyx"
-  COMMENT "Cythonizing Source bodo/libs/memory.pyx into bodo/libs/memory.cpp"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp" "bodo/memory.pyx"  
+  COMMENT "Cythonizing Source bodo/memory.pyx into bodo/memory.cpp"
+)
+
+python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
+target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
+target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR})
+target_link_libraries(memory PRIVATE arrow arrow_python)
+install(TARGETS memory DESTINATION "bodo/")
+
+
+# ---------------------- Cython Target - bodo.tests.memory_tester -----------------------
+add_custom_command(
+  OUTPUT bodo/tests/memory_tester.cpp
+  DEPENDS bodo/tests/memory_tester.pyx
+  VERBATIM
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"  
+  COMMENT "Cythonizing Source bodo/tests/memory_tester.pyx into bodo/tests/memory_tester.cpp"
 )
 
 python_add_library(
-  memory
+  memory_tester
   MODULE WITH_SOABI
-    "bodo/libs/memory.cpp"
+    "bodo/tests/memory_tester.cpp"
     "bodo/libs/_memory.cpp"
     "bodo/libs/_operator_pool.cpp"
     "bodo/libs/_utils.cpp"
@@ -273,12 +311,10 @@ python_add_library(
     "bodo/libs/_memory_budget.cpp"
 )
 
-# Required when using boost::stacktrace for debugging
-target_compile_definitions(memory PRIVATE "BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED=1")
-target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/")
-target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR})
-target_link_libraries(memory PRIVATE mpi arrow arrow_python fmt)
-install(TARGETS memory DESTINATION "bodo/libs/")
+target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
+target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR})
+target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt)
+install(TARGETS memory_tester DESTINATION "bodo/tests/")
 
 
 # ------------------------- Main Bodo Extension -------------------------
@@ -357,6 +393,7 @@ set(sources_list
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
   "bodo/libs/gason/gason.cpp"
+  "bodo/libs/_pymemory.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
 )

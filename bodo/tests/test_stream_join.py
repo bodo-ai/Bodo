@@ -14,7 +14,6 @@ import bodo
 import bodo.io.snowflake
 import bodo.tests.utils
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.libs.memory import BufferPool
 from bodo.libs.stream_join import (
     delete_join_state,
     get_partition_state,
@@ -23,6 +22,7 @@ from bodo.libs.stream_join import (
     join_probe_consume_batch,
     runtime_join_filter,
 )
+from bodo.memory import default_buffer_pool_smallest_size_class
 from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal,
@@ -1713,7 +1713,7 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
         return random_string
 
     # This is the minimum size of any of the allocated buffers in ChunkedTableBuilder
-    smallest_alloc_size = BufferPool.default().get_smallest_size_class_size()
+    smallest_alloc_size = default_buffer_pool_smallest_size_class()
     # Should match CHUNKED_TABLE_DEFAULT_STRING_PREALLOCATION defined in
     # _chunked_table_builder.h
     string_prealloc = 32
