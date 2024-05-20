@@ -746,6 +746,56 @@ class KeysEqualComparatorTwoKeys {
 };
 
 /**
+ * @brief Key equality comparator class (for hash map use) that is specialized
+ * for the case where all key columns are of the same type.
+ *
+ * @tparam ArrType Array type of all the keys (e.g.
+ * bodo_array_type::NULLABLE_INT_BOOL)
+ * @tparam DType DType of all they keys (e.g. Bodo_CTypes::INT32)
+ * @tparam is_na_equal Whether NAs are considered equal
+ * @tparam check_hash_first Whether we should compare the hash before checking
+ * for equality between rows. This is useful when there are many keys since the
+ * hash check can be a cheap short-circuit mechanism in the common case.
+ */
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType,
+          bool is_na_equal, bool check_hash_first = false>
+class KeysEqualComparatorAllSameTypeKeys {
+   public:
+    KeysEqualComparatorAllSameTypeKeys(
+        const std::vector<std::shared_ptr<array_info>>& arrs,
+        const std::shared_ptr<uint32_t[]>& hashes_)
+        : hashes(hashes_) {
+        this->cmps.reserve(arrs.size());
+        for (size_t i = 0; i < arrs.size(); i++) {
+            this->cmps.emplace_back(arrs[i], arrs[i]);
+        }
+    }
+
+    constexpr bool operator()(const int64_t iRowA,
+                              const int64_t iRowB) const noexcept {
+        if (check_hash_first) {
+            assert(this->hashes != nullptr);
+            if (this->hashes[iRowA] != this->hashes[iRowB]) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < this->cmps.size(); i++) {
+            bool eq =
+                (this->cmps[i].template operator()<ArrType, DType, is_na_equal>(
+                    iRowA, iRowB));
+            if (!eq) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+   private:
+    std::vector<ElementComparator> cmps;
+    const std::shared_ptr<uint32_t[]>& hashes;
+};
+
+/**
  * @brief Join Key equality comparator class (for hash map use) that is
  * specialized for one key to make common cases faster (e.g. Int32, Int64, DATE,
  * DICT).
