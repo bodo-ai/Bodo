@@ -36,18 +36,12 @@ on:
         type: boolean
         default: false
 
-      publishProduction:
-        description: Share with the Production platform.
-        type: boolean
-        default: false
-
 jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
       publishDev: ${{ steps.setup_variables.outputs.publishDev }}
       publishStaging: ${{ steps.setup_variables.outputs.publishStaging }}
-      publishProduction: ${{ steps.setup_variables.outputs.publishProduction }}
       bodoVersion: ${{ steps.setup_variables.outputs.bodoVersion }}
       bodoSQLVersion: ${{ steps.setup_variables.outputs.bodoVersion }}
       icebergConnectorVersion: ${{ steps.setup_variables.outputs.bodoVersion }}
@@ -64,7 +58,6 @@ jobs:
           if [[ "${{github.event_name}}" == "push" && "${{github.ref}}" == "refs/heads/develop" || "${{github.event_name}}" == "pull_request" ]]; then
             echo "publishDev=true" >> $GITHUB_OUTPUT
             echo "publishStaging=true" >> $GITHUB_OUTPUT
-            echo "publishProduction=false" >> $GITHUB_OUTPUT
 
             wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
             chmod +x miniconda.sh
@@ -89,7 +82,6 @@ jobs:
           else
             echo "publishDev=${{ github.event.inputs.publishDev }}" >> $GITHUB_OUTPUT
             echo "publishStaging=${{ github.event.inputs.publishStaging }}" >> $GITHUB_OUTPUT
-            echo "publishProduction=${{ github.event.inputs.publishProduction }}" >> $GITHUB_OUTPUT
 
             echo "bodoVersion=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
             echo "bodoSQLVersion=${{ github.event.inputs.bodoVersion}}" >> $GITHUB_OUTPUT
@@ -379,48 +371,6 @@ jobs:
           BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_STAGING_PLATFORM_PASSWORD }}
           BACKEND_SERVICE_URL: "https://api-staging.bodo.ai"
           ORGANIZATION_UUID: ${{ secrets.STAGING_ORGANIZATION_UUID }}
-        working-directory: bodo-platform-image
-        run: |
-          sleep 120
-          python manage_images.py
-
-  # PRODUCTION
-  share-images-with-prod-platform:
-    needs: [setup, combine-manifest-gen-ami-entries]
-    if: |
-      needs.setup.outputs.pushImage == 'true' &&
-      needs.setup.outputs.publishProduction == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.12
-
-      - name: "Install dependencies"
-        run: |
-          set -xe
-          python -VV
-          python -m site
-          python -m pip install requests
-
-      - name: Download Image Entries Request JSON
-        uses: actions/download-artifact@v4
-        with:
-          name: img-entries-request-json
-          path: bodo-platform-image/
-
-      - name: Share Images with Prod Platform
-        id: share
-        env:
-          AUTH_SERVICE_URL: "https://bodo.us.frontegg.com"
-          BOT_PLATFORM_USERNAME: ${{ secrets.BOT_PROD_PLATFORM_USERNAME }}
-          BOT_PLATFORM_PASSWORD: ${{ secrets.BOT_PROD_PLATFORM_PASSWORD }}
-          BACKEND_SERVICE_URL: "https://api.bodo.ai"
-          ORGANIZATION_UUID: ${{ secrets.PROD_ORGANIZATION_UUID }}
         working-directory: bodo-platform-image
         run: |
           sleep 120
