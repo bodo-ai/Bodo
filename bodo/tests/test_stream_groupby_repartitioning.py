@@ -8,7 +8,6 @@ from mpi4py import MPI
 import bodo
 import bodo.io.snowflake
 import bodo.tests.utils
-from bodo.libs.memory import default_buffer_pool
 from bodo.libs.stream_groupby import (
     delete_groupby_state,
     get_op_pool_bytes_allocated,
@@ -18,6 +17,7 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
+from bodo.memory import default_buffer_pool_bytes_allocated
 from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
 
 # NOTE: Once we're no longer actively working on Groupby Spill Support, most of these tests can be marked as "slow".
@@ -598,7 +598,7 @@ def test_split_during_acc_finalize_build_str_running_vals(
     # Ensure that all unused allocations are free-d before
     # measuring bytes_allocated.
     gc.collect()
-    bytes_before = default_buffer_pool().bytes_allocated()
+    bytes_before = default_buffer_pool_bytes_allocated()
     _test_helper(
         df,
         expected_out,
@@ -616,7 +616,7 @@ def test_split_during_acc_finalize_build_str_running_vals(
     # Ensure that all unused allocations are free-d before
     # measuring bytes_allocated.
     gc.collect()
-    bytes_after = default_buffer_pool().bytes_allocated()
+    bytes_after = default_buffer_pool_bytes_allocated()
     assert (
         bytes_before == bytes_after
     ), f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
