@@ -223,6 +223,68 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
     }
 
     /**
+     * Compute the Set Union of this ∪ other. For union purposes
+     * we do not consider situations in which the same join key refers to
+     * a different column value or isFirstLocation value. This is because
+     * all intended uses of this function are to combine set when the children
+     * are a potential cache node. As a result, if the values do not match we
+     * throw an error.
+     *
+     * Note: As an invariant this function assumes that for the same join ID
+     * all lists are the same length because they logically refer to the same
+     * join.
+     *
+     * @param other The other JoinFilterProgramState to compare against.
+     * @return The set union of this ∪ other.
+     */
+    fun union(other: JoinFilterProgramState): JoinFilterProgramState {
+        // We must iterate over both sets. To simplify code since the second
+        // iteration can only be disjoint joins, we track the seen join IDs.
+        val seenJoinIDs = mutableSetOf<Int>()
+        val result = JoinFilterProgramState()
+        for ((joinID, joinInfo) in joinStateMap) {
+            seenJoinIDs.add(joinID)
+            val otherJoinInfo = other.joinStateMap[joinID]
+            if (otherJoinInfo == null) {
+                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations)
+            } else {
+                // We need to actually compute the union between the columns.
+                val remainingColumns: MutableList<Int> = mutableListOf()
+                val remainingIsFirstLocations: MutableList<Boolean> = mutableListOf()
+                joinInfo.filterColumns.forEachIndexed { index, column ->
+                    val otherColumn = otherJoinInfo.filterColumns[index]
+                    val (finalColumn, finalIsFirst) =
+                        if (column == -1 && otherColumn == -1) {
+                            // Missing column
+                            Pair(-1, false)
+                        } else if (column == -1) {
+                            Pair(otherColumn, otherJoinInfo.filterIsFirstLocations[index])
+                        } else if (otherColumn == -1) {
+                            Pair(column, joinInfo.filterIsFirstLocations[index])
+                        } else {
+                            if (column != otherColumn ||
+                                joinInfo.filterIsFirstLocations[index] != otherJoinInfo.filterIsFirstLocations[index]
+                            ) {
+                                throw IllegalArgumentException("Cannot union two different columns")
+                            }
+                            Pair(column, joinInfo.filterIsFirstLocations[index])
+                        }
+                    remainingColumns.add(finalColumn)
+                    remainingIsFirstLocations.add(finalIsFirst)
+                }
+                result.add(joinID, remainingColumns, remainingIsFirstLocations)
+            }
+        }
+        // Check for any joins only in the other join state.
+        for ((joinID, joinInfo) in other.joinStateMap) {
+            if (joinID !in seenJoinIDs) {
+                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations)
+            }
+        }
+        return result
+    }
+
+    /**
      * Return if this is equal to the other object. This is a deep equality check.
      *
      * @param other The other object to compare against.
