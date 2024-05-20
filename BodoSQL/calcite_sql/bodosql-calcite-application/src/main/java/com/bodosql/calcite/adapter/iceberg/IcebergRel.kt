@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.iceberg
 
+import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
@@ -21,7 +22,7 @@ interface IcebergRel : RelNode {
         val CONVENTION = Convention.Impl("ICEBERG", IcebergRel::class.java)
     }
 
-    fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
         return getCatalogTable().generatePythonConnStr(schemaPath)
     }
 

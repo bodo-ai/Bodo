@@ -28,7 +28,7 @@ import pyarrow.parquet as pq
 import requests
 from mpi4py import MPI
 from numba.core import types
-from numba.extending import box, intrinsic, models, register_model, unbox
+from numba.extending import box, intrinsic, models, overload, register_model, unbox
 
 import bodo
 import bodo.utils.tracing as tracing
@@ -92,6 +92,23 @@ b_ICEBERG_FIELD_ID_MD_KEY = str.encode(ICEBERG_FIELD_ID_MD_KEY)
 # ===================================================================
 
 
+# ------------------------------ Types ---------------------------------- #
+class IcebergConnectionType(types.Type):
+    """
+    Abstract base class for IcebergConnections
+    """
+
+    def __init__(self, name):  # pragma: no cover
+        super(IcebergConnectionType, self).__init__(
+            name=name,
+        )
+
+    def get_conn_str(self) -> str:
+        raise NotImplementedError("IcebergConnectionType should not be instanstiated")
+
+
+# ===================================================================
+
 # ----------------------------- Helper Funcs ---------------------------- #
 
 
@@ -143,20 +160,39 @@ def format_iceberg_conn(conn_str: str) -> str:
     return conn_str
 
 
-@numba.njit
-def format_iceberg_conn_njit(conn_str):  # pragma: no cover
+def format_iceberg_conn_njit(conn):
+    pass
+
+
+@overload(format_iceberg_conn_njit)
+def overload_format_iceberg_conn_njit(conn):  # pragma: no cover
     """
-    njit wrapper around format_iceberg_conn
+    Wrapper around format_iceberg_conn for strings
+    Gets the connection string from conn_str attr for IcebergConnectionType
 
     Args:
-        conn_str (str): connection string passed in read_sql/read_sql_table/to_sql
+        conn_str (str | IcebergConnectionType): connection passed in read_sql/read_sql_table/to_sql
 
     Returns:
         str: connection string without the iceberg(+*?) prefix
     """
-    with bodo.no_warning_objmode(conn_str="unicode_type"):
-        conn_str = format_iceberg_conn(conn_str)
-    return conn_str
+    if isinstance(conn, (types.UnicodeType, types.StringLiteral)):
+
+        def impl(conn):
+            with bodo.no_warning_objmode(conn_str="unicode_type"):
+                conn_str = format_iceberg_conn(conn)
+            return conn_str
+
+        return impl
+    else:
+        assert isinstance(
+            conn, IcebergConnectionType
+        ), f"format_iceberg_conn_njit: Invalid type for conn, got {conn}"
+
+        def impl(conn):
+            return conn.conn_str
+
+        return impl
 
 
 # ----------------------------- Iceberg Read -----------------------------#

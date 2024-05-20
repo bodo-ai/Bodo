@@ -354,10 +354,10 @@ class FileSystemCatalog(
      * information can be passed around more easily.
      *
      * @param schemaPath The schema component to define the connection not including the table name.
-     * @return The connection string
+     * @return An Expr representing the connection string.
      */
-    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
-        return pathToBodoString(rootPath, true)
+    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
+        return Expr.StringLiteral(pathToBodoString(rootPath, true))
     }
 
     /**
@@ -406,7 +406,7 @@ class FileSystemCatalog(
                 schema,
                 ifExistsBehavior,
                 columnNamesGlobal,
-                pathToBodoString(rootPath, true),
+                Expr.StringLiteral(pathToBodoString(rootPath, true)),
             )
         } else {
             assert(writeDefault == WriteTarget.WriteTargetEnum.PARQUET)

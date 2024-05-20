@@ -17,7 +17,7 @@ class SnowflakeNativeWriteTarget(
     schema: ImmutableList<String>,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
-    private val connectionString: String,
+    private val connectionString: Expr,
 ) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     /**
      * Initialize the streaming create table state information for a Snowflake Native Table.
@@ -32,7 +32,7 @@ class SnowflakeNativeWriteTarget(
         return Expr.Call(
             "bodo.io.snowflake_write.snowflake_writer_init",
             operatorID.toExpr(),
-            Expr.StringLiteral(connectionString),
+            connectionString,
             Expr.StringLiteral(tableName),
             // TODO: Can we remove? This is already in the connection string.
             Expr.StringLiteral(schema[1]),

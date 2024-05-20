@@ -143,11 +143,14 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
 
         val schemaPath = getSchemaPath(relInput)
 
+        var conExpr = relInput.generatePythonConnStr(schemaPath)
+        conExpr = if (conExpr is StringLiteral) StringLiteral("iceberg+" + conExpr.arg) else conExpr
+
         val args =
             listOf(
                 StringLiteral(getTableName(relInput)),
                 // TODO: Replace with an implementation for the IcebergCatalog
-                StringLiteral("iceberg+" + relInput.generatePythonConnStr(schemaPath)),
+                conExpr,
                 StringLiteral(schemaPath.joinToString(separator = ".")),
             )
         // Add extra keyword argument specifying which columns should be dictionary encoded

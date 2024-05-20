@@ -24,6 +24,7 @@ from bodo.hiframes.table import TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
 from bodo.io.helpers import pyarrow_schema_type
+from bodo.io.iceberg import IcebergConnectionType
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
@@ -327,7 +328,7 @@ class IcebergReader(Connector):
     def __init__(
         self,
         table_name: str,
-        connection: str,
+        connection: ir.AbstractRHS,
         df_out_varname: str,
         out_table_col_names: list[str],
         out_table_col_types: list[types.ArrayCompatible],
@@ -696,7 +697,17 @@ def iceberg_distributed_run(
         iceberg_node.filters
     )
     extra_args = ", ".join(filter_map.values())
-    func_text = f"def sql_impl(sql_request, conn, database_schema, {extra_args}):\n"
+    func_text = (
+        f"def sql_impl(sql_request, conn_wrapper, database_schema, {extra_args}):\n"
+    )
+    if isinstance(iceberg_node.connection, ir.Var) and isinstance(
+        typemap[iceberg_node.connection.name], IcebergConnectionType
+    ):
+        func_text += f"    conn = conn_wrapper.conn_str\n"
+        conn_type = typemap[iceberg_node.connection.name]
+    else:
+        func_text += f"    conn = conn_wrapper\n"
+        conn_type = string_type
 
     filter_args = ""
     # Pass args to _iceberg_reader_py with iceberg
@@ -750,17 +761,16 @@ def iceberg_distributed_run(
         },
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=(string_type, string_type, schema_type)
+        arg_typs=(string_type, conn_type, schema_type)
         + tuple(typemap[v.name] for v in filter_vars),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
-
     replace_arg_nodes(
         f_block,
         [
             ir.Const(iceberg_node.table_name, iceberg_node.loc),
-            ir.Const(iceberg_node.connection, iceberg_node.loc),
+            iceberg_node.connection,
             ir.Const(iceberg_node.database_schema, iceberg_node.loc),
         ]
         + filter_vars,
@@ -1336,29 +1346,29 @@ def _gen_iceberg_reader_py(
     return jit_func
 
 
-numba.parfors.array_analysis.array_analysis_extensions[IcebergReader] = (
-    bodo.ir.connector.connector_array_analysis
-)
-distributed_analysis.distributed_analysis_extensions[IcebergReader] = (
-    bodo.ir.connector.connector_distributed_analysis
-)
+numba.parfors.array_analysis.array_analysis_extensions[
+    IcebergReader
+] = bodo.ir.connector.connector_array_analysis
+distributed_analysis.distributed_analysis_extensions[
+    IcebergReader
+] = bodo.ir.connector.connector_distributed_analysis
 typeinfer.typeinfer_extensions[IcebergReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[IcebergReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[IcebergReader] = remove_dead_iceberg
-numba.core.analysis.ir_extension_usedefs[IcebergReader] = (
-    bodo.ir.connector.connector_usedefs
-)
-ir_utils.copy_propagate_extensions[IcebergReader] = (
-    bodo.ir.connector.get_copies_connector
-)
-ir_utils.apply_copy_propagate_extensions[IcebergReader] = (
-    bodo.ir.connector.apply_copies_connector
-)
-ir_utils.build_defs_extensions[IcebergReader] = (
-    bodo.ir.connector.build_connector_definitions
-)
+numba.core.analysis.ir_extension_usedefs[
+    IcebergReader
+] = bodo.ir.connector.connector_usedefs
+ir_utils.copy_propagate_extensions[
+    IcebergReader
+] = bodo.ir.connector.get_copies_connector
+ir_utils.apply_copy_propagate_extensions[
+    IcebergReader
+] = bodo.ir.connector.apply_copies_connector
+ir_utils.build_defs_extensions[
+    IcebergReader
+] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[IcebergReader] = iceberg_distributed_run
 remove_dead_column_extensions[IcebergReader] = iceberg_remove_dead_column
-ir_extension_table_column_use[IcebergReader] = (
-    bodo.ir.connector.connector_table_column_use
-)
+ir_extension_table_column_use[
+    IcebergReader
+] = bodo.ir.connector.connector_table_column_use

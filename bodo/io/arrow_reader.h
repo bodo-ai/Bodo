@@ -317,6 +317,20 @@ class ArrowReader {
      */
     virtual void ReportReadStageMetrics();
 
+    /**
+     * @brief getter for reported_init_stage_metrics
+     */
+    bool get_reported_init_stage_metrics() const {
+        return reported_init_stage_metrics;
+    }
+
+    /**
+     * @brief getter for reported_read_stage_metrics
+     */
+    bool get_reported_read_stage_metrics() const {
+        return reported_read_stage_metrics;
+    }
+
    protected:
     const bool parallel;
     const int64_t tot_rows_to_read;  // used for df.head(N) case
@@ -415,7 +429,6 @@ class ArrowReader {
      */
     virtual std::shared_ptr<table_info> get_empty_out_table() = 0;
 
-   protected:
     /**
      * @brief Unify the given table with the dictionary builders
      * for its dictionary columns. This should only be used in the streaming

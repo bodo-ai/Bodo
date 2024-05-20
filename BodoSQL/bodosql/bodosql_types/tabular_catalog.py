@@ -2,16 +2,26 @@
 catalog contains all information needed to connect use Tabular Iceberg catalog for organizing and modifying tables.
 """
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
-from numba.core import types
+import os
+
+import numba
+from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,
     box,
+    intrinsic,
+    make_attribute_wrapper,
     models,
+    overload,
     register_model,
     typeof_impl,
     unbox,
 )
 
+import bodo
+from bodo.io.iceberg import IcebergConnectionType
+from bodo.utils.typing import get_literal_value, raise_bodo_error
+from bodo.utils.utils import run_rank0
 from bodosql import DatabaseCatalog, DatabaseCatalogType
 from bodosql.imported_java_classes import TabularCatalogClass
 
@@ -58,14 +68,34 @@ class TabularCatalog(DatabaseCatalog):
         self.warehouse = warehouse
         self.token = token
         self.credential = credential
+        if self.token is None:
+            self.token = self.get_java_token()
+
+        # Set the token as an environment variable so that it can be accessed at runtime
+        # Used by the TabularConnectionType
+        os.environ["__BODOSQL_TABULAR_TOKEN"] = self.token
 
     def get_java_object(self):
         return _create_java_tabular_catalog(self.warehouse, self.token, self.credential)
+
+    @run_rank0
+    def get_java_token(self):
+        """
+        Get the token for the tabular catalog from the Java catalog.
+        """
+        return self.get_java_object().getToken()
 
     def __eq__(self, other):
         if not isinstance(other, TabularCatalog):
             return False
         return self.warehouse == other.warehouse
+
+
+@overload(TabularCatalog, no_unliteral=True)
+def overload_snowflake_catalog_constructor(
+    warehouse: str, token: str | None = None, credential: str | None = None
+):
+    raise_bodo_error("TabularCatalog: Cannot be created in JIT mode.")
 
 
 class TabularCatalogType(DatabaseCatalogType):
@@ -159,3 +189,90 @@ def unbox_tabular_catalog(typ, val, c):
     Since the actual model is opaque we can just generate a dummy.
     """
     return NativeValue(c.context.get_dummy_value())
+
+
+@numba.jit
+def get_conn_str(rest_uri, warehouse, token):
+    """Get the connection string for a Tabular Iceberg catalog."""
+    return f"rest://{rest_uri}?warehouse={warehouse}&token={token}"
+
+
+class TabularConnectionType(IcebergConnectionType):
+    """
+    Python class for storing the information
+        needed to connect to a Tabular Iceberg catalog.
+    Token is read from an environment variable so that it can be accessed at runtime.
+    The compiler can get a connection string using the get_conn_str function.
+    The runtime can get a connection string using the conn_str attribute.
+    """
+
+    def __init__(self, rest_uri, warehouse):
+        self.warehouse = warehouse
+        token = os.getenv("__BODOSQL_TABULAR_TOKEN")
+        assert (
+            token is not None
+        ), "TabularConnectionTYPE: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+
+        self.conn_str = get_conn_str(rest_uri, warehouse, token)
+
+        super(TabularConnectionType, self).__init__(
+            name=f"TabularConnectionType({warehouse=}, {rest_uri=}, conn_str=*********)",
+        )
+
+    def get_conn_str(self) -> str:
+        return "iceberg+" + self.conn_str
+
+
+@intrinsic(prefer_literal=True)
+def _get_tabular_connection(typingctx, rest_uri, warehouse, conn_str):
+    """Create a struct model for a  TabularConnectionType from a uri, warehouse and connection string."""
+    literal_rest_uri = get_literal_value(rest_uri)
+    literal_warehouse = get_literal_value(warehouse)
+    tabular_connection_type = TabularConnectionType(literal_rest_uri, literal_warehouse)
+
+    def codegen(context, builder, sig, args):
+        """lowering code to initialize a TabularConnectionType"""
+        tabular_connection_type = sig.return_type
+        tabular_connection_struct = cgutils.create_struct_proxy(
+            tabular_connection_type
+        )(context, builder)
+        context.nrt.incref(builder, sig.args[2], args[2])
+        tabular_connection_struct.conn_str = args[2]
+        return tabular_connection_struct._getvalue()
+
+    return tabular_connection_type(rest_uri, warehouse, conn_str), codegen
+
+
+def get_tabular_connection(rest_uri: str, warehouse: str):
+    pass
+
+
+@overload(get_tabular_connection, no_unliteral=True)
+def overload_get_tabular_connection(rest_uri: str, warehouse: str):
+    """Overload for get_tabular_connection that creates a TabularConnectionType."""
+
+    def impl(rest_uri: str, warehouse: str):  # pragma: no cover
+        with bodo.no_warning_objmode(token="unicode_type"):
+            token = os.getenv("__BODOSQL_TABULAR_TOKEN", "")
+        assert (
+            token != ""
+        ), "get_tabular_connection: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+        conn_str = get_conn_str(rest_uri, warehouse, token)
+        conn = _get_tabular_connection(rest_uri, warehouse, conn_str)
+        return conn
+
+    return impl
+
+
+@register_model(TabularConnectionType)
+class TabularConnectionTypeModel(models.StructModel):
+    """Model for TabularConnectionType has one member, conn_str."""
+
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("conn_str", types.unicode_type),
+        ]
+        super(TabularConnectionTypeModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(TabularConnectionType, "conn_str", "conn_str")

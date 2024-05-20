@@ -230,9 +230,9 @@ public interface BodoSQLCatalog {
    * information can be passed around more easily.
    *
    * @param schemaPath The schema component to define the connection not including the table name.
-   * @return The connection string
+   * @return The an Expr representing the connection string.
    */
-  String generatePythonConnStr(ImmutableList<String> schemaPath);
+  Expr generatePythonConnStr(ImmutableList<String> schemaPath);
 
   /**
    * Return the desired WriteTarget for a create table operation. We provide both creation details

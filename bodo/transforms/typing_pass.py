@@ -3782,22 +3782,52 @@ class TypingTransforms:
         # will use the variable name database_schema.
         supported_args = ["table_name", "con", "schema"]
         arg_values = []
+
+        def handle_con(con_arg):
+            """
+            Extracts the con_str from the con arg
+            """
+            err_msg = f"pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
+            con_type = self.typemap[con_arg.name]
+
+            if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+                con_str = con_type.get_conn_str()
+            else:
+                con_str = self._get_const_value(
+                    con_arg, label, rhs.loc, err_msg=err_msg
+                )
+
+            # Parse `con` String and Ensure its an Iceberg Connection
+            try:
+                con_str = bodo.io.iceberg.format_iceberg_conn(con_str)
+            except BodoError as e:
+                raise BodoError(
+                    "pandas.read_sql_table(): Only Iceberg is currently supported. "
+                    + e.msg
+                )
+            # TODO: BSE-3331: This shouldn't have to change the con_arg, con_arg should be able to stay as an ir.Var but
+            # right now it does because we need to call format_iceberg_conn on the value before passing to the IcebergReader
+            if not isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
+                con_arg = ir.Const(con_str, con_arg.loc)
+
+            if not isinstance(con_str, str):
+                raise BodoError(err_msg)
+
+            return con_arg, con_str
+
         for i, arg in enumerate(supported_args):
             err_msg = f"pandas.read_sql_table(): '{arg}', if provided, must be a constant string."
             temp = get_call_expr_arg(func_str, rhs.args, kws, i, arg)
-            temp = self._get_const_value(temp, label, rhs.loc, err_msg=err_msg)
-            if not isinstance(temp, str):
-                raise BodoError(err_msg)
+
+            if arg == "con":
+                temp, con_str = handle_con(temp)
+            else:
+                temp = self._get_const_value(temp, label, rhs.loc, err_msg=err_msg)
+                if not isinstance(temp, str):
+                    raise BodoError(err_msg)
+
             arg_values.append(temp)
         table_name, con, database_schema = arg_values
-
-        # Parse `con` String and Ensure its an Iceberg Connection
-        try:
-            con = bodo.io.iceberg.format_iceberg_conn(con)
-        except BodoError as e:
-            raise BodoError(
-                "pandas.read_sql_table(): Only Iceberg is currently supported. " + e.msg
-            )
 
         # Generate Output DataFrame Type
         arg_defaults = {
@@ -3937,7 +3967,9 @@ class TypingTransforms:
             # we will make the decision ourselves. At this point, we will only
             # do the dict-encoding ourselves if the table is a Snowflake managed
             # Iceberg table. If it isn't, we will let Arrow do it.
-            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(con)
+            dict_encode_in_bodo = bodo.io.iceberg.is_snowflake_managed_iceberg_wh(
+                con_str
+            )
 
         # _bodo_chunksize enables streaming Iceberg reads with specified batch-size
         _bodo_chunksize_var = get_call_expr_arg(
@@ -4037,7 +4069,7 @@ class TypingTransforms:
             pyarrow_table_schema,
         ) = bodo.io.iceberg.get_iceberg_type_info(
             table_name,
-            con,
+            con_str,
             database_schema,
             is_merge_into_cow=_bodo_merge_into,
         )
@@ -4080,7 +4112,7 @@ class TypingTransforms:
             str_columns = sorted(str_columns)
 
             dict_str_cols = bodo.io.iceberg.determine_str_as_dict_columns(
-                con,
+                con_str,
                 database_schema,
                 table_name,
                 str_columns,
