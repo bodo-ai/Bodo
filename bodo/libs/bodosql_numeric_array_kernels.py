@@ -384,8 +384,6 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
             extra_globals = {
                 "round_half_always_up": round_half_always_up,
-                "ceil": math.ceil,
-                "floor": math.floor,
             }
 
             return gen_vectorized(
@@ -449,7 +447,14 @@ def round_half_always_up(x, places):
     loc_vars = {}
     exec(
         func_text,
-        {"bodo": bodo, "floor": math.floor, "ceil": math.ceil, "np": np},
+        # We must use np.floor/ceil and not math.floor/ceil to handle
+        # potential intermediate overflows in the float case.
+        # The multiplication/division by 'shifts' may create a value
+        # not representable as an integer. However, math.floor/ceil
+        # will force it to an integer, leading to be an incorrect result.
+        # See 'test_round_half_always_up_intermediate_overflows' for
+        # an example.
+        {"bodo": bodo, "floor": np.floor, "ceil": np.ceil, "np": np},
         loc_vars,
     )
     impl = loc_vars["impl"]

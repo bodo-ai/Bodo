@@ -1552,3 +1552,23 @@ def test_multiply_numeric_decimal(precision_scale_decimal_array, memory_leak_che
         dtype=pd.ArrowDtype(pa.decimal128(38, 6)),
     )
     check_func(impl, (arr1, arr2), py_output=py_output)
+
+
+def test_round_half_always_up_intermediate_overflows(memory_leak_check):
+    """
+    Test that we correctly handle intermediate overflows that might
+    occur when performing round on a float value.
+    This could happen when, e.g. we must temporarily scale the value
+    up to a number that cannot be represented as an int64.
+    """
+
+    @bodo.jit
+    def test(x, places):
+        return bodo.libs.bodosql_numeric_array_kernels.round_half_always_up(x, places)
+
+    # In this case, it's not actually possible to represent more than 5 decimal places
+    # due to how large the number is. During the intermediate calculation,
+    # the intermediate value 178977083892.98654 * 10**8 is larger than INT64_MAX.
+    # If we don't handle this properly, the output would be incorrect.
+    out = test(np.float64("178977083892.98654"), 8)
+    assert out == np.float64("178977083892.98654")
