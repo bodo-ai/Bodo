@@ -199,7 +199,7 @@ open class IcebergRESTCatalog(
      * @param schemaPath The schema component to define the connection not including the table name.
      * @return The connection string
      */
-    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
+    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
         val props = getIcebergConnection().properties()
         val warehouse = props[CatalogProperties.WAREHOUSE_LOCATION]!!
         val uri = props[CatalogProperties.URI]!!.replace(Regex("https?://"), "")
@@ -209,7 +209,7 @@ open class IcebergRESTCatalog(
             } else {
                 props["token"]
             }
-        return "REST://%s?token=%s&warehouse=%s".format(uri, token, warehouse)
+        return Expr.StringLiteral("REST://%s?token=%s&warehouse=%s".format(uri, token, warehouse))
     }
 
     /**
@@ -237,6 +237,14 @@ open class IcebergRESTCatalog(
             columnNamesGlobal,
             generatePythonConnStr(schema),
         )
+    }
+
+    /**
+     * Return the catalog's token.
+     * @return The catalog's token.
+     */
+    fun getToken(): String? {
+        return getIcebergConnection().properties()["token"]
     }
 
     companion object {

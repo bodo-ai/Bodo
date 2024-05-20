@@ -160,7 +160,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
         val args =
             listOf(
                 StringLiteral(tableName),
-                StringLiteral(relInput.generatePythonConnStr(ImmutableList.of(databaseName, schemaName))),
+                relInput.generatePythonConnStr(ImmutableList.of(databaseName, schemaName)),
             )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, true, Expr.None, Expr.None))
     }
@@ -270,7 +270,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
                 // We don't use a schema name because we've already fully qualified
                 // all table references, and it's better if this doesn't have any
                 // potentially unexpected behavior.
-                StringLiteral(relInput.generatePythonConnStr(ImmutableList.of("", ""))),
+                relInput.generatePythonConnStr(ImmutableList.of("", "")),
             )
         return Expr.Call("pd.read_sql", args, getNamedArgs(ctx, false, bodoTableNameExpr, originalIndices))
     }

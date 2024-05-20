@@ -1,5 +1,6 @@
 package com.bodosql.calcite.adapter.snowflake
 
+import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.table.SnowflakeCatalogTable
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.BatchingPropertyTraitDef
@@ -29,7 +30,7 @@ interface SnowflakeRel : RelNode {
         val CONVENTION = Convention.Impl("SNOWFLAKE", SnowflakeRel::class.java)
     }
 
-    fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
         return getCatalogTable().generatePythonConnStr(schemaPath)
     }
 

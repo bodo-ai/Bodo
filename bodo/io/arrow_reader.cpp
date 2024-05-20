@@ -1565,7 +1565,8 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
         *is_last_out = is_last_out_;
         reader->metrics.output_row_count += total_rows_out_;
         if (is_last_out_) {
-            if (reader->op_id != -1) {
+            if (reader->op_id != -1 &&
+                !reader->get_reported_read_stage_metrics()) {
                 QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                     QueryProfileCollector::MakeOperatorStageID(
                         reader->op_id, QUERY_PROFILE_READ_STAGE_ID),

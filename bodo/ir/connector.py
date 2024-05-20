@@ -208,6 +208,9 @@ def visit_vars_connector(node: Connector, callback, cbdata):
         visitor = VarVisitor(lambda v: visit_vars_inner(v, callback, cbdata))
         node.filters = visitor.visit(node.filters)
 
+    if node.connector_typ == "iceberg":
+        node.connection = visit_vars_inner(node.connection, callback, cbdata)
+
 
 def get_filter_vars(filters: Filter) -> list[ir.Var]:
     """
@@ -252,6 +255,10 @@ def connector_usedefs(node: Connector, use_set=None, def_set=None):
         vars = get_filter_vars(node.filters)
         use_set.update({v.name for v in vars})
 
+    if node.connector_typ == "iceberg":
+        if isinstance(node.connection, numba.core.ir.Var):
+            use_set.add(node.connection.name)
+
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
@@ -279,6 +286,10 @@ def apply_copies_connector(
     if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
         visitor = VarVisitor(lambda v: replace_vars_inner(v, var_dict))
         node.filters = visitor.visit(node.filters)
+
+    if node.connector_typ == "iceberg":
+        node.connection = replace_vars_inner(node.connection, var_dict)
+
     if node.connector_typ == "csv":
         node.nrows = replace_vars_inner(node.nrows, var_dict)
         node.skiprows = replace_vars_inner(node.skiprows, var_dict)

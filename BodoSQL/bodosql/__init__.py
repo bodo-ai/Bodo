@@ -13,7 +13,11 @@ from bodosql.bodosql_types.snowflake_catalog import (
     SnowflakeCatalog,
     SnowflakeCatalogType,
 )
-from bodosql.bodosql_types.tabular_catalog import TabularCatalog, TabularCatalogType
+from bodosql.bodosql_types.tabular_catalog import (
+    TabularCatalog,
+    TabularCatalogType,
+    get_tabular_connection,
+)
 
 # Import BodoSQL libs
 import bodosql.libs.regex

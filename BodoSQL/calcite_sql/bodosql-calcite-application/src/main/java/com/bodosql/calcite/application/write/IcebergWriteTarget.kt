@@ -16,12 +16,12 @@ open class IcebergWriteTarget(
     schema: ImmutableList<String>,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
-    protected val icebergPath: String,
+    protected val icebergPath: Expr,
 ) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     protected val icebergConnectionString = pathToIcebergConnectionString(icebergPath)
 
-    private fun pathToIcebergConnectionString(path: String): String {
-        return "iceberg+$path"
+    private fun pathToIcebergConnectionString(path: Expr): Expr {
+        return if (path is Expr.StringLiteral) Expr.StringLiteral("iceberg+" + path.arg) else path
     }
 
     open fun allowsThetaSketches(): Boolean = true
@@ -39,7 +39,7 @@ open class IcebergWriteTarget(
         var args =
             listOf(
                 operatorID.toExpr(),
-                Expr.StringLiteral(icebergConnectionString),
+                icebergConnectionString,
                 Expr.StringLiteral(tableName),
                 Expr.StringLiteral(schema.joinToString(separator = "/")),
                 columnNamesGlobal,

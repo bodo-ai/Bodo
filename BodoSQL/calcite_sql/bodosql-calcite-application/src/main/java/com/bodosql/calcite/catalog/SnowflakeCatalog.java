@@ -1127,10 +1127,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
    * connection information can be passed around more easily.
    *
    * @param schemaPath The schema component to define the connection.
-   * @return The connection string
+   * @return An Expr representing the connection string.
    */
   @Override
-  public String generatePythonConnStr(ImmutableList<String> schemaPath) {
+  public Expr generatePythonConnStr(ImmutableList<String> schemaPath) {
     if (schemaPath.size() != 2) {
       throw new BodoSQLCodegenException(
           "Internal Error: Snowflake requires exactly one database and one schema.");
@@ -1200,7 +1200,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           "Internal Error: Unable to encode Python connection string. Error message: " + e);
     }
 
-    return connString.toString();
+    return new Expr.StringLiteral(connString.toString());
   }
 
   /**
@@ -1242,7 +1242,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     List<Expr> args = new ArrayList<>();
     List<kotlin.Pair<String, Expr>> kwargs = new ArrayList<>();
     args.add(new Expr.StringLiteral(tableName.get(2)));
-    args.add(new Expr.StringLiteral(generatePythonConnStr(tableName.subList(0, 2))));
+    args.add(generatePythonConnStr(tableName.subList(0, 2)));
     kwargs.add(new kotlin.Pair<>("schema", new Expr.StringLiteral(tableName.get(1))));
     kwargs.add(
         new kotlin.Pair<>("if_exists", new Expr.StringLiteral(ifExists.asToSqlKwArgument())));
@@ -1995,14 +1995,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       SqlCreateTable.CreateTableType createTableType,
       IfExistsBehavior ifExistsBehavior,
       Variable columnNamesGlobal) {
-    String snowflakeConnectionString = generatePythonConnStr(schema);
+    Expr snowflakeConnectionString = generatePythonConnStr(schema);
     if (useIcebergWrite(ifExistsBehavior, createTableType)) {
       return new SnowflakeIcebergWriteTarget(
           tableName,
           schema,
           ifExistsBehavior,
           columnNamesGlobal,
-          getIcebergBaseURL(icebergVolume),
+          new Expr.StringLiteral(getIcebergBaseURL(icebergVolume)),
           icebergVolume,
           snowflakeConnectionString,
           genIcebergTableUUID());
