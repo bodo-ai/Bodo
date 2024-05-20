@@ -198,7 +198,7 @@ open class CatalogTable(
      * @param schemaPath The path to the table not including the table name.
      * @return A string that can be passed to Python to read from the table.
      */
-    fun generatePythonConnStr(schemaPath: ImmutableList<String>): String {
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
         return catalog.generatePythonConnStr(schemaPath)
     }
 

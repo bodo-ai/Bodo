@@ -17,9 +17,9 @@ class SnowflakeIcebergWriteTarget(
     schema: ImmutableList<String>,
     ifExistsBehavior: IfExistsBehavior,
     columnNamesGlobal: Variable,
-    icebergPath: String,
+    icebergPath: Expr,
     private val icebergVolume: String,
-    private val snowflakeConnectionString: String,
+    private val snowflakeConnectionString: Expr,
     uuid: String,
 ) : IcebergWriteTarget(
         tableName,
@@ -40,8 +40,8 @@ class SnowflakeIcebergWriteTarget(
         val expr =
             Expr.Call(
                 "bodo.io.stream_iceberg_write.convert_to_snowflake_iceberg_table",
-                Expr.StringLiteral(snowflakeConnectionString),
-                Expr.StringLiteral(icebergConnectionString),
+                snowflakeConnectionString,
+                icebergConnectionString,
                 Expr.StringLiteral(schema.joinToString(separator = "/")),
                 // Note: This is the name of the volume, not the path or connection string.
                 Expr.StringLiteral(icebergVolume),

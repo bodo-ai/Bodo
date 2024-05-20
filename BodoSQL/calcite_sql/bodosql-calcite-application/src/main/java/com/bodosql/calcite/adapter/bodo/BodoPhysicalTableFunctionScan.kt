@@ -95,7 +95,7 @@ class BodoPhysicalTableFunctionScan(
             val function = etfCall.op.function as SnowflakeNamedArgumentSqlCatalogTableFunction
             val catalog = function.catalog
             val databaseName = if (function.functionPath.size < 2) catalog.getDefaultSchema(0)[0] else function.functionPath[0]
-            val connStr = Expr.StringLiteral(catalog.generatePythonConnStr(ImmutableList.of(databaseName, "")))
+            val connStr = catalog.generatePythonConnStr(ImmutableList.of(databaseName, ""))
             val tableName = (etfCall.operands[0] as RexLiteral).getValueAs(String::class.java)!!
             val query =
                 Expr.StringLiteral(

@@ -1,5 +1,8 @@
+import os
+import tempfile
 from io import StringIO
 
+import numba
 import pandas as pd
 
 import bodo
@@ -16,8 +19,10 @@ from bodo.tests.utils import (
     gen_unique_table_id,
     get_rest_catalog_connection_string,
     pytest_tabular,
+    temp_env_override,
 )
 from bodo.utils.utils import run_rank0
+from bodosql.bodosql_types.tabular_catalog import get_tabular_connection
 
 pytestmark = pytest_tabular
 
@@ -451,3 +456,51 @@ def test_dynamic_scalar_filter_pushdown(
                 stream,
                 "Iceberg Filter Pushed Down:\nbic.FilterExpr('<=', [bic.ColumnRef('A'), bic.Scalar(f0)])",
             )
+
+
+def test_tabular_catalog_token_caching(memory_leak_check):
+    prev_cache_loc = numba.config.CACHE_DIR
+    try:
+        tempdir = run_rank0(tempfile.TemporaryDirectory)()
+        cache_loc = tempdir.name
+        # In certain cases, numba reloads its config variables from the
+        # environment. In those cases, the above line would be overridden.
+        # Therefore, we also set it to the env var that numba reloads from.
+        with temp_env_override(
+            {"NUMBA_CACHE_DIR": cache_loc, "__BODOSQL_TABULAR_TOKEN": "test_token1"}
+        ):
+            numba.config.CACHE_DIR = cache_loc
+
+            def f():
+                tc = get_tabular_connection("test_uri", "test_warehouse")
+                return tc.conn_str
+
+            dispatcher = bodo.jit(cache=True)(f)
+            assert (
+                dispatcher()
+                == "rest://test_uri?warehouse=test_warehouse&token=test_token1"
+            )
+            sig = dispatcher.signatures[0]
+            assert (
+                dispatcher._cache_hits[sig] == 0
+            ), "Expected no cache hit for function signature"
+
+            # Ensure that the cache is shared across all ranks
+            bodo.barrier()
+
+            dispatcher_2 = bodo.jit(cache=True)(f)
+            os.environ["__BODOSQL_TABULAR_TOKEN"] = "test_token2"
+            assert (
+                dispatcher_2()
+                == "rest://test_uri?warehouse=test_warehouse&token=test_token2"
+            )
+            sig = dispatcher_2.signatures[0]
+            assert (
+                dispatcher_2._cache_hits[sig] == 1
+            ), "Expected a cache hit for function signature"
+
+    finally:
+        # Ensure all ranks are done before cleanup
+        bodo.barrier()
+        run_rank0(tempdir.cleanup)()
+        numba.config.CACHE_DIR = prev_cache_loc
