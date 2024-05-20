@@ -8165,3 +8165,29 @@ def test_timestamptz_gb_mode(memory_leak_check):
         }
     )
     check_func(impl, (df,), py_output=expected, sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
+def test_many_same_type_keys(memory_leak_check):
+    """
+    Test the case where we have many keys of the same type. This is used
+    for testing a specially templated case
+    (see GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES in _groupby_groups.cpp).
+    """
+
+    def impl(df):
+        return df.groupby(["A", "B", "C", "D", "E"], as_index=False, dropna=False)[
+            "F"
+        ].sum()
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([0, 1, 4, 5, 9] * 10, dtype="Int64"),
+            "B": pd.Series(list(np.arange(10, 20)) * 5, dtype="Int64"),
+            "C": pd.Series(list(np.arange(20, 45)) * 2, dtype="Int64"),
+            "D": pd.Series(list(np.arange(0, 5)) * 10, dtype="Int64"),
+            "E": pd.Series(list(np.arange(90, 140)), dtype="Int64"),
+            "F": pd.Series(list(np.arange(10, 20)) * 5, dtype="Int64"),
+        }
+    )
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)

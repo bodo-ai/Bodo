@@ -28,13 +28,14 @@ static std::array<boost::multiprecision::int256_t, kMaxLargeScale + 1>
         return values;
     })();
 
-static boost::multiprecision::int256_t GetScaleMultiplier(int scale) {
+static inline boost::multiprecision::int256_t GetScaleMultiplier(
+    int scale) noexcept {
     return kLargeScaleMultipliers[scale];
 }
 
 // Convert to 256-bit integer from 128-bit decimal.
-static boost::multiprecision::int256_t ConvertToInt256(
-    arrow::BasicDecimal128 in) {
+static inline boost::multiprecision::int256_t ConvertToInt256(
+    arrow::BasicDecimal128 in) noexcept {
     boost::multiprecision::int256_t v = in.high_bits();
     v <<= 64;
     v |= in.low_bits();
@@ -42,8 +43,8 @@ static boost::multiprecision::int256_t ConvertToInt256(
 }
 
 // divide input by 10^reduce_by, and round up the fractional part.
-static boost::multiprecision::int256_t ReduceScaleBy(
-    boost::multiprecision::int256_t in, int32_t reduce_by) {
+static inline boost::multiprecision::int256_t ReduceScaleBy(
+    boost::multiprecision::int256_t in, int32_t reduce_by) noexcept {
     if (reduce_by == 0) {
         // nothing to do.
         return in;
@@ -61,8 +62,8 @@ static boost::multiprecision::int256_t ReduceScaleBy(
 
 // Convert to 128-bit decimal from 256-bit integer.
 // If there is an overflow, the output is undefined.
-static arrow::BasicDecimal128 ConvertToDecimal128(
-    boost::multiprecision::int256_t in, bool* overflow) {
+static inline arrow::BasicDecimal128 ConvertToDecimal128(
+    boost::multiprecision::int256_t in, bool* overflow) noexcept {
     arrow::BasicDecimal128 result;
     constexpr boost::multiprecision::int256_t UINT64_MASK =
         std::numeric_limits<uint64_t>::max();
@@ -96,7 +97,7 @@ inline void gdv_xlarge_multiply_and_scale_down(int64_t x_high, uint64_t x_low,
                                                int32_t reduce_scale_by,
                                                int64_t* out_high,
                                                uint64_t* out_low,
-                                               bool* overflow) {
+                                               bool* overflow) noexcept {
     arrow::BasicDecimal128 x{x_high, x_low};
     arrow::BasicDecimal128 y{y_high, y_low};
     auto intermediate_result = ConvertToInt256(x) * ConvertToInt256(y);
@@ -108,10 +109,9 @@ inline void gdv_xlarge_multiply_and_scale_down(int64_t x_high, uint64_t x_low,
 
 // Multiply when the out_precision is 38, and there is no trimming of the scale
 // i.e the intermediate value is the same as the final value.
-static void MultiplyMaxPrecisionNoScaleDown(const arrow::Decimal128& x,
-                                            const arrow::Decimal128& y,
-                                            int32_t out_scale, bool* overflow,
-                                            arrow::Decimal128* result) {
+static inline void MultiplyMaxPrecisionNoScaleDown(
+    const arrow::Decimal128& x, const arrow::Decimal128& y, int32_t out_scale,
+    bool* overflow, arrow::Decimal128* result) noexcept {
     auto x_abs = arrow::BasicDecimal128::Abs(x);
     auto y_abs = arrow::BasicDecimal128::Abs(y);
 
@@ -126,11 +126,9 @@ static void MultiplyMaxPrecisionNoScaleDown(const arrow::Decimal128& x,
 
 // Multiply when the out_precision is 38, and there is trimming of the scale i.e
 // the intermediate value could be larger than the final value.
-static void MultiplyMaxPrecisionAndScaleDown(const arrow::Decimal128& x,
-                                             const arrow::Decimal128& y,
-                                             int32_t delta_scale,
-                                             bool* overflow,
-                                             arrow::Decimal128* result) {
+static inline void MultiplyMaxPrecisionAndScaleDown(
+    const arrow::Decimal128& x, const arrow::Decimal128& y, int32_t delta_scale,
+    bool* overflow, arrow::Decimal128* result) noexcept {
     *overflow = false;
     auto x_abs = arrow::BasicDecimal128::Abs(x);
     auto y_abs = arrow::BasicDecimal128::Abs(y);
@@ -173,7 +171,7 @@ template <bool rescale>
 inline void MultiplyMaxPrecision(const arrow::Decimal128& x,
                                  const arrow::Decimal128& y, int32_t out_scale,
                                  int32_t delta_scale, bool* overflow,
-                                 arrow::Decimal128* result) {
+                                 arrow::Decimal128* result) noexcept {
     if (rescale) {
         MultiplyMaxPrecisionAndScaleDown(x, y, delta_scale, overflow, result);
     } else {
