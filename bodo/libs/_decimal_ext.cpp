@@ -316,14 +316,14 @@ arrow::Decimal128 multiply_decimal_scalars_py_entry(
  * @param[out] overflow Overflow flag.
  * @return std::shared_ptr<array_info> Output nullable decimal array.
  */
-std::shared_ptr<array_info> multiply_decimal_arrays(
-    const std::shared_ptr<array_info>& arr1,
-    const std::shared_ptr<array_info>& arr2, int64_t out_precision,
+std::unique_ptr<array_info> multiply_decimal_arrays(
+    const std::unique_ptr<array_info>& arr1,
+    const std::unique_ptr<array_info>& arr2, int64_t out_precision,
     int64_t out_scale, bool* const overflow) noexcept {
     int64_t s1 = arr1->scale;
     int64_t s2 = arr2->scale;
     // Allocate output array.
-    std::shared_ptr<array_info> out_arr =
+    std::unique_ptr<array_info> out_arr =
         alloc_nullable_array_no_nulls(arr1->length, Bodo_CTypes::DECIMAL);
     out_arr->precision = out_precision;
     out_arr->scale = out_scale;
@@ -379,14 +379,14 @@ array_info* multiply_decimal_arrays_py_entry(array_info* arr1_,
                                              int64_t out_scale,
                                              bool* overflow) noexcept {
     try {
-        std::shared_ptr<array_info> arr1 = std::shared_ptr<array_info>(arr1_);
-        std::shared_ptr<array_info> arr2 = std::shared_ptr<array_info>(arr2_);
+        std::unique_ptr<array_info> arr1 = std::unique_ptr<array_info>(arr1_);
+        std::unique_ptr<array_info> arr2 = std::unique_ptr<array_info>(arr2_);
         assert(arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                arr2->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                arr1->dtype == Bodo_CTypes::DECIMAL &&
                arr2->dtype == Bodo_CTypes::DECIMAL &&
                arr1->length == arr2->length);
-        std::shared_ptr<array_info> out_arr = multiply_decimal_arrays(
+        std::unique_ptr<array_info> out_arr = multiply_decimal_arrays(
             arr1, arr2, out_precision, out_scale, overflow);
         return new array_info(*out_arr);
     } catch (const std::exception& e) {

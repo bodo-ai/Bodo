@@ -1,6 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_groups.h"
+#include "_bodo_common.h"
 #include "_groupby_hashing.h"
 #include "_shuffle.h"
 
@@ -268,6 +269,76 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
         GROUPBY_INFO_IMPL_2_KEYS(bodo_array_type::DICT, Bodo_CTypes::STRING,
                                  bodo_array_type::DICT, Bodo_CTypes::STRING);
 #undef GROUPBY_INFO_IMPL_2_KEYS
+    }
+
+    // Use a specialized implementation for the case where all keys have the
+    // same array and data types. We set `check_hash_first` to true if there are
+    // 4 or more keys.
+    // Tested using 'bodo/tests/test_groupby.py::test_many_same_type_keys'.
+    bool all_keys_same_type = true;
+    bodo_array_type::arr_type_enum arr_type = table->columns[0]->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = table->columns[0]->dtype;
+    for (int64_t i = 1; i < n_keys; i++) {
+        all_keys_same_type &= ((table->columns[i]->arr_type == arr_type) &&
+                               (table->columns[i]->dtype == dtype));
+    }
+
+    if (all_keys_same_type) {
+        std::vector<std::shared_ptr<array_info>> key_arrs(n_keys);
+        for (int64_t i = 0; i < n_keys; i++) {
+            key_arrs[i] = table->columns[i];
+        }
+
+#ifndef GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES
+#define GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(ARRAY_TYPE, DTYPE)             \
+    if (arr_type == ARRAY_TYPE && dtype == DTYPE && n_keys >= 4) {          \
+        using KeyType =                                                     \
+            KeysEqualComparatorAllSameTypeKeys<ARRAY_TYPE, DTYPE,           \
+                                               /*is_na_equal=*/true,        \
+                                               /*check_hash_first=*/true>;  \
+        KeyType equal_fct{key_arrs, hashes};                                \
+        using rh_flat_t =                                                   \
+            bodo::unord_map_container<int64_t, int64_t,                     \
+                                      HashLookupIn32bitTable, KeyType>;     \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct, pool);      \
+        get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,      \
+                            key_cols, hashes, nunique_hashes,               \
+                            check_for_null_keys, key_dropna,                \
+                            UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);    \
+        return;                                                             \
+    }                                                                       \
+    if (arr_type == ARRAY_TYPE && dtype == DTYPE) {                         \
+        using KeyType =                                                     \
+            KeysEqualComparatorAllSameTypeKeys<ARRAY_TYPE, DTYPE,           \
+                                               /*is_na_equal=*/true,        \
+                                               /*check_hash_first=*/false>; \
+        KeyType equal_fct{key_arrs, hashes};                                \
+        using rh_flat_t =                                                   \
+            bodo::unord_map_container<int64_t, int64_t,                     \
+                                      HashLookupIn32bitTable, KeyType>;     \
+        rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct, pool);      \
+        get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table,      \
+                            key_cols, hashes, nunique_hashes,               \
+                            check_for_null_keys, key_dropna,                \
+                            UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);    \
+        return;                                                             \
+    }
+#endif
+
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::NULLABLE_INT_BOOL,
+                                             Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::NUMPY,
+                                             Bodo_CTypes::INT32);
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::NUMPY,
+                                             Bodo_CTypes::INT64);
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::NUMPY,
+                                             Bodo_CTypes::DATETIME);
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::DICT,
+                                             Bodo_CTypes::STRING);
+        GROUPBY_INFO_IMPL_ALL_SAME_KEY_TYPES(bodo_array_type::STRING,
+                                             Bodo_CTypes::STRING);
     }
 
     // general implementation with generic key comparator class
