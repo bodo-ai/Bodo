@@ -67,6 +67,6 @@ def execute_ddl_objmode(bodo_sql_context: BodoSQLContext, query: str) -> Table:
     df = bodo_sql_context.execute_ddl(query)
     arrs = []
     for i in range(len(df.columns)):
-        arr = df.iloc[i].array
+        arr = df.iloc[:, i].array
         arrs.append(arr)
     return Table(arrs, dist=Distribution.REP)
