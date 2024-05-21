@@ -122,7 +122,7 @@ if __name__ == "__main__":
     update = os.environ.get("UPDATE_IMAGE", "false") == "true"
     updated_bodo_version = os.environ.get("UPDATED_IMAGE_NAME", None)
 
-    logging.info("Update Image: ", update)
+    logging.info("Update Image: %s", update)
 
     # Create the data to be shared
     if args.deregister or update:
