@@ -122,16 +122,30 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val namespace = Namespace.of(*schemaPath.toTypedArray())
         // LOOP over objects
         // Tables
+        icebergConnection.listTables(namespace).forEach {
+            columnValues[0].add(null)
+            columnValues[1].add(it.name())
+            columnValues[2].add("TABLE")
+            columnValues[3].add(namespace.levels().joinToString("."))
+        }
         // TODO: Views
         return DDLExecutionResult(fieldNames, columnValues)
     }
 
-    override fun showSchemas(schemaPath: ImmutableList<String>): DDLExecutionResult {
-        // TODO:
+    override fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
         // LOOP over objects
+        val namespace = Namespace.of(*dbPath.toTypedArray())
+        icebergConnection.listNamespaces(namespace).forEach {
+            columnValues[0].add(null)
+            // get child schema name only
+            columnValues[1].add(it.level(it.levels().size - 1))
+            columnValues[2].add(null)
+            // get full schema path
+            columnValues[3].add(it.toString())
+        }
         return DDLExecutionResult(fieldNames, columnValues)
     }
 
