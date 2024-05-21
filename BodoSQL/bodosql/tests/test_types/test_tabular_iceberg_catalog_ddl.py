@@ -9,7 +9,7 @@ from bodo.tests.iceberg_database_helpers.utils import get_spark_tabular
 from bodo.tests.utils import check_func_seq, pytest_tabular
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
-from bodosql.tests.utils import gen_unique_id, test_equal_par
+from bodosql.tests.utils import assert_equal_par, gen_unique_id
 
 pytestmark = pytest_tabular
 
@@ -54,24 +54,24 @@ def test_create_view(tabular_catalog, tabular_connection, memory_leak_check):
     query = f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A"
     py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully created."]})
 
-    @run_rank0
     def verify_view_created():
-        assert check_view_exists(tabular_connection, view_name)
         x = bc.sql(f"SELECT * FROM {view_name}")
-        assert "A" in x
-        assert x["A"].shape == (1,)
-        assert x["A"][0] == "testview"
+        x = bodo.gatherv(x)
+        if bodo.get_rank() == 0:
+            assert "A" in x
+            assert len(x["A"]) == 1
+            assert x["A"][0] == "testview"
 
     # execute_ddl Version
     with view_helper(tabular_connection, view_name, create=False):
         bodo_output = bc.execute_ddl(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         verify_view_created()
 
     # Python Version
     with view_helper(tabular_connection, view_name, create=False):
         bodo_output = bc.sql(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         verify_view_created()
 
     # Jit Version
@@ -148,7 +148,7 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
             )
             query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
             bodo_output = bc.execute_ddl(query)
-            test_equal_par(bodo_output, py_output)
+            assert_equal_par(bodo_output, py_output)
 
             # Column B does not exist - validation should fail
             with pytest.raises(BodoError, match=f"Column 'B' not found"):

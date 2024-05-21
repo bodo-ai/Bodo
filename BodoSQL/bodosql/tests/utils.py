@@ -1641,7 +1641,7 @@ def gen_unique_id(name_prefix: str) -> str:
     return path
 
 
-def test_equal_par(bodo_output, py_output):
+def assert_equal_par(bodo_output, py_output):
     passed = _test_equal_guard(bodo_output, py_output, False, False)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs

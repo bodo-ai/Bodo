@@ -23,7 +23,7 @@ from bodo.utils.typing import BodoError
 from bodosql.tests.test_types.snowflake_catalog_common import (
     test_db_snowflake_catalog,  # noqa
 )
-from bodosql.tests.utils import gen_unique_id, test_equal_par
+from bodosql.tests.utils import assert_equal_par, gen_unique_id
 
 pytestmark = pytest_snowflake
 
@@ -71,13 +71,13 @@ def test_create_schema(if_not_exists, test_db_snowflake_catalog, memory_leak_che
     # execute_ddl Version
     with schema_helper(conn, schema_name, create=False):
         bodo_output = bc.execute_ddl(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert check_schema_exists(conn, schema_name)
 
     # Python Version
     with schema_helper(conn, schema_name, create=False):
         bodo_output = bc.sql(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert check_schema_exists(conn, schema_name)
 
     # Jit Version
@@ -165,13 +165,13 @@ def test_drop_schema(if_exists, test_db_snowflake_catalog, memory_leak_check):
     # execute_ddl Version
     with schema_helper(conn, schema_name):
         bodo_output = bc.execute_ddl(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert not check_schema_exists(conn, schema_name)
 
     # Python Version
     with schema_helper(conn, schema_name):
         bodo_output = bc.sql(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert not check_schema_exists(conn, schema_name)
 
     # Jit Version
@@ -706,13 +706,13 @@ def test_create_view(test_db_snowflake_catalog, memory_leak_check):
     # execute_ddl Version
     with view_helper(conn, view_name, create=False):
         bodo_output = bc.execute_ddl(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         verify_view_created()
 
     # Python Version
     with view_helper(conn, view_name, create=False):
         bodo_output = bc.sql(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         verify_view_created()
 
     # Jit Version
@@ -758,7 +758,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
             f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
         )
         bodo_output = bc.execute_ddl(query)
-        test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
 
         # Column B does not exist - validation should fail
         with pytest.raises(BodoError, match=f"Column 'B' not found"):
