@@ -114,6 +114,27 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         return DDLExecutionResult(names, columnValues)
     }
 
+    override fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        // TODO:
+        val fieldNames =
+            listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
+        val columnValues = List(4) { ArrayList<String?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        // LOOP over objects
+        // Tables
+        // TODO: Views
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    override fun showSchemas(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        // TODO:
+        val fieldNames =
+            listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
+        val columnValues = List(4) { ArrayList<String?>() }
+        // LOOP over objects
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
     fun relDataTypeToViewSchemaType(dataType: RelDataType): Type {
         return when {
             SqlTypeFamily.STRING.contains(dataType) -> Types.StringType.get()

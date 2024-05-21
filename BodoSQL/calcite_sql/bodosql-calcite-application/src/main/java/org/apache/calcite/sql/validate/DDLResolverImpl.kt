@@ -8,6 +8,8 @@ import com.bodosql.calcite.ddl.NamespaceNotFoundException
 import com.bodosql.calcite.schema.BodoSqlSchema
 import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.sql.ddl.SqlDropTable
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas
 import com.bodosql.calcite.sql.validate.BodoSqlValidator
 import com.bodosql.calcite.sql.validate.DDLResolver
 import com.bodosql.calcite.table.BodoSqlTable
@@ -68,9 +70,15 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             // Drop Queries
             SqlKind.DROP_SCHEMA -> executeDropSchema(node as SqlDropSchema)
             SqlKind.DROP_TABLE -> executeDropTable(node as SqlDropTable)
-            
+
             SqlKind.DESCRIBE_TABLE -> {
                 executeDescribeTable(node as SqlDescribeTable)
+            }
+            SqlKind.SHOW_OBJECTS-> {
+                executeShowObjects(node as SqlSnowflakeShowObjects)
+            }
+            SqlKind.SHOW_SCHEMAS-> {
+                executeShowSchemas(node as SqlSnowflakeShowSchemas)
             }
             SqlKind.CREATE_VIEW -> {
                 executeCreateView(node as SqlCreateView)
@@ -162,10 +170,34 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         try {
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
-            // Perform the actual drop table operation
+            // Perform the actual describe table operation
             return catalogTable.getDDLExecutor().describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Table $tableName does not exist or not authorized to describe.")
+        }
+    }
+
+    private fun executeShowObjects(node: SqlSnowflakeShowObjects): DDLExecutionResult {
+        val schemaPath = node.schemaName.names
+        val schemaName = schemaPath.joinToString(separator = ".")
+        try {
+            val schema = deriveSchema(schemaPath)
+            val schemaCat = validateSchema(schema, node.kind, schemaName)
+            return schemaCat.ddlExecutor.showObjects(schemaPath)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Schema $schemaName does not exist or not authorized.")
+        }
+    }
+
+    private fun executeShowSchemas(node: SqlSnowflakeShowSchemas): DDLExecutionResult {
+        val dbPath = node.dbName.names
+        val dbName = dbPath.joinToString(separator = ".")
+        try {
+            val schema = deriveSchema(dbPath)
+            val schemaCat = validateSchema(schema, node.kind, dbName)
+            return schemaCat.ddlExecutor.showSchemas(dbPath)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Database $dbName does not exist or not authorized.")
         }
     }
 

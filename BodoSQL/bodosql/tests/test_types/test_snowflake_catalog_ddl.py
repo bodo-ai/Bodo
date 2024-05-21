@@ -512,7 +512,7 @@ def test_describe_table(describe_keyword, test_db_snowflake_catalog, memory_leak
             "UNIQUE_KEY": ["N"] * 16,
         }
     )
-    passed = _test_equal_guard(bodo_output, expected_output)
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
@@ -524,6 +524,140 @@ def test_describe_table_compiles_jit(test_db_snowflake_catalog, memory_leak_chec
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     query = "DESCRIBE TABLE SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM"
     bc.validate_query_compiles(query)
+
+
+def _show_schemas_snowflake_sample_data_tpch_sf1_output():
+    return pd.DataFrame(
+        {
+            "CREATED_ON": [
+                "2021-11-11 13:17:32.899 -0800",
+                "2021-11-11 13:17:33.269 -0800",
+                "2021-11-11 13:17:33.308 -0800",
+                "2021-11-11 13:17:33.242 -0800",
+                "2021-11-11 13:17:33.225 -0800",
+                "2021-11-11 13:17:33.199 -0800",
+                "2021-11-11 13:17:34.582 -0800",
+                "2021-11-11 13:17:34.593 -0800",
+            ],
+            "NAME": [
+                "CUSTOMER",
+                "LINEITEM",
+                "NATION",
+                "ORDERS",
+                "PART",
+                "PARTSUPP",
+                "REGION",
+                "SUPPLIER",
+            ],
+            "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.TPCH_SF1"] * 8,
+            "KIND": ["TABLE"] * 8,
+        }
+    )
+
+
+def test_show_objects(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show objects works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("SHOW TERSE OBJECTS in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
+
+    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Objects test failed"
+
+
+def test_show_objects_jit(test_db_snowflake_catalog, memory_leak_check):
+    """Verify that show objects works in JIT. This is needed because we need
+    to ensure the type information is correct."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query = "SHOW TERSE OBJECTS IN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1"
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    bodo_output = impl(bc, query)
+    passed = _test_equal_guard(
+        bodo_output,
+        expected_output,
+        sort_output=True,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
+def _show_schemas_snowflake_sample_data_output():
+    return pd.DataFrame(
+        {
+            "CREATED_ON": [
+                "2024-05-14 20:12:27.165 -0700",
+                "2021-11-11 13:17:31.657 -0800",
+                "2023-09-05 18:34:28.256 -0700",
+                "2021-11-11 13:17:31.816 -0800",
+                "2021-11-11 13:17:31.807 -0800",
+                "2021-11-11 13:17:31.656 -0800",
+                "2021-11-11 13:17:31.793 -0800",
+            ],
+            "NAME": [
+                "INFORMATION_SCHEMA",
+                "TPCDS_SF100TCL",
+                "TPCDS_SF10TCL",
+                "TPCH_SF1",
+                "TPCH_SF10",
+                "TPCH_SF100",
+                "TPCH_SF1000",
+            ],
+            "SCHEMA_NAME": [
+                "SNOWFLAKE_SAMPLE_DATA",
+            ]
+            * 7,
+            "KIND": [None] * 7,
+        }
+    )
+
+
+def test_show_schemas(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show schemas works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("SHOW TERSE SCHEMAS in SNOWFLAKE_SAMPLE_DATA")
+    expected_output = _show_schemas_snowflake_sample_data_output()
+    # excluding INFORMATION_SCHEMA
+    # INFORMATION_SCHEMA: created_on changes with each run
+    passed = _test_equal_guard(bodo_output.drop([0]), expected_output.drop([0]))
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Objects test failed"
+
+
+def test_show_schemas_jit(test_db_snowflake_catalog, memory_leak_check):
+    """Verify that show schemas works in JIT. This is needed because we need
+    to ensure the type information is correct."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query = "SHOW TERSE SCHEMAS IN SNOWFLAKE_SAMPLE_DATA"
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    expected_output = _show_schemas_snowflake_sample_data_output()
+    bodo_output = impl(bc, query)
+    # excluding INFORMATION_SCHEMA
+    # INFORMATION_SCHEMA: created_on changes with each run
+    passed = _test_equal_guard(
+        bodo_output.drop(0),
+        expected_output.drop(0),
+        sort_output=True,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
 def check_view_exists(conn_str, view_name) -> bool:

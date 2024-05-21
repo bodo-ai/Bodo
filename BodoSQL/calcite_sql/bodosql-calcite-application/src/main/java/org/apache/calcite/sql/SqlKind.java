@@ -170,6 +170,12 @@ public enum SqlKind {
   /** DESCRIBE TABLE statement. */
   DESCRIBE_TABLE,
 
+  /** SHOW OBJECTS statement. */
+  SHOW_OBJECTS,
+
+  /** SHOW SCHEMAS statement. */
+  SHOW_SCHEMAS,
+
   /** INSERT statement. */
   INSERT,
 
