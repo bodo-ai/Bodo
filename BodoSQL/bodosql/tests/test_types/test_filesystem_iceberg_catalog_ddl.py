@@ -426,3 +426,109 @@ def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_che
     query = f"DESCRIBE TABLE ANY_TABLE"
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bc.validate_query_compiles(query)
+
+
+def test_show_objects(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):
+    """
+    Tests that the filesystem catalog can shows objects in iceberg
+    schema.
+    """
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    db_schema = "iceberg_db"
+    # Create 2 tables
+    table_name1 = create_simple_ddl_table(spark)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name1}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+    table_name2 = create_simple_ddl_table(spark)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name2}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+
+    query = f'SHOW TERSE OBJECTS IN "{db_schema}"'
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    bodo_output = bc.execute_ddl(query)
+    expected_output = pd.DataFrame(
+        {
+            "CREATED_ON": [None, None],
+            "NAME": [table_name2, table_name1],
+            "KIND": ["TABLE"] * 2,
+            "SCHEMA_NAME": [db_schema] * 2,
+        }
+    )
+    passed = _test_equal_guard(
+        bodo_output, expected_output, sort_output=True, reset_index=True
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Objects test failed"
+
+
+def test_show_objects_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
+    """
+    Verify that show objects compiles in JIT.
+    """
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    query = f'CREATE SCHEMA "{schema_name}"'
+    bc.execute_ddl(query)
+    query = f"SHOW TERSE OBJECTS IN '{schema_name}'"
+    bc.validate_query_compiles(query)
+
+
+def test_show_schemas(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):
+    """
+    Tests that the filesystem catalog can shows schemas in iceberg
+    schema.
+    """
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    db_name = gen_unique_id("ICEBERG_DB").upper()
+    query = f'CREATE SCHEMA "{db_name}"'
+    bc.execute_ddl(query)
+    schema_name1 = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    query = f'CREATE SCHEMA "{db_name}"."{schema_name1}"'
+    bc.execute_ddl(query)
+    schema_name2 = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    query = f'CREATE SCHEMA "{db_name}"."{schema_name2}"'
+    bc.execute_ddl(query)
+
+    query = f'SHOW TERSE SCHEMAS IN "{db_name}"'
+    bodo_output = bc.execute_ddl(query)
+    expected_output = pd.DataFrame(
+        {
+            "CREATED_ON": [None, None],
+            "NAME": [schema_name1, schema_name2],
+            "KIND": [None] * 2,
+            "SCHEMA_NAME": [f"{db_name}.{schema_name1}", f"{db_name}.{schema_name2}"],
+        }
+    )
+    passed = _test_equal_guard(
+        bodo_output, expected_output, sort_output=True, reset_index=True
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Objects test failed"
+    query = f'DROP SCHEMA "{db_name}"."{schema_name1}"'
+    bc.execute_ddl(query)
+    query = f'DROP SCHEMA "{db_name}"."{schema_name2}"'
+    bc.execute_ddl(query)
+    query = f'DROP SCHEMA "{db_name}"'
+    bc.execute_ddl(query)
+
+
+def test_show_schemas_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
+    """
+    Verify that show schemas compiles in JIT.
+    """
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    query = f'CREATE SCHEMA "{schema_name}"'
+    bc.execute_ddl(query)
+    query = f"SHOW TERSE SCHEMAS IN '{schema_name}'"
+    bc.validate_query_compiles(query)
+    query = f'DROP SCHEMA "{schema_name}"'
+    bc.execute_ddl(query)
