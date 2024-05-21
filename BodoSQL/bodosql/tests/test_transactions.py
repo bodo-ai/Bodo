@@ -8,20 +8,9 @@ accordingly.
 import pandas as pd
 import pytest
 
-import bodo
 import bodosql
-from bodo.tests.utils import _test_equal_guard, check_func, reduce_sum
-
-
-def _test_equal_par(bodo_output, py_output):
-    passed = _test_equal_guard(
-        bodo_output,
-        py_output,
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Parallel test failed"
+from bodo.tests.utils import check_func
+from bodosql.tests.utils import assert_equal_par
 
 
 @pytest.mark.parametrize("extension", ["", "WORK", "TRANSACTION"])
@@ -35,7 +24,7 @@ def test_begin(extension, memory_leak_check):
 
     # execute_ddl Version
     bodo_output = bc.execute_ddl(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
     # Jit Version
     # Intentionally returns replicated output
@@ -43,7 +32,7 @@ def test_begin(extension, memory_leak_check):
 
     # Python Version
     bodo_output = bc.sql(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
 
 @pytest.mark.parametrize("extension", ["", "WORK"])
@@ -57,7 +46,7 @@ def test_commit(extension, memory_leak_check):
 
     # execute_ddl Version
     bodo_output = bc.execute_ddl(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
     # Jit Version
     # Intentionally returns replicated output
@@ -65,7 +54,7 @@ def test_commit(extension, memory_leak_check):
 
     # Python Version
     bodo_output = bc.sql(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
 
 @pytest.mark.parametrize("extension", ["", "WORK"])
@@ -79,7 +68,7 @@ def test_rollback(extension, memory_leak_check):
 
     # execute_ddl Version
     bodo_output = bc.execute_ddl(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
     # Jit Version
     # Intentionally returns replicated output
@@ -87,7 +76,7 @@ def test_rollback(extension, memory_leak_check):
 
     # Python Version
     bodo_output = bc.sql(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
 
 def test_begin_commit(memory_leak_check):

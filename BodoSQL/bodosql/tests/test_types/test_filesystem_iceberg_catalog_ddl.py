@@ -17,12 +17,11 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 from bodo.tests.utils import (
-    _test_equal_guard,
     check_func_seq,
     gen_unique_table_id,
-    reduce_sum,
 )
 from bodo.utils.typing import BodoError
+from bodosql.tests.utils import assert_equal_par
 
 pytestmark = pytest.mark.iceberg
 
@@ -80,17 +79,6 @@ def ddl_schema(schema_path: Path, create=True):
             assert not schema_path.exists(), "Failed to drop schema"
 
 
-def _test_equal_par(bodo_output, py_output):
-    passed = _test_equal_guard(
-        bodo_output,
-        py_output,
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Parallel test failed"
-
-
 @pytest.mark.parametrize("if_not_exists", [True, False])
 def test_create_schema(if_not_exists, iceberg_filesystem_catalog, memory_leak_check):
     schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
@@ -106,13 +94,13 @@ def test_create_schema(if_not_exists, iceberg_filesystem_catalog, memory_leak_ch
     # execute_ddl Version
     with ddl_schema(schema_path, create=False):
         bodo_output: pd.DataFrame = bc.execute_ddl(query)
-        _test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert schema_path.exists()
 
     # Python Version
     with ddl_schema(schema_path, create=False):
         bodo_output = bc.sql(query)
-        _test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert schema_path.exists()
 
     # Jit Version
@@ -183,13 +171,13 @@ def test_drop_schema(if_exists, iceberg_filesystem_catalog, memory_leak_check):
     # execute_ddl Version
     with ddl_schema(schema_path):
         bodo_output = bc.execute_ddl(query)
-        _test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert not schema_path.exists()
 
     # Python Version
     with ddl_schema(schema_path):
         bodo_output = bc.sql(query)
-        _test_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output)
         assert not schema_path.exists()
 
     # Jit Version
@@ -267,7 +255,7 @@ def test_drop_table(iceberg_filesystem_catalog, iceberg_database, memory_leak_ch
     py_output = pd.DataFrame({"STATUS": [f"{table_name} successfully dropped."]})
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = impl(bc, query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
     # Verify we can't find the table.
     remaining_tables = spark.sql(
@@ -293,7 +281,7 @@ def test_iceberg_drop_table_python(iceberg_filesystem_catalog, memory_leak_check
     py_output = pd.DataFrame({"STATUS": [f"{table_name} successfully dropped."]})
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = bc.sql(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
     # Verify we can't find the table.
     remaining_tables = spark.sql(
@@ -319,7 +307,7 @@ def test_iceberg_drop_table_execute_ddl(iceberg_filesystem_catalog, memory_leak_
     py_output = pd.DataFrame({"STATUS": [f"{table_name} successfully dropped."]})
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = bc.execute_ddl(query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
     # Verify we can't find the table.
     remaining_tables = spark.sql(
@@ -383,7 +371,7 @@ def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_
     )
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bodo_output = impl(bc, query)
-    _test_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
 
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
@@ -416,7 +404,7 @@ def test_describe_table(
             "UNIQUE_KEY": ["N"],
         }
     )
-    _test_equal_par(bodo_output, expected_output)
+    assert_equal_par(bodo_output, expected_output)
 
 
 def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
