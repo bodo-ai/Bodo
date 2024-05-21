@@ -356,8 +356,12 @@ public class RelationalAlgebraGenerator {
   }
 
   // TODO: Determine a better location for this.
-  public static final EnumSet<SqlKind> DESCRIBE_SET =
-      EnumSet.of(SqlKind.DESCRIBE_TABLE, SqlKind.DESCRIBE_SCHEMA);
+  public static final EnumSet<SqlKind> OTHER_NON_COMPUTE_SET =
+      EnumSet.of(
+          SqlKind.DESCRIBE_TABLE,
+          SqlKind.DESCRIBE_SCHEMA,
+          SqlKind.SHOW_SCHEMAS,
+          SqlKind.SHOW_OBJECTS);
 
   /**
    * Return if a SQLKind generates compute. This includes CREATE_TABLE because of CTAS right now.
@@ -366,7 +370,7 @@ public class RelationalAlgebraGenerator {
    * @return True if the SQLKind generates compute.
    */
   public static boolean isComputeKind(SqlKind kind) {
-    return (!DESCRIBE_SET.contains(kind) && !SqlKind.DDL.contains(kind))
+    return (!OTHER_NON_COMPUTE_SET.contains(kind) && !SqlKind.DDL.contains(kind))
         || (kind == SqlKind.CREATE_TABLE);
   }
 

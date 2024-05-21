@@ -63,6 +63,20 @@ interface DDLExecutor {
         typeFactory: RelDataTypeFactory,
     ): DDLExecutionResult
 
+    /**
+     * Show objects in the database.
+     * @param schemaPath The path to the schema to show objects from.
+     * @return The result of the operation.
+     */
+    fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult
+
+    /**
+     * Show schemas in the database.
+     * @param dbPath The path to schema to show all sub-schemas from.
+     * @return The result of the operation.
+     */
+    fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult
+
     @Throws(ViewAlreadyExistsException::class)
     fun createOrReplaceView(
         viewPath: ImmutableList<String>,

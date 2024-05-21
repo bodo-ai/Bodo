@@ -1414,3 +1414,42 @@ SqlRollback SqlRollback() :
         return new SqlRollback(s.end(this));
     }
 }
+
+/**
+ * Parses a SHOW OBJECTS statement.
+ */
+SqlSnowflakeShowObjects SqlShowObjects() :
+{
+   final Span s;
+   final SqlIdentifier schemaName;
+}
+{
+    <SHOW> <TERSE> { s = span(); }
+    (<OBJECTS>)
+    [
+        <IN>
+        schemaName = CompoundIdentifier()
+        {
+            return new SqlSnowflakeShowObjects(s.end(schemaName), schemaName);
+        }
+    ]
+}
+/**
+ * Parses a SHOW SCHEMAS statement.
+ */
+SqlSnowflakeShowSchemas SqlShowSchemas() :
+{
+   final Span s;
+   final SqlIdentifier dbName;
+}
+{
+    <SHOW> <TERSE> { s = span(); }
+    (<SCHEMAS>)
+    [
+        <IN>
+        dbName = CompoundIdentifier()
+        {
+            return new SqlSnowflakeShowSchemas(s.end(dbName), dbName);
+        }
+    ]
+}

@@ -16,7 +16,9 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
         val (fieldsNames, columnTypes) =
             when (ddlNode.kind) {
                 // Drop Queries
-                SqlKind.CREATE_VIEW, SqlKind.CREATE_SCHEMA, SqlKind.DROP_SCHEMA, SqlKind.BEGIN, SqlKind.COMMIT, SqlKind.ROLLBACK, SqlKind.DROP_TABLE -> {
+                SqlKind.CREATE_VIEW, SqlKind.CREATE_SCHEMA, SqlKind.DROP_SCHEMA, SqlKind.BEGIN,
+                SqlKind.COMMIT, SqlKind.ROLLBACK, SqlKind.DROP_TABLE,
+                -> {
                     val fieldNames = listOf("STATUS")
                     // Note this is non-null
                     val types = listOf(stringType)
@@ -28,6 +30,42 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                     // We only return the first 7 arguments from Snowflake right now as other expressions may not generalize.
                     val fieldNames = listOf("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY")
                     val types = listOf(stringType, stringType, stringType, stringType, stringType, stringType, stringType)
+                    Pair(fieldNames, types)
+                }
+                SqlKind.SHOW_OBJECTS -> {
+                    val fieldNames =
+                        listOf(
+                            "CREATED_ON",
+                            "NAME",
+                            "SCHEMA_NAME",
+                            "KIND",
+                        )
+                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                    val types =
+                        listOf(
+                            stringType,
+                            stringType,
+                            stringType,
+                            stringType,
+                        )
+                    Pair(fieldNames, types)
+                }
+                SqlKind.SHOW_SCHEMAS -> {
+                    val fieldNames =
+                        listOf(
+                            "CREATED_ON",
+                            "NAME",
+                            "SCHEMA_NAME",
+                            "KIND",
+                        )
+                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                    val types =
+                        listOf(
+                            stringType,
+                            stringType,
+                            stringType,
+                            stringType,
+                        )
                     Pair(fieldNames, types)
                 }
                 else -> throw UnsupportedOperationException("Unsupported DDL operation: ${ddlNode.kind}")

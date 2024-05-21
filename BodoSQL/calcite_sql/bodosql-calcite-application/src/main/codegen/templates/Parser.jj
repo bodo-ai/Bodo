@@ -1207,7 +1207,7 @@ SqlNode SqlStmt() :
     |
 <#-- Add methods to parse additional statements here -->
 <#list (parser.statementParserMethods!default.parser.statementParserMethods) as method>
-        LOOKAHEAD(2) stmt = ${method}
+        LOOKAHEAD(3) stmt = ${method}
     |
 </#list>
         stmt = SqlSetOption(Span.of(), null)
