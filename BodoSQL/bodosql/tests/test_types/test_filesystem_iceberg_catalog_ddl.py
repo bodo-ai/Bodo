@@ -17,10 +17,13 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 from bodo.tests.utils import (
+    _test_equal_guard,
     check_func_seq,
     gen_unique_table_id,
+    reduce_sum,
 )
 from bodo.utils.typing import BodoError
+from bodo.utils.utils import run_rank0
 from bodosql.tests.utils import assert_equal_par
 
 pytestmark = pytest.mark.iceberg
@@ -318,60 +321,78 @@ def test_iceberg_drop_table_execute_ddl(iceberg_filesystem_catalog, memory_leak_
 
 def test_drop_table_not_found(iceberg_filesystem_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Iceberg raises an error."""
+    try:
 
-    @bodo.jit
-    def impl(bc, query):
-        return bc.sql(query)
+        @bodo.jit
+        def impl(bc, query):
+            return bc.sql(query)
 
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
-    # Create an unused table to ensure the database is created
-    create_simple_ddl_table(spark)
-    # Create a garbage table name.
-    table_name = "FEJWIOPFE13_9029J03C32"
-    db_schema = "iceberg_db"
-    existing_tables = spark.sql(
-        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
-    ).toPandas()
-    assert (
-        len(existing_tables) == 0
-    ), "Table Name already exists. Please choose a different table name."
-    with pytest.raises(BodoError, match=""):
-        query = f"DROP TABLE {table_name}"
-        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
-        impl(bc, query)
+        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        # Create an unused table to ensure the database is created
+        created_table = create_simple_ddl_table(spark)
+        # Create a garbage table name.
+        table_name = "FEJWIOPFE13_9029J03C32"
+        db_schema = "iceberg_db"
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+        ).toPandas()
+        assert (
+            len(existing_tables) == 0
+        ), "Table Name already exists. Please choose a different table name."
+        with pytest.raises(BodoError, match=""):
+            query = f"DROP TABLE {table_name}"
+            bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+            impl(bc, query)
+    finally:
+        # Cleanup
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{created_table}"
+            spark.sql(query)
+
+        cleanup()
 
 
 def test_drop_table_not_found_if_exists(iceberg_filesystem_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Iceberg doesn't raise an error
     with IF EXISTS."""
+    try:
 
-    @bodo.jit
-    def impl(bc, query):
-        return bc.sql(query)
+        @bodo.jit
+        def impl(bc, query):
+            return bc.sql(query)
 
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
-    # Create an unused table to ensure the database is created
-    create_simple_ddl_table(spark)
-    # Create a garbage table name.
-    table_name = "FEJWIOPFE13_9029J03C32"
-    db_schema = "iceberg_db"
-    existing_tables = spark.sql(
-        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
-    ).toPandas()
-    assert (
-        len(existing_tables) == 0
-    ), "Table Name already exists. Please choose a different table name."
-    query = f"DROP TABLE IF EXISTS {table_name}"
-    py_output = pd.DataFrame(
-        {
-            "STATUS": [
-                f"Drop statement executed successfully ({table_name} already dropped)."
-            ]
-        }
-    )
-    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
-    bodo_output = impl(bc, query)
-    assert_equal_par(bodo_output, py_output)
+        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        # Create an unused table to ensure the database is created
+        created_table = create_simple_ddl_table(spark)
+        # Create a garbage table name.
+        table_name = "FEJWIOPFE13_9029J03C32"
+        db_schema = "iceberg_db"
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+        ).toPandas()
+        assert (
+            len(existing_tables) == 0
+        ), "Table Name already exists. Please choose a different table name."
+        query = f"DROP TABLE IF EXISTS {table_name}"
+        py_output = pd.DataFrame(
+            {
+                "STATUS": [
+                    f"Drop statement executed successfully ({table_name} already dropped)."
+                ]
+            }
+        )
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+    finally:
+        # Cleanup
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{created_table}"
+            spark.sql(query)
+
+        cleanup()
 
 
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
@@ -382,29 +403,38 @@ def test_describe_table(
     Tests that the filesystem catalog can describe an iceberg
     table.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
-    table_name = create_simple_ddl_table(spark)
-    db_schema = "iceberg_db"
-    existing_tables = spark.sql(
-        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
-    ).toPandas()
-    assert len(existing_tables) == 1, "Unable to find testing table"
+    try:
+        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        table_name = create_simple_ddl_table(spark)
+        db_schema = "iceberg_db"
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+        ).toPandas()
+        assert len(existing_tables) == 1, "Unable to find testing table"
 
-    query = f'{describe_keyword} TABLE "{db_schema}"."{table_name}"'
-    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
-    bodo_output = bc.execute_ddl(query)
-    expected_output = pd.DataFrame(
-        {
-            "NAME": ["A"],
-            "TYPE": ["BIGINT"],
-            "KIND": ["COLUMN"],
-            "NULL?": ["Y"],
-            "DEFAULT": [None],
-            "PRIMARY_KEY": ["N"],
-            "UNIQUE_KEY": ["N"],
-        }
-    )
-    assert_equal_par(bodo_output, expected_output)
+        query = f'{describe_keyword} TABLE "{db_schema}"."{table_name}"'
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = bc.execute_ddl(query)
+        expected_output = pd.DataFrame(
+            {
+                "NAME": ["A"],
+                "TYPE": ["BIGINT"],
+                "KIND": ["COLUMN"],
+                "NULL?": ["Y"],
+                "DEFAULT": [None],
+                "PRIMARY_KEY": ["N"],
+                "UNIQUE_KEY": ["N"],
+            }
+        )
+        assert_equal_par(bodo_output, expected_output)
+    finally:
+        # Cleanup
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name}"
+            spark.sql(query)
+
+        cleanup()
 
 
 def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
