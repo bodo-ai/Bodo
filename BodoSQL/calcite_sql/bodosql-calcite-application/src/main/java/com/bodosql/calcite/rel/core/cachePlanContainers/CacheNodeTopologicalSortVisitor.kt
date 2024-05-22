@@ -52,9 +52,9 @@ class CacheNodeTopologicalSortVisitor<E> {
     }
 
     /**
-     * Return if there are no more plans that are "ready"
-     * to visit. This does not mean the result is "empty"
+     * Return if there are any plans that are "ready"
+     * to visit. Returning false doesn't mean the visitor is "empty"
      * because some nodes may not have visited consumer yet.
      */
-    fun hasReadyNode(): Boolean = cacheQueue.isEmpty()
+    fun hasReadyNode(): Boolean = cacheQueue.isNotEmpty()
 }

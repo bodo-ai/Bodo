@@ -33,7 +33,7 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
     BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
-        inputs: MutableList<RelNode>,
+        inputs: List<RelNode>,
     ): BodoPhysicalRuntimeJoinFilter {
         return copy(traitSet, sole(inputs), filterColumns)
     }

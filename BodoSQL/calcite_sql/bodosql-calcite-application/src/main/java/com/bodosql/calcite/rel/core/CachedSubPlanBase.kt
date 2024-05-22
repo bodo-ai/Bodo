@@ -37,11 +37,11 @@ open class CachedSubPlanBase protected constructor(
     }
 
     override fun deriveRowType(): RelDataType {
-        return cachedPlan.plan.validatedRowType
+        return cachedPlan.plan.rowType
     }
 
     override fun estimateRowCount(mq: RelMetadataQuery): Double {
-        return cachedPlan.plan.rel.estimateRowCount(mq)
+        return cachedPlan.plan.estimateRowCount(mq)
     }
 
     // TODO: Add cost calculation. This is tricky because the cost should be amortized

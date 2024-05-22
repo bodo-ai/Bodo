@@ -35,8 +35,7 @@ class SearchArgExpandProgram : Program {
         while (cacheHandler.isNotEmpty()) {
             val cacheNode = cacheHandler.pop()
             val cacheRoot = cacheNode.cachedPlan.plan
-            val cachePlanRoot = cacheRoot.rel
-            cacheNode.cachedPlan.plan = cacheRoot.withRel(cachePlanRoot.accept(visitor))
+            cacheNode.cachedPlan.plan = cacheRoot.accept(visitor)
         }
         return result
     }

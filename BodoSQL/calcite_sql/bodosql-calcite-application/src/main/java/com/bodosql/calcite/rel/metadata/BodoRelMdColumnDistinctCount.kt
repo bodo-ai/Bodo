@@ -584,7 +584,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         mq: RelMetadataQuery,
         column: Int,
     ): Double? {
-        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.cachedPlan.plan.rel, column)
+        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.cachedPlan.plan, column)
     }
 
     companion object {
