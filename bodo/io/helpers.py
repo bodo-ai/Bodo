@@ -890,7 +890,11 @@ def define_stream_writer_dtor(
     mod = builder.module
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
-    fn = cgutils.get_or_insert_function(mod, fnty, name=".dtor.stream_writer")
+    # Ensure the name depends on the payload type because each streaming write may
+    # have a different struct and we need to generate 1 dtor per struct.
+    fn = cgutils.get_or_insert_function(
+        mod, fnty, name=f".dtor.stream_writer.{payload_type}"
+    )
 
     # End early if the dtor is already defined
     if not fn.is_declaration:

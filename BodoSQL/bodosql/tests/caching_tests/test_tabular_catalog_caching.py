@@ -1,7 +1,6 @@
 from uuid import getnode
 
 import pandas as pd
-import pytest
 from mpi4py import MPI
 
 import bodosql
@@ -41,7 +40,6 @@ def test_tabular_catalog_read_caching(fn_distribution, is_cached, tabular_catalo
 
 
 @pytest_mark_tabular
-@pytest.mark.skip(reason="BSE-3346: Need to fix the test")
 def test_tabular_catalog_write_caching(fn_distribution, is_cached, tabular_catalog):
     def impl(bc, write_query, read_query):
         # Write step
