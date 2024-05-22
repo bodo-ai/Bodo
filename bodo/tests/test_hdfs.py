@@ -95,6 +95,7 @@ def test_hdfs_pq_asof1(datapath, hdfs_datapath):
 
     fname = datapath("asof1.pq")
     py_output = pd.read_parquet(fname)
+    py_output["time"] = py_output["time"].astype("datetime64[ns, UTC]")
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
 

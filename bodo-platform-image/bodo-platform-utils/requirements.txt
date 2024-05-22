@@ -10,4 +10,4 @@ urllib3>=1.26.9
 mpi4py==3.1.5
 requests
 cachetools>=5.3.0
-pyarrow>=15.0.0
+pyarrow>=16.0.0

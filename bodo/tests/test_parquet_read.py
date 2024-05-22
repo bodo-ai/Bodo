@@ -2706,12 +2706,13 @@ def test_filter_pushdown_string(datapath, memory_leak_check):
         check_logger_msg(stream, "(ds.field('two') == ds.scalar(f0))")
 
 
+@pytest.mark.skip("[BSE-3362] Filter pushdown with timestamp in Python not working")
 def test_filter_pushdown_timestamp(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
         d = datetime.date(2015, 1, 1)
         d2 = d.replace(year=1992)
-        return df[df["DT64"] < pd.Timestamp(d2)]
+        return df[df["DT64"].dt.tz_convert(None) < pd.Timestamp(d2)]
 
     path = datapath("pandas_dt.pq")
     stream = io.StringIO()

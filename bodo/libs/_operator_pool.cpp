@@ -154,10 +154,10 @@ inline ::arrow::Status OperatorBufferPool::allocate_inner_(int64_t size,
     if (alloc_status.ok()) {
         if (!is_scratch) {
             this->update_main_mem_pinned_bytes(size);
-            this->main_mem_stats_.UpdateAllocatedBytes(size);
+            this->main_mem_stats_.DidAllocateBytes(size);
         }
         this->update_pinned_bytes(size);
-        this->stats_.UpdateAllocatedBytes(size);
+        this->stats_.DidAllocateBytes(size);
     }
     return alloc_status;
 }
@@ -187,9 +187,9 @@ inline void OperatorBufferPool::free_inner_(uint8_t *buffer, int64_t size,
             this->update_main_mem_pinned_bytes(-size);
         }
     }
-    this->stats_.UpdateAllocatedBytes(-size, /*is_free*/ true);
+    this->stats_.DidFreeBytes(size);
     if (!is_scratch) {
-        this->main_mem_stats_.UpdateAllocatedBytes(-size, /*is_free*/ true);
+        this->main_mem_stats_.DidFreeBytes(size);
     }
 }
 
@@ -251,10 +251,10 @@ inline ::arrow::Status OperatorBufferPool::reallocate_inner_(int64_t old_size,
         // (new_size + old_size) can be pinned, so this can only be lesser
         // than that.
         this->update_pinned_bytes(new_size - old_size);
-        this->stats_.UpdateAllocatedBytes(new_size - old_size);
+        this->stats_.DidReallocateBytes(old_size, new_size);
         if (!is_scratch) {
             this->update_main_mem_pinned_bytes(new_size - old_size);
-            this->main_mem_stats_.UpdateAllocatedBytes(new_size - old_size);
+            this->main_mem_stats_.DidReallocateBytes(old_size, new_size);
         }
     } else {
         // If it failed, undo the stats updates if old buffer was never
