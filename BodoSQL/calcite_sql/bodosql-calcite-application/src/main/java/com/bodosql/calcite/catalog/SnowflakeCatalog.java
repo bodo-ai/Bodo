@@ -1350,15 +1350,20 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   @Override
   public Expr generateReadCode(
       ImmutableList<String> tableName, boolean useStreaming, StreamingOptions streamingOptions) {
-    // TODO: Convert to use Expr.Call
+    ArrayList<kotlin.Pair<String, Expr>> kwargs = new ArrayList<>();
     String streamingArg = "";
     if (useStreaming) {
-      streamingArg = "_bodo_chunksize=" + streamingOptions.getChunkSize();
+      kwargs.add(
+          new kotlin.Pair<>(
+              "_bodo_chunksize", new Expr.IntegerLiteral(streamingOptions.getChunkSize())));
     }
-    return new Expr.Raw(
-        String.format(
-            "pd.read_sql('%s', '%s', _bodo_is_table_input=True, _bodo_read_as_table=True, %s)",
-            tableName.get(2), generatePythonConnStr(tableName.subList(0, 2)), streamingArg));
+    kwargs.add(new kotlin.Pair<>("_bodo_is_table_input", new Expr.BooleanLiteral(true)));
+    kwargs.add(new kotlin.Pair<>("_bodo_read_as_table", new Expr.BooleanLiteral(true)));
+    List<Expr> args =
+        List.of(
+            new Expr.StringLiteral(tableName.get(2)),
+            generatePythonConnStr(tableName.subList(0, 2)));
+    return new Expr.Call("pd.read_sql", args, kwargs);
   }
 
   /**
@@ -1400,10 +1405,15 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     if (schemaList.size() > 0) {
       schemaName = schemaList.get(0);
     }
-    return new Expr.Raw(
-        String.format(
-            "pd.read_sql('%s', '%s', _bodo_read_as_table=True)",
-            query, generatePythonConnStr(ImmutableList.of(currentDatabase, schemaName))));
+
+    List<kotlin.Pair<String, Expr>> kwargs =
+        List.of(new kotlin.Pair<>("_bodo_read_as_table", new Expr.BooleanLiteral(true)));
+    return new Expr.Call(
+        "pd.read_sql",
+        List.of(
+            new Expr.StringLiteral(query),
+            generatePythonConnStr(ImmutableList.of(currentDatabase, schemaName))),
+        kwargs);
   }
 
   /**
