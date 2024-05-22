@@ -142,6 +142,7 @@ class BodoPhysicalJoin(
             right: RelNode,
             condition: RexNode,
             joinType: JoinRelType,
+            rebalanceOutput: Boolean = false,
             joinFilterID: Int = -1,
             originalJoinFilterKeyLocations: List<Int> = listOf(),
         ): BodoPhysicalJoin {
@@ -153,6 +154,7 @@ class BodoPhysicalJoin(
                 right,
                 condition,
                 joinType,
+                rebalanceOutput = rebalanceOutput,
                 joinFilterID = joinFilterID,
                 originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
             )

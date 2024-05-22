@@ -432,6 +432,6 @@ class BodoRelMdRowCount : RelMdRowCount() {
         rel: CachedSubPlanBase,
         mq: RelMetadataQuery,
     ): Double? {
-        return mq.getRowCount(rel.cachedPlan.plan.rel)
+        return mq.getRowCount(rel.cachedPlan.plan)
     }
 }

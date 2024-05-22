@@ -10,10 +10,8 @@ import org.apache.calcite.plan.RelOptMaterialization
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
-import org.apache.calcite.rel.RelRoot
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.RelVisitor
-import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.tools.Program
 
 /**
@@ -84,8 +82,7 @@ class CacheSubPlanProgram : Program {
                 val children = rel.inputs.map { it.accept(this) }
                 val node = rel.copy(rel.traitSet, children)
                 if (cacheNodes.contains(id)) {
-                    val root = RelRoot.of(node, SqlKind.OTHER)
-                    val plan = CachedPlanInfo.create(root, 1)
+                    val plan = CachedPlanInfo.create(node, 1)
                     val cachedSubPlan = BodoPhysicalCachedSubPlan.create(plan, cluster.nextCacheId())
                     cacheNodeMap[id] = cachedSubPlan
                     cachedSubPlan
@@ -93,6 +90,13 @@ class CacheSubPlanProgram : Program {
                     node
                 }
             }
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        fun canCacheNode(rel: RelNode): Boolean {
+            return rel is BodoPhysicalRel && rel !is BodoPhysicalCachedSubPlan
         }
     }
 }

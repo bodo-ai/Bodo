@@ -1,12 +1,12 @@
 package com.bodosql.calcite.rel.core
 
-import org.apache.calcite.rel.RelRoot
+import org.apache.calcite.rel.RelNode
 
 /**
  * Wrapper around a RelRoot to track information about caching in a way that is
  * mutable.
  */
-class CachedPlanInfo private constructor(var plan: RelRoot, private var numConsumers: Int) {
+class CachedPlanInfo private constructor(var plan: RelNode, private var numConsumers: Int) {
     fun removeConsumer() {
         numConsumers--
     }
@@ -15,13 +15,17 @@ class CachedPlanInfo private constructor(var plan: RelRoot, private var numConsu
         numConsumers++
     }
 
+    fun addConsumers(num: Int) {
+        numConsumers += num
+    }
+
     fun getNumConsumers(): Int {
         return numConsumers
     }
 
     companion object {
         fun create(
-            plan: RelRoot,
+            plan: RelNode,
             numConsumers: Int,
         ): CachedPlanInfo {
             return CachedPlanInfo(plan, numConsumers)
