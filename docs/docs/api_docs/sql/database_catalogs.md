@@ -222,3 +222,56 @@ To access S3 BodoSQL uses the following environment variables to connect to S3:
 
 If you encounter any issues connecting to s3 or accessing a table, please ensure that these environment variables are set.
 For more information please refer to the [AWS documentation.](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html)
+
+
+## TabularCatalog {#tabular-catalog-api}
+
+The `TabularCatalog` allows users to read and write tables using the REST Iceberg Catalog provided by Tabular.
+To use this catalog, you will have to select a warehouse and provide a method of authentication.
+
+```py
+catalog = bodosql.TabularCatalog(
+    warehouse="warehouse_name",
+    credential="clientid:clientsecret"
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT * FROM MY_SCHEMA.MY_TABLE")
+
+run_query(bc)
+```
+
+When constructing a query you must follow the BodoSQL rules for [identifier case sensitivity][identifier-case-sensitivity].
+
+
+### API Reference
+
+- `bodosql.TabularCatalog(warehouse: str, credential: str, token: str)`
+<br><br>
+
+    Constructor for `TabularCatalog`. This allows users to use a Tabular Iceberg Warehouse as a database for querying
+    or writing tables with a `BodoSQLContext`. Either `credential` or `token` must be provided.
+
+    ***Arguments***
+
+    - `warehouse`: Name of the Tabular Iceberg Warehouse to query.
+
+    - `credential`: The [Tabular credential](https://docs.tabular.io/en/creating-and-modifying-credentials.html) to use for authentication. This should be in the form of `clientid:clientsecret`.
+
+    - `token`: A [temporary OAuth2 token](https://docs.tabular.io/en/data-access-flow-in-tabular.html) to use for authentication. This token should be a valid token for the Tabular Warehouse.
+
+#### Supported Query Types
+
+The `TabularCatalog` currently supports the following types of SQL queries:
+
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
+
+#### S3 Support
+
+The `TabularCatalog` supports reading and writing tables stored on S3.
+S3 access is provided by the Tabular Warehouse and does not require any additional configuration.
+
