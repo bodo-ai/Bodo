@@ -18,7 +18,9 @@ Click on _CREATE CATALOG_ and fill up the form with the required values.
 ![Catalogs](../platform2-screenshots/catalogspage.png#center) 
 
 
-Currently, we only support Snowflake Database Catalogs on the Bodo Platform.  
+Currently, we support Snowflake Database Catalogs and Tabular Database Catalogs on the Bodo Platform.  
+See [`SnowflakeCatalog`][snowflake-catalog-api] and [`TabularCatalog`][tabular-catalog-api] for details on
+the required parameters.
 
 Upon submitting the form, you will see that your Catalog has been created and is now
 available to use in your interactive notebook. 
@@ -26,11 +28,29 @@ available to use in your interactive notebook.
 ![Catalog List](../platform2-screenshots/added_catalog.png)
 
 
+## Running a Job With a Database Catalog
+
+:fontawesome-brands-aws: Supported On AWS ·
+:material-microsoft-azure:{.azure} Supported on Azure 
+
+To run a SQL job with the database catalog you need to create a job template in the jobs tab.
+
+![Job List](../platform2-screenshots/empty_jobs_tab.png)
+
+Configure the job template normally and under Advanced Options, you can select the Catalog you want to use.
+
+![Job Template](../platform2-screenshots/job_template_catalog.png)
+
+Catalogs can also be given to bodosdk jobs.
+When the job is run, the SQL code will be executed on the tables in the connected remote database.
  
 ## Using Database Catalogs in Interactive Notebooks
 
 :fontawesome-brands-aws: Supported On AWS ·
 :material-microsoft-azure:{.azure} Supported on Azure
+
+!!! Important
+    Using Database Catalogs in Interactive Notebooks is only supported for Snowflake Database Catalogs.
 
 When you create a code cell in your interactive notebook, you will notice a blue selector on the
 top right hand corner of the code cell. By default, this will be set to _Parallel-Python_.
