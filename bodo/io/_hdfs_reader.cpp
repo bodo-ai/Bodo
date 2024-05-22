@@ -213,7 +213,7 @@ FileReader *init_hdfs_reader(const char *fname, const char *suffix,
         ::arrow::fs::FileSystemFromUri(fname, &path);
     arrow::fs::FileInfo file_stat;
 
-    arrow::internal::Uri uri;
+    arrow::util::Uri uri;
     (void)uri.Parse(fname);
     arrow::Result<arrow::fs::FileInfo> result = fs->GetFileInfo(uri.path());
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)

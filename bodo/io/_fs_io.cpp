@@ -1,6 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <arrow/io/api.h>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -9,6 +8,7 @@
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
+#include <arrow/io/api.h>
 #include <arrow/result.h>
 
 #include "../libs/_bodo_common.h"
@@ -122,7 +122,7 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
     bool is_s3 = file_path.starts_with("s3://");
     std::shared_ptr<arrow::fs::FileSystem> fs;
     if (is_s3 || is_hdfs) {
-        arrow::internal::Uri uri;
+        arrow::util::Uri uri;
         (void)uri.Parse(file_path);
         PyObject *fs_mod = nullptr;
         PyObject *func_obj = nullptr;
