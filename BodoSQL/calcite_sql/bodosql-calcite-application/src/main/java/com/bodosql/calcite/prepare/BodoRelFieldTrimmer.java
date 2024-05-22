@@ -28,7 +28,6 @@ import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.SingleRel;
 import org.apache.calcite.rel.core.Aggregate;
 import org.apache.calcite.rel.core.AggregateCall;
@@ -86,11 +85,10 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // Process all cache nodes.
     while (cacheHandler.isNotEmpty()) {
       CachedSubPlanBase cacheNode = cacheHandler.pop();
-      RelRoot cacheRoot = cacheNode.getCachedPlan().getPlan();
-      RelNode cachePlanRoot = cacheRoot.rel;
+      RelNode cacheRoot = cacheNode.getCachedPlan().getPlan();
       // Just call on the parent implementation so only the top
       // level iterates through cache nodes.
-      cacheNode.getCachedPlan().setPlan(cacheRoot.withRel(super.trim(cachePlanRoot)));
+      cacheNode.getCachedPlan().setPlan(super.trim(cacheRoot));
     }
     return result;
   }

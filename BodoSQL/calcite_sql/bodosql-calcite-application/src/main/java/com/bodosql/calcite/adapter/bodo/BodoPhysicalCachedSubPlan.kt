@@ -10,7 +10,8 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.rel.core.CachedPlanInfo
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
-import com.bodosql.calcite.traits.BatchingPropertyTraitDef
+import com.bodosql.calcite.traits.BatchingProperty
+import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -25,7 +26,7 @@ class BodoPhysicalCachedSubPlan private constructor(
             cachedPlan,
             cacheID,
             cluster,
-            traitSet.replace(BodoPhysicalRel.CONVENTION).replace(cachedPlan.plan.rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)),
+            traitSet.replace(BodoPhysicalRel.CONVENTION),
         ),
         BodoPhysicalRel {
         override fun copy(
@@ -49,7 +50,7 @@ class BodoPhysicalCachedSubPlan private constructor(
                 if (isCached) {
                     relationalOperatorCache.getCachedTable(cacheID)
                 } else {
-                    val table = implementor.visitChild(cachedPlan.plan.rel, 0)
+                    val table = implementor.visitChild(cachedPlan.plan, 0)
                     relationalOperatorCache.cacheTable(cacheID, table)
                     table
                 }
@@ -132,13 +133,17 @@ class BodoPhysicalCachedSubPlan private constructor(
             // Do Nothing
         }
 
+        override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
+            return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
+        }
+
         companion object {
             @JvmStatic
             fun create(
                 cachedPlan: CachedPlanInfo,
                 cacheID: Int,
             ): BodoPhysicalCachedSubPlan {
-                val rootNode = cachedPlan.plan.rel
+                val rootNode = cachedPlan.plan
                 return BodoPhysicalCachedSubPlan(cachedPlan, cacheID, rootNode.cluster, rootNode.traitSet)
             }
         }

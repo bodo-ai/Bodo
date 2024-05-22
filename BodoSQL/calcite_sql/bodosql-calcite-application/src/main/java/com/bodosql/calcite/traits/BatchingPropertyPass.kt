@@ -1,8 +1,10 @@
 package com.bodosql.calcite.traits
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalCachedSubPlan
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.adapter.pandas.PandasRel
+import com.bodosql.calcite.rel.core.cachePlanContainers.CachedResultVisitor
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.tools.RelBuilder
@@ -20,6 +22,31 @@ import org.apache.calcite.tools.RelBuilder
  * the implementation requirements.
  */
 class BatchingPropertyPass(private val builder: RelBuilder) {
+    private val cacheVisitor = CachedResultVisitor(generateCacheNodeFunction())
+
+    /**
+     * Generate the function to cache the BatchingProperty for a BodoPhysicalCachedSubPlan.
+     */
+    private fun generateCacheNodeFunction(): (BodoPhysicalCachedSubPlan) -> BatchingProperty {
+        return {
+                cachedNode: BodoPhysicalCachedSubPlan ->
+            val newRoot = visit(cachedNode.cachedPlan.plan)
+            val property = getOutputBatchingProperty(newRoot)
+            val expectedInputProperty = cachedNode.expectedInputBatchingProperty(property)
+            val (inputProperty, cacheBody) =
+                if (property.satisfies(expectedInputProperty)) {
+                    Pair(property, newRoot)
+                } else {
+                    // Insert an exchange
+                    val exchangeInput = generateExchangeInput(newRoot, expectedInputProperty)
+                    Pair(expectedInputProperty, exchangeInput)
+                }
+            // Update the cache
+            cachedNode.cachedPlan.plan = cacheBody
+            inputProperty
+        }
+    }
+
     /**
      * Generate the code to insert a SeparateStreamExchange or
      * CombineStreamsExchange. This includes a special case where
@@ -36,6 +63,15 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
         } else {
             CombineStreamsExchange(input.cluster, input.traitSet.replace(expectedInputProperty), input)
         }
+    }
+
+    /**
+     * Cache visitors are special because we must both visit the cached section
+     * and update the current node.
+     */
+    fun visit(node: BodoPhysicalCachedSubPlan): RelNode {
+        val inputProperty = cacheVisitor.visit(node)
+        return node.copy(node.traitSet.replace(inputProperty), listOf())
     }
 
     /**
@@ -152,6 +188,9 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
      */
     fun visit(node: RelNode): RelNode {
         return when (node) {
+            is BodoPhysicalCachedSubPlan -> {
+                visit(node)
+            }
             is BodoPhysicalProject -> {
                 visit(node)
             }
@@ -172,6 +211,7 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
         fun applyBatchingInfo(
             rel: RelNode,
             builder: RelBuilder,
+            hasRequiredOutput: Boolean = true,
         ): RelNode {
             return if (rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == null) {
                 // Ignore for non-streaming
@@ -182,7 +222,7 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
                 val output = visitor.visit(rel)
                 val finalBatchingProperty = getOutputBatchingProperty(output)
                 // The final result must be non-streaming
-                if (finalBatchingProperty == requiredBatchingProperty) {
+                if (!hasRequiredOutput || finalBatchingProperty == requiredBatchingProperty) {
                     output
                 } else {
                     CombineStreamsExchange(output.cluster, output.traitSet.replace(requiredBatchingProperty), output)
