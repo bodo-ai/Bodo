@@ -15,7 +15,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.gener
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.generateSampleCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateExceptCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateIntersectCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateUnionCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
 import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKeyIndices;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
@@ -42,7 +41,6 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableCreate;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableModify;
-import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalValues;
 import com.bodosql.calcite.adapter.bodo.RexToBodoTranslator;
 import com.bodosql.calcite.adapter.bodo.ScalarRexToBodoTranslator;
@@ -460,8 +458,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
       this.visitBodoAggregate((BodoPhysicalAggregate) node);
     } else if (node instanceof BodoPhysicalMinRowNumberFilter) {
       this.visitBodoMinRowNumberFilter((BodoPhysicalMinRowNumberFilter) node);
-    } else if (node instanceof BodoPhysicalUnion) {
-      this.visitBodoUnion((BodoPhysicalUnion) node);
     } else if (node instanceof BodoPhysicalIntersect) {
       this.visitBodoIntersect((BodoPhysicalIntersect) node);
     } else if (node instanceof BodoPhysicalMinus) {
@@ -658,192 +654,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
           this.generatedCode.add(new Op.Assign(outVar, logicalValuesExpr));
           tableGenStack.push(new BodoEngineTable(outVar.emit(), node));
         });
-  }
-
-  /**
-   * Visitor for streaming Bodo Union node
-   *
-   * @param node BodoPhysicalUnion node to be visited
-   */
-  private void visitStreamingBodoUnion(BodoPhysicalUnion node) {
-
-    // Visit the input node
-    this.visit(node.getInput(0), 0, node);
-
-    // Create the state variables
-    StateVariable stateVar = genStateVar();
-    kotlin.Pair<String, Expr> isAll = new kotlin.Pair<>("all", new Expr.BooleanLiteral(node.all));
-    OperatorID operatorID = this.generatedCode.newOperatorID(node);
-    StreamingRelNodeTimer timerInfo =
-        StreamingRelNodeTimer.createStreamingTimer(
-            operatorID,
-            this.generatedCode,
-            this.verboseLevel,
-            this.tracingLevel,
-            node.operationDescriptor(),
-            node.loggingTitle(),
-            node.nodeDetails(),
-            node.getTimerType());
-
-    Expr.Call stateCall =
-        new Expr.Call(
-            "bodo.libs.stream_union.init_union_state",
-            List.of(operatorID.toExpr()),
-            List.of(isAll));
-    Op.Assign unionInit = new Op.Assign(stateVar, stateCall);
-
-    // Fetch the streaming pipeline
-    StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
-    // Add Initialization Code
-    timerInfo.insertStateStartTimer(0);
-    // UNION ALL is implemented as a ChunkedTableBuilder and doesn't need tracked in the memory
-    // budget comptroller
-    if (node.all) {
-      inputPipeline.addInitialization(unionInit);
-    } else {
-      RelMetadataQuery mq = node.getCluster().getMetadataQuery();
-      inputPipeline.initializeStreamingState(
-          operatorID, unionInit, OperatorType.UNION, node.estimateBuildMemory(mq));
-    }
-    timerInfo.insertStateEndTimer(0);
-
-    // In all but the last UNION call, we should set is_final_pipeline=False
-    for (int i = 0; i < node.getInputs().size() - 1; i++) {
-      if (i != 0) {
-        RelNode input = node.getInput(i);
-        this.visit(input, i, node);
-      }
-
-      StreamingPipelineFrame pipeline = generatedCode.getCurrentStreamingPipeline();
-      Variable batchExitCond = pipeline.getExitCond();
-
-      Variable newExitCond = genGenericTempVar();
-
-      // Add Union Consume Code in Pipeline Loop
-      BodoEngineTable inputTable = tableGenStack.pop();
-      Expr.Call consumeCall =
-          new Expr.Call(
-              "bodo.libs.stream_union.union_consume_batch",
-              List.of(
-                  stateVar,
-                  inputTable,
-                  batchExitCond,
-                  /*is_final_pipeline*/
-                  new Expr.BooleanLiteral(false)));
-
-      timerInfo.insertLoopOperationStartTimer(i + 1);
-      generatedCode.add(new Op.Assign(newExitCond, consumeCall));
-      timerInfo.insertLoopOperationEndTimer(i + 1);
-      pipeline.endSection(newExitCond);
-
-      // Finalize and add the batch pipeline.
-      generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));
-    }
-
-    int i = node.getInputs().size() - 1;
-
-    // For the last UNION consume call, we need to set is_final_pipeline=True
-    RelNode input = node.getInput(i);
-    this.visit(input, i, node);
-
-    StreamingPipelineFrame pipeline = generatedCode.getCurrentStreamingPipeline();
-    Variable batchExitCond = pipeline.getExitCond();
-
-    Variable newExitCond = genGenericTempVar();
-
-    BodoEngineTable inputTable = tableGenStack.pop();
-    Expr.Call consumeCall =
-        new Expr.Call(
-            "bodo.libs.stream_union.union_consume_batch",
-            List.of(
-                stateVar,
-                inputTable,
-                batchExitCond,
-                /*is_final_pipeline*/
-                new Expr.BooleanLiteral(true)));
-
-    timerInfo.insertLoopOperationStartTimer(i + 1);
-    generatedCode.add(new Op.Assign(newExitCond, consumeCall));
-    timerInfo.insertLoopOperationEndTimer(i + 1);
-    pipeline.endSection(newExitCond);
-    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
-    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
-
-    // Union's produce pipeline is only a ChunkedTableBuilder with no need for memory budget so
-    // ending after last input
-    if (!(node.all)) {
-      generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
-    }
-
-    // Create a new pipeline for output of table_builder
-    Variable newFlag = genFinishedStreamingFlag();
-    Variable iterVar = genIterVar();
-    generatedCode.startStreamingPipelineFrame(newFlag, iterVar);
-    StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
-    // Add the output side
-    Variable outTable = genTableVar();
-    Variable outputControl = genOutputControlVar();
-    outputPipeline.addOutputControl(outputControl);
-
-    Expr.Call outputCall =
-        new Expr.Call(
-            "bodo.libs.stream_union.union_produce_batch", List.of(stateVar, outputControl));
-    timerInfo.insertLoopOperationStartTimer(i + 2);
-    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
-    timerInfo.updateRowCount(i + 2, outTable);
-    timerInfo.insertLoopOperationEndTimer(i + 2);
-
-    // Append the code to delete the table builder state
-    // Union state is deleted automatically by Numba
-    Op.Stmt deleteState =
-        new Op.Stmt(new Expr.Call("bodo.libs.stream_union.delete_union_state", List.of(stateVar)));
-    outputPipeline.addTermination(deleteState);
-
-    // Add the output table from last pipeline to the stack
-    BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);
-    tableGenStack.push(outEngineTable);
-    timerInfo.terminateTimer();
-  }
-
-  /**
-   * Visitor for single batch / non-streaming Bodo Union
-   *
-   * @param node BodoPhysicalUnion node to be visited
-   */
-  private void visitSingleBatchBodoUnion(BodoPhysicalUnion node) {
-    List<Variable> childExprs = new ArrayList<>();
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
-    // Visit all the inputs
-    for (int i = 0; i < node.getInputs().size(); i++) {
-      RelNode input = node.getInput(i);
-      this.visit(input, i, node);
-      BodoEngineTable inputTable = tableGenStack.pop();
-      childExprs.add(ctx.convertTableToDf(inputTable));
-    }
-
-    singleBatchTimer(
-        node,
-        () -> {
-          Variable outVar = this.genDfVar();
-          List<String> columnNames = node.getRowType().getFieldNames();
-          Expr unionExpr = generateUnionCode(columnNames, childExprs, node.all, this);
-          this.generatedCode.add(new Op.Assign(outVar, unionExpr));
-          BodoEngineTable outTable = ctx.convertDfToTable(outVar, node);
-          tableGenStack.push(outTable);
-        });
-  }
-
-  /**
-   * Visitor for Bodo Union node. Code generation for UNION [ALL/DISTINCT] in SQL
-   *
-   * @param node BodoPhysicalUnion node to be visited
-   */
-  private void visitBodoUnion(BodoPhysicalUnion node) {
-    if (node.isStreaming()) {
-      visitStreamingBodoUnion(node);
-    } else {
-      visitSingleBatchBodoUnion(node);
-    }
   }
 
   /**
@@ -2558,6 +2368,12 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @Override
     public Variable lowerAsMetaType(@NotNull final Expr expression) {
       return BodoCodeGenVisitor.this.lowerAsMetaType(expression);
+    }
+
+    @NotNull
+    @Override
+    public Variable lowerAsColNamesMetaType(@NotNull final Expr expression) {
+      return BodoCodeGenVisitor.this.lowerAsColNamesMetaType(expression);
     }
 
     @NotNull
