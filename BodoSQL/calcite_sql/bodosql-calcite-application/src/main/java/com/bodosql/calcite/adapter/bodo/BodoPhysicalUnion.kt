@@ -1,7 +1,20 @@
 package com.bodosql.calcite.adapter.bodo
 
+import com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
+import com.bodosql.calcite.codeGeneration.TerminatingPipelineEmission
+import com.bodosql.calcite.codeGeneration.TerminatingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.Op.Assign
+import com.bodosql.calcite.ir.Op.Stmt
+import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.ir.StreamingPipelineFrame
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.UnionBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -30,24 +43,142 @@ class BodoPhysicalUnion(
     }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        TODO("Not yet implemented")
+        return if (isStreaming()) {
+            emitStreaming(implementor)
+        } else {
+            emitSingleBatch(implementor)
+        }
+    }
+
+    private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
+        // Generate a pipeline for each input and pushing its result into the union state
+        val terminatingPipelines =
+            inputs.withIndex().map {
+                    (idx, input) ->
+                val isLast = idx == inputs.size - 1
+                val forceEndOperator = isLast && !all
+                // Terminating pipelines must end with a terminating state. Because we just
+                // need to push the result of the input into the union state, we only need
+                // a single state.
+                val stage =
+                    TerminatingStageEmission { ctx, stateVar, table ->
+                        val inputVar = table!!
+                        val builder = ctx.builder()
+                        val pipeline: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
+                        val batchExitCond = pipeline.getExitCond()
+                        val consumeCall =
+                            Expr.Call(
+                                "bodo.libs.stream_union.union_consume_batch",
+                                listOf(
+                                    stateVar,
+                                    inputVar,
+                                    batchExitCond,
+                                    Expr.BooleanLiteral(isLast),
+                                ),
+                            )
+                        val newExitCond: Variable = builder.symbolTable.genFinishedStreamingFlag()
+                        val exitAssign = Assign(newExitCond, consumeCall)
+                        builder.add(exitAssign)
+                        pipeline.endSection(newExitCond)
+                        // For budget purposes we mark the end of the operator after the last stage.
+                        // We only need to do this
+                        if (forceEndOperator) {
+                            builder.forceEndOperatorAtCurPipeline(ctx.operatorID(), pipeline)
+                        }
+                        null
+                    }
+                TerminatingPipelineEmission(listOf(), stage, false, input)
+            }
+        // The final pipeline generates the output from the state.
+        val outputStage =
+            OutputtingStageEmission(
+                {
+                        ctx, stateVar, _ ->
+                    val builder = ctx.builder()
+                    val pipeline = builder.getCurrentStreamingPipeline()
+                    val outputControl: Variable = builder.symbolTable.genOutputControlVar()
+                    pipeline.addOutputControl(outputControl)
+                    val outputCall =
+                        Expr.Call(
+                            "bodo.libs.stream_union.union_produce_batch",
+                            listOf(stateVar, outputControl),
+                        )
+                    val outTable: Variable = builder.symbolTable.genTableVar()
+                    val finishedFlag = pipeline.getExitCond()
+                    val outputAssign = Op.TupleAssign(listOf(outTable, finishedFlag), outputCall)
+                    builder.add(outputAssign)
+                    ctx.returns(outTable)
+                },
+                reportOutTableSize = true,
+            )
+        val outputPipeline = OutputtingPipelineEmission(listOf(outputStage), true, null)
+        val operatorEmission =
+            OperatorEmission(
+                { ctx -> initStateVariable(ctx) },
+                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                terminatingPipelines,
+                outputPipeline,
+                timeStateInitialization = false,
+            )
+        return implementor.buildStreaming(operatorEmission)!!
+    }
+
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
+        val columnNames = getRowType().fieldNames
+        return implementor.build {
+                ctx ->
+            val builder = ctx.builder()
+            val dfs = inputs.withIndex().map { inputInfo -> ctx.convertTableToDf(ctx.visitChild(inputInfo.value, inputInfo.index)) }
+            val outVar = builder.symbolTable.genDfVar()
+            val unionExpr = SetOpCodeGen.generateUnionCode(columnNames, dfs, all, ctx)
+            builder.add(Assign(outVar, unionExpr))
+            ctx.convertDfToTable(outVar, this)
+        }
     }
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
-        TODO("Not yet implemented")
+        val builder = ctx.builder()
+        val stateVar = builder.symbolTable.genStateVar()
+        val isAll = Pair<String, Expr>("all", Expr.BooleanLiteral(this.all))
+        val stateCall =
+            Expr.Call(
+                "bodo.libs.stream_union.init_union_state",
+                listOf(ctx.operatorID().toExpr()),
+                listOf(isAll),
+            )
+        val unionInit = Assign(stateVar, stateCall)
+        val initialPipeline = builder.getCurrentStreamingPipeline()
+        if (this.all) {
+            // UNION ALL is implemented as a ChunkedTableBuilder and doesn't need tracked in the memory
+            // budget comptroller
+            initialPipeline.addInitialization(unionInit)
+        } else {
+            val mq: RelMetadataQuery = cluster.metadataQuery
+            initialPipeline.initializeStreamingState(
+                ctx.operatorID(),
+                unionInit,
+                OperatorType.UNION,
+                estimateBuildMemory(mq),
+            )
+        }
+        return stateVar
     }
 
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
     ) {
-        TODO("Not yet implemented")
+        val builder = ctx.builder()
+        val finalPipeline = builder.getCurrentStreamingPipeline()
+        val deleteState =
+            Stmt(Expr.Call("bodo.libs.stream_union.delete_union_state", listOf(stateVar)))
+        finalPipeline.addTermination(deleteState)
     }
 
     /**
      * Get union build memory estimate for memory budget comptroller
      */
-    fun estimateBuildMemory(mq: RelMetadataQuery): Int {
+    private fun estimateBuildMemory(mq: RelMetadataQuery): Int {
         // UNION ALL is implemented as a ChunkedTableBuilder and doesn't need tracked in the memory
         // budget comptroller
         assert(!all)
