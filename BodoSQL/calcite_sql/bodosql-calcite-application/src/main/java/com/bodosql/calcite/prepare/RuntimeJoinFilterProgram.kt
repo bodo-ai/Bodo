@@ -486,13 +486,18 @@ object RuntimeJoinFilterProgram : Program {
         }
 
         private fun visit(cachedSubPlan: BodoPhysicalCachedSubPlan): RelNode {
+            if (!emitFilters) {
+                throw IllegalStateException("Cache plan visiting requires filters to be emitted.")
+            }
             val pushedFilters = getPushableJoinFilters(cachedSubPlan.cachedPlan.plan, liveJoins)
             val generatedFilters = liveJoins.difference(pushedFilters)
             // Clear the filters
             liveJoins = JoinFilterProgramState()
+            // We must make a copy in case there is nested caching since we identify nodes by ID.
+            val cachedCopy = cachedSubPlan.copy(cachedSubPlan.traitSet, cachedSubPlan.inputs)
             // Mark the cache node as visited.
-            cacheVisitor.add(cachedSubPlan, Pair(cachedSubPlan.id, pushedFilters))
-            return applyFilters(cachedSubPlan, generatedFilters)
+            cacheVisitor.add(cachedCopy, Pair(cachedCopy.id, pushedFilters))
+            return applyFilters(cachedCopy, generatedFilters)
         }
 
         /**
