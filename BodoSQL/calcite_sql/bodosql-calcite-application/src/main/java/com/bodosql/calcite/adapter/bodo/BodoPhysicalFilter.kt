@@ -1,6 +1,9 @@
 package com.bodosql.calcite.adapter.bodo
 
 import com.bodosql.calcite.application.utils.IsScalar.isScalar
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
@@ -32,41 +35,46 @@ class BodoPhysicalFilter(
     }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        val inputVar = implementor.visitChild(input, 0)
-        // Choose the build implementation.
-        // TODO(jsternberg): Go over this interface again. It feels to me
-        // like the implementor could just choose the correct version
-        // for us rather than having us check this condition ourselves.
         return if (isStreaming()) {
-            emitStreaming(implementor, inputVar)
+            emitStreaming(implementor)
         } else {
-            emitSingleBatch(implementor, inputVar)
+            emitSingleBatch(implementor)
         }
     }
 
-    private fun emitStreaming(
-        implementor: BodoPhysicalRel.Implementor,
-        inputVar: BodoEngineTable,
-    ): BodoEngineTable {
-        return implementor.buildStreaming(
-            BodoPhysicalRel.ProfilingOptions(timeStateInitialization = false),
-            { ctx -> initStateVariable(ctx) },
-            { ctx, stateVar ->
-                // Extract window aggregates and update the nodes.
-                val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
-                val translator = ctx.streamingRexTranslator(inputVar, inputRefs, stateVar)
-                emit(ctx, translator, inputVar, condition)
-            },
-            { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
-        )
+    private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
+        val stage =
+            OutputtingStageEmission(
+                { ctx, stateVar, table ->
+                    // Extract window aggregates and update the nodes.
+                    val inputVar = table!!
+                    val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
+                    val translator = ctx.streamingRexTranslator(inputVar, inputRefs, stateVar)
+                    emit(ctx, translator, inputVar, condition)
+                },
+                reportOutTableSize = true,
+            )
+        val pipeline =
+            OutputtingPipelineEmission(
+                listOf(stage),
+                false,
+                input,
+            )
+        val operatorEmission =
+            OperatorEmission(
+                { ctx -> initStateVariable(ctx) },
+                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                listOf(),
+                pipeline,
+                timeStateInitialization = false,
+            )
+        return implementor.buildStreaming(operatorEmission)!!
     }
 
-    private fun emitSingleBatch(
-        implementor: BodoPhysicalRel.Implementor,
-        inputVar: BodoEngineTable,
-    ): BodoEngineTable {
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         return implementor::build {
                 ctx ->
+            val inputVar = ctx.visitChild(input, 0)
             // Extract window aggregates and update the nodes.
             val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
             val translator = ctx.rexTranslator(inputVar, inputRefs)

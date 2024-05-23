@@ -2,6 +2,7 @@ package com.bodosql.calcite.adapter.bodo
 
 import com.bodosql.calcite.adapter.common.TimerSupportedRel
 import com.bodosql.calcite.application.utils.RelationalOperatorCache
+import com.bodosql.calcite.codeGeneration.OperatorEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Module
@@ -76,25 +77,10 @@ interface BodoPhysicalRel : TimerSupportedRel {
         return RelOptUtil.toString(this)
     }
 
-    data class ProfilingOptions(val reportOutTableSize: Boolean = true, val timeStateInitialization: Boolean = true)
-
     interface Implementor {
-        fun visitChild(
-            input: RelNode,
-            ordinal: Int,
-        ): BodoEngineTable
-
-        fun visitChildren(inputs: List<RelNode>): List<BodoEngineTable> = inputs.mapIndexed { index, input -> visitChild(input, index) }
-
         fun build(fn: (BuildContext) -> BodoEngineTable): BodoEngineTable
 
-        fun buildStreaming(
-            profilingOptions: ProfilingOptions,
-            initFn: (BuildContext) -> StateVariable,
-            bodyFn: (BuildContext, StateVariable) -> BodoEngineTable,
-            deleteFn: (BuildContext, StateVariable) -> Unit,
-            buildPipeline: Boolean = false,
-        ): BodoEngineTable
+        fun buildStreaming(operatorEmission: OperatorEmission): BodoEngineTable?
 
         /**
          * getter for relationalOperatorCache
@@ -104,6 +90,14 @@ interface BodoPhysicalRel : TimerSupportedRel {
 
     interface BuildContext {
         fun operatorID(): OperatorID
+
+        /**
+         * Visits a child relational expression and returns the result as a BodoEngineTable.
+         */
+        fun visitChild(
+            input: RelNode,
+            ordinal: Int,
+        ): BodoEngineTable
 
         /**
          * Returns the Module.Builder used to construct this operation in this context.
@@ -211,5 +205,15 @@ interface BodoPhysicalRel : TimerSupportedRel {
          * Returns the default timezone
          */
         fun getDefaultTZ(): BodoTZInfo
+
+        /**
+         * Start a new active pipeline. This is used for streaming.
+         */
+        fun startPipeline()
+
+        /**
+         * End the active pipeline. This is used for streaming.
+         */
+        fun endPipeline()
     }
 }

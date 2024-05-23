@@ -2,9 +2,13 @@ package com.bodosql.calcite.adapter.bodo
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.operatorTables.TableFunctionOperatorTable
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.rel.core.FlattenBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -54,12 +58,37 @@ class BodoPhysicalFlatten(
      * @return the variable that represents this relational expression.
      */
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return implementor::build {
-                ctx ->
-            if (call.operator.name == TableFunctionOperatorTable.FLATTEN.name) {
-                emitFlatten(implementor, ctx, call)
-            } else {
-                throw BodoSQLCodegenException("Flatten node does not currently support codegen for operation $call")
+        if (call.operator.name != TableFunctionOperatorTable.FLATTEN.name) {
+            throw BodoSQLCodegenException("Flatten node does not currently support codegen for operation $call")
+        }
+        return if (isStreaming()) {
+            val stage =
+                OutputtingStageEmission(
+                    { ctx, _, table ->
+                        emitFlatten(ctx, call, table!!)
+                    },
+                    reportOutTableSize = true,
+                )
+            val pipeline =
+                OutputtingPipelineEmission(
+                    listOf(stage),
+                    false,
+                    input,
+                )
+            val operatorEmission =
+                OperatorEmission(
+                    { ctx -> initStateVariable(ctx) },
+                    { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                    listOf(),
+                    pipeline,
+                    timeStateInitialization = false,
+                )
+            implementor.buildStreaming(operatorEmission)!!
+        } else {
+            implementor::build {
+                    ctx ->
+                val inputVar = ctx.visitChild(input, 0)
+                emitFlatten(ctx, call, inputVar)
             }
         }
     }
@@ -73,11 +102,10 @@ class BodoPhysicalFlatten(
      * @return the variable that represents this relational expression.
      */
     fun emitFlatten(
-        implementor: BodoPhysicalRel.Implementor,
         ctx: BodoPhysicalRel.BuildContext,
         flattenCall: RexCall,
+        inputVar: BodoEngineTable,
     ): BodoEngineTable {
-        val inputVar = implementor.visitChild(input, 0)
         val replicatedColsExpresions = repeatColumns.toList().map { idx -> Expr.IntegerLiteral(idx) }
         val replicatedColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(replicatedColsExpresions)))
         val columnToExplode = flattenCall.operands[0]
@@ -101,7 +129,7 @@ class BodoPhysicalFlatten(
      * This should be called from emit.
      */
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
-        TODO("Not yet implemented")
+        return UnusedStateVariable
     }
 
     /**
@@ -111,9 +139,7 @@ class BodoPhysicalFlatten(
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
-    ) {
-        TODO("Not yet implemented")
-    }
+    ) {}
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())

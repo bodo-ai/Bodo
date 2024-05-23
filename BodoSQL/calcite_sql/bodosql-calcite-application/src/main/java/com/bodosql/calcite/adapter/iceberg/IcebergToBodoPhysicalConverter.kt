@@ -3,6 +3,9 @@ package com.bodosql.calcite.adapter.iceberg
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Expr.StringLiteral
@@ -89,13 +92,28 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
     // ----------------------------------- Codegen Helpers -----------------------------------
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
-            implementor.buildStreaming(
-                BodoPhysicalRel.ProfilingOptions(false),
-                { ctx -> initStateVariable(ctx) },
-                { ctx, stateVar -> generateStreamingTable(ctx, stateVar) },
-                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
-                true,
-            )
+            val stage =
+                OutputtingStageEmission(
+                    { ctx, stateVar, _ ->
+                        generateStreamingTable(ctx, stateVar)
+                    },
+                    reportOutTableSize = false,
+                )
+            val pipeline =
+                OutputtingPipelineEmission(
+                    listOf(stage),
+                    true,
+                    null,
+                )
+            val operatorEmission =
+                OperatorEmission(
+                    { ctx -> initStateVariable(ctx) },
+                    { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                    listOf(),
+                    pipeline,
+                    timeStateInitialization = true,
+                )
+            implementor.buildStreaming(operatorEmission)!!
         } else {
             implementor.build { ctx -> generateNonStreamingTable(ctx) }
         }
