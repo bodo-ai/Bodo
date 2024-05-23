@@ -208,4 +208,17 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             throw RuntimeException("CREATE VIEW is unimplemented for the current catalog")
         }
     }
+
+    override fun dropView(viewPath: ImmutableList<String>) {
+        if (icebergConnection is ViewCatalog) {
+            val viewName = viewPath[viewPath.size - 1]
+            val tableIdentifier = tablePathToTableIdentifier(viewPath.subList(0, viewPath.size - 1), Util.last(viewPath))
+            val result = icebergConnection.dropView(tableIdentifier)
+            if (!result) {
+                throw RuntimeException("Unable to drop view $viewName. Please check that you have sufficient permissions.")
+            }
+        } else {
+            throw RuntimeException("DROP VIEW is unimplemented for the current catalog")
+        }
+    }
 }

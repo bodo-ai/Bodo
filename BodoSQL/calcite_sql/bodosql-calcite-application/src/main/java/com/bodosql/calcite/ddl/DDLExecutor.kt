@@ -84,4 +84,13 @@ interface DDLExecutor {
         parentSchema: CatalogSchema,
         rowType: RelDataType,
     )
+
+    /**
+     * Drops a view from the catalog. Note: We don't need ifExists because we
+     * have already checked for the existence of the table before calling this.
+     * @param viewPath The path to the view to describe.
+     * @return The result of the operation.
+     */
+    @Throws(NamespaceNotFoundException::class, MissingObjectException::class)
+    fun dropView(viewPath: ImmutableList<String>)
 }

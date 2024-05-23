@@ -196,6 +196,7 @@ nav:
                   - api_docs/sql/ddl/describe_table.md
                   - api_docs/sql/ddl/drop_schema.md
                   - api_docs/sql/ddl/drop_table.md
+                  - api_docs/sql/ddl/drop_view.md
               - DML:
                   - api_docs/sql/dml/index.md
                   - api_docs/sql/dml/insert_into.md

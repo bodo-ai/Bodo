@@ -446,6 +446,108 @@ def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_che
     bc.validate_query_compiles(query)
 
 
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_iceberg_drop_view_unsupported_catalog_error_does_not_exist(
+    if_exists, iceberg_filesystem_catalog, memory_leak_check
+):
+    """
+    Tests on the filesystem catalog to drop an non-exist view
+    """
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+    # execute_ddl Version
+    if if_exists:
+        bodo_output = bc.execute_ddl(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to drop.",
+        ):
+            bc.execute_ddl(query_drop_view)
+    # Python Version
+    if if_exists:
+        bodo_output = bc.sql(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to drop.",
+        ):
+            bc.sql(query_drop_view)
+    # Jit Version
+    if if_exists:
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_drop_view),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to drop.",
+        ):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query_drop_view),
+                py_output="",
+                test_str_literal=False,
+            )
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_iceberg_drop_view_unsupported_catalog_error_non_view(
+    if_exists, iceberg_filesystem_catalog, memory_leak_check
+):
+    """
+    Tests on the filesystem catalog to drop an non view file
+    """
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    db_schema = "iceberg_db"
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    view_name = table_name
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f'DROP VIEW {if_exists_str} "{db_schema}"."{table_name}"'
+    # execute_ddl Version
+    with pytest.raises(
+        BodoError, match=f"DROP VIEW is unimplemented for the current catalog"
+    ):
+        bc.execute_ddl(query_drop_view)
+    # Python Version
+    with pytest.raises(
+        BodoError, match=f"DROP VIEW is unimplemented for the current catalog"
+    ):
+        bc.sql(query_drop_view)
+    # Jit Version
+    with pytest.raises(
+        BodoError, match=f"DROP VIEW is unimplemented for the current catalog"
+    ):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_drop_view),
+            py_output="",
+            test_str_literal=False,
+        )
+
+    # Clean up table generated for this test
+    query_drop_table = f'DROP TABLE "{db_schema}"."{view_name}"'
+    bc.execute_ddl(query_drop_table)
+    remaining_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(remaining_tables) == 0, "Table was not dropped"
+
+
 def test_show_objects(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):
     """
     Tests that the filesystem catalog can shows objects in iceberg

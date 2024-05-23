@@ -6,7 +6,7 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.iceberg_database_helpers.utils import get_spark_tabular
-from bodo.tests.utils import check_func_seq, pytest_tabular
+from bodo.tests.utils import _test_equal_guard, check_func_seq, pytest_tabular
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
 from bodosql.tests.utils import assert_equal_par, gen_unique_id
@@ -27,7 +27,7 @@ def view_helper(tabular_connection, view_name, create=True):
         @run_rank0
         def create_view():
             get_spark_tabular(tabular_connection).sql(
-                f"CREATE OR REPLACE VIEW {view_name} AS SELECT 0"
+                f"CREATE OR REPLACE VIEW {view_name} AS SELECT 0 AS A"
             )
             assert check_view_exists(tabular_connection, view_name)
 
@@ -163,3 +163,100 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
                 spark.sql(f"DROP VIEW {schema_1}.VIEW2")
 
             cleanup()
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_iceberg_drop_view(
+    if_exists, tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo drops the view successfully when the view exists."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+
+    # execute_ddl Version
+    with view_helper(tabular_connection, view_name, create=True):
+        bodo_output = bc.execute_ddl(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+        assert not check_view_exists(tabular_connection, view_name)
+
+    # Python Version
+    with view_helper(tabular_connection, view_name, create=True):
+        bodo_output = bc.sql(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+        assert not check_view_exists(tabular_connection, view_name)
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with view_helper(tabular_connection, view_name, create=True):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_drop_view),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+        assert not check_view_exists(tabular_connection, view_name)
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_iceberg_drop_view_error_does_not_exist(
+    if_exists, tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo drops the view successfully when the view exists and if_exists.
+    Tests that Bodo raises error when the view exists and if_exists is False.
+    """
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+
+    # execute_ddl Version
+    with view_helper(tabular_connection, view_name, create=False):
+        if if_exists:
+            bodo_output = bc.execute_ddl(query_drop_view)
+            _test_equal_guard(bodo_output, py_output)
+            assert not check_view_exists(tabular_connection, view_name)
+        else:
+            with pytest.raises(
+                BodoError,
+                match=f"View '{view_name}' does not exist or not authorized to drop.",
+            ):
+                bc.execute_ddl(query_drop_view)
+
+    # Python Version
+    with view_helper(tabular_connection, view_name, create=False):
+        if if_exists:
+            bodo_output = bc.sql(query_drop_view)
+            _test_equal_guard(bodo_output, py_output)
+            assert not check_view_exists(tabular_connection, view_name)
+        else:
+            with pytest.raises(
+                BodoError,
+                match=f"View '{view_name}' does not exist or not authorized to drop.",
+            ):
+                bc.sql(query_drop_view)
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with view_helper(tabular_connection, view_name, create=False):
+        if if_exists:
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query_drop_view),
+                py_output=py_output,
+                test_str_literal=False,
+            )
+        else:
+            with pytest.raises(
+                BodoError,
+                match=f"View '{view_name}' does not exist or not authorized to drop.",
+            ):
+                check_func_seq(
+                    lambda bc, query: bc.sql(query),
+                    (bc, query_drop_view),
+                    py_output="",
+                    test_str_literal=False,
+                )

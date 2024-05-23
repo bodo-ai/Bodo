@@ -23,6 +23,7 @@ import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.ddl.SqlCreateSchema
 import org.apache.calcite.sql.ddl.SqlDropSchema
 import org.apache.calcite.sql.ddl.SqlCreateView
+import org.apache.calcite.sql.ddl.SqlDropView
 import org.apache.calcite.sql.ddl.SqlDdlNodes
 import org.apache.calcite.util.Util
 import java.util.function.Function
@@ -66,7 +67,6 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
 
             // Create Queries
             SqlKind.CREATE_SCHEMA -> executeCreateSchema(node as SqlCreateSchema)
-
             // Drop Queries
             SqlKind.DROP_SCHEMA -> executeDropSchema(node as SqlDropSchema)
             SqlKind.DROP_TABLE -> executeDropTable(node as SqlDropTable)
@@ -83,6 +83,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             SqlKind.CREATE_VIEW -> {
                 executeCreateView(node as SqlCreateView)
             }
+            SqlKind.DROP_VIEW -> {
+                executeDropView(node as SqlDropView)
+            }
             else -> {
                 throw RuntimeException("Unsupported DDL operation: ${node.kind}")
             }
@@ -98,7 +101,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val schema = deriveSchema(parentSchemaPath)
             val catalogSchema = validateSchema(schema, node.kind, schemaName)
             // Perform the actual create schema implementation
-            catalogSchema.ddlExecutor.createSchema(schemaPath)
+            catalogSchema.getDDLExecutor().createSchema(schemaPath)
         } catch (e: NamespaceAlreadyExistsException) {
             return if (node.ifNotExists) {
                 DDLExecutionResult(listOf("STATUS"), listOf(listOf("'$schemaName' already exists, statement succeeded.")))
@@ -221,6 +224,38 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         catalogSchema.ddlExecutor.createOrReplaceView(schemaPath, validatedCreate, catalogSchema, rowDataType)
 
         return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$schemaName' successfully created.")))
+    }
+
+    private fun executeDropView(node: SqlDropView): DDLExecutionResult {
+        val viewPath = node.name.names
+        val viewName = viewPath.joinToString(separator = ".")
+        val ifexists: () -> DDLExecutionResult = {
+            if (node.ifExists) {
+                // If drop table doesn't care if the table exists, we still need to validate the
+                // schema exists.
+                val schemaPath = Util.skipLast(viewPath)
+                val schemaName = schemaPath.joinToString(separator = ".")
+                try {
+                    val schema = deriveSchema(Util.skipLast(viewPath))
+                    validateSchema(schema, node.kind, schemaName)
+                    DDLExecutionResult(listOf("STATUS"), listOf(listOf("Drop statement executed successfully ($viewName already dropped).")))
+                } catch (e: MissingObjectException) {
+                    throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
+                }
+            } else {
+                throw RuntimeException("View '$viewName' does not exist or not authorized to drop.")
+            }
+        }
+        try {
+            val view = deriveTable(viewPath)
+            val catalogView = validateTable(view, node.kind, viewName)
+            catalogView.getDDLExecutor().dropView(catalogView.fullPath)
+        } catch (e: MissingObjectException) {
+            ifexists()
+        } catch (e: NamespaceNotFoundException) {
+            ifexists()
+        }
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$viewName' successfully dropped.")))
     }
 
     /**

@@ -2240,6 +2240,33 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                 e.getMessage()));
       }
     }
+
+    /**
+     * Drop a view with call to Snowflake API. Signals error whenever Snowflake signals an error.
+     * The "if_exists" flag is handled in DDLExecutor.
+     *
+     * @param viewPath Global Variable holding the output column names.
+     */
+    @Override
+    public void dropView(@NotNull ImmutableList<String> viewPath)
+        throws NamespaceNotFoundException {
+      String viewName = generateSnowflakeObjectString(viewPath);
+      String query = String.format(Locale.ROOT, "DROP VIEW %s", viewName);
+      try {
+        executeSnowflakeQuery(query);
+      } catch (SQLException e) {
+        if (e.getMessage().contains("does not exist")) {
+          throw new NamespaceNotFoundException();
+        }
+
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to drop Snowflake view from query %s. Error: %s",
+                viewName,
+                e.getMessage()));
+      }
+    }
   }
 
   // HELPER FUNCTIONS
