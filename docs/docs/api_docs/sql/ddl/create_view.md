@@ -2,7 +2,7 @@
 
 Creates a new view in the current/specified schema.
 
-See the [Snowflake documentation](https://docs.snowflake.com/en/sql-reference/sql/create-schema) for more details.
+See the [Snowflake documentation](https://docs.snowflake.com/en/sql-reference/sql/create-view) for more details.
 
 Currently, BodoSQL only supports the following syntax:
 
