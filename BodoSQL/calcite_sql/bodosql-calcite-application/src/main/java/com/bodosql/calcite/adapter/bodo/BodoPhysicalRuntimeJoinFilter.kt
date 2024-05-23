@@ -1,5 +1,8 @@
 package com.bodosql.calcite.adapter.bodo
 
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
@@ -66,53 +69,61 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
      * @return the variable that represents this relational expression.
      */
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        val inputVar = implementor.visitChild(this.input, 0)
-        return implementor.buildStreaming(
-            BodoPhysicalRel.ProfilingOptions(timeStateInitialization = false),
-            {
-                    ctx ->
-                initStateVariable(ctx)
-            },
-            {
-                    ctx, _ ->
-                val joinStateCache = ctx.builder().getJoinStateCache()
-                var currentTable: BodoEngineTable = inputVar
-                for (i in joinFilterIDs.indices) {
-                    val joinFilterID = joinFilterIDs[i]
-                    val columns = filterColumns[i]
-                    val isFirstLocation = filterIsFirstLocations[i]
-                    val (stateVar, keyLocations) = joinStateCache.getStreamingJoinInfo(joinFilterID)
-                    // If we don't have the state stored assume we have disabled
-                    // streaming entirely and this is a no-op.
-                    if (stateVar != null) {
-                        val columnOrderedList = MutableList(columns.size) { Expr.NegativeOne }
-                        val isFirstList: MutableList<Expr.BooleanLiteral> = MutableList(isFirstLocation.size) { Expr.BooleanLiteral(false) }
-                        keyLocations.forEachIndexed { index, keyLocation ->
-                            columnOrderedList[keyLocation] = Expr.IntegerLiteral(columns[index])
-                            isFirstList[keyLocation] = Expr.BooleanLiteral(isFirstLocation[index])
+        // TODO: Consider moving to separate stages, 1 per filter.
+        val stage =
+            OutputtingStageEmission(
+                { ctx, _, table ->
+                    val joinStateCache = ctx.builder().getJoinStateCache()
+                    var currentTable: BodoEngineTable = table!!
+                    for (i in joinFilterIDs.indices) {
+                        val joinFilterID = joinFilterIDs[i]
+                        val columns = filterColumns[i]
+                        val isFirstLocation = filterIsFirstLocations[i]
+                        val (stateVar, keyLocations) = joinStateCache.getStreamingJoinInfo(joinFilterID)
+                        // If we don't have the state stored assume we have disabled
+                        // streaming entirely and this is a no-op.
+                        if (stateVar != null) {
+                            val columnOrderedList = MutableList(columns.size) { Expr.NegativeOne }
+                            val isFirstList: MutableList<Expr.BooleanLiteral> =
+                                MutableList(isFirstLocation.size) { Expr.BooleanLiteral(false) }
+                            keyLocations.forEachIndexed { index, keyLocation ->
+                                columnOrderedList[keyLocation] = Expr.IntegerLiteral(columns[index])
+                                isFirstList[keyLocation] = Expr.BooleanLiteral(isFirstLocation[index])
+                            }
+                            val columnsTuple = Expr.Tuple(columnOrderedList)
+                            val tupleVar = ctx.lowerAsMetaType(columnsTuple)
+                            val isFirstLocationTuple = Expr.Tuple(isFirstList)
+                            val isFirstLocationVar = ctx.lowerAsMetaType(isFirstLocationTuple)
+                            val call =
+                                Expr.Call(
+                                    "bodo.libs.stream_join.runtime_join_filter",
+                                    listOf(stateVar, currentTable, tupleVar, isFirstLocationVar),
+                                )
+                            val tableVar = ctx.builder().symbolTable.genTableVar()
+                            val assign = Op.Assign(tableVar, call)
+                            ctx.builder().add(assign)
+                            currentTable = BodoEngineTable(tableVar.emit(), this)
                         }
-                        val columnsTuple = Expr.Tuple(columnOrderedList)
-                        val tupleVar = ctx.lowerAsMetaType(columnsTuple)
-                        val isFirstLocationTuple = Expr.Tuple(isFirstList)
-                        val isFirstLocationVar = ctx.lowerAsMetaType(isFirstLocationTuple)
-                        val call =
-                            Expr.Call(
-                                "bodo.libs.stream_join.runtime_join_filter",
-                                listOf(stateVar, currentTable, tupleVar, isFirstLocationVar),
-                            )
-                        val tableVar = ctx.builder().symbolTable.genTableVar()
-                        val assign = Op.Assign(tableVar, call)
-                        ctx.builder().add(assign)
-                        currentTable = BodoEngineTable(tableVar.emit(), this)
                     }
-                }
-                currentTable
-            },
-            {
-                    ctx, stateVar ->
-                deleteStateVariable(ctx, stateVar)
-            },
-        )
+                    currentTable
+                },
+                reportOutTableSize = true,
+            )
+        val pipeline =
+            OutputtingPipelineEmission(
+                listOf(stage),
+                false,
+                input,
+            )
+        val operatorEmission =
+            OperatorEmission(
+                { ctx -> initStateVariable(ctx) },
+                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                listOf(),
+                pipeline,
+                timeStateInitialization = false,
+            )
+        return implementor.buildStreaming(operatorEmission)!!
     }
 
     /**

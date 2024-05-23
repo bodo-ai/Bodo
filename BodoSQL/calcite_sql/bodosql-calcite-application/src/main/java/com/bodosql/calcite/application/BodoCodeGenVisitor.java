@@ -56,6 +56,7 @@ import com.bodosql.calcite.application.timers.StreamingRelNodeTimer;
 import com.bodosql.calcite.application.utils.RelationalOperatorCache;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior;
+import com.bodosql.calcite.codeGeneration.OperatorEmission;
 import com.bodosql.calcite.ddl.GenerateDDLTypes;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
@@ -82,9 +83,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.function.Supplier;
-import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
-import kotlin.jvm.functions.Function2;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -92,6 +91,7 @@ import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.JoinInfo;
+import org.apache.calcite.rel.core.TableCreate;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -622,7 +622,15 @@ public class BodoCodeGenVisitor extends RelVisitor {
   private void visitBodoPhysicalRel(BodoPhysicalRel node) {
     // Note: All timer handling is done in emit
     BodoEngineTable out = node.emit(new Implementor(node));
-    tableGenStack.push(out);
+    if (out != null) {
+      tableGenStack.push(out);
+    } else {
+      // Only write should not emit a table.
+      if (!(node instanceof TableModify) && !(node instanceof TableCreate)) {
+        throw new BodoSQLCodegenException(
+            "Internal Error: BodoPhysicalRel node did not emit a table: " + node.getClass());
+      }
+    }
   }
 
   /**
@@ -2469,52 +2477,20 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     @NotNull
     @Override
-    public BodoEngineTable visitChild(@NotNull final RelNode input, final int ordinal) {
-      visit(input, ordinal, node);
-      return tableGenStack.pop();
-    }
-
-    @NotNull
-    @Override
-    public List<BodoEngineTable> visitChildren(@NotNull final List<? extends RelNode> inputs) {
-      return DefaultImpls.visitChildren(this, inputs);
-    }
-
-    @NotNull
-    @Override
     public BodoEngineTable build(
         @NotNull final Function1<? super BodoPhysicalRel.BuildContext, BodoEngineTable> fn) {
       return singleBatchTimer(
           node, () -> fn.invoke(new BodoCodeGenVisitor.BuildContext(node, genDefaultTZ())));
     }
 
-    @NotNull
+    @Nullable
     @Override
-    public BodoEngineTable buildStreaming(
-        @NotNull BodoPhysicalRel.ProfilingOptions profilingOptions,
-        @NotNull Function1<? super BodoPhysicalRel.BuildContext, ? extends StateVariable> initFn,
-        @NotNull
-            Function2<? super BodoPhysicalRel.BuildContext, ? super StateVariable, BodoEngineTable>
-                bodyFn,
-        @NotNull
-            Function2<? super BodoPhysicalRel.BuildContext, ? super StateVariable, Unit> deleteFn,
-        boolean createPipeline) {
-      if (createPipeline) {
-        Variable exitCond = genFinishedStreamingFlag();
-        Variable iterVariable = genIterVar();
-        generatedCode.startStreamingPipelineFrame(exitCond, iterVariable);
-      }
-
-      // TODO: Move to a wrapper function to avoid the timerInfo calls.
-      // This requires more information about the high level design of the streaming
-      // operators since there are several parts (e.g. state, multiple loop sections,
-      // etc.)
-      // At this time it seems like it would be too much work to have a clean
-      // interface.
-      // There may be a need to pass in several lambdas, so other changes may be
-      // needed to avoid
-      // constant rewriting.
+    public BodoEngineTable buildStreaming(@NotNull OperatorEmission operatorEmission) {
       OperatorID operatorID = generatedCode.newOperatorID(node);
+      BodoCodeGenVisitor.BuildContext buildContext =
+          new BodoCodeGenVisitor.BuildContext(node, operatorID, genDefaultTZ());
+      // Must init the first pipeline before we can generate any timers.
+      BodoEngineTable table = operatorEmission.initFirstPipeline(buildContext);
       StreamingRelNodeTimer timerInfo =
           StreamingRelNodeTimer.createStreamingTimer(
               operatorID,
@@ -2525,28 +2501,9 @@ public class BodoCodeGenVisitor extends RelVisitor {
               node.loggingTitle(),
               node.nodeDetails(),
               node.getTimerType());
-
-      BodoCodeGenVisitor.BuildContext buildContext =
-          new BodoCodeGenVisitor.BuildContext(node, operatorID, genDefaultTZ());
-      if (profilingOptions.getTimeStateInitialization()) {
-        // Init the state and time it.
-        timerInfo.insertStateStartTimer(0);
-      }
-      StateVariable stateVar = initFn.invoke(buildContext);
-      if (profilingOptions.getTimeStateInitialization()) {
-        timerInfo.insertStateEndTimer(0);
-      }
-      // Handle the loop body
-      timerInfo.insertLoopOperationStartTimer(1);
-      BodoEngineTable res = bodyFn.invoke(buildContext, stateVar);
-      if (profilingOptions.getReportOutTableSize()) {
-        timerInfo.updateRowCount(1, res);
-      }
-      timerInfo.insertLoopOperationEndTimer(1);
-      // Delete the state
-      deleteFn.invoke(buildContext, stateVar);
+      BodoEngineTable output = operatorEmission.emitOperator(buildContext, timerInfo, table);
       timerInfo.terminateTimer();
-      return res;
+      return output;
     }
 
     @NotNull
@@ -2576,6 +2533,13 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @Override
     public OperatorID operatorID() {
       return operatorID;
+    }
+
+    @NotNull
+    @Override
+    public BodoEngineTable visitChild(@NotNull final RelNode input, final int ordinal) {
+      visit(input, ordinal, node);
+      return tableGenStack.pop();
     }
 
     @NotNull
@@ -2729,6 +2693,18 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @Override
     public BodoTZInfo getDefaultTZ() {
       return this.defaultTz;
+    }
+
+    @Override
+    public void startPipeline() {
+      Variable exitCond = builder().getSymbolTable().genFinishedStreamingFlag();
+      Variable iterVariable = builder().getSymbolTable().genIterVar();
+      builder().startStreamingPipelineFrame(exitCond, iterVariable);
+    }
+
+    @Override
+    public void endPipeline() {
+      builder().endCurrentStreamingPipeline();
     }
   }
 }

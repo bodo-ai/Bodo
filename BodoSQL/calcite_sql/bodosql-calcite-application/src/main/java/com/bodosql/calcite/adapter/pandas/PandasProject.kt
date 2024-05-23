@@ -2,6 +2,9 @@ package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.adapter.common.ProjectUtils.Companion.generateDataFrame
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.ir.Variable
@@ -46,21 +49,35 @@ class PandasProject(
      * @return the variable that represents this relational expression.
      */
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        val inputVar = implementor.visitChild(input, 0)
         return if (isStreaming()) {
-            implementor.buildStreaming(
-                BodoPhysicalRel.ProfilingOptions(reportOutTableSize = false, timeStateInitialization = false),
-                { UnusedStateVariable },
-                {
-                        ctx, stateVar ->
-                    val localRefs = mutableListOf<Variable>()
-                    val translator = ctx.streamingRexTranslator(inputVar, localRefs, stateVar)
-                    generateDataFrame(ctx, inputVar, translator, projects, localRefs, projects, input)
-                },
-                { _, _ -> },
-            )
+            val stage =
+                OutputtingStageEmission(
+                    { ctx, stateVar, table ->
+                        val inputVar = table!!
+                        val localRefs = mutableListOf<Variable>()
+                        val translator = ctx.streamingRexTranslator(inputVar, localRefs, stateVar)
+                        generateDataFrame(ctx, inputVar, translator, projects, localRefs, projects, input)
+                    },
+                    reportOutTableSize = false,
+                )
+            val pipeline =
+                OutputtingPipelineEmission(
+                    listOf(stage),
+                    false,
+                    input,
+                )
+            val operatorEmission =
+                OperatorEmission(
+                    { UnusedStateVariable },
+                    { _, _ -> },
+                    listOf(),
+                    pipeline,
+                    timeStateInitialization = false,
+                )
+            implementor.buildStreaming(operatorEmission)!!
         } else {
             implementor.build { ctx ->
+                val inputVar = ctx.visitChild(input, 0)
                 val localRefs = mutableListOf<Variable>()
                 val translator = ctx.rexTranslator(inputVar, localRefs)
                 generateDataFrame(ctx, inputVar, translator, projects, localRefs, projects, input)

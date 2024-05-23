@@ -1,8 +1,12 @@
 package com.bodosql.calcite.adapter.pandas
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.traits.BatchingProperty
 import org.apache.calcite.plan.ConventionTraitDef
 import org.apache.calcite.plan.RelOptCluster
@@ -38,7 +42,31 @@ class PandasToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet,
      * @return the variable that represents this relational expression.
      */
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return implementor.visitChild(input, 0)
+        return if (isStreaming()) {
+            // This node is just pass through.
+            val stage =
+                OutputtingStageEmission(
+                    { _, _, table -> table!! },
+                    reportOutTableSize = false,
+                )
+            val pipeline =
+                OutputtingPipelineEmission(
+                    listOf(stage),
+                    false,
+                    input,
+                )
+            val operatorEmission =
+                OperatorEmission(
+                    { UnusedStateVariable },
+                    { _, _ -> },
+                    listOf(),
+                    pipeline,
+                    timeStateInitialization = false,
+                )
+            implementor.buildStreaming(operatorEmission)!!
+        } else {
+            implementor.build { ctx -> ctx.visitChild(input, 0) }
+        }
     }
 
     /**
