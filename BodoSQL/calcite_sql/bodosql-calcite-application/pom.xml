@@ -34,9 +34,6 @@
         <iceberg.version>1.5.1</iceberg.version>
         <hadoop.version>3.3.3</hadoop.version>
         <!-- End Iceberg Dependencies -->
-        <!-- Start Arrow Dependencies. We may remove these as we cleanup the relationship with file formats. -->
-        <arrow.version>15.0.0</arrow.version>
-        <!-- End Arrow Dependencies -->
     </properties>
 
     <dependencies>
@@ -144,21 +141,6 @@
             <artifactId>hadoop-aws</artifactId>
             <version>${hadoop.version}</version>
         </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.apache.arrow/arrow-dataset -->
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-dataset</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.apache.arrow/arrow-memory-netty -->
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-memory-netty</artifactId>
-            <version>${arrow.version}</version>
-        </dependency>
-
 
         <!-- Protobuf to fix Reflective upgrade while waiting on avatica upgrade-->
         <dependency>
