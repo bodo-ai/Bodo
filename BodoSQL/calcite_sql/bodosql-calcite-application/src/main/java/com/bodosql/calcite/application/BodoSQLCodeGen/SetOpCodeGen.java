@@ -5,6 +5,7 @@ import static com.bodosql.calcite.application.utils.Utils.getDummyColNameBase;
 import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.utils.Utils.renameColumns;
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
 import com.bodosql.calcite.application.BodoCodeGenVisitor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
@@ -26,14 +27,14 @@ public class SetOpCodeGen {
    * @param childExprs The child expressions to be Unioned together. The expressions must all be
    *     dataframes
    * @param isAll Is the union a UnionAll Expression.
-   * @param bodoVisitorClass Bodo Visitor used to create global variables.
+   * @param ctx BuildContext used to create global variables.
    * @return The code generated for the Union expression.
    */
   public static Expr generateUnionCode(
       List<String> outputColumnNames,
       List<Variable> childExprs,
       boolean isAll,
-      BodoCodeGenVisitor bodoVisitorClass) {
+      BodoPhysicalRel.BuildContext ctx) {
 
     Expr.Tuple dfTup = new Expr.Tuple(childExprs);
 
@@ -51,7 +52,7 @@ public class SetOpCodeGen {
       colNamesExpr.add(new Expr.StringLiteral(colName));
     }
     Expr.Tuple colNameTuple = new Expr.Tuple(colNamesExpr);
-    Variable globalVarName = bodoVisitorClass.lowerAsColNamesMetaType(colNameTuple);
+    Variable globalVarName = ctx.lowerAsColNamesMetaType(colNameTuple);
 
     Expr.Call unionExpr =
         new Expr.Call(

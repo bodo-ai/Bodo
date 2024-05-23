@@ -117,6 +117,12 @@ interface BodoPhysicalRel : TimerSupportedRel {
         fun lowerAsMetaType(expression: Expr): Variable
 
         /**
+         * Lowers an expression into a global ColumnNamesMetaType variable that can be retrieved using
+         * the returned [Variable].
+         */
+        fun lowerAsColNamesMetaType(expression: Expr): Variable
+
+        /**
          * Returns a RexToBodoTranslator that works in this build context.
          */
         fun rexTranslator(input: BodoEngineTable): RexToBodoTranslator

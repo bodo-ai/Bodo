@@ -3,6 +3,7 @@ package com.bodosql.calcite.codeGeneration
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.application.timers.StreamingRelNodeTimer
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -14,6 +15,7 @@ class OperatorEmission(
     val timeStateInitialization: Boolean,
 ) {
     private val firstPipeline = if (terminatingPipelines.isEmpty()) outputPipeline!! else terminatingPipelines.first()
+    private val lastPipeline = if (outputPipeline != null) outputPipeline else terminatingPipelines.last()
     private val stageNumber = AtomicInteger(0)
 
     /**
@@ -28,6 +30,7 @@ class OperatorEmission(
         timerInfo: StreamingRelNodeTimer,
         input: BodoEngineTable?,
     ): BodoEngineTable? {
+        val builder = ctx.builder()
         val initializationStage = stageNumber.getAndIncrement()
         if (timeStateInitialization) {
             timerInfo.insertStateStartTimer(initializationStage)
@@ -45,6 +48,11 @@ class OperatorEmission(
                     pipeline.initializePipeline(ctx, idx)
                 }
             pipeline.emitPipeline(ctx, stateVar, inputTable, stageNumber, timerInfo)
+            // Don't terminate the last pipeline, so we can delete state at the end.
+            if (pipeline != lastPipeline) {
+                val streamingFrame = builder.endCurrentStreamingPipeline()
+                builder.add(Op.StreamingPipeline(streamingFrame))
+            }
         }
         val outputTable =
             if (outputPipeline != null) {
@@ -59,6 +67,11 @@ class OperatorEmission(
                 null
             }
         deleteStateFn(ctx, stateVar)
+        // If we are sink we must terminate the final pipeline.
+        if (lastPipeline is TerminatingPipelineEmission) {
+            val streamingFrame = builder.endCurrentStreamingPipeline()
+            builder.add(Op.StreamingPipeline(streamingFrame))
+        }
         return outputTable
     }
 }
