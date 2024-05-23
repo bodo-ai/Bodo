@@ -12,10 +12,6 @@ import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
 import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
-import org.apache.arrow.dataset.file.FileFormat
-import org.apache.arrow.dataset.file.FileSystemDatasetFactory
-import org.apache.arrow.dataset.jni.NativeMemoryPool
-import org.apache.arrow.memory.RootAllocator
 import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
@@ -131,7 +127,7 @@ class FileSystemCatalog(
      * @return Is this path referring to a table?
      */
     private fun isTable(path: Path): Boolean {
-        return isIcebergTable(path) || isParquetTable(path)
+        return isIcebergTable(path)
     }
 
     /**
@@ -153,22 +149,6 @@ class FileSystemCatalog(
                     null
                 }
             return metadataStatus?.isDirectory ?: false
-        }
-    }
-
-    /**
-     * Is the given path a Parquet table which is represented
-     * by a single file. A parquet table is a file that ends in
-     * either ".parquet" or ".pq".
-     * @param path The file system path.
-     * @return Is this path referring to a Parquet table?
-     */
-    private fun isParquetTable(path: Path): Boolean {
-        return if (!fs.getFileStatus(path).isFile) {
-            false
-        } else {
-            val name = path.name
-            name.endsWith(".parquet") || name.endsWith(".pq")
         }
     }
 
@@ -195,17 +175,8 @@ class FileSystemCatalog(
         schemaPath: ImmutableList<String>,
         tableName: String,
     ): CatalogTable {
-        val path = tableInfoToFilePath(schemaPath, tableName)
-        if (isIcebergTable(path)) {
-            val columns = getIcebergTableColumns(schemaPath, tableName)
-            return IcebergCatalogTable(tableName, schemaPath, columns, this)
-        } else {
-            val allocator = RootAllocator()
-            val factory =
-                FileSystemDatasetFactory(allocator, NativeMemoryPool.getDefault(), FileFormat.PARQUET, uriToArrowString(path.toUri()))
-            val schema = factory.inspect()
-            throw RuntimeException("FileSystemCatalog Error: Only Iceberg tables are currently supported.")
-        }
+        val columns = getIcebergTableColumns(schemaPath, tableName)
+        return IcebergCatalogTable(tableName, schemaPath, columns, this)
     }
 
     /**
