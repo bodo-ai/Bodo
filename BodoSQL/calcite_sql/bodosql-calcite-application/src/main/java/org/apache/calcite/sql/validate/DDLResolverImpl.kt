@@ -15,6 +15,7 @@ import com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas
 import com.bodosql.calcite.sql.ddl.SqlShowTables
+import com.bodosql.calcite.sql.ddl.SqlShowViews
 import com.bodosql.calcite.sql.validate.BodoSqlValidator
 import com.bodosql.calcite.sql.validate.DDLResolver
 import com.bodosql.calcite.table.BodoSqlTable
@@ -92,6 +93,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
             SqlKind.SHOW_TABLES-> {
                 executeShowTables(node as SqlShowTables)
+            }
+            SqlKind.SHOW_VIEWS-> {
+                executeShowViews(node as SqlShowViews)
             }
             SqlKind.CREATE_VIEW -> {
                 executeCreateView(node as SqlCreateView)
@@ -362,6 +366,25 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
             return schemaCat.ddlExecutor.showTables(schemaPath)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Schema $schemaName does not exist or not authorized.")
+        }
+    }
+
+    /**
+     * Executes the "SHOW VIEWS" command for a specified schema and returns the result.
+     *
+     * @param node The SqlShowViews SqlNode
+     * @return DDLExecutionResult containing the details of the tables in the specified schema.
+     * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
+     */
+    private fun executeShowViews(node: SqlShowViews): DDLExecutionResult {
+        val schemaPath = node.schemaName.names
+        val schemaName = schemaPath.joinToString(separator = ".")
+        try {
+            val schema = deriveSchema(schemaPath)
+            val schemaCat = validateSchema(schema, node.kind, schemaName)
+            return schemaCat.ddlExecutor.showViews(schemaPath)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }

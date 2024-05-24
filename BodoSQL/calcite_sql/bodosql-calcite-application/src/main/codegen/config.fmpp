@@ -48,6 +48,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableClone"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas"
+      "com.bodosql.calcite.sql.ddl.SqlShowViews"
       "com.bodosql.calcite.sql.ddl.SqlShowTables"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate"
       "com.bodosql.calcite.sql.ddl.SqlDropTable"
@@ -204,6 +205,7 @@ data: {
       "POLICY"
       "OBJECTS"
       "SCHEMAS"
+      "VIEWS"
       "TERSE"
       "TABLES"
     ]
@@ -482,6 +484,7 @@ data: {
         "TZH"
         "TZM"
         "TERSE"
+        "VIEWS"
         "TABLES"
     ]
 
@@ -529,6 +532,7 @@ data: {
         "SqlCopyInto()"
         "SqlShowObjects()"
         "SqlShowSchemas()"
+        "SqlShowViews()"
         "SqlShowTables()"
     ]
 

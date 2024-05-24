@@ -1209,6 +1209,99 @@ def test_show_tables_jit(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
+def _show_views_snowflake_sample_data_output():
+    # This is a long test, yes, but this is the only reliably available
+    # query for SHOW VIEWS in the Snowflake sample database.
+    return pd.DataFrame(
+        {
+            "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 40,
+            "NAME": [
+                "APPLICABLE_ROLES",
+                "CLASSES",
+                "CLASS_INSTANCES",
+                "CLASS_INSTANCE_FUNCTIONS",
+                "CLASS_INSTANCE_PROCEDURES",
+                "COLUMNS",
+                "CURRENT_PACKAGES_POLICY",
+                "DATABASES",
+                "ELEMENT_TYPES",
+                "ENABLED_ROLES",
+                "EVENT_TABLES",
+                "EXTERNAL_TABLES",
+                "FIELDS",
+                "FILE_FORMATS",
+                "FUNCTIONS",
+                "GIT_REPOSITORIES",
+                "HYBRID_TABLES",
+                "INDEXES",
+                "INDEX_COLUMNS",
+                "INFORMATION_SCHEMA_CATALOG_NAME",
+                "LOAD_HISTORY",
+                "MODEL_VERSIONS",
+                "OBJECT_PRIVILEGES",
+                "PACKAGES",
+                "PIPES",
+                "PROCEDURES",
+                "REFERENTIAL_CONSTRAINTS",
+                "REPLICATION_DATABASES",
+                "REPLICATION_GROUPS",
+                "SCHEMATA",
+                "SEQUENCES",
+                "SERVICES",
+                "STAGES",
+                "STREAMLITS",
+                "TABLES",
+                "TABLE_CONSTRAINTS",
+                "TABLE_PRIVILEGES",
+                "TABLE_STORAGE_METRICS",
+                "USAGE_PRIVILEGES",
+                "VIEWS",
+            ],
+            "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 40,
+            "KIND": ["VIEW"] * 40,
+        }
+    )
+
+
+def test_show_views(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show views works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    # Using Snowflake sample data to test to avoid overhead of creating a view
+    bodo_output = bc.execute_ddl(
+        "SHOW TERSE VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
+    )
+
+    expected_output = _show_views_snowflake_sample_data_output()
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show views test failed"
+
+
+def test_show_views_jit(test_db_snowflake_catalog, memory_leak_check):
+    """Verify that show views works in JIT. This is needed because we need
+    to ensure the type information is correct."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query = "SHOW TERSE VIEWS IN SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    expected_output = _show_views_snowflake_sample_data_output()
+    bodo_output = impl(bc, query)
+    passed = _test_equal_guard(
+        bodo_output,
+        expected_output,
+        sort_output=True,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
 def test_create_view(test_db_snowflake_catalog, memory_leak_check):
     """Tests that Bodo can create a view in Snowflake."""
     db = test_db_snowflake_catalog.database

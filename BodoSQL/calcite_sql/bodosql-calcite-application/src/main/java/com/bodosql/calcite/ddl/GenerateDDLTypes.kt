@@ -89,6 +89,25 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                         )
                     Pair(fieldNames, types)
                 }
+                SqlKind.SHOW_VIEWS -> {
+                    val fieldNames =
+                        listOf(
+                            "CREATED_ON",
+                            "NAME",
+                            "SCHEMA_NAME",
+                            "KIND",
+                        )
+                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                    val types =
+                        listOf(
+                            stringType,
+                            stringType,
+                            stringType,
+                            stringType,
+                        )
+                    Pair(fieldNames, types)
+                }
+
                 else -> throw UnsupportedOperationException("Unsupported DDL operation: ${ddlNode.kind}")
             }
         return typeFactory.createStructType(columnTypes, fieldsNames)
