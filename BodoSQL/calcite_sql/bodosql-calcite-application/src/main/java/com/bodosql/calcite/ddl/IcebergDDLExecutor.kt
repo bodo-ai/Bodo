@@ -21,6 +21,8 @@ import org.apache.iceberg.catalog.TableIdentifier
 import org.apache.iceberg.catalog.ViewCatalog
 import org.apache.iceberg.exceptions.AlreadyExistsException
 import org.apache.iceberg.exceptions.NamespaceNotEmptyException
+import org.apache.iceberg.exceptions.NoSuchTableException
+import org.apache.iceberg.exceptions.NoSuchViewException
 import org.apache.iceberg.types.Type
 import org.apache.iceberg.types.Types
 
@@ -206,6 +208,108 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             viewBuilder.createOrReplace()
         } else {
             throw RuntimeException("CREATE VIEW is unimplemented for the current catalog")
+        }
+    }
+
+    /**
+     * Renames a table in Iceberg using ALTER TABLE RENAME TO. Supports the IF EXISTS clause through
+     * the ifExists parameter.
+     *
+     * @param tablePath The path of the table to rename.
+     * @param renamePath The new path of the table.
+     * @param ifExists Whether to use the IF EXISTS clause.
+     * @return The result of the operation.
+     * @throws NoSuchTableException If the table does not exist and IF EXISTS clause not present.
+     * @throws AlreadyExistsException If the renamed table already exists.
+     * @throws Exception for any other exception thrown.
+     */
+    override fun renameTable(
+        tablePath: ImmutableList<String>,
+        renamePath: ImmutableList<String>,
+        ifExists: Boolean,
+    ): DDLExecutionResult {
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val renameName = renamePath[renamePath.size - 1]
+        val renameSchema =
+            if (renamePath.size > 1) {
+                renamePath.subList(0, renamePath.size - 1)
+            } else {
+                tableSchema // If a schema is not provided for the renamed table we assume it is the same schema as the original table.
+            }
+        // Now get identifiers
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val renameIdentifier = tablePathToTableIdentifier(renameSchema, renameName)
+        return try {
+            icebergConnection.renameTable(tableIdentifier, renameIdentifier)
+            DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        } catch (e: NoSuchTableException) {
+            // To match snowflake's behavior, we see if it is a view and try renaming the view too.
+            if (icebergConnection is ViewCatalog) {
+                renameView(tablePath, renamePath, ifExists)
+            } else if (ifExists) {
+                // Need to return gracefully with an IF EXISTS clause.
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+            } else {
+                throw e
+            }
+        } catch (e: AlreadyExistsException) {
+            throw e
+        } catch (e: Exception) {
+            // Handle any other unexpected exceptions
+            throw e
+        }
+    }
+
+    /**
+     * Renames a view in Iceberg using ALTER VIEW RENAME TO. Supports the IF EXISTS clause through
+     * the ifExists parameter.
+     *
+     * @param viewPath The path of the view to rename.
+     * @param renamePath The new path of the view.
+     * @param ifExists Whether to use the IF EXISTS clause.
+     * @return The result of the operation.
+     * @throws NoSuchViewException If the view does not exist and IF EXISTS clause not present.
+     * @throws AlreadyExistsException If the renamed view already exists.
+     * @throws RuntimeException If catalog does not support renaming views.
+     * @throws Exception for any other exception thrown.
+     */
+    override fun renameView(
+        viewPath: ImmutableList<String>,
+        renamePath: ImmutableList<String>,
+        ifExists: Boolean,
+    ): DDLExecutionResult {
+        if (icebergConnection is ViewCatalog) {
+            val viewName = viewPath[viewPath.size - 1]
+            val viewSchema = viewPath.subList(0, viewPath.size - 1)
+            val renameName = renamePath[renamePath.size - 1]
+            val renameSchema =
+                if (renamePath.size > 1) {
+                    renamePath.subList(0, renamePath.size - 1)
+                } else {
+                    viewSchema // If a schema is not provided for the renamed view we assume it is the same schema as the original view.
+                }
+            // Now get identifiers
+            val viewIdentifier = tablePathToTableIdentifier(viewSchema, viewName)
+            val renameIdentifier = tablePathToTableIdentifier(renameSchema, renameName)
+            return try {
+                icebergConnection.renameView(viewIdentifier, renameIdentifier)
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+            } catch (e: NoSuchViewException) {
+                if (ifExists) {
+                    // Need to return gracefully with an IF EXISTS clause.
+                    DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+                } else {
+                    throw e
+                }
+            } catch (e: AlreadyExistsException) {
+                throw e
+            } catch (e: Exception) {
+                // Handle any other unexpected exceptions
+                throw e
+            }
+        } else {
+            throw RuntimeException("ALTER VIEW is unimplemented for the current catalog")
         }
     }
 

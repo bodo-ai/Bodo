@@ -2114,6 +2114,100 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
     }
 
+    /**
+     * Renames a table in Snowflake using ALTER TABLE RENAME TO. Supports the IF EXISTS clause
+     * through the ifExists parameter.
+     *
+     * @param tablePath The path of the table to rename.
+     * @param renamePath The new path of the table.
+     * @param ifExists Whether to use the IF EXISTS clause.
+     * @return The result of the operation.
+     * @throws RuntimeException If the operation fails.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult renameTable(
+        @NotNull ImmutableList<String> tablePath,
+        @NotNull ImmutableList<String> renamePath,
+        boolean ifExists) {
+      // Convert paths into Snowflake object strings
+      String tableName = generateSnowflakeObjectString(tablePath);
+      String renameName = generateSnowflakeObjectString(renamePath);
+      // SQL query
+      String query =
+          String.format(
+              Locale.ROOT,
+              "ALTER TABLE %s %s RENAME TO %s",
+              ifExists ? "IF EXISTS" : "",
+              tableName,
+              renameName);
+      try {
+        // Execute query
+        ResultSet output = executeSnowflakeQuery(query);
+        // Build result from output
+        List<List<String>> columnValues = new ArrayList<>();
+        columnValues.add(new ArrayList<>());
+        while (output.next()) {
+          columnValues.get(0).add(output.getString(1));
+        }
+        return new DDLExecutionResult(List.of("STATUS"), columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to rename Snowflake table %s. Error: %s",
+                tableName,
+                e.getMessage()));
+      }
+    }
+
+    /**
+     * Renames a view in Snowflake using ALTER VIEW RENAME TO. Supports the IF EXISTS clause through
+     * the ifExists parameter.
+     *
+     * @param viewPath The path of the view to rename.
+     * @param renamePath The new path of the view.
+     * @param ifExists Whether to use the IF EXISTS clause.
+     * @return The result of the operation.
+     * @throws RuntimeException If the operation fails.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult renameView(
+        @NotNull ImmutableList<String> viewPath,
+        @NotNull ImmutableList<String> renamePath,
+        boolean ifExists) {
+      // Convert paths into Snowflake object strings
+      String viewName = generateSnowflakeObjectString(viewPath);
+      String renameName = generateSnowflakeObjectString(renamePath);
+      // SQL query
+      String query =
+          String.format(
+              Locale.ROOT,
+              "ALTER VIEW %s %s RENAME TO %s",
+              ifExists ? "IF EXISTS" : "",
+              viewName,
+              renameName);
+      try {
+        // Execute query
+        ResultSet output = executeSnowflakeQuery(query);
+        // Build result from output
+        List<List<String>> columnValues = new ArrayList<>();
+        columnValues.add(new ArrayList<>());
+        while (output.next()) {
+          columnValues.get(0).add(output.getString(1));
+        }
+        return new DDLExecutionResult(List.of("STATUS"), columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to rename Snowflake view %s. Error: %s",
+                viewName,
+                e.getMessage()));
+      }
+    }
+
     @NotNull
     @Override
     public DDLExecutionResult describeTable(

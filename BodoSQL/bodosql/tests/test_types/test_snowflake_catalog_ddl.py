@@ -471,7 +471,7 @@ def test_drop_table_not_found(test_db_snowflake_catalog, memory_leak_check):
         f"SHOW TABLES LIKE '{table_name}' STARTS WITH '{table_name}'",
         conn,
     )
-    assert len(tables) == 0, "Table exists. Please choose a different table name."
+    assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
     with pytest.raises(BodoError, match=""):
         query = f"DROP TABLE {table_name}"
         impl(bc, query)
@@ -495,7 +495,7 @@ def test_drop_table_not_found_if_exists(test_db_snowflake_catalog, memory_leak_c
         f"SHOW TABLES LIKE '{table_name}' STARTS WITH '{table_name}'",
         conn,
     )
-    assert len(tables) == 0, "Table exists. Please choose a different table name."
+    assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
     query = f"DROP TABLE IF EXISTS {table_name}"
     py_output = pd.DataFrame(
         {
@@ -514,6 +514,463 @@ def test_drop_table_not_found_if_exists(test_db_snowflake_catalog, memory_leak_c
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
+###########################
+# ALTER TABLE Tests start #
+###########################
+
+# RENAME TO tests
+
+
+def test_alter_table_rename(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that we can rename a table using ALTER TABLE in Snowflake.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    table_query = "SELECT 1 as A"
+    with create_snowflake_table_from_select_query(
+        table_query, "alter_table_rename_test", db, schema
+    ) as table_name:
+        try:
+            pd.read_sql(
+                f"DROP TABLE IF EXISTS {table_name}_renamed", conn
+            )  # Clean up if previously existed
+            case_insenstive_table_name = table_name.upper()
+            # Execute ALTER TABLE query.
+            query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
+            py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+            bodo_output = impl(bc, query)
+            assert_equal_par(
+                bodo_output,
+                py_output,
+            )
+            # Verify there exists a table called renamedTable.
+            tables = pd.read_sql(
+                f"SHOW TABLES LIKE '{table_name}_renamed'",
+                conn,
+            )
+            assert len(tables) == 1, "Renamed table was not found"
+        finally:
+            # Clean up after
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}")
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}_renamed")
+
+
+def test_alter_table_rename_ifexists(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that we can rename a table using ALTER TABLE in Snowflake, with the IF EXISTS option.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    table_query = "SELECT 1 as A"
+    with create_snowflake_table_from_select_query(
+        table_query, "alter_table_rename_ifexists_test", db, schema
+    ) as table_name:
+        try:
+            pd.read_sql(
+                f"DROP TABLE IF EXISTS {table_name}_renamed", conn
+            )  # Clean up if previously existed
+            case_insenstive_table_name = table_name.upper()
+            # Execute ALTER TABLE query with IF EXISTS option.
+            query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_renamed"
+            py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+            bodo_output = impl(bc, query)
+            assert_equal_par(
+                bodo_output,
+                py_output,
+            )
+            # Verify there exists a table called renamedTable.
+            tables = pd.read_sql(
+                f"SHOW TABLES LIKE '{table_name}_renamed'",
+                conn,
+            )
+            assert len(tables) == 1, "Renamed table was not found"
+        finally:
+            # Clean up after
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}")
+            bc.sql("DROP TABLE IF EXISTS renamedTable")
+
+
+def test_alter_table_rename_not_found(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that attempting to ALTER a non-existent table without
+    the IF EXISTS option raises an error.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a garbage table name.
+    table_name = "FEJWIOPFE13_9029J03C32"
+    tables = pd.read_sql(
+        f"SHOW TABLES LIKE '{table_name}' STARTS WITH '{table_name}'",
+        conn,
+    )
+    assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
+
+    # This should now throw an error.
+    with pytest.raises(BodoError, match="does not exist or not authorized"):
+        query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
+        impl(bc, query)
+
+
+def test_alter_table_rename_ifexists_not_found(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that attempting to ALTER a non-existent table with
+    the IF EXISTS option does not raise an error.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a garbage table name.
+    table_name = "FEJWIOPFE13_9029J03C32"
+    tables = pd.read_sql(
+        f"SHOW TABLES LIKE '{table_name}' STARTS WITH '{table_name}'",
+        conn,
+    )
+    assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
+
+    # This query should NOT throw an error, and instead gracefully return a status message.
+    query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_renamed"
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+    bodo_output = impl(bc, query)
+    passed = assert_equal_par(bodo_output, py_output)
+
+
+def test_alter_table_rename_alreadyexists(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests if renaming a table to an already existing table
+    using ALTER TABLE in Snowflake will throw an error.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    table_query = "SELECT 1 as A"
+    with create_snowflake_table_from_select_query(
+        table_query, "alter_table_rename_test", db, schema
+    ) as table_name:
+        try:
+            pd.read_sql(
+                f"DROP TABLE IF EXISTS {table_name}_renamed", conn
+            )  # Clean up if previously existed
+            case_insenstive_table_name = table_name.upper()
+            # Create another table
+            bc.sql(f"CREATE OR REPLACE TABLE {table_name}_renamed AS SELECT 1 as A")
+            # Execute ALTER TABLE query.
+            query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
+            # This should now throw an error.
+            with pytest.raises(BodoError, match="already exists"):
+                impl(bc, query)
+
+        finally:
+            # Clean up after
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}")
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}_renamed")
+
+
+# Unsupported operations tests
+def test_alter_table_not_supported(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that attempt to use not-yet supported ALTER TABLE operations.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # These should all throw an error.
+    # NOTE: These should all preferrably throw a nice error such as
+    #       "This DDL operation is not supported yet", but this requires
+    #       changing more of the parser, so I think this is lower priority for now.
+    with pytest.raises(BodoError, match="This DDL operation is currently unsupported"):
+        query = f"ALTER TABLE test1 SWAP WITH renamedTable"
+        impl(bc, query)
+
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
+        query = f"ALTER TABLE test1 CLUSTER BY test2"
+        impl(bc, query)
+
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
+        query = f"ALTER TABLE test1 SET test2"
+        impl(bc, query)
+
+
+###########################
+# ALTER VIEW Tests start  #
+###########################
+
+# RENAME TO tests
+
+
+def test_alter_view_rename(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that we can rename a view using ALTER VIEW in Snowflake.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query = f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully created."]})
+
+    # Create view
+    bodo_output = pd.read_sql(query, conn)
+
+    try:
+        pd.read_sql(
+            "DROP VIEW IF EXISTS renamedView", conn
+        )  # Clean up if previously existed
+        case_insenstive_view_name = view_name.upper()
+        # Execute ALTER TABLE query.
+        query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(
+            bodo_output,
+            py_output,
+        )
+        # Verify there exists a table called renamedTable.
+        tables = pd.read_sql(
+            f"SHOW VIEWS LIKE '{view_name}_renamed'",
+            conn,
+        )
+        assert len(tables) == 1, "Renamed view was not found"
+    finally:
+        # Clean up after
+        pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn)
+        pd.read_sql(f"DROP VIEW IF EXISTS {view_name}_renamed", conn)
+
+
+def test_alter_view_rename_ifexists(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that we can rename a view using ALTER VIEW in Snowflake, with the IF EXISTS option.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query = f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A"
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+
+    # Create view with a call to Snowflake
+    bodo_output = pd.read_sql(query, conn)
+
+    try:
+        case_insenstive_view_name = view_name.upper()
+        # Execute ALTER TABLE query with IF EXISTS option.
+        query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(
+            bodo_output,
+            py_output,
+        )
+        # Verify there exists a table called renamedTable.
+        tables = pd.read_sql(
+            f"SHOW VIEWS LIKE '{view_name}_renamed'",
+            conn,
+        )
+        assert len(tables) == 1, "Renamed view was not found"
+    finally:
+        # Clean up afterwards!
+        pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn)
+        pd.read_sql(f"DROP VIEW IF EXISTS {view_name}_renamed", conn)
+
+
+def test_alter_view_rename_not_found(test_db_snowflake_catalog, memory_leak_check):
+    """
+     Tests that attempting to ALTER a non-existent view without
+    the IF EXISTS option raises an error.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a garbage table name.
+    view_name = "FEJWIOPFE13_9029J03C32"
+    views = pd.read_sql(
+        f"SHOW VIEWS LIKE '{view_name}' STARTS WITH '{view_name}'",
+        conn,
+    )
+    assert len(views) == 0, "View exists. Need to test with a non-existent view."
+
+    # This should now throw an error.
+    with pytest.raises(BodoError, match="does not exist or not authorized"):
+        query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
+        impl(bc, query)
+
+
+def test_alter_view_rename_ifexists_not_found(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that attempting to ALTER a non-existent view with
+    the IF EXISTS option does NOT raise an error.
+    """
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a garbage view name.
+    view_name = "FEJWIOPFE13_9029J03C32"
+    views = pd.read_sql(
+        f"SHOW VIEWS LIKE '{view_name}' STARTS WITH '{view_name}'",
+        conn,
+    )
+    assert len(views) == 0, "View exists. Need to test with a non-existent view."
+
+    # This query should NOT throw an error, and instead gracefully return a status message.
+    query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
+    py_output = py_output = pd.DataFrame(
+        {"STATUS": ["Statement executed successfully."]}
+    )
+    bodo_output = impl(bc, query)
+    assert_equal_par(
+        bodo_output,
+        py_output,
+    )
+
+
+def test_alter_view_rename_alreadyexists(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests if renaming a view to an already existing view
+    using ALTER VIEW in Snowflake will throw an error.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    view_name = gen_unique_id("TEST_VIEW").upper()
+
+    # Create views
+    bodo_output = pd.read_sql(
+        f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A", conn
+    )
+    bodo_output = pd.read_sql(
+        f"CREATE OR REPLACE VIEW {view_name}_renamed AS SELECT 'testview' as A", conn
+    )
+
+    try:
+        case_insenstive_view_name = view_name.upper()
+        # Execute ALTER TABLE query.
+        query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
+        # This should now throw an error.
+        with pytest.raises(BodoError, match="already exists"):
+            impl(bc, query)
+    finally:
+        # Clean up after
+        pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn)
+        pd.read_sql(f"DROP VIEW IF EXISTS {view_name}_renamed", conn)
+
+
+# Unsupported operations tests
+def test_alter_view_not_supported(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that attempt to use not-yet supported ALTER VIEW operations."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # These should all throw an error.
+    # NOTE: These should all preferrably throw a nice error such as
+    #       "This DDL operation is not supported yet", but this requires
+    #       changing more of the parser, so I think this is lower priority for now.
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
+        query = f"ALTER VIEW test1 SET COMMENT = 'test'"
+        impl(bc, query)
+
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
+        query = f"ALTER VIEW test1 SET SECURE"
+        impl(bc, query)
+
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
+        query = f"ALTER VIEW test1 SET SECURE"
+        impl(bc, query)
+
+
+###################
+# ALTER tests end #
+###################
 
 
 @pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])

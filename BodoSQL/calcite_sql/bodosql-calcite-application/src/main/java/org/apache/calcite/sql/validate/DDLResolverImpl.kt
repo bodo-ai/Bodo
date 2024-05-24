@@ -8,6 +8,10 @@ import com.bodosql.calcite.ddl.NamespaceNotFoundException
 import com.bodosql.calcite.schema.BodoSqlSchema
 import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.sql.ddl.SqlDropTable
+import com.bodosql.calcite.sql.ddl.SqlAlterTable
+import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable
+import com.bodosql.calcite.sql.ddl.SqlAlterView
+import com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas
 import com.bodosql.calcite.sql.validate.BodoSqlValidator
@@ -17,6 +21,7 @@ import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.prepare.RelOptTableImpl
+import org.apache.calcite.sql.SqlAlter
 import org.apache.calcite.sql.SqlDescribeTable
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlNode
@@ -71,6 +76,10 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             SqlKind.DROP_SCHEMA -> executeDropSchema(node as SqlDropSchema)
             SqlKind.DROP_TABLE -> executeDropTable(node as SqlDropTable)
 
+            // Alter Queries
+            SqlKind.ALTER_TABLE -> executeAlterTable(node as SqlAlterTable)
+            SqlKind.ALTER_VIEW -> executeAlterView(node as SqlAlterView)
+            
             SqlKind.DESCRIBE_TABLE -> {
                 executeDescribeTable(node as SqlDescribeTable)
             }
@@ -89,6 +98,122 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             else -> {
                 throw RuntimeException("Unsupported DDL operation: ${node.kind}")
             }
+        }
+    }
+
+    /**
+     * Executes an ALTER TABLE operation.
+     * 
+     * This function is called for any ALTER TABLE operation, but cases on
+     * the specific type of ALTER TABLE operation to execute (implemented as
+     * subclasses of the SqlAlterTable class).
+     * 
+     * Currently only supports RENAME TO operations.
+     * 
+     * @param node The ALTER TABLE node to execute.
+     * @return The result of the operation.
+     */
+    private fun executeAlterTable(node: SqlAlterTable): DDLExecutionResult{
+        // Type check up front
+        // When adding support for additional ALTER operations, expand this check.
+        // NOTE: This check will not actually catch cases like ALTER TABLE CLUSTER BY, since
+        // the SQL node for that is not implemented yet and thus the parser will just fail
+        // to parse the query all together.
+        if (node !is SqlAlterTableRenameTable) {
+            throw RuntimeException("This DDL operation is currently unsupported.")
+        }
+
+        val tablePath = node.table.names
+        val tableName = tablePath.joinToString(separator = ".")
+
+        val table : BodoSqlTable
+        val catalogTable : CatalogTable
+
+        // Since there are multiple alter statements, we deal with the table/schema validation first,
+        // which is common to all statements.
+        try {
+            table = deriveTable(tablePath)
+            catalogTable = validateTable(table, node.kind, tableName)
+        } catch (e: MissingObjectException) {
+            if (node.ifExists){
+                // When IF EXISTS is passed in and the node doesn't exist, we will validate the schema.
+                // If valid schema we can return gracefully.
+                // If the schema does not exist, we will raise an error.
+                val schemaPath = Util.skipLast(tablePath)
+                val schemaName = schemaPath.joinToString(separator = ".")
+                try {
+                    val schema = deriveSchema(schemaPath)
+                    validateSchema(schema, node.kind, schemaName)
+                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")));
+                } catch (e: MissingObjectException){
+                    throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
+                }
+            } else {
+                // When IF EXISTS is not passed in, we will raise an error if the table does not exist.
+                throw RuntimeException("Table '$tableName' does not exist or not authorized.")
+            }
+        }
+        // After validation, we can then case on the specific type of ALTER TABLE.
+        return when (node) {
+            is SqlAlterTableRenameTable -> {
+                catalogTable.getDDLExecutor().renameTable(catalogTable.fullPath, node.renameName.names, node.ifExists)
+            }
+            else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyways, since type check is up front.
+        }
+    }
+
+    /**
+     * Executes an ALTER VIEW operation.
+     * 
+     * This function is called for any ALTER VIEW operation, but cases on
+     * the specific type of ALTER VIEW operation to execute (implemented as
+     * subclasses of the SqlAlterView class).
+     * Note: The function is virtually identical to executeAlterTable, but is kept separate/
+     * Refer to executeAlterTable for more detailed comments.
+     * 
+     * Currently only supports RENAME TO operations.
+     * 
+     * @param node The ALTER VIEW node to execute.
+     * @return The result of the operation.
+     */
+    private fun executeAlterView(node: SqlAlterView): DDLExecutionResult{
+        // Type check up front
+        // When adding support for additional ALTER operations, expand this check.
+        if (node !is SqlAlterViewRenameView) {
+            throw RuntimeException("This DDL operation is currently unsupported.")
+        }
+
+        val viewPath = node.view.names
+        val viewName = viewPath.joinToString(separator = ".")
+        val view : BodoSqlTable
+        val catalogView : CatalogTable
+
+        // Since there are multiple alter statements, we deal with the validation first.
+        try {
+            view = deriveTable(viewPath)
+            catalogView = validateTable(view, node.kind, viewName)
+        } catch (e: MissingObjectException) {
+            if (node.ifExists){
+                // We still need to validate the schema.
+                val schemaPath = Util.skipLast(viewPath)
+                val schemaName = schemaPath.joinToString(separator = ".")
+                try {
+                    val schema = deriveSchema(schemaPath)
+                    validateSchema(schema, node.kind, schemaName)
+                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")));
+                } catch (e: MissingObjectException){
+                    throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
+                }
+            } else {
+                throw RuntimeException("View '$viewName' does not exist or not authorized.")
+            }
+        }
+        // After validation, we can then case on the type of ALTER.
+        return when (node) {
+            is SqlAlterViewRenameView -> {
+                catalogView.getDDLExecutor().renameView(catalogView.fullPath, node.renameName.names, node.ifExists)
+            }
+            else -> throw RuntimeException("This DDL operation is currently unsupported.")
         }
     }
 
