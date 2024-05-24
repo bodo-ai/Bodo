@@ -196,6 +196,34 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         return DDLExecutionResult(fieldNames, columnValues)
     }
 
+    /**
+     * Emulates SHOW TERSE VIEWS for a specified namespace in Iceberg.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     * @throws RuntimeException if catalog does not support view operations
+     *
+     * The method uses the .listViews(namespace) method of the respective catalog
+     * to emulate SHOW TERSE VIEWS, if the catalog supports the method.
+     */
+    override fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        if (icebergConnection !is ViewCatalog) {
+            throw RuntimeException("SHOW VIEWS is unimplemented for the current catalog")
+        }
+        val fieldNames =
+            listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
+        val columnValues = List(4) { ArrayList<String?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        icebergConnection.listViews(namespace).forEach {
+            columnValues[0].add(null)
+            columnValues[1].add(it.name())
+            columnValues[2].add("VIEW")
+            columnValues[3].add(namespace.levels().joinToString("."))
+        }
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
     fun relDataTypeToViewSchemaType(dataType: RelDataType): Type {
         return when {
             SqlTypeFamily.STRING.contains(dataType) -> Types.StringType.get()

@@ -2372,6 +2372,48 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
     }
 
+    /**
+     * Emulates SHOW TERSE VIEWS for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws RuntimeException on error
+     *     <p>The method executes a Snowflake query SHOW TABLES to show tables within a specified
+     *     schema, and processes the result set. It builds up and returns a DDLExecutionResult
+     *     object which contains the column names and their respective values. Note that the
+     *     database name and schema name columns of the original query are combined due to
+     *     compatibility with Iceberg, which uses namespaces instead of DB/schemas.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult showViews(@NotNull ImmutableList<String> schemaPath) {
+
+      String schemaName = generateSnowflakeObjectString(schemaPath);
+      // NOTE: Normal SHOW VIEWS does not provide a "kind" column.
+      String query = String.format(Locale.ROOT, "SHOW TERSE VIEWS IN %s", schemaName);
+      List<List<String>> columnValues = new ArrayList();
+      List<String> columnNames = List.of("CREATED_ON", "NAME", "SCHEMA_NAME", "KIND");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          columnValues.get(0).add(output.getString("created_on"));
+          columnValues.get(1).add(output.getString("name"));
+          String db_schema =
+              output.getString("database_name") + "." + output.getString("schema_name");
+          columnValues.get(2).add(db_schema);
+          columnValues.get(3).add(output.getString("kind"));
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT, "Unable to show views in %s. Error: %s", schemaName, e.getMessage()));
+      }
+    }
+
     @Override
     public void createOrReplaceView(
         @NotNull ImmutableList<String> viewPath,

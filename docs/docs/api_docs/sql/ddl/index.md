@@ -15,5 +15,6 @@ BodoSQL currently supports the following Data Definition Language (DDL) statemen
 - [Show Objects][show-objects]
 - [Show Schemas][show-schemas]
 - [Show Tables][show-tables]
+- [Show Views][show-views]
 
 --- 

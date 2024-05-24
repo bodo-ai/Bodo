@@ -1497,3 +1497,24 @@ SqlShowTables SqlShowTables() :
         }
     ]
 }
+
+/**
+ * Parses a SHOW VIEWS statement.
+ */
+SqlShowViews SqlShowViews() :
+{
+   final Span s;
+   final SqlIdentifier schemaName;
+}
+{
+    <SHOW> <TERSE> { s = span(); }
+    (<VIEWS>)
+    [
+        <IN>
+        schemaName = CompoundIdentifier()
+        {
+            return new SqlShowViews(s.end(schemaName), schemaName);
+        }
+    ]
+}
+
