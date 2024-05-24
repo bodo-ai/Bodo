@@ -132,6 +132,9 @@ def schema_helper(tabular_connection, schema_name, create=True):
         destroy_schema()
 
 
+# This test is marked one rank because it relies on executing a CREATE TABLE
+# query which currently doesn't work on multiple ranks.
+@pytest_mark_one_rank
 def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_check):
     """Tests that Bodo validates view definitions before submitting to Snowflake."""
     schema_1 = gen_unique_id("SCHEMA1").upper()
@@ -170,8 +173,9 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
             @run_rank0
             def cleanup():
                 spark = get_spark_tabular(tabular_connection)
-                spark.sql(f"DROP TABLE {schema_1}.TABLE1")
-                spark.sql(f"DROP VIEW {schema_1}.VIEW2")
+                spark.sql(f"DROP TABLE IF EXISTS {schema_1}.TABLE1")
+                spark.sql(f"DROP VIEW IF EXISTS {schema_1}.VIEW2")
+                spark.sql(f"DROP VIEW IF EXISTS {schema_1}.VIEW3")
 
             cleanup()
 
