@@ -219,6 +219,7 @@ def reset_aws_vars(aws_env_vars, orig_env_vars):
             os.environ[v] = orig_env_vars[v]
 
 
+@pytest.mark.skip(reason="BSE-3369: Data link is broken.")
 def test_s3_pq_anon_public_dataset(memory_leak_check):
     """
     Test pd.read_parquet(..., storage_options={"anon": True})

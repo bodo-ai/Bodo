@@ -587,6 +587,7 @@ def test_iceberg_drop_view(
         assert not check_view_exists(tabular_connection, view_name)
 
 
+@pytest_mark_one_rank
 @pytest.mark.parametrize("if_exists", [True, False])
 def test_iceberg_drop_view_error_does_not_exist(
     if_exists, tabular_catalog, tabular_connection, memory_leak_check
