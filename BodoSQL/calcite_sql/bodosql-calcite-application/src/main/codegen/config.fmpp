@@ -56,6 +56,8 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterView"
+      "com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView"
       "com.bodosql.calcite.sql.ddl.SqlTruncateTable"
       "com.bodosql.calcite.sql.func.SqlBodoOperatorTable"
       "com.bodosql.calcite.sql.parser.SqlBodoParserUtil"
@@ -514,8 +516,13 @@ data: {
         "SqlDropSchema",
     ]
 
+    # List of methods for parsing extensions to "ALTER TABLE / VIEW" calls.
+    alterStatementParserMethods: [
+        "SqlAlterTable",
+        "SqlAlterView",
+    ]
+
     statementParserMethods: [
-        "SqlAlterTable()"
         "SqlCopyInto()"
         "SqlShowObjects()"
         "SqlShowSchemas()"

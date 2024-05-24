@@ -6,17 +6,17 @@ import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
 
 /**
- * SqlNode for ALTER TABLE RENAME TO statement.
+ * SqlNode for ALTER VIEW RENAME TO statement.
  * ifExists parameter is responsible for optional IF EXISTS clause.
- * Subclass of SqlAlterTable.
+ * Subclass of SqlAlterView.
  */
 
-class SqlAlterTableRenameTable(
+class SqlAlterViewRenameView(
     pos: SqlParserPos,
     ifExists: Boolean,
-    table: SqlIdentifier,
+    view: SqlIdentifier,
     val renameName: SqlIdentifier,
-) : SqlAlterTable(pos, ifExists, table) {
+) : SqlAlterView(pos, ifExists, view) {
     override fun unparseSuffix(
         writer: SqlWriter,
         leftPrec: Int,
@@ -27,5 +27,5 @@ class SqlAlterTableRenameTable(
         renameName.unparse(writer, leftPrec, rightPrec)
     }
 
-    override fun getOperandList(): List<SqlNode> = listOf(table, renameName)
+    override fun getOperandList(): List<SqlNode> = listOf(view, renameName)
 }

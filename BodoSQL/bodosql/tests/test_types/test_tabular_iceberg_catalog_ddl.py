@@ -6,7 +6,12 @@ import pytest
 import bodo
 import bodosql
 from bodo.tests.iceberg_database_helpers.utils import get_spark_tabular
-from bodo.tests.utils import _test_equal_guard, check_func_seq, pytest_tabular
+from bodo.tests.utils import (
+    _test_equal_guard,
+    check_func_seq,
+    pytest_mark_one_rank,
+    pytest_tabular,
+)
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
 from bodosql.tests.utils import assert_equal_par, gen_unique_id
@@ -17,6 +22,12 @@ pytestmark = pytest_tabular
 def check_view_exists(tabular_connection, view_name) -> bool:
     spark = get_spark_tabular(tabular_connection)
     tables = spark.sql(f"SHOW VIEWS LIKE '{view_name}'").toPandas()
+    return len(tables) == 1
+
+
+def check_table_exists(tabular_connection, table_name) -> bool:
+    spark = get_spark_tabular(tabular_connection)
+    tables = spark.sql(f"SHOW TABLES LIKE '{table_name}'").toPandas()
     return len(tables) == 1
 
 
@@ -163,6 +174,382 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
                 spark.sql(f"DROP VIEW {schema_1}.VIEW2")
 
             cleanup()
+
+
+##################
+#   ALTER tests  #
+##################
+
+# TODO: There are problems with bc.sql CREATE TABLE when run on more than 2 ranks.
+# This is a known issue. For now, we will run these tests on one rank only.
+
+
+# Helper functions
+@run_rank0
+def verify_table_created(table_name, tabular_connection, bc):
+    assert check_table_exists(tabular_connection, table_name)
+    x = bc.sql(f"SELECT * FROM {table_name}")
+    assert "A" in x
+    assert x["A"].shape == (1,)
+    assert x["A"][0] == "testtable"
+
+
+def create_test_table(table_name, bc):
+    bc.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT 'testtable' as A")
+
+
+def drop_test_table(table_name, tabular_connection):
+    # drop created table
+    get_spark_tabular(tabular_connection).sql(f"DROP TABLE IF EXISTS {table_name}")
+    get_spark_tabular(tabular_connection).sql(
+        f"DROP TABLE IF EXISTS {table_name}_renamed"
+    )
+
+
+# Verify view was created.
+@run_rank0
+def verify_view_created(view_name, tabular_connection, bc):
+    assert check_view_exists(tabular_connection, view_name)
+    x = bc.sql(f"SELECT * FROM {view_name}")
+    assert "A" in x
+    assert x["A"].shape == (1,)
+    assert x["A"][0] == "testview"
+
+
+def create_test_view(view_name, bc):
+    bc.sql(f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A")
+
+
+def drop_test_view(view_name, tabular_connection):
+    # drop created view
+    get_spark_tabular(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}")
+    get_spark_tabular(tabular_connection).sql(
+        f"DROP VIEW IF EXISTS {view_name}_renamed"
+    )
+
+
+# Begin tests
+@pytest_mark_one_rank
+def test_alter_table_rename(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that Bodo can rename a table via ALTER TABLE using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed table exists
+        verify_table_created(f"{table_name}_renamed", tabular_connection, bc)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_rename_ifexists(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can rename a table via ALTER TABLE IF EXISTS using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed table exists
+        verify_table_created(f"{table_name}_renamed", tabular_connection, bc)
+
+    finally:
+        # drop created table
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_rename_not_found(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo throws an error when rename a non-existent table via ALTER TABLE using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+
+    # Verify table does not exist.
+    assert not check_table_exists(tabular_connection, table_name)
+
+    # Alter query
+    query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
+
+    # This should throw an error, saying the table does not exist or not authorized.
+    with pytest.raises(BodoError, match="does not exist or not authorized"):
+        bodo_output = bc.execute_ddl(query)
+
+
+@pytest_mark_one_rank
+def test_alter_table_rename_ifexists_not_found(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo returns gracefully when renaming
+    a non-existent table via ALTER TABLE IF EXISTS using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+
+    # Verify table does not exist.
+    assert not check_table_exists(tabular_connection, table_name)
+
+    # Alter query
+    query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_renamed"
+    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    bodo_output = bc.execute_ddl(query)
+    assert_equal_par(bodo_output, py_output)
+
+
+@pytest_mark_one_rank
+def test_alter_table_rename_to_existing(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """
+    Tests that Bodo throws an error when renaming a table to an existing table
+    via ALTER TABLE using a Tabular catalog.
+    """
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        # Create the test table
+        create_test_table(table_name, bc)
+        create_test_table(f"{table_name}_B", bc)
+
+        verify_table_created(table_name, tabular_connection, bc)
+        verify_table_created(f"{table_name}_B", tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_B"
+
+        # This should throw an error, saying the table does not exist or not authorized.
+        with pytest.raises(BodoError, match="already exists"):
+            bodo_output = bc.execute_ddl(query)
+
+    finally:
+        # drop created table
+        drop_test_table(table_name, tabular_connection)
+        drop_test_table(f"{table_name}_B", tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_view(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that Bodo can rename a view via ALTER VIEW using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    try:
+        create_test_view(view_name, bc)
+        verify_view_created(view_name, tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed view exists
+        verify_view_created(f"{view_name}_renamed", tabular_connection, bc)
+
+    finally:
+        # drop created views
+        drop_test_view(view_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_view_rename_ifexists(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can rename a view via ALTER view IF EXISTS using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    try:
+        # Create the test view
+        create_test_view(view_name, bc)
+        verify_view_created(view_name, tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed view exists
+        verify_view_created(f"{view_name}_renamed", tabular_connection, bc)
+
+    finally:
+        # drop created view
+        drop_test_view(view_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_view_rename_not_found(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo throws an error when rename a non-existent view via ALTER view using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+
+    # Verify view does not exist.
+    assert not check_view_exists(tabular_connection, view_name)
+
+    # Alter query
+    query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
+
+    # This should throw an error, saying the view does not exist or not authorized.
+    with pytest.raises(BodoError, match="does not exist or not authorized"):
+        bodo_output = bc.execute_ddl(query)
+
+
+@pytest_mark_one_rank
+def test_alter_view_rename_ifexists_not_found(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo returns gracefully when renaming
+    a non-existent view via ALTER view IF EXISTS using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+
+    # Verify view does not exist.
+    assert not check_view_exists(tabular_connection, view_name)
+
+    # Alter query
+    query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
+    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    bodo_output = bc.execute_ddl(query)
+    assert_equal_par(bodo_output, py_output)
+
+
+@pytest_mark_one_rank
+def test_alter_view_rename_to_existing(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """
+    Tests that Bodo throws an error when renaming a view to an existing view
+    via ALTER view using a Tabular catalog.
+    """
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    try:
+        # Create the test view
+        create_test_view(view_name, bc)
+        create_test_view(f"{view_name}_B", bc)
+
+        # Verify view was created.
+        verify_view_created(view_name, tabular_connection, bc)
+        verify_view_created(f"{view_name}_B", tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_B"
+
+        # This should throw an error, saying the view does not exist or not authorized.
+        with pytest.raises(BodoError, match="already exists"):
+            bodo_output = bc.execute_ddl(query)
+
+    finally:
+        # drop created view
+        drop_test_view(view_name, tabular_connection)
+        drop_test_view(f"{view_name}_B", tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_on_view(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests Bodo's behavior when attempting to rename a VIEW via ALTER TABLE
+    using a Tabular catalog matches Snowflake's behavior. (This should SUCCEED)"""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    try:
+        # Create the test view
+        create_test_view(view_name, bc)
+
+        verify_view_created(view_name, tabular_connection, bc)
+
+        # Alter query
+        query = f"ALTER TABLE {view_name} RENAME TO {view_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed view exists
+        verify_view_created(f"{view_name}_renamed", tabular_connection, bc)
+
+    finally:
+        # drop created view
+        drop_test_view(view_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_view_on_table(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests Bodo's behavior when attempting to rename a TABLE via ALTER VIEW
+    using a Tabular catalog matches Snowflake's behavior. (This should FAIL)"""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        # Create the test table
+        create_test_table(table_name, bc)
+
+        # Verify table was created.
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Alter VIEW query
+        query = f"ALTER VIEW {table_name} RENAME TO {table_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+
+        # This should throw an error, saying the view does not exist or not authorized.
+        with pytest.raises(BodoError, match="View does not exist"):
+            bodo_output = bc.execute_ddl(query)
+
+    finally:
+        # drop created table
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_unsupported_commands(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo throws an error when running unsupported ALTER commands using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    # Unsupported query
+    query = f"ALTER VIEW {view_name} SET SECURE"
+
+    # This should throw an error
+    with pytest.raises(BodoError, match="Unable to parse"):
+        bodo_output = bc.execute_ddl(query)
+
+    # Unsupported query
+    query = f"ALTER TABLE {table_name} SWAP WITH {table_name}_swap"
+
+    # This should throw an error
+    with pytest.raises(BodoError, match="currently unsupported"):
+        bodo_output = bc.execute_ddl(query)
+
+    # Unsupported query
+    query = f"ALTER TABLE {table_name} CLUSTER BY junk_column"
+
+    # This should throw an error
+    with pytest.raises(BodoError, match="Unable to parse"):
+        bodo_output = bc.execute_ddl(query)
+
+
+###################
+# DROP VIEW Tests #
+###################
 
 
 @pytest.mark.parametrize("if_exists", [True, False])

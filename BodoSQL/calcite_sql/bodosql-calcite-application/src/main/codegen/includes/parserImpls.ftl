@@ -708,7 +708,11 @@ SqlNode SqlCopyInto() :
 
 }
 
-SqlAlterTable SqlAlterTable() :
+// This will attempt to match on all ALTER TABLE nodes we currently have implemented.
+// If it encounters a ALTER TABLE statement that it doesn't know how to parse,
+// it will raise a SqlParseError.
+
+SqlAlterTable SqlAlterTable(Span s) :
 {
     boolean ifExists;
     SqlIdentifier table;
@@ -720,7 +724,7 @@ SqlAlterTable SqlAlterTable() :
     SqlNodeList dropCols = null;
 }
 {
-    <ALTER> <TABLE>
+    <TABLE>
     ifExists = IfExistsOpt()
     table = CompoundIdentifier()
     (
@@ -734,6 +738,26 @@ SqlAlterTable SqlAlterTable() :
         { return new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
     |   ( <DROP> [ <COLUMN> ] { dropCols = new SqlNodeList(getPos()); } AddSimpleIdentifiers(dropCols)
         { return new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols); })
+    )
+}
+
+// This will attempt to match on all ALTER VIEW nodes we currently have implemented.
+// If it encounters a ALTER TABLE statement that it doesn't know how to parse,
+// it will raise a SqlParseError.
+
+SqlAlterView SqlAlterView(Span s) :
+{
+    boolean ifExists;
+    SqlIdentifier view;
+    SqlIdentifier renameName = null;
+}
+{
+    <VIEW>
+    ifExists = IfExistsOpt()
+    view = CompoundIdentifier()
+    (
+        ( <RENAME> <TO> renameName = SimpleIdentifier()
+        { return new SqlAlterViewRenameView(getPos(), ifExists, view, renameName); })
     )
 }
 
