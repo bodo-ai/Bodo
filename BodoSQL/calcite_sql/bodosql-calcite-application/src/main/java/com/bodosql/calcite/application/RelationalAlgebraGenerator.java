@@ -361,7 +361,8 @@ public class RelationalAlgebraGenerator {
           SqlKind.DESCRIBE_TABLE,
           SqlKind.DESCRIBE_SCHEMA,
           SqlKind.SHOW_SCHEMAS,
-          SqlKind.SHOW_OBJECTS);
+          SqlKind.SHOW_OBJECTS,
+          SqlKind.SHOW_TABLES);
 
   /**
    * Return if a SQLKind generates compute. This includes CREATE_TABLE because of CTAS right now.

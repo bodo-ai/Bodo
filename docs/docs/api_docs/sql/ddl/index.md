@@ -12,5 +12,8 @@ BodoSQL currently supports the following Data Definition Language (DDL) statemen
 - [Drop Schema][drop-schema]
 - [Drop Table][drop-table]
 - [Drop View][drop-view]
+- [Show Objects][show-objects]
+- [Show Schemas][show-schemas]
+- [Show Tables][show-tables]
 
 --- 

@@ -176,6 +176,9 @@ public enum SqlKind {
   /** SHOW SCHEMAS statement. */
   SHOW_SCHEMAS,
 
+  /** SHOW TABLES statement. */
+  SHOW_TABLES,
+
   /** INSERT statement. */
   INSERT,
 
