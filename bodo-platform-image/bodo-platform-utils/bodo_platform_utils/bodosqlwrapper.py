@@ -14,6 +14,7 @@ import pandas as pd
 import typing as pt
 import pyarrow as pa
 from mpi4py import MPI
+import fsspec
 
 import bodo
 import bodosql
@@ -23,7 +24,7 @@ from bodo.sql_plan_cache import BodoSqlPlanCache
 import numba
 
 from .catalog import get_data
-from .type_convertor import get_value_for_type
+from .type_convertor import get_value_for_type, parse_output_types
 
 # constants
 AUTH_URL_SUFFIX = "/v1/oauth/tokens"
@@ -99,153 +100,6 @@ def get_cache_loc_from_dispatcher(dispatcher) -> pt.Optional[str]:
         return None
 
 
-def parse_output_types(output: "pd.DataFrame") -> pt.List[pt.Dict]:
-    """
-    Parse the output types of the query result
-    Args:
-        output: Query result dataframe
-    Return:
-        List of dictionaries containing the column name, type and nullable status
-    """
-
-    def _get_col_type(col_name: str, col_dtype) -> pt.Tuple[str, bool, pt.Dict]:
-        """
-        Inner function to get the column type for specific columns
-
-        Returns:
-            Tuple of
-                - Column type
-                - Nullable status
-                - Dictionary of additional type information. For example, timezone
-                  for timestamp with timezone columns. Otherwise None
-        """
-        # Special handling for object type
-        # TODO: Remove this after removing all Bodo object boxing
-        if col_dtype == np.dtype("O"):
-            first_val = output[col_name][0]
-            if isinstance(first_val, str):
-                return ("STRING", True, {})
-            if isinstance(first_val, bytes):
-                return ("BINARY", True, {})
-            if isinstance(first_val, datetime.date):
-                return ("DATE", True, {})
-            if isinstance(first_val, datetime.datetime):
-                return ("TIMESTAMP_NTZ_NS", True, {})
-            if isinstance(first_val, datetime.time):
-                return ("TIME", True, {})
-            raise ValueError(
-                f"Unsupported object type for column {col_name}: {type(first_val)}"
-            )
-
-        # Special PyArrow-based Arrays
-        if isinstance(col_dtype, pd.ArrowDtype):
-            pa_type = col_dtype.pyarrow_dtype
-            if pa.types.is_boolean(pa_type):
-                return ("BOOL", True, {})
-            if pa.types.is_int8(pa_type):
-                return ("INT8", True, {})
-            if pa.types.is_int16(pa_type):
-                return ("INT16", True, {})
-            if pa.types.is_int32(pa_type):
-                return ("INT32", True, {})
-            if pa.types.is_int64(pa_type):
-                return ("INT64", True, {})
-            if pa.types.is_float32(pa_type):
-                return ("FLOAT32", True, {})
-            if pa.types.is_float64(pa_type):
-                return ("FLOAT64", True, {})
-            if pa.types.is_date32(pa_type):
-                return ("DATE", True, {})
-            if pa.types.is_decimal128(pa_type):
-                return (f"DECIMAL({pa_type.precision}, {pa_type.scale})", True, {})
-            if pa.types.is_large_binary(pa_type) or pa.types.is_binary(pa_type):
-                return ("BINARY", True, {})
-            if pa.types.is_large_string(pa_type) or pa.types.is_string(pa_type):
-                return ("STRING", True, {})
-            if pa.types.is_time32(pa_type):
-                return (f"TIME_{pa_type.unit.upper()}", True, {})
-            if pa.types.is_time64(pa_type):
-                return (f"TIME_{pa_type.unit.upper()}", True, {})
-            if pa.types.is_null(pa_type):
-                return ("NULL", True, {})
-            if pa.types.is_large_list(pa_type) or pa.types.is_list(pa_type):
-                return ("ARRAY", True, {})
-            if pa.types.is_map(pa_type):
-                return ("MAP", True, {})
-            if pa.types.is_struct(pa_type):
-                return ("STRUCT", True, {})
-            if pa.types.is_timestamp(pa_type):
-                if pa_type.tz is None:
-                    return (f"TIMESTAMP_NTZ_{pa_type.unit.upper()}", True, {})
-                else:
-                    return (
-                        f"TIMESTAMP_LTZ_{pa_type.unit.upper()}",
-                        True,
-                        {"timezone": pa_type.tz},
-                    )
-
-            raise ValueError(
-                f"Unsupported PyArrow dtype {pa_type} for column {col_name}"
-            )
-
-        # Numpy and Nullable dtypes
-        # Integers
-        if col_dtype == np.int8:
-            return ("INT8", False, {})
-        if col_dtype == np.int16:
-            return ("INT16", False, {})
-        if col_dtype == np.int32:
-            return ("INT32", False, {})
-        if col_dtype == np.int64:
-            return ("INT64", False, {})
-        if isinstance(col_dtype, pd.Int8Dtype):
-            return ("INT8", True, {})
-        if isinstance(col_dtype, pd.Int16Dtype):
-            return ("INT16", True, {})
-        if isinstance(col_dtype, pd.Int32Dtype):
-            return ("INT32", True, {})
-        if isinstance(col_dtype, pd.Int64Dtype):
-            return ("INT64", True, {})
-
-        # Floats
-        if col_dtype == np.float32:
-            return ("FLOAT32", False, {})
-        if col_dtype == np.float64:
-            return ("FLOAT64", False, {})
-        if isinstance(col_dtype, pd.Float32Dtype):
-            return ("FLOAT32", True, {})
-        if isinstance(col_dtype, pd.Float64Dtype):
-            return ("FLOAT64", True, {})
-
-        # Booleans
-        if col_dtype == np.bool_:
-            return ("BOOL", False, {})
-        if isinstance(col_dtype, pd.BooleanDtype):
-            return ("BOOL", True, {})
-
-        # Datetime
-        if col_dtype == np.datetime64:
-            return ("TIMESTAMP_NTZ_NS", False, {})
-        if isinstance(col_dtype, pd.DatetimeTZDtype):
-            return (
-                f"TIMESTAMP_LTZ_{col_dtype.unit.upper()}",
-                True,
-                {"timezone": col_dtype.tz},
-            )
-
-        # Strings
-        if isinstance(col_dtype, pd.StringDtype):
-            return ("STRING", True, {})
-
-        raise ValueError(f"Unsupported dtype {col_dtype} for column {col_name}")
-
-    output_types = [
-        (col_name, *_get_col_type(col_name, col_type))
-        for col_name, col_type in output.dtypes.iter()
-    ]
-    return [{"name": a, "type": b, "nullable": c} | d for a, b, c, d in output_types]
-
-
 def handle_query_params(query_params):
     """
     Handle query params
@@ -297,7 +151,7 @@ def run_sql_query_wrapper(
             total_len = MPI.COMM_WORLD.reduce(len(output), op=MPI.SUM, root=0)
             if bodo.get_rank() == 0:
                 output_types = parse_output_types(output)
-                with open(
+                with fsspec.open(
                     os.path.join(args.pq_out_filename, "metadata.json"), "w"
                 ) as f:
                     json.dump({"num_rows": total_len, "schema": output_types}, f)
