@@ -673,3 +673,21 @@ def test_show_tables_terse(tabular_catalog, tabular_connection, memory_leak_chec
     )
     bodo_output = bc.execute_ddl(query)
     assert_equal_par(bodo_output, py_output)
+
+
+def test_show_views_terse(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that Bodo can run SHOW TERSE VIEWS using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    # SHOW query.
+    # Using CI namespace for testing, to prevent overhead of creating and deleting views.
+    query = f"SHOW TERSE VIEWS in BODOSQL_DDL_TESTS"
+    py_output = pd.DataFrame(
+        {
+            "CREATED_ON": [None],
+            "NAME": ["BODOSQL_ICEBERG_DDL_READ_TEST_VIEW"],
+            "KIND": ["VIEW"],
+            "SCHEMA_NAME": ["BODOSQL_DDL_TESTS"],
+        }
+    )
+    bodo_output = bc.execute_ddl(query)
+    assert_equal_par(bodo_output, py_output)

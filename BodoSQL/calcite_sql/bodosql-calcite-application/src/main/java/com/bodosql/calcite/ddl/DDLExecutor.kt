@@ -118,6 +118,13 @@ interface DDLExecutor {
      */
     fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult
 
+    /**
+     * Show views in the database.
+     * @param schemaPath The path to the schema to show views from.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     */
+    fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult
+
     @Throws(ViewAlreadyExistsException::class)
     fun createOrReplaceView(
         viewPath: ImmutableList<String>,
