@@ -14,6 +14,7 @@ import com.bodosql.calcite.sql.ddl.SqlAlterView
 import com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas
+import com.bodosql.calcite.sql.ddl.SqlShowTables
 import com.bodosql.calcite.sql.validate.BodoSqlValidator
 import com.bodosql.calcite.sql.validate.DDLResolver
 import com.bodosql.calcite.table.BodoSqlTable
@@ -88,6 +89,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
             SqlKind.SHOW_SCHEMAS-> {
                 executeShowSchemas(node as SqlSnowflakeShowSchemas)
+            }
+            SqlKind.SHOW_TABLES-> {
+                executeShowTables(node as SqlShowTables)
             }
             SqlKind.CREATE_VIEW -> {
                 executeCreateView(node as SqlCreateView)
@@ -305,6 +309,14 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         }
     }
 
+
+    /**
+     * Executes the "SHOW OBJECTS" command for a specified schema and returns the result.
+     *
+     * @param node The SqlSnowflakeShowObjects SqlNode
+     * @return DDLExecutionResult containing the details of the objects in the specified schema.
+     * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
+     */
     private fun executeShowObjects(node: SqlSnowflakeShowObjects): DDLExecutionResult {
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
@@ -317,6 +329,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         }
     }
 
+    /**
+     * Executes the "SHOW SCHEMAS" command for a specified DB and returns the result.
+     *
+     * @param node The SqlSnowflakeShowSchemas SqlNode
+     * @return DDLExecutionResult containing the details of the schemas in the specified DB.
+     * @throws RuntimeException if the DB does not exist or the user is not authorized to access it.
+     */
     private fun executeShowSchemas(node: SqlSnowflakeShowSchemas): DDLExecutionResult {
         val dbPath = node.dbName.names
         val dbName = dbPath.joinToString(separator = ".")
@@ -326,6 +345,25 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             return schemaCat.ddlExecutor.showSchemas(dbPath)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Database $dbName does not exist or not authorized.")
+        }
+    }
+
+    /**
+     * Executes the "SHOW TABLES" command for a specified schema and returns the result.
+     *
+     * @param node The SqlShowTables SqlNode
+     * @return DDLExecutionResult containing the details of the tables in the specified schema.
+     * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
+     */
+    private fun executeShowTables(node: SqlShowTables): DDLExecutionResult {
+        val schemaPath = node.schemaName.names
+        val schemaName = schemaPath.joinToString(separator = ".")
+        try {
+            val schema = deriveSchema(schemaPath)
+            val schemaCat = validateSchema(schema, node.kind, schemaName)
+            return schemaCat.ddlExecutor.showTables(schemaPath)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }
     }
 

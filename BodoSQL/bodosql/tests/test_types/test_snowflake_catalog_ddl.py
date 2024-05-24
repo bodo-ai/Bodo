@@ -1173,6 +1173,42 @@ def test_show_schemas_jit(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
+def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show tables works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("SHOW TERSE TABLES in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
+
+    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Tables test failed"
+
+
+def test_show_tables_jit(test_db_snowflake_catalog, memory_leak_check):
+    """Verify that show tables works in JIT. This is needed because we need
+    to ensure the type information is correct."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query = "SHOW TERSE TABLES IN SNOWFLAKE_SAMPLE_DATA.TPCH_SF1"
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    bodo_output = impl(bc, query)
+    passed = _test_equal_guard(
+        bodo_output,
+        expected_output,
+        sort_output=True,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
 def test_create_view(test_db_snowflake_catalog, memory_leak_check):
     """Tests that Bodo can create a view in Snowflake."""
     db = test_db_snowflake_catalog.database

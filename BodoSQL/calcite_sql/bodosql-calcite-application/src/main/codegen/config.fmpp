@@ -48,6 +48,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableClone"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas"
+      "com.bodosql.calcite.sql.ddl.SqlShowTables"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate"
       "com.bodosql.calcite.sql.ddl.SqlDropTable"
       "com.bodosql.calcite.sql.ddl.SqlAlterTable"
@@ -204,6 +205,7 @@ data: {
       "OBJECTS"
       "SCHEMAS"
       "TERSE"
+      "TABLES"
     ]
 
     # List of non-reserved keywords to add;
@@ -480,6 +482,7 @@ data: {
         "TZH"
         "TZM"
         "TERSE"
+        "TABLES"
     ]
 
     # List of additional join types. Each is a method with no arguments.
@@ -526,6 +529,7 @@ data: {
         "SqlCopyInto()"
         "SqlShowObjects()"
         "SqlShowSchemas()"
+        "SqlShowTables()"
     ]
 
     # Binary operators tokens.

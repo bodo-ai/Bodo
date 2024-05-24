@@ -647,3 +647,28 @@ def test_iceberg_drop_view_error_does_not_exist(
                     py_output="",
                     test_str_literal=False,
                 )
+
+
+##################
+#   SHOW tests  #
+##################
+
+
+# Begin tests
+def test_show_tables_terse(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that Bodo can run SHOW TERSE TABLES using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    # SHOW query.
+    # Using existing for testing, to prevent overhead of creating and deleting tables.
+    query = f"SHOW TERSE TABLES in BODOSQL_DDL_TESTS"
+    py_output = pd.DataFrame(
+        {
+            "CREATED_ON": [None],
+            "NAME": ["BODOSQL_ICEBERG_DDL_READ_TEST"],
+            "KIND": ["TABLE"],
+            "SCHEMA_NAME": ["BODOSQL_DDL_TESTS"],
+        }
+    )
+    bodo_output = bc.execute_ddl(query)
+    assert_equal_par(bodo_output, py_output)

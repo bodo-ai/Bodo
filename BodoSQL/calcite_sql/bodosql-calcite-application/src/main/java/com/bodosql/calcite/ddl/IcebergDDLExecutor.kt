@@ -116,6 +116,16 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         return DDLExecutionResult(names, columnValues)
     }
 
+    /**
+     * Emulates SHOW TERSE OBJECTS for a specified namespace in Iceberg.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     *
+     * The method uses the .listTables(namespace) method of the respective catalog
+     * to emulate the table part of SHOW TERSE OBJECTS. Views are a TODO.
+     */
     override fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
         // TODO:
         val fieldNames =
@@ -134,6 +144,16 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         return DDLExecutionResult(fieldNames, columnValues)
     }
 
+    /**
+     * Emulates SHOW TERSE SCHEMAS for a specified namespace in Iceberg.
+     *
+     * @param dbPath The db path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     *
+     * The method uses the .listNamespaces(namespace) method of the respective catalog
+     * to emulate SHOW TERSE SCHEMAS.
+     */
     override fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
@@ -147,6 +167,31 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[2].add(null)
             // get full schema path
             columnValues[3].add(it.toString())
+        }
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    /**
+     * Emulates SHOW TERSE TABLES for a specified namespace in Iceberg.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     *
+     * The method uses the .listTables(namespace) method of the respective catalog
+     * to emulate SHOW TERSE TABLES.
+     */
+    override fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        val fieldNames =
+            listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
+        val columnValues = List(4) { ArrayList<String?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        // Identical to showObjects code, but only for tables.
+        icebergConnection.listTables(namespace).forEach {
+            columnValues[0].add(null)
+            columnValues[1].add(it.name())
+            columnValues[2].add("TABLE")
+            columnValues[3].add(namespace.levels().joinToString("."))
         }
         return DDLExecutionResult(fieldNames, columnValues)
     }
