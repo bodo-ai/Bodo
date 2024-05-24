@@ -15,9 +15,10 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
         val stringType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true)
         val (fieldsNames, columnTypes) =
             when (ddlNode.kind) {
-                // Drop Queries
-                SqlKind.CREATE_VIEW, SqlKind.CREATE_SCHEMA, SqlKind.DROP_SCHEMA, SqlKind.BEGIN, SqlKind.COMMIT,
-                SqlKind.ROLLBACK, SqlKind.DROP_TABLE, SqlKind.DROP_VIEW,
+                // DDL queries that only return a status message
+                SqlKind.CREATE_VIEW, SqlKind.CREATE_SCHEMA, SqlKind.DROP_SCHEMA, SqlKind.BEGIN,
+                SqlKind.COMMIT, SqlKind.ROLLBACK, SqlKind.DROP_TABLE, SqlKind.DROP_VIEW,
+                SqlKind.ALTER_TABLE, SqlKind.ALTER_VIEW,
                 -> {
                     val fieldNames = listOf("STATUS")
                     // Note this is non-null

@@ -190,6 +190,8 @@ nav:
           - API Reference:
               - DDL:
                   - api_docs/sql/ddl/index.md
+                  - api_docs/sql/ddl/alter_table.md
+                  - api_docs/sql/ddl/alter_view.md
                   - api_docs/sql/ddl/create_schema.md
                   - api_docs/sql/ddl/create_table.md
                   - api_docs/sql/ddl/create_view.md
