@@ -1477,3 +1477,23 @@ SqlSnowflakeShowSchemas SqlShowSchemas() :
         }
     ]
 }
+
+/**
+ * Parses a SHOW TABLES statement.
+ */
+SqlShowTables SqlShowTables() :
+{
+   final Span s;
+   final SqlIdentifier dbName;
+}
+{
+    <SHOW> <TERSE> { s = span(); }
+    (<TABLES>)
+    [
+        <IN>
+        dbName = CompoundIdentifier()
+        {
+            return new SqlShowTables(s.end(dbName), dbName);
+        }
+    ]
+}

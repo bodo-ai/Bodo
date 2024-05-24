@@ -33,6 +33,8 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                     val types = listOf(stringType, stringType, stringType, stringType, stringType, stringType, stringType)
                     Pair(fieldNames, types)
                 }
+
+                // SHOW Queries
                 SqlKind.SHOW_OBJECTS -> {
                     val fieldNames =
                         listOf(
@@ -52,6 +54,24 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                     Pair(fieldNames, types)
                 }
                 SqlKind.SHOW_SCHEMAS -> {
+                    val fieldNames =
+                        listOf(
+                            "CREATED_ON",
+                            "NAME",
+                            "SCHEMA_NAME",
+                            "KIND",
+                        )
+                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                    val types =
+                        listOf(
+                            stringType,
+                            stringType,
+                            stringType,
+                            stringType,
+                        )
+                    Pair(fieldNames, types)
+                }
+                SqlKind.SHOW_TABLES -> {
                     val fieldNames =
                         listOf(
                             "CREATED_ON",

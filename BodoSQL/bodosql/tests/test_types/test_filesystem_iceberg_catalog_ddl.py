@@ -553,38 +553,49 @@ def test_show_objects(iceberg_filesystem_catalog, iceberg_database, memory_leak_
     Tests that the filesystem catalog can shows objects in iceberg
     schema.
     """
-    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
-    db_schema = "iceberg_db"
-    # Create 2 tables
-    table_name1 = create_simple_ddl_table(spark)
-    existing_tables = spark.sql(
-        f"show tables in hadoop_prod.{db_schema} like '{table_name1}'"
-    ).toPandas()
-    assert len(existing_tables) == 1, "Unable to find testing table"
-    table_name2 = create_simple_ddl_table(spark)
-    existing_tables = spark.sql(
-        f"show tables in hadoop_prod.{db_schema} like '{table_name2}'"
-    ).toPandas()
-    assert len(existing_tables) == 1, "Unable to find testing table"
+    try:
+        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        db_schema = "iceberg_db"
+        # Create 2 tables
+        table_name1 = create_simple_ddl_table(spark)
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name1}'"
+        ).toPandas()
+        assert len(existing_tables) == 1, "Unable to find testing table"
+        table_name2 = create_simple_ddl_table(spark)
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name2}'"
+        ).toPandas()
+        assert len(existing_tables) == 1, "Unable to find testing table"
 
-    query = f'SHOW TERSE OBJECTS IN "{db_schema}"'
-    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
-    bodo_output = bc.execute_ddl(query)
-    expected_output = pd.DataFrame(
-        {
-            "CREATED_ON": [None, None],
-            "NAME": [table_name2, table_name1],
-            "KIND": ["TABLE"] * 2,
-            "SCHEMA_NAME": [db_schema] * 2,
-        }
-    )
-    passed = _test_equal_guard(
-        bodo_output, expected_output, sort_output=True, reset_index=True
-    )
-    # count how many pes passed the test, since throwing exceptions directly
-    # can lead to inconsistency across pes and hangs
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Show Objects test failed"
+        query = f'SHOW TERSE OBJECTS IN "{db_schema}"'
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = bc.execute_ddl(query)
+        expected_output = pd.DataFrame(
+            {
+                "CREATED_ON": [None, None],
+                "NAME": [table_name2, table_name1],
+                "KIND": ["TABLE"] * 2,
+                "SCHEMA_NAME": [db_schema] * 2,
+            }
+        )
+        passed = _test_equal_guard(
+            bodo_output, expected_output, sort_output=True, reset_index=True
+        )
+        # count how many pes passed the test, since throwing exceptions directly
+        # can lead to inconsistency across pes and hangs
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size(), "Show Objects test failed"
+    finally:
+        # Cleanup
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name1}"
+            spark.sql(query)
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name2}"
+            spark.sql(query)
+
+        cleanup()
 
 
 def test_show_objects_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
@@ -652,3 +663,65 @@ def test_show_schemas_compiles_jit(iceberg_filesystem_catalog, memory_leak_check
     bc.validate_query_compiles(query)
     query = f'DROP SCHEMA "{schema_name}"'
     bc.execute_ddl(query)
+
+
+def test_show_tables(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):
+    """
+    Tests that the filesystem catalog can show tables in iceberg
+    schema.
+    """
+    try:
+        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        db_schema = "iceberg_db"
+        # Create 2 tables
+        table_name1 = create_simple_ddl_table(spark)
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name1}'"
+        ).toPandas()
+        assert len(existing_tables) == 1, "Unable to find testing table"
+        table_name2 = create_simple_ddl_table(spark)
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name2}'"
+        ).toPandas()
+        assert len(existing_tables) == 1, "Unable to find testing table"
+
+        query = f'SHOW TERSE TABLES IN "{db_schema}"'
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = bc.execute_ddl(query)
+        expected_output = pd.DataFrame(
+            {
+                "CREATED_ON": [None, None],
+                "NAME": [table_name2, table_name1],
+                "KIND": ["TABLE"] * 2,
+                "SCHEMA_NAME": [db_schema] * 2,
+            }
+        )
+        passed = _test_equal_guard(
+            bodo_output, expected_output, sort_output=True, reset_index=True
+        )
+        # count how many pes passed the test, since throwing exceptions directly
+        # can lead to inconsistency across pes and hangs
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size(), "Show tables test failed"
+    finally:
+        # Cleanup
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name1}"
+            spark.sql(query)
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name2}"
+            spark.sql(query)
+
+        cleanup()
+
+
+def test_show_tables_compiles_jit(iceberg_filesystem_catalog, memory_leak_check):
+    """
+    Verify that show tables compiles in JIT.
+    """
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    schema_name = gen_unique_id("TEST_SCHEMA_DDL").upper()
+    query = f'CREATE SCHEMA "{schema_name}"'
+    bc.execute_ddl(query)
+    query = f"SHOW TERSE TABLES IN '{schema_name}'"
+    bc.validate_query_compiles(query)

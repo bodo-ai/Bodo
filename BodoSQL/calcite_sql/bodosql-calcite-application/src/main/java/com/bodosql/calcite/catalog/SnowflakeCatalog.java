@@ -2248,6 +2248,17 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
     }
 
+    /**
+     * Emulates SHOW TERSE OBJECTS for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws RuntimeException on error The method executes a Snowflake query SHOW OBJECTS to show
+     *     objects within a specified schema, and processes the result set. It builds up and returns
+     *     a DDLExecutionResult object which contains the column names and their respective values.
+     *     Note that the database name and schema name columns of the original query are combined
+     *     due to compatibility with Iceberg, which uses namespaces instead of DB/schemas.
+     */
     @NotNull
     @Override
     public DDLExecutionResult showObjects(@NotNull ImmutableList<String> schemaPath) {
@@ -2280,6 +2291,56 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
     }
 
+    /**
+     * Emulates SHOW TERSE TABLES for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws RuntimeException on error The method executes a Snowflake query SHOW TABLES to show
+     *     tables within a specified schema, and processes the result set. It builds up and returns
+     *     a DDLExecutionResult object which contains the column names and their respective values.
+     *     Note that the database name and schema name columns of the original query are combined
+     *     due to compatibility with Iceberg, which uses namespaces instead of DB/schemas.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult showTables(@NotNull ImmutableList<String> schemaPath) {
+      String schemaName = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "SHOW TABLES IN %s", schemaName);
+      List<List<String>> columnValues = new ArrayList();
+      List<String> columnNames = List.of("CREATED_ON", "NAME", "SCHEMA_NAME", "KIND");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          columnValues.get(0).add(output.getString("created_on"));
+          columnValues.get(1).add(output.getString("name"));
+          String db_schema =
+              output.getString("database_name") + "." + output.getString("schema_name");
+          columnValues.get(2).add(db_schema);
+          columnValues.get(3).add(output.getString("kind"));
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT, "Unable to show tables in %s. Error: %s", schemaName, e.getMessage()));
+      }
+    }
+
+    /**
+     * Emulates SHOW TERSE SCHEMAS for a specified db in Snowflake.
+     *
+     * @param dbPath The db path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws RuntimeException on error The method executes a Snowflake query SHOW SCHEMAS to show
+     *     schemas within a specified schema, and processes the result set. It builds up and returns
+     *     a DDLExecutionResult object which contains the column names and their respective values.
+     *     Note that the database name column of the original query is renamed to SCHEMA_NAME due to
+     *     compatibility with Iceberg, which uses namespaces instead of DB/schemas.
+     */
     @NotNull
     @Override
     public DDLExecutionResult showSchemas(@NotNull ImmutableList<String> dbPath) {
