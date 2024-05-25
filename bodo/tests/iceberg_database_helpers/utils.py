@@ -25,7 +25,7 @@ def get_spark(path: str = ".") -> SparkSession:
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.4.3",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
         )
         .config(
             "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
@@ -56,7 +56,7 @@ def get_spark_tabular(tabular_connection):
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.1",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
         )
         .config("spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog")
         .config(
