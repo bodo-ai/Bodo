@@ -1166,7 +1166,8 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["partition_spec"],
                     writer["sort_order"],
                     writer["iceberg_schema_str"],
-                    writer["parallel"],
+                    # Don't pass parallel=True because streaming is not synchronized.
+                    False,
                     writer["output_pyarrow_schema"],
                     writer["arrow_fs"],
                     writer["theta_sketches"],
