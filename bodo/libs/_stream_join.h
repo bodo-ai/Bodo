@@ -562,7 +562,6 @@ class JoinPartition {
      * build side.
      * @param probe_kept_cols Which columns to generate in the output on the
      * probe side.
-     * @param build_needs_reduction Do the build misses need a reduction?
      * @param[in, out] output_buffer The output buffer of the join state that
      * we should append the output to.
      *
@@ -575,7 +574,6 @@ class JoinPartition {
     void FinalizeProbeForInactivePartition(
         cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
         const std::vector<uint64_t>& probe_kept_cols,
-        const bool build_needs_reduction,
         const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
 
     /**
