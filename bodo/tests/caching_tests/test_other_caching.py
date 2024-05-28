@@ -2,9 +2,11 @@
 import logging
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 from caching_tests_common import fn_distribution  # noqa
 
+import bodo
 from bodo.tests.test_metadata import (  # noqa
     bytes_gen_dist_df,
     int_gen_dist_df,
@@ -252,3 +254,19 @@ def test_caching_version_check(is_cached, memory_leak_check):
         sig = impl.signatures[0]
         assert impl._cache_hits[sig] == 0
         assert impl._cache_misses[sig] == 1
+
+
+def test_nested_arr_cache(is_cached, memory_leak_check):
+    """
+    Test caching workaround for nested array handling.
+    See https://bodo.atlassian.net/browse/BSE-3359
+    """
+
+    def impl(arr):
+        A = bodo.libs.bodosql_array_kernels.array_construct((arr,), (False,))
+        return len(A)
+
+    arr = pd.arrays.ArrowExtensionArray(
+        pa.array([[1, 3, None]], pa.large_list(pa.int64()))
+    )
+    check_caching(impl, (arr,), is_cached, InputDist.REP, py_output=1)
