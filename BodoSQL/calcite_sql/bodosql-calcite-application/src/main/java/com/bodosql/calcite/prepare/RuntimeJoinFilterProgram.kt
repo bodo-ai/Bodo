@@ -74,9 +74,8 @@ object RuntimeJoinFilterProgram : Program {
     internal open class RuntimeJoinFilterShuttle(
         private val cluster: BodoRelOptCluster,
         private val emitFilters: Boolean,
+        protected var liveJoins: JoinFilterProgramState = JoinFilterProgramState(),
     ) : RelShuttleImpl() {
-        private var liveJoins = JoinFilterProgramState()
-
         // Keep track of nodes which should be a source for a new cache node. This should
         // only be set/modified by the caching passes.
         private var createdCacheIDs = mutableMapOf<Int, BodoPhysicalCachedSubPlan?>()
@@ -810,9 +809,9 @@ object RuntimeJoinFilterProgram : Program {
      */
     internal class InlineCacheVisitor(
         cluster: BodoRelOptCluster,
-        private var liveJoins: JoinFilterProgramState,
+        liveJoins: JoinFilterProgramState,
         private val numInlineConsumers: Int,
-    ) : RuntimeJoinFilterShuttle(cluster, false) {
+    ) : RuntimeJoinFilterShuttle(cluster, false, liveJoins) {
         private val cachedNodes = mutableSetOf<Int>()
 
         override fun visit(node: RelNode): RelNode {
