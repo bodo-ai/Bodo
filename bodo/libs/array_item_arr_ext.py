@@ -551,7 +551,9 @@ def replace_data_arr(typingctx, arr_typ, data_typ=None):
     return types.none(arr_typ, data_typ), codegen
 
 
-@numba.njit(no_cpython_wrapper=True)
+# Inlining at Numba level to work around caching issues for recursive functions.
+# See https://bodo.atlassian.net/browse/BSE-3359
+@numba.njit(no_cpython_wrapper=True, inline="always")
 def ensure_data_capacity(arr, old_size, new_size):  # pragma: no cover
     """
     make sure the internal data array has enough space for 'new_size' number of elements
@@ -566,7 +568,9 @@ def ensure_data_capacity(arr, old_size, new_size):  # pragma: no cover
         replace_data_arr(arr, new_data)
 
 
-@numba.njit(no_cpython_wrapper=True)
+# Inlining at Numba level to work around caching issues for recursive functions.
+# See https://bodo.atlassian.net/browse/BSE-3359
+@numba.njit(no_cpython_wrapper=True, inline="always")
 def trim_excess_data(arr):  # pragma: no cover
     """
     make sure the internal data array doesn't have an extra data (to enable
