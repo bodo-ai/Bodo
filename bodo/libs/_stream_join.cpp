@@ -834,7 +834,6 @@ template <bool build_table_outer, bool probe_table_outer,
 void JoinPartition::FinalizeProbeForInactivePartition(
     cond_expr_fn_t cond_func, const std::vector<uint64_t>& build_kept_cols,
     const std::vector<uint64_t>& probe_kept_cols,
-    const bool build_needs_reduction,
     const std::shared_ptr<ChunkedTableBuilder>& output_buffer) {
     assert(this->pinned_);
     // This should always be 0 here but just in case
@@ -923,13 +922,10 @@ void JoinPartition::FinalizeProbeForInactivePartition(
     // Add unmatched rows from build table to output table
     if (build_table_outer) {
         time_pt start_build_outer = start_timer();
-        if (build_needs_reduction) {
-            generate_build_table_outer_rows_for_partition<true>(
-                this, build_idxs, probe_idxs);
-        } else {
-            generate_build_table_outer_rows_for_partition<false>(
-                this, build_idxs, probe_idxs);
-        }
+        // If an inactive partition exists, this means that the build side is
+        // distributed and therefore no reduction is required.
+        generate_build_table_outer_rows_for_partition<
+            /*requires_reduction*/ false>(this, build_idxs, probe_idxs);
         this->metrics.build_outer_output_idx_time +=
             end_timer(start_build_outer);
 
@@ -2316,9 +2312,6 @@ void HashJoinState::FinalizeProbeForInactivePartitions(
     const std::vector<uint64_t>& build_kept_cols,
     const std::vector<uint64_t>& probe_kept_cols) {
     time_pt start_finalize = start_timer();
-    // We need a reduction of build misses if the probe table is distributed
-    // and the build table is not.
-    bool build_needs_reduction = this->probe_parallel && !this->build_parallel;
     time_pt start_pin;
     for (size_t i = 1; i < this->partitions.size(); i++) {
         if (this->debug_partitioning) {
@@ -2327,6 +2320,9 @@ void HashJoinState::FinalizeProbeForInactivePartitions(
                    "Starting probe finalization for partition "
                 << i << "." << std::endl;
         }
+        // Multiple partitions should only exist when the build table is
+        // distributed.
+        assert(this->build_parallel);
         // Pin the partition
         start_pin = start_timer();
         this->partitions[i]->pin();
@@ -2336,7 +2332,7 @@ void HashJoinState::FinalizeProbeForInactivePartitions(
             ->FinalizeProbeForInactivePartition<
                 build_table_outer, probe_table_outer, non_equi_condition>(
                 this->cond_func, build_kept_cols, probe_kept_cols,
-                build_needs_reduction, this->output_buffer);
+                this->output_buffer);
         // Free the partition
         this->partitions[i].reset();
         if (this->debug_partitioning) {
