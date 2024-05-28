@@ -6,9 +6,12 @@ import com.bodosql.calcite.application.logicalRules.BodoSQLReduceExpressionsRule
 import com.bodosql.calcite.application.operatorTables.SnowflakeNativeUDF;
 import com.bodosql.calcite.plan.RelOptRowSamplingParameters;
 import com.bodosql.calcite.rel.core.RowSample;
+import com.bodosql.calcite.rel.logical.BodoLogicalFlatten;
 import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate;
+import com.bodosql.calcite.rel.logical.BodoLogicalTableFunctionScan;
 import com.bodosql.calcite.rex.RexNamedParam;
 import com.bodosql.calcite.schema.FunctionExpander;
+import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableBase;
 import com.bodosql.calcite.sql.func.SqlNamedParam;
@@ -34,14 +37,18 @@ import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexDynamicParam;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.runtime.Resources;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.sql.SnowflakeNamedArgumentSqlCatalogTableFunction;
+import org.apache.calcite.sql.SnowflakeNamedArgumentSqlTableFunction;
+import org.apache.calcite.sql.SnowflakeSqlTableFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedBaseFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
@@ -501,6 +508,73 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
                 snowflakeTableUdf.getRowType(typeFactory, List.of()),
                 cluster);
         bb.setRoot(expandedFunction, true);
+        return;
+      }
+    } else if (operator instanceof SnowflakeNamedArgumentSqlTableFunction) {
+      // Convert the table function call for Snowflake.
+      SnowflakeNamedArgumentSqlTableFunction tableFunction =
+          (SnowflakeNamedArgumentSqlTableFunction) operator;
+      replaceSubQueries(bb, call, RelOptUtil.Logic.TRUE_FALSE_UNKNOWN);
+      SqlCall extendedCall = new SqlCallBinding(validator, bb.scope, call).permutedCall();
+      RelDataType outputType = bb.getValidator().getValidatedNodeType(call);
+      if (tableFunction.getType() == SnowflakeSqlTableFunction.FunctionType.FLATTEN) {
+        // Update the arguments and replace any default values in the arguments.
+        List<RexNode> arguments = new ArrayList<>();
+        for (int i = 0; i < extendedCall.operandCount(); i++) {
+          SqlNode operand = extendedCall.operand(i);
+          final RexNode convertedOperand;
+          if (BodoSqlUtil.isDefaultCall(operand)) {
+            convertedOperand = tableFunction.getDefaultValue(this.rexBuilder, i);
+          } else {
+            convertedOperand = bb.convertExpression(operand);
+          }
+          arguments.add(convertedOperand);
+        }
+        // Flatten has no inputs, so first create a dummy LogicalValues.
+        String[] fieldNames = {"DUMMY"};
+        boolean expr = true;
+        RelNode values = this.relBuilder.values(fieldNames, expr).build();
+        // Determine if we have any non-literals. These require generating a projection.
+        int projectIndex = 0;
+        List<RexNode> projectRexNodes = new ArrayList();
+        List<RexNode> flattenRexNodes = new ArrayList();
+        for (int i = 0; i < arguments.size(); i++) {
+          RexNode argument = arguments.get(i);
+          if (argument instanceof RexLiteral) {
+            flattenRexNodes.add(argument);
+          } else {
+            projectRexNodes.add(argument);
+            flattenRexNodes.add(rexBuilder.makeInputRef(argument.getType(), projectIndex++));
+          }
+        }
+        final RelNode input;
+        if (!projectRexNodes.isEmpty()) {
+          RelNode project = relBuilder.push(values).project(projectRexNodes).build();
+          input = project;
+        } else {
+          input = values;
+        }
+        RexCall updatedCall = (RexCall) this.rexBuilder.makeCall(operator, flattenRexNodes);
+        RelNode output = BodoLogicalFlatten.create(input, updatedCall, outputType);
+        bb.setRoot(output, true);
+        return;
+      } else if (tableFunction.getType() == SnowflakeSqlTableFunction.FunctionType.GENERATOR) {
+        // Update the arguments and replace any default values in the arguments.
+        List<RexNode> arguments = new ArrayList<>();
+        for (int i = 0; i < extendedCall.operandCount(); i++) {
+          SqlNode operand = extendedCall.operand(i);
+          final RexNode convertedOperand;
+          if (BodoSqlUtil.isDefaultCall(operand)) {
+            convertedOperand = tableFunction.getDefaultValue(this.rexBuilder, i);
+          } else {
+            convertedOperand = bb.convertExpression(operand);
+          }
+          arguments.add(convertedOperand);
+        }
+        RexCall newCall = (RexCall) this.rexBuilder.makeCall(operator, arguments);
+        RelNode output =
+            BodoLogicalTableFunctionScan.create(cluster, List.of(), newCall, outputType);
+        bb.setRoot(output, true);
         return;
       }
     }

@@ -1,5 +1,6 @@
 package org.apache.calcite.plan;
 
+import java.util.Stack;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelShuttleImpl;
@@ -22,6 +23,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable;
+import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.HashSet;
@@ -141,52 +143,57 @@ public class BodoRelOptUtil {
    * This is intended for use with the volcano planner,
    * so it supports RelSubset.
    */
-  public static class CycleFinder extends RelVisitor {
+  public static class CycleFinder {
 
-    private final Set<RelNode> startedRelNodes;
-    private final Set<RelNode> finishedRelNodes;
-    private boolean containsCycle;
-
-    public CycleFinder() {
-      startedRelNodes = new HashSet();
-      finishedRelNodes = new HashSet();
-      containsCycle = false;
-    }
-    public void visit(
-            RelNode node,
-            int ordinal,
-            @Nullable RelNode parent) {
-      if (startedRelNodes.contains(node)) {
-        containsCycle = true;
-        return;
-      } else if (finishedRelNodes.contains(node)) {
-        // We have already traversed this section.
-        return;
-      }
-      startedRelNodes.add(node);
-      if (node instanceof RelSubset) {
-        RelSubset s = (RelSubset) node;
-        RelNode best = s.getBest();
-        if (best != null) {
-          visit(best, 0, node);
+    // Make the constructor private so no one creates an instance of this class.
+    // We can't cache results because especially with RelSubset, the plan can change.
+    private CycleFinder() {}
+    /**
+     * Check for a cycle by implementing an iterative version of DFS.
+     * @param p The root of the RelNode tree.
+     * @return True if a cycle is found, false otherwise.
+     */
+    public static boolean determineCycle(RelNode p) {
+      final Set<Integer> startedRelNodes = new HashSet();
+      final Set<Integer> finishedRelNodes = new HashSet();
+      // Keep a stack of both the upcoming nodes and the nodes that have been visited.
+      // Here True indicates a second visit to the node, whereas False means this is our
+      // first visit.
+      Stack<Pair<RelNode, Boolean>> nodeStack = new Stack<>();
+      nodeStack.add(new Pair(p, false));
+      while (!nodeStack.isEmpty()) {
+        Pair<RelNode, Boolean> pair = nodeStack.pop();
+        RelNode node = pair.left;
+        Boolean secondVisit = pair.right;
+        if (finishedRelNodes.contains(node.getId())) {
+          // Do nothing if we already finished this node.
+        } else if (secondVisit) {
+          // Mark this node as finished. It does not contain a cycle.
+          finishedRelNodes.add(node.getId());
+          startedRelNodes.remove(node.getId());
+        } else if (startedRelNodes.contains(node.getId())) {
+          // We found a cycle.
+          return true;
+        } else {
+          startedRelNodes.add(node.getId());
+          // Add the node so the LIFO order can be used to detect cycles.
+          nodeStack.add(new Pair(node, true));
+          if (node instanceof RelSubset) {
+            RelSubset s = (RelSubset) node;
+            RelNode best = s.getBest();
+            if (best != null && !finishedRelNodes.contains(best.getId())) {
+              nodeStack.add(new Pair(best, false));
+            }
+          } else {
+            for (RelNode input : node.getInputs()) {
+              if (!finishedRelNodes.contains(input.getId())) {
+                nodeStack.add(new Pair(input, false));
+              }
+            }
+          }
         }
-      } else {
-        super.visit(node, ordinal, parent);
       }
-      startedRelNodes.remove(node);
-      finishedRelNodes.add(node);
-    }
-
-    public boolean foundCycle() {
-      return containsCycle;
-    }
-
-    public @Nullable RelNode go(RelNode p) {
-      containsCycle = false;
-      @Nullable RelNode result = super.go(p);
-      startedRelNodes.clear();
-      finishedRelNodes.clear();
-      return result;
+      return false;
     }
   }
 }

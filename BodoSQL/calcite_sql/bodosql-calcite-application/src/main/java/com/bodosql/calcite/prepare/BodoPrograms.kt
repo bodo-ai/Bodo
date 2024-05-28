@@ -16,7 +16,6 @@ import com.bodosql.calcite.prepare.BodoRules.SNOWFLAKE_PROJECT_CONVERTER_LOCK_RU
 import com.bodosql.calcite.prepare.BodoRules.SUB_QUERY_REMOVAL_RULES
 import com.bodosql.calcite.rel.logical.BodoLogicalAggregate
 import com.bodosql.calcite.rel.logical.BodoLogicalFilter
-import com.bodosql.calcite.rel.logical.BodoLogicalFlatten
 import com.bodosql.calcite.rel.logical.BodoLogicalJoin
 import com.bodosql.calcite.rel.logical.BodoLogicalProject
 import com.bodosql.calcite.rel.logical.BodoLogicalSort
@@ -24,7 +23,6 @@ import com.bodosql.calcite.rel.logical.BodoLogicalTableFunctionScan
 import com.bodosql.calcite.rel.logical.BodoLogicalUnion
 import com.bodosql.calcite.rel.metadata.BodoMetadataRestrictionScan
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataProvider
-import com.bodosql.calcite.sql.BodoSqlUtil
 import com.bodosql.calcite.sql2rel.BodoRelDecorrelator
 import com.bodosql.calcite.traits.BatchingPropertyPass
 import com.google.common.collect.Iterables
@@ -53,16 +51,13 @@ import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexExecutorImpl
-import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexShuttle
-import org.apache.calcite.sql.SnowflakeSqlTableFunction
 import org.apache.calcite.sql.SqlExplainFormat
 import org.apache.calcite.sql.SqlExplainLevel
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.tools.Program
 import org.apache.calcite.tools.Programs
-import org.apache.calcite.tools.RelBuilder
 
 /**
  * Holds a collection of programs for Calcite to produce plans.
@@ -268,8 +263,6 @@ object BodoPrograms {
     private class PreprocessorProgram : Program by Programs.sequence(
         // Remove subqueries and correlation nodes from the query.
         SubQueryRemoveProgram(),
-        // Convert specialized table functions to their appropriate RelNodes
-        ConvertTableFunctionProgram(),
         DecorrelateProgram(),
         RewriteProgram(),
         FlattenCaseExpressionsProgram,
@@ -537,91 +530,6 @@ object BodoPrograms {
                 val node = visitChildren(other)
                 return mapDigestToRel.computeIfAbsent(node.digest) { node }
             }
-        }
-    }
-
-    /**
-     * Convert any table functions that may have specialized node representations
-     * into their appropriate nodes.
-     */
-    class ConvertTableFunctionProgram : Program {
-        private class Visitor(private var builder: RelBuilder) : RelShuttleImpl() {
-            override fun visit(other: RelNode): RelNode {
-                // Note: LogicalTableFunctionScan doesn't have .accept() implemented, so we have to match on other.
-                if (other is LogicalTableFunctionScan) {
-                    if (other.call is RexCall) {
-                        // Verify we have a Snowflake table call that is one of the supported functions:
-                        // - A "flatten" node
-                        // - A call to the generator function
-                        val rexCall = other.call as RexCall
-                        if (rexCall.op is SnowflakeSqlTableFunction) {
-                            if (rexCall.op.type == SnowflakeSqlTableFunction.FunctionType.FLATTEN) {
-                                // Flatten has no inputs, so first create a dummy LogicalValues.
-                                val fieldName = "DUMMY"
-                                val expr = true
-                                builder.values(arrayOf(fieldName), expr)
-                                // Check the RexCall arguments. We will let any operands with literals be unchanged,
-                                // but all other values should be replaced.
-                                var projectIdx = 0
-                                val projectOperands = ArrayList<RexNode>()
-                                val replaceMap = HashMap<Int, Int>()
-                                for ((idx, value) in rexCall.operands.withIndex()) {
-                                    // Skip defaults
-                                    if (BodoSqlUtil.isDefaultCall(value)) {
-                                        continue
-                                    }
-                                    if (value !is RexLiteral) {
-                                        replaceMap[idx] = projectIdx
-                                        projectOperands.add(value)
-                                        projectIdx += 1
-                                    }
-                                }
-                                // Add a projection if there are any non-literal nodes
-                                if (projectOperands.isNotEmpty()) {
-                                    builder.project(projectOperands)
-                                }
-                                val newOperands = ArrayList<RexNode>()
-                                for ((idx, value) in rexCall.operands.withIndex()) {
-                                    if (BodoSqlUtil.isDefaultCall(value)) {
-                                        // Replace default values.
-                                        newOperands.add(rexCall.op.getDefaultValue(builder.rexBuilder, idx))
-                                    } else if (replaceMap.contains(idx)) {
-                                        newOperands.add(builder.field(replaceMap[idx]!!))
-                                    } else {
-                                        newOperands.add(value)
-                                    }
-                                }
-                                val updatedCall = builder.rexBuilder.makeCall(rexCall.op, newOperands) as RexCall
-                                return BodoLogicalFlatten.create(builder.build(), updatedCall, other.getRowType())
-                            } else if (rexCall.op.type == SnowflakeSqlTableFunction.FunctionType.GENERATOR) {
-                                val newOperands = ArrayList<RexNode>()
-                                rexCall.operands.mapIndexed {
-                                        idx, value ->
-                                    if (BodoSqlUtil.isDefaultCall(value)) {
-                                        newOperands.add(rexCall.op.getDefaultValue(builder.rexBuilder, idx))
-                                    } else {
-                                        newOperands.add(value)
-                                    }
-                                }
-                                val newCall = builder.rexBuilder.makeCall(rexCall.op, newOperands) as RexCall
-                                return BodoLogicalTableFunctionScan.create(other.cluster, other.inputs, newCall, other.rowType)
-                            }
-                        }
-                    }
-                }
-                return super.visit(other)
-            }
-        }
-
-        override fun run(
-            planner: RelOptPlanner,
-            rel: RelNode,
-            requiredOutputTraits: RelTraitSet,
-            materializations: MutableList<RelOptMaterialization>,
-            lattices: MutableList<RelOptLattice>,
-        ): RelNode {
-            val builder = com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
-            return rel.accept(Visitor(builder))
         }
     }
 

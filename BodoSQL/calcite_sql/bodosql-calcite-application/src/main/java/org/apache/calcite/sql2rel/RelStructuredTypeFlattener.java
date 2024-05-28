@@ -74,6 +74,7 @@ import org.apache.calcite.runtime.PairList;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.BodoSqlTypeUtil;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.tools.RelBuilder;
@@ -953,7 +954,7 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
           return new RexInputRef(newField.getKey(), removeDistinct(newField.getValue()));
         } else if (refExp instanceof RexCorrelVariable) {
           RelDataType refType =
-              SqlTypeUtil.flattenRecordType(
+              BodoSqlTypeUtil.flattenRecordType(
                   rexBuilder.getTypeFactory(), refExp.getType(), null);
           refExp = rexBuilder.makeCorrel(refType, ((RexCorrelVariable) refExp).id);
           return rexBuilder.makeFieldAccess(refExp, iInput);

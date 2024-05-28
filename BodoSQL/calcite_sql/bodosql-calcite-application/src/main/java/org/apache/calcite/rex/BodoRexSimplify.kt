@@ -27,9 +27,12 @@ import org.apache.calcite.sql.SqlOperator
 import org.apache.calcite.sql.`fun`.SqlLibraryOperators
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.BasicSqlType
+import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.BodoTZInfo
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.type.SqlTypeUtil
+import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
 import org.apache.calcite.util.TimeString
@@ -1163,12 +1166,34 @@ class BodoRexSimplify(
     }
 
     /**
+     * Determines if a cast is of the form
+     * TYPE::VARIANT::TYPE. If so, we can simplify
+     * the cast to just TYPE the original input.
+     * @param operand The argument being cast.
+     * @param targetType The target type of the cast.
+     * @return True if the cast is removable, false otherwise.
+     */
+    private fun isRedundantVariantCast(operand: RexNode, targetType: RelDataType): Boolean {
+        val isVariantCast = operand.type is VariantSqlType && operand.kind == SqlKind.CAST
+        return if (isVariantCast) {
+            val variantCastOperand = (operand as RexCall).operands[0]
+            // Anything that would have been a valid equivalent literal can safely remove the variant, even
+            // if the final type will require casting.
+            BodoSqlTypeUtil.literalEqualSansNullability(variantCastOperand.type, targetType)
+        } else {
+            false
+        }
+    }
+
+    /**
      * Simplify Bodo call expressions that don't depend on handling unknown
      * values in custom way.
      */
     private fun simplifyBodoCast(call: RexCall, operand: RexNode, targetType: RelDataType, isTryCast: Boolean, unknownAs: RexUnknownAs): RexNode {
         return if (call.type.sqlTypeName == SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE) {
             simplifyTimestampLtzCast(call, operand, isTryCast)
+        } else if (isRedundantVariantCast(operand, targetType)) {
+            (operand as RexCall).operands[0]
         } else {
             when (targetType.sqlTypeName) {
                 SqlTypeName.INTEGER, SqlTypeName.SMALLINT, SqlTypeName.TINYINT, SqlTypeName.BIGINT -> simplifyIntegerCast(

@@ -1,6 +1,7 @@
 package com.bodosql.calcite.sql2rel;
 
 import com.bodosql.calcite.rel.core.RowSample;
+import com.bodosql.calcite.rel.logical.BodoLogicalFlatten;
 import com.bodosql.calcite.rel.logical.BodoLogicalTableCreate;
 import java.util.List;
 import org.apache.calcite.plan.RelOptTable;
@@ -19,6 +20,10 @@ public class BodoRelStructuredTypeFlattener extends RelStructuredTypeFlattener {
   }
 
   public void rewriteRel(RowSample rel) {
+    rewriteGeneric(rel);
+  }
+
+  public void rewriteRel(BodoLogicalFlatten rel) {
     rewriteGeneric(rel);
   }
 
