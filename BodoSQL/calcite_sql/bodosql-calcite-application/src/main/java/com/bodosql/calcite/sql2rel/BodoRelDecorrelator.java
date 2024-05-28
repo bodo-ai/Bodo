@@ -229,7 +229,10 @@ public class BodoRelDecorrelator extends RelDecorrelator {
     NoCorrelationRelVisitor relVisitor = new NoCorrelationRelVisitor();
     relVisitor.go(rel);
     if (relVisitor.foundCorrelatedVariable) {
-      throw new RuntimeException("Found correlation in plan:\n" + RelOptUtil.toString(rel));
+      throw new RuntimeException(
+          "Found correlation in plan:\n"
+              + RelOptUtil.dumpPlan(
+                  "", rel, SqlExplainFormat.TEXT, SqlExplainLevel.NON_COST_ATTRIBUTES));
     }
   }
 
@@ -584,9 +587,12 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       List<RexNode> projectTerms = new ArrayList();
       List<Integer> repeatCols = new ArrayList();
 
+      // Push the left input for any field generation
+      d.relBuilder.push(left);
+
       // Add all elements from the lhs to the new projection
       for (int i = 0; i < left.getRowType().getFieldCount(); i++) {
-        projectTerms.add(new RexInputRef(i, left.getRowType().getFieldList().get(i).getType()));
+        projectTerms.add(d.relBuilder.field(i));
         repeatCols.add(i);
       }
 
@@ -610,7 +616,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
       }
 
       // Build the new projection with the combined terms
-      RelNode newProject = d.relBuilder.push(left).project(projectTerms).build();
+      RelNode newProject = d.relBuilder.project(projectTerms).build();
 
       // Construct the new call to the flatten operation
       RexCall newFlattenCall = oldFlattenCall.clone(oldFlattenCall.type, flattenOperands);

@@ -105,6 +105,7 @@ public class BodoReturnTypes {
                 } else {
                     throw new CalciteContextException("", BODO_SQL_RESOURCE.requiresArrayOrJson("FLATTEN", "INPUT").ex());
                 }
+                // TODO: The value should but nullable if OUTER=TRUE and otherwise not nullable
                 RelDataType type5 = inputType;
                 List<RelDataType> types = List.of(type0, type1, type2, type3, type4, type5);
                 List<String> names = List.of("SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS");
