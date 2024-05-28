@@ -1,9 +1,13 @@
 package org.apache.calcite.sql.type;
 
 import com.bodosql.calcite.sql.validate.BodoCoercionUtil;
+import com.google.errorprone.annotations.Var;
+import java.util.ArrayList;
+import java.util.Map;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelRecordType;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.sql.SnowflakeUserDefinedBaseFunction;
@@ -184,5 +188,114 @@ public class BodoSqlTypeUtil {
       }
     }
     return SqlTypeUtil.canCastFrom(toType, fromType, coerce);
+  }
+
+  /**
+   * Reimplementation of SqlTypeUtil.flattenRecordType with a fix for nullability
+   * in the private method flattenFields.
+   *
+   * Flattens a record type by recursively expanding any fields which are
+   * themselves record types. For each record type, a representative null
+   * value field is also prepended (with state NULL for a null value and FALSE
+   * for non-null), and all component types are asserted to be nullable, since
+   * SQL doesn't allow NOT NULL to be specified on attributes.
+   *
+   * @param typeFactory   factory which should produced flattened type
+   * @param recordType    type with possible nesting
+   * @param flatteningMap if non-null, receives map from unflattened ordinal
+   *                      to flattened ordinal (must have length at least
+   *                      recordType.getFieldList().size())
+   * @return flattened equivalent
+   */
+  public static RelDataType flattenRecordType(
+          RelDataTypeFactory typeFactory,
+          RelDataType recordType,
+          int @Nullable [] flatteningMap) {
+    if (!recordType.isStruct()) {
+      return recordType;
+    }
+    List<RelDataTypeField> fieldList = new ArrayList<>();
+    boolean nested =
+            flattenFields(
+                    typeFactory,
+                    recordType,
+                    fieldList,
+                    flatteningMap);
+    if (!nested) {
+      return recordType;
+    }
+    List<RelDataType> types = new ArrayList<>();
+    List<String> fieldNames = new ArrayList<>();
+    Map<String, Long> fieldCnt = fieldList.stream()
+            .map(RelDataTypeField::getName)
+            .collect(Collectors.groupingBy(java.util.function.Function.identity(), Collectors.counting()));
+    int i = -1;
+    for (RelDataTypeField field : fieldList) {
+      ++i;
+      types.add(field.getType());
+      String oriFieldName = field.getName();
+      // Patch up the field name with index if there are duplicates.
+      // There is still possibility that the patched name conflicts with existing ones,
+      // but that should be rare case.
+      Long fieldCount = fieldCnt.get(oriFieldName);
+      String fieldName = fieldCount != null && fieldCount > 1
+              ? oriFieldName + "_" + i
+              : oriFieldName;
+      fieldNames.add(fieldName);
+    }
+    return typeFactory.createStructType(types, fieldNames);
+  }
+
+  private static boolean flattenFields(
+          RelDataTypeFactory typeFactory,
+          RelDataType type,
+          List<RelDataTypeField> list,
+          int @Nullable [] flatteningMap) {
+    boolean nested = false;
+    for (RelDataTypeField field : type.getFieldList()) {
+      if (flatteningMap != null) {
+        flatteningMap[field.getIndex()] = list.size();
+      }
+      if (field.getType().isStruct()) {
+        nested = true;
+        flattenFields(
+                typeFactory,
+                field.getType(),
+                list,
+                null);
+      } else if (field.getType().getComponentType() != null) {
+        nested = true;
+
+        // TODO jvs 14-Feb-2005:  generalize to any kind of
+        // collection type
+        RelDataType flattenedCollectionType =
+                // Bodo Change: Fix nullability
+                typeFactory.createTypeWithNullability(typeFactory.createMultisetType(
+                        flattenRecordType(
+                                typeFactory,
+                                getComponentTypeOrThrow(field.getType()),
+                                null),
+                        -1), field.getType().isNullable());
+        if (field.getType() instanceof ArraySqlType) {
+          // Bodo Change: Fix nullability
+          flattenedCollectionType =
+                  typeFactory.createTypeWithNullability(typeFactory.createArrayType(
+                          flattenRecordType(
+                                  typeFactory,
+                                  getComponentTypeOrThrow(field.getType()),
+                                  null),
+                          -1), field.getType().isNullable());
+        }
+        field =
+                new RelDataTypeFieldImpl(
+                        field.getName(),
+                        field.getIndex(),
+                        flattenedCollectionType);
+        list.add(field);
+      } else {
+        list.add(field);
+      }
+    }
+    return nested;
   }
 }

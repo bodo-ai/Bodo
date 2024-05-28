@@ -928,9 +928,7 @@ public class VolcanoPlanner extends AbstractRelOptPlanner {
                 boolean existed = subset.set.rels.remove(rel);
                 assert existed : "rel was not known to its set";
                 // Bodo Change: Check if RelNode contains a cycle. If so skip it.
-                BodoRelOptUtil.CycleFinder finder = new BodoRelOptUtil.CycleFinder();
-                finder.go(equivRel);
-                boolean hasCycle = finder.foundCycle();
+                boolean hasCycle = BodoRelOptUtil.CycleFinder.determineCycle(equivRel);
                 final RelSubset equivSubset = getSubsetNonNull(equivRel);
                 for (RelSubset s : subset.set.subsets) {
                     if (s.best == rel) {
@@ -1007,9 +1005,7 @@ public class VolcanoPlanner extends AbstractRelOptPlanner {
                 subset.bestCost = cost;
                 subset.best = relNode;
                 // Bodo Change: Check if RelNode now contains a cycle. If so revert it.
-                BodoRelOptUtil.CycleFinder finder = new BodoRelOptUtil.CycleFinder();
-                finder.go(relNode);
-                boolean hasCycle = finder.foundCycle();
+                boolean hasCycle = BodoRelOptUtil.CycleFinder.determineCycle(relNode);
                 if (hasCycle) {
                     subset.bestCost = oldCost;
                     subset.best = oldRel;
