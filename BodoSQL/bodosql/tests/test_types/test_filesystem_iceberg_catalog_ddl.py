@@ -725,3 +725,56 @@ def test_show_tables_compiles_jit(iceberg_filesystem_catalog, memory_leak_check)
     bc.execute_ddl(query)
     query = f"SHOW TERSE TABLES IN '{schema_name}'"
     bc.validate_query_compiles(query)
+
+
+def test_show_no_terse_error(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """Tests that SHOW commands without the TERSE option
+    raises an appropriate error."""
+
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    # The command will be caught before even connecting to the catalog
+    # and thus we don't need to setup any tables or schemas
+
+    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
+        bodo_output = bc.execute_ddl(f"SHOW TABLES in junkSchema")
+    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
+        bodo_output = bc.execute_ddl(f"SHOW VIEWS in junkSchema")
+    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
+        bodo_output = bc.execute_ddl(f"SHOW OBJECTS in junkSchema")
+    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
+        bodo_output = bc.execute_ddl(f"SHOW SCHEMAS in junkSchema")
+
+
+def test_show_views_error(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog appropriately raises an error when
+    attempting to show views.
+    """
+    try:
+        spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+        db_schema = "iceberg_db"
+        # Create 2 tables
+        table_name1 = create_simple_ddl_table(spark)
+        existing_tables = spark.sql(
+            f"show tables in hadoop_prod.{db_schema} like '{table_name1}'"
+        ).toPandas()
+        assert len(existing_tables) == 1, "Unable to find testing table"
+
+        query = f'SHOW TERSE VIEWS IN "{db_schema}"'
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        with pytest.raises(
+            BodoError, match="SHOW VIEWS is unimplemented for the current catalog"
+        ):
+            bodo_output = bc.execute_ddl(query)
+    finally:
+        # Cleanup
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name1}"
+            spark.sql(query)
+
+        cleanup()

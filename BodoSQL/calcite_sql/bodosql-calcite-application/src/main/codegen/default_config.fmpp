@@ -432,6 +432,12 @@ parser: {
   dropStatementParserMethods: [
   ]
 
+  # List of methods for parsing extensions to "DROP" calls.
+  # Each must accept arguments "(Span s, boolean ifTerse)".
+  # Example: "SqlShowTables".
+  showStatementParserMethods : [
+  ]
+
   # List of methods for parsing extensions to "TRUNCATE" calls.
   # Each must accept arguments "(SqlParserPos pos)".
   # Example: "SqlTruncate".

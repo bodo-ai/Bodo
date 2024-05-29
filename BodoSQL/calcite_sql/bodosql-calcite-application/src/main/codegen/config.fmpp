@@ -46,6 +46,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableAs"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableLike"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableClone"
+      "com.bodosql.calcite.sql.ddl.SqlShow"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas"
       "com.bodosql.calcite.sql.ddl.SqlShowViews"
@@ -528,12 +529,18 @@ data: {
         "SqlAlterView",
     ]
 
+    # List of methods for parsing extensions to "SHOW" calls.
+    showStatementParserMethods : [
+        "SqlShowObjects"
+        "SqlShowSchemas"
+        "SqlShowViews"
+        "SqlShowTables"
+    ]
+
+    # List of methods which are not extensions (don't have a corresponding preexisting parser method).
     statementParserMethods: [
+        # Misc commands
         "SqlCopyInto()"
-        "SqlShowObjects()"
-        "SqlShowSchemas()"
-        "SqlShowViews()"
-        "SqlShowTables()"
     ]
 
     # Binary operators tokens.

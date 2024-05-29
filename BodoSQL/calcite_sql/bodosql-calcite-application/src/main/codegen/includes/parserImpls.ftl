@@ -1439,82 +1439,100 @@ SqlRollback SqlRollback() :
     }
 }
 
+// Responsible for parsing all SHOW statements.
+// Will attempt to parse a TERSE option; for statements that do not support this
+// it will just be set to false.
+
+SqlShow SqlShow() :
+{
+    final Span s;
+    final SqlShow showNode;
+    boolean ifTerse;
+}
+{
+    <SHOW>
+    ifTerse = TerseOpt()
+    { s = span(); }
+    (
+        <#list (parser.showStatementParserMethods!default.parser.showStatementParserMethods) as method>
+                showNode = ${method}(s, ifTerse)
+            <#sep>
+                |
+            </#sep>
+        </#list>
+    )
+    {
+        return showNode;
+    }
+}
+
 /**
  * Parses a SHOW OBJECTS statement.
  */
-SqlSnowflakeShowObjects SqlShowObjects() :
+SqlSnowflakeShowObjects SqlShowObjects(Span s, boolean ifTerse) :
 {
-   final Span s;
    final SqlIdentifier schemaName;
 }
 {
-    <SHOW> <TERSE> { s = span(); }
-    (<OBJECTS>)
-    [
-        <IN>
-        schemaName = CompoundIdentifier()
-        {
-            return new SqlSnowflakeShowObjects(s.end(schemaName), schemaName);
-        }
-    ]
+    <OBJECTS> <IN>
+    schemaName = CompoundIdentifier()
+    {
+        return new SqlSnowflakeShowObjects(s.end(schemaName), schemaName, ifTerse);
+    }
 }
 /**
  * Parses a SHOW SCHEMAS statement.
  */
-SqlSnowflakeShowSchemas SqlShowSchemas() :
+SqlSnowflakeShowSchemas SqlShowSchemas(Span s, boolean ifTerse) :
 {
-   final Span s;
    final SqlIdentifier dbName;
 }
 {
-    <SHOW> <TERSE> { s = span(); }
-    (<SCHEMAS>)
-    [
-        <IN>
-        dbName = CompoundIdentifier()
-        {
-            return new SqlSnowflakeShowSchemas(s.end(dbName), dbName);
-        }
-    ]
+    <SCHEMAS> <IN>
+    dbName = CompoundIdentifier()
+    {
+        return new SqlSnowflakeShowSchemas(s.end(dbName), dbName, ifTerse);
+    }
 }
 
 /**
  * Parses a SHOW TABLES statement.
  */
-SqlShowTables SqlShowTables() :
+SqlShowTables SqlShowTables(Span s, boolean ifTerse) :
 {
-   final Span s;
-   final SqlIdentifier dbName;
+   final SqlIdentifier schemaName;
 }
 {
-    <SHOW> <TERSE> { s = span(); }
-    (<TABLES>)
-    [
-        <IN>
-        dbName = CompoundIdentifier()
-        {
-            return new SqlShowTables(s.end(dbName), dbName);
-        }
-    ]
+    <TABLES> <IN>
+    schemaName = CompoundIdentifier()
+    {
+        return new SqlShowTables(s.end(schemaName), schemaName, ifTerse);
+    }
 }
 
 /**
  * Parses a SHOW VIEWS statement.
  */
-SqlShowViews SqlShowViews() :
+SqlShowViews SqlShowViews(Span s, boolean ifTerse) :
 {
-   final Span s;
    final SqlIdentifier schemaName;
 }
 {
-    <SHOW> <TERSE> { s = span(); }
-    (<VIEWS>)
-    [
-        <IN>
-        schemaName = CompoundIdentifier()
-        {
-            return new SqlShowViews(s.end(schemaName), schemaName);
-        }
-    ]
+    <VIEWS> <IN>
+    schemaName = CompoundIdentifier()
+    {
+        return new SqlShowViews(s.end(schemaName), schemaName, ifTerse);
+    }
 }
 
+/**
+ * Helper to parse a TERSE keyword (for SHOW statements).
+ */
+boolean TerseOpt() :
+{
+}
+{
+    <TERSE> { return true; }
+    |
+    { return false; }
+}

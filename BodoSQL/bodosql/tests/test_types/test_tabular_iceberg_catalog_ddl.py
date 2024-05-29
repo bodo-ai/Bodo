@@ -695,3 +695,15 @@ def test_show_views_terse(tabular_catalog, tabular_connection, memory_leak_check
     )
     bodo_output = bc.execute_ddl(query)
     assert_equal_par(bodo_output, py_output)
+
+
+def test_show_no_terse_error(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that SHOW commands without the TERSE option
+    raises an appropriate error."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+
+    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
+        bodo_output = bc.execute_ddl("SHOW TABLES in BODOSQL_DDL_TESTS")
+
+    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
+        bodo_output = bc.execute_ddl("SHOW VIEWS in BODOSQL_DDL_TESTS")
