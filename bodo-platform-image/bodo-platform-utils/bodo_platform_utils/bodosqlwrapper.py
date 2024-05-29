@@ -245,6 +245,7 @@ def create_tabular_catalog(catalog, args):
     client_id, client_secret = credential.split(":")
 
     # Gets a user access token
+    iceberg_rest_url = iceberg_rest_url.removesuffix("/")
     auth_url = iceberg_rest_url + AUTH_URL_SUFFIX
     oauth_response = requests.post(
         auth_url,
@@ -259,6 +260,7 @@ def create_tabular_catalog(catalog, args):
 
     return bodosql.TabularCatalog(
         warehouse=warehouse,
+        rest_uri=iceberg_rest_url,
         token=user_session_token,
     )
 

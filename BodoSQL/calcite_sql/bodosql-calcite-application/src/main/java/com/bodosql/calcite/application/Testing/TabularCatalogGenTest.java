@@ -26,7 +26,7 @@ public class TabularCatalogGenTest extends GenTestFixture {
     Map envVars = System.getenv();
     String credential = (String) envVars.get("TABULAR_CREDENTIAL");
     String warehouse = "Bodo-Test-Iceberg-Warehouse";
-    return new TabularCatalog(warehouse, null, credential);
+    return new TabularCatalog(warehouse, "https://api.tabular.io/ws", null, credential);
   }
 
   @NotNull

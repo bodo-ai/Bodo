@@ -4,8 +4,8 @@ import com.bodosql.calcite.ir.Expr
 import com.google.common.collect.ImmutableList
 import org.apache.iceberg.CatalogProperties
 
-class TabularCatalog(warehouse: String, token: String? = null, credential: String? = null) : IcebergRESTCatalog(
-    "https://api.tabular.io/ws",
+class TabularCatalog(warehouse: String, restUri: String, token: String? = null, credential: String? = null) : IcebergRESTCatalog(
+    restUri,
     warehouse,
     token,
     credential,

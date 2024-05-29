@@ -27,12 +27,13 @@ from bodosql.imported_java_classes import TabularCatalogClass
 
 
 def _create_java_tabular_catalog(
-    warehouse: str, token: str | None, credential: str | None
+    warehouse: str, rest_uri: str, token: str | None, credential: str | None
 ):
     """
     Create a Java TabularCatalog object.
     Args:
         warehouse (str): The warehouse to connect to.
+        rest_uri (str): The URI of the REST server.
         token (str): The token to use for authentication.
         credential (str): The credential to use for authentication.
     Returns:
@@ -40,6 +41,7 @@ def _create_java_tabular_catalog(
     """
     return TabularCatalogClass(
         warehouse,
+        rest_uri,
         token,
         credential,
     )
@@ -54,6 +56,7 @@ class TabularCatalog(DatabaseCatalog):
     def __init__(
         self,
         warehouse: str,
+        rest_uri: str = "https://api.tabular.io/ws",
         token: str | None = None,
         credential: str | None = None,
     ):
@@ -62,10 +65,12 @@ class TabularCatalog(DatabaseCatalog):
         Either a token or a credential must be provided.
         Args:
             warehouse (str): The warehouse to connect to.
+            rest_uri (str): The URI of the REST server.
             token (str): The token to use for authentication.
             credential (str): The credential to use for authentication.
         """
         self.warehouse = warehouse
+        self.rest_uri = rest_uri
         self.token = token
         self.credential = credential
         if self.token is None:
@@ -76,7 +81,9 @@ class TabularCatalog(DatabaseCatalog):
         os.environ["__BODOSQL_TABULAR_TOKEN"] = self.token
 
     def get_java_object(self):
-        return _create_java_tabular_catalog(self.warehouse, self.token, self.credential)
+        return _create_java_tabular_catalog(
+            self.warehouse, self.rest_uri, self.token, self.credential
+        )
 
     @run_rank0
     def get_java_token(self):
@@ -92,7 +99,7 @@ class TabularCatalog(DatabaseCatalog):
 
 
 @overload(TabularCatalog, no_unliteral=True)
-def overload_snowflake_catalog_constructor(
+def overload_tabular_catalog_constructor(
     warehouse: str, token: str | None = None, credential: str | None = None
 ):
     raise_bodo_error("TabularCatalog: Cannot be created in JIT mode.")
@@ -100,35 +107,46 @@ def overload_snowflake_catalog_constructor(
 
 class TabularCatalogType(DatabaseCatalogType):
     def __init__(
-        self, warehouse: str, token: str | None = None, credential: str | None = None
+        self,
+        warehouse: str,
+        rest_uri: str,
+        token: str | None = None,
+        credential: str | None = None,
     ):
         """
         Create a tabular catalog type from a connection string to a tabular catalog.
         Args:
             warehouse (str): The warehouse to connect to.
+            rest_uri (str): The URI of the REST server.
             token (str): The token to use for authentication.
             credential (str): The credential to use for authentication.
         """
         self.warehouse = warehouse
+        self.rest_uri = rest_uri
         self.token = token
         self.credential = credential
 
         super(TabularCatalogType, self).__init__(
-            name=f"TabularCatalogType({self.warehouse=},{'token' if self.token is not None else 'credential'}=*****)",
+            name=f"TabularCatalogType({self.warehouse=},{self.rest_uri},{'token' if self.token is not None else 'credential'}=*****)",
         )
 
     def get_java_object(self):
-        return _create_java_tabular_catalog(self.warehouse, self.token, self.credential)
+        return _create_java_tabular_catalog(
+            self.warehouse, self.rest_uri, self.token, self.credential
+        )
 
     @property
     def key(self):
-        return self.warehouse
+        return self.warehouse, self.rest_uri
 
 
 @typeof_impl.register(TabularCatalog)
 def typeof_tabular_catalog(val, c):
     return TabularCatalogType(
-        warehouse=val.warehouse, token=val.token, credential=val.credential
+        warehouse=val.warehouse,
+        rest_uri=val.rest_uri,
+        token=val.token,
+        credential=val.credential,
     )
 
 
@@ -144,6 +162,11 @@ def box_tabular_catalog(typ, val, c):
     warehouse_obj = c.pyapi.from_native_value(
         types.unicode_type,
         c.context.get_constant_generic(c.builder, types.unicode_type, typ.warehouse),
+        c.env_manager,
+    )
+    rest_uri_obj = c.pyapi.from_native_value(
+        types.unicode_type,
+        c.context.get_constant_generic(c.builder, types.unicode_type, typ.rest_uri),
         c.env_manager,
     )
     if typ.token is not None:
@@ -171,11 +194,13 @@ def box_tabular_catalog(typ, val, c):
         tabular_catalog_obj,
         (
             warehouse_obj,
+            rest_uri_obj,
             token_obj,
             credential_obj,
         ),
     )
     c.pyapi.decref(warehouse_obj)
+    c.pyapi.decref(rest_uri_obj)
     c.pyapi.decref(token_obj)
     c.pyapi.decref(credential_obj)
     c.pyapi.decref(tabular_catalog_obj)
