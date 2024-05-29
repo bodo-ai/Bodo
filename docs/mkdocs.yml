@@ -152,6 +152,7 @@ nav:
           - Managing Packages Manually: guides/using_bodo_platform/packages.md
           - Running Shell Commands on a Cluster: guides/using_bodo_platform/shell.md
           - Connecting to a Cluster: guides/using_bodo_platform/connect.md
+          - Configuring Customer Managed VPC: guides/using_bodo_platform/customer_managed_vpc.md
           - Troubleshooting: guides/using_bodo_platform/troubleshooting.md
       - Understanding Parallelism with Bodo:
           - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
