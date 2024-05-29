@@ -1,57 +1,44 @@
-package com.bodosql.calcite.application.Testing;
+package com.bodosql.calcite.application.testing;
 
-import com.bodosql.calcite.application.PandasCodeSqlPlanPair;
-import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.application.write.WriteTarget;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.catalog.FileSystemCatalog;
+import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.LocalSchema;
-import com.bodosql.calcite.traits.BatchingProperty;
 import java.util.Map;
+import org.jetbrains.annotations.NotNull;
 
 /** Class for locally testing codegen using a FileSystem Catalog */
-public class FileSystemCatalogGenTest {
+public class FileSystemCatalogGenTest extends GenTestFixture {
+  @Override
+  public boolean isIceberg() {
+    return true;
+  }
+
+  @Override
+  public boolean supportsTimestampTZ() {
+    return false;
+  }
+
+  @NotNull
+  @Override
+  public BodoSQLCatalog getCatalog() {
+    Map envVars = System.getenv();
+    return new FileSystemCatalog(
+        (String) envVars.get("ROOT_PATH"),
+        WriteTarget.WriteTargetEnum.ICEBERG,
+        (String) envVars.get("DEFAULT_SCHEMA"));
+  }
+
+  @NotNull
+  @Override
+  public BodoSqlSchema getSchema() {
+    return new LocalSchema("__BODOLOCAL__");
+  }
+
   public static void main(String[] args) throws Exception {
     String sql = "Select * from SIMPLE_BOOL_BINARY_TABLE";
-    Map envVars = System.getenv();
-    BodoSQLCatalog catalog =
-        new FileSystemCatalog(
-            (String) envVars.get("ROOT_PATH"),
-            WriteTarget.WriteTargetEnum.ICEBERG,
-            (String) envVars.get("DEFAULT_SCHEMA"));
-    LocalSchema schema = new LocalSchema("__BODOLOCAL__");
-
-    RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(
-            catalog,
-            schema,
-            RelationalAlgebraGenerator.STREAMING_PLANNER,
-            0,
-            1,
-            BatchingProperty.defaultBatchSize,
-            true, // Always hide credentials
-            true, // Enable Iceberg for testing
-            false, // Do not enable TIMESTAMPTZ for Iceberg testing
-            true, // Enable Join Runtime filters for Testing
-            "SNOWFLAKE" // Maintain case sensitivity in the Snowflake style by default
-            );
-
-    // Controls if we are generating code or executing DDL. You can set this
-    // to false if you want to observe the actual execution of DDL statements.
     boolean generateCode = true;
-
-    System.out.println("SQL query:");
-    System.out.println(sql + "\n");
-
-    if (generateCode) {
-      PandasCodeSqlPlanPair pair = generator.getPandasAndPlanString(sql, true);
-      System.out.println("Optimized plan:");
-      System.out.println(pair.getSqlPlan() + "\n");
-      System.out.println("Generated code:");
-      System.out.println(pair.getPdCode() + "\n");
-    } else {
-      System.out.println("DDL OUTPUT:");
-      System.out.println(generator.executeDDL(sql));
-    }
+    new FileSystemCatalogGenTest().run(sql, generateCode);
   }
 }

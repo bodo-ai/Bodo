@@ -1,4 +1,4 @@
-package com.bodosql.calcite.application.Testing;
+package com.bodosql.calcite.application.testing;
 
 import com.bodosql.calcite.adapter.bodo.BodoUtilKt;
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
