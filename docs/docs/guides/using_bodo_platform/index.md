@@ -46,6 +46,11 @@ This guide explains how to interact with Bodo clusters outside of Jobs and Noteb
 
 ---
 
+## [Configuring Customer Managed VPC][customer_managed_vpc]
+This guide explains how to configure a Customer Managed VPC for the Bodo Cloud Platform.
+
+---
+
 ## [Troubleshooting][troubleshooting]
 
 This guide offers some troubleshooting tips for potential issues encountered while using the Bodo Cloud Platform.

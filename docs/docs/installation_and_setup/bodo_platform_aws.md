@@ -42,7 +42,7 @@ the required resources in it. This can be done through three ways:
 
 
 !!! tip Important
-You need the following set of permissions to successfully create the resources defined in the CloudFormation stack:
+    You need the following set of permissions to successfully create the resources defined in the CloudFormation stack:
 
     - [`AWSCloudFormationFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AWSCloudFormationFullAccess.html){target="blank"}
     - [`AmazonS3FullAccess`](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-iam-awsmanpol.html#security-iam-awsmanpol-amazons3fullaccess){target="blank"}
@@ -58,18 +58,19 @@ Once you have ensured that you have all permissions necessary to create the reso
    ![CloudFormation Form](../platform_onboarding_screenshots/cloudformation-form.png#center)
 
 2. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
-
     
+
     !!! note "Important"
-        All the values are pre-filled in the CloudFormation template. Please do not change any values.
+         All values are pre-filled in the CloudFormation template. Please do not modify.
 
 3. Click on "Create Stack" to create the stack. This will create the necessary resources in your AWS account.
 
    ![CloudFormation Page](../platform_onboarding_screenshots/cloudformation.png#center)
 
+!!! note
 
-    !!! note
-        The stack creation process may take a few minutes to complete. Please wait until the stack is created successfully.
+     The stack creation process may take a few minutes to complete. 
+     Please wait until the stack is created successfully.
 
 4. You can check the status of the stack from Bodo Platform as shown below. Once the stack is created successfully, Cloud Configuration will be created.
    ![CloudFormation Status](../platform_onboarding_screenshots/cloudformation-status.gif#center)
@@ -109,9 +110,11 @@ Before that, Open the Cloud Configuration Form and note down the External ID.
 
 ![Cloud-Configuration](../create_s3_and_dynamo_screenshots/cloud_config_id.png#center)
 
+    
 !!! note
-   The S3 bucket and the Dynamo DB table should be created in the same region. 
-   Supported regions are: 'us-east-1', 'us-east-2', 'us-west-1' and 'us-west-2'.
+
+     The S3 bucket and the Dynamo DB table should be created in the same region. 
+     Supported regions are: 'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2 and 'eu-west-1'.
 
 #### Setup S3 Bucket {#setup_s3_bucket}
 - **Setup S3 Bucket**
@@ -229,6 +232,7 @@ Platform.
 
 
 !!! info "Important" 
+
     We highly recommend that you ensure sufficient limits on
     your AWS account to launch resources. See
     [here][resources_created_in_aws_env] for details on the
