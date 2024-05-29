@@ -18,15 +18,6 @@ class TabularCatalog(warehouse: String, token: String? = null, credential: Strin
     }
 
     /**
-     * Return the db location to which this Catalog refers.
-     *
-     * @return The source DB location.
-     */
-    override fun getDBType(): String {
-        return "TABULAR"
-    }
-
-    /**
      * Generate a TabularConnectionType that can generate a
      * Python connection string used to read from or write to a Catalog in Bodo's SQL
      * Python code.

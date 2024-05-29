@@ -213,6 +213,10 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         return icebergConnection
     }
 
+    override fun getDBType(): String {
+        return "ICEBERG"
+    }
+
     companion object {
         // All Iceberg Timestamp columns have precision 6
         private const val ICEBERG_DATETIME_PRECISION = 6
