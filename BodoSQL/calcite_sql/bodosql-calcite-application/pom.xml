@@ -33,6 +33,7 @@
         <!-- Start Iceberg Dependencies. We may remove these as we cleanup the relationship with the Iceberg Connector. -->
         <iceberg.version>1.5.2</iceberg.version>
         <hadoop.version>3.3.3</hadoop.version>
+        <aws.version>2.20.26</aws.version>
         <!-- End Iceberg Dependencies -->
     </properties>
 
@@ -177,6 +178,33 @@
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>20231013</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-aws -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-aws</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-glue -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-glue</artifactId>
+            <version>1.12.726</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>glue</artifactId>
+            <version>${aws.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
+            <version>${aws.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.version}</version>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
