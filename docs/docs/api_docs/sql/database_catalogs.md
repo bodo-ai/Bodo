@@ -258,6 +258,8 @@ When constructing a query you must follow the BodoSQL rules for [identifier case
 
     - `warehouse`: Name of the Tabular Iceberg Warehouse to query.
 
+    - `rest_uri`: The REST URI for Tabular's REST Iceberg catalog, defaults to `https://api.tabular.io/ws`.
+
     - `credential`: The [Tabular credential](https://docs.tabular.io/en/creating-and-modifying-credentials.html) to use for authentication. This should be in the form of `clientid:clientsecret`.
 
     - `token`: A [temporary OAuth2 token](https://docs.tabular.io/en/data-access-flow-in-tabular.html) to use for authentication. This token should be a valid token for the Tabular Warehouse.
