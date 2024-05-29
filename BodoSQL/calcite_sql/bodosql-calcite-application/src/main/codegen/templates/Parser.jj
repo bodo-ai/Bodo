@@ -1218,6 +1218,10 @@ SqlNode SqlStmt() :
     |
         stmt = SqlAlter()
     |
+<#if (parser.showStatementParserMethods!default.parser.showStatementParserMethods)?size != 0>
+        stmt = SqlShow()
+    |
+</#if>
 <#if (parser.createStatementParserMethods!default.parser.createStatementParserMethods)?size != 0>
         stmt = SqlCreate()
     |

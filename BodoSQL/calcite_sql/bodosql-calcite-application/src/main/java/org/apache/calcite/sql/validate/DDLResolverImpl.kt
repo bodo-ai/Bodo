@@ -322,6 +322,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
     private fun executeShowObjects(node: SqlSnowflakeShowObjects): DDLExecutionResult {
+        if (!node.isTerse){
+            throw RuntimeException("SHOW OBJECTS: Only SHOW TERSE is currently supported.")
+        }
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
@@ -341,6 +344,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the DB does not exist or the user is not authorized to access it.
      */
     private fun executeShowSchemas(node: SqlSnowflakeShowSchemas): DDLExecutionResult {
+        if (!node.isTerse){
+            throw RuntimeException("SHOW SCHEMAS: Only SHOW TERSE is currently supported.")
+        }
         val dbPath = node.dbName.names
         val dbName = dbPath.joinToString(separator = ".")
         try {
@@ -360,6 +366,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
     private fun executeShowTables(node: SqlShowTables): DDLExecutionResult {
+        if (!node.isTerse){
+            throw RuntimeException("SHOW TABLES: Only SHOW TERSE is currently supported.")
+        }
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
@@ -379,6 +388,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
     private fun executeShowViews(node: SqlShowViews): DDLExecutionResult {
+        if (!node.isTerse){
+            throw RuntimeException("SHOW VIEWS: Only SHOW TERSE is currently supported.")
+        }
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {

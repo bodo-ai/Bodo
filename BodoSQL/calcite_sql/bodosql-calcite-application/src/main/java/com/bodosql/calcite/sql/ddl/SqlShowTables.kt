@@ -1,7 +1,6 @@
 package com.bodosql.calcite.sql.ddl
 
 import com.google.common.collect.ImmutableList
-import org.apache.calcite.sql.SqlCall
 import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlNode
@@ -11,12 +10,13 @@ import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
 
 /**
- * Parse tree node representing a {@code SHOW TABLES} clause.
+ * Parse tree node representing a `SHOW TABLES` clause.
  */
 class SqlShowTables(
-    val pos: SqlParserPos,
+    pos: SqlParserPos,
     val schemaName: SqlIdentifier,
-) : SqlCall(pos) {
+    isTerse: Boolean,
+) : SqlShow(pos, isTerse) {
     companion object {
         @JvmStatic
         private val OPERATOR: SqlOperator =
@@ -32,12 +32,19 @@ class SqlShowTables(
         return ImmutableList.of(schemaName)
     }
 
-    override fun unparse(
+    /**
+     * This begins unparsing the clause after SHOW as the superclass
+     * already deals with the SHOW statement.
+     */
+    override fun unparseShowOperation(
         writer: SqlWriter,
         leftPrec: Int,
         rightPrec: Int,
     ) {
-        writer.keyword("SHOW TABLES")
+        // May need to raise the IN keyword into a boolean
+        // when later adding support for SHOW without specifying schema/db
+        writer.keyword("TABLES")
+        writer.keyword("IN")
         schemaName.unparse(writer, leftPrec, rightPrec)
     }
 }
