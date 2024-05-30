@@ -2929,26 +2929,36 @@ pytest_one_rank = [
 ]
 
 
-# Decorate
-pytest_mark_tabular = compose_decos(
-    (
-        pytest.mark.tabular,
-        pytest.mark.iceberg,
-        pytest.mark.skipif(
-            "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-        ),
-    )
-)
-
-
-# This is for using a "mark" or marking a whole file.
-pytest_tabular = [
+tabular_markers = (
     pytest.mark.tabular,
     pytest.mark.iceberg,
     pytest.mark.skipif(
         "TABULAR_CREDENTIAL" not in os.environ, reason="requires tabular credentials"
     ),
-]
+)
+
+# Decorate
+pytest_mark_tabular = compose_decos(tabular_markers)
+
+
+# This is for using a "mark" or marking a whole file.
+pytest_tabular = list(tabular_markers)
+
+
+glue_markers = (
+    pytest.mark.glue,
+    pytest.mark.iceberg,
+    pytest.mark.skipif(
+        "AWS_ACCESS_KEY_ID" not in os.environ, reason="requires glue credentials"
+    ),
+)
+
+# Decorate
+pytest_mark_glue = compose_decos(glue_markers)
+
+# This is for using a "mark" or marking a whole file.
+pytest_glue = list(glue_markers)
+
 
 # Flag to ignore the mass slowing of tests unless specific files are changed
 ignore_slow_unless_changed = os.environ.get("BODO_IGNORE_SLOW_UNLESS_CHANGED", False)
