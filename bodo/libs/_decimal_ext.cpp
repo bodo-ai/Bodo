@@ -15,9 +15,6 @@
 #include "_bodo_to_arrow.h"
 #include "_gandiva_decimal_copy.h"
 
-// using scale 18 when converting from Python Decimal objects (same as Spark)
-#define PY_DECIMAL_SCALE 18
-
 #pragma pack(1)
 struct decimal_value {
     int64_t low;
@@ -76,6 +73,18 @@ double decimal_to_double(__int128 const& val, uint8_t scale) {
     // Can't figure out how to do this in C++
     arrow::Decimal128 dec((int64_t)(val >> 64), (int64_t)(val));
     return dec.ToDouble(scale);
+}
+
+arrow::Decimal256 shift_decimal_scalar(arrow::Decimal256 val,
+                                       int64_t shift_amount) {
+    if (shift_amount == 0) {
+        return val;
+    } else if (shift_amount > 0) {
+        return val.IncreaseScaleBy(shift_amount);
+    } else {
+        // We always round "half up".
+        return val.ReduceScaleBy(-shift_amount, true);
+    }
 }
 
 arrow::Decimal128 shift_decimal_scalar(arrow::Decimal128 val,
@@ -686,8 +695,6 @@ PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale);
 
-arrow::Decimal128 str_to_decimal(const std::string& str_val);
-
 /**
  * @brief Get the Arrow function name for comparison operator
  * See https://arrow.apache.org/docs/cpp/compute.html#comparisons
@@ -898,6 +905,187 @@ bool arrow_compute_cmp_decimal_decimal_py_entry(
     }
 }
 
+/**
+ * @brief Cast a string to a decimal scalar, rounding half up if the scale
+ * doesn't fit.
+ *
+ * @param str_val Input string to cast
+ * @param precision Output precision
+ * @param scale Output scale
+ * @param error[out] If an error occurs, set this to true.
+ * @return arrow::Decimal128 output decimal scalar
+ */
+arrow::Decimal128 str_to_decimal_scalar(const std::string_view& str_val,
+                                        int32_t precision, int32_t scale,
+                                        bool* error) {
+    int32_t final_leading_digits = precision - scale;
+    // Create the decimal value from a string. Arrow provides
+    // the parsed precision and scale.
+    arrow::Decimal128 decimal;
+    int32_t parsed_precision;
+    int32_t parsed_scale;
+    // Handle any leading and trailing spaces.
+    // Note: Arrow handles any leading 0s.
+    size_t start = 0;
+    while (start < str_val.size() && isspace(str_val[start])) {
+        start++;
+    }
+    size_t end = str_val.size() - 1;
+    while (end > start && isspace(str_val[end])) {
+        end--;
+    }
+    bool seen_exp = false;
+    // Trailing E is equivalent to remainder of string * 1
+    if (str_val[end] == 'E' || str_val[end] == 'e') {
+        end--;
+        seen_exp = true;
+    }
+    std::string_view used_val =
+        std::string_view(str_val).substr(start, (end - start) + 1);
+    if ((used_val.empty() || used_val == "-" || used_val == "+") && seen_exp) {
+        // Just E is 0 and fits in any precision/scale.
+        *error = false;
+        return arrow::Decimal128(0);
+    } else {
+        arrow::Status status = arrow::Decimal128::FromString(
+            used_val, &decimal, &parsed_precision, &parsed_scale);
+        if (!status.ok()) {
+            *error = true;
+            return arrow::Decimal128(0);
+        }
+        int32_t parsed_leading_digits = parsed_precision - parsed_scale;
+        if (parsed_leading_digits > final_leading_digits) {
+            // If we have more leading digits than allowed we must thrown an
+            // error.
+            *error = true;
+            return arrow::Decimal128(0);
+        }
+        if (parsed_precision > decimalops::kMaxPrecision) {
+            // Extreme edge case where the value doesn't fit in the maximum
+            // precision. Try parsing as a Decimal256 and then truncate.
+            arrow::Decimal256 decimal256;
+            int32_t parsed_precision256;
+            int32_t parsed_scale256;
+            status = arrow::Decimal256::FromString(
+                used_val, &decimal256, &parsed_precision256, &parsed_scale256);
+            if (!status.ok()) {
+                *error = true;
+                return arrow::Decimal128(0);
+            }
+            decimal256 = shift_decimal_scalar(decimal256, scale - parsed_scale);
+            if (!decimal256.FitsInPrecision(decimalops::kMaxPrecision)) {
+                *error = true;
+                return arrow::Decimal128(0);
+            }
+            // Note: We add an explicit type because we want to make sure this
+            // is type stable.
+            std::array<uint64_t, 4> data_array =
+                decimal256.little_endian_array();
+            return arrow::Decimal128(arrow::BasicDecimal128{
+                static_cast<int64_t>(data_array[1]), data_array[0]});
+        } else {
+            *error = false;
+            // If the scale doesn't match then we need to shift the output.
+            return shift_decimal_scalar(decimal, scale - parsed_scale);
+        }
+    }
+}
+
+/**
+ * @brief Python entry point for converting a string value to decimal.
+ *
+ * @param str_val The string value to convert.
+ * @param precision The output precision.
+ * @param scale The output scale.
+ * @param[out] error If an error occurs, set this to true.
+ * @return arrow::Decimal128
+ */
+arrow::Decimal128 str_to_decimal_scalar_py_entry(const std::string& str_val,
+                                                 int64_t precision,
+                                                 int64_t scale, bool* error) {
+    try {
+        return str_to_decimal_scalar(str_val, precision, scale, error);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Python entry point for converting a string array to decimal.
+ *
+ * @param str_val The string value to convert.
+ * @param precision The output precision.
+ * @param scale The output scale.
+ * @param null_on_error If an error occurs just set null.
+ * @return Output decimal array.
+ */
+template <bool null_on_error>
+std::unique_ptr<array_info> str_to_decimal_array(
+    std::shared_ptr<array_info> in_arr, int64_t precision, int64_t scale) {
+    // Note: This assumes we have a regular string array. Dictionary arrays
+    // are handled in Python.
+    assert(in_arr->arr_type == bodo_array_type::STRING);
+    assert(in_arr->dtype == Bodo_CTypes::STRING);
+    char* in_data = in_arr->data1<bodo_array_type::STRING, char>();
+    offset_t* in_offsets = (offset_t*)in_arr->data2<bodo_array_type::STRING>();
+    uint8_t* in_nulls =
+        (uint8_t*)in_arr->null_bitmask<bodo_array_type::STRING>();
+    size_t n_rows = in_arr->length;
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(n_rows, Bodo_CTypes::DECIMAL);
+    arrow::Decimal128* out_data =
+        out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128>();
+    for (size_t i = 0; i < n_rows; i++) {
+        if (is_na(in_nulls, i)) {
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            continue;
+        }
+        offset_t start = in_offsets[i];
+        offset_t end = in_offsets[i + 1];
+        const std::string_view str_val(in_data + start, end - start);
+        bool error;
+        out_data[i] = str_to_decimal_scalar(str_val, precision, scale, &error);
+        if (error) {
+            if (null_on_error) {
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            } else {
+                throw std::runtime_error(
+                    "String value is out of range for decimal or doesn't parse "
+                    "properly: " +
+                    std::string(str_val));
+            }
+        }
+    }
+    return out_arr;
+}
+
+/**
+ * @brief Python entry point for converting a string array to decimal.
+ *
+ * @param arr The string array to convert.
+ * @param precision The output precision.
+ * @param scale The output scale.
+ * @param null_on_error If an error occurs just set null.
+ * @return Output decimal array.
+ */
+array_info* str_to_decimal_array_py_entry(array_info* arr, int64_t precision,
+                                          int64_t scale, bool null_on_error) {
+    try {
+        std::unique_ptr<array_info> out_arr;
+        std::shared_ptr<array_info> in_arr = std::shared_ptr<array_info>(arr);
+        if (null_on_error) {
+            out_arr = str_to_decimal_array<true>(in_arr, precision, scale);
+        } else {
+            out_arr = str_to_decimal_array<false>(in_arr, precision, scale);
+        }
+        return out_arr.release();
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
     MOD_DEF(m, "decimal_ext", "No docs", NULL);
@@ -919,7 +1107,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, box_decimal);
 
     SetAttrStringFromVoidPtr(m, decimal_to_str);
-    SetAttrStringFromVoidPtr(m, str_to_decimal);
+    SetAttrStringFromVoidPtr(m, str_to_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, str_to_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_to_double_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_to_int64_py_entry);
     SetAttrStringFromVoidPtr(m, int_to_decimal_array);
@@ -996,39 +1185,4 @@ void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
     ((char*)meminfo->data)[l] = 0;
     *len_ptr = l;
     *meminfo_ptr = meminfo;
-}
-
-arrow::Decimal128 str_to_decimal(const std::string& str_val) {
-    /*
-        str_to_decimal ignores a scale and precision value from
-        Python code because the user cannot specify them directly. Precision
-        currently matches the arrow default value of 38 and scale is set in
-        the global variable. If this should ever change this function will need
-        to be adjusted.
-    */
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return -1;                     \
-    }
-#undef CHECK_ARROW_AND_ASSIGN
-#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
-    CHECK(res.status().ok(), msg)             \
-    lhs = std::move(res).ValueOrDie();
-
-    auto gilstate = PyGILState_Ensure();
-    // Create the decimal array value from a string, precision, and scale
-    arrow::Decimal128 decimal;
-    int32_t precision;
-    int32_t scale;
-    arrow::Status status =
-        arrow::Decimal128::FromString(str_val, &decimal, &precision, &scale);
-    CHECK(status.ok(), "decimal rescale failed");
-    // rescale decimal to 18 (default scale converting from Python)
-    CHECK_ARROW_AND_ASSIGN(decimal.Rescale(scale, PY_DECIMAL_SCALE),
-                           "decimal rescale error", decimal);
-    return decimal;
-#undef CHECK
 }

@@ -37,12 +37,22 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs import decimal_ext
-from bodo.utils.typing import raise_bodo_error, unwrap_typeref
+from bodo.utils.typing import (
+    get_overload_const_bool,
+    is_overload_constant_bool,
+    raise_bodo_error,
+    unwrap_typeref,
+)
 
 ll.add_symbol("unbox_decimal", decimal_ext.unbox_decimal)
 ll.add_symbol("box_decimal", decimal_ext.box_decimal)
 ll.add_symbol("decimal_to_str", decimal_ext.decimal_to_str)
-ll.add_symbol("str_to_decimal", decimal_ext.str_to_decimal)
+ll.add_symbol(
+    "str_to_decimal_scalar_py_entry", decimal_ext.str_to_decimal_scalar_py_entry
+)
+ll.add_symbol(
+    "str_to_decimal_array_py_entry", decimal_ext.str_to_decimal_array_py_entry
+)
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
 ll.add_symbol("decimal_to_int64", decimal_ext.decimal_to_int64_py_entry)
 ll.add_symbol("int_to_decimal_array", decimal_ext.int_to_decimal_array)
@@ -248,41 +258,136 @@ def decimal_to_str(typingctx, val_t=None):
     return bodo.string_type(val_t), codegen
 
 
-def str_to_decimal_codegen(context, builder, signature, args):
-    val, _, _ = args
-    val = bodo.libs.str_ext.gen_unicode_to_std_str(context, builder, val)
-    fnty = lir.FunctionType(
-        lir.IntType(128),
-        [
-            lir.IntType(8).as_pointer(),
-        ],
-    )
-    fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_decimal")
-    decimal_val = builder.call(
-        fn,
-        [
-            val,
-        ],
-    )
-    return decimal_val
-
-
 @intrinsic(prefer_literal=True)
-def str_to_decimal(typingctx, val, precision_tp, scale_tp=None):
-    """convert string ot decimal128"""
+def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
+    """convert string to decimal128. This returns a tuple of
+    (Decimal128Type, bool) where the bool indicates if the value
+    errored in parsing or fitting in the final decimal value."""
     assert val == bodo.string_type or is_overload_constant_str(val)
     assert is_overload_constant_int(precision_tp)
     assert is_overload_constant_int(scale_tp)
 
     def codegen(context, builder, signature, args):
-        return str_to_decimal_codegen(context, builder, signature, args)
+        val, precision, scale = args
+        val = bodo.libs.str_ext.gen_unicode_to_std_str(context, builder, val)
+        error_ptr = cgutils.alloca_once(builder, lir.IntType(1))
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="str_to_decimal_scalar_py_entry"
+        )
+        decimal_val = builder.call(
+            fn,
+            [
+                val,
+                precision,
+                scale,
+                error_ptr,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        errors = builder.load(error_ptr)
+        return context.make_tuple(builder, signature.return_type, [decimal_val, errors])
 
     precision = get_overload_const_int(precision_tp)
     scale = get_overload_const_int(scale_tp)
-    return (
-        Decimal128Type(precision, scale)(val, precision_tp, scale_tp),
-        codegen,
-    )
+    decimal_type = Decimal128Type(precision, scale)
+    return_type = types.Tuple((decimal_type, types.bool_))
+    return return_type(val, precision_tp, scale_tp), codegen
+
+
+def str_to_decimal_scalar(val, precision, scale, null_on_error):
+    pass
+
+
+@overload(str_to_decimal_scalar, prefer_literal=True)
+def overload_str_to_decimal_scalar(val, precision, scale, null_on_error):
+    if (
+        not is_overload_constant_int(precision)
+        or not is_overload_constant_int(scale)
+        or not is_overload_constant_bool(null_on_error)
+    ):
+        raise_bodo_error(
+            "str_to_decimal_scalar: constant precision, scale, and null_on_error expected."
+        )
+    raise_exception = not get_overload_const_bool(null_on_error)
+    if raise_exception:
+
+        def impl(val, precision, scale, null_on_error):  # pragma: no cover
+            val, overflow = _str_to_decimal_scalar(str(val), precision, scale)
+            if overflow:
+                raise RuntimeError(
+                    "String value is out of range for decimal or doesn't parse properly"
+                )
+            return val
+
+        return impl
+
+    else:
+
+        def impl(val, precision, scale, null_on_error):  # pragma: no cover
+            val, overflow = _str_to_decimal_scalar(str(val), precision, scale)
+            if overflow:
+                return None
+            return val
+
+        return impl
+
+
+@intrinsic(prefer_literal=True)
+def _str_to_decimal_array(typingctx, val_tp, precision_tp, scale_tp, null_on_error_tp):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="str_to_decimal_array_py_entry"
+        )
+        ret = builder.call(fn, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return array_info_type(val_tp, precision_tp, scale_tp, null_on_error_tp), codegen
+
+
+def str_to_decimal_array(arr, precision, scale, null_on_error):
+    pass
+
+
+@overload(str_to_decimal_array, prefer_literal=True)
+def overload_str_to_decimal_array(arr, precision, scale, null_on_error):
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    if not is_overload_constant_int(precision) or not is_overload_constant_int(scale):
+        raise_bodo_error("str_to_decimal_array: constant precision and scale expected.")
+
+    _precision = get_overload_const_int(precision)
+    _scale = get_overload_const_int(scale)
+    _output_type = DecimalArrayType(_precision, _scale)
+
+    def impl(arr, precision, scale, null_on_error):  # pragma: no cover
+        input_info = array_to_info(arr)
+        out_info = _str_to_decimal_array(input_info, precision, scale, null_on_error)
+        out_arr = info_to_array(out_info, _output_type)
+        delete_info(out_info)
+        return out_arr
+
+    return impl
 
 
 # We cannot have exact matching between Python and Bodo
@@ -459,16 +564,24 @@ def decimal_constructor_overload(value="0", context=None):
     if not is_overload_none(context):  # pragma: no cover
         raise BodoError("decimal.Decimal() context argument not supported yet")
 
-    # [BE-4399]: implement a more efficient constructor for integers/floats that
-    # does not need to convert to strings first, and has more precise float support
-    if (
-        isinstance(value, (types.Number,))
-        or is_overload_constant_str(value)
-        or value == bodo.string_type
-    ):
+    if is_overload_constant_str(value) or value == bodo.string_type:
 
         def impl(value="0", context=None):  # pragma: no cover
-            return str_to_decimal(str(value), 38, 18)
+            return str_to_decimal_scalar(value, 38, 18, False)
+
+        return impl
+    elif isinstance(value, types.Integer):
+
+        def impl(value="0", context=None):  # pragma: no cover
+            # TODO: Assign a scale + precision based on the integer type.
+            decimal_int = int_to_decimal_scalar(value)
+            return _cast_decimal_to_decimal_scalar_unsafe(decimal_int, 38, 18)
+
+        return impl
+    elif isinstance(value, types.Float):
+
+        def impl(value="0", context=None):  # pragma: no cover
+            return float_to_decimal_scalar(value, 38, 18, False)
 
         return impl
     # TODO: Add support for the tuple, and Decimal arguments
@@ -1443,6 +1556,8 @@ def decimal_arr_setitem(A, idx, val):
 
     # scalar case
     if isinstance(idx, types.Integer):
+        _precision = A.precision
+        _scale = A.scale
         # This is the existing type check
         if isinstance(val, Decimal128Type):
 
@@ -1452,16 +1567,39 @@ def decimal_arr_setitem(A, idx, val):
 
             # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
             return impl_scalar
-        else:
-            # [BE-4399] make a more efficient way to insert integers/floats into
-            # a Decimal array
+        elif isinstance(val, types.Integer):
+            max_real_precision = int_to_decimal_precision[val]
+            always_safe = max_real_precision <= _precision
+
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                decimal_int = int_to_decimal_scalar(val)
+                if always_safe:
+                    cast_decimal = _cast_decimal_to_decimal_scalar_unsafe(
+                        decimal_int, _precision, _scale
+                    )
+                else:
+                    cast_decimal, overflow = _cast_decimal_to_decimal_scalar_safe(
+                        decimal_int, _precision, _scale
+                    )
+                    if overflow:
+                        raise ValueError("Number out of representable range")
+                A._data[idx] = decimal128type_to_int128(cast_decimal)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+            return impl_scalar
+        elif isinstance(val, types.Float):
+
             def impl_scalar(A, idx, val):  # pragma: no cover
                 A._data[idx] = decimal128type_to_int128(
-                    str_to_decimal(str(val), 38, 18)
+                    float_to_decimal_scalar(val, _precision, _scale, False)
                 )
                 bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
-        return impl_scalar
+            return impl_scalar
+        else:
+            raise BodoError(
+                f"setitem for DecimalArray with scalar type {val} not supported."
+            )  # pragma: no cover
 
     if not (
         (is_iterable_type(val) and isinstance(val.dtype, bodo.Decimal128Type))

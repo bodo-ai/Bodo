@@ -1852,6 +1852,98 @@ try_to_number = make_to_number(True)
 to_number = make_to_number(False)
 
 
+def string_to_decimal(expr, precision, scale, null_on_error):  # pragma: no cover
+    pass
+
+
+@overload(string_to_decimal, no_unliteral=True)
+def string_to_decimal_overload(expr, precision, scale, null_on_error):
+    """
+    Cast a string expression array or scalar to a decimal type with the given precision and scale.
+    If null_on_error=True then values that either don't fit in the specified decimal or don't parse
+    properly are replaced with nulls. The exception is that scale values should be rounded half up.
+    When null_on_error=False, the function will throw an error if the string can't be converted to a decimal.
+
+    Note: This function shouldn't be called directly from BodoSQL because it doesn't
+    have optional handling so it should be called by to_number.
+
+    Args:
+        expr (numeric array or scalar): the input string array or scalar
+        precision (positive integer literal): the precision of the decimal type
+        scale (positive integer literal): the scale of the decimal type
+        null_on_error (bool literal): if True, return None for invalid values, otherwise throw an error
+
+    Returns:
+        decimal array or scalar: the converted decimal array or scalar
+    """
+    if not is_overload_constant_int(precision):
+        raise_bodo_error("string_to_decimal: prec must be a literal value if provided")
+    if not is_overload_constant_int(scale):
+        raise_bodo_error("string_to_decimal: scale must be a literal value if provided")
+    if not is_overload_constant_bool(null_on_error):
+        raise_bodo_error("string_to_decimal: null_on_error must be a literal value")
+
+    # Note: We don't use gen_vectorized here because there are optimized
+    # array kernels in C++.
+    if is_overload_none(expr):
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            return None
+
+        return impl
+
+    elif expr == bodo.string_type or is_overload_constant_str(expr):
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.str_to_decimal_scalar(
+                expr, precision, scale, null_on_error
+            )
+
+        return impl
+    elif expr == bodo.string_array_type:
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.str_to_decimal_array(
+                expr, precision, scale, null_on_error
+            )
+
+        return impl
+
+    else:
+        assert expr == bodo.dict_str_arr_type, "string_to_decimal_overload: dictionary-encoded string array type expected"
+
+        def impl(expr, precision, scale, null_on_error):  # pragma: no cover
+            # Just cast the data array. Note: Since a value may no longer exist
+            # in the dictionary we cannot error on invalid values.
+            old_data = expr._data
+            indices = expr._indices
+            decimal_data = bodo.libs.decimal_arr_ext.str_to_decimal_array(
+                old_data, precision, scale, True
+            )
+            out_array = bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                len(expr), precision, scale
+            )
+            for i in range(len(out_array)):
+                if bodo.libs.array_kernels.isna(expr, i):
+                    bodo.libs.array_kernels.setna(out_array, i)
+                    continue
+                index = indices[i]
+                if bodo.libs.array_kernels.isna(decimal_data, index):
+                    # Note: We assume we don't need to check old data for nulls because the index
+                    # should always be updated.
+                    # TODO: Verify this is enforced.
+                    if not null_on_error:
+                        raise BodoError(
+                            f"String value is out of range for decimal or doesn't parse properly"
+                        )
+                    bodo.libs.array_kernels.setna(out_array, i)
+                    continue
+                out_array[i] = decimal_data[index]
+            return out_array
+
+        return impl
+
+
 def numeric_to_decimal(expr, precision, scale, null_on_error):  # pragma: no cover
     pass
 
@@ -2039,7 +2131,13 @@ def to_number_util_overload(
 
             return impl
         elif is_string:
-            raise_bodo_error("TO_NUMBER: cannot output decimal from string input")
+
+            def impl(
+                expr, prec, scale, _try, outputs_decimal, dict_encoding_state, func_id
+            ):
+                return string_to_decimal(expr, prec, scale, _try)
+
+            return impl
         else:
 
             def impl(

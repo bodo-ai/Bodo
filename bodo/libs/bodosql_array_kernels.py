@@ -238,6 +238,7 @@ broadcasted_fixed_arg_functions = {
     "square",
     "startswith",
     "strcmp",
+    "string_to_decimal",
     "strtok",
     "strtok_to_array",
     "substring",
