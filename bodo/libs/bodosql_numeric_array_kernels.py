@@ -1403,8 +1403,8 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             # future we can grab this information from SQL or the original function
             return bodo.utils.typing.to_nullable_type(types.Array(out_dtype, 1, "C"))
 
-        if func_name == "multiply_numeric":
-            # We only support decimal arithmetic on multiplication.
+        if func_name in ("multiply_numeric", "divide_numeric"):
+            # We only support decimal arithmetic on multiplication and division.
             verify_numeric_arg(arr0, "multiply_numeric", "arr0")
             verify_numeric_arg(arr1, "multiply_numeric", "arr1")
         else:
@@ -1418,6 +1418,12 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
 
                 def impl(arr0, arr1):  # pragma: no cover
                     return bodo.libs.bodosql_array_kernels.multiply_decimals(arr0, arr1)
+
+                return impl
+            elif func_name == "divide_numeric":
+
+                def impl(arr0, arr1):  # pragma: no cover
+                    return bodo.libs.bodosql_array_kernels.divide_decimals(arr0, arr1)
 
                 return impl
             else:
@@ -1449,6 +1455,27 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
 
                     def impl(arr0, arr1):  # pragma: no cover
                         return bodo.libs.bodosql_array_kernels.multiply_decimals(
+                            arr0, bodo.libs.decimal_arr_ext.int_to_decimal(arr1)
+                        )
+
+                    return impl
+            elif func_name == "divide_numeric":
+                if isinstance(arr0, types.Integer) or (
+                    is_array_typ(arr0) and isinstance(arr0.dtype, types.Integer)
+                ):
+
+                    def impl(arr0, arr1):  # pragma: no cover
+                        return bodo.libs.bodosql_array_kernels.divide_decimals(
+                            bodo.libs.decimal_arr_ext.int_to_decimal(arr0), arr1
+                        )
+
+                    return impl
+                if isinstance(arr1, types.Integer) or (
+                    is_array_typ(arr1) and isinstance(arr1.dtype, types.Integer)
+                ):
+
+                    def impl(arr0, arr1):  # pragma: no cover
+                        return bodo.libs.bodosql_array_kernels.divide_decimals(
                             arr0, bodo.libs.decimal_arr_ext.int_to_decimal(arr1)
                         )
 
@@ -1588,3 +1615,73 @@ def overload_multiply_decimals(arr1, arr2):
             scalar_text,
             out_dtype,
         )
+
+
+def divide_decimals(arr1, arr2):  # pragma: no cover
+    pass
+
+
+@overload(divide_decimals)
+def overload_divide_decimals(arr1, arr2):
+    """
+    Implementation of division for two decimal arrays or scalars. This does
+    not handle optional types so it should not be called directly
+    from BodoSQL. This is meant as a convenience function to simplify the
+    division logic.
+    """
+    if not (
+        is_overload_none(arr1)
+        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):
+        raise_bodo_error("divide_decimals: arr1 must be a decimal array or scalar")
+    if not (
+        is_overload_none(arr2)
+        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):
+        raise_bodo_error("divide_decimals: arr2 must be a decimal array or scalar")
+
+    if is_overload_none(arr1):
+        # Pick dummy values for precision and scale to simplify the code. p1/s1 values
+        # only matter for the array/scalar cases where output array type is created
+        # below (not scalar/scalar cases).
+        p1, s1 = 38, 0
+    else:
+        p1, s1 = arr1.precision, arr1.scale
+    if is_overload_none(arr2):
+        # Pick dummy values for precision and scale to simplify the code. p2/s2 values
+        # only matter for the array/scalar cases where output array type is created
+        # below (not scalar/scalar cases).
+        p2, s2 = 38, 0
+    else:
+        p2, s2 = arr2.precision, arr2.scale
+
+    # If any argument is an array, call the specialized function to reduce function
+    # call overhead on every element, else use gen_vectorized.
+    if (isinstance(arr1, bodo.DecimalArrayType) and (not is_overload_none(arr2))) or (
+        isinstance(arr2, bodo.DecimalArrayType) and (not is_overload_none(arr1))
+    ):
+
+        def impl(arr1, arr2):
+            return bodo.libs.decimal_arr_ext.divide_decimal_arrays(arr1, arr2)
+
+        return impl
+
+    p, s = bodo.libs.decimal_arr_ext.decimal_division_output_precision_scale(
+        p1, s1, p2, s2
+    )
+    out_dtype = bodo.DecimalArrayType(p, s)
+
+    arg_names = ["arr1", "arr2"]
+    arg_types = [arr1, arr2]
+    propagate_null = [True, True]
+    scalar_text = (
+        "res[i] = bodo.libs.decimal_arr_ext.divide_decimal_scalars(arg0, arg1)"
+    )
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )

@@ -755,6 +755,158 @@ def test_decimal_array_multiplication_overflow_handling():
         print(out)
 
 
+def test_decimal_array_division(precision_scale_decimal_array, memory_leak_check):
+    """Test decimal division"""
+
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.divide_decimals(arr1, arr2)
+
+    arr1 = precision_scale_decimal_array
+    arr2 = pd.array(
+        [
+            "2.1",
+            "0.005",
+            "2.4336",
+            "0.000001",
+            "1001000.25",
+            "1.4",
+            None,
+            "100082016.81",
+            "130.1881",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 6)),
+    )
+    py_output = pd.array(
+        [
+            "0.47619048",
+            "310.00000000",
+            "0.64102564",
+            "10560000.00000000",
+            "0.00099950",
+            None,
+            None,
+            "0.00009996",
+            "-0.08764242",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+    )
+    check_func(impl, (arr1, arr2), py_output=py_output)
+
+    # array/scalar case
+    py_output = pd.array(
+        [
+            "0.50000000",
+            "0.77500000",
+            "0.78000000",
+            "5.28000000",
+            "500.25000000",
+            None,
+            None,
+            "5002.05000000",
+            "-5.70500000",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+    )
+    check_func(
+        impl, (arr1, pa.scalar(Decimal("2"), pa.decimal128(4, 2))), py_output=py_output
+    )
+
+    # scalar/array case
+    py_output = pd.array(
+        [
+            "2.00000000",
+            "1.29032258",
+            "1.28205128",
+            "0.18939394",
+            "0.00199900",
+            None,
+            None,
+            "0.00019992",
+            "-0.17528484",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+    )
+    check_func(
+        impl, (pa.scalar(Decimal("2"), pa.decimal128(4, 2)), arr1), py_output=py_output
+    )
+
+    # Two scalars case
+    py_output = pa.scalar(Decimal("1.57620818"), pa.decimal128(13, 8))
+    check_func(
+        impl,
+        (
+            pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal("-1.345"), pa.decimal128(5, 3)),
+        ),
+        py_output=py_output,
+    )
+
+
+@pytest_mark_one_rank
+def test_decimal_array_division_error_handling():
+    """
+    Test that an appropriate error is raised when there is division by zero or overflow
+    """
+
+    @bodo.jit(distributed=["arr1", "arr2"])
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.divide_decimals(arr1, arr2)
+
+    arr1 = pd.array(
+        [
+            "1",
+            "9999999999999999999.99",  # This will overflow
+            None,
+            None,
+            "9999999.99",
+            "1",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+    )
+    arr2 = pd.array(
+        [
+            "1",
+            "0.0000000000000001",
+            None,
+            None,
+            "99.9999999",
+            "1",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 36)),
+    )
+
+    with pytest.raises(ValueError, match="Number out of representable range"):
+        out = impl(arr1, arr2)
+        print(out)
+
+    arr1 = pd.array(
+        [
+            "1",
+            "9999999999999999999.99",
+            None,
+            None,
+            "9999999.99",
+            "1",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+    )
+    arr2 = pd.array(
+        [
+            "1",
+            "0.0",  # Division by zero
+            None,
+            None,
+            "99.9999999",
+            "1",
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(38, 36)),
+    )
+
+    with pytest.raises(RuntimeError, match="Decimal division by zero error"):
+        out = impl(arr1, arr2)
+        print(out)
+
+
 def test_str_to_decimal_scalar(memory_leak_check):
     """
     Test converting a string scalar to decimal.
