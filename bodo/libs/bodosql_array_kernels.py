@@ -194,6 +194,7 @@ broadcasted_fixed_arg_functions = {
     "monthname",
     "months_between",
     "multiply_decimals",
+    "divide_decimals",
     "multiply_numeric",
     "negate",
     "negate_interval",
