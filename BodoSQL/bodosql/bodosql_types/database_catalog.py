@@ -19,7 +19,7 @@ class DatabaseCatalog(ABC):
     def get_java_object(self):
         """Convert the Python catalog object into its Java
         representation. Each implementing class should have its
-        own correctsponding java class.
+        own corresponding java class.
         """
         return NotImplemented
 
@@ -41,6 +41,6 @@ class DatabaseCatalogType(types.Type, ABC):
     def get_java_object(self):
         """Convert the Python catalog object into its Java
         representation. Each implementing class should have its
-        own correctsponding java class.
+        own corresponding java class.
         """
         return NotImplemented

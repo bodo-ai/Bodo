@@ -114,7 +114,7 @@ That’s it, you’re all set to experience Bodo. Follow along one of our tutori
 
 ## Basic Terminology
 
-###  **Notebooks**
+###  **Notebooks** {#jupyter-notebooks}
 
   A Notebook is a simple instances of a JupyterLab Server. You can use
   a notebook to navigate the files in your workspace, define and execute

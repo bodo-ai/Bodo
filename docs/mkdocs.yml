@@ -126,6 +126,7 @@ nav:
     - Local SQL Engine Quick Start (Community Edition): quick_start/quickstart_local_sql.md
     - Local Python Engine Quick Start (Community Edition): quick_start/quickstart_local_python.md
     - Local Iceberg Quick Start (Community Edition): quick_start/quickstart_local_iceberg.md
+    - Tabular Catalog Quick Start: quick_start/quickstart_tabular_catalog.md
   - Guides:
       - integrating_bodo/index.md
       - Installation and Setup Guides:
