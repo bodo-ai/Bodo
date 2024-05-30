@@ -649,16 +649,12 @@ def test_lateral_with_lateral_udtf(test_db_snowflake_catalog, memory_leak_check)
     )
 
 
-@pytest.mark.skip(
-    reason="BSE-3394 Test now works and need to switch it to a valid output testing."
-)
 def test_exploding_function(test_db_snowflake_catalog, memory_leak_check):
     """
-    Tests that a UDTF containing a row exploding function fails to inline
-    due to an unsupported correlation.
+    Tests that a UDTF containing a row exploding function can be inlined.
 
     Note: Snowflake produces a message "Unsupported subquery type cannot be evaluated"
-    for the same reason.
+    so we have more support than Snowflake.
     """
 
     def impl(bc, query):
@@ -672,11 +668,89 @@ def test_exploding_function(test_db_snowflake_catalog, memory_leak_check):
     GROUP BY word
     """
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    with pytest.raises(
-        BodoError,
-        match="Found correlation in plan",
-    ):
-        impl(bc, query)
+    py_output = pd.DataFrame(
+        {
+            "WORD": [
+                "",
+                "according",
+                "accounts",
+                "are",
+                "asymptotes",
+                "beans",
+                "blithely",
+                "ca",
+                "cajole",
+                "carefully",
+                "close",
+                "courts",
+                "even",
+                "excuse",
+                "final",
+                "furiousl",
+                "furiously",
+                "haggle",
+                "hs",
+                "ironic,",
+                "lar",
+                "ly",
+                "packages",
+                "pinto",
+                "regular",
+                "s",
+                "special",
+                "thinly",
+                "to",
+                "uickly",
+                "use",
+                "waters",
+            ],
+            "REGIONS_USING_WORD": [
+                1,
+                1,
+                2,
+                1,
+                1,
+                1,
+                2,
+                1,
+                2,
+                1,
+                1,
+                1,
+                2,
+                1,
+                3,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+            ],
+        }
+    )
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_output,
+        reset_index=True,
+        sort_output=True,
+        # Note: Since this test doesn't have any actual table inputs our infrastructure
+        # doesn't successfully set the result to replicated. As a result, we only run this
+        # test as distributed data.
+        only_1DVar=True,
+    )
 
 
 def test_exploding_function_param(test_db_snowflake_catalog, memory_leak_check):
