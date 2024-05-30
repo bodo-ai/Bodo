@@ -100,6 +100,14 @@ ll.add_symbol(
     "multiply_decimal_arrays",
     decimal_ext.multiply_decimal_arrays_py_entry,
 )
+ll.add_symbol(
+    "divide_decimal_scalars",
+    decimal_ext.divide_decimal_scalars_py_entry,
+)
+ll.add_symbol(
+    "divide_decimal_arrays",
+    decimal_ext.divide_decimal_arrays_py_entry,
+)
 
 
 from bodo.utils.indexing import (
@@ -1345,6 +1353,203 @@ def _multiply_decimal_arrays(typingctx, d1_t, d2_t, out_precision_t, out_scale_t
 
     ret_type = types.Tuple([array_info_type, types.bool_])
     return ret_type(d1_t, d2_t, out_precision_t, out_scale_t), codegen
+
+
+def decimal_division_output_precision_scale(p1, s1, p2, s2):
+    """
+    Calculate the output precision and scale for a division of two decimals.
+    See: https://docs.snowflake.com/en/sql-reference/operators-arithmetic#division
+    """
+    l1 = p1 - s1
+    l = l1 + s2
+    s = max(s1, min(s1 + 6, 12))
+    p = min(l + s, 38)
+    return p, s
+
+
+def divide_decimal_scalars(d1, d2):  # pragma: no cover
+    pass
+
+
+@overload(divide_decimal_scalars)
+def overload_divide_decimal_scalars(d1, d2):
+    """
+    Divide two decimal scalars. If overflow occurs this raises an exception.
+    """
+    if not isinstance(d1, Decimal128Type) or not isinstance(d2, Decimal128Type):
+        raise BodoError(
+            "divide_decimal_scalars: Decimal128Type expected for both inputs"
+        )
+
+    p, s = decimal_division_output_precision_scale(
+        d1.precision, d1.scale, d2.precision, d2.scale
+    )
+
+    def impl(d1, d2):  # pragma: no cover
+        output, overflow = _divide_decimal_scalars(d1, d2, p, s)
+        if overflow:
+            raise ValueError("Number out of representable range")
+        else:
+            return output
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
+    assert isinstance(d1_t, Decimal128Type), "_divide_decimal_scalars: decimal expected"
+    assert isinstance(d2_t, Decimal128Type), "_divide_decimal_scalars: decimal expected"
+    assert is_overload_constant_int(
+        precision_t
+    ), "_divide_decimal_scalars: constant precision expected"
+    assert is_overload_constant_int(
+        scale_t
+    ), "_divide_decimal_scalars: constant scale expected"
+    output_precision = get_overload_const_int(precision_t)
+    output_scale = get_overload_const_int(scale_t)
+    d1_precision = d1_t.precision
+    d1_scale = d1_t.scale
+    d2_precision = d2_t.precision
+    d2_scale = d2_t.scale
+
+    def codegen(context, builder, signature, args):
+        d1, d2, output_precision, output_scale = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        d1_precision_const = context.get_constant(types.int64, d1_precision)
+        d1_scale_const = context.get_constant(types.int64, d1_scale)
+        d2_precision_const = context.get_constant(types.int64, d2_precision)
+        d2_scale_const = context.get_constant(types.int64, d2_scale)
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="divide_decimal_scalars"
+        )
+        overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        ret = builder.call(
+            fn,
+            [
+                d1,
+                d1_precision_const,
+                d1_scale_const,
+                d2,
+                d2_precision_const,
+                d2_scale_const,
+                output_precision,
+                output_scale,
+                overflow_pointer,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        overflow = builder.load(overflow_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    ret_type = types.Tuple([output_decimal_type, types.bool_])
+    return ret_type(d1_t, d2_t, precision_t, scale_t), codegen
+
+
+def divide_decimal_arrays(d1, d2):  # pragma: no cover
+    pass
+
+
+@overload(divide_decimal_arrays)
+def overload_divide_decimal_arrays(d1, d2):
+    """
+    Divide two decimal arrays or a decimal array and a decimal scalar.
+    Raises an exception if overflows.
+    """
+    from bodo.libs.array import delete_info, info_to_array
+
+    assert isinstance(
+        d1, (DecimalArrayType, Decimal128Type)
+    ), "divide_decimal_arrays: decimal input1 expected"
+    assert isinstance(
+        d2, (DecimalArrayType, Decimal128Type)
+    ), "divide_decimal_arrays: decimal input2 expected"
+    assert isinstance(d1, DecimalArrayType) or isinstance(
+        d2, DecimalArrayType
+    ), "divide_decimal_arrays: decimal array expected"
+
+    p, s = decimal_division_output_precision_scale(
+        d1.precision, d1.scale, d2.precision, d2.scale
+    )
+    output_decimal_arr_type = DecimalArrayType(p, s)
+
+    def impl(d1, d2):  # pragma: no cover
+        # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
+        # convert back to scalars
+        d1_info, is_scalar_d1 = array_or_scalar_to_info(d1)
+        d2_info, is_scalar_d2 = array_or_scalar_to_info(d2)
+        out_arr_info, overflow = _divide_decimal_arrays(
+            d1_info, d2_info, p, s, is_scalar_d1, is_scalar_d2
+        )
+        out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
+        delete_info(out_arr_info)
+        if overflow:
+            raise ValueError("Number out of representable range")
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=False)
+def _divide_decimal_arrays(
+    typingctx, d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        d1, d2, output_precision, output_scale, is_scalar_d1, is_scalar_d2 = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="divide_decimal_arrays"
+        )
+        overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        ret = builder.call(
+            fn,
+            [
+                d1,
+                d2,
+                output_precision,
+                output_scale,
+                is_scalar_d1,
+                is_scalar_d2,
+                overflow_pointer,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        overflow = builder.load(overflow_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+
+    ret_type = types.Tuple([array_info_type, types.bool_])
+    return (
+        ret_type(
+            d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+        ),
+        codegen,
+    )
 
 
 class DecimalArrayType(types.ArrayCompatible):

@@ -405,6 +405,130 @@ array_info* multiply_decimal_arrays_py_entry(array_info* arr1_,
 }
 
 /**
+ * @brief Divide two decimal scalars with the given precision and scale
+ * and return the output. The output should have its scale truncated to
+ * the provided output scale. If overflow is detected, then the overflow
+ * need to be updated to true.
+ *
+ * @param v1 First decimal value
+ * @param p1 Precision of first decimal value
+ * @param s1 Scale of first decimal value
+ * @param v2 Second decimal value
+ * @param p2 Precision of second decimal value
+ * @param s2 Scale of second decimal value
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @param[out] overflow Overflow flag
+ * @return arrow::Decimal128
+ */
+arrow::Decimal128 divide_decimal_scalars_py_entry(
+    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
+    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
+    bool* overflow) noexcept {
+    try {
+        int32_t delta_scale = out_scale + s2 - s1;
+        return decimalops::Divide(v1, v2, delta_scale, overflow);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Divide two decimal arrays or a decimal array and a scalar element-wise
+ * and return an output array with the specified precision and scale. If
+ * overflow is detected during any division, then the 'overflow' flag is updated
+ * to true.
+ *
+ * @param arr1 First nullable decimal array.
+ * @param arr2 Second nullable decimal array.
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @param is_scalar_arg1 first argument is scalar (passed as a one element
+ * array)
+ * @param is_scalar_arg2 second argument is scalar (passed as a one element
+ * array)
+ * @param[out] overflow Overflow flag.
+ * @return std::shared_ptr<array_info> Output nullable decimal array.
+ */
+std::unique_ptr<array_info> divide_decimal_arrays(
+    const std::unique_ptr<array_info>& arr1,
+    const std::unique_ptr<array_info>& arr2, int64_t out_precision,
+    int64_t out_scale, bool is_scalar_arg1, bool is_scalar_arg2,
+    bool* const overflow) {
+    int64_t s1 = arr1->scale;
+    int64_t s2 = arr2->scale;
+    int32_t delta_scale = out_scale + s2 - s1;
+
+    size_t len = is_scalar_arg1 ? arr2->length : arr1->length;
+
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
+    out_arr->precision = out_precision;
+    out_arr->scale = out_scale;
+
+    bool out_overflow = false;
+
+    for (size_t i = 0; i < len; i++) {
+        bool v1_null =
+            !is_scalar_arg1 &&
+            !arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i);
+        bool v2_null =
+            !is_scalar_arg2 &&
+            !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i);
+
+        if (v1_null || v2_null) {
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
+        } else {
+            arrow::Decimal128* out_ptr =
+                out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                               arrow::Decimal128>() +
+                i;
+            size_t d1_ind = is_scalar_arg1 ? 0 : i;
+            const arrow::Decimal128& d1 =
+                *(arr1->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                              arrow::Decimal128>() +
+                  d1_ind);
+            size_t d2_ind = is_scalar_arg2 ? 0 : i;
+            const arrow::Decimal128& d2 =
+                *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                              arrow::Decimal128>() +
+                  d2_ind);
+
+            bool overflow_i;
+            *out_ptr = decimalops::Divide(d1, d2, delta_scale, &overflow_i);
+            out_overflow |= overflow_i;
+        }
+    }
+
+    *overflow = out_overflow;
+    return out_arr;
+}
+
+array_info* divide_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
+                                           int64_t out_precision,
+                                           int64_t out_scale,
+                                           bool is_scalar_arg1,
+                                           bool is_scalar_arg2,
+                                           bool* overflow) noexcept {
+    try {
+        std::unique_ptr<array_info> arr1 = std::unique_ptr<array_info>(arr1_);
+        std::unique_ptr<array_info> arr2 = std::unique_ptr<array_info>(arr2_);
+        assert(arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr2->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr1->dtype == Bodo_CTypes::DECIMAL &&
+               arr2->dtype == Bodo_CTypes::DECIMAL);
+        std::unique_ptr<array_info> out_arr =
+            divide_decimal_arrays(arr1, arr2, out_precision, out_scale,
+                                  is_scalar_arg1, is_scalar_arg2, overflow);
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
  * @param val input decimal value
@@ -1125,6 +1249,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_arrays_py_entry);
+    SetAttrStringFromVoidPtr(m, divide_decimal_scalars_py_entry);
+    SetAttrStringFromVoidPtr(m, divide_decimal_arrays_py_entry);
 
     return m;
 }

@@ -207,4 +207,122 @@ inline void Multiply(const arrow::Decimal128& x, const arrow::Decimal128& y,
                                       result);
     }
 }
+
+// Suppose we have a number that requires x bits to be represented and we scale
+// it up by 10^scale_by. Let's say now y bits are required to represent it. This
+// function returns the maximum possible y - x for a given 'scale_by'.
+inline int32_t MaxBitsRequiredIncreaseAfterScaling(int32_t scale_by) {
+    // We rely on the following formula:
+    // bits_required(x * 10^y) <= bits_required(x) + floor(log2(10^y)) + 1
+    // We precompute floor(log2(10^x)) + 1 for x = 0, 1, 2...75, 76
+    assert(scale_by >= 0);
+    assert(scale_by <= 76);
+    static const int32_t floor_log2_plus_one[] = {
+        0,   4,   7,   10,  14,  17,  20,  24,  27,  30,  34,  37,  40,
+        44,  47,  50,  54,  57,  60,  64,  67,  70,  74,  77,  80,  84,
+        87,  90,  94,  97,  100, 103, 107, 110, 113, 117, 120, 123, 127,
+        130, 133, 137, 140, 143, 147, 150, 153, 157, 160, 163, 167, 170,
+        173, 177, 180, 183, 187, 190, 193, 196, 200, 203, 206, 210, 213,
+        216, 220, 223, 226, 230, 233, 236, 240, 243, 246, 250, 253};
+    return floor_log2_plus_one[scale_by];
+}
+
+// Returns the maximum possible number of bits required to represent num *
+// 10^scale_by.
+inline int32_t MaxBitsRequiredAfterScaling(const arrow::Decimal128& value,
+                                           int32_t scale_by) {
+    arrow::BasicDecimal128 value_abs = arrow::BasicDecimal128::Abs(value);
+    assert(scale_by >= 0);
+    assert(scale_by <= 76);
+    int32_t num_occupied = 128 - value_abs.CountLeadingBinaryZeros();
+    return num_occupied + MaxBitsRequiredIncreaseAfterScaling(scale_by);
+}
+
+static inline arrow::BasicDecimal128 CheckAndIncreaseScale(
+    const arrow::BasicDecimal128& in, int32_t delta) {
+    return (delta <= 0) ? in : in.IncreaseScaleBy(delta);
+}
+
+// multiply input by 10^increase_by.
+static inline boost::multiprecision::int256_t IncreaseScaleBy(
+    boost::multiprecision::int256_t in, int32_t increase_by) {
+    assert(increase_by >= 0);
+    assert(increase_by <= 2 * DecimalTypeUtil::kMaxPrecision);
+
+    return in * GetScaleMultiplier(increase_by);
+}
+
+inline void gdv_xlarge_scale_up_and_divide(int64_t x_high, uint64_t x_low,
+                                           int64_t y_high, uint64_t y_low,
+                                           int32_t increase_scale_by,
+                                           int64_t* out_high, uint64_t* out_low,
+                                           bool* overflow) {
+    arrow::BasicDecimal128 x{x_high, x_low};
+    arrow::BasicDecimal128 y{y_high, y_low};
+
+    boost::multiprecision::int256_t x_large = ConvertToInt256(x);
+    boost::multiprecision::int256_t x_large_scaled_up =
+        IncreaseScaleBy(x_large, increase_scale_by);
+    boost::multiprecision::int256_t y_large = ConvertToInt256(y);
+    boost::multiprecision::int256_t result_large = x_large_scaled_up / y_large;
+    boost::multiprecision::int256_t remainder_large =
+        x_large_scaled_up % y_large;
+
+    // Since we are scaling up and then, scaling down, round-up the result (+1
+    // for +ve, -1 for -ve), if the remainder is >= 2 * divisor.
+    if (abs(2 * remainder_large) >= abs(y_large)) {
+        // x +ve and y +ve, result is +ve =>   (1 ^ 1)  + 1 =  0 + 1 = +1
+        // x +ve and y -ve, result is -ve =>  (-1 ^ 1)  + 1 = -2 + 1 = -1
+        // x +ve and y -ve, result is -ve =>   (1 ^ -1) + 1 = -2 + 1 = -1
+        // x -ve and y -ve, result is +ve =>  (-1 ^ -1) + 1 =  0 + 1 = +1
+        result_large += (x.Sign() ^ y.Sign()) + 1;
+    }
+    auto result = ConvertToDecimal128(result_large, overflow);
+    *out_high = result.high_bits();
+    *out_low = result.low_bits();
+}
+
+inline arrow::Decimal128 Divide(const arrow::Decimal128& x,
+                                const arrow::Decimal128& y, int32_t delta_scale,
+                                bool* overflow) {
+    if (y == 0) {
+        throw std::runtime_error("Decimal division by zero error");
+    }
+
+    arrow::BasicDecimal128 result;
+    int32_t num_bits_required_after_scaling =
+        MaxBitsRequiredAfterScaling(x, delta_scale);
+    if (num_bits_required_after_scaling <= 127) {
+        // fast-path. The dividend fits in 128-bit after scaling too.
+        *overflow = false;
+
+        // do the division.
+        arrow::BasicDecimal128 x_scaled = CheckAndIncreaseScale(x, delta_scale);
+        arrow::BasicDecimal128 remainder;
+        arrow::DecimalStatus status = x_scaled.Divide(y, &result, &remainder);
+        if (status != arrow::DecimalStatus::kSuccess) {
+            throw std::runtime_error("Decimal division failed");
+        }
+
+        // round-up
+        if (arrow::BasicDecimal128::Abs(2 * remainder) >=
+            arrow::BasicDecimal128::Abs(y)) {
+            result += (x.Sign() ^ y.Sign()) + 1;
+        }
+    } else {
+        // convert to 256-bit and do the divide.
+        *overflow = delta_scale > 38 && num_bits_required_after_scaling > 255;
+        if (!*overflow) {
+            int64_t result_high;
+            uint64_t result_low;
+
+            gdv_xlarge_scale_up_and_divide(
+                x.high_bits(), x.low_bits(), y.high_bits(), y.low_bits(),
+                delta_scale, &result_high, &result_low, overflow);
+            result = arrow::BasicDecimal128(result_high, result_low);
+        }
+    }
+    return result;
+}
+
 }  // namespace decimalops
