@@ -53,6 +53,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlShowTables"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate"
       "com.bodosql.calcite.sql.ddl.SqlDropTable"
+      "com.bodosql.calcite.sql.ddl.SqlDescribeView"
       "com.bodosql.calcite.sql.ddl.SqlAlterTable"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableSwapTable"

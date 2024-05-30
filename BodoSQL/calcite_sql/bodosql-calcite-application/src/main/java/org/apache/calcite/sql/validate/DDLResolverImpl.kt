@@ -8,6 +8,7 @@ import com.bodosql.calcite.ddl.NamespaceNotFoundException
 import com.bodosql.calcite.schema.BodoSqlSchema
 import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.sql.ddl.SqlDropTable
+import com.bodosql.calcite.sql.ddl.SqlDescribeView
 import com.bodosql.calcite.sql.ddl.SqlAlterTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable
 import com.bodosql.calcite.sql.ddl.SqlAlterView
@@ -100,6 +101,10 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             SqlKind.CREATE_VIEW -> {
                 executeCreateView(node as SqlCreateView)
             }
+            SqlKind.DESCRIBE_VIEW -> {
+                executeDescribeView(node as SqlDescribeView)
+            }
+
             SqlKind.DROP_VIEW -> {
                 executeDropView(node as SqlDropView)
             }
@@ -424,6 +429,18 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$schemaName' successfully created.")))
     }
 
+    private fun executeDescribeView(node: SqlDescribeView): DDLExecutionResult {
+        val viewPath = node.view.names
+        val viewName = viewPath.joinToString(separator = ".")
+        try {
+            val view = deriveTable(viewPath)
+            val catalogTable = validateTable(view, node.kind, viewName)
+            return catalogTable.getDDLExecutor().describeView(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("View '$viewName' does not exist or not authorized to describe.")
+        }
+    }
+    
     private fun executeDropView(node: SqlDropView): DDLExecutionResult {
         val viewPath = node.name.names
         val viewName = viewPath.joinToString(separator = ".")

@@ -9,6 +9,7 @@ BodoSQL currently supports the following Data Definition Language (DDL) statemen
 - [Create Table][create-table]
 - [Create View][create-view]
 - [Describe Table][describe-table]
+- [Describe View][describe-view]
 - [Drop Schema][drop-schema]
 - [Drop Table][drop-table]
 - [Drop View][drop-view]
