@@ -24,20 +24,42 @@ def gen_bodosql_code(
         import bodo
         import bodosql
         from bodo_platform_utils import catalog
+        from bodo_platform_utils.bodosqlwrapper import CatalogType
 
-        # Get Snowflake catalog details using bodo-platform-utils.
-        # At this time only Snowflake catalogs are supported.
-        sf_credentials = catalog.get_data("{catalog_name}")
+        # Get catalog details using bodo-platform-utils.
+        credentials = catalog.get_data("{catalog_name}")
+        
+        # check whether the catalog is tabular or snowflake
+        # add more conditions once more catalog types are supported
+        
+        if "icebergRestUrl" in catalog.get_data("{catalog_name}"):
+            catalog_type_str = "TABULAR"
+        else:
+            catalog_type_str = "SNOWFLAKE"
+            
+        if catalog_type_str is None:
+            catalog_type = CatalogType.SNOWFLAKE
+        else:
+            catalog_type = CatalogType(catalog_type_str)
 
         # BodoSQL Catalogs and Contexts need to be created outside
         # JIT functions.
-        bsql_catalog = bodosql.SnowflakeCatalog(
-                username=sf_credentials["username"],
-                password=sf_credentials["password"],
-                account=sf_credentials["accountName"],
-                warehouse=sf_credentials["warehouse"],
-                database=sf_credentials["database"],
+
+        
+        if catalog_type == CatalogType.TABULAR:
+            bsql_catalog = bodosql.TabularCatalog(
+                warehouse=credentials["warehouse"],
+                rest_uri=credentials["icebergRestUrl"],
+                credential=credentials["credential"],
             )
+        else:
+            bsql_catalog = bodosql.SnowflakeCatalog(
+                    username=credentials["username"],
+                    password=credentials["password"],
+                    account=credentials["accountName"],
+                    warehouse=credentials["warehouse"],
+                    database=credentials["database"],
+                )
 
         bc = bodosql.BodoSQLContext(catalog=bsql_catalog)
 
