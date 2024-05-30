@@ -33,3 +33,7 @@ This guide will walk you through the process of running a simple Python code usi
 - ### [Iceberg Quickstart][quickstart-local-iceberg]
 
 This guide will walk you through the process of running a simple Python code using Bodo engine on your local machine to write a local Iceberg table and read from it.
+
+- ### [Tabular Quickstart][quickstart-tabular]
+
+This guide will walk you through the process of creating and using Tabular Database Catalogs on the Bodo Platform.
