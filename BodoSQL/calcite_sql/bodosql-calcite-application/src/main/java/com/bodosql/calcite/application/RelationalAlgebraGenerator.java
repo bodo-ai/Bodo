@@ -360,6 +360,7 @@ public class RelationalAlgebraGenerator {
       EnumSet.of(
           SqlKind.DESCRIBE_TABLE,
           SqlKind.DESCRIBE_SCHEMA,
+          SqlKind.DESCRIBE_VIEW,
           SqlKind.SHOW_SCHEMAS,
           SqlKind.SHOW_OBJECTS,
           SqlKind.SHOW_TABLES,

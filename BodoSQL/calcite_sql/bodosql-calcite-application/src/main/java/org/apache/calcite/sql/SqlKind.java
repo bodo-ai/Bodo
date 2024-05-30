@@ -1223,6 +1223,9 @@ public enum SqlKind {
   /** {@code DROP VIEW} DDL statement. */
   DROP_VIEW,
 
+  /** {@code DESCRIBE VIEW} DDL statement. */
+  DESCRIBE_VIEW,
+
   /** {@code CREATE MATERIALIZED VIEW} DDL statement. */
   CREATE_MATERIALIZED_VIEW,
 

@@ -2216,7 +2216,19 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       String query = String.format(Locale.ROOT, "DESCRIBE TABLE %s", tableName);
       List<List<String>> columnValues = new ArrayList<>();
       List<String> columnNames =
-          List.of("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY");
+          List.of(
+              "NAME",
+              "TYPE",
+              "KIND",
+              "NULL?",
+              "DEFAULT",
+              "PRIMARY_KEY",
+              "UNIQUE_KEY",
+              "CHECK",
+              "EXPRESSION",
+              "COMMENT",
+              "POLICY NAME",
+              "PRIVACY DOMAIN");
       for (int i = 0; i < columnNames.size(); i++) {
         columnValues.add(new ArrayList<>());
       }
@@ -2231,8 +2243,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           ColumnDataTypeInfo bodoColumnTypeInfo = snowflakeTypeNameToTypeInfo(columnType, true);
           RelDataType type = bodoColumnTypeInfo.convertToSqlType(typeFactory);
           columnValues.get(1).add(type.toString());
-          // Other columns are just copied over.
           columnValues.get(0).add(output.getString("name")); // First column as of 2024-05-06
+          // Other columns are just copied over.
           for (int i = 2; i < columnNames.size(); i++) {
             columnValues.get(i).add(output.getString(i + 1));
           }
@@ -2439,6 +2451,65 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     /**
+     * Describe a view with call to Snowflake API. Signals error whenever Snowflake signals an error
+     * or when the view does not exist. The columns are up-to-date as of 2024-05-22
+     *
+     * @param viewPath The path to the view to describe.
+     * @param typeFactory The type factory to use for creating the Bodo Type.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult describeView(
+        @NotNull ImmutableList<String> viewPath, @NotNull RelDataTypeFactory typeFactory) {
+      String viewName = generateSnowflakeObjectString(viewPath);
+      String query = String.format(Locale.ROOT, "DESCRIBE VIEW %s", viewName);
+      List<List<String>> columnValues = new ArrayList<>();
+      List<String> columnNames =
+          List.of(
+              "NAME",
+              "TYPE",
+              "KIND",
+              "NULL?",
+              "DEFAULT",
+              "PRIMARY_KEY",
+              "UNIQUE_KEY",
+              "CHECK",
+              "EXPRESSION",
+              "COMMENT",
+              "POLICY NAME",
+              "PRIVACY DOMAIN");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          // We keep the columns, but we do custom processing
+          // for types to unify our output.
+          int typeColIdx = output.findColumn("type"); // Second column as of 2024-05-06
+          String columnType = output.getString(typeColIdx);
+          // Note We don't care about nullability
+          ColumnDataTypeInfo bodoColumnTypeInfo = snowflakeTypeNameToTypeInfo(columnType, true);
+          RelDataType type = bodoColumnTypeInfo.convertToSqlType(typeFactory);
+          columnValues.get(1).add(type.toString());
+          columnValues.get(0).add(output.getString("name")); // First column as of 2024-05-06
+          // Other columns are just copied over.
+          for (int i = 2; i < columnNames.size(); i++) {
+            columnValues.get(i).add(output.getString(i + 1));
+          }
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to describe Snowflake view %s. Error: %s",
+                viewName,
+                e.getMessage()));
+      }
+    }
+
+    /*
      * Drop a view with call to Snowflake API. Signals error whenever Snowflake signals an error.
      * The "if_exists" flag is handled in DDLExecutor.
      *

@@ -94,8 +94,22 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         tablePath: ImmutableList<String>,
         typeFactory: RelDataTypeFactory,
     ): DDLExecutionResult {
-        val names = listOf("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY")
-        val columnValues = List(7) { ArrayList<String?>() }
+        val names =
+            listOf(
+                "NAME",
+                "TYPE",
+                "KIND",
+                "NULL?",
+                "DEFAULT",
+                "PRIMARY_KEY",
+                "UNIQUE_KEY",
+                "CHECK",
+                "EXPRESSION",
+                "COMMENT",
+                "POLICY NAME",
+                "PRIVACY DOMAIN",
+            )
+        val columnValues = List(12) { ArrayList<String?>() }
 
         val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
         val table = icebergConnection.loadTable(tableIdentifier)
@@ -112,6 +126,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             // Iceberg doesn't support primary or unique keys yet.
             columnValues[5].add("N")
             columnValues[6].add("N")
+            // Five new columns from Snowflake that is set to null in Iceberg
+            for (idx in 7..11) columnValues[idx].add(null)
         }
         return DDLExecutionResult(names, columnValues)
     }
@@ -282,6 +298,50 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         } else {
             throw RuntimeException("CREATE VIEW is unimplemented for the current catalog")
         }
+    }
+
+    override fun describeView(
+        viewPath: ImmutableList<String>,
+        typeFactory: RelDataTypeFactory,
+    ): DDLExecutionResult {
+        if (icebergConnection is ViewCatalog) {
+            val names =
+                listOf(
+                    "NAME",
+                    "TYPE",
+                    "KIND",
+                    "NULL?",
+                    "DEFAULT",
+                    "PRIMARY_KEY",
+                    "UNIQUE_KEY",
+                    "CHECK",
+                    "EXPRESSION",
+                    "COMMENT",
+                    "POLICY NAME",
+                    "PRIVACY DOMAIN",
+                )
+            val columnValues = List(12) { ArrayList<String?>() }
+            val viewIdentifier = tablePathToTableIdentifier(viewPath.subList(0, viewPath.size - 1), Util.last(viewPath))
+            val view = icebergConnection.loadView(viewIdentifier)
+            val schema = view.schema()
+            schema.columns().forEach {
+                columnValues[0].add(it.name())
+                val typeInfo = IcebergCatalog.icebergTypeToTypeInfo(it.type(), it.isOptional)
+                val bodoType = typeInfo.convertToSqlType(typeFactory)
+                columnValues[1].add(bodoType.toString())
+                columnValues[2].add("COLUMN")
+                columnValues[3].add(if (it.isOptional) "Y" else "N")
+                // We don't support default values yet.
+                columnValues[4].add(null)
+                // Iceberg doesn't support primary or unique keys yet.
+                columnValues[5].add("N")
+                columnValues[6].add("N")
+                // Five new columns from Snowflake that is set to null in Iceberg
+                for (idx in 7..11) columnValues[idx].add(null)
+            }
+            return DDLExecutionResult(names, columnValues)
+        }
+        throw RuntimeException("DESCRIBE VIEW is unimplemented for the current catalog")
     }
 
     /**
