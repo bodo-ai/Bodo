@@ -204,7 +204,7 @@ def test_decimal_constant_lowering(decimal_value, memory_leak_check):
 
 
 def test_join(decimal_arr_value, memory_leak_check):
-    """test joining dataframes with decimal data columns
+    """test joining DataFrames with decimal data columns
     TODO: add decimal array to regular df tests and remove this
     """
 
@@ -229,11 +229,17 @@ def test_constructor(memory_leak_check):
     def test_impl3():
         return Decimal(1)
 
+    def test_impl4():
+        return Decimal(" -1.135E  ")
+
     check_func(
         test_impl1, (), py_output=pa.scalar(Decimal("1.1"), pa.decimal128(38, 18))
     )
     check_func(test_impl2, (), py_output=pa.scalar(Decimal(), pa.decimal128(38, 18)))
     check_func(test_impl3, (), py_output=pa.scalar(Decimal(1), pa.decimal128(38, 18)))
+    check_func(
+        test_impl4, (), py_output=pa.scalar(Decimal("-1.135"), pa.decimal128(38, 18))
+    )
 
 
 # TODO: fix memory leak and add memory_leak_check
@@ -747,3 +753,123 @@ def test_decimal_array_multiplication_overflow_handling():
     with pytest.raises(ValueError, match="Number out of representable range"):
         out = impl(arr1, arr2)
         print(out)
+
+
+def test_str_to_decimal_scalar(memory_leak_check):
+    """
+    Test converting a string scalar to decimal.
+    """
+
+    def impl(s):
+        return bodo.libs.bodosql_array_kernels.string_to_decimal(s, 4, 2, True)
+
+    check_func(
+        impl, ("1.12",), py_output=pa.scalar(Decimal("1.12"), pa.decimal128(4, 2))
+    )
+    check_func(impl, ("E",), py_output=pa.scalar(Decimal("0"), pa.decimal128(4, 2)))
+    check_func(impl, ("-E",), py_output=pa.scalar(Decimal("-0"), pa.decimal128(4, 2)))
+    check_func(impl, ("+E",), py_output=pa.scalar(Decimal("+0"), pa.decimal128(4, 2)))
+    check_func(
+        impl, ("1.1E-1",), py_output=pa.scalar(Decimal("0.11"), pa.decimal128(4, 2))
+    )
+    check_func(
+        impl, ("-1.1E",), py_output=pa.scalar(Decimal("-1.1"), pa.decimal128(4, 2))
+    )
+    # Check rounding scale
+    check_func(
+        impl, ("1.125",), py_output=pa.scalar(Decimal("1.13"), pa.decimal128(4, 2))
+    )
+    # Check for too large a leading digit
+    check_func(impl, ("-100",), py_output=None)
+    # Check for None -> None
+    check_func(impl, (None,), py_output=None)
+
+
+def test_str_to_decimal_array(memory_leak_check):
+    """
+    Test converting a string array to decimal.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.string_to_decimal(arr, 4, 2, True)
+
+    arr = pd.array(
+        [
+            "1.12",
+            "E",
+            "-E",
+            "+E",
+            "1.1E-1",
+            "-1.1E",
+            "1.125",
+            "-100",
+            None,
+        ]
+        * 2
+    )
+    py_output = pd.array(
+        [
+            "1.12",
+            "0",
+            "0",
+            "0",
+            "0.11",
+            "-1.1",
+            "1.13",
+            None,
+            None,
+        ]
+        * 2,
+        dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
+    )
+    check_func(impl, (arr,), py_output=py_output)
+
+
+def test_str_to_decimal_scalar_edge_case(memory_leak_check):
+    """
+    Tests an edge case where using the full precision + scale doesn't
+    fit in a decimal 128, but the scale can be rounded.
+    """
+
+    def impl(s):
+        return bodo.libs.bodosql_array_kernels.string_to_decimal(s, 38, 4, True)
+
+    leading = "9" + "0" * 33
+    value = f"{leading}.12345"
+    check_func(
+        impl,
+        (value,),
+        py_output=pa.scalar(Decimal(f"{leading}.1235"), pa.decimal128(38, 4)),
+    )
+
+
+def test_str_to_decimal_error():
+    """
+    Test that with null_on_error=False strings that don't fit or don't parse raise
+    an error.
+    """
+
+    @bodo.jit
+    def impl(s):
+        return bodo.libs.bodosql_array_kernels.string_to_decimal(s, 4, 2, False)
+
+    with pytest.raises(
+        RuntimeError,
+        match="String value is out of range for decimal or doesn't parse properly",
+    ):
+        impl("-100")
+    with pytest.raises(
+        RuntimeError,
+        match="String value is out of range for decimal or doesn't parse properly",
+    ):
+        impl("1 0")
+    with pytest.raises(
+        RuntimeError,
+        match="String value is out of range for decimal or doesn't parse properly",
+    ):
+        impl(pd.array(["-100"] * 5))
+    with pytest.raises(
+        RuntimeError,
+        match="String value is out of range for decimal or doesn't parse properly",
+    ):
+        impl(pd.array(["1 0"] * 5))
