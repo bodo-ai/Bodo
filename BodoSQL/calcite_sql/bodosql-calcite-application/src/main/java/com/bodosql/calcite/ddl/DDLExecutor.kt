@@ -134,6 +134,18 @@ interface DDLExecutor {
     )
 
     /**
+     * Describes a view in the catalog. We use a type factory to create the Bodo
+     * type consistently across all catalogs.
+     * @param viewPath The path to the table to describe.
+     * @param typeFactory The type factory to use for creating the Bodo Type.
+     * @return The result of the operation.
+     */
+    fun describeView(
+        viewPath: ImmutableList<String>,
+        typeFactory: RelDataTypeFactory,
+    ): DDLExecutionResult
+
+    /*
      * Drops a view from the catalog. Note: We don't need ifExists because we
      * have already checked for the existence of the table before calling this.
      * @param viewPath The path to the view to describe.

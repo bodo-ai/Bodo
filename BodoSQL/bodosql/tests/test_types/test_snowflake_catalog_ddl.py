@@ -1247,6 +1247,11 @@ def test_describe_table(describe_keyword, test_db_snowflake_catalog, memory_leak
             "DEFAULT": [None] * 16,
             "PRIMARY_KEY": ["N"] * 16,
             "UNIQUE_KEY": ["N"] * 16,
+            "CHECK": [None] * 16,
+            "EXPRESSION": [None] * 16,
+            "COMMENT": [None] * 16,
+            "POLICY NAME": [None] * 16,
+            "PRIVACY DOMAIN": [None] * 16,
         }
     )
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
@@ -1402,6 +1407,31 @@ def test_show_schemas_jit(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
+def check_view_exists(conn_str, view_name) -> bool:
+    tables = pd.read_sql(
+        f"SHOW VIEWS LIKE '{view_name}' STARTS WITH '{view_name}'",
+        conn_str,
+    )
+    return len(tables) == 1
+
+
+@contextmanager
+def view_helper(conn_str, view_name, create=True):
+    if create:
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"CREATE VIEW {view_name} AS SELECT 0 AS A", conn_str)
+            assert check_view_exists(conn_str, view_name)
+        bodo.barrier()
+
+    try:
+        yield
+    finally:
+        bodo.barrier()
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn_str)
+            assert not check_view_exists(conn_str, view_name)
+
+
 def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
     """Tests that show tables works on Snowflake."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
@@ -1544,3 +1574,443 @@ def test_show_no_terse_error(test_db_snowflake_catalog, memory_leak_check):
         bodo_output = bc.execute_ddl("SHOW OBJECTS in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
     with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
         bodo_output = bc.execute_ddl("SHOW SCHEMAS in SNOWFLAKE_SAMPLE_DATA")
+
+
+def test_create_view(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo can create a view in Snowflake."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query = f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully created."]})
+
+    def verify_view_created():
+        assert check_view_exists(conn, view_name)
+        x = pd.read_sql(f"SELECT * FROM {view_name}", conn)
+        assert "a" in x
+        assert x["a"].shape == (1,)
+        assert x["a"][0] == "testview"
+
+    # execute_ddl Version
+    with view_helper(conn, view_name, create=False):
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+        verify_view_created()
+
+    # Python Version
+    with view_helper(conn, view_name, create=False):
+        bodo_output = bc.sql(query)
+        assert_equal_par(bodo_output, py_output)
+        verify_view_created()
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with view_helper(conn, view_name, create=False):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+        verify_view_created()
+
+
+def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo validates view definitions before submitting to Snowflake."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    schema_1 = gen_unique_id("SCEHMA1").upper()
+    schema_2 = gen_unique_id("SCEHMA2").upper()
+
+    # this test creates two schemas - schema_1 and schema_2, and creates a table
+    # at SCHEMA_1.TABLE1. We then ensure that view validation will fail if we
+    # create a view referencing TABLE1 in SCHEMA_2, and that the column of
+    # TABLE1 are validated when we create a view in SCHEMA_1.
+
+    catalog = deepcopy(test_db_snowflake_catalog)
+    with schema_helper(conn, schema_1, create=True):
+        catalog.connection_params["schema"] = schema_1
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
+        bc.sql(table_query)
+        with schema_helper(conn, schema_2, create=True):
+            with pytest.raises(BodoError, match=f"Object 'TABLE1' not found"):
+                query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
+                bc.execute_ddl(query)
+
+        # Test that the view validates if ran in the correct schema
+        py_output = pd.DataFrame({"STATUS": [f"View 'VIEW2' successfully created."]})
+        query = (
+            f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
+        )
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Column B does not exist - validation should fail
+        with pytest.raises(BodoError, match=f"Column 'B' not found"):
+            query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
+            bc.execute_ddl(query)
+
+
+@contextmanager
+def view_helper_nontrivialview(conn_str, view_name, create=True):
+    if create:
+        if bodo.get_rank() == 0:
+            pd.read_sql(
+                f"CREATE VIEW {view_name} AS (SELECT * FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM)",
+                conn_str,
+            )
+            assert check_view_exists(conn_str, view_name)
+        bodo.barrier()
+
+    try:
+        yield
+    finally:
+        bodo.barrier()
+        if bodo.get_rank() == 0:
+            pd.read_sql(f"DROP VIEW IF EXISTS {view_name}", conn_str)
+            assert not check_view_exists(conn_str, view_name)
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_describe_view(describe_keyword, test_db_snowflake_catalog, memory_leak_check):
+    """Tests that describe view works on a proper Snowflake view."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query_describe_view = f"{describe_keyword} VIEW {view_name}"
+    expected_output = pd.DataFrame(
+        {
+            "NAME": [
+                "L_ORDERKEY",
+                "L_PARTKEY",
+                "L_SUPPKEY",
+                "L_LINENUMBER",
+                "L_QUANTITY",
+                "L_EXTENDEDPRICE",
+                "L_DISCOUNT",
+                "L_TAX",
+                "L_RETURNFLAG",
+                "L_LINESTATUS",
+                "L_SHIPDATE",
+                "L_COMMITDATE",
+                "L_RECEIPTDATE",
+                "L_SHIPINSTRUCT",
+                "L_SHIPMODE",
+                "L_COMMENT",
+            ],
+            "TYPE": [
+                "BIGINT",
+                "BIGINT",
+                "BIGINT",
+                "BIGINT",
+                "DOUBLE",
+                "DOUBLE",
+                "DOUBLE",
+                "DOUBLE",
+                "VARCHAR(1)",
+                "VARCHAR(1)",
+                "DATE",
+                "DATE",
+                "DATE",
+                "VARCHAR(25)",
+                "VARCHAR(10)",
+                "VARCHAR(44)",
+            ],
+            "KIND": ["COLUMN"] * 16,
+            "NULL?": ["N"] * 16,
+            "DEFAULT": [None] * 16,
+            "PRIMARY_KEY": ["N"] * 16,
+            "UNIQUE_KEY": ["N"] * 16,
+            "CHECK": [None] * 16,
+            "EXPRESSION": [None] * 16,
+            "COMMENT": [None] * 16,
+            "POLICY NAME": [None] * 16,
+            "PRIVACY DOMAIN": [None] * 16,
+        }
+    )
+    with view_helper_nontrivialview(conn, view_name, create=True):
+        # Python Version
+        bodo_output = bc.sql(query_describe_view)
+        passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size(), "Describe table test failed"
+
+        # execute_ddl Version
+        bodo_output = bc.execute_ddl(query_describe_view)
+        passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size(), "Describe table test failed"
+
+        # Jit Version
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_describe_view),
+            py_output=expected_output,
+            test_str_literal=False,
+        )
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_describe_view_on_table(
+    describe_keyword, test_db_snowflake_catalog, memory_leak_check
+):
+    """Tests that describe view also works on a Snowflake table."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    query_describe_view = (
+        f"{describe_keyword} VIEW SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM"
+    )
+    expected_output = pd.DataFrame(
+        {
+            "NAME": [
+                "L_ORDERKEY",
+                "L_PARTKEY",
+                "L_SUPPKEY",
+                "L_LINENUMBER",
+                "L_QUANTITY",
+                "L_EXTENDEDPRICE",
+                "L_DISCOUNT",
+                "L_TAX",
+                "L_RETURNFLAG",
+                "L_LINESTATUS",
+                "L_SHIPDATE",
+                "L_COMMITDATE",
+                "L_RECEIPTDATE",
+                "L_SHIPINSTRUCT",
+                "L_SHIPMODE",
+                "L_COMMENT",
+            ],
+            "TYPE": [
+                "BIGINT",
+                "BIGINT",
+                "BIGINT",
+                "BIGINT",
+                "DOUBLE",
+                "DOUBLE",
+                "DOUBLE",
+                "DOUBLE",
+                "VARCHAR(1)",
+                "VARCHAR(1)",
+                "DATE",
+                "DATE",
+                "DATE",
+                "VARCHAR(25)",
+                "VARCHAR(10)",
+                "VARCHAR(44)",
+            ],
+            "KIND": ["COLUMN"] * 16,
+            "NULL?": ["N"] * 16,
+            "DEFAULT": [None] * 16,
+            "PRIMARY_KEY": ["N"] * 16,
+            "UNIQUE_KEY": ["N"] * 16,
+            "CHECK": [None] * 16,
+            "EXPRESSION": [None] * 16,
+            "COMMENT": [None] * 16,
+            "POLICY NAME": [None] * 16,
+            "PRIVACY DOMAIN": [None] * 16,
+        }
+    )
+
+    # Python Version
+    bodo_output = bc.sql(query_describe_view)
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Describe table test failed"
+
+    # execute_ddl Version
+    bodo_output = bc.execute_ddl(query_describe_view)
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Describe table test failed"
+
+    # Jit Version
+    check_func_seq(
+        lambda bc, query: bc.sql(query),
+        (bc, query_describe_view),
+        py_output=expected_output,
+        test_str_literal=False,
+    )
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_describe_view_error_does_not_exist(
+    describe_keyword, test_db_snowflake_catalog, memory_leak_check
+):
+    """Tests that describe view raise error if the view does not exist."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query_describe_view = f"{describe_keyword} VIEW {view_name}"
+    with view_helper_nontrivialview(conn, view_name, create=False):
+        # execute_ddl Version
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to describe.",
+        ):
+            bc.execute_ddl(query_describe_view)
+
+        # Python Version
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to describe.",
+        ):
+            bc.sql(query_describe_view)
+
+        # Jit Version
+        # Intentionally returns replicated output
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to describe.",
+        ):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query_describe_view),
+                py_output="",
+                test_str_literal=False,
+            )
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_drop_view(if_exists, test_db_snowflake_catalog, memory_leak_check):
+    """Tests that Bodo can drop a view in Snowflake if the view does exist."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+
+    # execute_ddl Version
+    with view_helper(conn, view_name, create=True):
+        bodo_output = bc.execute_ddl(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+        assert not check_view_exists(conn, view_name)
+
+    # Python Version
+    with view_helper(conn, view_name, create=True):
+        bodo_output = bc.sql(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+        assert not check_view_exists(conn, view_name)
+
+    # Jit Version
+    with view_helper(conn, view_name, create=True):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_drop_view),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+        assert not check_view_exists(conn, view_name)
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_drop_view_error_does_not_exist(
+    if_exists, test_db_snowflake_catalog, memory_leak_check
+):
+    """Tests that Bodo can drop a view in Snowflake if the view does not exist with if_exists.
+    Tests that Bodo signals error in Snowflake if the view does not exist without if_exists.
+    """
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
+    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+
+    with view_helper(conn, view_name, create=True):
+        pass
+    # execute_ddl Version
+    if if_exists:
+        bodo_output = bc.execute_ddl(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to drop.",
+        ):
+            bc.execute_ddl(query_drop_view)
+
+    # Python Version
+    if if_exists:
+        bodo_output = bc.sql(query_drop_view)
+        _test_equal_guard(bodo_output, py_output)
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to drop.",
+        ):
+            bc.sql(query_drop_view)
+
+    # Jit Version
+    if if_exists:
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_drop_view),
+            py_output=py_output,
+            test_str_literal=False,
+        )
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"View '{view_name}' does not exist or not authorized to drop.",
+        ):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query_drop_view),
+                py_output=py_output,
+                test_str_literal=False,
+            )
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
+def test_drop_view_error_non_view(
+    if_exists, test_db_snowflake_catalog, memory_leak_check
+):
+    """Tests that Bodo signals error in Snowflake if the path is not a view."""
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
+    with table_helper(conn, view_name, create=True):
+        # execute_ddl Version
+        with pytest.raises(
+            BodoError, match=f"Unable to drop Snowflake view from query"
+        ):
+            bc.execute_ddl(query_drop_view)
+
+        # Python Version
+        with pytest.raises(
+            BodoError, match=f"Unable to drop Snowflake view from query"
+        ):
+            bc.sql(query_drop_view)
+
+        # Jit Version
+        with pytest.raises(
+            BodoError, match=f"Unable to drop Snowflake view from query"
+        ):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query_drop_view),
+                py_output="",
+                test_str_literal=False,
+            )

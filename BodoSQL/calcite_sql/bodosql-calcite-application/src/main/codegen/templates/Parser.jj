@@ -38,11 +38,11 @@ import com.bodosql.calcite.sql.func.SqlNamedParam;
 import com.bodosql.calcite.sql.ddl.SqlBegin;
 import com.bodosql.calcite.sql.ddl.SqlCommit;
 import com.bodosql.calcite.sql.ddl.SqlRollback;
+import com.bodosql.calcite.sql.ddl.SqlDescribeView;
 import com.bodosql.calcite.sql.ddl.SqlAlterView;
 import com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView;
 import com.bodosql.calcite.sql.ddl.SqlAlterTable;
 import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable;
-
 import org.apache.calcite.sql.VariantTypeNameSpec;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.TimeUnit;
@@ -1620,6 +1620,11 @@ SqlNode SqlDescribe() :
 {
     (<DESCRIBE> | <DESC>) { s = span(); }
     (
+        LOOKAHEAD(2) (<VIEW>)
+        table = CompoundIdentifier() {
+            return new SqlDescribeView(s.end(this), table);
+        }
+    |
         LOOKAHEAD(2) (<DATABASE> | <CATALOG> | <SCHEMA>)
         id = CompoundIdentifier() {
             // DESCRIBE DATABASE and DESCRIBE CATALOG currently do the same as

@@ -424,6 +424,11 @@ def test_describe_table(
                 "DEFAULT": [None],
                 "PRIMARY_KEY": ["N"],
                 "UNIQUE_KEY": ["N"],
+                "CHECK": [None],
+                "EXPRESSION": [None],
+                "COMMENT": [None],
+                "POLICY NAME": [None],
+                "PRIVACY DOMAIN": [None],
             }
         )
         assert_equal_par(bodo_output, expected_output)
@@ -663,6 +668,44 @@ def test_show_schemas_compiles_jit(iceberg_filesystem_catalog, memory_leak_check
     bc.validate_query_compiles(query)
     query = f'DROP SCHEMA "{schema_name}"'
     bc.execute_ddl(query)
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_iceberg_describe_view_unsupported(
+    describe_keyword, iceberg_filesystem_catalog, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog raises an error when describing an iceberg
+    view.
+    """
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query_describe_view = f"{describe_keyword} VIEW {view_name}"
+    with pytest.raises(
+        BodoError,
+        match=f"View '{view_name}' does not exist or not authorized to describe.",
+    ):
+        bc.execute_ddl(query_describe_view)
+
+    # Python Version
+    with pytest.raises(
+        BodoError,
+        match=f"View '{view_name}' does not exist or not authorized to describe.",
+    ):
+        bc.sql(query_describe_view)
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with pytest.raises(
+        BodoError,
+        match=f"View '{view_name}' does not exist or not authorized to describe.",
+    ):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_describe_view),
+            py_output="",
+            test_str_literal=False,
+        )
 
 
 def test_show_tables(iceberg_filesystem_catalog, iceberg_database, memory_leak_check):

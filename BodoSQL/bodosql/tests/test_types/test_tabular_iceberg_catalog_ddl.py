@@ -11,6 +11,7 @@ from bodo.tests.utils import (
     check_func_seq,
     pytest_mark_one_rank,
     pytest_tabular,
+    reduce_sum,
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
@@ -178,6 +179,122 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
                 spark.sql(f"DROP VIEW IF EXISTS {schema_1}.VIEW3")
 
             cleanup()
+
+
+@contextmanager
+def view_helper_nontrivialview(bc, tabular_connection, view_name, create=True):
+    """If create = True, create a non-trivial view with actual data that will get destroyed automatically aftre this function call"""
+    schema = "CI"
+    if create:
+        view_query = f"CREATE OR REPLACE VIEW {view_name} AS (SELECT * FROM {schema}.BODOSQL_ICEBERG_READ_TEST)"
+        bc.sql(view_query)
+    try:
+        yield
+    finally:
+        bodo.barrier()
+
+        @run_rank0
+        def destroy_view():
+            get_spark_tabular(tabular_connection).sql(
+                f"DROP VIEW IF EXISTS {view_name}"
+            )
+            assert not check_view_exists(tabular_connection, view_name)
+
+        destroy_view()
+
+
+def _test_equal_par(bodo_output, py_output):
+    passed = _test_equal_guard(
+        bodo_output,
+        py_output,
+    )
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Parallel test failed"
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_iceberg_describe_view_basic(
+    describe_keyword, tabular_catalog, tabular_connection, memory_leak_check
+):
+    """
+    Tests that the tabular catalog correctly describes the view
+    """
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query_describe_view = f"{describe_keyword} VIEW {view_name}"
+
+    expected_output = pd.DataFrame(
+        {
+            "NAME": ["A", "B", "C"],
+            "TYPE": ["VARCHAR", "DOUBLE", "BOOLEAN"],
+            "KIND": ["COLUMN", "COLUMN", "COLUMN"],
+            "NULL?": ["N", "N", "N"],
+            "DEFAULT": [None, None, None],
+            "PRIMARY_KEY": ["N", "N", "N"],
+            "UNIQUE_KEY": ["N", "N", "N"],
+            "CHECK": [None, None, None],
+            "EXPRESSION": [None, None, None],
+            "COMMENT": [None, None, None],
+            "POLICY NAME": [None, None, None],
+            "PRIVACY DOMAIN": [None, None, None],
+        }
+    )
+    with view_helper_nontrivialview(bc, tabular_connection, view_name, create=True):
+        # execute_ddl Version
+        output = bc.execute_ddl(query_describe_view)
+        _test_equal_par(output, expected_output)
+
+        # Python Version
+        output = bc.sql(query_describe_view)
+        _test_equal_par(output, expected_output)
+
+        # Jit Version
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_describe_view),
+            py_output=expected_output,
+            test_str_literal=False,
+        )
+
+
+@pytest.mark.parametrize("describe_keyword", ["DESCRIBE", "DESC"])
+def test_iceberg_describe_view_error_does_not_exist(
+    describe_keyword, tabular_catalog, memory_leak_check
+):
+    """
+    Tests that the tabular catalog raises an error when describing an iceberg
+    view that does not exist.
+    """
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    view_name = gen_unique_id("TEST_VIEW").upper()
+    query_describe_view = f"{describe_keyword} VIEW {view_name}"
+    with pytest.raises(
+        BodoError,
+        match=f"View '{view_name}' does not exist or not authorized to describe.",
+    ):
+        bc.execute_ddl(query_describe_view)
+
+    # Python Version
+    with pytest.raises(
+        BodoError,
+        match=f"View '{view_name}' does not exist or not authorized to describe.",
+    ):
+        bc.sql(query_describe_view)
+
+    # Jit Version
+    # Intentionally returns replicated output
+    with pytest.raises(
+        BodoError,
+        match=f"View '{view_name}' does not exist or not authorized to describe.",
+    ):
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_describe_view),
+            py_output="",
+            test_str_literal=False,
+        )
 
 
 ##################

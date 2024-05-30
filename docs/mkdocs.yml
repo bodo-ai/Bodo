@@ -198,6 +198,7 @@ nav:
                   - api_docs/sql/ddl/create_table.md
                   - api_docs/sql/ddl/create_view.md
                   - api_docs/sql/ddl/describe_table.md
+                  - api_docs/sql/ddl/describe_view.md
                   - api_docs/sql/ddl/drop_schema.md
                   - api_docs/sql/ddl/drop_table.md
                   - api_docs/sql/ddl/drop_view.md

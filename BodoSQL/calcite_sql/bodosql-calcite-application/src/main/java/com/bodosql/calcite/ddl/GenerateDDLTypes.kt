@@ -27,10 +27,14 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                 }
 
                 // Describe Queries
-                SqlKind.DESCRIBE_TABLE -> {
+                SqlKind.DESCRIBE_TABLE, SqlKind.DESCRIBE_VIEW -> {
                     // We only return the first 7 arguments from Snowflake right now as other expressions may not generalize.
-                    val fieldNames = listOf("NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY")
-                    val types = listOf(stringType, stringType, stringType, stringType, stringType, stringType, stringType)
+                    val fieldNames =
+                        listOf(
+                            "NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY", "CHECK",
+                            "EXPRESSION", "COMMENT", "POLICY NAME", "PRIVACY DOMAIN",
+                        )
+                    val types = List(12) { _ -> stringType }
                     Pair(fieldNames, types)
                 }
 
