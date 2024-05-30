@@ -46,6 +46,7 @@ class RelCostAndMetaDataWriter(
     rel: RelNode,
     private val minRelID: Map<Int, Int>,
     private val showCosts: Boolean = true,
+    private val hideOperatorIDs: Boolean = false,
 ) : RelWriterImpl(pw) {
     // Information caching
     private val cacheQueue = CacheNodeSingleVisitHandler()
@@ -80,7 +81,11 @@ class RelCostAndMetaDataWriter(
 
         if (showCosts) {
             newSection(s, "operator id")
-            s.append("${minRelID[rel.id]}\n")
+            if (hideOperatorIDs) {
+                s.append("OPID\n")
+            } else {
+                s.append("${minRelID[rel.id]}\n")
+            }
             // Display cost information.
             val cost = mq.getNonCumulativeCost(rel) as Cost
             newSection(s, "cost")
