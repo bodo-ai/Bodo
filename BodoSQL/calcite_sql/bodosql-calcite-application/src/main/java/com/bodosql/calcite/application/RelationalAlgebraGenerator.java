@@ -474,7 +474,8 @@ public class RelationalAlgebraGenerator {
     RelNode newRoot = BodoUtilKt.bodoPhysicalProject(root.getLeft());
     StringWriter sw = new StringWriter();
     RelCostAndMetaDataWriter costWriter =
-        new RelCostAndMetaDataWriter(new PrintWriter(sw), newRoot, root.getRight(), includeCosts);
+        new RelCostAndMetaDataWriter(
+            new PrintWriter(sw), newRoot, root.getRight(), includeCosts, hideOperatorIDs);
     newRoot.explain(costWriter);
     costWriter.explainCachedNodes();
     return sw.toString();
