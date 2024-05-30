@@ -1980,3 +1980,13 @@ def tabular_catalog(tabular_connection):
     return bodosql.TabularCatalog(
         warehouse=tabular_warehouse, credential=tabular_credential
     )
+
+
+@pytest.fixture
+def glue_catalog():
+    """
+    Returns a glue catalog object
+    """
+
+    warehouse = "s3://icebergglue-ci"
+    return bodosql.GlueCatalog(warehouse=warehouse)

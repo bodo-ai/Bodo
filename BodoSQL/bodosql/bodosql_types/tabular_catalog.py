@@ -236,7 +236,7 @@ class TabularConnectionType(IcebergConnectionType):
         token = os.getenv("__BODOSQL_TABULAR_TOKEN")
         assert (
             token is not None
-        ), "TabularConnectionTYPE: Expected __BODOSQL_TABULAR_TOKEN to be defined"
+        ), "TabularConnectionType: Expected __BODOSQL_TABULAR_TOKEN to be defined"
 
         self.conn_str = get_conn_str(rest_uri, warehouse, token)
 

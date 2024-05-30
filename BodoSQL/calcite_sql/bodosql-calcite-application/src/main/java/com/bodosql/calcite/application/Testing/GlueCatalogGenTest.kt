@@ -17,7 +17,7 @@ class GlueCatalogGenTest : GenTestFixture() {
     }
 
     override fun getCatalog(): BodoSQLCatalog {
-        val warehouse = "s3://buckets/aneesh-iceberggluetest"
+        val warehouse = "s3://aneesh-iceberggluetest"
         return BodoGlueCatalog(warehouse)
     }
 
@@ -29,7 +29,7 @@ class GlueCatalogGenTest : GenTestFixture() {
         @Throws(Exception::class)
         @JvmStatic
         fun main(args: Array<String>) {
-            val sql = "SELECT * FROM \"apple_data_two\".\"destfull\""
+            val sql = "SELECT * FROM \"icerbergglueci\".\"ICEBERG_READ_TEST\""
             val generateCode = true
             GlueCatalogGenTest().run(sql, generateCode)
         }

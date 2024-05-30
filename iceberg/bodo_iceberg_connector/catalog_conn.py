@@ -31,7 +31,7 @@ def parse_conn_str(
         if parsed_conn.scheme == "thrift":
             catalog_type = "hive"
 
-        elif parsed_conn.scheme == "" and parsed_conn.path == "glue":
+        elif parsed_conn.scheme == "glue":
             catalog_type = "glue"
 
         elif parsed_conn.scheme == "s3":

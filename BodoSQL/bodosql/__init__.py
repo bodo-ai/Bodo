@@ -18,6 +18,11 @@ from bodosql.bodosql_types.tabular_catalog import (
     TabularCatalogType,
     get_tabular_connection,
 )
+from bodosql.bodosql_types.glue_catalog import (
+    GlueCatalog,
+    GlueCatalogType,
+    get_glue_connection,
+)
 
 # Import BodoSQL libs
 import bodosql.libs.regex
