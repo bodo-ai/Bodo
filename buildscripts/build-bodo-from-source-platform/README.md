@@ -1,6 +1,13 @@
 # build-bodo-from-source-platform
 
 ## Set up DEV environment on platform, single-node cluster
+
+>[!NOTE]
+> If the node is too small, it may run out of memory during the build process. 
+> In that case, you can try to build on a larger node or use environment variable `CMAKE_BUILD_PARALLEL_LEVEL` 
+> to manually control the number of processes used.
+> Try setting it to a single process using `export CMAKE_BUILD_PARALLEL_LEVEL=1`
+
 1. SSH into the cluster node.
 1. Copy single_node_install.sh to the node.
 1. Run the script: `bash single_node_install.sh`.
