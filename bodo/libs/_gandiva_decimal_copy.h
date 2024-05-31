@@ -247,7 +247,7 @@ static inline arrow::BasicDecimal128 CheckAndIncreaseScale(
 static inline boost::multiprecision::int256_t IncreaseScaleBy(
     boost::multiprecision::int256_t in, int32_t increase_by) {
     assert(increase_by >= 0);
-    assert(increase_by <= 2 * DecimalTypeUtil::kMaxPrecision);
+    assert(increase_by <= 2 * kMaxPrecision);
 
     return in * GetScaleMultiplier(increase_by);
 }
