@@ -13,6 +13,7 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
 import com.google.common.collect.ImmutableList
@@ -22,6 +23,7 @@ import org.apache.calcite.plan.RelOptCost
 import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.convert.ConverterImpl
 import org.apache.calcite.rel.core.Filter
@@ -119,16 +121,25 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
-            val stage =
+            val runtimeJoinFilters = extractRuntimeJoinFilters()
+            val readStage =
                 OutputtingStageEmission(
                     { ctx, stateVar, _ ->
                         generateStreamingTable(ctx, stateVar)
                     },
                     reportOutTableSize = false,
                 )
+            val stages = mutableListOf(readStage)
+            if (runtimeJoinFilters.isNotEmpty()) {
+                val wrappedStage =
+                    OutputtingStageEmission({ ctx, stateVar, inputTable ->
+                        RuntimeJoinFilterBase.wrapResultInRuntimeJoinFilters(this, ctx, extractRuntimeJoinFilters(), inputTable!!)
+                    }, reportOutTableSize = true)
+                stages.add(wrappedStage)
+            }
             val pipeline =
                 OutputtingPipelineEmission(
-                    listOf(stage),
+                    stages,
                     true,
                     null,
                 )
@@ -241,12 +252,62 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
         }
     }
 
+    private var withoutRuntimeJoin: RelNode? = null
+
+    /**
+     * Return a copy of the RelNode subtree where runtime join filter are skipped
+     */
+    private fun skipRuntimeJoinFilters(): RelNode {
+        if (withoutRuntimeJoin == null) {
+            val runtimeJoinFilterSkipper =
+                object : RelShuttleImpl() {
+                    override fun visit(other: RelNode): RelNode {
+                        return if (other is SnowflakeRuntimeJoinFilter) {
+                            return visit(other.input)
+                        } else {
+                            super.visit(other)
+                        }
+                    }
+                }
+            withoutRuntimeJoin = input.accept(runtimeJoinFilterSkipper)
+        }
+        return withoutRuntimeJoin!!
+    }
+
+    private var extractedRtjfList: List<SnowflakeRuntimeJoinFilter>? = null
+
+    /**
+     * Returns a list of the RelNode from the subtree that are runtime join filters.
+     */
+    private fun extractRuntimeJoinFilters(): List<SnowflakeRuntimeJoinFilter> {
+        if (extractedRtjfList == null) {
+            val runtimeJoinFilterExtract =
+                object : RelVisitor() {
+                    val runtimeJoinFilters: MutableList<SnowflakeRuntimeJoinFilter> = mutableListOf()
+
+                    override fun visit(
+                        node: RelNode,
+                        ordinal: Int,
+                        parent: RelNode?,
+                    ) {
+                        if (node is SnowflakeRuntimeJoinFilter) {
+                            runtimeJoinFilters.add(node)
+                        }
+                        super.visit(node, ordinal, parent)
+                    }
+                }
+            runtimeJoinFilterExtract.go(input)
+            extractedRtjfList = runtimeJoinFilterExtract.runtimeJoinFilters.toList()
+        }
+        return extractedRtjfList!!
+    }
+
     private fun getSnowflakeSQL(): String {
         warnIfPushedFilterContainsTimestampTZCast()
 
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = BodoRelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
-        return rel2sql.visitRoot(input)
+        return rel2sql.visitRoot(skipRuntimeJoinFilters())
             .asSelect()
             .toSqlString { c ->
                 c.withClauseStartsLine(false)
@@ -260,8 +321,11 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
      * supported operations consist of Aggregates and filters.
      */
     private fun readSql(ctx: BodoPhysicalRel.BuildContext): Expr.Call {
+        // For now, pull out any Runtime Join Filters inside the converter
+        // node and run them after the read. Will deal with pushing
+        // them into the IO node later.
         val sql = getSnowflakeSQL()
-        val relInput = input as SnowflakeRel
+        val relInput = (skipRuntimeJoinFilters()) as SnowflakeRel
 
         val passTableInfo = canUseOptimizedReadSqlPath(relInput)
 
@@ -420,6 +484,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
             "_bodo_chunksize" to getStreamingBatchArg(ctx),
             "_bodo_read_as_table" to Expr.BooleanLiteral(true),
             "_bodo_sql_op_id" to ctx.operatorID().toExpr(),
+            "_bodo_runtime_join_filters" to RuntimeJoinFilterBase.getRuntimeJoinFilterTuple(ctx, extractRuntimeJoinFilters()),
         )
     }
 
@@ -457,7 +522,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
      */
     private fun generateNonStreamingTable(ctx: BodoPhysicalRel.BuildContext): BodoEngineTable {
         val readExpr = generateReadExpr(ctx)
-        return ctx.returns(readExpr)
+        return RuntimeJoinFilterBase.wrapResultInRuntimeJoinFilters(this, ctx, extractRuntimeJoinFilters(), readExpr)
     }
 
     /**
