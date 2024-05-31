@@ -22,6 +22,15 @@
   tags:
     - conda
 
+# We need to install our own `zstandard` package since the one on conda-forge doesn't support
+# zstd==1.5.6 which is required by Arrow.
+- name: CONDA | Install zstandard from Bodo channel
+  command:
+    cmd: |
+      /opt/conda/bin/mamba install --yes -c bodo.ai -c conda-forge zstandard==0.22.1
+  tags:
+    - conda
+
 - name: CONDA | Obtain current PATH before manipulations
   shell: |
     echo $PATH

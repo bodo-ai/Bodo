@@ -10,6 +10,15 @@
   tags:
     - worker_deps
 
+# We need to install our own `zstandard` package since the one on conda-forge doesn't support
+# zstd==1.5.6 which is required by Arrow.
+- name: WORKER_DEPS | Install zstandard from Bodo channel
+  command:
+    cmd: |
+      /opt/conda/bin/mamba install --yes -c bodo.ai -c conda-forge zstandard==0.22.1
+  tags:
+    - worker_deps
+
 - name: WORKER_DEPS | Install Bodo Dependencies from Mamba via Conda-Lock
   command:
     cmd: "/opt/conda/bin/mamba env update --name base --file /tmp/conda-linux-64.lock.yml"
