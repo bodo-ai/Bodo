@@ -1723,22 +1723,23 @@ class DistributedAnalysis:
             ("init_groupby_state", "bodo.libs.stream_groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),
             ("init_union_state", "bodo.libs.stream_union"),
+            ("init_window_state", "bodo.libs.stream_window"),
         ):  # pragma: no cover
             # Initialize groupby state to 1D
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
             return
 
-        if fdef == (
-            "groupby_build_consume_batch",
-            "bodo.libs.stream_groupby",
+        if fdef in (
+            ("groupby_build_consume_batch", "bodo.libs.stream_groupby"),
+            ("window_build_consume_batch", "bodo.libs.stream_window"),
         ):  # pragma: no cover
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
-        if fdef == (
-            "groupby_produce_output_batch",
-            "bodo.libs.stream_groupby",
+        if fdef in (
+            ("groupby_produce_output_batch", "bodo.libs.stream_groupby"),
+            ("window_produce_output_batch", "bodo.libs.stream_window"),
         ):  # pragma: no cover
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)

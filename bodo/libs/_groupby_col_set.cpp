@@ -1868,7 +1868,7 @@ void WindowColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t window_col_offset = input_cols.size() - n_input_cols;
-    // Allocate one output coumn for each window function call
+    // Allocate one output column for each window function call
     for (int64_t window_func : window_funcs) {
         // arr_type and dtype are assigned dummy default values.
         // This is simple to ensure they are initialized but should
@@ -1929,11 +1929,34 @@ void WindowColSet::alloc_running_value_columns(
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos,
                           bodo::IBufferPool* const pool,
                           std::shared_ptr<::arrow::MemoryManager> mm) {
-    // Doesn't go through streaming, so we don't need to use
-    // Op-Pool with this.
     window_computation(this->input_cols, window_funcs, this->update_cols,
                        grp_infos[0], asc, na_pos, window_args, n_input_cols,
-                       is_parallel, use_sql_rules);
+                       is_parallel, use_sql_rules, pool, mm);
+}
+
+std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {
+    std::vector<std::unique_ptr<bodo::DataType>> output_types;
+    for (int64_t window_func : window_funcs) {
+        switch (window_func) {
+            case Bodo_FTypes::dense_rank:
+            case Bodo_FTypes::rank:
+            case Bodo_FTypes::row_number:
+            case Bodo_FTypes::cume_dist:
+            case Bodo_FTypes::percent_rank: {
+                bodo_array_type::arr_type_enum arr_type =
+                    bodo_array_type::NULLABLE_INT_BOOL;
+                Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
+                std::tie(arr_type, dtype) =
+                    get_groupby_output_dtype(window_func, arr_type, dtype);
+                output_types.push_back(std::make_unique<bodo::DataType>(arr_type, dtype));
+                break;
+            }
+            default:
+                throw std::runtime_error(
+                    "Window function is not supported in streaming");
+        }
+    }
+    return output_types;
 }
 
 const std::vector<std::shared_ptr<array_info>>

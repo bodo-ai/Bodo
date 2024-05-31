@@ -264,6 +264,15 @@ class BasicColSet {
     }
 
     /**
+     * @brief Returns a vector of the output types for the compute column(s).
+     * This is currently only supported for window.
+     */
+    virtual std::vector<std::unique_ptr<bodo::DataType>> getOutputTypes() {
+        throw std::runtime_error(
+            "getOutputTypes() not implemented for this colset");
+    }
+
+    /**
      * @brief Set output column for this column set if this
      * colset uses output columns (used in streaming groupby)
      */
@@ -378,7 +387,7 @@ class WindowColSet : public BasicColSet {
      * @param _window_funcs: What function(s) are we computing.
      * @param _asc: Are the sort columns ascending on the input column.
      * @param _na_pos: Are NAs last in the sort columns
-     * @param _windiw_args: Any additional window arguments
+     * @param _window_args: Any additional window arguments
      * @param _is_parallel: flag to identify whether data is distributed
      * @param use_sql_rules: Do we use SQL or Pandas null handling rules.
      *
@@ -428,25 +437,22 @@ class WindowColSet : public BasicColSet {
     virtual const std::vector<std::shared_ptr<array_info>> getOutputColumns()
         override;
 
-    virtual void setUpdateCols(
-        std::vector<std::shared_ptr<array_info>> update_cols_) override {
-        throw std::runtime_error(
-            "WindowColSet not implemented for streaming groupby");
-    }
     virtual void setCombineCols(
         std::vector<std::shared_ptr<array_info>> combine_cols_) override {
         throw std::runtime_error(
-            "WindowColSet not implemented for streaming groupby");
+            "WindowColSet only supports the accumulate streaming path");
     }
     virtual void setInCol(
         std::vector<std::shared_ptr<array_info>> new_in_cols) override {
-        throw std::runtime_error(
-            "WindowColSet not implemented for streaming groupby");
+        this->input_cols = new_in_cols;
     }
     virtual void clear() override {
-        throw std::runtime_error(
-            "WindowColSet not implemented for streaming groupby");
+        BasicColSet::clear();
+        this->input_cols.clear();
     }
+
+    virtual std::vector<std::unique_ptr<bodo::DataType>> getOutputTypes()
+        override;
 
    private:
     std::vector<std::shared_ptr<array_info>> input_cols;

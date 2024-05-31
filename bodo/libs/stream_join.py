@@ -25,11 +25,12 @@ from bodo.libs.array import (
     delete_table,
     py_data_to_cpp_table,
 )
+from bodo.libs.stream_base import StreamingStateType
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
-    error_on_unsupported_nested_arrays,
+    error_on_unsupported_streaming_arrays,
     get_common_bodosql_integer_arr_type,
     get_overload_const_bool,
     get_overload_const_str,
@@ -41,7 +42,6 @@ from bodo.utils.typing import (
     to_nullable_type,
     unwrap_typeref,
 )
-from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 if TYPE_CHECKING:  # pragma: no cover
     pass
@@ -81,7 +81,7 @@ ll.add_symbol(
 )
 
 
-class JoinStateType(types.Type):
+class JoinStateType(StreamingStateType):
     """Type for C++ JoinState pointer"""
 
     def __init__(
@@ -95,9 +95,8 @@ class JoinStateType(types.Type):
         build_table_type=types.unknown,
         probe_table_type=types.unknown,
     ):
-        # TODO[BSE-937]: support nested arrays in streaming
-        error_on_unsupported_nested_arrays(build_table_type)
-        error_on_unsupported_nested_arrays(probe_table_type)
+        error_on_unsupported_streaming_arrays(build_table_type)
+        error_on_unsupported_streaming_arrays(probe_table_type)
 
         self.build_key_inds = build_key_inds
         self.probe_key_inds = probe_key_inds
@@ -513,19 +512,6 @@ class JoinStateType(types.Type):
         table = self.probe_table_type
         return self._derive_input_type(key_types, key_indices, table)
 
-    @staticmethod
-    def _derive_c_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
-        """Generate the CType Enum types for each array in the
-        C++ build table via the indices.
-
-        Args:
-            arr_types (List[types.ArrayCompatible]): The array types to use.
-
-        Returns:
-            List(int): List with the integer values of each CTypeEnum value.
-        """
-        return numba_to_c_types(arr_types)
-
     @property
     def build_arr_ctypes(self) -> np.ndarray:
         """
@@ -555,19 +541,6 @@ class JoinStateType(types.Type):
                 CTypeEnum.
         """
         return self._derive_c_types(self.probe_reordered_arr_types)
-
-    @staticmethod
-    def _derive_c_array_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
-        """Generate the CArrayTypeEnum Enum types for each array in the
-        C++ build table via the indices.
-
-        Args:
-            arr_types (List[types.ArrayCompatible]): The array types to use.
-
-        Returns:
-            List(int): List with the integer values of each CTypeEnum value.
-        """
-        return numba_to_c_array_types(arr_types)
 
     @property
     def build_arr_array_types(self) -> np.ndarray:

@@ -26,15 +26,15 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
+from bodo.libs.stream_base import StreamingStateType
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
-    error_on_unsupported_nested_arrays,
+    error_on_unsupported_streaming_arrays,
     is_overload_none,
     unwrap_typeref,
 )
-from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 ll.add_symbol(
     "groupby_state_init_py_entry", stream_groupby_cpp.groupby_state_init_py_entry
@@ -72,7 +72,7 @@ ll.add_symbol(
 )
 
 
-class GroupbyStateType(types.Type):
+class GroupbyStateType(StreamingStateType):
     """Type for C++ GroupbyState pointer"""
 
     def __init__(
@@ -87,8 +87,7 @@ class GroupbyStateType(types.Type):
         mrnf_col_inds_keep: tuple[int] = (),
         build_table_type=types.unknown,
     ):
-        # TODO[BSE-937]: support nested arrays in streaming
-        error_on_unsupported_nested_arrays(build_table_type)
+        error_on_unsupported_streaming_arrays(build_table_type)
 
         self.key_inds = key_inds
         self.fnames = fnames
@@ -100,8 +99,8 @@ class GroupbyStateType(types.Type):
         self.mrnf_col_inds_keep: tuple[int] = mrnf_col_inds_keep
         self.build_table_type = build_table_type
         super().__init__(
-            f"GroupbyStateType(key_inds={key_inds}, fnames={fnames}, f_in_offsets={f_in_offsets}, "
-            f"f_in_cols={f_in_cols}, {mrnf_sort_col_inds=}, {mrnf_sort_col_asc=}, {mrnf_sort_col_na=}, "
+            f"GroupbyStateType({key_inds=}, {fnames=}, {f_in_offsets=}, "
+            f"{f_in_cols=}, {mrnf_sort_col_inds=}, {mrnf_sort_col_asc=}, {mrnf_sort_col_na=}, "
             f"{mrnf_col_inds_keep=}, build_table={build_table_type})"
         )
 
@@ -267,19 +266,6 @@ class GroupbyStateType(types.Type):
             key_types, key_indices, mrnf_sort_col_types, mrnf_sort_col_indices, table
         )
 
-    @staticmethod
-    def _derive_c_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
-        """Generate the CType Enum types for each array in the
-        C++ build table via the indices.
-
-        Args:
-            arr_types (List[types.ArrayCompatible]): The array types to use.
-
-        Returns:
-            List(int): List with the integer values of each CTypeEnum value.
-        """
-        return numba_to_c_types(arr_types)
-
     @property
     def build_arr_ctypes(self) -> np.ndarray:
         """
@@ -293,19 +279,6 @@ class GroupbyStateType(types.Type):
                 CTypeEnum.
         """
         return self._derive_c_types(self.build_reordered_arr_types)
-
-    @staticmethod
-    def _derive_c_array_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
-        """Generate the CArrayTypeEnum Enum types for each array in the
-        C++ build table via the indices.
-
-        Args:
-            arr_types (List[types.ArrayCompatible]): The array types to use.
-
-        Returns:
-            List(int): List with the integer values of each CTypeEnum value.
-        """
-        return numba_to_c_array_types(arr_types)
 
     @property
     def build_arr_array_types(self) -> np.ndarray:
@@ -322,18 +295,6 @@ class GroupbyStateType(types.Type):
         """
         return self._derive_c_array_types(self.build_reordered_arr_types)
 
-    @property
-    def num_build_input_arrs(self) -> int:
-        """
-        Determine the actual number of build arrays in the input.
-
-        Note: We use build_reordered_arr_types in case the same column
-        is used as a key in multiple comparisons.
-
-        Return (int): The number of build arrays
-        """
-        return len(self.build_reordered_arr_types)
-
     @staticmethod
     def _derive_cpp_indices(key_indices, mrnf_sort_col_inds, num_cols):
         """Generate the indices used for the C++ table from the
@@ -344,7 +305,7 @@ class GroupbyStateType(types.Type):
             mrnf_sort_col_inds (tuple[int]): The indices of the order-by
                 columns for MRNF (if this is the MRNF case). In the non-MRNF
                 case, this must be an empty tuple.
-            num_cols (int): The number of total columns in the array.
+            num_cols (int): The number of total columns in the table.
 
         Returns:
             N Tuple(int): Tuple giving the order of the output indices
@@ -502,7 +463,7 @@ class GroupbyStateType(types.Type):
 register_model(GroupbyStateType)(models.OpaqueModel)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _init_groupby_state(
     typingctx,
     operator_id,
@@ -510,6 +471,7 @@ def _init_groupby_state(
     build_arr_array_types,
     n_build_arrs,
     ftypes_t,
+    window_ftypes_t,
     f_in_offsets_t,
     f_in_cols_t,
     n_funcs_t,
@@ -558,6 +520,7 @@ def _init_groupby_state(
             build_arr_array_types,
             n_build_arrs,
             ftypes,
+            window_ftypes,
             f_in_offsets,
             f_in_cols,
             n_funcs,
@@ -585,6 +548,7 @@ def _init_groupby_state(
                 lir.IntType(32).as_pointer(),
                 lir.IntType(32).as_pointer(),
                 lir.IntType(32).as_pointer(),
+                lir.IntType(32).as_pointer(),
                 lir.IntType(32),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
@@ -607,6 +571,7 @@ def _init_groupby_state(
             build_arr_array_types,
             n_build_arrs,
             ftypes,
+            window_ftypes,
             f_in_offsets,
             f_in_cols,
             n_funcs,
@@ -630,6 +595,7 @@ def _init_groupby_state(
         types.voidptr,
         types.voidptr,
         types.int32,
+        types.CPointer(types.int32),
         types.CPointer(types.int32),
         types.CPointer(types.int32),
         types.CPointer(types.int32),
@@ -812,6 +778,7 @@ def init_groupby_state(
                         f"Groupby does not support semi-structured arrays for aggregations other than {', '.join(supported_nested_agg_funcs[:-1])} and {supported_nested_agg_funcs[-1]}."
                     )
     ftypes_arr = np.array(ftypes, np.int32)
+    window_ftypes_arr = np.array([], np.int32)
     f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)
     f_in_cols_arr = np.array(output_type.reordered_f_in_cols, np.int32)
     n_funcs = len(output_type.fnames)
@@ -844,6 +811,7 @@ def init_groupby_state(
             build_arr_array_types.ctypes,
             n_build_arrs,
             ftypes_arr.ctypes,
+            window_ftypes_arr.ctypes,
             f_in_offsets_arr.ctypes,
             f_in_cols_arr.ctypes,
             n_funcs,
@@ -860,7 +828,7 @@ def init_groupby_state(
     return impl_init_groupby_state
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _groupby_build_consume_batch(
     typingctx,
     groupby_state,
@@ -907,10 +875,10 @@ def gen_groupby_build_consume_batch_impl(
          Union-Distinct case where this is called in multiple pipelines. For regular
          groupby, this should always be true.
     Returns:
-        bool: is last batch globally with possiblity of false negatives due to iterations between syncs
+        bool: is last batch globally with possibility of false negatives due to iterations between syncs
     """
     in_col_inds = MetaType(groupby_state.build_indices)
-    n_table_cols = groupby_state.num_build_input_arrs
+    n_table_cols = len(in_col_inds)
 
     def impl_groupby_build_consume_batch(
         groupby_state, table, is_last, is_final_pipeline
@@ -933,9 +901,6 @@ class GroupbyBuildConsumeBatchInfer(AbstractTemplate):
         return signature(types.bool_, *folded_args).replace(pysig=pysig)
 
 
-GroupbyBuildConsumeBatchInfer._no_unliteral = True
-
-
 @lower_builtin(groupby_build_consume_batch, types.VarArg(types.Any))
 def lower_groupby_build_consume_batch(context, builder, sig, args):
     """lower groupby_build_consume_batch() using gen_groupby_build_consume_batch_impl above"""
@@ -943,7 +908,7 @@ def lower_groupby_build_consume_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _groupby_produce_output_batch(
     typingctx,
     groupby_state,
@@ -1037,9 +1002,6 @@ class GroupbyProduceOutputInfer(AbstractTemplate):
         return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
-GroupbyProduceOutputInfer._no_unliteral = True
-
-
 @lower_builtin(groupby_produce_output_batch, types.VarArg(types.Any))
 def lower_groupby_produce_output_batch(context, builder, sig, args):
     """lower groupby_produce_output_batch() using gen_groupby_produce_output_batch_impl above"""
@@ -1047,7 +1009,7 @@ def lower_groupby_produce_output_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def delete_groupby_state(
     typingctx,
     groupby_state,

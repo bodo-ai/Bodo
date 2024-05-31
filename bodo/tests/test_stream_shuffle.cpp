@@ -89,9 +89,7 @@ static bodo::tests::suite tests([] {
         std::vector<std::shared_ptr<BasicColSet>> col_sets = {col_set};
         GroupbyIncrementalShuffleState state = GroupbyIncrementalShuffleState(
             std::make_shared<bodo::Schema>(*schema), dict_builders, {col_set},
-            1, 1, 0, sync_freq, 0, false, true
-
-        );
+            1, 1, 0, sync_freq, 0, false, AggregationType::MRNF);
         // Table with only 1 unique key, should perform local reduction
         auto table = bodo::tests::cppToBodo({"A", "B"}, {true, true}, {},
                                             std::vector<int32_t>(100, 0),

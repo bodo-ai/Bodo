@@ -29,14 +29,14 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
+from bodo.libs.stream_base import StreamingStateType
 from bodo.utils.typing import (
     MetaType,
-    error_on_unsupported_nested_arrays,
+    error_on_unsupported_streaming_arrays,
     get_overload_const_bool,
     is_overload_none,
     unwrap_typeref,
 )
-from bodo.utils.utils import numba_to_c_array_types, numba_to_c_types
 
 ll.add_symbol(
     "table_builder_state_init_py_entry",
@@ -83,7 +83,7 @@ ll.add_symbol(
 )
 
 
-class TableBuilderStateType(types.Type):
+class TableBuilderStateType(StreamingStateType):
     """Type for C++ TableBuilderState pointer"""
 
     def __init__(
@@ -91,26 +91,12 @@ class TableBuilderStateType(types.Type):
         build_table_type=types.unknown,
         is_chunked_builder=False,
     ):
-        # TODO[BSE-937]: support nested arrays in streaming
-        error_on_unsupported_nested_arrays(build_table_type)
+        error_on_unsupported_streaming_arrays(build_table_type)
         self._build_table_type = build_table_type
         self.is_chunked_builder = is_chunked_builder
         super().__init__(
             f"TableBuilderStateType(build_table={build_table_type}, is_chunked_builder={is_chunked_builder})"
         )
-
-    @staticmethod
-    def _derive_c_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
-        """Generate the CType Enum types for each array in the
-        C++ build table via the indices.
-
-        Args:
-            arr_types (List[types.ArrayCompatible]): The array types to use.
-
-        Returns:
-            List(int): List with the integer values of each CTypeEnum value.
-        """
-        return numba_to_c_types(arr_types)
 
     @cached_property
     def arr_dtypes(self) -> List[types.ArrayCompatible]:
@@ -120,19 +106,6 @@ class TableBuilderStateType(types.Type):
     @cached_property
     def arr_ctypes(self) -> np.ndarray:
         return self._derive_c_types(self.arr_dtypes)
-
-    @staticmethod
-    def _derive_c_array_types(arr_types: List[types.ArrayCompatible]) -> np.ndarray:
-        """Generate the CArrayTypeEnum Enum types for each array in the
-        C++ build table via the indices.
-
-        Args:
-            arr_types (List[types.ArrayCompatible]): The array types to use.
-
-        Returns:
-            List(int): List with the integer values of each CTypeEnum value.
-        """
-        return numba_to_c_array_types(arr_types)
 
     @property
     def arr_array_types(self) -> np.ndarray:

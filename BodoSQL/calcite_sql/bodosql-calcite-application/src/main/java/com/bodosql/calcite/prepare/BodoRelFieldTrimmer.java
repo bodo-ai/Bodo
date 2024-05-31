@@ -4,6 +4,7 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRowSample;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalWindow;
 import com.bodosql.calcite.adapter.iceberg.IcebergProject;
 import com.bodosql.calcite.adapter.iceberg.IcebergRel;
 import com.bodosql.calcite.adapter.iceberg.IcebergTableScan;
@@ -39,6 +40,7 @@ import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.TableCreate;
 import org.apache.calcite.rel.core.TableModify;
+import org.apache.calcite.rel.core.Window;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
@@ -47,6 +49,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.rex.RexVisitor;
+import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql2rel.RelFieldTrimmer;
 import org.apache.calcite.tools.RelBuilder;
@@ -794,6 +797,174 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // return fields that the consumer didn't ask for, because the filter
     // needs them for its condition.
     return result(newFilter, mapping, filter);
+  }
+
+  public TrimResult trimFields(
+      BodoPhysicalWindow window, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
+
+    // If this is true, then there should only be 1 group, always
+    // at least 1 partition key per group, and no constants.
+    assert (window.supportsStreamingWindow());
+
+    RelNode input = window.getInput();
+    final RelDataType rowType = window.getRowType();
+    final int fieldCount = rowType.getFieldCount();
+
+    List<Boolean> keepGroups = new ArrayList<>();
+    List<List<Boolean>> keepWithinGroups = new ArrayList<>();
+
+    ImmutableBitSet.Builder inputFieldsUsedBuilder = ImmutableBitSet.builder();
+    final Set<RelDataTypeField> inputExtraFields = new LinkedHashSet<>(extraFields);
+    int nPassThroughInput = window.getInputsToKeep().cardinality();
+    int windowOutColIdx = nPassThroughInput;
+    RelOptUtil.InputFinder inputFinder = new RelOptUtil.InputFinder(inputExtraFields);
+    // Note: the output columns are the pass through columns followed by each agg call in each
+    // of the groups. So if columns 0 and 3 are pass-through, and there are 2 groups G1 and G2
+    // where G1 contains agg calls A and B, and G2 contains agg call C, the output is
+    // in the following order: $0, $3, A, B, C
+    for (Window.Group group : window.groups) {
+      Boolean keepGroup = false;
+      List<Boolean> keepWithinGroup = new ArrayList<>();
+      for (Window.RexWinAggCall call : group.aggCalls) {
+        Boolean keepCall = fieldsUsed.get(windowOutColIdx);
+        if (keepCall) {
+          keepGroup = true;
+          call.accept(inputFinder);
+        }
+        keepWithinGroup.add(keepCall);
+        windowOutColIdx++;
+      }
+      // If any of the outputs of the group are kept, add the
+      // partition and order keys to the node.
+      if (keepGroup) {
+        inputFieldsUsedBuilder.addAll(group.keys);
+        inputFieldsUsedBuilder.addAll(group.orderKeys.getKeys());
+      }
+      keepGroups.add(keepGroup);
+      keepWithinGroups.add(keepWithinGroup);
+    }
+
+    // We need to remap the input fields used to which of the pass-through columns
+    // from the child must be kept. This is not 1:1 since inputsToKeep may have
+    // pruned some of the columns.
+    inputFieldsUsedBuilder.addAll(inputFinder.build());
+    for (int i = 0; i < nPassThroughInput; i++) {
+      if (fieldsUsed.get(i)) {
+        int inputCol = window.getInputsToKeep().nth(i);
+        inputFieldsUsedBuilder.set(inputCol);
+      }
+    }
+    ImmutableBitSet inputFieldsUsed = inputFieldsUsedBuilder.build();
+
+    // Create input with trimmed columns.
+    TrimResult incompleteTrimResult = trimChild(window, input, inputFieldsUsed, inputExtraFields);
+
+    // Insert a pruning projection
+    final TrimResult trimResult =
+        insertPruningProjection(incompleteTrimResult, inputFieldsUsed, inputExtraFields);
+
+    RelNode newInput = trimResult.left;
+    final Mapping inputMapping = trimResult.right;
+
+    // Build the new list of groups based on which outputs are kept.
+    final RexVisitor<RexNode> shuttle = new RexPermuteInputsShuttle(inputMapping, newInput);
+    List<Window.Group> newGroups = new ArrayList<>();
+    for (int i = 0; i < window.groups.size(); i++) {
+      if (keepGroups.get(i)) {
+        Window.Group oldGroup = window.groups.get(i);
+        List<Window.RexWinAggCall> aggCalls = new ArrayList<>();
+        int ordinalPos = 0;
+        for (int callIdx = 0; callIdx < oldGroup.aggCalls.size(); callIdx++) {
+          if (keepWithinGroups.get(i).get(callIdx)) {
+            // Transform the old RexWinAggCall
+            Window.RexWinAggCall oldCall = oldGroup.aggCalls.get(callIdx);
+            RexCall permutedCall = (RexCall) (oldCall.accept(shuttle));
+            Window.RexWinAggCall permutedRexWinAggCall =
+                new Window.RexWinAggCall(
+                    (SqlAggFunction) permutedCall.getOperator(),
+                    permutedCall.getType(),
+                    permutedCall.operands,
+                    ordinalPos,
+                    oldCall.distinct,
+                    oldCall.ignoreNulls);
+
+            aggCalls.add(permutedRexWinAggCall);
+            ordinalPos++;
+          }
+        }
+        // Build the new partition keys by translating the indices
+        ImmutableBitSet.Builder newKeysBuilder = ImmutableBitSet.builder();
+        for (int partitionKey : oldGroup.keys.asList()) {
+          newKeysBuilder.set(inputMapping.getTarget(partitionKey));
+        }
+        // Build the new order keys by translating the indices
+        List<RelFieldCollation> newCollations = new ArrayList<>();
+        for (RelFieldCollation orderKey : oldGroup.orderKeys.getFieldCollations()) {
+          newCollations.add(
+              new RelFieldCollation(
+                  inputMapping.getTarget(orderKey.getFieldIndex()),
+                  orderKey.direction,
+                  orderKey.nullDirection));
+        }
+        // Build the new group
+        Window.Group newGroup =
+            new Window.Group(
+                newKeysBuilder.build(),
+                oldGroup.isRows,
+                oldGroup.lowerBound,
+                oldGroup.upperBound,
+                RelCollations.of(newCollations),
+                aggCalls);
+        newGroups.add(newGroup);
+      }
+    }
+
+    // Build the new bitmask indicating which input columns are kept.
+    ImmutableBitSet.Builder newInputsToKeepBuilder = ImmutableBitSet.builder();
+    for (int i = 0; i < nPassThroughInput; i++) {
+      if (fieldsUsed.get(i)) {
+        int trueInputCol = window.getInputsToKeep().nth(i);
+        newInputsToKeepBuilder.set(inputMapping.getTarget(trueInputCol));
+      }
+    }
+
+    // Populate the new mapping.
+    final Mapping mapping =
+        Mappings.create(MappingType.INVERSE_SURJECTION, fieldCount, fieldsUsed.cardinality());
+    int oldIdx;
+    int newIdx = 0;
+    for (oldIdx = 0; oldIdx < nPassThroughInput; oldIdx++) {
+      if (fieldsUsed.get(oldIdx)) {
+        mapping.set(oldIdx, newIdx);
+        newIdx++;
+      }
+    }
+    for (Window.Group group : window.groups) {
+      for (int aggIdx = 0; aggIdx < group.aggCalls.size(); aggIdx++) {
+        if (fieldsUsed.get(oldIdx)) {
+          mapping.set(oldIdx, newIdx);
+          newIdx++;
+        }
+        oldIdx++;
+      }
+    }
+
+    // Create the new row type by shuffling the original one as well as
+    // pruning any now-removed columns.
+    final RelDataType newRowType =
+        RelOptUtil.permute(window.getCluster().getTypeFactory(), rowType, mapping);
+
+    // Create and return the new window node
+    BodoPhysicalWindow newWindow =
+        BodoPhysicalWindow.create(
+            window.getCluster(),
+            window.getHints(),
+            newInput,
+            window.constants,
+            newRowType,
+            newGroups,
+            newInputsToKeepBuilder.build());
+    return result(newWindow, mapping, window);
   }
 
   public TrimResult trimFields(
