@@ -127,9 +127,9 @@ void min_row_number_filter_no_sort(
  *
  * This function creates a boolean array of all-false, then finds the indices
  * corresponding to the idxmin/idxmax of the orderby columns and sets those
- * indices to true. This implementaiton does so without sorting the array since
+ * indices to true. This implementation does so without sorting the array since
  * if no other window functions being calculated require sorting, then we can
- * find the idxmin/idxmax without bothering to sort the whole table seciton.
+ * find the idxmin/idxmax without bothering to sort the whole table section.
  *
  * @param[in] orderby_arrs: the columns used in the order by clause of the query
  * @param[in,out] out_arr: output array where the true values will be placed
@@ -138,14 +138,18 @@ void min_row_number_filter_no_sort(
  * ascending
  * @param[in] na_pos_vect: vector indicating which of the orderby columns are
  * null first/last
- * @param[in] is_parallel: is the function being run in parallel?
- * @param[in] use_sql_rules: should initialization functions obey SQL semantics?
+ * @param is_parallel: is the function being run in parallel?
+ * @param use_sql_rules: should initialization functions obey SQL semantics?
+ * @param pool Memory pool to use for allocations during the execution of
+ * this function.
+ * @param mm Memory manager associated with the pool.
  */
 void min_row_number_filter_window_computation_no_sort(
     std::vector<std::shared_ptr<array_info>>& orderby_arrs,
     std::shared_ptr<array_info> out_arr, grouping_info const& grp_info,
     const std::vector<bool>& asc_vect, const std::vector<bool>& na_pos_vect,
-    bool is_parallel, bool use_sql_rules) {
+    bool is_parallel, bool use_sql_rules, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     int ftype;
     bodo_array_type::arr_type_enum idx_arr_type;
     std::tie(ftype, idx_arr_type) = get_update_ftype_idx_arr_type_for_mrnf(
@@ -153,7 +157,7 @@ void min_row_number_filter_window_computation_no_sort(
     std::shared_ptr<array_info> idx_col = alloc_array_top_level(
         grp_info.num_groups, 1, 1, idx_arr_type, Bodo_CTypes::UINT64);
     min_row_number_filter_no_sort(idx_col, orderby_arrs, grp_info, asc_vect,
-                                  na_pos_vect, ftype, use_sql_rules);
+                                  na_pos_vect, ftype, use_sql_rules, pool, mm);
     // Now we have the idxmin/idxmax in the idx_col for each group.
     // We need to set the corresponding indices in the final array to true.
     uint8_t* out_arr_data1 = (uint8_t*)(out_arr->data1());
@@ -361,10 +365,10 @@ void rank_computation(std::shared_ptr<array_info> out_arr,
 /**
  * Computes the BodoSQL window function DENSE_RANK() on a subset of a table
  * containing complete partitions, where the rows are sorted first by group
- * (so each partition is clustered togeher) and then by the columns in the
+ * (so each partition is clustered together) and then by the columns in the
  * orderby clause.
  *
- * The computaiton works by having a counter that starts at 1, increases by 1
+ * The computation works by having a counter that starts at 1, increases by 1
  * the orderby columns change values, and resets to 1 whenever a new group is
  * reached.
  *
@@ -404,10 +408,10 @@ void dense_rank_computation(
 /**
  * Computes the BodoSQL window function PERCENT_RANK() on a subset of a table
  * containing complete partitions, where the rows are sorted first by group
- * (so each partition is clustered togeher) and then by the columns in the
+ * (so each partition is clustered together) and then by the columns in the
  * orderby clause.
  *
- * The computaiton works by calculating the regular rank for each row. Then,
+ * The computation works by calculating the regular rank for each row. Then,
  * after a group is finished, the percent rank for each row is calculated
  * via the formula (r-1)/(n-1) where r is the rank and n is the group size.
  *
@@ -706,33 +710,6 @@ void conditional_change_event_computation(
     }
 }
 
-/**
- * Computes a batch of window functions for BodoSQL on a subset of a table
- * containing complete partitions. All of the window functions in the
- * batch use the same partitioning and orderby scheme. If any of the window
- * functions require the table to be sorted in order for the result to be
- * calculated, performs a sort on the table first by group and then by
- * the orderby columns.
- *
- * @param[in] input_arrs: the columns being used to order the rows of
- * the table when computing a window function, as well as any additional
- * columns that are being aggregated by the window functions.
- * @param[in] window_funcs: the vector of window functions being computed
- * @param[in,out] out_arrs: the arrays where the final answer for each window
- * function computed will be stored
- * @param[in] asc_vect: vector indicating which of the orderby columns are
- * to be sorted in ascending vs descending order
- * @param[in] na_pos_vect: vector indicating which of the orderby columns are
- * to place nulls first vs last
- * @param[in] window_args: vector of any scalar arguments for the window
- * functions being calculated. It is the responsibility of each function to know
- * how many arguments it is expected and to cast them to the correct type.
- * @param[in] n_input_cols: the number of arrays from input_arrs that correspond
- * to inputs to the window functions. If there are any, they are at the end
- * of the vector in the same order as the functions in window_funcs.
- * @param[in] is_parallel: is the function being run in parallel?
- * @param[in] use_sql_rules: should initialization functions obey SQL semantics?
- */
 void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                         std::vector<int64_t> window_funcs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
@@ -740,7 +717,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                         const std::vector<bool>& asc_vect,
                         const std::vector<bool>& na_pos_vect,
                         const std::vector<void*>& window_args, int n_input_cols,
-                        bool is_parallel, bool use_sql_rules) {
+                        bool is_parallel, bool use_sql_rules,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t window_arg_offset = 0;
     int64_t window_col_offset = input_arrs.size() - n_input_cols;
     std::vector<std::shared_ptr<array_info>> orderby_arrs(
@@ -768,12 +747,13 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
             size_t num_rows = grp_info.row_to_group.size();
             idx_col = orderby_arrs.size() + 1;
             std::shared_ptr<array_info> idx_arr =
-                alloc_numpy(num_rows, Bodo_CTypes::INT64);
+                alloc_numpy(num_rows, Bodo_CTypes::INT64, pool, mm);
             for (size_t i = 0; i < num_rows; i++) {
                 getv<int64_t>(idx_arr, i) = i;
             }
-            iter_table = grouped_sort(grp_info, orderby_arrs, {idx_arr},
-                                      asc_vect, na_pos_vect, 0, is_parallel);
+            iter_table =
+                grouped_sort(grp_info, orderby_arrs, {idx_arr}, asc_vect,
+                             na_pos_vect, 0, is_parallel, pool, mm);
             break;
         }
     }
@@ -784,7 +764,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
     // that are to be modified
     for (size_t i = 0; i < window_funcs.size(); i++) {
         switch (window_funcs[i]) {
-            // min_row_number_filter uses a sort-less implementaiton if no
+            // min_row_number_filter uses a sort-less implementation if no
             // other window functions being calculated require sorting. However,
             // if another window function in this computation requires sorting
             // the table, then we can just use the sorted groups instead.
@@ -796,7 +776,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 } else {
                     min_row_number_filter_window_computation_no_sort(
                         orderby_arrs, out_arrs[i], grp_info, asc_vect,
-                        na_pos_vect, is_parallel, use_sql_rules);
+                        na_pos_vect, is_parallel, use_sql_rules, pool, mm);
                 }
                 break;
             }

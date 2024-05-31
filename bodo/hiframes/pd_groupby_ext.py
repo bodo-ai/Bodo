@@ -1550,6 +1550,39 @@ def extract_window_args(
     return scalar_args, vector_args
 
 
+def get_window_func_types():
+    """
+    Return a mapping from function name to an expected output row type.
+    This may return None if the output type depends on the input type.
+    TODO: Add the input type as an argument.
+    """
+    window_func_types = {
+        "row_number": dtype_to_array_type(types.uint64),
+        "rank": dtype_to_array_type(types.uint64),
+        "dense_rank": dtype_to_array_type(types.uint64),
+        "ntile": dtype_to_array_type(types.uint64),
+        "ratio_to_report": to_nullable_type(dtype_to_array_type(types.float64)),
+        "conditional_true_event": dtype_to_array_type(types.uint64),
+        "conditional_change_event": dtype_to_array_type(types.uint64),
+        "size": dtype_to_array_type(types.uint64),
+        "count": dtype_to_array_type(types.uint64),
+        "count_if": dtype_to_array_type(types.uint64),
+        "percent_rank": dtype_to_array_type(types.float64),
+        "cume_dist": dtype_to_array_type(types.float64),
+        "var": to_nullable_type(dtype_to_array_type(types.float64)),
+        "var_pop": to_nullable_type(dtype_to_array_type(types.float64)),
+        "std": to_nullable_type(dtype_to_array_type(types.float64)),
+        "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
+        "mean": to_nullable_type(dtype_to_array_type(types.float64)),
+        "min_row_number_filter": bodo.boolean_array_type,
+        # None = output dtype matches input dtype
+        "any_value": None,
+        "first": None,
+        "last": None,
+    }
+    return window_func_types
+
+
 def resolve_window_funcs(
     grp: DataFrameGroupByType,
     args: Tuple,
@@ -1624,30 +1657,6 @@ def resolve_window_funcs(
     out_columns = [f"AGG_OUTPUT_{i}" for i in range(len(window_funcs))]
     out_data = []
     in_cols = list(order_by)
-    window_func_types = {
-        "row_number": dtype_to_array_type(types.uint64),
-        "rank": dtype_to_array_type(types.uint64),
-        "dense_rank": dtype_to_array_type(types.uint64),
-        "ntile": dtype_to_array_type(types.uint64),
-        "ratio_to_report": to_nullable_type(dtype_to_array_type(types.float64)),
-        "conditional_true_event": dtype_to_array_type(types.uint64),
-        "conditional_change_event": dtype_to_array_type(types.uint64),
-        "size": dtype_to_array_type(types.uint64),
-        "count": dtype_to_array_type(types.uint64),
-        "count_if": dtype_to_array_type(types.uint64),
-        "percent_rank": dtype_to_array_type(types.float64),
-        "cume_dist": dtype_to_array_type(types.float64),
-        "var": to_nullable_type(dtype_to_array_type(types.float64)),
-        "var_pop": to_nullable_type(dtype_to_array_type(types.float64)),
-        "std": to_nullable_type(dtype_to_array_type(types.float64)),
-        "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
-        "mean": to_nullable_type(dtype_to_array_type(types.float64)),
-        "min_row_number_filter": bodo.boolean_array_type,
-        # None = output dtype matches input dtype
-        "any_value": None,
-        "first": None,
-        "last": None,
-    }
 
     for window_func in window_funcs:
         if len(window_func) == 0:
@@ -1656,6 +1665,7 @@ def resolve_window_funcs(
             )
         func_name = window_func[0]
         func_args = window_func[1:]
+        window_func_types = get_window_func_types()
         if func_name not in window_func_types:
             raise_bodo_error(f"Unrecognized window function {func_name}")
         _, vector_args = extract_window_args(func_name, func_args)

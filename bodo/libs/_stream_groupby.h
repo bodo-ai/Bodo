@@ -30,6 +30,23 @@ class GroupbyPartition;
 class GroupbyIncrementalShuffleState;
 class GroupbyState;
 
+// Track the type of operation due to overlap between window functions and
+// aggregates.
+enum class AggregationType {
+    AGGREGATE = 0,
+    MRNF = 1,
+    WINDOW = 2,
+};
+
+/**
+ * @brief Get the string representation of the AggregationType
+ * for metrics purposes.
+ *
+ * @param type The AggregationType to convert to string.
+ * @return std::string String representation of the AggregationType.
+ */
+std::string get_aggregation_type_string(AggregationType type);
+
 template <bool is_local>
 struct HashGroupbyTable {
     /**
@@ -107,8 +124,8 @@ struct GroupbyMetrics {
     };
 
     /**
-     * @brief Struct for metrics collected while executing get_update_table or
-     * compute_local_mrnf.
+     * @brief Struct for metrics collected while executing get_update_table,
+     * compute_local_mrnf, or compute_local_window.
      *
      */
     struct AggUpdateMetrics {
@@ -184,9 +201,10 @@ struct GroupbyMetrics {
     // Only relevant for the Agg case
     time_t finalize_activate_groupby_hashing_time = 0;
 
-    // Only relevant for the acc and MRNF cases
+    // Only relevant for the acc, MRNF, and window cases
     time_t finalize_get_update_table_time = 0;  // Overall
     time_t finalize_compute_mrnf_time = 0;      // Overall
+    time_t finalize_window_compute_time = 0;    // Overall
     // - get_update_table / compute_local_mrnf
     AggUpdateMetrics finalize_update_metrics;
 
@@ -416,9 +434,6 @@ class GroupbyPartition {
      * This works for both the aggregating and accumulating
      * cases.
      *
-     * NOTE: Only active partitions are supported at this point.
-     * Support for inactive partitions will be added in the future.
-     *
      * @return std::shared_ptr<table_info> Output of this partition.
      */
     std::shared_ptr<table_info> Finalize();
@@ -436,9 +451,6 @@ class GroupbyPartition {
      * This will also clear the build state (i.e. all memory associated with the
      * logical hash table).
      *
-     * NOTE: Only active partitions are supported at this point.
-     * Support for inactive partitions will be added in the future.
-     *
      * @param mrnf_part_cols_to_keep Bitmask specifying the partition columns to
      * retain in the output.
      * @param mrnf_sort_cols_to_keep Bitmask specifying the order-by columns to
@@ -448,6 +460,29 @@ class GroupbyPartition {
     void FinalizeMrnf(
         const std::vector<bool>& mrnf_part_cols_to_keep,
         const std::vector<bool>& mrnf_sort_cols_to_keep,
+        const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
+
+    /**
+     * @brief Finalize the partition in the Window case.
+     * The computation is similar to that in 'get_update_table', except
+     * it's slightly modified for the Window case.
+     * In particular, unlike the regular case where we return an output table
+     * that is then appended into the output buffer, this will append the output
+     * directly into the 'output_buffer'. We can do this since we're just
+     * appending certain rows and the window function columns.
+     *
+     * This will also clear the build state (i.e. all memory associated with the
+     * logical hash table).
+     *
+     * @param partition_by_cols_to_keep Bitmask specifying the partition by
+     * columns to retain in the output.
+     * @param order_by_cols_to_keep Bitmask specifying the order by columns to
+     * retain in the output.
+     * @param output_buffer The output buffer to append the generated output to.
+     */
+    void FinalizeWindow(
+        const std::vector<bool>& partition_by_cols_to_keep,
+        const std::vector<bool>& order_by_cols_to_keep,
         const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
 
    private:
@@ -593,7 +628,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * enabled).
      * @param nunique_only_ Whether this is the nunique-only accumulate input
      * case.
-     * @param mrnf_only_ Whether this is the MRNF-only case.
+     * @param agg_type_ Is this MRNF, WINDOW, or regular Aggregation?
      */
     GroupbyIncrementalShuffleState(
         const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
@@ -601,7 +636,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
         const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
         const uint64_t mrnf_n_sort_cols_, const uint64_t n_keys_,
         const uint64_t& curr_iter_, int64_t& sync_freq_, int64_t op_id_,
-        const bool nunique_only_, const bool mrnf_only_);
+        const bool nunique_only_, const AggregationType agg_type_);
 
     virtual ~GroupbyIncrementalShuffleState() = default;
 
@@ -680,7 +715,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     /// @brief Whether this is the nunique-only case.
     const bool nunique_only = false;
     /// Whether this is the mrnf-only case.
-    const bool mrnf_only = false;
+    const AggregationType agg_type = AggregationType::AGGREGATE;
     /// Metrics
     GroupbyIncrementalShuffleMetrics metrics;
 };
@@ -750,7 +785,7 @@ class GroupbyState {
     std::vector<int32_t> f_running_value_offsets;
 
     // Min-Row Number Filter (MRNF) specific attributes.
-    bool mrnf_only = false;
+    AggregationType agg_type = AggregationType::AGGREGATE;
     const std::vector<bool> mrnf_sort_asc;
     const std::vector<bool> mrnf_sort_na;
     const std::vector<bool> mrnf_part_cols_to_keep;
@@ -815,6 +850,7 @@ class GroupbyState {
 
     GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                  std::vector<int32_t> ftypes_,
+                 std::vector<int32_t> window_ftypes_,
                  std::vector<int32_t> f_in_offsets_,
                  std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
                  std::vector<bool> mrnf_sort_asc_vec_,
@@ -962,6 +998,24 @@ class GroupbyState {
         const std::shared_ptr<table_info>& dummy_build_table);
 
     /**
+     * @brief Initialize the output buffer in the Window case using
+     * the schema of the dummy_build_table. The dummy_build_table
+     * is the 'build_table_buffer' from any of the GroupbyPartitions in this
+     * GroupbyState. This function will then generate the logic to add the
+     * window columns to the output buffer.
+     * We will use 'mrnf_part_cols_to_keep' and 'mrnf_sort_cols_to_keep' to
+     * determine the columns to retain.
+     *
+     * NOTE: The function is idempotent and only initializes once. All
+     * calls after the first one are ignored.
+     *
+     * @param dummy_build_table Underlying table_info of 'build_table_buffer'
+     * from any of the partitions.
+     */
+    void InitOutputBufferWindow(
+        const std::shared_ptr<table_info>& dummy_build_table);
+
+    /**
      * @brief Initialize the output buffer using schema information
      * from the dummy table.
      *
@@ -1043,21 +1097,27 @@ class GroupbyState {
      * Helper function that gets the running column types for a given function.
      * This is used to initialize the build state. Currently, this creates a
      * dummy colset, and calls getRunningValueColumnTypes on it. This is pretty
-     * ugly, but it works for now.
+     * ugly, but it works for now. window_ftype is used for populating any
+     * window related colsets, which currently only support a single window
+     * function.
      */
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         std::vector<std::shared_ptr<array_info>> local_input_cols,
-        std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype);
+        std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
+        int window_ftype);
 
     /**
      * Helper function that gets the output column types for a given function.
      * This is used to initialize the build state. Implemented in a similar
-     * fashion to getRunningValueColumnTypes.
+     * fashion to getRunningValueColumnTypes. window_ftype is used for
+     * populating any window related colsets, which currently only support a
+     * single window function.
      */
     std::vector<
         std::pair<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>>
     getSeparateOutputColumns(
-        std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype);
+        std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
+        int window_ftype);
 
     /*@brief Split the partition at index 'idx' into two partitions.
      * This must only be called in the event of a threshold enforcement error.

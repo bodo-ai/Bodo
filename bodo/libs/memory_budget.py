@@ -34,7 +34,8 @@ class OperatorType(Enum):
     JOIN = 2
     GROUPBY = 3
     UNION = 4
-    ACCUMULATE_TABLE = 5
+    WINDOW = 5
+    ACCUMULATE_TABLE = 6
 
 
 @intrinsic(prefer_literal=True)

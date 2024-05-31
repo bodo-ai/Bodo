@@ -86,7 +86,7 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     decode_if_dict_array,
     dtype_to_array_type,
-    error_on_unsupported_nested_arrays,
+    error_on_unsupported_streaming_arrays,
     get_castable_arr_dtype,
     get_common_scalar_dtype,
     get_index_data_arr_types,
@@ -5224,7 +5224,7 @@ def overload_union_dataframes(
         )
 
     for in_table_type in df_types:
-        error_on_unsupported_nested_arrays(in_table_type.table_type)
+        error_on_unsupported_streaming_arrays(in_table_type.table_type)
 
     num_cols = -1
     col_types = None

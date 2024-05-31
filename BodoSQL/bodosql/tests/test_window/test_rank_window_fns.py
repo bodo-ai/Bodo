@@ -297,11 +297,11 @@ def test_mrnf_order_edgecases(
     query = f"""
     SELECT I
     FROM
-        (   
+        (
             SELECT
                 I,
                 ROW_NUMBER() OVER(
-                    PARTITION BY {', '.join(partition_cols)} 
+                    PARTITION BY {', '.join(partition_cols)}
                     ORDER BY {', '.join(order_cols)}) as rn
             FROM table1
         )
@@ -331,7 +331,7 @@ def test_mrnf_all_ties(memory_leak_check):
     SELECT
         B, C
     FROM
-        (   
+        (
             SELECT
                 B, C,
                 ROW_NUMBER() OVER(PARTITION BY B ORDER BY C ASC NULLS FIRST) as rn
@@ -585,4 +585,124 @@ def test_row_number_filter_multicolumn(input_arrs, memory_leak_check):
         ctx,
         None,
         expected_output=py_output,
+    )
+
+
+def test_dense_rank_stress_test(datapath, memory_leak_check):
+    """
+    A more complex test for streaming window functions focused on the correctness
+    of dense rank in a larger data context. The specifics of the test:
+
+    Takes in a database of words, transformed into a table where each row is
+    one of the words with one of the letters in it (1 row per letter in the word) and
+    another table mapping each letter of the alphabet to a scrabble score. Calculates
+    the scrabble scores for every word and for each word length finds all words that
+    have the highest score with that length.
+    """
+
+    query = """
+    SELECT 
+        LENGTH(words.word) as n_chars,
+        words.word,
+    FROM scrabble, words
+    WHERE scrabble.letter = words.letter
+    GROUP BY words.word
+    QUALIFY dense_rank() OVER (PARTITION BY n_chars ORDER BY sum(scrabble.score) DESC) = 1
+    """
+
+    words = []
+    letters = []
+    jw_data = pd.read_csv(datapath("jaro_winkler_data.csv"))
+    seen = set()
+    for word in jw_data["A"]:
+        word = word.upper().replace(" ", "").replace(".", "")
+        if word in seen:
+            continue
+        seen.add(word)
+        for letter in word:
+            words.append(word)
+            letters.append(letter)
+    ctx = {
+        "SCRABBLE": pd.DataFrame(
+            {
+                "LETTER": list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+                "SCORE": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] * 2,
+            }
+        ),
+        "WORDS": pd.DataFrame(
+            {
+                "WORD": words,
+                "LETTER": letters,
+            }
+        ),
+    }
+    expected_df = pd.DataFrame(
+        {
+            "word_length": [
+                10,
+                11,
+                11,
+                12,
+                12,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                18,
+                19,
+                20,
+                20,
+                21,
+                22,
+                23,
+                23,
+                24,
+                25,
+                25,
+                26,
+                27,
+                28,
+                29,
+            ],
+            "word": [
+                "LCHTRDBLDM",
+                "DMCRMLVZRPL",
+                "DMZRPLMLVTN",
+                "SMKLVBLLMNVJ",
+                "LCZRKHKNVYLM",
+                "SKYLMLCDMGRY",
+                "YLLWLMPLLVVRY",
+                "MDMLVLMVRYFLRL",
+                "WHTSKYYLLWLMWHT",
+                "RYLKHKVLTYLLWVRY",
+                "YLLWPLKHKMTLLCRYL",
+                "THSTLSMKPLMYLLWSKY",
+                "LMSSHLLMGNTYLLWSMK",
+                "SSHLLLMMDMYLLWMTLLC",
+                "NVJTHSTLSSHLLYLLWKHK",
+                "VLTPLMMTLLCYLLWLVNDR",
+                "FLRLLMBRLYWDYLLWTHSTL",
+                "SSHLLFLRLSMKMDNGHTYLLW",
+                "YLLWBRNSHDMTLLCSSHLLKHK",
+                "BRLYWDMTLLCSLMNQMRNYLLW",
+                "LMNDTMTCRNFLWRMTLLCSSHLL",
+                "YLLWFRSTDPLMBRLYWDCRNFLWR",
+                "SSHLLTHSTLCHCLTKHKCRNFLWR",
+                "SLMNGLDNRDCRNFLWRYLLWSSHLL",
+                "CRNFLWRYLLWGLDNRDBRLYWDBLCK",
+                "BRLYWDGLDNRDPWDRMTLLCCRNFLWR",
+                "FRSTDCHRTRSBLNCHDCRNSLKBRLYWD",
+            ],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_df,
+        check_dtype=False,
+        check_names=False,
     )

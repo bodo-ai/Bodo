@@ -20,20 +20,25 @@
  * @return std::string
  */
 std::string GetOperatorType_as_string(OperatorType const& op_type) {
-    if (op_type == OperatorType::UNKNOWN)
-        return "UNKNOWN";
-    if (op_type == OperatorType::SNOWFLAKE_WRITE)
-        return "SNOWFLAKE_WRITE";
-    if (op_type == OperatorType::JOIN)
-        return "JOIN";
-    if (op_type == OperatorType::GROUPBY)
-        return "GROUPBY";
-    if (op_type == OperatorType::UNION)
-        return "UNION";
-    if (op_type == OperatorType::ACCUMULATE_TABLE)
-        return "ACCUMULATE_TABLE";
-    throw std::runtime_error(
-        "GetOperatorType_as_string: Uncovered Operator Type!");
+    switch (op_type) {
+        case OperatorType::UNKNOWN:
+            return "UNKNOWN";
+        case OperatorType::SNOWFLAKE_WRITE:
+            return "SNOWFLAKE_WRITE";
+        case OperatorType::JOIN:
+            return "JOIN";
+        case OperatorType::GROUPBY:
+            return "GROUPBY";
+        case OperatorType::UNION:
+            return "UNION";
+        case OperatorType::ACCUMULATE_TABLE:
+            return "ACCUMULATE_TABLE";
+        case OperatorType::WINDOW:
+            return "WINDOW";
+        default:
+            throw std::runtime_error(
+                "GetOperatorType_as_string: Uncovered Operator Type!");
+    }
 }
 
 void OperatorComptroller::Initialize() {

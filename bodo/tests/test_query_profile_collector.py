@@ -1137,12 +1137,12 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "ACC"
         )
-        assert "is_mrnf_only" in initialization_metrics_names
+        assert "aggregation_type" in initialization_metrics_names
         assert (
-            initialization_metrics[initialization_metrics_names.index("is_mrnf_only")][
-                "stat"
-            ]
-            == 1
+            initialization_metrics[
+                initialization_metrics_names.index("aggregation_type")
+            ]["stat"]
+            == "MIN ROW NUMBER FILTER"
         )
         assert "n_shuffles" in build_metrics_dict
         assert build_metrics_dict["n_shuffles"] >= 1
