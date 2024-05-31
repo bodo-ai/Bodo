@@ -76,14 +76,19 @@ void min_row_number_filter_no_sort(
  * @param[in] grp_info Struct containing information about the groups.
  * @param[in] asc Should the arrays be sorted in ascending order?
  * @param[in] na_pos Should NA's be placed at the end of the arrays?
- * @param[in] is_parallel Is the data distributed? This is used for tracing
- * @param[in] use_sql_rules Do we use SQL or Pandas Null rules?
+ * @param is_parallel Is the data distributed? This is used for tracing
+ * @param use_sql_rules Do we use SQL or Pandas Null rules?
+ * @param pool Memory pool to use for allocations during the execution of
+ * this function.
+ * @param mm Memory manager associated with the pool.
  */
-void window_computation(std::vector<std::shared_ptr<array_info>>& orderby_arrs,
-                        std::vector<int64_t> window_funcs,
-                        std::vector<std::shared_ptr<array_info>> out_arrs,
-                        grouping_info const& grp_info,
-                        const std::vector<bool>& asc_vect,
-                        const std::vector<bool>& na_pos_vect,
-                        const std::vector<void*>& window_args, int n_input_cols,
-                        bool is_parallel, bool use_sql_rules);
+void window_computation(
+    std::vector<std::shared_ptr<array_info>>& orderby_arrs,
+    std::vector<int64_t> window_funcs,
+    std::vector<std::shared_ptr<array_info>> out_arrs,
+    grouping_info const& grp_info, const std::vector<bool>& asc_vect,
+    const std::vector<bool>& na_pos_vect, const std::vector<void*>& window_args,
+    int n_input_cols, bool is_parallel, bool use_sql_rules,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());

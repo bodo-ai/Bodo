@@ -12,6 +12,7 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRuntimeJoinFilter
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalWindow
 import com.bodosql.calcite.adapter.common.LimitUtils
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
@@ -161,6 +162,10 @@ object RuntimeJoinFilterProgram : Program {
                     is BodoPhysicalSort -> {
                         // Sort can produce the filter only if
                         // we have an order by + limit.
+                        visit(rel)
+                    }
+
+                    is BodoPhysicalWindow -> {
                         visit(rel)
                     }
 
@@ -317,6 +322,11 @@ object RuntimeJoinFilterProgram : Program {
         private fun visit(sort: BodoPhysicalSort): RelNode {
             val (pushLiveJoinInfo, outputLiveJoinInfo) = processSort(sort, liveJoins)
             return processSingleRel(sort, pushLiveJoinInfo, outputLiveJoinInfo)
+        }
+
+        private fun visit(window: BodoPhysicalWindow): RelNode {
+            val (pushLiveJoinInfo, outputLiveJoinInfo) = processWindow(window, liveJoins, true)
+            return processSingleRel(window, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
         private fun visit(aggregate: BodoPhysicalAggregate): RelNode {
@@ -620,6 +630,42 @@ object RuntimeJoinFilterProgram : Program {
         }
 
         /**
+         * Process a window node by splitting into the remaining join filters for the current node and
+         * join filters that can be pushed further. If updateColumns is true, the columns will be updated
+         * based on the original key indices. If false we will just return the old columns indices, which is used
+         * for cache processing.
+         * @param window The window node to process.
+         * @param liveJoins The current state of the live joins.
+         * @param updateColumns If true, the columns will be updated based on the aggregate mapping. If false, then
+         * the pushed join filters will use the original indices. This is useful for cache processing when we
+         * just want to detect the pushable subset.
+         * @return The pair of join filters that can be pushed and the join filters that must be applied at the current node.
+         */
+        private fun processWindow(
+            window: BodoPhysicalWindow,
+            liveJoins: JoinFilterProgramState,
+            updateColumns: Boolean,
+        ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
+            // Split the join info into those which must be processed now
+            // and those which can be processed later.
+            assert(window.supportsStreamingWindow())
+            val keptInputs = window.inputsToKeep.toList()
+            val columnTransformFunction =
+                if (updateColumns) {
+                    { idx: Int -> keptInputs[idx] }
+                } else {
+                    { idx: Int -> idx }
+                }
+            // Only push columns which are partition keys in every group.
+            val commonPartitionKeys = window.groups.map { it.keys }.reduce(ImmutableBitSet::intersect)
+            return splitFilterSections(
+                canPushPredicate = { colIdx -> commonPartitionKeys.get(colIdx) },
+                columnTransformFunction = columnTransformFunction,
+                liveJoins,
+            )
+        }
+
+        /**
          * Process an aggregate node by splitting into the remaining join filters for the current node and
          * join filters that can be pushed further. If updateColumns is true, the columns will be updated
          * based on the original key indices. If false we will just return the old columns indices, which is used
@@ -739,6 +785,11 @@ object RuntimeJoinFilterProgram : Program {
 
                 is BodoPhysicalSort -> {
                     val (pushed, _) = processSort(rel, liveJoins)
+                    pushed
+                }
+
+                is BodoPhysicalWindow -> {
+                    val (pushed, _) = processWindow(rel, liveJoins, false)
                     pushed
                 }
 

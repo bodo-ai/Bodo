@@ -9,5 +9,6 @@ enum class OperatorType {
     JOIN,
     GROUPBY,
     UNION,
+    WINDOW,
     ACCUMULATE_TABLE,
 }

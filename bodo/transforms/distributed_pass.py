@@ -578,20 +578,18 @@ class DistributedPass:
                 "parquet_writer_init",
                 "bodo.io.stream_parquet_write",
             ),
-        ) and self._is_1D_or_1D_Var_arr(lhs):
-            set_last_arg_to_true(self, assign.value)
-            return [assign]
-
-        if fdef == (
-            "init_groupby_state",
-            "bodo.libs.stream_groupby",
-        ) and self._is_1D_or_1D_Var_arr(lhs):
-            set_last_arg_to_true(self, assign.value)
-            return [assign]
-
-        if fdef == (
-            "init_union_state",
-            "bodo.libs.stream_union",
+            (
+                "init_groupby_state",
+                "bodo.libs.stream_groupby",
+            ),
+            (
+                "init_union_state",
+                "bodo.libs.stream_union",
+            ),
+            (
+                "init_window_state",
+                "bodo.libs.stream_window",
+            ),
         ) and self._is_1D_or_1D_Var_arr(lhs):
             set_last_arg_to_true(self, assign.value)
             return [assign]

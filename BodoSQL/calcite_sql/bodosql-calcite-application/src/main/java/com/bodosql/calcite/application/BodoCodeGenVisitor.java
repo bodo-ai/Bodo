@@ -1701,7 +1701,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     }
     Variable keepGlobal = this.lowerAsMetaType(new Expr.Tuple(keepKeys));
 
-    // Generate the global variables for regular streaming groupby
+    // Generate the global variables for regular streaming group by
     List<Integer> inColsList = new ArrayList();
     for (int i = 0; i < node.getInput().getRowType().getFieldCount(); i++) {
       if (!partitionColsIntegers.contains(i)) {

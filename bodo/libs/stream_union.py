@@ -22,12 +22,13 @@ from bodo.libs.array import (
     delete_table,
     py_data_to_cpp_table,
 )
+from bodo.libs.stream_base import StreamingStateType
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
     dtype_to_array_type,
-    error_on_unsupported_nested_arrays,
+    error_on_unsupported_streaming_arrays,
     get_common_scalar_dtype,
     get_overload_const_bool,
     is_nullable_ignore_sentinals,
@@ -37,7 +38,7 @@ from bodo.utils.typing import (
 )
 
 
-class UnionStateType(types.Type):
+class UnionStateType(StreamingStateType):
     all: bool
     in_table_types: Tuple[TableType, ...]
 
@@ -46,13 +47,12 @@ class UnionStateType(types.Type):
         all: bool = False,
         in_table_types: Tuple[TableType, ...] = (),
     ):
-        # TODO[BSE-937]: support nested arrays in streaming
         for in_table_type in in_table_types:
-            error_on_unsupported_nested_arrays(in_table_type)
+            error_on_unsupported_streaming_arrays(in_table_type)
 
         self.all = all
         self.in_table_types = in_table_types
-        super().__init__(f"UnionStateType(all={all}, in_table_types={in_table_types})")
+        super().__init__(f"UnionStateType({all=}, {in_table_types=})")
 
     @property
     def key(self):
@@ -211,6 +211,7 @@ def init_union_state(
     else:
         # Distinct Only. No aggregation functions
         ftypes_arr = np.array([], np.int32)
+        window_ftypes_arr = np.array([], np.int32)
         f_in_offsets = np.array([1], np.int32)
         f_in_cols = np.array([], np.int32)
 
@@ -232,6 +233,7 @@ def init_union_state(
                 arr_array_types.ctypes,
                 n_arrs,
                 ftypes_arr.ctypes,
+                window_ftypes_arr.ctypes,
                 f_in_offsets.ctypes,
                 f_in_cols.ctypes,
                 0,

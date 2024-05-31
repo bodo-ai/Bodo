@@ -543,7 +543,9 @@ object BodoPrograms {
     object WindowProjectTransformProgram : Program by ShuttleProgram(Visitor) {
         private object Visitor : RelShuttleImpl() {
             override fun visit(other: RelNode): RelNode =
-                if (other is BodoPhysicalWindow) {
+                // If the cohort is entirely supported in streaming window codegen,
+                // then keep the window node. Otherwise, turn into a project.
+                if (other is BodoPhysicalWindow && !other.supportsStreamingWindow()) {
                     other.convertToProject().accept(this)
                 } else {
                     super.visit(other)
