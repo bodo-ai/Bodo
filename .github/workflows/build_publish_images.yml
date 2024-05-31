@@ -78,6 +78,8 @@ jobs:
             echo "bodoSQLCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT 
             echo "bodoIcebergCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT
 
+            echo "pythonVersion=3.12" >> $GITHUB_OUTPUT 
+
             echo "buildName=dev${BODO_VERSION}.b${{ github.run_number }}" >> $GITHUB_OUTPUT
           else
             echo "publishDev=${{ github.event.inputs.publishDev }}" >> $GITHUB_OUTPUT
@@ -90,6 +92,8 @@ jobs:
             OUT_CHANNEL="bodo.ai"
             echo "bodoSQLCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT 
             echo "bodoIcebergCondaChannel=$OUT_CHANNEL" >> $GITHUB_OUTPUT
+
+            echo "pythonVersion=${{ github.event.inputs.pythonVersion }}" >> $GITHUB_OUTPUT
             
             echo "buildName=${{ github.event.inputs.bodoVersion }}" >> $GITHUB_OUTPUT
           fi
@@ -193,7 +197,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           GIT_SHA: ${{ env.SHA }}
           SKIP_CREATE_IMAGES: ${{ needs.setup.outputs.skipCreateImages }}
-          PYTHON_VERSION: ${{ github.event.inputs.pythonVersion  }}
+          PYTHON_VERSION: ${{ needs.setup.outputs.pythonVersion  }}
           BODO_VERSION: ${{ needs.setup.outputs.bodoVersion }}
           BODOSQL_VERSION: ${{ needs.setup.outputs.bodoSQLVersion }}
           BODOSQL_CHANNEL: ${{ needs.setup.outputs.bodoSQLCondaChannel }}
