@@ -879,7 +879,8 @@ class UntypedPass:
         # columns=None, chunksize=None, _bodo_read_as_dict,
         # _bodo_is_table_input, _bodo_downcast_decimal_to_double,
         # _bodo_read_as_table, _bodo_orig_table_name,
-        # _bodo_orig_table_indices, _bodo_sql_op_id)
+        # _bodo_orig_table_indices, _bodo_sql_op_id,
+        # _bodo_runtime_join_filters)
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
         # The sql request has to be constant
@@ -1024,6 +1025,69 @@ class UntypedPass:
             use_default=True,
             typ="int",
         )
+        # Retrieve the tuple of runtime join filters in the form
+        # ((state_1, indices_1), (state_2, indices_2)...) where each
+        # state is a join state object and each indices is a tuple of
+        # column indices.
+        _bodo_runtime_join_filters_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_runtime_join_filters",
+            default=None,
+            use_default=True,
+        )
+        if _bodo_runtime_join_filters_arg is None:
+            # If the tuple is absent, then no runtime
+            # join filters were provided so we can skip the codepath.
+            rtjf_terms = None
+        else:
+            _bodo_runtime_join_filters_defn = numba.core.ir_utils.get_definition(
+                self.func_ir,
+                _bodo_runtime_join_filters_arg,
+            )
+            if (
+                isinstance(_bodo_runtime_join_filters_defn, ir.Const)
+                and _bodo_runtime_join_filters_defn.value is None
+            ):
+                # If the tuple is explicitly set to None, then no runtime
+                # join filters were provided so we can skip the codepath.
+                rtjf_terms = None
+            else:
+                # Otherwise, we create a list of (state_var, indices)
+                # tuples from the raw arguments and store in the SqlReader
+                assert (
+                    chunksize != None
+                ), "Cannot provide rtjf terms in a non-streaming read."
+                rtjf_terms = []
+                for rtjf_tuple in _bodo_runtime_join_filters_defn.items:
+                    tup_defn = numba.core.ir_utils.get_definition(
+                        self.func_ir, rtjf_tuple
+                    )
+                    # Verify that the tuple is well formed
+                    if len(tup_defn.items) != 2:
+                        raise_bodo_error(
+                            f"Invalid runtime join filter tuple. Expected 2 elements per tuple, instead had {len(tup_defn.items)}"
+                        )
+                    # Extract the state variable
+                    state_var = tup_defn.items[0]
+                    if not isinstance(state_var, ir.Var):
+                        raise_bodo_error(
+                            f"Invalid runtime join filter tuple. Expected the first argument to be a Var, instead got {state_var}."
+                        )
+                    # Extract the column indices
+                    col_indices_meta = numba.core.ir_utils.get_definition(
+                        self.func_ir, tup_defn.items[1]
+                    )
+                    if not isinstance(col_indices_meta, ir.Global) or not isinstance(
+                        col_indices_meta.value, bodo.utils.typing.MetaType
+                    ):
+                        raise_bodo_error(
+                            f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {col_indices_meta}."
+                        )
+                    col_indices_tup = col_indices_meta.value.meta
+                    rtjf_terms.append((state_var, col_indices_tup))
 
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
@@ -1061,6 +1125,7 @@ class UntypedPass:
             "_bodo_orig_table_name",
             "_bodo_orig_table_indices",
             "_bodo_sql_op_id",
+            "_bodo_runtime_join_filters",
         )
 
         unsupported_args = set(kws.keys()) - set(supported_args)
@@ -1170,6 +1235,7 @@ class UntypedPass:
                 _bodo_downcast_decimal_to_double,
                 chunksize,
                 _bodo_sql_op_id_const,
+                rtjf_terms,
             )
         ]
 

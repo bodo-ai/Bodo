@@ -4,6 +4,7 @@ sequential and parallel code.
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import io
 import os
 import traceback
 from uuid import getnode
@@ -16,6 +17,11 @@ import bodo
 import bodosql
 from bodo.tests.caching_tests.caching_tests_common import (  # noqa
     fn_distribution,
+)
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
 )
 from bodo.tests.utils import (
     check_caching,
@@ -171,3 +177,69 @@ def test_snowflake_catalog_write_caching(fn_distribution, is_cached):
 
         if error is not None:
             raise error
+
+
+@pytest_mark_snowflake
+def test_snowflake_runtime_join_filter_caching(is_cached):
+    """
+    Tests usage of caching on a query that will also trigger a
+    min/max runtime join filter pushed into the I/O.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # The "is_cached" fixture is essentially a wrapper that returns the value
+    # of the --is_cached flag used when invoking pytest (defaults to "n").
+    # runtests_caching will pass this flag, depending on if we expect the
+    # current test to be cached.
+    check_cache = is_cached == "y"
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ["SF_USERNAME"],
+        os.environ["SF_PASSWORD"],
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        db,
+        connection_params={"schema": schema},
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    answer = pd.DataFrame({"N_SUPPLIERS": [131]})
+
+    # Count the number of unique suppliers who supply at least one
+    # part that has the specified properties. Should create a runtime
+    # join filter on partsupp with the following predicates:
+    # - ps_partkey >= 1977
+    # - ps_suppkey <= 195380
+    query = """
+    SELECT COUNT(DISTINCT ps_suppkey) AS n_suppliers
+    FROM tpch_sf1.part, tpch_sf1.partsupp
+    WHERE p_name ILIKE '%yellow%'
+        AND p_name ILIKE '%blue%'
+        AND p_type ILIKE '%anodized%'
+        AND p_size > 30
+        AND p_partkey = ps_partkey
+    """
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_caching(
+            impl,
+            (bc, query),
+            check_cache,
+            input_dist=fn_distribution,
+            py_output=answer,
+            sort_output=True,
+            reset_index=True,
+            is_out_dist=False,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(
+            stream,
+            'SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "TEST_DB"."TPCH_SF1"."PARTSUPP" WHERE "PS_PARTKEY" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= 1977) AND ($1 <= 195380)',
+        )

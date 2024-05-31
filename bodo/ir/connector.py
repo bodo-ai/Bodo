@@ -208,6 +208,12 @@ def visit_vars_connector(node: Connector, callback, cbdata):
         visitor = VarVisitor(lambda v: visit_vars_inner(v, callback, cbdata))
         node.filters = visitor.visit(node.filters)
 
+    if node.connector_typ == "sql" and node.rtjf_terms:
+        for i in range(len(node.rtjf_terms)):
+            var, indices = node.rtjf_terms[i]
+            new_var = visit_vars_inner(var, callback, cbdata)
+            node.rtjf_terms[i] = (new_var, indices)
+
     if node.connector_typ == "iceberg":
         node.connection = visit_vars_inner(node.connection, callback, cbdata)
 
@@ -255,6 +261,12 @@ def connector_usedefs(node: Connector, use_set=None, def_set=None):
         vars = get_filter_vars(node.filters)
         use_set.update({v.name for v in vars})
 
+    if node.connector_typ == "sql" and node.rtjf_terms:
+        for i in range(len(node.rtjf_terms)):
+            var, _ = node.rtjf_terms[i]
+            if isinstance(var, numba.core.ir.Var):
+                use_set.add(var.name)
+
     if node.connector_typ == "iceberg":
         if isinstance(node.connection, numba.core.ir.Var):
             use_set.add(node.connection.name)
@@ -286,6 +298,12 @@ def apply_copies_connector(
     if node.connector_typ in ("parquet", "sql", "iceberg") and node.filters:
         visitor = VarVisitor(lambda v: replace_vars_inner(v, var_dict))
         node.filters = visitor.visit(node.filters)
+
+    if node.connector_typ == "sql" and node.rtjf_terms:
+        for i in range(len(node.rtjf_terms)):
+            var, indices = node.rtjf_terms[i]
+            new_var = replace_vars_inner(var, var_dict)
+            node.rtjf_terms[i] = (new_var, indices)
 
     if node.connector_typ == "iceberg":
         node.connection = replace_vars_inner(node.connection, var_dict)

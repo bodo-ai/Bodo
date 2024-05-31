@@ -14,6 +14,12 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalUnion
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalWindow
 import com.bodosql.calcite.adapter.common.LimitUtils
+import com.bodosql.calcite.adapter.iceberg.IcebergRel
+import com.bodosql.calcite.adapter.iceberg.IcebergRuntimeJoinFilter
+import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
+import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
+import com.bodosql.calcite.adapter.snowflake.SnowflakeRuntimeJoinFilter
+import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import com.bodosql.calcite.rel.core.CachedPlanInfo
@@ -185,6 +191,14 @@ object RuntimeJoinFilterProgram : Program {
                         visit(rel)
                     }
 
+                    is SnowflakeToBodoPhysicalConverter -> {
+                        visit(rel)
+                    }
+
+                    is IcebergToBodoPhysicalConverter -> {
+                        visit(rel)
+                    }
+
                     is BodoPhysicalCachedSubPlan -> {
                         visit(rel)
                     }
@@ -312,6 +326,42 @@ object RuntimeJoinFilterProgram : Program {
         private fun visit(filter: BodoPhysicalFilter): RelNode {
             val (pushLiveJoinInfo, outputLiveJoinInfo) = processFilter(filter, liveJoins)
             return processSingleRel(filter, pushLiveJoinInfo, outputLiveJoinInfo)
+        }
+
+        private fun visit(converter: SnowflakeToBodoPhysicalConverter): RelNode {
+            return if (liveJoins.isEmpty() || !emitFilters) {
+                converter
+            } else {
+                val (filterKeys, filterColumns, areFirstLocations) = liveJoins.flattenToLists()
+                val snowflakeRtjf =
+                    SnowflakeRuntimeJoinFilter.create(
+                        converter.input,
+                        filterKeys,
+                        filterColumns,
+                        areFirstLocations,
+                        (converter.input as SnowflakeRel).getCatalogTable(),
+                    )
+                liveJoins = JoinFilterProgramState()
+                converter.copy(converter.traitSet, listOf(snowflakeRtjf))
+            }
+        }
+
+        private fun visit(converter: IcebergToBodoPhysicalConverter): RelNode {
+            return if (liveJoins.isEmpty() || !emitFilters) {
+                converter
+            } else {
+                val (filterKeys, filterColumns, areFirstLocations) = liveJoins.flattenToLists()
+                val icebergRtjf =
+                    IcebergRuntimeJoinFilter.create(
+                        converter.input,
+                        filterKeys,
+                        filterColumns,
+                        areFirstLocations,
+                        (converter.input as IcebergRel).getCatalogTable(),
+                    )
+                liveJoins = JoinFilterProgramState()
+                converter.copy(converter.traitSet, listOf(icebergRtjf))
+            }
         }
 
         private fun visit(node: BodoPhysicalMinRowNumberFilter): RelNode {
@@ -802,7 +852,9 @@ object RuntimeJoinFilterProgram : Program {
                     val (pushed, _) = processFlatten(rel, liveJoins, false)
                     pushed
                 }
-                is BodoPhysicalJoin, is BodoPhysicalMinus, is BodoPhysicalIntersect, is BodoPhysicalUnion -> {
+                is BodoPhysicalJoin, is BodoPhysicalMinus, is BodoPhysicalIntersect, is BodoPhysicalUnion,
+                is SnowflakeToBodoPhysicalConverter, is IcebergToBodoPhysicalConverter,
+                -> {
                     // We can push everything past these nodes.
                     liveJoins
                 }

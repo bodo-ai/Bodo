@@ -12,6 +12,7 @@ import com.bodosql.calcite.ir.Expr.StringLiteral
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -92,16 +93,30 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
     // ----------------------------------- Codegen Helpers -----------------------------------
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
         if (isStreaming()) {
-            val stage =
+            val runtimeJoinFilters: List<IcebergRuntimeJoinFilter> = flattenIcebergTree().runtimeJoinFilters
+            val readStage =
                 OutputtingStageEmission(
                     { ctx, stateVar, _ ->
                         generateStreamingTable(ctx, stateVar)
                     },
                     reportOutTableSize = false,
                 )
+            val stages = mutableListOf(readStage)
+            if (runtimeJoinFilters.isNotEmpty()) {
+                val wrappedStage =
+                    OutputtingStageEmission({ ctx, stateVar, inputTable ->
+                        RuntimeJoinFilterBase.wrapResultInRuntimeJoinFilters(
+                            this,
+                            ctx,
+                            flattenIcebergTree().runtimeJoinFilters,
+                            inputTable!!,
+                        )
+                    }, reportOutTableSize = true)
+                stages.add(wrappedStage)
+            }
             val pipeline =
                 OutputtingPipelineEmission(
-                    listOf(stage),
+                    stages,
                     true,
                     null,
                 )
@@ -140,7 +155,7 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
      */
     private fun generateReadExpr(ctx: BodoPhysicalRel.BuildContext): Expr.Call {
         val relInput = input as IcebergRel
-        val flattenedInfo = flattenIcebergTree(relInput)
+        val flattenedInfo = flattenIcebergTree()
         val cols = flattenedInfo.colNames
         val filters = flattenedInfo.filters
         val tableScanNode = flattenedInfo.scan
@@ -207,6 +222,11 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
                 "_bodo_limit" to limit,
                 "_bodo_sql_op_id" to ctx.operatorID().toExpr(),
                 "_bodo_read_as_dict" to dictExpr,
+                "_bodo_runtime_join_filters" to
+                    RuntimeJoinFilterBase.getRuntimeJoinFilterTuple(
+                        ctx,
+                        flattenIcebergTree().runtimeJoinFilters,
+                    ),
             )
 
         return Expr.Call("pd.read_sql_table", args, namedArgs)
@@ -217,81 +237,100 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
         val filters: List<RexNode>,
         val scan: IcebergTableScan,
         val limit: Expr,
+        val runtimeJoinFilters: List<IcebergRuntimeJoinFilter>,
     )
 
-    private fun flattenIcebergTree(node: IcebergRel): FlattenedIcebergInfo {
-        val visitor =
-            object : RelVisitor() {
-                // Initialize all columns to be in the original location.
-                var colMap: MutableList<Int> = (0..<node.rowType.fieldCount).toMutableList()
-                var filters: MutableList<RexNode> = mutableListOf()
-                var baseScan: IcebergTableScan? = null
-                var limit: BigDecimal? = null
+    private var cachedIcebergFlattenedInfo: FlattenedIcebergInfo? = null
 
-                override fun visit(
-                    node: RelNode,
-                    ordinal: Int,
-                    parent: RelNode?,
-                ) {
-                    when (node) {
-                        // Enable moving past filters to get the original table
-                        is IcebergFilter -> {
-                            filters.add(node.condition)
-                            node.childrenAccept(this)
-                        }
-                        is IcebergSort -> {
-                            val nodeVal: BigDecimal = (node.fetch!! as RexLiteral).getValueAs(BigDecimal::class.java)!!
-                            if (this.limit == null) {
-                                this.limit = nodeVal
-                            } else {
-                                this.limit =
-                                    minOf(
-                                        this.limit!!,
-                                        nodeVal,
-                                    )
+    private fun flattenIcebergTree(): FlattenedIcebergInfo {
+        if (cachedIcebergFlattenedInfo == null) {
+            val node = input as IcebergRel
+            val visitor =
+                object : RelVisitor() {
+                    // Initialize all columns to be in the original location.
+                    var colMap: MutableList<Int> = (0..<node.rowType.fieldCount).toMutableList()
+                    var filters: MutableList<RexNode> = mutableListOf()
+                    var runtimeJoinFilters: MutableList<IcebergRuntimeJoinFilter> = mutableListOf()
+                    var baseScan: IcebergTableScan? = null
+                    var limit: BigDecimal? = null
+
+                    override fun visit(
+                        node: RelNode,
+                        ordinal: Int,
+                        parent: RelNode?,
+                    ) {
+                        when (node) {
+                            // Enable moving past filters to get the original table
+                            is IcebergFilter -> {
+                                filters.add(node.condition)
+                                node.childrenAccept(this)
                             }
-                            node.childrenAccept(this)
-                        }
-                        is IcebergProject -> {
-                            val newColMap = mutableListOf<Int>()
-                            // Projects may reorder columns, so we need to update the column mapping.
-                            for (i in 0..<colMap.size) {
-                                val project = node.projects[colMap[i]]
-                                if (project !is RexInputRef) {
-                                    throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+
+                            is IcebergSort -> {
+                                val nodeVal: BigDecimal =
+                                    (node.fetch!! as RexLiteral).getValueAs(BigDecimal::class.java)!!
+                                if (this.limit == null) {
+                                    this.limit = nodeVal
+                                } else {
+                                    this.limit =
+                                        minOf(
+                                            this.limit!!,
+                                            nodeVal,
+                                        )
                                 }
-                                newColMap.add(project.index)
+                                node.childrenAccept(this)
                             }
-                            colMap = newColMap
-                            node.childrenAccept(this)
-                        }
 
-                        is IcebergTableScan -> {
-                            baseScan = node
-                            for (value in colMap) {
-                                if (value >= node.deriveRowType().fieldNames.size) {
-                                    throw RuntimeException("IcebergProjection Invalid")
+                            is IcebergProject -> {
+                                val newColMap = mutableListOf<Int>()
+                                // Projects may reorder columns, so we need to update the column mapping.
+                                for (i in 0..<colMap.size) {
+                                    val project = node.projects[colMap[i]]
+                                    if (project !is RexInputRef) {
+                                        throw RuntimeException("getOriginalColumnIndices() requires only InputRefs")
+                                    }
+                                    newColMap.add(project.index)
+                                }
+                                colMap = newColMap
+                                node.childrenAccept(this)
+                            }
+
+                            is IcebergRuntimeJoinFilter -> {
+                                runtimeJoinFilters.add(node)
+                                node.childrenAccept(this)
+                            }
+
+                            is IcebergTableScan -> {
+                                baseScan = node
+                                for (value in colMap) {
+                                    if (value >= node.deriveRowType().fieldNames.size) {
+                                        throw RuntimeException("IcebergProjection Invalid")
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        visitor.go(node)
-        val actualLimit =
-            if (visitor.limit == null) {
-                Expr.None
-            } else {
-                Expr.DecimalLiteral(visitor.limit!!)
-            }
-        val baseScan = visitor.baseScan!!
-        val origColNames = baseScan.deriveRowType().fieldNames
-        return FlattenedIcebergInfo(
-            visitor.colMap.mapIndexed { _, v -> origColNames[v] }.toList(),
-            visitor.filters,
-            baseScan,
-            actualLimit,
-        )
+            visitor.go(node)
+            val actualLimit =
+                if (visitor.limit == null) {
+                    Expr.None
+                } else {
+                    Expr.DecimalLiteral(visitor.limit!!)
+                }
+            val baseScan = visitor.baseScan!!
+            val origColNames = baseScan.deriveRowType().fieldNames
+            val runtimeJoinFilters = visitor.runtimeJoinFilters
+            cachedIcebergFlattenedInfo =
+                FlattenedIcebergInfo(
+                    visitor.colMap.mapIndexed { _, v -> origColNames[v] }.toList(),
+                    visitor.filters,
+                    baseScan,
+                    actualLimit,
+                    runtimeJoinFilters,
+                )
+        }
+        return cachedIcebergFlattenedInfo!!
     }
 
     private fun getTableName(input: IcebergRel) = input.getCatalogTable().name
@@ -332,6 +371,6 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
      */
     private fun generateNonStreamingTable(ctx: BodoPhysicalRel.BuildContext): BodoEngineTable {
         val readExpr = generateReadExpr(ctx)
-        return ctx.returns(readExpr)
+        return RuntimeJoinFilterBase.wrapResultInRuntimeJoinFilters(this, ctx, flattenIcebergTree().runtimeJoinFilters, readExpr)
     }
 }
