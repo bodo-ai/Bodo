@@ -1,5 +1,10 @@
 package com.bodosql.calcite.rel.core
 
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRuntimeJoinFilter
+import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.plan.makeCost
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -58,5 +63,81 @@ open class RuntimeJoinFilterBase(
     ): RelOptCost {
         val rows = mq.getRowCount(this)
         return planner.makeCost().multiplyBy(rows)
+    }
+
+    companion object {
+        /**
+         * Generates the expression to pass in a tuple of runtime join filters
+         * to an I/O call. The tuple contains tuples in the form
+         * (joinState, filterColumns, isFirstBooleans).
+         */
+        fun getRuntimeJoinFilterTuple(
+            ctx: BodoPhysicalRel.BuildContext,
+            runtimeJoinFilters: List<RuntimeJoinFilterBase>,
+        ): Expr {
+            if (runtimeJoinFilters.isEmpty()) return Expr.None
+            val rfjExprs: MutableList<Expr> = mutableListOf()
+            // Iterate across each RuntimeJoinFilter node
+            runtimeJoinFilters.forEach { rfjCollection ->
+                rfjCollection.joinFilterIDs.forEachIndexed { idx, joinFilterId ->
+                    val joinStateCache = ctx.builder().getJoinStateCache()
+                    val (stateVar, keyLocations) = joinStateCache.getStreamingJoinInfo(joinFilterId)
+                    val nKeyColumns = keyLocations.size
+                    // If we don't have the state stored assume we have disabled
+                    // streaming entirely and this is a no-op.
+                    stateVar?.let {
+                        val columnOrderedList = MutableList(nKeyColumns) { Expr.NegativeOne }
+                        keyLocations.forEachIndexed { index, keyLocation ->
+                            columnOrderedList[keyLocation] =
+                                Expr.IntegerLiteral(rfjCollection.filterColumns[idx][index])
+                        }
+                        val columnsTuple = Expr.Tuple(columnOrderedList)
+                        val tupleVar = ctx.lowerAsMetaType(columnsTuple)
+                        val rfjExpr = Expr.Tuple(stateVar, tupleVar)
+                        rfjExprs.add(rfjExpr)
+                    }
+                }
+            }
+            return Expr.Tuple(rfjExprs)
+        }
+
+        /**
+         * Wrap a reader result in runtime join filter codegen
+         *
+         * @param rel The original RelNode generating the read call.
+         * @param ctx The build context.
+         * @param runtimeJoinFilters The filters being applied.
+         * @param readerResult The expression generated from the reader call.
+         */
+        fun wrapResultInRuntimeJoinFilters(
+            rel: RelNode,
+            ctx: BodoPhysicalRel.BuildContext,
+            runtimeJoinFilters: List<RuntimeJoinFilterBase>,
+            readerResult: Expr,
+        ): BodoEngineTable {
+            val builder = ctx.builder()
+            var result = readerResult
+            runtimeJoinFilters.forEach {
+                for (i in it.joinFilterIDs.indices) {
+                    val joinFilterID = it.joinFilterIDs[i]
+                    val columns = it.filterColumns[i]
+                    val isFirstLocation = it.filterIsFirstLocations[i]
+                    val rtjfResult =
+                        BodoPhysicalRuntimeJoinFilter.generateRuntimeJoinFilterCode(
+                            ctx,
+                            joinFilterID,
+                            columns,
+                            isFirstLocation,
+                            result,
+                        )
+                    rtjfResult?.let {
+                        val tableChunkVar = builder.symbolTable.genTableVar()
+                        builder.add(Op.Assign(tableChunkVar, rtjfResult))
+                        result = tableChunkVar
+                    }
+                }
+            }
+            return BodoEngineTable(result.emit(), rel)
+        }
     }
 }

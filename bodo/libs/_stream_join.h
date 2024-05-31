@@ -172,6 +172,12 @@ struct HashJoinMetrics : public JoinMetrics {
     time_t build_filter_na_time = 0;
     stat_t build_filter_na_output_nrows = 0;
 
+    // Time spent dealing with min/max updates
+    time_t build_min_max_update_time = 0;
+
+    // Time spent dealing with the min/max parallel finalization
+    time_t build_min_max_finalize_time = 0;
+
     // Partitioning state
     blob_t final_partitioning_state;
 
@@ -849,6 +855,10 @@ class HashJoinState : public JoinState {
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
 
+    // Vector that stores an array for each equi-join key. Each array
+    // has 2 values: the minimum key, and the maixmum key.
+    std::vector<std::optional<std::shared_ptr<array_info>>> min_max_values;
+
     HashJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                   const std::shared_ptr<bodo::Schema> probe_table_schema_,
                   uint64_t n_keys_, bool build_table_outer_,
@@ -1076,6 +1086,29 @@ class HashJoinState : public JoinState {
      */
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
     GetDictionaryHashesForKeys();
+
+    /**
+     * Returns whether a key column of a hash join can have a runtime
+     * join filter based on its min/max values.
+     */
+    static bool IsValidRuntimeJoinFilterMinMaxColumn(
+        std::unique_ptr<bodo::DataType>& dtype);
+
+    /**
+     * Processes a batch of data to include it in the accumulated min/max values
+     * for each key column.
+     *
+     * @param[in] in_table The batch of data that is being processed to update
+     * the min/max values.
+     */
+    void UpdateKeysMinMax(std::shared_ptr<table_info>& in_table);
+
+    /**
+     * Does the parallel finalization of the min/max values for each key column
+     * to ensure that ever rank has the global min/max of the key columns before
+     * any runtime join filters.
+     */
+    void FinalizeKeysMinMax();
 
     /// @brief Get the current budget of the op-pool for this Join operator.
     uint64_t op_pool_budget_bytes() const;

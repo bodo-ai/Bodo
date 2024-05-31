@@ -4,7 +4,7 @@ Implementation of pd.read_sql in Bodo.
 We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
-
+import sys
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -28,12 +28,16 @@ from numba.core.ir_utils import (
     next_label,
     replace_arg_nodes,
 )
-from numba.extending import intrinsic
+from numba.extending import (
+    intrinsic,
+    overload,
+)
 
 import bodo
 import bodo.ir.connector
 import bodo.ir.filter as bif
 import bodo.user_logging
+from bodo.ext import stream_join_cpp
 from bodo.hiframes.table import Table, TableType
 from bodo.io import arrow_cpp  # type: ignore
 from bodo.io.arrow_reader import ArrowReaderType
@@ -55,6 +59,7 @@ from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
@@ -74,6 +79,10 @@ if TYPE_CHECKING:  # pragma: no cover
 ll.add_symbol("snowflake_read_py_entry", arrow_cpp.snowflake_read_py_entry)
 ll.add_symbol(
     "snowflake_reader_init_py_entry", arrow_cpp.snowflake_reader_init_py_entry
+)
+ll.add_symbol(
+    "get_runtime_join_filter_min_max_py_entrypt",
+    stream_join_cpp.get_runtime_join_filter_min_max_py_entrypt,
 )
 
 MPI_ROOT = 0
@@ -152,6 +161,9 @@ class SqlReader(Connector):
         # purposes. Only supported in the streaming Snowflake
         # Read case.
         sql_op_id: int = -1,
+        # List of tuples representing runtime join filters
+        # that have been pushed down to I/O.
+        rtjf_terms: Optional[list[tuple[ir.Var, tuple[int]]]] = None,
     ):
         # Column Names and Types. Common for all Connectors
         # - Output Columns
@@ -208,9 +220,21 @@ class SqlReader(Connector):
         self.chunksize = chunksize
         self.sql_op_id = sql_op_id
 
+        self.rtjf_terms = rtjf_terms
+
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, out_col_names={self.out_table_col_names}, out_col_types={self.out_table_col_types}, df_out_varname={self.df_out_varname}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, downcast_decimal_to_double={self.downcast_decimal_to_double}, sql_op_id={self.sql_op_id})"
+        runtime_join_filters = (
+            None
+            if self.rtjf_terms is None
+            else "["
+            + ", ".join(
+                f"({state_var.name}, {col_indices})"
+                for state_var, col_indices in self.rtjf_terms
+            )
+            + "]"
+        )
+        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, out_col_names={self.out_table_col_names}, out_col_types={self.out_table_col_types}, df_out_varname={self.df_out_varname}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, downcast_decimal_to_double={self.downcast_decimal_to_double}, sql_op_id={self.sql_op_id}, runtime_join_filters={runtime_join_filters})"
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
         if self.is_streaming:
@@ -427,6 +451,99 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
                 return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
 
 
+# Class for a the RTJF min/max stored value
+this_module = sys.modules[__name__]
+install_py_obj_class(
+    types_name="rtjf_min_max_value_type",
+    python_type=None,
+    module=this_module,
+    class_name="RtjfMinMaxValueType",
+    model_name="RtjfMinMaxValueModel",
+)
+
+
+@intrinsic
+def get_runtime_join_filter_min_max(typingctx, state_var_t, key_index_t, is_min_t):
+    """
+    Fetches the minimum or maximum value from a runtime join filter corresponding
+    to the specified key index, if one exists. Returns as a PyObject that is
+    either the string representation of the value, or None if it cannot be found.
+    Whether the min or max is returned depends on the is_min argument.
+    """
+    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+    # assert key_index_t == types.int64
+    # assert is_min_t == types.bool_, breakpoint()
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # join state
+                lir.IntType(64),  # key_index_t
+                lir.IntType(1),  # is_min
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_runtime_join_filter_min_max_py_entrypt"
+        )
+        rtjf_min = builder.call(fn_tp, args)
+        rtjf_min_struct = cgutils.create_struct_proxy(types.rtjf_min_max_value_type)(
+            context, builder
+        )
+        pyapi = context.get_python_api(builder)
+        # borrows and manages a reference for obj (see comments in py_objs.py)
+        rtjf_min_struct.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+            context.get_constant_null(types.voidptr), rtjf_min
+        )
+        rtjf_min_struct.pyobj = rtjf_min
+        inlined_check_and_propagate_cpp_exception(context, builder)
+        return rtjf_min_struct._getvalue()
+
+    sig = types.rtjf_min_max_value_type(state_var_t, key_index_t, is_min_t)
+    return sig, codegen
+
+
+def gen_runtime_join_filter_cond(state_var, col_indices):
+    pass
+
+
+@overload(gen_runtime_join_filter_cond)
+def overload_gen_runtime_join_filter_cond(state_var, col_indices):
+    """
+    Takes in a join state and tuple of column indices and uses them to construct a string
+    representing a conjunction of bounds checks based on the minimum/maximum values inferred
+    from the runtime join filter. This is used for Snowflake reads.
+    """
+
+    def impl(state_var, col_indices):  # pragma: no cover
+        cond_terms = ["TRUE"]
+        n_cols = len(col_indices)
+        for i in range(n_cols):
+            col_idx = col_indices[i]
+            if col_idx == -1:
+                continue
+            # Get the min/max value bounds for the current key column from the join state
+            min_val = get_runtime_join_filter_min_max(state_var, np.int64(i), True)
+            max_val = get_runtime_join_filter_min_max(state_var, np.int64(i), False)
+            # Use object mode to convert to a string representation of the bounds check
+            with bodo.no_warning_objmode(
+                min_result="unicode_type", max_result="unicode_type"
+            ):
+                min_result = max_result = ""
+                if min_val is not None:
+                    min_result = f"(${col_idx+1} >= {min_val})"
+                if max_val is not None:
+                    max_result = f"(${col_idx+1} <= {max_val})"
+            # If the results were successful, add to the conjunction list
+            if min_result != "":
+                cond_terms.append(min_result)
+            if max_result != "":
+                cond_terms.append(max_result)
+        return " AND ".join(cond_terms)
+
+    return impl
+
+
 def sql_distributed_run(
     sql_node: SqlReader,
     array_dists,
@@ -545,8 +662,31 @@ def sql_distributed_run(
         # Compute the min to minimize compute.
         limit = min(sql_node.limit, meta_head_only_info[0])
 
+    # If we have runtime join filter terms passed in, add them to the query code.
+    rtjf_suffix = ""
+    rtjf_state_args = []
+    rtjf_state_names = []
+    if sql_node.rtjf_terms is not None:
+        rtjf_args = []
+        for state_var, col_indices in sql_node.rtjf_terms:
+            # Creates a name for each join state argument that corresponds to the
+            # variable name, but reformatting the state_var to avoid IR variable
+            # chracters like "$"
+            state_name = "".join(
+                char for char in state_var.name if char.isalnum() or char == "_"
+            )
+            rtjf_args.append((state_name, str(col_indices)))
+            rtjf_state_args.append(state_var)
+            rtjf_state_names.append(state_name)
+        for state_var, col_indices in rtjf_args:
+            rtjf_suffix += f"    runtime_join_filter_cond = gen_runtime_join_filter_cond({state_var}, {col_indices})\n"
+            rtjf_suffix += '    sql_request = f"SELECT * FROM ({sql_request}) WHERE {runtime_join_filter_cond}"\n'
+
+        if bodo.user_logging.get_verbose_level() >= 2:
+            rtjf_suffix += "    log_message('SQL I/O', f'Runtime join filter query: {sql_request}')\n"
+
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(sql_node.filters)
-    extra_args = ", ".join(filter_map.values())
+    extra_args = ", ".join(list(filter_map.values()) + rtjf_state_names)
     func_text = f"def sql_impl(sql_request, conn, database_schema, {extra_args}):\n"
     # If we are doing regular SQL, filters are embedded into the query.
     if sql_node.is_select_query:
@@ -576,6 +716,7 @@ def sql_distributed_run(
         #    is smaller than the limit being pushdown so we can ignore it.
         if sql_node.limit != limit:
             func_text += f'    sql_request = f"{{sql_request}} LIMIT {limit}"\n'
+        func_text += rtjf_suffix
 
     filter_args = ""
 
@@ -623,11 +764,14 @@ def sql_distributed_run(
             "bcast_scalar": bcast_scalar,
             "bcast": bcast,
             "get_sql_literal": _get_snowflake_sql_literal,
+            "gen_runtime_join_filter_cond": gen_runtime_join_filter_cond,
+            "log_message": bodo.user_logging.log_message,
         },
         typingctx=typingctx,
         targetctx=targetctx,
         arg_typs=(string_type, string_type, schema_type)
-        + tuple(typemap[v.name] for v in filter_vars),
+        + tuple(typemap[v.name] for v in filter_vars)
+        + tuple(typemap[v.name] for v in rtjf_state_args),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
@@ -662,7 +806,6 @@ def sql_distributed_run(
             )
     else:
         updated_sql_request = sql_node.sql_request
-
     replace_arg_nodes(
         f_block,
         [
@@ -670,7 +813,8 @@ def sql_distributed_run(
             ir.Const(sql_node.connection, sql_node.loc),
             ir.Const(sql_node.database_schema, sql_node.loc),
         ]
-        + filter_vars,
+        + filter_vars
+        + rtjf_state_args,
     )
     nodes = f_block.body[:-3]
 
