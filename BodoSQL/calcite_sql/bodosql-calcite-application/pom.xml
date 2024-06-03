@@ -693,7 +693,7 @@
                     </dependency>
                 </dependencies>
                 <configuration>
-                    <forkCount>3</forkCount>
+                    <forkCount>4</forkCount>
                     <reuseForks>false</reuseForks>
                 </configuration>
             </plugin>
