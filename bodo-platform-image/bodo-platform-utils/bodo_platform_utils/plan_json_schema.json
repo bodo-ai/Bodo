@@ -1,0 +1,30 @@
+{
+  "type":"object",
+  "properties":{
+    "root":{
+      "$ref":"#/$defs/node"
+    }
+  },
+  "required": ["root"],
+  "$defs":{
+    "node":{
+      "type":"object",
+      "properties":{
+        "name":{
+          "type":"string"
+        },
+        "properties":{
+          "type":"object"
+        },
+        "children":{
+          "type":"array",
+          "items":{
+            "$ref":"#/$defs/node"
+          }
+        }
+      },
+      "required": ["name", "properties", "children"],
+      "additionalProperties": false
+    }
+  }
+}

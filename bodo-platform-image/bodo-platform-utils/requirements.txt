@@ -11,3 +11,6 @@ mpi4py==3.1.5
 requests
 cachetools>=5.3.0
 pyarrow>=16.0.0
+jsonschema
+plotly
+igraph
