@@ -674,8 +674,8 @@ class ElementComparator {
                  ArrType != bodo_array_type::NULLABLE_INT_BOOL &&
                  ArrType != bodo_array_type::DICT)
     constexpr bool operator()(const int64_t iRowA, const int64_t iRowB) const {
-        return TestEqualColumn(this->arr1, iRowA, this->arr2, iRowB,
-                               is_na_equal);
+        return TestEqualColumn<ArrType>(this->arr1, iRowA, this->arr2, iRowB,
+                                        is_na_equal);
     }
 
    private:

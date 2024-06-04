@@ -233,20 +233,23 @@ void row_number_computation(std::shared_ptr<array_info> out_arr,
 }
 
 /** Returns whether the current row of orderby keys is distinct from
- * the previous row when performing a rank computation.
+ * the previous row when performing a rank computation. The templated
+ * argument ArrType should only ever be non-unknown if all of the
+ * arrays in sorted_orderbys have the same array type.
  *
  * @param[in] sorted_orderbys: the columns used to order the table
  * when performing a window computation.
  * @param[in] i: the row that is being queried to see if it is distinct
  * from the previous row.
  */
+template <bodo_array_type::arr_type_enum ArrType>
 inline bool distinct_from_previous_row(
     std::vector<std::shared_ptr<array_info>> sorted_orderbys, int64_t i) {
     if (i == 0) {
         return true;
     }
     for (auto arr : sorted_orderbys) {
-        if (!TestEqualColumn(arr, i, arr, i - 1, true)) {
+        if (!TestEqualColumn<ArrType>(arr, i, arr, i - 1, true)) {
             return true;
         }
     }
@@ -335,6 +338,7 @@ inline void rank_tie_upward_batch_update(std::shared_ptr<array_info> rank_arr,
  * @param[in] sorted_idx: array mapping each index in the sorted table back
  * to its location in the original unsorted table
  */
+template <bodo_array_type::arr_type_enum ArrType>
 void rank_computation(std::shared_ptr<array_info> out_arr,
                       std::shared_ptr<array_info> sorted_groups,
                       std::vector<std::shared_ptr<array_info>> sorted_orderbys,
@@ -353,7 +357,7 @@ void rank_computation(std::shared_ptr<array_info> out_arr,
             group_start_idx = i;
             // Set the prev group
             prev_group = curr_group;
-        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+        } else if (distinct_from_previous_row<ArrType>(sorted_orderbys, i)) {
             rank_val = i - group_start_idx + 1;
         }
         // Get the index in the output array.
@@ -379,6 +383,7 @@ void rank_computation(std::shared_ptr<array_info> out_arr,
  * @param[in] sorted_idx: array mapping each index in the sorted table back
  * to its location in the original unsorted table
  */
+template <bodo_array_type::arr_type_enum ArrType>
 void dense_rank_computation(
     std::shared_ptr<array_info> out_arr,
     std::shared_ptr<array_info> sorted_groups,
@@ -396,7 +401,7 @@ void dense_rank_computation(
             rank_val = 1;
             // Set the prev group
             prev_group = curr_group;
-        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+        } else if (distinct_from_previous_row<ArrType>(sorted_orderbys, i)) {
             rank_val++;
         }
         // Get the index in the output array.
@@ -422,6 +427,7 @@ void dense_rank_computation(
  * @param[in] sorted_idx: array mapping each index in the sorted table back
  * to its location in the original unsorted table
  */
+template <bodo_array_type::arr_type_enum ArrType>
 void percent_rank_computation(
     std::shared_ptr<array_info> out_arr,
     std::shared_ptr<array_info> sorted_groups,
@@ -450,7 +456,7 @@ void percent_rank_computation(
             group_start_idx = i;
             // Set the prev group
             prev_group = curr_group;
-        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+        } else if (distinct_from_previous_row<ArrType>(sorted_orderbys, i)) {
             rank_val = i - group_start_idx + 1;
         }
         getv<int64_t>(rank_arr, i) = rank_val;
@@ -486,6 +492,7 @@ void percent_rank_computation(
  * @param[in] sorted_idx: array mapping each index in the sorted table back
  * to its location in the original unsorted table
  */
+template <bodo_array_type::arr_type_enum ArrType>
 void cume_dist_computation(
     std::shared_ptr<array_info> out_arr,
     std::shared_ptr<array_info> sorted_groups,
@@ -518,7 +525,7 @@ void cume_dist_computation(
             tie_start_idx = i;
             // Set the prev group
             prev_group = curr_group;
-        } else if (distinct_from_previous_row(sorted_orderbys, i)) {
+        } else if (distinct_from_previous_row<ArrType>(sorted_orderbys, i)) {
             // Update the group of ties that just finished by setting
             // all of them to the rank value of the last position
             rank_tie_upward_batch_update(rank_arr, group_start_idx,
@@ -531,6 +538,71 @@ void cume_dist_computation(
     // Repeat the group ending procedure after the final group finishes
     rank_division_batch_update(out_arr, sorted_idx, rank_arr, group_start_idx,
                                n, 0, 0);
+}
+
+// Wrapper function for the 4 rank-based window function computations.
+template <Bodo_FTypes::FTypeEnum ftype>
+void rank_fn_computation(
+    std::shared_ptr<array_info> out_arr,
+    std::shared_ptr<array_info> sorted_groups,
+    std::vector<std::shared_ptr<array_info>> sorted_orderbys,
+    std::shared_ptr<array_info> sorted_idx) {
+#define RANK_FN_ATYPE_CASE(ArrType, func)                                \
+    case ArrType: {                                                      \
+        bool can_use_arr_type = true;                                    \
+        for (size_t order_col = 1; order_col < sorted_orderbys.size();   \
+             order_col++) {                                              \
+            if (sorted_orderbys[order_col]->arr_type != ArrType) {       \
+                can_use_arr_type = false;                                \
+                break;                                                   \
+            }                                                            \
+        }                                                                \
+        if (can_use_arr_type) {                                          \
+            func<ArrType>(out_arr, sorted_groups, sorted_orderbys,       \
+                          sorted_idx);                                   \
+        } else {                                                         \
+            func<bodo_array_type::UNKNOWN>(out_arr, sorted_groups,       \
+                                           sorted_orderbys, sorted_idx); \
+        }                                                                \
+        break;                                                           \
+    }
+#define RANK_FN_FTYPE_CASE(rank_ftype, func)                                  \
+    case rank_ftype: {                                                        \
+        if (sorted_orderbys.size() == 0) {                                    \
+            func<bodo_array_type::UNKNOWN>(out_arr, sorted_groups,            \
+                                           sorted_orderbys, sorted_idx);      \
+        } else {                                                              \
+            switch (sorted_orderbys[0]->arr_type) {                           \
+                RANK_FN_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL, func); \
+                RANK_FN_ATYPE_CASE(bodo_array_type::NUMPY, func);             \
+                RANK_FN_ATYPE_CASE(bodo_array_type::STRING, func);            \
+                RANK_FN_ATYPE_CASE(bodo_array_type::DICT, func);              \
+                RANK_FN_ATYPE_CASE(bodo_array_type::TIMESTAMPTZ, func);       \
+                RANK_FN_ATYPE_CASE(bodo_array_type::ARRAY_ITEM, func);        \
+                RANK_FN_ATYPE_CASE(bodo_array_type::STRUCT, func);            \
+                RANK_FN_ATYPE_CASE(bodo_array_type::MAP, func);               \
+                default: {                                                    \
+                    throw std::runtime_error(                                 \
+                        "Unsupported ArrType for rank computation: " +        \
+                        GetArrType_as_string(sorted_orderbys[0]->arr_type));  \
+                }                                                             \
+            }                                                                 \
+        }                                                                     \
+        break;                                                                \
+    }
+    switch (ftype) {
+        RANK_FN_FTYPE_CASE(Bodo_FTypes::rank, rank_computation);
+        RANK_FN_FTYPE_CASE(Bodo_FTypes::dense_rank, dense_rank_computation);
+        RANK_FN_FTYPE_CASE(Bodo_FTypes::percent_rank, percent_rank_computation);
+        RANK_FN_FTYPE_CASE(Bodo_FTypes::cume_dist, cume_dist_computation);
+        default: {
+            throw std::runtime_error(
+                "Unsupported ftype for rank computation: " +
+                get_name_for_Bodo_FTypes(ftype));
+        }
+    }
+#undef rank_fn_atype_case
+#undef define
 }
 
 void ntile_batch_update(std::shared_ptr<array_info> out_arr,
@@ -786,15 +858,16 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             case Bodo_FTypes::rank: {
-                rank_computation(out_arrs[i], iter_table->columns[0],
-                                 std::vector<std::shared_ptr<array_info>>(
-                                     iter_table->columns.begin() + 1,
-                                     iter_table->columns.begin() + idx_col),
-                                 iter_table->columns[idx_col]);
+                rank_fn_computation<Bodo_FTypes::rank>(
+                    out_arrs[i], iter_table->columns[0],
+                    std::vector<std::shared_ptr<array_info>>(
+                        iter_table->columns.begin() + 1,
+                        iter_table->columns.begin() + idx_col),
+                    iter_table->columns[idx_col]);
                 break;
             }
             case Bodo_FTypes::dense_rank: {
-                dense_rank_computation(
+                rank_fn_computation<Bodo_FTypes::dense_rank>(
                     out_arrs[i], iter_table->columns[0],
                     std::vector<std::shared_ptr<array_info>>(
                         iter_table->columns.begin() + 1,
@@ -803,7 +876,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             case Bodo_FTypes::percent_rank: {
-                percent_rank_computation(
+                rank_fn_computation<Bodo_FTypes::percent_rank>(
                     out_arrs[i], iter_table->columns[0],
                     std::vector<std::shared_ptr<array_info>>(
                         iter_table->columns.begin() + 1,
@@ -812,7 +885,7 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             case Bodo_FTypes::cume_dist: {
-                cume_dist_computation(
+                rank_fn_computation<Bodo_FTypes::cume_dist>(
                     out_arrs[i], iter_table->columns[0],
                     std::vector<std::shared_ptr<array_info>>(
                         iter_table->columns.begin() + 1,
