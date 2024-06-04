@@ -1,4 +1,7 @@
+import os
+
 import pandas as pd
+import pytest
 
 import bodosql
 from bodo.tests.utils import check_func, pytest_glue
@@ -6,6 +9,10 @@ from bodo.tests.utils import check_func, pytest_glue
 pytestmark = pytest_glue
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" in os.environ,
+    reason="BSE-3425: Permissions error only in azure environment",
+)
 def test_basic_read(memory_leak_check, glue_catalog):
     """
     Test reading an entire Iceberg table from Glue in SQL
