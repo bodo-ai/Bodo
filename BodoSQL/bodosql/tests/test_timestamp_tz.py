@@ -409,6 +409,87 @@ def test_timestamp_tz_datediff(
 
 
 @pytest.mark.parametrize(
+    "unit, answer",
+    [
+        pytest.param(
+            "DAY",
+            pd.array(
+                [
+                    str(bodo.TimestampTZ.fromLocal("2024-04-01", 0)),
+                    None,
+                    str(bodo.TimestampTZ.fromLocal("2024-07-04", 30)),
+                    str(bodo.TimestampTZ.fromLocal("1999-12-31", -60)),
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", -240)),
+                    str(bodo.TimestampTZ.fromLocal("2024-02-29", 330)),
+                    None,
+                    str(bodo.TimestampTZ.fromLocal("2024-04-01", -480)),
+                ],
+            ),
+            id="day",
+        ),
+        pytest.param(
+            "YEAR",
+            pd.array(
+                [
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", 0)),
+                    None,
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", 30)),
+                    str(bodo.TimestampTZ.fromLocal("1999-01-01", -60)),
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", -240)),
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", 330)),
+                    None,
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", -480)),
+                ],
+            ),
+            id="year",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SECOND",
+            pd.array(
+                [
+                    str(bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", 0)),
+                    None,
+                    str(bodo.TimestampTZ.fromLocal("2024-07-04 20:30:14", 30)),
+                    str(bodo.TimestampTZ.fromLocal("1999-12-31 23:59:59", -60)),
+                    str(bodo.TimestampTZ.fromLocal("2024-01-01", -240)),
+                    str(bodo.TimestampTZ.fromLocal("2024-02-29 6:45:00", 330)),
+                    None,
+                    str(bodo.TimestampTZ.fromLocal("2024-04-01 12:00:00", -480)),
+                ],
+            ),
+            id="second",
+        ),
+    ],
+)
+def test_timestamp_tz_datetrunc(timestamp_tz_data, unit, answer, memory_leak_check):
+    """
+    Tests the datetime subtraction arithmetic operations on TIMESTMAP_TZ data.
+
+    timestamp_tz_data: the fixture containing the input data.
+    datediff_calc: the expression used to calculate a dateadd call with the columns from timestamp_tz_data.
+    diff_answer: the expected difference between the two dates in the desired interval.
+    """
+    query = f"SELECT I, TO_VARCHAR(DATE_TRUNC('{unit}', T)) as D FROM TABLE1"
+    ctx = {"TABLE1": timestamp_tz_data}
+    expected_output = pd.DataFrame(
+        {
+            "I": np.arange(8),
+            "D": answer,
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        enable_timestamp_tz=True,
+    )
+
+
+@pytest.mark.parametrize(
     "extract_term, answer",
     [
         pytest.param(

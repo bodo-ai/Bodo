@@ -1890,13 +1890,20 @@ def overload_date_trunc_util(
         )
     else:  # Truncate a timestamp object/array
         verify_datetime_arg_allow_tz(
-            date_or_time_expr, "DATE_TRUNC", "date_or_time_expr"
+            date_or_time_expr,
+            "DATE_TRUNC",
+            "date_or_time_expr",
+            allow_timestamp_tz=True,
         )
+        is_timestamp_tz = is_valid_timestamptz_arg(date_or_time_expr)
+
         tz_literal = get_tz_if_exists(date_or_time_expr)
         # We perform computation on Timestamp types.
         box_str = (
             "bodo.utils.conversion.box_if_dt64"
-            if bodo.utils.utils.is_array_typ(date_or_time_expr, True)
+            if not is_timestamp_tz
+            and bodo.utils.utils.is_array_typ(date_or_time_expr, True)
+            and tz_literal is None
             else ""
         )
         # When returning a scalar we return a pd.Timestamp type.
@@ -1905,46 +1912,61 @@ def overload_date_trunc_util(
             if bodo.utils.utils.is_array_typ(date_or_time_expr, True)
             else ""
         )
-        if tz_literal is None:
-            scalar_text += f"arg1 = {box_str}(arg1)\n"
+
+        if is_timestamp_tz:
+            # For TIMESTAMPTZ, DATE_TRUNC operates on the local representation
+            # of the timestamp and wraps the output in a TIMESTAMPTZ with the
+            # same offset as the input.
+            scalar_text += (
+                "in_val = bodo.hiframes.timestamptz_ext.get_local_timestamp(arg1)\n"
+            )
+            out_dtype = bodo.timestamptz_array_type
+        elif tz_literal is None:
+            scalar_text += f"in_val = {box_str}(arg1)\n"
+            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+        else:
+            scalar_text += "in_val = arg1\n"
+            out_dtype = bodo.DatetimeArrayType(tz_literal)
+
         scalar_text += "if part_str == 'quarter':\n"
-        scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month= (3*(arg1.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
+        scalar_text += "    out_val = pd.Timestamp(year=in_val.year, month= (3*(in_val.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
         scalar_text += "elif part_str == 'year':\n"
-        scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=1, day=1, tz=tz_literal)\n"
+        scalar_text += "    out_val = pd.Timestamp(year=in_val.year, month=1, day=1, tz=tz_literal)\n"
         scalar_text += "elif part_str == 'month':\n"
-        scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=arg1.month, day=1, tz=tz_literal)\n"
+        scalar_text += "    out_val = pd.Timestamp(year=in_val.year, month=in_val.month, day=1, tz=tz_literal)\n"
         scalar_text += "elif part_str == 'day':\n"
-        scalar_text += "    out_val = arg1.normalize()\n"
+        scalar_text += "    out_val = in_val.normalize()\n"
         scalar_text += "elif part_str == 'week':\n"
         # If we are already at the start of the week just normalize.
-        scalar_text += "    if arg1.dayofweek == 0:\n"
-        scalar_text += "        out_val = arg1.normalize()\n"
+        scalar_text += "    if in_val.dayofweek == 0:\n"
+        scalar_text += "        out_val = in_val.normalize()\n"
         scalar_text += "    else:\n"
-        scalar_text += "        out_val = arg1.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
+        scalar_text += "        out_val = in_val.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
         scalar_text += "elif part_str == 'hour':\n"
-        scalar_text += "    out_val = arg1.floor('H')\n"
+        scalar_text += "    out_val = in_val.floor('H')\n"
         scalar_text += "elif part_str == 'minute':\n"
-        scalar_text += "    out_val = arg1.floor('min')\n"
+        scalar_text += "    out_val = in_val.floor('min')\n"
         scalar_text += "elif part_str == 'second':\n"
-        scalar_text += "    out_val = arg1.floor('S')\n"
+        scalar_text += "    out_val = in_val.floor('S')\n"
         scalar_text += "elif part_str == 'millisecond':\n"
-        scalar_text += "    out_val = arg1.floor('ms')\n"
+        scalar_text += "    out_val = in_val.floor('ms')\n"
         scalar_text += "elif part_str == 'microsecond':\n"
-        scalar_text += "    out_val = arg1.floor('us')\n"
+        scalar_text += "    out_val = in_val.floor('us')\n"
         scalar_text += "elif part_str == 'nanosecond':\n"
-        scalar_text += "    out_val = arg1\n"
+        scalar_text += "    out_val = in_val\n"
         scalar_text += "else:\n"
         # TODO: Include part_str when non-constant exception strings are supported.
         scalar_text += (
             "    raise ValueError('Invalid date or time part for DATE_TRUNC')\n"
         )
-        if tz_literal is None:
+        if is_timestamp_tz:
+            # Wrap the result in TIMESTAMPTZ preserving the offset
+            scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(out_val, arg1.offset_minutes)\n"
+        elif tz_literal is None:
             # In the tz-naive array case we have to convert the Timestamp to dt64
             scalar_text += f"res[i] = {unbox_str}(out_val)\n"
-            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
         else:
             scalar_text += f"res[i] = out_val\n"
-            out_dtype = bodo.DatetimeArrayType(tz_literal)
 
     return gen_vectorized(
         arg_names,
