@@ -378,6 +378,48 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
     }
 
     /**
+     * Infer the distinctiveness for CASE. All of the odd-numbered arguments (+ the last argument) are the outputs.
+     * In the worst case scenario, the NDV is the sum of distinct values for each possible output. We attempt to fetch
+     * the distinct values for each of these arguments, but return null if any of them  cannot be derived. We can
+     * also ignore any output terms that are duplicates of each other.
+     *
+     * For example, consider the following RexNode:
+     *
+     * <code>CASE(COND_A, $0, COND_B, $1, COND_C $0, $2)<code>
+     *
+     * Then the outputs are $0, $1, $0, and $2, so our NDV approximation would be the sum of the NDV approximations for
+     * $0, $1, and $2 (only counting $0 once).
+     *
+     * [BSE-2213] Investigate adding distinctness propagation for more BodoSQL functions.
+     *
+     * @param rel The original projection containing this rex node
+     * @param operands The arguments being passed to the CASE function.
+     * @param mq The metadata query handler
+     * @return The number of distinct rows produced by CASE, or null if we cannot infer it.
+     */
+    private fun inferCaseDistinctness(
+        rel: Project,
+        operands: List<RexNode>,
+        mq: RelMetadataQuery,
+    ): Double? {
+        val nOperands = operands.size
+        // Get the operands from the correct locations corresponding to output arguments, and convert to a set
+        // to remove all duplicates
+        val outputArgs =
+            operands.filterIndexed {
+                    idx, _ ->
+                (idx % 2 == 1) || (idx == nOperands - 1)
+            }.toSet()
+        // Get the distinct values of each of the possible outputs
+        val outputDistinct = outputArgs.map { inferRexDistinctness(rel, it, mq) }
+        // If any of the distinct values were null, it means that one of hte outputs has unknown approximate NDV,
+        // so we cannot approximate the NDV of the entire CASE statement
+        if (outputDistinct.any { it == null }) return null
+        // Return the sum of the remaining values.
+        return outputDistinct.reduce { x, y -> x!! + y!! }
+    }
+
+    /**
      * Attempts to infer the distinctiveness of a RexNode by inferring the distinctiveness
      * of the Input Ref(s) involved and either passing it through unmodified, or transforming
      * it somehow if it goes through a function call.
@@ -402,17 +444,28 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
             return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, rex.index)
         }
         if (rex is RexCall) {
-            if (rex.kind == SqlKind.CAST) {
-                return inferCastDistinctiveness(rel, rex.operands[0], mq, rex.type.sqlTypeName)
-            } else if (rex.kind == SqlKind.OTHER_FUNCTION) {
-                val concatFunctions = listOf(StringOperatorTable.CONCAT.name, StringOperatorTable.CONCAT_WS.name)
-                if (concatFunctions.contains(rex.operator.name)) {
-                    return inferConcatDistinctiveness(rel, rex.operands, mq)
+            when (rex.kind) {
+                SqlKind.SAFE_CAST,
+                SqlKind.CAST,
+                -> {
+                    return inferCastDistinctiveness(rel, rex.operands[0], mq, rex.type.sqlTypeName)
                 }
-            } else if (rex.kind == SqlKind.OTHER) {
-                if (rex.operator.name == SqlStdOperatorTable.CONCAT.name) {
-                    return inferConcatDistinctiveness(rel, rex.operands, mq)
+                SqlKind.CASE -> {
+                    return inferCaseDistinctness(rel, rex.operands, mq)
                 }
+                SqlKind.OTHER_FUNCTION -> {
+                    val concatFunctions = listOf(StringOperatorTable.CONCAT.name, StringOperatorTable.CONCAT_WS.name)
+                    if (concatFunctions.contains(rex.operator.name)) {
+                        return inferConcatDistinctiveness(rel, rex.operands, mq)
+                    }
+                }
+                SqlKind.OTHER -> {
+                    if (rex.operator.name == SqlStdOperatorTable.CONCAT.name) {
+                        return inferConcatDistinctiveness(rel, rex.operands, mq)
+                    }
+                }
+
+                else -> {}
             }
         }
         return null
