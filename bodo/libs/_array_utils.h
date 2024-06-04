@@ -322,6 +322,65 @@ std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+template <typename T, int dtype>
+    requires std::integral<T>
+inline bool isnan_categorical(T const& val) {
+    T miss_idx = -1;
+    return val == miss_idx;
+}
+
+template <typename T, int dtype>
+inline bool isnan_categorical(T const& val) {
+    return false;
+}
+
+template <typename T, int dtype>
+    requires std::integral<T>
+inline void set_na_if_num_categories(T& val, int64_t num_categories) {
+    if (val == T(num_categories)) {
+        val = T(-1);
+    }
+}
+
+template <typename T, int dtype>
+inline void set_na_if_num_categories(T& val, int64_t num_categories) {
+    return;
+}
+
+/** This function is used to determine if the value in a Categorical pointer
+ * (pointer to a single value in a CategoricalArrayType) isnan.
+ * @param the data type for the codes.
+ * @param the Categorical Pointer
+ * @returns if the value stored at the ptr is nan
+ */
+inline bool isnan_categorical_ptr(int dtype, char* ptr) {
+    switch (dtype) {
+        case Bodo_CTypes::INT8:
+            return isnan_categorical<int8_t, Bodo_CTypes::INT8>(
+                *((const int8_t*)ptr));
+        case Bodo_CTypes::INT16:
+            return isnan_categorical<int16_t, Bodo_CTypes::INT16>(
+                *((const int16_t*)ptr));
+        case Bodo_CTypes::INT32:
+            return isnan_categorical<int32_t, Bodo_CTypes::INT32>(
+                *((const int32_t*)ptr));
+        case Bodo_CTypes::INT64:
+            return isnan_categorical<int64_t, Bodo_CTypes::INT64>(
+                *((const int64_t*)ptr));
+
+        default:
+            throw std::runtime_error(
+                "_array_utils.h::NumericComparison: Invalid dtype put on "
+                "CategoricalArrayType.");
+    }
+}
+
+int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
+                          int64_t pos1_s, int64_t pos1_e,
+                          std::shared_ptr<arrow::Array> const& arr2,
+                          int64_t pos2_s, int64_t pos2_e,
+                          bool const& na_position_bis, bool const& is_na_equal);
+
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
  * type as the right keys. The computation is for just one column and it is used
@@ -334,9 +393,177 @@ std::shared_ptr<table_info> RetrieveTable(
  * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
+template <bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+    requires(arr_type != bodo_array_type::UNKNOWN)
 bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
                      const std::shared_ptr<array_info>& arr2, int64_t pos2,
-                     bool is_na_equal);
+                     bool is_na_equal) {
+    if constexpr (arr_type == bodo_array_type::STRUCT ||
+                  arr_type == bodo_array_type::ARRAY_ITEM ||
+                  arr_type == bodo_array_type::MAP) {
+        // TODO: Handle is_na_equal in Arrow arrays
+        int64_t pos1_s = pos1;
+        int64_t pos1_e = pos1 + 1;
+        int64_t pos2_s = pos2;
+        int64_t pos2_e = pos2 + 1;
+        bool na_position_bis = true;  // This value has no importance
+        int val = ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
+                                        to_arrow(arr2), pos2_s, pos2_e,
+                                        na_position_bis, is_na_equal);
+        return val == 0;
+    }
+    if constexpr (arr_type == bodo_array_type::NUMPY ||
+                  arr_type == bodo_array_type::CATEGORICAL) {
+        // In the case of NUMPY, we compare the values for concluding.
+        uint64_t siztype = numpy_item_size[arr1->dtype];
+        char* ptr1 = arr1->data1() + siztype * pos1;
+        char* ptr2 = arr2->data1() + siztype * pos2;
+        if (memcmp(ptr1, ptr2, siztype) != 0) {
+            return false;
+        }
+        // Check for null if NA is not considered equal
+        if (!is_na_equal) {
+            if (arr_type == bodo_array_type::CATEGORICAL) {
+                // Categorical null values are represented as -1
+                return !isnan_categorical_ptr(arr1->dtype, ptr1);
+            } else if (arr1->dtype == Bodo_CTypes::FLOAT32) {
+                return !isnan(*((float*)ptr1));
+            } else if (arr1->dtype == Bodo_CTypes::FLOAT64) {
+                return !isnan(*((double*)ptr1));
+            } else if (arr1->dtype == Bodo_CTypes::DATETIME ||
+                       arr1->dtype == Bodo_CTypes::TIMEDELTA) {
+                return (*((int64_t*)ptr1)) !=
+                       std::numeric_limits<int64_t>::min();
+            }
+        }
+    }
+    if constexpr (arr_type == bodo_array_type::DICT) {
+        if (!is_matching_dictionary(arr1->child_arrays[0],
+                                    arr2->child_arrays[0])) {
+            throw std::runtime_error(
+                "TestEqualColumn: don't know if arrays have unified "
+                "dictionary");
+        }
+        // Recursively call on the indices
+        return TestEqualColumn<bodo_array_type::NULLABLE_INT_BOOL>(
+            arr1->child_arrays[1], pos1, arr2->child_arrays[1], pos2,
+            is_na_equal);
+    }
+    if constexpr (arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+                  arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // NULLABLE case. We need to consider the bitmask and the values.
+        bool bit1 = arr1->get_null_bit<arr_type>(pos1);
+        bool bit2 = arr2->get_null_bit<arr_type>(pos2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        if (bit1 != bit2) {
+            return false;
+        }
+        // If both bitmasks are false, then it does not matter what value
+        // they are storing. Comparison is the same as for NUMPY.
+        if (bit1) {
+            if (arr1->dtype == Bodo_CTypes::_BOOL) {
+                // Boolean array store 1 bit per boolean value so
+                // we need a separate implementation.
+                bool val1 = GetBit(arr1->data1<arr_type, uint8_t>(), pos1);
+                bool val2 = GetBit(arr2->data1<arr_type, uint8_t>(), pos2);
+                if (val1 != val2) {
+                    return false;
+                }
+            } else {
+                uint64_t siztype = numpy_item_size[arr1->dtype];
+                char* ptr1 = arr1->data1<arr_type>() + siztype * pos1;
+                char* ptr2 = arr2->data1<arr_type>() + siztype * pos2;
+                if (memcmp(ptr1, ptr2, siztype) != 0) {
+                    return false;
+                }
+            }
+        } else {
+            return is_na_equal;
+        }
+    }
+    if constexpr (arr_type == bodo_array_type::STRING) {
+        // For STRING case we need to deal bitmask and the values.
+        bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(pos1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(pos2);
+        // If bitmasks are different then we conclude they are not equal.
+        if (bit1 != bit2)
+            return false;
+        // If bitmasks are both false, then no need to compare the string
+        // values.
+        if (bit1) {
+            // Here we consider the shifts in data2 for the comparison.
+            offset_t* data2_1 =
+                (offset_t*)arr1->data2<bodo_array_type::STRING>();
+            offset_t* data2_2 =
+                (offset_t*)arr2->data2<bodo_array_type::STRING>();
+            offset_t len1 = data2_1[pos1 + 1] - data2_1[pos1];
+            offset_t len2 = data2_2[pos2 + 1] - data2_2[pos2];
+            // If string lengths are different then they are different.
+            if (len1 != len2)
+                return false;
+            // Now we iterate over the characters for the comparison.
+            offset_t pos1_prev = data2_1[pos1];
+            offset_t pos2_prev = data2_2[pos2];
+            char* data1_1 = arr1->data1<bodo_array_type::STRING>() + pos1_prev;
+            char* data1_2 = arr2->data1<bodo_array_type::STRING>() + pos2_prev;
+            return memcmp(data1_1, data1_2, len1) == 0;
+        } else {
+            return is_na_equal;
+        }
+    }
+    if constexpr (arr_type == bodo_array_type::TIMESTAMPTZ) {
+        // Check the bitmask and the values.
+        bool bit1 = arr1->get_null_bit<bodo_array_type::TIMESTAMPTZ>(pos1);
+        bool bit2 = arr2->get_null_bit<bodo_array_type::TIMESTAMPTZ>(pos2);
+        // If bitmask is opposite then they are clearly not equal.
+        if (bit1 != bit2) {
+            return false;
+        }
+        // If both bitmasks are false, then no need to check the data values
+        if (bit1) {
+            uint64_t siztype = numpy_item_size[arr1->dtype];
+            char* ptr1 =
+                arr1->data1<bodo_array_type::TIMESTAMPTZ>() + siztype * pos1;
+            char* ptr2 =
+                arr2->data1<bodo_array_type::TIMESTAMPTZ>() + siztype * pos2;
+            if (memcmp(ptr1, ptr2, siztype) != 0) {
+                return false;
+            }
+        } else {
+            return is_na_equal;
+        }
+    }
+    return true;
+}
+
+/** Wrapper for TestEqualColumn when the array type is not already known.
+ */
+template <bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+    requires(arr_type == bodo_array_type::UNKNOWN)
+bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
+                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
+                     bool is_na_equal) {
+#define ARR_TYPE_CASE(arr_type)                                                \
+    case arr_type: {                                                           \
+        return TestEqualColumn<arr_type>(arr1, pos1, arr2, pos2, is_na_equal); \
+    }
+    switch (arr1->arr_type) {
+        ARR_TYPE_CASE(bodo_array_type::NUMPY);
+        ARR_TYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
+        ARR_TYPE_CASE(bodo_array_type::STRING);
+        ARR_TYPE_CASE(bodo_array_type::DICT);
+        ARR_TYPE_CASE(bodo_array_type::TIMESTAMPTZ);
+        ARR_TYPE_CASE(bodo_array_type::STRUCT);
+        ARR_TYPE_CASE(bodo_array_type::ARRAY_ITEM);
+        ARR_TYPE_CASE(bodo_array_type::MAP);
+        ARR_TYPE_CASE(bodo_array_type::CATEGORICAL);
+        default: {
+            throw std::runtime_error("TestEqualColumn: invalid array type " +
+                                     GetArrType_as_string(arr1->arr_type));
+        }
+    }
+}
 
 /* @brief Get the sort indices of a slice of an array
  * @param arr Array to sort
@@ -425,59 +652,6 @@ inline bool TestEqualJoin(const std::shared_ptr<const table_info>& table1,
     // If all keys are equal then we are ok and the keys are equals.
     return true;
 };
-
-template <typename T, int dtype>
-    requires std::integral<T>
-inline bool isnan_categorical(T const& val) {
-    T miss_idx = -1;
-    return val == miss_idx;
-}
-
-template <typename T, int dtype>
-inline bool isnan_categorical(T const& val) {
-    return false;
-}
-
-template <typename T, int dtype>
-    requires std::integral<T>
-inline void set_na_if_num_categories(T& val, int64_t num_categories) {
-    if (val == T(num_categories)) {
-        val = T(-1);
-    }
-}
-
-template <typename T, int dtype>
-inline void set_na_if_num_categories(T& val, int64_t num_categories) {
-    return;
-}
-
-/** This function is used to determine if the value in a Categorical pointer
- * (pointer to a single value in a CategoricalArrayType) isnan.
- * @param the data type for the codes.
- * @param the Categorical Pointer
- * @returns if the value stored at the ptr is nan
- */
-inline bool isnan_categorical_ptr(int dtype, char* ptr) {
-    switch (dtype) {
-        case Bodo_CTypes::INT8:
-            return isnan_categorical<int8_t, Bodo_CTypes::INT8>(
-                *((const int8_t*)ptr));
-        case Bodo_CTypes::INT16:
-            return isnan_categorical<int16_t, Bodo_CTypes::INT16>(
-                *((const int16_t*)ptr));
-        case Bodo_CTypes::INT32:
-            return isnan_categorical<int32_t, Bodo_CTypes::INT32>(
-                *((const int32_t*)ptr));
-        case Bodo_CTypes::INT64:
-            return isnan_categorical<int64_t, Bodo_CTypes::INT64>(
-                *((const int64_t*)ptr));
-
-        default:
-            throw std::runtime_error(
-                "_array_utils.h::NumericComparison: Invalid dtype put on "
-                "CategoricalArrayType.");
-    }
-}
 
 /**
  * @brief Convert a bodo string array to a vector of strings.
