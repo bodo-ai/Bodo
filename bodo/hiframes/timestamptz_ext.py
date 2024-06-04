@@ -90,7 +90,7 @@ class TimestampTZ:
         offset_sign = "+" if self.offset_minutes >= 0 else "-"
         offset_hrs = abs(self.offset_minutes) // 60
         offset_min = abs(self.offset_minutes) % 60
-        return f"{offset_sign}{offset_hrs:02}:{offset_min:02}"
+        return f"{offset_sign}{offset_hrs:02}{offset_min:02}"
 
     def __repr__(self):
         # This implementation is for human readability, not for displaying to
