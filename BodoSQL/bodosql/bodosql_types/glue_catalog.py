@@ -122,7 +122,7 @@ def unbox_glue_catalog(typ, val, c):
 @numba.jit
 def get_conn_str(warehouse):
     """Get the connection string for a Glue Iceberg catalog."""
-    return f"glue://catalog?warehouse={warehouse}"
+    return f"glue?warehouse={warehouse}"
 
 
 class GlueConnectionType(IcebergConnectionType):
