@@ -1175,7 +1175,8 @@ inline bool should_keep_row(const std::shared_ptr<array_info>& sorted_data,
                      getv<int64_t>(sorted_groups, idx - 1))) {
         return true;
     }
-    return !TestEqualColumn(sorted_data, idx, sorted_data, idx - 1, true);
+    return !TestEqualColumn<ArrType>(sorted_data, idx, sorted_data, idx - 1,
+                                     true);
 }
 
 /**
@@ -1464,8 +1465,10 @@ void object_agg_computation(const std::shared_ptr<array_info>& key_col,
     // NOTE: values_null_bitmask will be nullptr in the NUMPY case.
     const uint8_t* values_null_bitmask = (uint8_t*)values->null_bitmask();
     const bool all_values_non_null = (values_null_bitmask == nullptr);
+    assert(groups->arr_type == bodo_array_type::NUMPY);
     for (size_t i = 0; i < n_total; i++) {
-        if (i > 0 && !TestEqualColumn(groups, i, groups, i - 1, true)) {
+        if (i > 0 && !TestEqualColumn<bodo_array_type::NUMPY>(groups, i, groups,
+                                                              i - 1, true)) {
             offset_buffer[offset_idx] = non_null_count;
             offset_idx++;
         }
