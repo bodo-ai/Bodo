@@ -7,23 +7,40 @@ def parse_plan(plan):
 
     nodes = {}
     node = {"properties": {}}
+    hit_cache_node = False
     for line in plan:
         indent = len(line) - len(line.lstrip())
         line = line.strip()
+
+        is_cache_node = line.startswith("CACHED NODE")
+        hit_cache_node |= is_cache_node
+        if not is_cache_node and hit_cache_node:
+            # Cache nodes are the same indent as their first child so we need to adjust the indent
+            # to compensate
+            indent += 2
+
         if line.startswith("#"):
             k, v = line[1:].split(":")
             node["properties"][k.strip()] = v.strip()
         else:
             node["name"] = line.strip()
+            if not node["name"]:
+                continue
             node["children"] = []
-            if indent != 0:
-                nodes[indent - 2][-1]["children"].append(node)
+
             if indent not in nodes:
                 nodes[indent] = []
+
+            if indent != 0:
+                nodes[indent - 2][-1]["children"].append(node)
             nodes[indent].append(node)
             node = {"properties": {}}
+
     root = nodes[0][0]
-    return {"root": root}
+    cache_nodes = []
+    for node in nodes[0][1:]:
+        cache_nodes.append(node)
+    return {"root": root, "cache_nodes": cache_nodes}
 
 
 def __main__():

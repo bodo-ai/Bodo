@@ -31,7 +31,10 @@ def wrap_title(title):
 
 def generate_graph(plan):
     graph = Graph(directed=True)
-    add_nodes(graph, plan["root"], {})
+    seen_nodes = {}
+    add_nodes(graph, plan["root"], seen_nodes)
+    for node in plan.get("cache_nodes", []):
+        add_nodes(graph, node, seen_nodes)
     return graph
 
 
@@ -141,7 +144,7 @@ def __main__():
     plan = json.load(open(json_path))
     fig = graph_plan(plan)
 
-    fig.write_html(out_file, include_plotlyjs="cdn", auto_open=True)
+    fig.write_html(out_file, include_plotlyjs="cdn")
 
 
 if __name__ == "__main__":
