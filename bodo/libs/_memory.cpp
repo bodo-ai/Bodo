@@ -853,13 +853,43 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
         this->storage_managers_.push_back(std::move(manager));
     }
 
+    std::vector<size_t> size_class_num_frames(num_size_classes);
+    for (uint8_t i = 0; i < num_size_classes; i++) {
+        size_class_num_frames[i] = static_cast<size_t>(
+            this->memory_size_bytes_ / size_class_bytes_[i]);
+    }
+
+    // If we're not enforcing max limit, we will allocate extra frames to
+    // account for under-utilization.
+    if (!this->options_.enforce_max_limit_during_allocation) {
+        int64_t n_size_classes_ = static_cast<int64_t>(num_size_classes);
+        constexpr int64_t zero = 0;
+        // 2x frames for the 8 largest SizeClasses
+        // 1.5x frames for the next 8 largest SizeClasses
+        // 1x for the rest.
+        // Always 1x for the smallest SizeClass. This is because the
+        // malloc threshold is 75% of this size, so there isn't much chance of
+        // under-utilization.
+        // Statically, this leads to a maximum of
+        // ((1+2+...+128) + (0.5*(256+512+...+32768))) = 32895 extra frames.
+        // Assuming 67bits of metadata per frame, that's a maximum of ~270KiB
+        // extra metadata.
+        for (int64_t i = (n_size_classes_ - 1);
+             i > std::max(zero, n_size_classes_ - 8 - 1); i--) {
+            size_class_num_frames[i] *= 2;
+        }
+        for (int64_t i = std::max(zero, n_size_classes_ - 8 - 1);
+             i > std::max(zero, n_size_classes_ - 16 - 1); i--) {
+            size_class_num_frames[i] = static_cast<size_t>(
+                static_cast<double>(size_class_num_frames[i]) * 1.5);
+        }
+    }
+
     // Create the SizeClass objects
     this->size_classes_.reserve(num_size_classes);
     for (uint8_t i = 0; i < num_size_classes; i++) {
-        uint64_t num_blocks = static_cast<uint64_t>(this->memory_size_bytes_ /
-                                                    size_class_bytes_[i]);
         this->size_classes_.emplace_back(std::make_unique<SizeClass>(
-            i, std::span(this->storage_managers_), num_blocks,
+            i, std::span(this->storage_managers_), size_class_num_frames[i],
             size_class_bytes_[i], this->options_.spill_on_unpin,
             this->options_.move_on_unpin, this->options_.tracing_mode()));
     }
@@ -1239,9 +1269,9 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         // there's sufficient memory available for this allocation.
         // However, in the case where max limit enforcement is not enabled,
         // we may actually have simply run out of frames.
-        // XXX TODO Might need to allocate more frames (2x) when setting
-        // enforce_max_limit_during_allocation as false, so that we don't run
-        // out of frames.
+        // We do allocate some extra frames for the larger SizeClass-es when
+        // enforce_max_limit_during_allocation is false, so that we reduce the
+        // possibility of running out of frames.
         int64_t frame_idx =
             this->size_classes_[size_class_idx]->AllocateFrame(out);
         if (frame_idx == -1) {
