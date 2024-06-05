@@ -701,40 +701,38 @@ void alloc_init_keys(
         // of the loop since 'from_tables' has a live reference
         // to it.
         array_info* key_col = (from_tables[0]->columns[i]).get();
-        std::shared_ptr<array_info> new_key_col = nullptr;
-        if (key_col->arr_type == bodo_array_type::NUMPY ||
-            key_col->arr_type == bodo_array_type::CATEGORICAL ||
-            key_col->arr_type == bodo_array_type::TIMESTAMPTZ ||
-            key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            new_key_col = alloc_array_top_level(
-                num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
-                key_col->num_categories, false, false, false, pool, mm);
-            if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-                key_col->dtype == Bodo_CTypes::_BOOL) {
-                // Nullable booleans store 1 bit per boolean
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i, grp_infos);
-                    bool bit = GetBit(
-                        (uint8_t*)key_col
-                            ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
-                        key_row);
-                    SetBitTo((uint8_t*)new_key_col
-                                 ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
-                             j, bit);
+        std::shared_ptr<array_info> new_key_col;
+        switch (key_col->arr_type) {
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                new_key_col = alloc_array_top_level(
+                    num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
+                    key_col->num_categories, false, false, false, pool, mm);
+                if (key_col->dtype == Bodo_CTypes::_BOOL) {
+                    // Nullable booleans store 1 bit per boolean
+                    for (size_t j = 0; j < num_groups; j++) {
+                        std::tie(key_col, key_row) =
+                            find_key_for_group(j, from_tables, i, grp_infos);
+                        bool bit = GetBit(
+                            (uint8_t*)key_col
+                                ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                            key_row);
+                        SetBitTo(
+                            (uint8_t*)new_key_col
+                                ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                            j, bit);
+                    }
+                } else {
+                    int64_t dtype_size = numpy_item_size[key_col->dtype];
+                    char* new_data1 = new_key_col->data1();
+                    char* old_data1 = key_col->data1();
+                    for (size_t j = 0; j < num_groups; j++) {
+                        std::tie(key_col, key_row) =
+                            find_key_for_group(j, from_tables, i, grp_infos);
+                        memcpy(new_data1 + j * dtype_size,
+                               old_data1 + key_row * dtype_size, dtype_size);
+                    }
                 }
-            } else {
-                int64_t dtype_size = numpy_item_size[key_col->dtype];
-                char* new_data1 = new_key_col->data1();
-                char* old_data1 = key_col->data1();
-                for (size_t j = 0; j < num_groups; j++) {
-                    std::tie(key_col, key_row) =
-                        find_key_for_group(j, from_tables, i, grp_infos);
-                    memcpy(new_data1 + j * dtype_size,
-                           old_data1 + key_row * dtype_size, dtype_size);
-                }
-            }
-            if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i, grp_infos);
@@ -746,97 +744,136 @@ void alloc_init_keys(
                         ->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(j,
                                                                            bit);
                 }
-            }
-        }
-        if (key_col->arr_type == bodo_array_type::TIMESTAMPTZ) {
-            int64_t dtype_size = numpy_item_size[key_col->dtype];
-            for (size_t j = 0; j < num_groups; j++) {
-                std::tie(key_col, key_row) =
-                    find_key_for_group(j, from_tables, i, grp_infos);
-                // data1
-                memcpy(new_key_col->data1<bodo_array_type::TIMESTAMPTZ>() +
-                           j * dtype_size,
-                       key_col->data1<bodo_array_type::TIMESTAMPTZ>() +
-                           key_row * dtype_size,
-                       dtype_size);
-                // data2
-                memcpy(new_key_col->data2<bodo_array_type::TIMESTAMPTZ>() +
-                           j * sizeof(int16_t),
-                       key_col->data2<bodo_array_type::TIMESTAMPTZ>() +
-                           key_row * dtype_size,
-                       dtype_size);
-                // null bitmask
-                bool bit = key_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(
-                    key_row);
-                new_key_col->set_null_bit<bodo_array_type::TIMESTAMPTZ>(j, bit);
-            }
-        }
-        if (key_col->arr_type == bodo_array_type::DICT) {
-            array_info* key_indices = (key_col->child_arrays[1]).get();
-            std::shared_ptr<array_info> new_key_indices = alloc_array_top_level(
-                num_groups, -1, -1, key_indices->arr_type, key_indices->dtype,
-                -1, 0, 0, false, false, false, pool, mm);
-            for (size_t j = 0; j < num_groups; j++) {
-                std::tie(key_col, key_row) =
-                    find_key_for_group(j, from_tables, i, grp_infos);
-                // Update key_indices with the new key col
-                key_indices = (key_col->child_arrays[1]).get();
-                new_key_indices
-                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
-                        j) =
-                    key_indices->at<dict_indices_t,
-                                    bodo_array_type::NULLABLE_INT_BOOL>(
-                        key_row);
-                bool bit =
-                    key_indices
-                        ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
-                            key_row);
-                new_key_indices
-                    ->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(j, bit);
-            }
-            new_key_col = create_dict_string_array(key_col->child_arrays[0],
-                                                   new_key_indices);
-        }
-        if (key_col->arr_type == bodo_array_type::STRING) {
-            // new key col will have num_groups rows containing the
-            // string for each group
-            int64_t n_chars = 0;  // total number of chars of all keys for
-                                  // this column
-            offset_t* in_offsets;
-            for (size_t j = 0; j < num_groups; j++) {
-                std::tie(key_col, key_row) =
-                    find_key_for_group(j, from_tables, i, grp_infos);
-                in_offsets =
-                    (offset_t*)key_col->data2<bodo_array_type::STRING>();
-                n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
-            }
-            // XXX Shouldn't we forward the array_id here?
-            new_key_col = alloc_array_top_level(
-                num_groups, n_chars, 1, key_col->arr_type, key_col->dtype, -1,
-                0, key_col->num_categories, key_col->is_globally_replicated,
-                key_col->is_locally_unique, key_col->is_locally_sorted, pool,
-                mm);
 
-            offset_t* out_offsets =
-                (offset_t*)new_key_col->data2<bodo_array_type::STRING>();
-            offset_t pos = 0;
-            for (size_t j = 0; j < num_groups; j++) {
-                std::tie(key_col, key_row) =
-                    find_key_for_group(j, from_tables, i, grp_infos);
-                in_offsets =
-                    (offset_t*)key_col->data2<bodo_array_type::STRING>();
-                offset_t start_offset = in_offsets[key_row];
-                offset_t str_len = in_offsets[key_row + 1] - start_offset;
-                out_offsets[j] = pos;
-                memcpy(&new_key_col->data1<bodo_array_type::STRING>()[pos],
-                       &key_col->data1<bodo_array_type::STRING>()[start_offset],
-                       str_len);
-                pos += str_len;
-                bool bit =
-                    key_col->get_null_bit<bodo_array_type::STRING>(key_row);
-                new_key_col->set_null_bit<bodo_array_type::STRING>(j, bit);
+                break;
             }
-            out_offsets[num_groups] = pos;
+            case bodo_array_type::CATEGORICAL:
+            case bodo_array_type::NUMPY: {
+                new_key_col = alloc_array_top_level(
+                    num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
+                    key_col->num_categories, false, false, false, pool, mm);
+
+                int64_t dtype_size = numpy_item_size[key_col->dtype];
+                char* new_data1 = new_key_col->data1();
+                char* old_data1 = key_col->data1();
+                for (size_t j = 0; j < num_groups; j++) {
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i, grp_infos);
+                    memcpy(new_data1 + j * dtype_size,
+                           old_data1 + key_row * dtype_size, dtype_size);
+                }
+
+                break;
+            }
+            case bodo_array_type::TIMESTAMPTZ: {
+                new_key_col = alloc_array_top_level(
+                    num_groups, 1, 1, key_col->arr_type, key_col->dtype, -1, 0,
+                    key_col->num_categories, false, false, false, pool, mm);
+                int64_t dtype_size = numpy_item_size[key_col->dtype];
+                for (size_t j = 0; j < num_groups; j++) {
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i, grp_infos);
+                    // data1 (stores UTC timestamp)
+                    memcpy(new_key_col->data1<bodo_array_type::TIMESTAMPTZ>() +
+                               j * dtype_size,
+                           key_col->data1<bodo_array_type::TIMESTAMPTZ>() +
+                               key_row * dtype_size,
+                           dtype_size);
+                    // data2 (stores offset from UTC)
+                    memcpy(new_key_col->data2<bodo_array_type::TIMESTAMPTZ>() +
+                               j * sizeof(int16_t),
+                           key_col->data2<bodo_array_type::TIMESTAMPTZ>() +
+                               key_row * sizeof(int16_t),
+                           sizeof(int16_t));
+                    // null bitmask
+                    bool bit =
+                        key_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(
+                            key_row);
+                    new_key_col->set_null_bit<bodo_array_type::TIMESTAMPTZ>(
+                        j, bit);
+                }
+
+                break;
+            }
+            case bodo_array_type::DICT: {
+                array_info* key_indices = (key_col->child_arrays[1]).get();
+                std::shared_ptr<array_info> new_key_indices =
+                    alloc_array_top_level(num_groups, -1, -1,
+                                          key_indices->arr_type,
+                                          key_indices->dtype, -1, 0, 0, false,
+                                          false, false, pool, mm);
+                for (size_t j = 0; j < num_groups; j++) {
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i, grp_infos);
+                    // Update key_indices with the new key col
+                    key_indices = (key_col->child_arrays[1]).get();
+                    new_key_indices->at<dict_indices_t,
+                                        bodo_array_type::NULLABLE_INT_BOOL>(j) =
+                        key_indices->at<dict_indices_t,
+                                        bodo_array_type::NULLABLE_INT_BOOL>(
+                            key_row);
+                    bool bit =
+                        key_indices
+                            ->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                                key_row);
+                    new_key_indices
+                        ->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(j,
+                                                                           bit);
+                }
+                new_key_col = create_dict_string_array(key_col->child_arrays[0],
+                                                       new_key_indices);
+
+                break;
+            }
+            case bodo_array_type::STRING: {
+                // new key col will have num_groups rows containing the
+                // string for each group
+                int64_t n_chars = 0;  // total number of chars of all keys for
+                                      // this column
+                offset_t* in_offsets;
+                for (size_t j = 0; j < num_groups; j++) {
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i, grp_infos);
+                    in_offsets =
+                        (offset_t*)key_col->data2<bodo_array_type::STRING>();
+                    n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
+                }
+                // XXX Shouldn't we forward the array_id here?
+                new_key_col = alloc_array_top_level(
+                    num_groups, n_chars, 1, key_col->arr_type, key_col->dtype,
+                    -1, 0, key_col->num_categories,
+                    key_col->is_globally_replicated, key_col->is_locally_unique,
+                    key_col->is_locally_sorted, pool, mm);
+
+                offset_t* out_offsets =
+                    (offset_t*)new_key_col->data2<bodo_array_type::STRING>();
+                offset_t pos = 0;
+                for (size_t j = 0; j < num_groups; j++) {
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i, grp_infos);
+                    in_offsets =
+                        (offset_t*)key_col->data2<bodo_array_type::STRING>();
+                    offset_t start_offset = in_offsets[key_row];
+                    offset_t str_len = in_offsets[key_row + 1] - start_offset;
+                    out_offsets[j] = pos;
+                    memcpy(
+                        &new_key_col->data1<bodo_array_type::STRING>()[pos],
+                        &key_col
+                             ->data1<bodo_array_type::STRING>()[start_offset],
+                        str_len);
+                    pos += str_len;
+                    bool bit =
+                        key_col->get_null_bit<bodo_array_type::STRING>(key_row);
+                    new_key_col->set_null_bit<bodo_array_type::STRING>(j, bit);
+                }
+                out_offsets[num_groups] = pos;
+
+                break;
+            }
+            default: {
+                throw new std::runtime_error(
+                    "_groupby_common.cpp::alloc_init_keys: Unsupported array type " + GetArrType_as_string(key_col->arr_type) + ".");
+            }
         }
         out_table->columns.push_back(std::move(new_key_col));
     }
