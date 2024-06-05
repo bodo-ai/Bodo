@@ -558,6 +558,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         ARR_TYPE_CASE(bodo_array_type::ARRAY_ITEM);
         ARR_TYPE_CASE(bodo_array_type::MAP);
         ARR_TYPE_CASE(bodo_array_type::CATEGORICAL);
+        ARR_TYPE_CASE(bodo_array_type::INTERVAL);
         default: {
             throw std::runtime_error("TestEqualColumn: invalid array type " +
                                      GetArrType_as_string(arr1->arr_type));
