@@ -498,13 +498,43 @@ void hash_arrow_array(const hashes_t& out_hashes,
         apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, str_array);
         apply_arrow_string_hashes(out_hashes, list_offsets, n_rows, str_array);
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, str_array);
-    } else {
+    } else if (input_array->type_id() == arrow::Type::DICTIONARY) {
+        // TODO: this is only needed to handle hash_array_combine incorrectly
+        // handling nested types. This should be removed and proper support for
+        // hashing nested arrays should be implemented instead.
+        std::shared_ptr<arrow::DictionaryArray> dict_array =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(input_array);
+        auto dictionary = dict_array->dictionary();
+        std::shared_ptr<uint32_t[]> dict_hashes =
+            bodo::make_shared_arr<uint32_t>(dictionary->length(),
+                                            bodo::BufferPool::DefaultPtr());
+        hash_arrow_array(dict_hashes, list_offsets, n_rows, dictionary,
+                         start_row_offset);
+
+        // Define a hash value for nulls
+        uint32_t null_hash = 0;
+        char val_c = 1;
+        hash_string_32(&val_c, 1, 0, &null_hash);
+
+        auto indices = dict_array->indices();
+        for (size_t i = 0; i < n_rows; i++) {
+            if (indices->IsNull(i)) {
+                out_hashes[i] = null_hash;
+            } else {
+                // Note that GetValueIndex is not reccomended for performant
+                // code, but this codepath should be removed in general
+                out_hashes[i] = dict_hashes[dict_array->GetValueIndex(i)];
+            }
+        }
+    } else if (arrow::is_primitive(*input_array->type())) {
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
         apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows,
                                  primitive_array);
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows,
                                  primitive_array);
+    } else {
+        throw std::runtime_error("hash_arrow_array: Unsupported array type");
     }
 }
 
