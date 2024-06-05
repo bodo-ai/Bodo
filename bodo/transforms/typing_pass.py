@@ -64,6 +64,7 @@ from bodo.utils.transform import (
     get_const_arg,
     get_const_func_output_type,
     get_const_value_inner,
+    get_runtime_join_filter_terms,
     replace_func,
     set_call_expr_arg,
     update_locs,
@@ -4172,6 +4173,26 @@ class TypingTransforms:
                 ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc),
             ]
             self.typemap[data_arrs[0].name] = ArrowReaderType(col_names, df_type.data)
+        # Retrieve the tuple of runtime join filters in the form
+        # ((state_1, indices_1), (state_2, indices_2)...) where each
+        # state is a join state object and each indices is a tuple of
+        # column indices.
+        _bodo_runtime_join_filters_arg = get_call_expr_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_runtime_join_filters",
+            default=None,
+            use_default=True,
+        )
+        rtjf_terms = get_runtime_join_filter_terms(
+            self.func_ir, _bodo_runtime_join_filters_arg
+        )
+        if rtjf_terms is not None and len(rtjf_terms):
+            assert (
+                chunksize is not None
+            ), "Cannot provide rtjf_terms in a non-streaming read"
 
         nodes = [
             bodo.ir.iceberg_ext.IcebergReader(
@@ -4199,6 +4220,7 @@ class TypingTransforms:
                 orig_col_types=orig_arr_types,
                 sql_op_id=_bodo_sql_op_id_const,
                 dict_encode_in_bodo=dict_encode_in_bodo,
+                rtjf_terms=rtjf_terms,
             )
         ]
 

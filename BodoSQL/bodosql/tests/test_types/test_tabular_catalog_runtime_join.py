@@ -24,6 +24,10 @@ pytestmark = pytest_tabular
 
 
 def test_simple_join(tabular_catalog, memory_leak_check):
+    """
+    Test data and file pruning runtime join filters are generated correctly when reading from tabular catalog
+    """
+
     def impl(bc, query):
         return bc.sql(query)
 
@@ -34,8 +38,8 @@ def test_simple_join(tabular_catalog, memory_leak_check):
     # the same pickup and dropoff point in location in each such zone.
     # Note: imposes a limit on the yellow table for practical reasons.
     # This should result in the nation table producing a runtime
-    # join filter on the pickup location id & dropoff location id to only
-    # read the rows where the values are between 5 and 204.
+    # join filter on the pickup_location_id to
+    # read the rows where the values are between 5 and 251.
     query = """
     SELECT loc.\"zone_name\" as zone_name, COUNT(*) as n_rides
     FROM \"examples\".\"nyc_taxi_locations\" loc, (SELECT * FROM \"examples\".\"nyc_taxi_yellow\" LIMIT 50000) yel
@@ -71,11 +75,10 @@ def test_simple_join(tabular_catalog, memory_leak_check):
             sort_output=True,
             reset_index=True,
         )
-        # TODO: in future, add logger message checking whether the expected
-        # runtime join filter occurred during the iceberg read. This should
-        # verify that pickup_location_id and dropoff_location_id are both
-        # between 5 and 204
         check_logger_msg(
             stream,
-            "",
+            "Runtime join filter expression: ((ds.field('{pickup_location_id}') >= 5) & (ds.field('{pickup_location_id}') <= 251))",
         )
+
+        # Without rtjf it reads all 454 files
+        check_logger_msg(stream, "Total number of files is 454. Reading 450 files:")

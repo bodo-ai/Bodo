@@ -224,16 +224,7 @@ class SqlReader(Connector):
 
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        runtime_join_filters = (
-            None
-            if self.rtjf_terms is None
-            else "["
-            + ", ".join(
-                f"({state_var.name}, {col_indices})"
-                for state_var, col_indices in self.rtjf_terms
-            )
-            + "]"
-        )
+        runtime_join_filters = rtjf_term_repr(self.rtjf_terms)
         return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, out_col_names={self.out_table_col_names}, out_col_types={self.out_table_col_types}, df_out_varname={self.df_out_varname}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, downcast_decimal_to_double={self.downcast_decimal_to_double}, sql_op_id={self.sql_op_id}, runtime_join_filters={runtime_join_filters})"
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
@@ -544,6 +535,46 @@ def overload_gen_runtime_join_filter_cond(state_var, col_indices):
     return impl
 
 
+def rtjf_term_repr(rtjf_terms):
+    """
+    Converts a list of runtime join filter terms to a string representation.
+    """
+    return (
+        "None"
+        if rtjf_terms is None
+        else "["
+        + ", ".join(
+            f"({state_var.name}, {col_indices})"
+            for state_var, col_indices in rtjf_terms
+        )
+        + "]"
+    )
+
+
+def extract_rtjf_terms(
+    rtjf_terms: list[tuple[ir.Var, tuple[int]]]
+) -> tuple[list[tuple[int]], list[ir.Var], list[str]]:
+    """
+    Extracts the runtime join filter terms into separate lists for the column indices,
+    state variables, and state variable names. For state variable names, the names are
+    reformatted to avoid IR variable characters like "$".
+    """
+    rtjf_state_col_indices = []
+    rtjf_state_args = []
+    rtjf_state_names = []
+    for state_var, col_indices in rtjf_terms:
+        # Creates a name for each join state argument that corresponds to the
+        # variable name, but reformatting the state_var to avoid IR variable
+        # chracters like "$"
+        state_name = "".join(
+            char for char in state_var.name if char.isalnum() or char == "_"
+        )
+        rtjf_state_col_indices.append(col_indices)
+        rtjf_state_args.append(state_var)
+        rtjf_state_names.append(state_name)
+    return rtjf_state_col_indices, rtjf_state_args, rtjf_state_names
+
+
 def sql_distributed_run(
     sql_node: SqlReader,
     array_dists,
@@ -667,18 +698,10 @@ def sql_distributed_run(
     rtjf_state_args = []
     rtjf_state_names = []
     if sql_node.rtjf_terms is not None:
-        rtjf_args = []
-        for state_var, col_indices in sql_node.rtjf_terms:
-            # Creates a name for each join state argument that corresponds to the
-            # variable name, but reformatting the state_var to avoid IR variable
-            # chracters like "$"
-            state_name = "".join(
-                char for char in state_var.name if char.isalnum() or char == "_"
-            )
-            rtjf_args.append((state_name, str(col_indices)))
-            rtjf_state_args.append(state_var)
-            rtjf_state_names.append(state_name)
-        for state_var, col_indices in rtjf_args:
+        rtjf_state_cols, rtjf_state_args, rtjf_state_names = extract_rtjf_terms(
+            sql_node.rtjf_terms
+        )
+        for state_var, col_indices in zip(rtjf_state_names, rtjf_state_cols):
             rtjf_suffix += f"    runtime_join_filter_cond = gen_runtime_join_filter_cond({state_var}, {col_indices})\n"
             rtjf_suffix += '    sql_request = f"SELECT * FROM ({sql_request}) WHERE {runtime_join_filter_cond}"\n'
 

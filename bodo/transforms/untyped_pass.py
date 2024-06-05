@@ -54,6 +54,7 @@ from bodo.utils.transform import (
     get_const_arg,
     get_const_value,
     get_const_value_inner,
+    get_runtime_join_filter_terms,
     set_call_expr_arg,
     update_node_list_definitions,
 )
@@ -1038,56 +1039,13 @@ class UntypedPass:
             default=None,
             use_default=True,
         )
-        if _bodo_runtime_join_filters_arg is None:
-            # If the tuple is absent, then no runtime
-            # join filters were provided so we can skip the codepath.
-            rtjf_terms = None
-        else:
-            _bodo_runtime_join_filters_defn = numba.core.ir_utils.get_definition(
-                self.func_ir,
-                _bodo_runtime_join_filters_arg,
-            )
-            if (
-                isinstance(_bodo_runtime_join_filters_defn, ir.Const)
-                and _bodo_runtime_join_filters_defn.value is None
-            ):
-                # If the tuple is explicitly set to None, then no runtime
-                # join filters were provided so we can skip the codepath.
-                rtjf_terms = None
-            else:
-                # Otherwise, we create a list of (state_var, indices)
-                # tuples from the raw arguments and store in the SqlReader
-                assert (
-                    chunksize != None
-                ), "Cannot provide rtjf terms in a non-streaming read."
-                rtjf_terms = []
-                for rtjf_tuple in _bodo_runtime_join_filters_defn.items:
-                    tup_defn = numba.core.ir_utils.get_definition(
-                        self.func_ir, rtjf_tuple
-                    )
-                    # Verify that the tuple is well formed
-                    if len(tup_defn.items) != 2:
-                        raise_bodo_error(
-                            f"Invalid runtime join filter tuple. Expected 2 elements per tuple, instead had {len(tup_defn.items)}"
-                        )
-                    # Extract the state variable
-                    state_var = tup_defn.items[0]
-                    if not isinstance(state_var, ir.Var):
-                        raise_bodo_error(
-                            f"Invalid runtime join filter tuple. Expected the first argument to be a Var, instead got {state_var}."
-                        )
-                    # Extract the column indices
-                    col_indices_meta = numba.core.ir_utils.get_definition(
-                        self.func_ir, tup_defn.items[1]
-                    )
-                    if not isinstance(col_indices_meta, ir.Global) or not isinstance(
-                        col_indices_meta.value, bodo.utils.typing.MetaType
-                    ):
-                        raise_bodo_error(
-                            f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {col_indices_meta}."
-                        )
-                    col_indices_tup = col_indices_meta.value.meta
-                    rtjf_terms.append((state_var, col_indices_tup))
+        rtjf_terms = get_runtime_join_filter_terms(
+            self.func_ir, _bodo_runtime_join_filters_arg
+        )
+        if rtjf_terms is not None and len(rtjf_terms):
+            assert (
+                chunksize is not None
+            ), "Cannot provide rtjf_terms in a non-streaming read"
 
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
