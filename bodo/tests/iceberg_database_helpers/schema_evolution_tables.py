@@ -704,6 +704,25 @@ def create_adversarial_table(table: str, spark=None, postfix: str = ""):
             for (column, type, nullable) in sql_schema
         ]
         append_to_iceberg_table(df, sql_schema, table, spark)
+        # Drop A
+        spark.sql(f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} DROP COLUMN A")
+        col_a = df["A"]
+        df = df.drop(columns=["A"])
+        sql_schema = [
+            (column, type, nullable)
+            for (column, type, nullable) in sql_schema
+            if column != "A"
+        ]
+        append_to_iceberg_table(df, sql_schema, table, spark)
+        # Add A and make it first
+        spark.sql(f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ADD COLUMN A INT")
+        df["A"] = col_a
+        sql_schema.append(("A", "INT", True))
+
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{DATABASE_NAME}.{table} ALTER COLUMN A FIRST"
+        )
+        append_to_iceberg_table(df, sql_schema, table, spark)
 
 
 def create_map_fields_evolution_table(table: str, spark=None, postfix: str = ""):

@@ -5,6 +5,7 @@ import typing as pt
 import llvmlite.binding as ll
 import numba
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
@@ -28,6 +29,12 @@ from bodo.io.iceberg import IcebergConnectionType
 from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateType
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
+from bodo.ir.sql_ext import (
+    RtjfMinMaxValueType,
+    extract_rtjf_terms,
+    get_runtime_join_filter_min_max,
+    rtjf_term_repr,
+)
 from bodo.libs.array import (
     array_from_cpp_table,
     cpp_table_to_py_table,
@@ -362,6 +369,9 @@ class IcebergReader(Connector):
         # the Snowflake Reader), or should we let Arrow return
         # dict-encoded columns directly.
         dict_encode_in_bodo: bool = False,
+        # List of tuples representing runtime join filters
+        # that have been pushed down to I/O.
+        rtjf_terms: list[tuple[ir.Var, tuple[int]]] | None = None,
     ):
         # Column Names and Types. Common for all Connectors
         # - Output Columns
@@ -433,8 +443,11 @@ class IcebergReader(Connector):
         # cannot read as dict-encoded columns directly.
         self.dict_encode_in_bodo = dict_encode_in_bodo
 
+        self.rtjf_terms = rtjf_terms
+
     def __repr__(self) -> str:  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
+        runtime_join_filters = rtjf_term_repr(self.rtjf_terms)
         return (
             f"{out_varnames} = IcebergReader(table_name={self.table_name}, connection={self.connection}, "
             f"out_col_names={self.out_table_col_names}, out_col_types={self.out_table_col_types}, "
@@ -442,7 +455,7 @@ class IcebergReader(Connector):
             f"unsupported_arrow_types={self.unsupported_arrow_types}, index_column_name={self.index_column_name}, "
             f"index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, "
             f"database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, "
-            f"is_merge_into={self.is_merge_into}, sql_op_id={self.sql_op_id}, dict_encode_in_bodo={self.dict_encode_in_bodo})"
+            f"is_merge_into={self.is_merge_into}, sql_op_id={self.sql_op_id}, dict_encode_in_bodo={self.dict_encode_in_bodo}, {runtime_join_filters=})"
         )
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
@@ -696,7 +709,15 @@ def iceberg_distributed_run(
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(
         iceberg_node.filters
     )
-    extra_args = ", ".join(filter_map.values())
+
+    if iceberg_node.rtjf_terms is not None:
+        rtjf_cols, rtjf_states_vars, rtjf_states_vars_names = extract_rtjf_terms(
+            iceberg_node.rtjf_terms
+        )
+    else:
+        rtjf_cols, rtjf_states_vars, rtjf_states_vars_names = [], [], []
+
+    extra_args = ", ".join(list(filter_map.values()) + list(rtjf_states_vars_names))
     func_text = (
         f"def sql_impl(sql_request, conn_wrapper, database_schema, {extra_args}):\n"
     )
@@ -711,11 +732,11 @@ def iceberg_distributed_run(
 
     filter_args = ""
     # Pass args to _iceberg_reader_py with iceberg
-    filter_args = extra_args
+    filter_args = ", ".join(filter_map.values())
 
     # total_rows is used for setting total size variable below
     if iceberg_node.is_streaming:  # pragma: no cover
-        func_text += f"    reader = _iceberg_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+        func_text += f"    reader = _iceberg_reader_py(sql_request, conn, database_schema, {extra_args})\n"
     else:
         func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _iceberg_reader_py(sql_request, conn, database_schema, {filter_args})\n"
 
@@ -747,6 +768,8 @@ def iceberg_distributed_run(
             orig_col_names=iceberg_node.orig_col_names,
             orig_col_types=iceberg_node.orig_col_types,
             sql_op_id=iceberg_node.sql_op_id,
+            rtjf_states_vars_names=rtjf_states_vars_names,
+            rtjf_cols=[np.array(cols) for cols in rtjf_cols],
         )
     else:
         sql_reader_py = _gen_iceberg_reader_py(**genargs)
@@ -762,7 +785,8 @@ def iceberg_distributed_run(
         typingctx=typingctx,
         targetctx=targetctx,
         arg_typs=(string_type, conn_type, schema_type)
-        + tuple(typemap[v.name] for v in filter_vars),
+        + tuple(typemap[v.name] for v in filter_vars)
+        + tuple(typemap[v.name] for v in rtjf_states_vars),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
@@ -773,7 +797,8 @@ def iceberg_distributed_run(
             iceberg_node.connection,
             ir.Const(iceberg_node.database_schema, iceberg_node.loc),
         ]
-        + filter_vars,
+        + filter_vars
+        + rtjf_states_vars,
     )
     nodes = f_block.body[:-3]
 
@@ -925,6 +950,92 @@ def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
     return dict_expr
 
 
+@numba.njit
+def get_rtjf_col_min_max_map(
+    rtjf_state: bodo.libs.stream_join.JoinStateType,
+    rtjf_cols: npt.NDArray,
+    col_names: list[str],
+) -> tuple[
+    list[str], list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]]
+]:  # pragma: no cover
+    """
+    Get the min/max bound for each key column in the runtime join filter supplied.
+    """
+    n_cols = len(rtjf_cols)
+    out_col_names = []
+    bounds = []
+    for i in range(n_cols):
+        col_idx = rtjf_cols[i]
+        if col_idx == -1:
+            continue
+        # Get the min/max value bounds for the current key column from the join state
+        min_val = get_runtime_join_filter_min_max(rtjf_state, np.int64(i), True)
+        max_val = get_runtime_join_filter_min_max(rtjf_state, np.int64(i), False)
+        col_name = col_names[col_idx]
+        out_col_names.append(col_name)
+        bounds.append((min_val, max_val))
+    return out_col_names, bounds
+
+
+@numba.njit
+def add_rtjf_iceberg_filter(
+    file_filters,
+    filtered_cols: list[str],
+    bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
+) -> ParquetPredicateType:  # pragma: no cover
+    """
+    For each column in filtered_cols create a FilterExpr containing it's bounds and combine them all with file_filters
+    """
+
+    with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
+        rtjf_filters = bic.FilterExpr.default()
+        for col, (min, max) in zip(filtered_cols, bounds):
+            if min is not None:
+                rtjf_filters = bic.FilterExpr(
+                    "AND",
+                    [
+                        rtjf_filters,
+                        bic.FilterExpr(">=", [bic.ColumnRef(col), bic.Scalar(min)]),
+                    ],
+                )
+            if max is not None:
+                rtjf_filters = bic.FilterExpr(
+                    "AND",
+                    [
+                        rtjf_filters,
+                        bic.FilterExpr("<=", [bic.ColumnRef(col), bic.Scalar(max)]),
+                    ],
+                )
+
+        combined_filters = bic.FilterExpr("AND", [file_filters, rtjf_filters])
+
+    return combined_filters
+
+
+@numba.njit
+def gen_runtime_join_filter_expr(
+    filtered_cols: list[str],
+    bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
+) -> str:  # pragma: no cover
+    """
+    Create a string that evaluates to an arrow filter expression
+    bounding each col to it's min/max as specified in rtjf_col_min_max_map
+    Returns an f-string so column names can be substituted in at runtime based
+    on each file's actual schema
+    """
+    rtjf_expr = ""
+
+    with bodo.no_warning_objmode(rtjf_expr="unicode_type"):
+        exprs = []
+        for col, (min, max) in zip(filtered_cols, bounds):
+            if min is not None:
+                exprs.append(f"(ds.field('{{{col}}}') >= {min})")
+            if max is not None:
+                exprs.append(f"(ds.field('{{{col}}}') <= {max})")
+        rtjf_expr += " & ".join(exprs)
+    return rtjf_expr
+
+
 def _gen_iceberg_reader_chunked_py(
     col_names: list[str],
     col_typs: list[pt.Any],
@@ -943,6 +1054,8 @@ def _gen_iceberg_reader_chunked_py(
     orig_col_names,
     orig_col_types,
     dict_encode_in_bodo: bool,
+    rtjf_states_vars_names: list[str],
+    rtjf_cols: list[npt.NDArray[np.int32]],
     sql_op_id: int = -1,
 ):  # pragma: no cover
     """Function to generate main streaming SQL implementation.
@@ -952,7 +1065,6 @@ def _gen_iceberg_reader_chunked_py(
     Args:
         chunksize: Number of rows in each batch
     """
-
     source_pyarrow_schema = pyarrow_schema
     assert (
         source_pyarrow_schema is not None
@@ -1018,13 +1130,33 @@ def _gen_iceberg_reader_chunked_py(
         if str_as_dict_cols
         else "0, 0"
     )
-
     comma = "," if filter_args else ""
+    rtjf_str = ""
+    if len(rtjf_states_vars_names):
+        rtjf_str = "  rtjf_exprs = []\n"
+    for i, var_name in enumerate(rtjf_states_vars_names):
+        rtjf_str += (
+            # Get runtime join filter column min/max map
+            f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, rtjf_cols_{call_id}[{i}], used_cols_{call_id})\n"
+            # Add runtime join filters to Iceberg file scan filters
+            f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, bounds)\n"
+            # Add runtime join filters to Iceberg expression filters for Arrow data filtering
+            f"  rtjf_exprs.append(gen_runtime_join_filter_expr(filtered_cols, bounds))\n"
+        )
+    rtjf_str += f"  combined_iceberg_expr_filter_f_str = (iceberg_expr_filter_f_str_{call_id})\n"
+    if len(rtjf_states_vars_names):
+        rtjf_str += f"  rtjf_expr = f\"({{' & '.join(rtjf_exprs)}})\"\n"
+        rtjf_str += f'  combined_iceberg_expr_filter_f_str +=  " & " if len(rtjf_exprs) and len(iceberg_expr_filter_f_str_{call_id}) else ""\n'
+        rtjf_str += "  combined_iceberg_expr_filter_f_str += rtjf_expr\n"
+        if bodo.user_logging.get_verbose_level() >= 2:
+            rtjf_str += "  log_message('Iceberg I/O', f'Runtime join filter expression: {rtjf_expr}')\n"
+
     func_text = (
-        f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}):\n"
+        f"def sql_reader_chunked_py(sql_request, conn, database_schema, {filter_args}{comma} {','.join(rtjf_states_vars_names)}):\n"
         f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
         f'  iceberg_filters = get_filters_pyobject("{filter_str}", ({filter_args}{comma}))\n'
         f"  filter_scalars_pyobject = get_filter_scalars_pyobject(({filter_args}{comma}))\n"
+        f"{rtjf_str}"
         # Iceberg C++ Parquet Reader
         f"  iceberg_reader = iceberg_pq_reader_init_py_entry(\n"
         f"    unicode_to_utf8(conn),\n"
@@ -1033,7 +1165,7 @@ def _gen_iceberg_reader_chunked_py(
         f"    {parallel},\n"
         f"    {-1 if limit is None else limit},\n"
         f"    iceberg_filters,\n"
-        f"    unicode_to_utf8(iceberg_expr_filter_f_str_{call_id}),\n"
+        f"    unicode_to_utf8(combined_iceberg_expr_filter_f_str),\n"
         f"    filter_scalars_pyobject,\n"
         f"    selected_cols_arr_{call_id}.ctypes,\n"
         f"    {len(source_selected_cols)},\n"
@@ -1062,6 +1194,9 @@ def _gen_iceberg_reader_chunked_py(
             f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
             f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),
             f"source_pyarrow_schema_{call_id}": source_pyarrow_schema,
+            f"used_cols_{call_id}": used_cols,
+            f"rtjf_cols_{call_id}": rtjf_cols,
+            "log_message": bodo.user_logging.log_message,
         }
     )
     loc_vars = {}
@@ -1309,7 +1444,6 @@ def _gen_iceberg_reader_py(
     func_text += f"  delete_table(out_table)\n"
     func_text += f"  ev.finalize()\n"
     func_text += "  return (total_rows, table_var, index_var, file_list, snapshot_id)\n"
-
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
         {
