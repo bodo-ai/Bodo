@@ -2023,13 +2023,16 @@ def test_larger_than_available_space_allocation_limit_ignored(capfd):
     assert pool.bytes_allocated() == 4.5 * 1024 * 1024
     assert pool.max_memory() == 4.5 * 1024 * 1024
 
-    # Try to fill up all 1MiB frames:
-    allocation_5: BufferPoolAllocation = pool.allocate(1024 * 1024)
-    _, err = capfd.readouterr()
-    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
-    allocation_6: BufferPoolAllocation = pool.allocate(1024 * 1024)
-    _, err = capfd.readouterr()
-    assert "We will try to allocate anyway. This may invoke the OOM killer" in err
+    # Try to fill up all 1MiB frames (there are 8 of these since we over-allocate
+    # frames from the largest SizeClass-es).
+    alloc_1MiB_frames = []
+    for i in range(6):
+        alloc_1MiB_frame: BufferPoolAllocation = pool.allocate(1024 * 1024)
+        _, err = capfd.readouterr()
+        assert (
+            "We will try to allocate anyway. This may invoke the OOM killer" in err
+        ), i
+        alloc_1MiB_frames.append(alloc_1MiB_frame)
 
     # Try allocating again:
     # Trying to allocate 1MiB should fail
@@ -2043,29 +2046,29 @@ def test_larger_than_available_space_allocation_limit_ignored(capfd):
     assert "We will try to allocate anyway. This may invoke the OOM killer" in err
 
     # Verify stats after allocation attempt
-    assert pool.bytes_allocated() == 6.5 * 1024 * 1024
-    assert pool.max_memory() == 6.5 * 1024 * 1024
+    assert pool.bytes_allocated() == 10.5 * 1024 * 1024
+    assert pool.max_memory() == 10.5 * 1024 * 1024
 
     # Unpinning and pinning should continue working
-    pool.unpin(allocation_6)
-    pool.pin(allocation_6)
+    pool.unpin(alloc_1MiB_frames[1])
+    pool.pin(alloc_1MiB_frames[1])
 
     # Unpinning and a new allocation should be fine
-    pool.unpin(allocation_6)
+    pool.unpin(alloc_1MiB_frames[1])
 
-    allocation_7: BufferPoolAllocation = pool.allocate(512 * 1024)
+    allocation_11: BufferPoolAllocation = pool.allocate(512 * 1024)
     _, err = capfd.readouterr()
     assert "We will try to allocate anyway. This may invoke the OOM killer" in err
 
-    pool.pin(allocation_6)
+    pool.pin(alloc_1MiB_frames[1])
 
     pool.free(allocation_1)
     pool.free(allocation_2)
     pool.free(allocation_3)
     pool.free(allocation_4)
-    pool.free(allocation_5)
-    pool.free(allocation_6)
-    pool.free(allocation_7)
+    for alloc in alloc_1MiB_frames:
+        pool.free(alloc)
+    pool.free(allocation_11)
 
     # Delete pool (to be conservative)
     del pool
@@ -2115,11 +2118,25 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
     # We should've triggered a spill of the unpinned frame
     assert not allocation2.is_in_memory()
 
+    # Allocate the remaining 2MiB frames (we allocate extra frames when enforcement is turned off)
+    allocation5: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+    allocation6: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    _, err = capfd.readouterr()
+    assert (
+        "Could not spill sufficient bytes. We will try to allocate anyway. This may invoke the OOM killer"
+        in err
+    )
+
     # Verify stats
-    assert pool.bytes_pinned() == 5 * 1024 * 1024
-    assert pool.bytes_in_memory() == 5 * 1024 * 1024
-    assert pool.bytes_allocated() == 6 * 1024 * 1024
-    assert pool.max_memory() == 6 * 1024 * 1024
+    assert pool.bytes_pinned() == 9 * 1024 * 1024
+    assert pool.bytes_in_memory() == 9 * 1024 * 1024
+    assert pool.bytes_allocated() == 10 * 1024 * 1024
+    assert pool.max_memory() == 10 * 1024 * 1024
 
     # Reduce memory pressure further by making 1MiB eligible
     # for eviction.
@@ -2139,15 +2156,15 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
     )
 
     # Verify stats
-    assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_in_memory() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 6 * 1024 * 1024
-    assert pool.max_memory() == 6 * 1024 * 1024
+    assert pool.bytes_pinned() == 8 * 1024 * 1024
+    assert pool.bytes_in_memory() == 8 * 1024 * 1024
+    assert pool.bytes_allocated() == 10 * 1024 * 1024
+    assert pool.max_memory() == 10 * 1024 * 1024
     # We should've triggered a spill of the unpinned frame
     assert not allocation3.is_in_memory()
 
     # Do a similar test for malloc
-    allocation5: BufferPoolAllocation = pool.allocate(2 * 1024)
+    allocation7: BufferPoolAllocation = pool.allocate(2 * 1024)
     # Verify that a warning was displayed on stderr before it raised the error
     _, err = capfd.readouterr()
     assert (
@@ -2163,6 +2180,8 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
     pool.free(allocation3)
     pool.free(allocation4)
     pool.free(allocation5)
+    pool.free(allocation6)
+    pool.free(allocation7)
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
@@ -2376,6 +2395,11 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
     assert not allocation3.is_in_memory()
     assert not allocation4.is_in_memory()
 
+    # Use up the remaining 2MiB frames (these exist because we allocate extra
+    # frames for the larger SizeClass-es).
+    allocation6: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+    allocation7: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
+
     # Test for the frame not available case (we're out of 2MiB frames at this point):
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
@@ -2390,10 +2414,10 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
     )
 
     # Verify stats
-    assert pool.bytes_pinned() == 4 * 1024 * 1024
-    assert pool.bytes_in_memory() == 4 * 1024 * 1024
-    assert pool.bytes_allocated() == 8 * 1024 * 1024
-    assert pool.max_memory() == 8 * 1024 * 1024
+    assert pool.bytes_pinned() == 8 * 1024 * 1024
+    assert pool.bytes_in_memory() == 8 * 1024 * 1024
+    assert pool.bytes_allocated() == 12 * 1024 * 1024
+    assert pool.max_memory() == 12 * 1024 * 1024
     assert not allocation2.is_in_memory()
     assert not allocation3.is_in_memory()
     assert not allocation4.is_in_memory()
@@ -2403,6 +2427,128 @@ def test_pin_evicted_block_not_evicted_sufficient_bytes_no_enforcement(
     pool.free(allocation3)
     pool.free(allocation4)
     pool.free(allocation5)
+    pool.free(allocation6)
+    pool.free(allocation7)
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+
+def test_extra_frames_no_enforcement():
+    """
+    Test that extra frames are allocated in the larger SizeClass-es
+    when threshold enforcement is disabled.
+    """
+
+    ## 1. When there are >16 SizeClass-es
+    options = BufferPoolOptions(
+        memory_size=128,  # MiB
+        min_size_class=1,  # KiB
+        enforce_max_limit_during_allocation=False,
+        debug_mode=False,
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    for idx, exp_num_frames in [
+        # 8 largest (1MiB, ..., 128MiB) should have 2x frames:
+        (10, 256),
+        (11, 128),
+        (12, 64),
+        (13, 32),
+        (14, 16),
+        (15, 8),
+        (16, 4),
+        (17, 2),
+        # Next 8 (512KiB, ..., 4KiB) should have 1x frames:
+        (2, 49152),
+        (3, 24576),
+        (4, 12288),
+        (5, 6144),
+        (6, 3072),
+        (7, 1536),
+        (8, 768),
+        (9, 384),
+        # Rest (2KiB & 1KiB) don't have extra frames:
+        (0, 131072),
+        (1, 65536),
+    ]:
+        size_class_: SizeClass = pool.get_size_class(idx)
+        n_blocks = size_class_.get_num_blocks()
+        assert (
+            n_blocks == exp_num_frames
+        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+    ## 2. Test when there are fewer than 16 SizeClass-es
+    options = BufferPoolOptions(
+        memory_size=16,  # MiB
+        min_size_class=2,  # KiB
+        enforce_max_limit_during_allocation=False,
+        debug_mode=False,
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    for idx, exp_num_frames in [
+        # Smallest SizeClass (2KiB) shouldn't have extra frames
+        (0, 8192),
+        # Next 5 (4KiB, ..., 64KiB) should have 1.5x frames
+        (1, 6144),
+        (2, 3072),
+        (3, 1536),
+        (4, 768),
+        (5, 384),
+        # 8 largest (128KiB, ..., 16MiB) should have 2x frames
+        (6, 256),
+        (7, 128),
+        (8, 64),
+        (9, 32),
+        (10, 16),
+        (11, 8),
+        (12, 4),
+        (13, 2),
+    ]:
+        size_class_: SizeClass = pool.get_size_class(idx)
+        n_blocks = size_class_.get_num_blocks()
+        assert (
+            n_blocks == exp_num_frames
+        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
+
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_allocated() == 0
+
+    pool.cleanup()
+    del pool
+
+    ## 3. Test edge cases with very few SizeClass-es
+    options = BufferPoolOptions(
+        memory_size=4,  # MiB
+        min_size_class=512,  # KiB
+        enforce_max_limit_during_allocation=False,
+        debug_mode=False,
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    for idx, exp_num_frames in [
+        # Smallest SizeClass (512KiB) shouldn't have extra frames
+        (0, 8),
+        # 3 largest (1MiB, ..., 4MiB) should have 2x frames
+        (1, 8),
+        (2, 4),
+        (3, 2),
+    ]:
+        size_class_: SizeClass = pool.get_size_class(idx)
+        n_blocks = size_class_.get_num_blocks()
+        assert (
+            n_blocks == exp_num_frames
+        ), f"Expected SizeClass at idx {idx} to have {exp_num_frames} frames but it has {n_blocks} frames instead!"
 
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
