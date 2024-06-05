@@ -8191,3 +8191,41 @@ def test_many_same_type_keys(memory_leak_check):
         }
     )
     check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
+def test_mixed_semi_structured_and_regular_keys(memory_leak_check):
+    """
+    Test the case where we have a mix of semi-structured and regular keys.
+    """
+
+    # This isn't tested with the other functions above to control the values
+    # per group better - if we have more tests like this, we should combine the
+    # tests and make it more generic
+    def impl(df):
+        return df.groupby(["A", "B"], as_index=False, dropna=False).agg("sum")
+
+    df = pd.DataFrame(
+        {
+            "A": ["1", "1", "2", "2", "4", "4"],
+            "B": pd.array([["1"], ["1"], ["2"], ["3"], ["4"], ["4"]]),
+            "C": [1, 2, 3, 4, 5, 5],
+        }
+    )
+
+    expected = pd.DataFrame(
+        {
+            "A": ["1", "2", "2", "4"],
+            "B": pd.array([["1"], ["2"], ["3"], ["4"]]),
+            "C": [3, 3, 4, 10],
+        }
+    )
+    # use_dict_encoded_strings must be set to false or hash_arrow_array will
+    # panic as the underlying string array will unexpectedly be dict encoded.
+    check_func(
+        impl,
+        (df,),
+        py_output=expected,
+        sort_output=True,
+        reset_index=True,
+        use_dict_encoded_strings=False,
+    )

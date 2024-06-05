@@ -1922,6 +1922,9 @@ def test_array_unique_agg(call, expected, memory_leak_check):
 
 @pytest.mark.slow
 def test_mixed_nested_agg(memory_leak_check):
+    """
+    Test the case where we have a mix of semi-structured and regular keys.
+    """
     query = f"SELECT A, AVG(B), COUNT(C), COUNT(D), SUM(E) from table1 GROUP BY A"
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -1955,4 +1958,35 @@ def test_mixed_nested_agg(memory_leak_check):
         expected_output=expected,
         convert_columns_to_pandas=True,
         check_dtype=False,
+    )
+
+
+def test_mixed_nested_agg_keys(memory_leak_check):
+    query = f"SELECT A, B, SUM(C) as C from table1 GROUP BY A, B"
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "A": ["1", "1", "2", "2", "4", "4"],
+                "B": pd.array([["1"], ["1"], ["2"], ["3"], ["4"], ["4"]]),
+                "C": [1, 2, 3, 4, 5, 5],
+            }
+        )
+    }
+    expected = pd.DataFrame(
+        {
+            "A": ["1", "2", "2", "4"],
+            "B": pd.array([["1"], ["2"], ["3"], ["4"]]),
+            "C": [3, 3, 4, 10],
+        }
+    )
+    # use_dict_encoded_strings must be set to false or hash_arrow_array will
+    # panic as the underlying string array will unexpectedly be dict encoded.
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected,
+        convert_columns_to_pandas=True,
+        check_dtype=False,
+        use_dict_encoded_strings=False,
     )
