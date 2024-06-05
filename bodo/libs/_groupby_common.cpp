@@ -1,5 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_common.h"
+#include <numeric>
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -870,9 +871,71 @@ void alloc_init_keys(
 
                 break;
             }
+            case bodo_array_type::ARRAY_ITEM: {
+                offset_t* key_offset_arr =
+                    (offset_t*)key_col->data1<bodo_array_type::ARRAY_ITEM>();
+
+                // Allocate the ARRAY_ITEM array
+                new_key_col =
+                    alloc_array_item(num_groups, nullptr, 0, pool, mm);
+
+                // Setup the offsets in data1
+                offset_t* new_key_offset_arr =
+                    (offset_t*)
+                        new_key_col->data1<bodo_array_type::ARRAY_ITEM>();
+
+                // Collect child array pieces
+                std::vector<std::shared_ptr<array_info>> inner_arr_parts;
+
+                offset_t pos = 0;
+                for (size_t j = 0; j < num_groups; j++) {
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i, grp_infos);
+
+                    // construct new offsets in data1
+                    offset_t start_offset = key_offset_arr[key_row];
+                    offset_t end_offset = key_offset_arr[key_row + 1];
+                    offset_t length = end_offset - start_offset;
+                    new_key_offset_arr[j] = pos;
+                    pos += length;
+
+                    // TODO(aneesh): BSE-3437 - if key_col is the same for all
+                    // groups, collect indexes and only call
+                    // RetrieveArray_SingleColumn once.
+                    std::vector<int64_t> idxs(length);
+                    // fills idxs with [start_offset, start_offset + 1, ...,]
+                    std::iota(idxs.begin(), idxs.end(), start_offset);
+                    // add key_col->child_arrays[0][idxs] to inner_arr_parts
+                    inner_arr_parts.emplace_back(RetrieveArray_SingleColumn(
+                        key_col->child_arrays[0], idxs, false, pool, mm));
+
+                    // null bitmask
+                    bool bit =
+                        key_col->get_null_bit<bodo_array_type::ARRAY_ITEM>(
+                            key_row);
+                    new_key_col->set_null_bit<bodo_array_type::ARRAY_ITEM>(j,
+                                                                           bit);
+                }
+                new_key_offset_arr[num_groups] = pos;
+
+                // Assemble child array fragments into a contiguous array
+                if (inner_arr_parts.empty()) {
+                    // concat_arrays expects a non-empty vector, so we instead
+                    // allocate an empty array that matches the type of the
+                    // input.
+                    new_key_col->child_arrays[0] =
+                        alloc_array_like(key_col->child_arrays[0], false);
+                } else {
+                    new_key_col->child_arrays[0] =
+                        concat_arrays(inner_arr_parts);
+                }
+                break;
+            }
             default: {
                 throw new std::runtime_error(
-                    "_groupby_common.cpp::alloc_init_keys: Unsupported array type " + GetArrType_as_string(key_col->arr_type) + ".");
+                    "_groupby_common.cpp::alloc_init_keys: Unsupported array "
+                    "type " +
+                    GetArrType_as_string(key_col->arr_type) + ".");
             }
         }
         out_table->columns.push_back(std::move(new_key_col));

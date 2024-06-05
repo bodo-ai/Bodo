@@ -926,9 +926,7 @@ void hash_array_combine(const hashes_t& out_hashes,
     if (array->arr_type == bodo_array_type::STRUCT ||
         array->arr_type == bodo_array_type::ARRAY_ITEM ||
         array->arr_type == bodo_array_type::MAP) {
-        // Support for these isn't required since start_row_offset
-        // is only used in streaming hash join and STRUCT and
-        // ARRAY_ITEM arrays cannot be keys at this time.
+        // TODO: stop using arrow hash
         bodo::vector<offset_t> list_offsets(n_rows + 1);
         for (offset_t i = 0; i <= n_rows; i++) {
             list_offsets[i] = i + start_row_offset;
