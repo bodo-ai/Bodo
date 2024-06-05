@@ -45,6 +45,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     is_literal_type,
     is_overload_constant_bool,
+    raise_bodo_error,
 )
 from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
 
@@ -2116,3 +2117,59 @@ def _convert_const_key_dict(
         )
 
         return (val_tup_var, idx_tup_var), new_nodes
+
+
+def get_runtime_join_filter_terms(
+    func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: Optional[ir.Expr]
+) -> Optional[list[tuple[ir.Var, tuple[int]]]]:
+    """
+    Takes a function IR and an expression for the runtime join filters argument to the function.
+    Extracts the join state variables and column indices from the runtime join filters argument so
+    we can access them at compile time to generate code to apply the runtime join filters.
+    """
+    if _bodo_runtime_join_filters_arg is None:
+        # If the tuple is absent, then no runtime
+        # join filters were provided so we can skip the codepath.
+        rtjf_terms = None
+    else:
+        _bodo_runtime_join_filters_defn = numba.core.ir_utils.get_definition(
+            func_ir,
+            _bodo_runtime_join_filters_arg,
+        )
+        if (
+            isinstance(_bodo_runtime_join_filters_defn, ir.Const)
+            and _bodo_runtime_join_filters_defn.value is None
+        ):
+            # If the tuple is explicitly set to None, then no runtime
+            # join filters were provided so we can skip the codepath.
+            rtjf_terms = None
+        else:
+            # Otherwise, we create a list of (state_var, indices)
+            # tuples from the raw arguments and store in the SqlReader
+            rtjf_terms = []
+            for rtjf_tuple in _bodo_runtime_join_filters_defn.items:
+                tup_defn = numba.core.ir_utils.get_definition(func_ir, rtjf_tuple)
+                # Verify that the tuple is well formed
+                if len(tup_defn.items) != 2:
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected 2 elements per tuple, instead had {len(tup_defn.items)}"
+                    )
+                # Extract the state variable
+                state_var = tup_defn.items[0]
+                if not isinstance(state_var, ir.Var):
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected the first argument to be a Var, instead got {state_var}."
+                    )
+                # Extract the column indices
+                col_indices_meta = numba.core.ir_utils.get_definition(
+                    func_ir, tup_defn.items[1]
+                )
+                if not isinstance(col_indices_meta, ir.Global) or not isinstance(
+                    col_indices_meta.value, bodo.utils.typing.MetaType
+                ):
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {col_indices_meta}."
+                    )
+                col_indices_tup = col_indices_meta.value.meta
+                rtjf_terms.append((state_var, col_indices_tup))
+    return rtjf_terms
