@@ -5,11 +5,9 @@ import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.fun.SqlMonotonicBinaryOperator;
 import org.apache.calcite.sql.fun.SqlQuantifyOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.BodoOperandTypes;
-import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.InferTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -90,26 +88,6 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
         throw new AssertionError(comparisonKind);
     }
   }
-
-  public static final SqlBinaryOperator PLUS =
-      new SqlMonotonicBinaryOperator(
-          "+",
-          SqlKind.PLUS,
-          40,
-          true,
-          BodoReturnTypes.NULLABLE_SUM,
-          InferTypes.FIRST_KNOWN,
-          BodoOperandTypes.PLUS_OPERATOR);
-
-  public static final SqlBinaryOperator MINUS =
-      new SqlMonotonicBinaryOperator(
-          "-",
-          SqlKind.MINUS,
-          40,
-          true, // Same type inference strategy as sum
-          BodoReturnTypes.NULLABLE_SUB,
-          InferTypes.FIRST_KNOWN,
-          BodoOperandTypes.MINUS_OPERATOR);
 
   /** The <code>LOCALTIMESTAMP [(<i>precision</i>)]</code> function. */
   public static final SqlFunction LOCALTIMESTAMP =

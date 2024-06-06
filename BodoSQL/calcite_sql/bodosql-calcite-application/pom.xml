@@ -460,6 +460,21 @@
                                         <exclude>org/apache/calcite/sql/ddl/SqlCreateTable.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlCoalesceFunction.class</exclude>
                                         <exclude>org/apache/calcite/sql/fun/SqlQuantifyOperator.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$10.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$11.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$12.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$13.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$14.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$2.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$3.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$4.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$5.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$6.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$7.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$8.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable$9.class</exclude>
+                                        <exclude>org/apache/calcite/sql/fun/SqlStdOperatorTable.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$Format.class</exclude>
                                         <exclude>org/apache/calcite/sql/parser/SqlParserUtil$MalformedUnicodeEscape.class</exclude>
@@ -545,10 +560,19 @@
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$2.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ReturnTypes$3.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ReturnTypes.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/SqlTypeAssignmentRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlOperandTypeChecker$Consistency.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlOperandTypeChecker.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/SqlTypeCoercionRule.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeFamily$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/SqlTypeFamily.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeName$1.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeName$Limit.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/SqlTypeName$PrecScale.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/SqlTypeName.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/TimeWithTimeZoneString.class</exclude>
                                         <exclude>org/apache/calcite/sql/util/TimestampString.class</exclude>
