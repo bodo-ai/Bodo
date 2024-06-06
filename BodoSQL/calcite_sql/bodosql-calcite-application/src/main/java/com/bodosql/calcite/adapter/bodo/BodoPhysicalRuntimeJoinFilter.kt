@@ -75,10 +75,16 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
                 { ctx, _, table ->
                     val joinStateCache = ctx.builder().getJoinStateCache()
                     var currentTable: BodoEngineTable = table!!
-                    for (i in joinFilterIDs.indices) {
-                        val joinFilterID = joinFilterIDs[i]
-                        val columns = filterColumns[i]
-                        val isFirstLocation = filterIsFirstLocations[i]
+
+                    // zip lists of joinFilterID, filterColumns, isFirstLocation, sort by joinID
+                    val joinFilters =
+                        joinFilterIDs.indices.map {
+                            Triple(joinFilterIDs[it], filterColumns[it], filterIsFirstLocations[it])
+                        }
+                    val sortedJoinFilters = joinFilters.sortedByDescending { it.first }
+
+                    for (joinFilter in sortedJoinFilters) {
+                        val (joinFilterID, columns, isFirstLocation) = joinFilter
                         val rtjfExpr = generateRuntimeJoinFilterCode(ctx, joinFilterID, columns, isFirstLocation, currentTable)
                         rtjfExpr?.let {
                             val tableVar = ctx.builder().symbolTable.genTableVar()
