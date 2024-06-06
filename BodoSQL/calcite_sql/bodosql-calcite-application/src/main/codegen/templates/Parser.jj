@@ -8619,8 +8619,8 @@ SqlBinaryOperator BinaryRowOperator() :
         return SqlStdOperatorTable.NOT_EQUALS;
     }
 |   <NULLEQ> { return SqlBodoOperatorTable.NULL_EQUALS; }
-|   <PLUS> { return SqlBodoOperatorTable.PLUS; }
-|   <MINUS> { return SqlBodoOperatorTable.MINUS; }
+|   <PLUS> { return SqlStdOperatorTable.PLUS; }
+|   <MINUS> { return SqlStdOperatorTable.MINUS; }
 |   <STAR> { return SqlStdOperatorTable.MULTIPLY; }
 |   <SLASH> { return SqlStdOperatorTable.DIVIDE; }
 |   <PERCENT_REMAINDER> {
