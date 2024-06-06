@@ -23,7 +23,10 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo.libs.pd_datetime_arr_ext
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pd_timestamp_tz_naive_type,
+)
 from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
     get_new_null_mask_bool_index,
@@ -350,6 +353,24 @@ def create_cmp_op_overload(op):
             # When we compare None and TimestampTZ in order to sort or take extreme values
             # in a series/array of TimestampTZ, None > TimestampTZ(), None < TimestampTZ() should all return False
             return lambda lhs, rhs: False  # pragma: no cover
+
+        if isinstance(lhs, TimestampTZType) and isinstance(rhs, PandasTimestampType):
+
+            def impl(lhs, rhs):
+                x = lhs.utc_timestamp.value
+                y = rhs.value
+                return op(0 if x == y else 1 if x > y else -1, 0)
+
+            return impl
+
+        if isinstance(lhs, PandasTimestampType) and isinstance(rhs, TimestampTZType):
+
+            def impl(lhs, rhs):
+                x = lhs.value
+                y = rhs.utc_timestamp.value
+                return op(0 if x == y else 1 if x > y else -1, 0)
+
+            return impl
 
     return overload_time_cmp
 

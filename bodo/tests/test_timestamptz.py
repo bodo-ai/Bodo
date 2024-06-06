@@ -725,3 +725,18 @@ def test_setitem_complex(idx, memory_leak_check):
     )
     # arr_val cannot be distributed differently, so this only works with 1 rank.
     check_func(impl, (arr, idx, arr_val), copy_input=True, only_seq=True)
+
+
+def test_cmp_with_timestamp(memory_leak_check):
+    @bodo.jit
+    def gt(a, b):
+        return a > b
+
+    a = bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", -420)
+    b = pd.Timestamp("2024-01-01 00:00:00")
+    assert gt(a, b)
+    assert not gt(b, a)
+
+    c = bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420)
+    assert not gt(c, b)
+    assert gt(b, c)
