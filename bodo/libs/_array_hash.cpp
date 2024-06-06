@@ -526,7 +526,12 @@ void hash_arrow_array(const hashes_t& out_hashes,
                 out_hashes[i] = dict_hashes[dict_array->GetValueIndex(i)];
             }
         }
-    } else if (arrow::is_primitive(*input_array->type())) {
+    } else if (arrow::is_primitive(*input_array->type()) ||
+               input_array->type_id() == arrow::Type::DECIMAL128) {
+        // Casting DECIMAL128 Arrays to PrimitiveArray succeeds, but arrow
+        // doesn't return true for is_primitive(DECIMAL128) - we might not be
+        // getting a good quality hash function this way though, and we may want
+        // to revisit this with a bespoke hash for decimal128.
         auto primitive_array =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
         apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows,
@@ -534,7 +539,8 @@ void hash_arrow_array(const hashes_t& out_hashes,
         apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows,
                                  primitive_array);
     } else {
-        throw std::runtime_error("hash_arrow_array: Unsupported array type");
+        throw std::runtime_error("hash_arrow_array: Unsupported array type: " +
+                                 input_array->type()->ToString());
     }
 }
 
