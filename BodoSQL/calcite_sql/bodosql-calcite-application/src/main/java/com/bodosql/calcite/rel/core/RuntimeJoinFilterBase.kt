@@ -117,11 +117,15 @@ open class RuntimeJoinFilterBase(
         ): BodoEngineTable {
             val builder = ctx.builder()
             var result = readerResult
-            runtimeJoinFilters.forEach {
-                for (i in it.joinFilterIDs.indices) {
-                    val joinFilterID = it.joinFilterIDs[i]
-                    val columns = it.filterColumns[i]
-                    val isFirstLocation = it.filterIsFirstLocations[i]
+            runtimeJoinFilters.forEach { it ->
+                val joinFilters =
+                    it.joinFilterIDs.indices.map { idx ->
+                        Triple(it.joinFilterIDs[idx], it.filterColumns[idx], it.filterIsFirstLocations[idx])
+                    }
+                val sortedJoinFilters = joinFilters.sortedByDescending { it.first }
+
+                for (joinFilter in sortedJoinFilters) {
+                    val (joinFilterID, columns, isFirstLocation) = joinFilter
                     val rtjfResult =
                         BodoPhysicalRuntimeJoinFilter.generateRuntimeJoinFilterCode(
                             ctx,
