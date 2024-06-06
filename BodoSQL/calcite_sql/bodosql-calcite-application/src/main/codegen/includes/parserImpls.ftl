@@ -728,7 +728,7 @@ SqlAlterTable SqlAlterTable(Span s) :
     ifExists = IfExistsOpt()
     table = CompoundIdentifier()
     (
-        ( <RENAME> <TO> renameName = SimpleIdentifier()
+        ( <RENAME> <TO> renameName = CompoundIdentifier()
         { return new SqlAlterTableRenameTable(getPos(), ifExists, table, renameName); })
     |   ( <SWAP> <WITH> swapName = CompoundIdentifier()
         { return new SqlAlterTableSwapTable(getPos(), ifExists, table, swapName); })
@@ -756,7 +756,7 @@ SqlAlterView SqlAlterView(Span s) :
     ifExists = IfExistsOpt()
     view = CompoundIdentifier()
     (
-        ( <RENAME> <TO> renameName = SimpleIdentifier()
+        ( <RENAME> <TO> renameName = CompoundIdentifier()
         { return new SqlAlterViewRenameView(getPos(), ifExists, view, renameName); })
     )
 }
