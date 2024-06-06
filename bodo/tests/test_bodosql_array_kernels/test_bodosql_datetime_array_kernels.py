@@ -3419,6 +3419,55 @@ def test_date_diff_adjustment_boundary(arg0, arg1, answer, memory_leak_check):
     check_func(impl_min, (arg1, arg0), py_output=-answer)
 
 
+@pytest.mark.parametrize(
+    "arg0, arg1, answer",
+    [
+        pytest.param(
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            datetime.date(2024, 1, 2),
+            1,
+            id="ttz-date",
+        ),
+        pytest.param(
+            datetime.date(2024, 1, 2),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            -1,
+            id="date-ttz",
+        ),
+        pytest.param(
+            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", 420),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            -1,
+            id="ttz-ttz",
+        ),
+        pytest.param(
+            bodo.TimestampTZ.fromLocal("2024-01-02 00:00:00", -420),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 420),
+            -1,
+            id="ttz-ttz-different_tz_1",
+        ),
+        pytest.param(
+            bodo.TimestampTZ.fromLocal("2024-01-02 00:01:00", -1380),
+            bodo.TimestampTZ.fromLocal("2024-01-01 00:00:00", 0),
+            -1,
+            id="ttz-ttz-different_tz_1",
+        ),
+    ],
+)
+def test_date_diff_timestamptz(arg0, arg1, answer, memory_leak_check):
+    """
+    Test the datediff kernel for cases where at least one input is TimestampTZ
+
+    This is has been checked directly in Snowflake.
+    """
+
+    def impl_min(arg0, arg1):
+        return bodo.libs.bodosql_array_kernels.diff_day(arg0, arg1)
+
+    check_func(impl_min, (arg0, arg1), py_output=answer)
+    check_func(impl_min, (arg1, arg0), py_output=-answer)
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None
