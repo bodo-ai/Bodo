@@ -373,6 +373,65 @@ def test_alter_table_rename(tabular_catalog, tabular_connection, memory_leak_che
 
 
 @pytest_mark_one_rank
+def test_alter_table_rename_compound(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can rename a table via ALTER TABLE using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        bc.sql(
+            f"CREATE OR REPLACE TABLE BODOSQL_DDL_TESTS.{table_name} AS SELECT 'testtable' as A"
+        )
+
+        # Alter query
+        query = f"ALTER TABLE BODOSQL_DDL_TESTS.{table_name} RENAME TO BODOSQL_DDL_TESTS.{table_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed table exists
+        check_table_exists(
+            tabular_connection, f"BODOSQL_DDL_TESTS.{table_name}_renamed"
+        )
+
+    finally:
+        drop_test_table(f"BODOSQL_DDL_TESTS.{table_name}", tabular_connection)
+
+
+def test_alter_table_rename_diffschema(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can rename a table via ALTER TABLE using a Tabular catalog into a different schema."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        bc.sql(
+            f"CREATE OR REPLACE TABLE BODOSQL_DDL_TESTS.{table_name} AS SELECT 'testtable' as A"
+        )
+
+        # Rename to non-existent schema
+        with pytest.raises(BodoError, match="Namespace does not exist"):
+            # Alter query
+            query = f"ALTER TABLE BODOSQL_DDL_TESTS.{table_name} RENAME TO NONEXISTENT_SCHEMA.{table_name}_renamed"
+            bodo_output = bc.execute_ddl(query)
+
+        # Alter query
+        query = f"ALTER TABLE BODOSQL_DDL_TESTS.{table_name} RENAME TO BODOSQL_DDL_TESTS_ALTERNATE.{table_name}_renamed"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify renamed table exists
+        check_table_exists(
+            tabular_connection, f"BODOSQL_DDL_TESTS_ALTERNATE.{table_name}_renamed"
+        )
+
+    finally:
+        drop_test_table(f"BODOSQL_DDL_TESTS.{table_name}", tabular_connection)
+
+
+@pytest_mark_one_rank
 def test_alter_table_rename_ifexists(
     tabular_catalog, tabular_connection, memory_leak_check
 ):

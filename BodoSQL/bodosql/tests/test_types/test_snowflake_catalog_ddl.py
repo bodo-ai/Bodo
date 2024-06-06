@@ -792,6 +792,99 @@ def test_alter_table_rename(test_db_snowflake_catalog, memory_leak_check):
             bc.sql(f"DROP TABLE IF EXISTS {table_name}_renamed")
 
 
+def test_alter_table_rename_compound(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that we can rename a table using ALTER TABLE in Snowflake.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    table_query = "SELECT 1 as A"
+    with create_snowflake_table_from_select_query(
+        table_query, "alter_table_rename_test", db, schema
+    ) as table_name:
+        try:
+            pd.read_sql(
+                f"DROP TABLE IF EXISTS {table_name}_renamed", conn
+            )  # Clean up if previously existed
+            case_insenstive_table_name = table_name.upper()
+            # Execute ALTER TABLE query.
+            query = f"ALTER TABLE {schema}.{table_name} RENAME TO {schema}.{table_name}_renamed"
+            py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+            bodo_output = impl(bc, query)
+            assert_equal_par(
+                bodo_output,
+                py_output,
+            )
+            # Verify there exists a table called renamedTable.
+            tables = pd.read_sql(
+                f"SHOW TABLES LIKE '{table_name}_renamed'",
+                conn,
+            )
+            assert len(tables) == 1, "Renamed table was not found"
+        finally:
+            # Clean up after
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}")
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}_renamed")
+
+
+def test_alter_table_rename_diffschema(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that we can rename a table using ALTER TABLE in Snowflake.
+    """
+
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    conn = get_snowflake_connection_string(db, schema)
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    table_query = "SELECT 1 as A"
+    with create_snowflake_table_from_select_query(
+        table_query, "alter_table_rename_test", db, schema
+    ) as table_name:
+        try:
+            pd.read_sql(
+                f"DROP TABLE IF EXISTS {table_name}_renamed", conn
+            )  # Clean up if previously existed
+            case_insenstive_table_name = table_name.upper()
+
+            # Rename into non-existent schema
+            with pytest.raises(BodoError, match="does not exist or not authorized."):
+                query = f"ALTER TABLE {schema}.{table_name} RENAME TO NONEXISTENT_SCHEMA.{table_name}_renamed"
+                bodo_output = impl(bc, query)
+
+            # Execute ALTER TABLE query.
+            query = f"ALTER TABLE {schema}.{table_name} RENAME TO TEST_SCHEMA.{table_name}_renamed"
+            py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
+            bodo_output = impl(bc, query)
+            assert_equal_par(
+                bodo_output,
+                py_output,
+            )
+            # Verify there exists a table called renamedTable.
+            tables = pd.read_sql(
+                f"SHOW TABLES LIKE '{table_name}_renamed' IN SCHEMA TEST_SCHEMA",
+                conn,
+            )
+            assert len(tables) == 1, "Renamed table was not found"
+        finally:
+            # Clean up after
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}")
+            bc.sql(f"DROP TABLE IF EXISTS {table_name}_renamed")
+            bc.sql(f"DROP TABLE IF EXISTS TEST_SCHEMA.{table_name}_renamed")
+
+
 def test_alter_table_rename_ifexists(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that we can rename a table using ALTER TABLE in Snowflake, with the IF EXISTS option.
