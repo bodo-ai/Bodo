@@ -1634,19 +1634,24 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             if is_date_arr1 or (arr1_tz != cast_tz):
                 scalar_text += "arg1 = bodo.libs.bodosql_array_kernels.to_timestamp(arg1, None, _cast_tz, 0)\n"
 
-            if is_valid_timestamptz_arg(arr0) and is_valid_timestamptz_arg(arr1):
-                # If we are working with timestamp_tz, we need to extract
-                # the UTC timestamp
-                first_arg = "bodo.hiframes.timestamptz_ext.get_utc_timestamp(arg0)"
-                second_arg = "bodo.hiframes.timestamptz_ext.get_utc_timestamp(arg1)"
-            elif cast_tz is None:
-                # If we are working with tz_naive data we need to keep the result in a timestamp.
-                first_arg = "bodo.utils.conversion.box_if_dt64(arg0)"
-                second_arg = "bodo.utils.conversion.box_if_dt64(arg1)"
-            else:
-                # Otherwise, the arguments can be used directly
-                first_arg = "arg0"
-                second_arg = "arg1"
+            # Convenience function to unwrap the arguments to a common
+            # representation
+            def unwrap_arg(type_, arg_name):
+                if is_valid_timestamptz_arg(type_):
+                    # If we are working with timestamp_tz, we need to extract
+                    # the local timestamp
+                    return (
+                        f"bodo.hiframes.timestamptz_ext.get_local_timestamp({arg_name})"
+                    )
+                elif cast_tz is None:
+                    # If we are working with tz_naive data we need to keep the result in a timestamp.
+                    return f"bodo.utils.conversion.box_if_dt64({arg_name})"
+                else:
+                    # Otherwise, the arguments can be used directly
+                    return arg_name
+
+            first_arg = unwrap_arg(arr0, "arg0")
+            second_arg = unwrap_arg(arr1, "arg1")
 
         arg_names = ["arr0", "arr1"]
         arg_types = [arr0, arr1]
