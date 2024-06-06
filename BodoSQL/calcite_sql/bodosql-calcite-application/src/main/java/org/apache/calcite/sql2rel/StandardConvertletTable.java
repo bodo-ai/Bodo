@@ -16,6 +16,8 @@
  */
 package org.apache.calcite.sql2rel;
 
+import com.bodosql.calcite.sql.func.SqlBodoOperatorTable;
+import com.bodosql.calcite.sql.type.CustomConsistencySqlOperandTypeChecker;
 import org.apache.calcite.avatica.util.DateTimeUtils;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.plan.RelOptUtil;
@@ -149,7 +151,6 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
         (cx, call) -> convertIsDistinctFrom(cx, call, true));
 
     registerOp(SqlStdOperatorTable.PLUS, this::convertPlus);
-
     registerOp(SqlStdOperatorTable.MINUS,
         (cx, call) -> {
           final RexCall e =
@@ -1138,13 +1139,28 @@ public class StandardConvertletTable extends ReflectiveConvertletTable {
           exprs.add(cx.getRexBuilder().ensureType(type, expr, true)));
     }
     if (exprs.size() > 1) {
-      final RelDataType type =
-          consistentType(cx, consistency, RexUtil.types(exprs));
-      if (type != null) {
-        final List<RexNode> oldExprs = new ArrayList<>(exprs);
-        exprs.clear();
-        for (RexNode expr : oldExprs) {
-          exprs.add(cx.getRexBuilder().ensureType(type, expr, true));
+      if (consistency == SqlOperandTypeChecker.Consistency.CUSTOM) {
+        SqlOperandTypeChecker typeChecker = call.getOperator().getOperandTypeChecker();
+        if (typeChecker instanceof CustomConsistencySqlOperandTypeChecker) {
+          CustomConsistencySqlOperandTypeChecker customTypeChecker =
+              (CustomConsistencySqlOperandTypeChecker) typeChecker;
+          final List<RelDataType> inputTypes = RexUtil.types(exprs);
+          List<RelDataType> outputTypes = customTypeChecker.deriveConsistencyOperandTypes(inputTypes, cx.getTypeFactory());
+          final List<RexNode> oldExprs = new ArrayList<>(exprs);
+          exprs.clear();
+          for (int i = 0; i < oldExprs.size(); i++) {
+            exprs.add(cx.getRexBuilder().ensureType(outputTypes.get(i), oldExprs.get(i), true));
+          }
+        }
+      } else {
+        final RelDataType type =
+                consistentType(cx, consistency, RexUtil.types(exprs));
+        if (type != null) {
+          final List<RexNode> oldExprs = new ArrayList<>(exprs);
+          exprs.clear();
+          for (RexNode expr : oldExprs) {
+            exprs.add(cx.getRexBuilder().ensureType(type, expr, true));
+          }
         }
       }
     }
