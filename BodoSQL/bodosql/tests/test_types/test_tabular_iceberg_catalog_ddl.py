@@ -21,12 +21,18 @@ pytestmark = pytest_tabular
 
 
 def check_view_exists(tabular_connection, view_name) -> bool:
+    # These should only be run from rank 0, but we can't mark them as
+    # run_rank0 since they are used in other run_rank0 functions
+    assert bodo.get_rank() == 0
     spark = get_spark_tabular(tabular_connection)
     tables = spark.sql(f"SHOW VIEWS LIKE '{view_name}'").toPandas()
     return len(tables) == 1
 
 
 def check_table_exists(tabular_connection, table_name) -> bool:
+    # These should only be run from rank 0, but we can't mark them as
+    # run_rank0 since they are used in other run_rank0 functions
+    assert bodo.get_rank() == 0
     spark = get_spark_tabular(tabular_connection)
     tables = spark.sql(f"SHOW TABLES LIKE '{table_name}'").toPandas()
     return len(tables) == 1
@@ -306,10 +312,10 @@ def test_iceberg_describe_view_error_does_not_exist(
 
 
 # Helper functions
-@run_rank0
 def verify_table_created(table_name, tabular_connection, bc):
     assert check_table_exists(tabular_connection, table_name)
     x = bc.sql(f"SELECT * FROM {table_name}")
+    x = bodo.allgatherv(x)
     assert "A" in x
     assert x["A"].shape == (1,)
     assert x["A"][0] == "testtable"
@@ -328,10 +334,10 @@ def drop_test_table(table_name, tabular_connection):
 
 
 # Verify view was created.
-@run_rank0
 def verify_view_created(view_name, tabular_connection, bc):
     assert check_view_exists(tabular_connection, view_name)
     x = bc.sql(f"SELECT * FROM {view_name}")
+    x = bodo.allgatherv(x)
     assert "A" in x
     assert x["A"].shape == (1,)
     assert x["A"][0] == "testview"
@@ -423,7 +429,7 @@ def test_alter_table_rename_diffschema(
         assert_equal_par(bodo_output, py_output)
 
         # Verify renamed table exists
-        check_table_exists(
+        run_rank0(check_table_exists)(
             tabular_connection, f"BODOSQL_DDL_TESTS_ALTERNATE.{table_name}_renamed"
         )
 
@@ -1008,13 +1014,13 @@ def test_iceberg_drop_view(
     with view_helper(tabular_connection, view_name, create=True):
         bodo_output = bc.execute_ddl(query_drop_view)
         _test_equal_guard(bodo_output, py_output)
-        assert not check_view_exists(tabular_connection, view_name)
+        assert not run_rank0(check_view_exists)(tabular_connection, view_name)
 
     # Python Version
     with view_helper(tabular_connection, view_name, create=True):
         bodo_output = bc.sql(query_drop_view)
         _test_equal_guard(bodo_output, py_output)
-        assert not check_view_exists(tabular_connection, view_name)
+        assert not run_rank0(check_view_exists)(tabular_connection, view_name)
 
     # Jit Version
     # Intentionally returns replicated output
@@ -1025,7 +1031,7 @@ def test_iceberg_drop_view(
             py_output=py_output,
             test_str_literal=False,
         )
-        assert not check_view_exists(tabular_connection, view_name)
+        assert not run_rank0(check_view_exists)(tabular_connection, view_name)
 
 
 @pytest_mark_one_rank
@@ -1047,7 +1053,7 @@ def test_iceberg_drop_view_error_does_not_exist(
         if if_exists:
             bodo_output = bc.execute_ddl(query_drop_view)
             _test_equal_guard(bodo_output, py_output)
-            assert not check_view_exists(tabular_connection, view_name)
+            assert not run_rank0(check_view_exists)(tabular_connection, view_name)
         else:
             with pytest.raises(
                 BodoError,
@@ -1060,7 +1066,7 @@ def test_iceberg_drop_view_error_does_not_exist(
         if if_exists:
             bodo_output = bc.sql(query_drop_view)
             _test_equal_guard(bodo_output, py_output)
-            assert not check_view_exists(tabular_connection, view_name)
+            assert not run_rank0(check_view_exists)(tabular_connection, view_name)
         else:
             with pytest.raises(
                 BodoError,
