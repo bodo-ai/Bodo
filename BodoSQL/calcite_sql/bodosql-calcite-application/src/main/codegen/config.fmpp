@@ -60,6 +60,8 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableRenameCol"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableSetProperty"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty"
       "com.bodosql.calcite.sql.ddl.SqlAlterView"
       "com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView"
       "com.bodosql.calcite.sql.ddl.SqlTruncateTable"
@@ -210,6 +212,12 @@ data: {
       "VIEWS"
       "TERSE"
       "TABLES"
+      "TAGS"
+      "PROPERTY"
+      "PROPERTIES"
+      "TBLPROPERTY"
+      "TBLPROPERTIES"
+      "UNSET"
     ]
 
     # List of non-reserved keywords to add;
@@ -488,6 +496,17 @@ data: {
         "TERSE"
         "VIEWS"
         "TABLES"
+        "PROPERTY"
+        "PROPERTIES"
+        "TBLPROPERTY"
+        "TBLPROPERTIES"
+        "TAG"
+        "TAGS"
+        "PROPERTY"
+        "PROPERTIES"
+        "TBLPROPERTY"
+        "TBLPROPERTIES"
+        "UNSET"
     ]
 
     # List of additional join types. Each is a method with no arguments.

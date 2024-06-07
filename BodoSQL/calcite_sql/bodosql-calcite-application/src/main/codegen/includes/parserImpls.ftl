@@ -714,6 +714,7 @@ SqlNode SqlCopyInto() :
 
 SqlAlterTable SqlAlterTable(Span s) :
 {
+    SqlAlterTable alterNode = null;
     boolean ifExists;
     SqlIdentifier table;
     SqlIdentifier renameName = null;
@@ -731,14 +732,95 @@ SqlAlterTable SqlAlterTable(Span s) :
         ( <RENAME> <TO> renameName = CompoundIdentifier()
         { return new SqlAlterTableRenameTable(getPos(), ifExists, table, renameName); })
     |   ( <SWAP> <WITH> swapName = CompoundIdentifier()
-        { return new SqlAlterTableSwapTable(getPos(), ifExists, table, swapName); })
+        { alterNode = new SqlAlterTableSwapTable(getPos(), ifExists, table, swapName); })
     |   ( <ADD> [ <COLUMN> ] addCol = ColumnWithType()
-        { return new SqlAlterTableAddCol(getPos(), ifExists, table, addCol); })
+        { alterNode = new SqlAlterTableAddCol(getPos(), ifExists, table, addCol); })
     |   ( <RENAME> [ <COLUMN> ] renameColOriginal = SimpleIdentifier() <TO> renameColNew = SimpleIdentifier()
-        { return new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
+        { alterNode = new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
     |   ( <DROP> [ <COLUMN> ] { dropCols = new SqlNodeList(getPos()); } AddSimpleIdentifiers(dropCols)
-        { return new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols); })
+        { alterNode = new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols); })
+    |   ( <SET>
+              (
+                  <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
+              )
+           alterNode = SqlAlterTableSetProperty(s, ifExists, table)
+        )
+    |   ( <UNSET>
+              (
+                  <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
+              )
+           alterNode = SqlAlterTableUnsetProperty(s, ifExists, table)
+        )
     )
+
+    { return alterNode; }
+}
+
+// Parses `SET PROPERTY` and its variants.
+// Keys and values are parsed as strings.
+
+SqlAlterTableSetProperty SqlAlterTableSetProperty(Span s, boolean ifExists, SqlIdentifier table) :
+{
+    final SqlNodeList valueList;
+    final SqlNodeList propertyList;
+    SqlNode property;
+    SqlNode value;
+}
+{
+    {
+        s = span();
+        propertyList = new SqlNodeList(s.pos());
+        valueList = new SqlNodeList(s.pos());
+    }
+
+    property = StringLiteral() { propertyList.add(property); }
+    <EQ>
+    value = StringLiteral() { valueList.add(value); }
+    (
+        <COMMA>
+        property = StringLiteral() { propertyList.add(property); }
+        <EQ>
+        value = StringLiteral() { valueList.add(value); }
+    )*
+    {
+        return new SqlAlterTableSetProperty(
+                        s.end(this),
+                        ifExists,
+                        table,
+                        propertyList,
+                        valueList);
+    }
+}
+
+// Parses `UNSET PROPERTY` and its variants.
+// Keys are parsed as strings.
+
+SqlAlterTableUnsetProperty SqlAlterTableUnsetProperty(Span s, boolean ifExists, SqlIdentifier table) :
+{
+    final SqlNodeList propertyList;
+    SqlNode property;
+    boolean ifPropertyExists;
+}
+{
+
+    {
+        s = span();
+        propertyList = new SqlNodeList(s.pos());
+    }
+    ifPropertyExists = IfExistsOpt()
+    property = StringLiteral() { propertyList.add(property); }
+    (
+        <COMMA>
+        property = StringLiteral() { propertyList.add(property); }
+    )*
+    {
+        return new SqlAlterTableUnsetProperty(
+                        s.addAll(propertyList).pos(),
+                        ifExists,
+                        table,
+                        propertyList,
+                        ifPropertyExists);
+    }
 }
 
 // This will attempt to match on all ALTER VIEW nodes we currently have implemented.
@@ -769,6 +851,7 @@ boolean IfExistsOpt() :
     |
     { return false; }
 }
+
 
 boolean CascadeOpt() :
 {

@@ -11,6 +11,8 @@ import com.bodosql.calcite.sql.ddl.SqlDropTable
 import com.bodosql.calcite.sql.ddl.SqlDescribeView
 import com.bodosql.calcite.sql.ddl.SqlAlterTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable
+import com.bodosql.calcite.sql.ddl.SqlAlterTableSetProperty
+import com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty
 import com.bodosql.calcite.sql.ddl.SqlAlterView
 import com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
@@ -132,7 +134,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         // NOTE: This check will not actually catch cases like ALTER TABLE CLUSTER BY, since
         // the SQL node for that is not implemented yet and thus the parser will just fail
         // to parse the query all together.
-        if (node !is SqlAlterTableRenameTable) {
+        if (node !is SqlAlterTableRenameTable &&
+            node !is SqlAlterTableSetProperty &&
+            node !is SqlAlterTableUnsetProperty) {
             throw RuntimeException("This DDL operation is currently unsupported.")
         }
 
@@ -171,7 +175,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             is SqlAlterTableRenameTable -> {
                 catalogTable.getDDLExecutor().renameTable(catalogTable.fullPath, node.renameName.names, node.ifExists)
             }
-            else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyways, since type check is up front.
+            is SqlAlterTableSetProperty -> {
+                catalogTable.getDDLExecutor().setProperty(catalogTable.fullPath, node.propertyList, node.valueList, node.ifExists)
+            }
+            is SqlAlterTableUnsetProperty -> {
+                catalogTable.getDDLExecutor().unsetProperty(catalogTable.fullPath, node.propertyList, node.ifExists, node.ifPropertyExists)
+            }
+            else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyway, since type check is up front.
         }
     }
 
