@@ -43,6 +43,7 @@ from bodo.hiframes.pd_index_ext import (
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
+from bodo.hiframes.timestamptz_ext import timestamptz_type
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
@@ -319,6 +320,7 @@ class SeriesDtypeEnum(Enum):
     NullArray = 49
     PD_datetime_tz = 50
     Time = 51
+    TimestampTZ = 52
 
 
 # Map of types that can be mapped to a singular enum. Maps type -> enum
@@ -353,6 +355,7 @@ _one_to_one_type_to_enum_map: dict[types.Type, int] = {
     bodo.bool_: SeriesDtypeEnum.Bool.value,
     types.none: SeriesDtypeEnum.NoneType.value,
     null_array_type: SeriesDtypeEnum.NullArray.value,
+    timestamptz_type: SeriesDtypeEnum.TimestampTZ.value,
 }
 
 # The reverse of the above map, Maps enum -> type
@@ -386,6 +389,7 @@ _one_to_one_enum_to_type_map: dict[int, types.Type] = {
     SeriesDtypeEnum.Bool.value: bodo.bool_,
     SeriesDtypeEnum.NoneType.value: types.none,
     SeriesDtypeEnum.NullArray.value: null_array_type,
+    SeriesDtypeEnum.TimestampTZ.value: timestamptz_type,
 }
 
 
