@@ -20,6 +20,7 @@ from bodo.tests.utils import (
     _test_equal_guard,
     check_func_seq,
     gen_unique_table_id,
+    pytest_mark_one_rank,
     reduce_sum,
 )
 from bodo.utils.typing import BodoError
@@ -818,6 +819,158 @@ def test_show_views_error(
         @run_rank0
         def cleanup():
             query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name1}"
+            spark.sql(query)
+
+        cleanup()
+
+
+def check_row_exists(output, row):
+    """
+    Helper function to check if a row exists in the output dataframe.
+    """
+    return ((output["key"] == row["key"]) & (output["value"] == row["value"])).any()
+
+
+def show_table_properties(spark, db_schema, table_name):
+    spark.catalog.refreshTable(f"hadoop_prod.{db_schema}.{table_name}")
+    output = spark.sql(
+        f"SHOW TBLPROPERTIES hadoop_prod.{db_schema}.{table_name}"
+    ).toPandas()
+    return output
+
+
+@pytest_mark_one_rank
+def test_alter_table_set_property(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can alter tables to set properties.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a new table in the FileSystemCatalog and verify it exists
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    db_schema, _ = iceberg_database(table_name)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+    try:
+        # Verify no properties are set
+        output = show_table_properties(spark, db_schema, table_name)
+        for i in [1, 2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert not check_row_exists(output, test_row)
+
+        # Set a property on the table
+        query = f"ALTER TABLE \"{db_schema}\".\"{table_name}\" SET PROPERTY 'test_tag1'='test_value1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify the properties were set
+        output = show_table_properties(spark, db_schema, table_name)
+        test_row = {"key": "test_tag1", "value": "test_value1"}
+        assert check_row_exists(output, test_row)
+
+        # Set multiple properties
+        query = f"ALTER TABLE \"{db_schema}\".\"{table_name}\" SET PROPERTY 'test_tag2'='test_value2', 'test_tag3'='test_value3'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify the properties were set
+        output = show_table_properties(spark, db_schema, table_name)
+        for i in [2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert check_row_exists(output, test_row)
+
+    finally:
+
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name}"
+            spark.sql(query)
+
+        cleanup()
+
+
+@pytest_mark_one_rank
+def test_alter_table_unset_property(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can alter tables to set properties.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a new table in the FileSystemCatalog and verify it exists
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    db_schema, _ = iceberg_database(table_name)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+    try:
+        # Verify no properties are set
+        output = show_table_properties(spark, db_schema, table_name)
+        for i in [1, 2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert not check_row_exists(output, test_row)
+
+        # Set 3 properties on the table
+        query = f"ALTER TABLE \"{db_schema}\".\"{table_name}\" SET PROPERTY 'test_tag1'='test_value1', 'test_tag2'='test_value2', 'test_tag3'='test_value3'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify the properties were set
+        output = show_table_properties(spark, db_schema, table_name)
+        for i in [1, 2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert check_row_exists(output, test_row)
+
+        # Unset one property
+        query = f'ALTER TABLE "{db_schema}"."{table_name}" UNSET PROPERTY \'test_tag1\''
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify the properties were unset
+        output = show_table_properties(spark, db_schema, table_name)
+        test_row = {"key": "test_tag1", "value": "test_value1"}
+        assert not check_row_exists(output, test_row)
+        for i in [2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert check_row_exists(output, test_row)
+
+        # Unset multiple properties
+        query = f"ALTER TABLE \"{db_schema}\".\"{table_name}\" UNSET PROPERTY 'test_tag2', 'test_tag3'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify the properties were unset
+        output = show_table_properties(spark, db_schema, table_name)
+        for i in [2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert not check_row_exists(output, test_row)
+
+    finally:
+
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name}"
             spark.sql(query)
 
         cleanup()

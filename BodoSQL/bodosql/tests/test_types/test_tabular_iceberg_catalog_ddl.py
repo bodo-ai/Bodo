@@ -727,6 +727,267 @@ def test_alter_unsupported_commands(
         bodo_output = bc.execute_ddl(query)
 
 
+def check_row_exists(output, row):
+    """
+    Helper function to check if a row exists in the output dataframe.
+    """
+    return ((output["key"] == row["key"]) & (output["value"] == row["value"])).any()
+
+
+# Set property tests
+# These all fail for the same reason as the other alter table tests
+# (verify_table_created fails) when run on mpiexec -n 3.
+
+
+@pytest_mark_one_rank
+def test_alter_table_set_property(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can set table properties using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Single Query
+        query = f"ALTER TABLE {table_name} SET PROPERTY 'test_tag1'='test_value1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Query with TBLPROPERTIES and spaces
+        query = (
+            f"ALTER TABLE {table_name} SET TBLPROPERTIES 'test tag 2'='test value 2'"
+        )
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Query with TAGS, multiple properties
+        query = f"ALTER TABLE {table_name} SET TAGS 'test_tag3'='test_value3', 'test_tag4'='test_value4'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Query with empty value
+        query = f"ALTER TABLE {table_name} SET TBLPROPERTIES 'test_tag_empty'=''"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Query with empty property
+        query = f"ALTER TABLE {table_name} SET TBLPROPERTIES ''='test_value_empty'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that tags were set
+        query = f"SHOW TBLPROPERTIES {table_name}"
+        spark = get_spark_tabular(tabular_connection)
+        output = spark.sql(query).toPandas()
+        for i in [1, 3, 4]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert check_row_exists(output, test_row)
+        test_row = {"key": f"test tag 2", "value": f"test value 2"}
+        assert check_row_exists(output, test_row)
+        test_row = {"key": f"test_tag_empty", "value": f""}
+        assert check_row_exists(output, test_row)
+        test_row = {"key": f"", "value": f"test_value_empty"}
+        assert check_row_exists(output, test_row)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+# Set property tests
+@pytest_mark_one_rank
+def test_alter_table_set_property_rename(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can rename table properties using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    spark = get_spark_tabular(tabular_connection)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Create property
+        query = f"ALTER TABLE {table_name} SET PROPERTY 'test_tag1'='test_value1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check it exists
+        output = spark.sql(f"SHOW TBLPROPERTIES {table_name}").toPandas()
+        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        assert check_row_exists(output, test_row)
+
+        # Rename tag
+        query = f"ALTER TABLE {table_name} SET PROPERTY 'test_tag1'='test_value2'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that it was successfully renamed
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(f"SHOW TBLPROPERTIES {table_name}").toPandas()
+
+        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        assert not check_row_exists(output, test_row)
+        test_row = {"key": f"test_tag1", "value": f"test_value2"}
+        assert check_row_exists(output, test_row)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+# Set property tests
+@pytest_mark_one_rank
+def test_alter_table_set_property_error(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that ALTER TABLE SET PROPERTIES will error appropriately
+    on malformed queries using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Invalid query
+        with pytest.raises(BodoError, match="Unable to parse SQL Query"):
+            query = f"ALTER TABLE {table_name} SET PROPERTY"
+            bodo_output = bc.execute_ddl(query)
+
+        # Missing property value
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f"ALTER TABLE {table_name} SET PROPERTY 'key'"
+            bodo_output = bc.execute_ddl(query)
+
+        # Invalid property key (non-string)
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f"ALTER TABLE {table_name} SET PROPERTY invalid_key = 'value'"
+            bodo_output = bc.execute_ddl(query)
+
+        # Invalid property value (non-string)
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f"ALTER TABLE {table_name} SET PROPERTY 'key' = 123"
+            bodo_output = bc.execute_ddl(query)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+# UNSET PROPERTY tests
+@pytest_mark_one_rank
+def test_alter_table_unset_property(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can unset table properties using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # set 3 properties
+        query = f"ALTER TABLE {table_name} SET PROPERTY 'test_tag1'='test_value1', 'test_tag2'='test_value2', 'test_tag3'='test_value3'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that properties were set
+        query = f"SHOW TBLPROPERTIES {table_name}"
+        spark = get_spark_tabular(tabular_connection)
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(query).toPandas()
+        for i in [1, 2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert check_row_exists(output, test_row)
+
+        # unset 1 property
+        query = f"ALTER TABLE {table_name} UNSET PROPERTY 'test_tag1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+
+        # Check that properties were unset
+        query = f"SHOW TBLPROPERTIES {table_name}"
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(query).toPandas()
+        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        assert not check_row_exists(output, test_row)
+        test_row = {"key": f"test_tag2", "value": f"test_value2"}
+        assert check_row_exists(output, test_row)
+        test_row = {"key": f"test_tag3", "value": f"test_value3"}
+        assert check_row_exists(output, test_row)
+
+        # unset 2 properties
+        query = f"ALTER TABLE {table_name} UNSET PROPERTIES 'test_tag2', 'test_tag3'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+
+        # Check that properties were unset
+        query = f"SHOW TBLPROPERTIES {table_name}"
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(query).toPandas()
+        for i in [1, 2, 3]:
+            test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
+            assert not check_row_exists(output, test_row)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_unset_property_error(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that ALTER TABLE UNSET PROPERTIES will error appropriately"""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # set property
+        query = f"ALTER TABLE {table_name} SET PROPERTY 'test_tag1'='test_value1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that properties were set
+        query = f"SHOW TBLPROPERTIES {table_name}"
+        spark = get_spark_tabular(tabular_connection)
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(query).toPandas()
+        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        assert check_row_exists(output, test_row)
+
+        # unset non-existent property
+        with pytest.raises(BodoError, match="Property nonexistent_tag does not exist."):
+            query = f"ALTER TABLE {table_name} UNSET PROPERTY 'nonexistent_tag'"
+            bodo_output = bc.execute_ddl(query)
+
+        # Unset non-existent property with IF EXISTS tag (should not error)
+        query = f"ALTER TABLE {table_name} UNSET PROPERTY IF EXISTS 'nonexistent_tag', 'test_tag1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that properties were unset
+        query = f"SHOW TBLPROPERTIES {table_name}"
+        spark = get_spark_tabular(tabular_connection)
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(query).toPandas()
+        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        assert not check_row_exists(output, test_row)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
 ###################
 # DROP VIEW Tests #
 ###################
