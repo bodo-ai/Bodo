@@ -68,6 +68,7 @@ import org.apache.calcite.sql.SnowflakeUserDefinedFunction;
 import org.apache.calcite.sql.SnowflakeUserDefinedTableFunction;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlSampleSpec;
 import org.apache.calcite.sql.SqlSelect;
@@ -77,6 +78,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.util.SqlString;
+import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
@@ -2554,6 +2556,27 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         boolean ifExists,
         boolean ifPropertyExists) {
       throw new RuntimeException("UNSET PROPERTY/TAG is not supported for Snowflake.");
+    }
+
+    @Override
+    @NotNull
+    public DDLExecutionResult addColumn(
+        @NotNull ImmutableList<String> tablePath,
+        boolean ifExists,
+        boolean ifNotExists,
+        @NotNull SqlNode addCol,
+        @NotNull SqlValidator validator) {
+      throw new RuntimeException("ADD COLUMN is not yet supported for Snowflake.");
+    }
+
+    @Override
+    @NotNull
+    public DDLExecutionResult dropColumn(
+        @NotNull ImmutableList<String> tablePath,
+        boolean ifExists,
+        @NotNull SqlNodeList dropCols,
+        boolean ifColumnExists) {
+      throw new RuntimeException("DROP COLUMN is not yet supported for Snowflake.");
     }
   }
 

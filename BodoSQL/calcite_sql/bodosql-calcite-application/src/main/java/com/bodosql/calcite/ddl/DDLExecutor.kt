@@ -4,8 +4,10 @@ import com.bodosql.calcite.schema.CatalogSchema
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.ddl.SqlCreateView
+import org.apache.calcite.sql.validate.SqlValidator
 
 class NamespaceAlreadyExistsException : Exception()
 
@@ -119,6 +121,41 @@ interface DDLExecutor {
         propertyList: SqlNodeList,
         ifExists: Boolean,
         ifPropertyExists: Boolean,
+    ): DDLExecutionResult
+
+    /**
+     * Add a column to a table in the catalog.
+     *
+     * @param tablePath The path to the table to add the column to.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param ifNotExists If true, the operation will not fail if the property does not exist.
+     * @param addCol SqlNode representing column details to be added (name, type, etc)
+     * @param validator Validator needed to derive type information from addCol SqlNode.
+     * @return The result of the operation.
+     */
+    fun addColumn(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        ifNotExists: Boolean,
+        addCol: SqlNode,
+        validator: SqlValidator,
+    ): DDLExecutionResult
+
+    /**
+     * Drops a column in a table in the catalog.
+     *
+     * @param tablePath The path to the table to add the column to.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param dropCols SqlNodeList representing columns to be dropped. (name, type, etc)
+     *                 Should be list of CompoundIdentifiers.
+     * @param ifColumnExists If true, the operation will not fail if the columns do not exist.
+     * @return The result of the operation.
+     */
+    fun dropColumn(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        dropCols: SqlNodeList,
+        ifColumnExists: Boolean,
     ): DDLExecutionResult
 
     /**

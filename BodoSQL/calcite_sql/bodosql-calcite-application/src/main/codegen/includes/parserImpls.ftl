@@ -723,6 +723,9 @@ SqlAlterTable SqlAlterTable(Span s) :
     SqlIdentifier renameColOriginal = null;
     SqlIdentifier renameColNew = null;
     SqlNodeList dropCols = null;
+    boolean ifNotExists;
+    boolean ifColumnExists;
+
 }
 {
     <TABLE>
@@ -733,12 +736,16 @@ SqlAlterTable SqlAlterTable(Span s) :
         { return new SqlAlterTableRenameTable(getPos(), ifExists, table, renameName); })
     |   ( <SWAP> <WITH> swapName = CompoundIdentifier()
         { alterNode = new SqlAlterTableSwapTable(getPos(), ifExists, table, swapName); })
-    |   ( <ADD> [ <COLUMN> ] addCol = ColumnWithType()
-        { alterNode = new SqlAlterTableAddCol(getPos(), ifExists, table, addCol); })
+    |   ( <ADD> [ <COLUMN> ]
+            ifNotExists = IfNotExistsOpt()
+            addCol = ColumnWithType()
+        { alterNode = new SqlAlterTableAddCol(getPos(), ifExists, ifNotExists, table, addCol); })
     |   ( <RENAME> [ <COLUMN> ] renameColOriginal = SimpleIdentifier() <TO> renameColNew = SimpleIdentifier()
         { alterNode = new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
-    |   ( <DROP> [ <COLUMN> ] { dropCols = new SqlNodeList(getPos()); } AddSimpleIdentifiers(dropCols)
-        { alterNode = new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols); })
+    |   ( <DROP> [ <COLUMN> ] ifColumnExists = IfExistsOpt()
+            { dropCols = new SqlNodeList(getPos()); }
+            AddCompoundIdentifiers(dropCols)
+        { alterNode = new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols, ifColumnExists); })
     |   ( <SET>
               (
                   <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
@@ -841,6 +848,24 @@ SqlAlterView SqlAlterView(Span s) :
         ( <RENAME> <TO> renameName = CompoundIdentifier()
         { return new SqlAlterViewRenameView(getPos(), ifExists, view, renameName); })
     )
+}
+
+/**
+ * Parses a comma-separated list of compound identifiers.
+ * Use this as an alternative to AddCompoundIdentifierTypes when
+ * there is no need to parse types.
+ */
+void AddCompoundIdentifiers(List<SqlNode> list) :
+{
+    SqlIdentifier id;
+}
+{
+    id = CompoundIdentifier() {list.add(id);}
+    (
+        <COMMA> id = CompoundIdentifier() {
+            list.add(id);
+        }
+    )*
 }
 
 boolean IfExistsOpt() :
