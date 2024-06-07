@@ -5,15 +5,19 @@ import com.bodosql.calcite.catalog.IcebergCatalog
 import com.bodosql.calcite.catalog.IcebergCatalog.Companion.schemaPathToNamespace
 import com.bodosql.calcite.catalog.IcebergCatalog.Companion.tablePathToTableIdentifier
 import com.bodosql.calcite.schema.CatalogSchema
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeColumnDeclaration
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.rel.type.RelDataTypeField
+import org.apache.calcite.sql.SqlIdentifier
 import org.apache.calcite.sql.SqlLiteral
+import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.ddl.SqlCreateView
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.validate.SqlValidator
 import org.apache.calcite.util.Util
 import org.apache.iceberg.Schema
 import org.apache.iceberg.catalog.Catalog
@@ -242,7 +246,13 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         return DDLExecutionResult(fieldNames, columnValues)
     }
 
-    fun relDataTypeToViewSchemaType(dataType: RelDataType): Type {
+    /**
+     * Used to convert SQL relDataTypes into Iceberg-compatible types.
+     *
+     * @param dataType The RelDataType.
+     * @return The appropriate Iceberg type corresponding to the dataType.
+     */
+    fun relDataTypeToIcebergType(dataType: RelDataType): Type {
         return when {
             SqlTypeFamily.STRING.contains(dataType) -> Types.StringType.get()
             SqlTypeFamily.BINARY.contains(dataType) -> Types.BinaryType.get()
@@ -254,19 +264,25 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 }
             }
             SqlTypeFamily.TIME.contains(dataType) -> Types.TimeType.get()
+            dataType.sqlTypeName == SqlTypeName.BIGINT -> Types.LongType.get()
             SqlTypeFamily.INTEGER.contains(dataType) -> Types.IntegerType.get()
             SqlTypeFamily.DECIMAL.contains(dataType) -> Types.DecimalType.of(dataType.precision, dataType.scale)
-            SqlTypeFamily.NUMERIC.contains(dataType) -> Types.DoubleType.get()
+            dataType.sqlTypeName == SqlTypeName.DOUBLE -> Types.DoubleType.get()
+            dataType.sqlTypeName == SqlTypeName.REAL -> Types.DoubleType.get()
+            dataType.sqlTypeName == SqlTypeName.FLOAT -> Types.FloatType.get()
+            SqlTypeFamily.NUMERIC.contains(dataType) -> Types.DecimalType.of(dataType.precision, dataType.scale)
             SqlTypeFamily.BOOLEAN.contains(dataType) -> Types.BooleanType.get()
-            SqlTypeFamily.ARRAY.contains(dataType) -> Types.ListType.ofOptional(0, relDataTypeToViewSchemaType(dataType.componentType!!))
+            SqlTypeFamily.DATE.contains(dataType) -> Types.DateType.get()
+            SqlTypeFamily.TIME.contains(dataType) -> Types.TimeType.get()
+            SqlTypeFamily.ARRAY.contains(dataType) -> Types.ListType.ofOptional(0, relDataTypeToIcebergType(dataType.componentType!!))
             SqlTypeFamily.MAP.contains(
                 dataType,
             ) ->
                 Types.MapType.ofOptional(
                     0,
                     0,
-                    relDataTypeToViewSchemaType(dataType.keyType!!),
-                    relDataTypeToViewSchemaType(dataType.valueType!!),
+                    relDataTypeToIcebergType(dataType.keyType!!),
+                    relDataTypeToIcebergType(dataType.valueType!!),
                 )
             else -> throw Exception("Unsupported data type $dataType in Iceberg view")
         }
@@ -288,7 +304,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             val schema =
                 Schema(
                     rowType.fieldList.map<RelDataTypeField, Types.NestedField> {
-                        Types.NestedField.required(schemaId++, it.name, relDataTypeToViewSchemaType(it.type))
+                        Types.NestedField.required(schemaId++, it.name, relDataTypeToIcebergType(it.type))
                     },
                 )
             viewBuilder.withSchema(schema)
@@ -499,7 +515,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
 
     /**
      * Unsets (deletes) the properties of an Iceberg table identified by the given table path
-     * using ALTER TABLE UNSET PROPERTIES and its variants (e.g. SET TBLPROPERTIES).
+     * using `ALTER TABLE UNSET PROPERTIES` and its variants (e.g. `SET TBLPROPERTIES`).
      *
      * @param tablePath The path of the table.
      * @param propertyList The list of properties to unset. Must be a SqlNodeList of SqlLitera.
@@ -532,6 +548,97 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         }
         updater.commit()
 
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+    }
+
+    /**
+     * Adds a column of a given type for a specified table in Iceberg.
+     * Effectively emulates `ALTER TABLE _ ADD COLUMN`.
+     * Only supports simple column names for now.
+     *
+     * @param tablePath The table path to add the column to.
+     * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
+     *                 has no effect here, but is included to match signature.)
+     * @param ifNotExists Do nothing if true and the column to add already exists.
+     * @param addCol SqlNode representing column details to be added (name, type, etc)
+     * @param validator Validator needed to derive type information from addCol SqlNode.
+     * @return DDLExecutionResult
+     */
+    override fun addColumn(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        ifNotExists: Boolean,
+        addCol: SqlNode,
+        validator: SqlValidator,
+    ): DDLExecutionResult {
+        // Table info
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val table = icebergConnection.loadTable(tableIdentifier)
+        // Column info
+        val column = addCol as SqlSnowflakeColumnDeclaration
+        if (!column.name.isSimple) {
+            throw RuntimeException("BodoSQL does not yet support nested columns and/or compound column names.")
+        }
+        val columnName = column.name.simple
+        val columnType = relDataTypeToIcebergType(column.dataType.deriveType(validator))
+        // Check if column exists
+        for (c in table.schema().columns()) {
+            val cName = c.name()
+            if (columnName == cName && ifNotExists) {
+                // Return early
+                return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+            }
+            // Otherwise, let the query throw its exception
+        }
+        // Execute query
+        table.updateSchema().addColumn(columnName, columnType).commit()
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+    }
+
+    /**
+     * Drops columns for a specified table in Iceberg.
+     * Effectively emulates `ALTER TABLE _ DROP COLUMN`.
+     *
+     * @param tablePath The table path to add the column to.
+     * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
+     *                 has no effect here, but is included to match signature.)
+     * @param dropCols SqlNodeList representing column names to be dropped.
+     * @param ifColumnExists Do nothing if true and the columns do not exist.
+     * @return DDLExecutionResult
+     */
+    override fun dropColumn(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        dropCols: SqlNodeList,
+        ifColumnExists: Boolean,
+    ): DDLExecutionResult {
+        // Table info
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val table = icebergConnection.loadTable(tableIdentifier)
+        var updater = table.updateSchema()
+        // Execute queries
+        for (col in dropCols) {
+            if (col is SqlIdentifier) {
+                // Build column name from compound identifier.
+                // @NOTE: The column name passed into deleteColumn are period separated.
+                // It can either be the case that they are column names with dots in them, or subfields.
+                val colName = col.names.joinToString(separator = ".")
+                try {
+                    updater = updater.deleteColumn(colName)
+                } catch (e: IllegalArgumentException) {
+                    if (!ifColumnExists || e.message?.contains("Cannot delete missing column") != true) {
+                        throw e
+                    }
+                }
+            } else {
+                throw RuntimeException("Unsupported syntax for DROP COLUMN.")
+            }
+        }
+        updater.commit()
         return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
     }
 }

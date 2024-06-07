@@ -13,6 +13,8 @@ import com.bodosql.calcite.sql.ddl.SqlAlterTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableSetProperty
 import com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty
+import com.bodosql.calcite.sql.ddl.SqlAlterTableAddCol
+import com.bodosql.calcite.sql.ddl.SqlAlterTableDropCol
 import com.bodosql.calcite.sql.ddl.SqlAlterView
 import com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
@@ -136,7 +138,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         // to parse the query all together.
         if (node !is SqlAlterTableRenameTable &&
             node !is SqlAlterTableSetProperty &&
-            node !is SqlAlterTableUnsetProperty) {
+            node !is SqlAlterTableUnsetProperty &&
+            node !is SqlAlterTableAddCol &&
+            node !is SqlAlterTableDropCol) {
             throw RuntimeException("This DDL operation is currently unsupported.")
         }
 
@@ -171,6 +175,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
         }
         // After validation, we can then case on the specific type of ALTER TABLE.
+        val validator = getValidator.apply(listOf())
         return when (node) {
             is SqlAlterTableRenameTable -> {
                 catalogTable.getDDLExecutor().renameTable(catalogTable.fullPath, node.renameName.names, node.ifExists)
@@ -180,6 +185,12 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
             is SqlAlterTableUnsetProperty -> {
                 catalogTable.getDDLExecutor().unsetProperty(catalogTable.fullPath, node.propertyList, node.ifExists, node.ifPropertyExists)
+            }
+            is SqlAlterTableAddCol -> {
+                catalogTable.getDDLExecutor().addColumn(catalogTable.fullPath,node.ifExists, node.ifNotExists, node.addCol, validator)
+            }
+            is SqlAlterTableDropCol -> {
+                catalogTable.getDDLExecutor().dropColumn(catalogTable.fullPath,node.ifExists, node.dropCols, node.ifColumnExists)
             }
             else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyway, since type check is up front.
         }

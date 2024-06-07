@@ -974,3 +974,167 @@ def test_alter_table_unset_property(
             spark.sql(query)
 
         cleanup()
+
+
+def get_sqlnode_type_names():
+    # A dict of types and the sqlnode names types they should be converted to.
+    # Note these are not the same as the iceberg type names -- refer to the BodoSQL ALTER TABLE docs for that.
+    return {
+        # iceberg type: decimal(38, 0)
+        "NUMBER": "DECIMAL(38, 0)",
+        "DECIMAL": "DECIMAL(38, 0)",
+        "NUMERIC": "DECIMAL(38, 0)",
+        # iceberg type: decimal(p, s)
+        "DECIMAL(10, 5)": "DECIMAL(10, 5)",
+        "NUMBER(10, 5)": "DECIMAL(10, 5)",
+        # iceberg type: int
+        "INT": "INTEGER",
+        "INTEGER": "INTEGER",
+        "SMALLINT": "INTEGER",
+        "TINYINT": "INTEGER",
+        "BYTEINT": "INTEGER",
+        # iceberg type: long
+        "BIGINT": "BIGINT",
+        # iceberg type: float
+        "FLOAT": "FLOAT",
+        "FLOAT4": "FLOAT",
+        "FLOAT8": "FLOAT",
+        # iceberg type: double
+        "DOUBLE": "DOUBLE",
+        "DOUBLE PRECISION": "DOUBLE",
+        "REAL": "DOUBLE",
+        # iceberg type: string
+        "VARCHAR": "VARCHAR",
+        "CHAR": "VARCHAR",
+        "CHARACTER": "VARCHAR",
+        "STRING": "VARCHAR",
+        "TEXT": "VARCHAR",
+        "BINARY": "VARCHAR",
+        "VARBINARY": "VARCHAR",
+        # iceberg type: boolean
+        "BOOLEAN": "BOOLEAN",
+        # iceberg type: date
+        "DATE": "DATE",
+        # iceberg type: time
+        "TIME": "TIME(6)",
+        # iceberg type: timestamp
+        "DATETIME": "TIMESTAMP(6)",
+        "TIMESTAMP": "TIMESTAMP(6)",
+        "TIMESTAMP_NTZ": "TIMESTAMP(6)",
+        # iceberg type: timestamptz (but not supported officially by bodo)
+        "TIMESTAMP_LTZ": "TIMESTAMP_WITH_LOCAL_TIME_ZONE(6)",
+        "TIMESTAMP_TZ": "TIMESTAMP_WITH_LOCAL_TIME_ZONE(6)",
+    }
+
+
+# Add Column tests
+@pytest_mark_one_rank
+def test_alter_table_add_column(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can alter tables to add columns.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a new table in the FileSystemCatalog and verify it exists
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    db_schema, _ = iceberg_database(table_name)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    try:
+        bc.sql(f'ALTER TABLE "{db_schema}"."{table_name}" DROP COLUMN A')
+        sqlnode_type_names = get_sqlnode_type_names()
+        # Convert to list to maintain order throughout testing
+        typeNames = list(sqlnode_type_names.keys())
+        for t in typeNames:
+            query = f'ALTER TABLE "{db_schema}"."{table_name}" add column COL_{t.translate(str.maketrans("(), ", "____"))} {t}'
+            py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+            bodo_output = bc.execute_ddl(query)
+            assert_equal_par(bodo_output, py_output)
+
+        # Check column names and types
+        query = f'DESCRIBE TABLE "{db_schema}"."{table_name}"'
+        output = bc.execute_ddl(query)
+        # Create dataframe with expected output
+        data = {
+            "NAME": [
+                "COL_" + name.translate(str.maketrans("(), ", "____"))
+                for name in typeNames
+            ],
+            "TYPE": [sqlnode_type_names[name] for name in typeNames],
+        }
+        answer = pd.DataFrame(data)
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+    finally:
+
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name}"
+            spark.sql(query)
+
+        cleanup()
+
+
+@pytest_mark_one_rank
+def test_alter_table_add_column_error(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog throws appropriate errors when
+    attempting invalid ALTER TABLE ADD COLUMN commands.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a new table in the FileSystemCatalog and verify it exists
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    db_schema, _ = iceberg_database(table_name)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    try:
+        # Compound column names / nested structures (Unsupported)
+        with pytest.raises(
+            BodoError,
+            match="BodoSQL does not yet support nested columns and/or compound column names.",
+        ):
+            query = f'ALTER TABLE "{db_schema}"."{table_name}" add column testparent.testchild integer'
+            bc.execute_ddl(query)
+
+        # Invalid column type
+        with pytest.raises(BodoError, match="Unknown identifier"):
+            query = f'ALTER TABLE "{db_schema}"."{table_name}" add column test junkType'
+            bc.execute_ddl(query)
+
+        # Invalid column name
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f'ALTER TABLE "{db_schema}"."{table_name}" add column 123 integer'
+            bc.execute_ddl(query)
+
+        # No type specified
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f'ALTER TABLE "{db_schema}"."{table_name}" add column test'
+            bc.execute_ddl(query)
+
+    finally:
+
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name}"
+            spark.sql(query)
+
+        cleanup()
