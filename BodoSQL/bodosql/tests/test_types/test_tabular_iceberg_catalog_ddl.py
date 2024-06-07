@@ -806,7 +806,6 @@ def test_alter_table_set_property(
         drop_test_table(table_name, tabular_connection)
 
 
-# Set property tests
 @pytest_mark_one_rank
 def test_alter_table_set_property_rename(
     tabular_catalog, tabular_connection, memory_leak_check
@@ -989,6 +988,334 @@ def test_alter_table_unset_property_error(
         output = spark.sql(query).toPandas()
         test_row = {"key": f"test_tag1", "value": f"test_value1"}
         assert not check_row_exists(output, test_row)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+# ADD COL TESTS
+
+
+def get_sqlnode_type_names():
+    # A dict of types and the sqlnode names types they should be converted to.
+    # Note these are not the same as the iceberg type names -- refer to the BodoSQL ALTER TABLE docs for that.
+    return {
+        # iceberg type: decimal(38, 0)
+        "NUMBER": "DECIMAL(38, 0)",
+        "DECIMAL": "DECIMAL(38, 0)",
+        "NUMERIC": "DECIMAL(38, 0)",
+        # iceberg type: decimal(p, s)
+        "DECIMAL(10, 5)": "DECIMAL(10, 5)",
+        "NUMBER(10, 5)": "DECIMAL(10, 5)",
+        # iceberg type: int
+        "INT": "INTEGER",
+        "INTEGER": "INTEGER",
+        "SMALLINT": "INTEGER",
+        "TINYINT": "INTEGER",
+        "BYTEINT": "INTEGER",
+        # iceberg type: long
+        "BIGINT": "BIGINT",
+        # iceberg type: float
+        "FLOAT": "FLOAT",
+        "FLOAT4": "FLOAT",
+        "FLOAT8": "FLOAT",
+        # iceberg type: double
+        "DOUBLE": "DOUBLE",
+        "DOUBLE PRECISION": "DOUBLE",
+        "REAL": "DOUBLE",
+        # iceberg type: string
+        "VARCHAR": "VARCHAR",
+        "CHAR": "VARCHAR",
+        "CHARACTER": "VARCHAR",
+        "STRING": "VARCHAR",
+        "TEXT": "VARCHAR",
+        "BINARY": "VARCHAR",
+        "VARBINARY": "VARCHAR",
+        # iceberg type: boolean
+        "BOOLEAN": "BOOLEAN",
+        # iceberg type: date
+        "DATE": "DATE",
+        # iceberg type: time
+        "TIME": "TIME(6)",
+        # iceberg type: timestamp
+        "DATETIME": "TIMESTAMP(6)",
+        "TIMESTAMP": "TIMESTAMP(6)",
+        "TIMESTAMP_NTZ": "TIMESTAMP(6)",
+        # iceberg type: timestamptz (but not supported officially by bodo)
+        "TIMESTAMP_LTZ": "TIMESTAMP_WITH_LOCAL_TIME_ZONE(6)",
+        "TIMESTAMP_TZ": "TIMESTAMP_WITH_LOCAL_TIME_ZONE(6)",
+    }
+
+
+@pytest_mark_one_rank
+def test_alter_table_add_column(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that Bodo can add columns to an existing table using a Tabular catalog.
+    This test focuses a lot on getting the column types right."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    spark = get_spark_tabular(tabular_connection)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+        spark.sql(f"ALTER TABLE {table_name} DROP COLUMN A")
+
+        def get_letter_pair(i):
+            """Simple helper to generate column names."""
+            if i < 26:
+                return chr(ord("a") + i)
+            quotient, remainder = divmod(i - 26, 26)
+            return chr(ord("a") + quotient) + chr(ord("a") + remainder)
+
+        sqlnode_type_names = get_sqlnode_type_names()
+        # Convert to list to maintain order throughout testing
+        typeNames = list(sqlnode_type_names.keys())
+        for t in typeNames:
+            query = f'ALTER TABLE {table_name} add column COL_{t.translate(str.maketrans("(), ", "____"))} {t}'
+            py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+            bodo_output = bc.execute_ddl(query)
+            assert_equal_par(bodo_output, py_output)
+
+        # Check column names and types
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        data = {
+            "NAME": [
+                "COL_" + name.translate(str.maketrans("(), ", "____"))
+                for name in typeNames
+            ],
+            "TYPE": [sqlnode_type_names[name] for name in typeNames],
+        }
+        answer = pd.DataFrame(data)
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_add_column_ifnotexists(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo exhibits appropriate behavior when adding columns with IF NOT EXISTS using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    spark = get_spark_tabular(tabular_connection)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Preexisting column name
+        with pytest.raises(BodoError, match="Cannot add column, name already exists"):
+            query = f"ALTER TABLE {table_name} add column A integer"
+            bodo_output = bc.execute_ddl(query)
+
+        # Preexisting column name with IF NOT EXISTS
+        query = f"ALTER TABLE {table_name} add column IF NOT EXISTS A integer"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_add_column_errors(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo throws an error when running unsupported ALTER TABLE ADD COLUMN commands using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    spark = get_spark_tabular(tabular_connection)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Compound column names / nested structures (Unsupported)
+        with pytest.raises(
+            BodoError,
+            match="BodoSQL does not yet support nested columns and/or compound column names.",
+        ):
+            query = f"ALTER TABLE {table_name} add column testparent.testchild integer"
+            bodo_output = bc.execute_ddl(query)
+
+        # Invalid column type
+        with pytest.raises(BodoError, match="Unknown identifier"):
+            query = f"ALTER TABLE {table_name} add column test junkType"
+            bodo_output = bc.execute_ddl(query)
+
+        # Invalid column name
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f"ALTER TABLE {table_name} add column 123 integer"
+            bodo_output = bc.execute_ddl(query)
+
+        # No type specified
+        with pytest.raises(BodoError, match="Unable to parse SQL Query."):
+            query = f"ALTER TABLE {table_name} add column test"
+            bodo_output = bc.execute_ddl(query)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+# DROP COLUMN TESTS
+@pytest_mark_one_rank
+def test_alter_table_drop_column(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can drop columns and nested columns in a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    spark = get_spark_tabular(tabular_connection)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+        # Drop extraneous column created during table creation
+        spark.sql(f"ALTER TABLE {table_name} drop column A")
+
+        # Create test columns
+        spark.sql(f"ALTER TABLE {table_name} add column TESTCOL1 INT")
+        spark.sql(
+            f"ALTER TABLE {table_name} add column TESTCOL2 struct<X: double, Y: double>"
+        )
+        spark.sql(f"ALTER TABLE {table_name} add column TESTCOL3 INT")
+        spark.sql(f"ALTER TABLE {table_name} add column TESTCOL4 INT")
+        # Check
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1", "TESTCOL2", "TESTCOL3", "TESTCOL4"],
+                "TYPE": [
+                    "INTEGER",
+                    "RecordType(DOUBLE X, DOUBLE Y)",
+                    "INTEGER",
+                    "INTEGER",
+                ],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Drop top level column
+        query = f"ALTER TABLE {table_name} DROP COLUMN TESTCOL1"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL2", "TESTCOL3", "TESTCOL4"],
+                "TYPE": ["RecordType(DOUBLE X, DOUBLE Y)", "INTEGER", "INTEGER"],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Drop nested column
+        query = f"ALTER TABLE {table_name} DROP COLUMN TESTCOL2.X"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL2", "TESTCOL3", "TESTCOL4"],
+                "TYPE": ["RecordType(DOUBLE Y)", "INTEGER", "INTEGER"],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Drop top level column of nested column
+        query = f"ALTER TABLE {table_name} DROP COLUMN TESTCOL2"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame(
+            {"NAME": ["TESTCOL3", "TESTCOL4"], "TYPE": ["INTEGER", "INTEGER"]}
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Drop multiple columns
+        query = f"ALTER TABLE {table_name} DROP COLUMN TESTCOL3, TESTCOL4"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame({"NAME": [], "TYPE": []})
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
+@pytest_mark_one_rank
+def test_alter_table_drop_column_ifexists(
+    tabular_catalog, tabular_connection, memory_leak_check
+):
+    """Tests that Bodo can drop columns and nested columns in a Tabular catalog
+    with the IF EXISTS keyword."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    spark = get_spark_tabular(tabular_connection)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+        # Drop extraneous column created during table creation
+        spark.sql(f"ALTER TABLE {table_name} drop column A")
+
+        # Create test columns
+        spark.sql(f"ALTER TABLE {table_name} add column TESTCOL1 INT")
+        spark.sql(
+            f"ALTER TABLE {table_name} add column TESTCOL2 struct<X: double, Y: double>"
+        )
+        # Check
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1", "TESTCOL2"],
+                "TYPE": ["INTEGER", "RecordType(DOUBLE X, DOUBLE Y)"],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Drop non-existent column
+        with pytest.raises(BodoError, match="Cannot delete missing column"):
+            query = f"ALTER TABLE {table_name} DROP COLUMN TESTCOL3"
+            bodo_output = bc.execute_ddl(query)
+
+        # Drop with IF EXISTS -- should not error
+        query = f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS TESTCOL3"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Drop non-existent nested column with IF EXISTS -- should not error
+        query = f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS TESTCOL1.X"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Drop columns now
+        query = f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS TESTCOL1"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        query = f"DESCRIBE TABLE {table_name}"
+        output = bc.sql(query)
+        answer = pd.DataFrame(
+            {"NAME": ["TESTCOL2"], "TYPE": ["RecordType(DOUBLE X, DOUBLE Y)"]}
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
 
     finally:
         drop_test_table(table_name, tabular_connection)
