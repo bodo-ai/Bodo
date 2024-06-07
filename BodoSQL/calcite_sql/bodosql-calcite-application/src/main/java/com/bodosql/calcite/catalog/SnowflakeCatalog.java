@@ -2535,6 +2535,26 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
                 e.getMessage()));
       }
     }
+
+    @Override
+    @NotNull
+    public DDLExecutionResult setProperty(
+        @NotNull ImmutableList<String> tablePath,
+        @NotNull SqlNodeList propertyList,
+        @NotNull SqlNodeList valueList,
+        boolean ifExists) {
+      throw new RuntimeException("SET PROPERTY/TAG is not supported for Snowflake.");
+    }
+
+    @Override
+    @NotNull
+    public DDLExecutionResult unsetProperty(
+        @NotNull ImmutableList<String> tablePath,
+        @NotNull SqlNodeList propertyList,
+        boolean ifExists,
+        boolean ifPropertyExists) {
+      throw new RuntimeException("UNSET PROPERTY/TAG is not supported for Snowflake.");
+    }
   }
 
   // HELPER FUNCTIONS

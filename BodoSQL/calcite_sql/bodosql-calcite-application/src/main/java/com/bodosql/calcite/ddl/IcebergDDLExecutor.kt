@@ -9,6 +9,8 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.rel.type.RelDataTypeField
+import org.apache.calcite.sql.SqlLiteral
+import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.ddl.SqlCreateView
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
@@ -457,5 +459,79 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         } else {
             throw RuntimeException("DROP VIEW is unimplemented for the current catalog")
         }
+    }
+
+    /**
+     * Sets the properties of an Iceberg table identified by the given table path
+     * using ALTER TABLE SET PROPERTIES and its variants (e.g. SET TBLPROPERTIES).
+     *
+     * @param tablePath The path of the table.
+     * @param propertyList The list of properties to set. Must be a SqlNodeList of SqlLiteral.
+     * @param valueList The list of values to set. Must be a SqlNodeList of SqlLiteral.
+     * @param ifExists Flag indicating whether to set the properties only if the table exists.
+     *                 If true, will not error even if the table does not exist.
+     * @return The result of the DDL execution.
+     */
+
+    override fun setProperty(
+        tablePath: ImmutableList<String>,
+        propertyList: SqlNodeList,
+        valueList: SqlNodeList,
+        ifExists: Boolean,
+    ): DDLExecutionResult {
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val table = icebergConnection.loadTable(tableIdentifier)
+        var updater = table.updateProperties()
+
+        for ((_property, _value) in propertyList.zip(valueList)) {
+            val property = _property as SqlLiteral
+            val value = _value as SqlLiteral
+            val propertyStr = property.toValue()
+            val valueStr = value.toValue()
+            updater = updater.set(propertyStr, valueStr)
+        }
+        updater.commit()
+
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+    }
+
+    /**
+     * Unsets (deletes) the properties of an Iceberg table identified by the given table path
+     * using ALTER TABLE UNSET PROPERTIES and its variants (e.g. SET TBLPROPERTIES).
+     *
+     * @param tablePath The path of the table.
+     * @param propertyList The list of properties to unset. Must be a SqlNodeList of SqlLitera.
+     * @param ifExists Flag indicating whether to unset the properties only if the table exists.
+     * @param ifPropertyExists Flag indicating whether to unset the properties only if the property exists
+     *                         on the table. If this flag is not set to True, and a non-existent property is
+     *                         attempted to be unset, a RuntimeException will be thrown.
+     * @return The result of the DDL execution.
+     */
+
+    override fun unsetProperty(
+        tablePath: ImmutableList<String>,
+        propertyList: SqlNodeList,
+        ifExists: Boolean,
+        ifPropertyExists: Boolean,
+    ): DDLExecutionResult {
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val table = icebergConnection.loadTable(tableIdentifier)
+        var updater = table.updateProperties()
+        for (_property in propertyList) {
+            val property = _property as SqlLiteral
+            val propertyStr = property.toValue()
+            // If (IF EXISTS) for property not set, and the property doesn't exist, throw error.
+            if (!ifPropertyExists && !table.properties().containsKey(propertyStr)) {
+                throw RuntimeException("Property $propertyStr does not exist.")
+            }
+            updater = updater.remove(propertyStr)
+        }
+        updater.commit()
+
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
     }
 }

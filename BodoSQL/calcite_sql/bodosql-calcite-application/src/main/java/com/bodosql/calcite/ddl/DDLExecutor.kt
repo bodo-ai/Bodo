@@ -4,6 +4,7 @@ import com.bodosql.calcite.schema.CatalogSchema
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.ddl.SqlCreateView
 
 class NamespaceAlreadyExistsException : Exception()
@@ -83,6 +84,41 @@ interface DDLExecutor {
         viewPath: ImmutableList<String>,
         renamePath: ImmutableList<String>,
         ifExists: Boolean,
+    ): DDLExecutionResult
+
+    /**
+     * Set a property on a table in the catalog. If the property already exists, it will be
+     * overwritten. If the property does not exist, it will be created.
+     *
+     * @param tablePath The path to the table to set the property on.
+     * @param propertyList The list of properties to set. Must be a SqlNodeList of SqlLiteral.
+     * @param valueList The list of values to set. Must be a SqlNodeList of SqlLiteral.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     *
+     * @return The result of the operation.
+     */
+    fun setProperty(
+        tablePath: ImmutableList<String>,
+        propertyList: SqlNodeList,
+        valueList: SqlNodeList,
+        ifExists: Boolean,
+    ): DDLExecutionResult
+
+    /**
+     * Unset (delete) a property on a table in the catalog.
+     *
+     * @param tablePath The path to the table to unset the properties on.
+     * @param propertyList The list of properties to unset. Must be a SqlNodeList of SqlLiteral.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param ifPropertyExists If true, the operation will not fail if the property does not exist.
+     *
+     * @return The result of the operation.
+     */
+    fun unsetProperty(
+        tablePath: ImmutableList<String>,
+        propertyList: SqlNodeList,
+        ifExists: Boolean,
+        ifPropertyExists: Boolean,
     ): DDLExecutionResult
 
     /**
