@@ -111,7 +111,7 @@ class RelCostAndMetaDataWriter(
                     for (columnIdx in 0 until rel.rowType.fieldCount) {
                         val distinctiveness = mq.getColumnDistinctCount(rel, columnIdx)
                         if (distinctiveness != null) {
-                            val formattedDistinctiveness = DecimalFormat("##0.#E0").format(distinctiveness)
+                            val formattedDistinctiveness = DecimalFormat("0.######E0").format(distinctiveness)
                             s.append("$$columnIdx = $formattedDistinctiveness values")
                             if (columnIdx < rel.rowType.fieldCount - 1) {
                                 s.append(", ")
