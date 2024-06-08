@@ -143,7 +143,7 @@ class Cost private constructor(
     override fun toString(): String = "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
 
     companion object {
-        private val DECIMAL_FORMAT = DecimalFormat("##0.###E0")
+        private val DECIMAL_FORMAT = DecimalFormat("0.######E0")
 
         private fun df(decimal: Double): String =
             DECIMAL_FORMAT
