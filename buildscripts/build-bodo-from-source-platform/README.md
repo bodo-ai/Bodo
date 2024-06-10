@@ -19,6 +19,7 @@
 1. Set your [Github token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token#creating-a-personal-access-token-classic) as an environment variable: `export GITHUB_TOKEN=<token>`
 1. Clone Bodo repository on all machines using a Github token: `psh git clone https://$GITHUB_TOKEN@github.com/Bodo-inc/Bodo.git`.
    This will also set the token in the Git Remote Origin URL, and therefore future git actions won't ask for credentials.
+1. Upgrade `conda` to allow installing packages `psh sudo /opt/conda/bin/conda upgrade --force conda --yes`
 1. Install `conda-lock` on all nodes: `psh sudo /opt/conda/bin/mamba install conda-lock -c conda-forge -n base --yes`
 1. Remove `mpi` and `mpich` on all nodes: `psh sudo /opt/conda/bin/conda remove mpi mpich -n base --force --yes`
 1. Navigate to the folder with the environment lock file: `cd Bodo/buildscripts/envs`
