@@ -1990,7 +1990,7 @@ def test_filter_pushdown_row_count_caching(
     # we can be fairly certain that the any queries to this table in the recent
     # query history stem from this test.
     assert "1 rows" in plan, "Plan should have 1 row in the cost estimate"
-    assert "59.849e3 rows" in plan, "Plan should have 59849 rows in the cost estimate"
+    assert "5.9849e4 rows" in plan, "Plan should have 59849 rows in the cost estimate"
 
     # Empirically, it takes a moment for the query history to update,
     # so we sleep for a few seconds to ensure that the query history is updated

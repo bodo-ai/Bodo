@@ -433,10 +433,10 @@ def test_parquet_statistics_file(datapath, memory_leak_check):
     # running a simple query and checking the distinctness estimates.
     plan = bc.generate_plan("select * from orders", show_cost=True)
     assert (
-        "distinct estimates: $0 = 30E3 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 29.99E3 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 29.98E3 values"
+        "distinct estimates: $0 = 3E4 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 2.9987E4 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 2.9984E4 values"
         in plan
     )
-    assert "30e3 rows" in plan
+    assert "3e4 rows" in plan
 
 
 @pytest.mark.parquet
@@ -481,10 +481,10 @@ def test_parquet_statistics_file_jit(datapath, memory_leak_check, tmp_path):
         bodo.barrier()
 
         assert (
-            "distinct estimates: $0 = 30E3 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 29.99E3 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 29.98E3 values"
+            "distinct estimates: $0 = 3E4 values, $1 = 2E3 values, $2 = 3E0 values, $3 = 2.9987E4 values, $4 = 2.406E3 values, $5 = 5E0 values, $6 = 1E3 values, $7 = 1E0 values, $8 = 2.9984E4 values"
             in plan_str
         )
-        assert "30e3 rows" in plan_str
+        assert "3e4 rows" in plan_str
 
     finally:
         # Restore original value in case of failure
