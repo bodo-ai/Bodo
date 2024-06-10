@@ -51,6 +51,11 @@ This guide explains how to configure a Customer Managed VPC for the Bodo Cloud P
 
 ---
 
+## [Configuring AWS PrivateLink][aws_private_link]
+This guide explains how to configure an AWS PrivateLink in Customer Managed VPC for the Bodo Cloud Platform.
+
+---
+
 ## [Troubleshooting][troubleshooting]
 
 This guide offers some troubleshooting tips for potential issues encountered while using the Bodo Cloud Platform.
