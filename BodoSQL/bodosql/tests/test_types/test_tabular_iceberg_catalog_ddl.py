@@ -313,7 +313,7 @@ def test_iceberg_describe_view_error_does_not_exist(
 
 # Helper functions
 def verify_table_created(table_name, tabular_connection, bc):
-    assert check_table_exists(tabular_connection, table_name)
+    assert run_rank0(check_table_exists)(tabular_connection, table_name)
     x = bc.sql(f"SELECT * FROM {table_name}")
     x = bodo.allgatherv(x)
     assert "A" in x
@@ -325,6 +325,7 @@ def create_test_table(table_name, bc):
     bc.sql(f"CREATE OR REPLACE TABLE {table_name} AS SELECT 'testtable' as A")
 
 
+@run_rank0
 def drop_test_table(table_name, tabular_connection):
     # drop created table
     get_spark_tabular(tabular_connection).sql(f"DROP TABLE IF EXISTS {table_name}")
@@ -335,7 +336,7 @@ def drop_test_table(table_name, tabular_connection):
 
 # Verify view was created.
 def verify_view_created(view_name, tabular_connection, bc):
-    assert check_view_exists(tabular_connection, view_name)
+    assert run_rank0(check_view_exists)(tabular_connection, view_name)
     x = bc.sql(f"SELECT * FROM {view_name}")
     x = bodo.allgatherv(x)
     assert "A" in x
@@ -347,6 +348,7 @@ def create_test_view(view_name, bc):
     bc.sql(f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A")
 
 
+@run_rank0
 def drop_test_view(view_name, tabular_connection):
     # drop created view
     get_spark_tabular(tabular_connection).sql(f"DROP VIEW IF EXISTS {view_name}")
