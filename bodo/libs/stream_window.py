@@ -346,6 +346,7 @@ def init_window_state(
     nulls_last,
     func_names,
     kept_input_indices,
+    op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
 ):
@@ -361,6 +362,7 @@ def overload_init_window_state(
     nulls_last,
     func_names,
     kept_input_indices,
+    op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
 ):
@@ -413,6 +415,7 @@ def overload_init_window_state(
         nulls_last,
         func_names,
         kept_input_indices,
+        op_pool_size_bytes=-1,
         expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
@@ -432,7 +435,7 @@ def overload_init_window_state(
             n_orderby_cols,
             kept_partition_cols_arr.ctypes,
             kept_order_by_cols_arr.ctypes,
-            -1,  # op_pool_size_bytes
+            op_pool_size_bytes,
             output_type,
             parallel,
         )
