@@ -848,6 +848,14 @@ class GroupbyState {
     GroupbyMetrics metrics;
     const int64_t op_id;
 
+    // Group By histogram information that can be used by the
+    // accumulate path. This is general to any shuffle operation
+    // that "blocks" on having a total table calculation, so it
+    // should eventually be moved to a helper class.
+    std::vector<int64_t> histogram_buckets;
+    uint64_t num_histogram_bits = 0;
+    bool compute_histogram = false;
+
     GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                  std::vector<int32_t> ftypes_,
                  std::vector<int32_t> window_ftypes_,
@@ -1182,4 +1190,20 @@ class GroupbyState {
     /// the UNION case where there may be multiple pipelines. UNION only has key
     /// columns, so we only need to keep a snapshot of those metrics.
     DictBuilderMetrics key_dict_builder_metrics_prev_stage_snapshot;
+
+    /**
+     * @brief Determine if based on the histogram information
+     * the partition described by the given number of bits
+     * and bit mask will always exceed the provided threshold
+     * in the largest partition. This threshold should always
+     * be a value between 0 and 1.
+     *
+     * @param num_bits The number of bits for the partition.
+     * @param bitmask The bitmask for the partition.
+     * @param threshold The threshold for disabling partitioning.
+     * @return true Partitioning should be disabled.
+     * @return false Partitioning should be enabled.
+     */
+    bool MaxPartitionExceedsThreshold(size_t num_bits, uint32_t bitmask,
+                                      double threshold);
 };

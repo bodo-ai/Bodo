@@ -7,7 +7,6 @@ from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
-import bodo.tests.utils
 from bodo.libs.stream_groupby import (
     delete_groupby_state,
     get_op_pool_bytes_allocated,
@@ -18,7 +17,14 @@ from bodo.libs.stream_groupby import (
     init_groupby_state,
 )
 from bodo.memory import default_buffer_pool_bytes_allocated
-from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
+from bodo.tests.utils import (
+    _gather_output,
+    _get_dist_arg,
+    _test_equal_guard,
+    pytest_mark_one_rank,
+    reduce_sum,
+    temp_env_override,
+)
 
 # NOTE: Once we're no longer actively working on Groupby Spill Support, most of these tests can be marked as "slow".
 
@@ -1370,6 +1376,179 @@ def test_max_partition_depth_fallback_agg_finalize(capfd, memory_leak_check):
         False,
         max_partition_depth,
     )
+
+
+##########################################################
+
+
+######## TESTS FOR STREAMING WINDOW SKEW HANDLING ########
+
+WINDOW_PARTITION_ROWS = 16 * 1024
+WINDOW_BYTES_PER_ROW = 8 * 4
+WINDOW_PARTITION_SIZE = WINDOW_PARTITION_ROWS * WINDOW_BYTES_PER_ROW
+WINDOW_PARTITION_BUDGET = (WINDOW_PARTITION_SIZE * 7) // 2
+
+import numpy as np
+import pandas as pd
+
+import bodo
+from bodo.utils.typing import ColNamesMetaType, MetaType
+
+global_2 = MetaType((0,))
+global_3 = MetaType((1,))
+global_1 = MetaType((0, 1, 2, 3))
+global_6 = MetaType((0, 2, 3))
+global_7 = ColNamesMetaType(("A", "C", "D", "RANK"))
+global_4 = MetaType((True,))
+global_5 = MetaType(("dense_rank",))
+
+
+@bodo.jit(distributed=["df"])
+def window_skew_impl(df):
+    T1 = bodo.hiframes.table.logical_table_to_table(
+        bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), global_1, 4
+    )
+    T2 = T1
+    __bodo_is_last_streaming_output_1 = False
+    _iter_1 = 0
+    _temp1 = bodo.hiframes.table.local_len(T2)
+    state_1 = bodo.libs.stream_window.init_window_state(
+        4001,
+        global_2,
+        global_3,
+        global_4,
+        global_4,
+        global_5,
+        global_6,
+        op_pool_size_bytes=WINDOW_PARTITION_BUDGET,
+    )
+    __bodo_is_last_streaming_output_2 = False
+    while not (__bodo_is_last_streaming_output_2):
+        T3 = bodo.hiframes.table.table_local_filter(
+            T2, slice((_iter_1 * 4096), ((_iter_1 + 1) * 4096))
+        )
+        __bodo_is_last_streaming_output_1 = (_iter_1 * 4096) >= _temp1
+        __bodo_is_last_streaming_output_2 = (
+            bodo.libs.stream_window.window_build_consume_batch(
+                state_1, T3, __bodo_is_last_streaming_output_1
+            )
+        )
+        _iter_1 = _iter_1 + 1
+    __bodo_is_last_streaming_output_3 = False
+    _produce_output_1 = True
+    __bodo_streaming_batches_table_builder_1 = (
+        bodo.libs.table_builder.init_table_builder_state(5001)
+    )
+    while not (__bodo_is_last_streaming_output_3):
+        (
+            T4,
+            __bodo_is_last_streaming_output_3,
+        ) = bodo.libs.stream_window.window_produce_output_batch(
+            state_1, _produce_output_1
+        )
+        T5 = T4
+        bodo.libs.table_builder.table_builder_append(
+            __bodo_streaming_batches_table_builder_1, T5
+        )
+    bodo.libs.stream_window.delete_window_state(state_1)
+    T6 = bodo.libs.table_builder.table_builder_finalize(
+        __bodo_streaming_batches_table_builder_1
+    )
+    T7 = bodo.hiframes.table.table_subset(T6, global_1, False)
+    index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
+    df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index_1, global_7)
+    bodo.libs.query_profile_collector.finalize()
+    return df2
+
+
+@pytest_mark_one_rank
+def test_dense_rank_skew_repartition(capfd):
+    """
+    Test that we avoid repartitioning unnecessarily when we
+    have a large partition. This test is very sensitive to the associated
+    data. With the histogram based partitioning disabled rank 0 should have
+    15 partitions, but with it there are only 2 partitions.
+    """
+    # memory_leak_check seems to indicate that we don't
+    # "free" an allocation (both the meminfo struct and the
+    # underlying allocation). We have confirmed that it's
+    # not an actual leak, i.e. no bytes from the buffer pool
+    # are leaked. Until we figure out the MemInfo leak
+    # (https://bodo.atlassian.net/browse/BSE-2271), we
+    # will just verify that there's no bytes leaking from the
+    # buffer pool itself.
+
+    df = pd.DataFrame(
+        {
+            "A": np.array(
+                [7790324] * (2 * WINDOW_PARTITION_ROWS) + (list(range(0, 5))),
+                dtype=np.int64,
+            ),
+            "B": np.arange(0, (2 * WINDOW_PARTITION_ROWS) + 5),
+            "C": np.arange(0, (2 * WINDOW_PARTITION_ROWS) + 5),
+            "D": np.arange(0, (2 * WINDOW_PARTITION_ROWS) + 5),
+        }
+    )
+    py_output = pd.DataFrame(
+        {
+            "A": df["A"],
+            "C": df["C"],
+            "D": df["D"],
+            "RANK": list(range(1, (2 * WINDOW_PARTITION_ROWS) + 1)) + ([1] * 5),
+        }
+    )
+    df = _get_dist_arg(df)
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+            # Enable partitioning even though spilling is not setup
+            "BODO_STREAM_GROUPBY_ENABLE_PARTITIONING": "1",
+        }
+    ):
+        # Ensure that all unused allocations are free-d before
+        # measuring bytes_allocated.
+        gc.collect()
+        bytes_before = default_buffer_pool_bytes_allocated()
+        output_df = window_skew_impl(df)
+        # Ensure that all unused allocations are free-d before
+        # measuring bytes_allocated.
+        gc.collect()
+        bytes_after = default_buffer_pool_bytes_allocated()
+        output_df = _gather_output(output_df)
+        passed = 1
+        if bodo.get_rank() == 0:
+            passed = _test_equal_guard(
+                output_df,
+                py_output,
+                sort_output=True,
+                reset_index=True,
+            )
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size()
+        assert (
+            bytes_before == bytes_after
+        ), f"Potential memory leak! bytes_before ({bytes_before}) != bytes_after ({bytes_after})"
+
+    output, err = capfd.readouterr()
+    # Uncomment to view the output for debugging.
+    # with capfd.disabled():
+    #     for i in range(bodo.get_size()):
+    #         if bodo.get_rank() == i:
+    #             print(f"stdout:\n{output}")
+    #             print(f"stderr:\n{err}")
+    #         bodo.barrier()
+    expected_log_msgs = [
+        "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 1 which is determined based on the histogram to retain at least 90% of its data after repartitioning. This may invoke the OOM killer.",
+        "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 2.",
+    ]
+    # Verify that the expected log messages are present.
+    comm = MPI.COMM_WORLD
+    for expected_log_message in expected_log_msgs:
+        assert_success = True
+        if expected_log_message is not None:
+            assert_success = expected_log_message in err
+        assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+        assert assert_success
 
 
 ##########################################################
