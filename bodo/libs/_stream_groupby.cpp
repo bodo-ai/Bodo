@@ -1933,6 +1933,14 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
         }
     }
 
+    // Allocate the histogram if we are taking the accumulate path.
+    this->compute_histogram = this->accumulate_before_update;
+    // Always compute the max number of partitions to protect against the worst
+    // case.
+    this->num_histogram_bits =
+        this->compute_histogram ? this->max_partition_depth : 0;
+    this->histogram_buckets.resize((1 << this->num_histogram_bits), 0);
+
     // Finally, now that we know if we need to accumulate all values before
     // update, do one last iteration to actually create each of the col_sets
     bool do_combine = !this->accumulate_before_update;
@@ -2446,6 +2454,13 @@ void GroupbyState::UpdateShuffleGroupsAndCombine(
 void GroupbyState::AppendBuildBatchHelper(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes) {
+    // Update the histogram buckets, regardless of how many partitions
+    // there are.
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        this->histogram_buckets[hash_to_bucket(partitioning_hashes[i_row],
+                                               this->num_histogram_bits)] += 1;
+    }
+
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
         this->partitions[0]->AppendBuildBatch<true>(in_table);
@@ -2519,6 +2534,14 @@ void GroupbyState::AppendBuildBatchHelper(
     const std::shared_ptr<table_info>& in_table,
     const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::vector<bool>& append_rows) {
+    // Update the histogram buckets, regardless of how many partitions
+    // there are.
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        this->histogram_buckets[hash_to_bucket(partitioning_hashes[i_row],
+                                               this->num_histogram_bits)] +=
+            append_rows[i_row] ? 1 : 0;
+    }
+
     if (this->partitions.size() == 1) {
         // Fast path for the single partition case
         this->partitions[0]->AppendBuildBatch<true>(in_table, append_rows);
@@ -3052,6 +3075,33 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
     this->shuffle_state->ResetMetrics();
 }
 
+bool GroupbyState::MaxPartitionExceedsThreshold(size_t num_bits,
+                                                uint32_t bitmask,
+                                                double threshold) {
+    int64_t max_bucket_size = 0;
+    int64_t total_bucket_size = 0;
+    uint64_t shift_amount = this->max_partition_depth - num_bits;
+    // All buckets in a partition will be clustered together.
+    // Find the bounds to investigate.
+    uint64_t lower_bound_partition_zero_inclusive = bitmask << shift_amount;
+    uint64_t upper_bound_partition_zero_exclusive = (num_bits + 1)
+                                                    << shift_amount;
+    for (uint64_t i = lower_bound_partition_zero_inclusive;
+         i < upper_bound_partition_zero_exclusive; i++) {
+        int64_t bucket_size = this->histogram_buckets[i];
+        total_bucket_size += bucket_size;
+        max_bucket_size = std::max(max_bucket_size, bucket_size);
+    }
+
+    if (total_bucket_size > 0) {
+        double ratio = static_cast<double>(max_bucket_size) /
+                       static_cast<double>(total_bucket_size);
+        return ratio > threshold;
+    } else {
+        return false;
+    }
+}
+
 void GroupbyState::FinalizeBuild() {
     time_pt start_finalize = start_timer();
     // Clear the shuffle state since it is longer required.
@@ -3078,21 +3128,62 @@ void GroupbyState::FinalizeBuild() {
                 // chance that this will succeed. Overall, we're better off
                 // doing this. Note that this is only until we implement a
                 // proper fallback mechanism such as a sorted aggregation.
-                if ((this->partitions[i_part]->get_num_top_bits() ==
-                     this->max_partition_depth) &&
-                    orig_partitioning_enabled) {
+                bool at_max_partition_depth =
+                    this->partitions[i_part]->get_num_top_bits() ==
+                    this->max_partition_depth;
+                // Check if based on having a histogram we can predict the
+                // impact of partitioning. If we know that repartitioning will
+                // never reduce a partition beyond 90% of the current row count
+                // then just try compute the whole thing.
+                bool bucket_disabled_partitioning = false;
+                if (!at_max_partition_depth && this->compute_histogram) {
+                    if (this->debug_partitioning) {
+                        std::cerr
+                            << "[DEBUG] GroupbyState::FinalizeBuild: Checking "
+                               "histogram buckets to disable partitioning"
+                            << std::endl;
+                    }
+                    // We require num_histogram_bits to be max_partition_depth,
+                    // so we have an exact mapping of buckets -> partition.
+                    assert(this->num_histogram_bits ==
+                           this->max_partition_depth);
+                    bucket_disabled_partitioning =
+                        this->MaxPartitionExceedsThreshold(
+                            this->partitions[i_part]->get_num_top_bits(),
+                            this->partitions[i_part]->get_top_bitmask(), 0.9);
+                }
+                if (orig_partitioning_enabled &&
+                    (at_max_partition_depth || bucket_disabled_partitioning)) {
                     this->DisablePartitioning();
                     if (this->debug_partitioning) {
-                        // Log a warning
-                        std::cerr
-                            << "[DEBUG] WARNING: Disabling partitioning and "
-                               "threshold enforcement temporarily to finalize "
-                               "partition "
-                            << i_part
-                            << " which is at max allowed partition depth ("
-                            << this->max_partition_depth
-                            << "). This may invoke the OOM killer."
-                            << std::endl;
+                        if (at_max_partition_depth) {
+                            // Log a warning
+                            std::cerr
+                                << "[DEBUG] WARNING: Disabling partitioning "
+                                   "and "
+                                   "threshold enforcement temporarily to "
+                                   "finalize "
+                                   "partition "
+                                << i_part
+                                << " which is at max allowed partition depth ("
+                                << this->max_partition_depth
+                                << "). This may invoke the OOM killer."
+                                << std::endl;
+                        } else {
+                            std::cerr
+                                << "[DEBUG] WARNING: Disabling partitioning "
+                                   "and "
+                                   "threshold enforcement temporarily to "
+                                   "finalize "
+                                   "partition "
+                                << i_part
+                                << " which is determined based on the "
+                                   "histogram "
+                                << "to retain at least 90% of its data after "
+                                << "repartitioning. This may invoke the OOM "
+                                   "killer."
+                                << std::endl;
+                        }
                     }
                 }
 
@@ -3444,7 +3535,8 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                 groupby_state->parallel, false, dict_hashes);
 
             // XXX Technically, we don't need the partition hashes if
-            // there's just one partition. We could move the hash computation
+            // there's just one partition and we aren't computing the
+            // histogram. We could move the hash computation
             // inside AppendBuildBatch and only do it if there are multiple
             // partitions.
             groupby_state->AppendBuildBatch(new_data, batch_hashes_partition);

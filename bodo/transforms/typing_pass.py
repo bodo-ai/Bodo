@@ -5445,7 +5445,7 @@ class TypingTransforms:
                 "init_window_state",
                 rhs.args,
                 dict(rhs.kws),
-                7,
+                8,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5487,7 +5487,7 @@ class TypingTransforms:
                 "init_window_state",
                 window_def.args,
                 dict(window_def.kws),
-                7,
+                8,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5513,16 +5513,37 @@ class TypingTransforms:
                     build_table_type=input_table_type,
                 )
 
+                # Fetch the op_pool_size_bytes argument
+                op_pool_size_bytes_var = get_call_expr_arg(
+                    "init_window_state",
+                    window_def.args,
+                    dict(window_def.kws),
+                    7,
+                    "op_pool_size_bytes",
+                    default=None,
+                    use_default=True,
+                )
+                params = [
+                    "operator_id",
+                    "partition_indices",
+                    "order_by_indices",
+                    "is_ascending",
+                    "nulls_last",
+                    "func_names",
+                    "kept_input_indices",
+                ]
+                args = [x for x in window_def.args]
+                # If there is a op_pool_size_bytes we need to include it in
+                # the function.
+                if op_pool_size_bytes_var is not None:
+                    params.append("op_pool_size_bytes")
+                    args.append(op_pool_size_bytes_var)
+                    op_pool_size_bytes_val = "op_pool_size_bytes"
+                else:
+                    op_pool_size_bytes_val = "-1"
+
                 # Compile a new function.
-                func_text = """def impl(
-                    operator_id,
-                    partition_indices,
-                    order_by_indices,
-                    is_ascending,
-                    nulls_last,
-                    func_names,
-                    kept_input_indices,
-                ):
+                func_text = f"""def impl({", ".join(params)}):
                     return bodo.libs.stream_window.init_window_state(
                         operator_id,
                         partition_indices,
@@ -5531,6 +5552,7 @@ class TypingTransforms:
                         nulls_last,
                         func_names,
                         kept_input_indices,
+                        op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,
                     )
                 """
@@ -5544,7 +5566,7 @@ class TypingTransforms:
 
                 new_nodes = compile_func_single_block(
                     func,
-                    window_def.args,
+                    args,
                     window_state,
                     self,
                     extra_globals={"_expected_state_type": new_type},

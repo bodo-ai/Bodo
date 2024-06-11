@@ -3,28 +3,17 @@
 
 #include "_bodo_common.h"
 
-#if 0
-
-#define PRIME 109345121  // prime number larger than n_pes
-// random integers from [0, PRIME-1], with SCALE > 0
-#define SCALE 30457      // 1 + random.randrange(PRIME - 1)
-#define SHIFT 84577466   // random.randrange(PRIME)
-
-static inline int hash_to_rank(uint32_t hash, int n_pes) {
-    return (((size_t)hash * SCALE + SHIFT) % PRIME) % (size_t)n_pes;
-}
-
-#undef PRIME
-#undef SCALE
-#undef SHIFT
-
-#else
-
 static inline int hash_to_rank(uint32_t hash, int n_pes) {
     return (size_t)hash % (size_t)n_pes;
 }
 
-#endif
+static inline uint32_t hash_to_bucket(uint32_t hash, uint64_t num_bucket_bits) {
+    constexpr size_t uint32_bits = sizeof(uint32_t) * CHAR_BIT;
+    // Shifting uint32_t by 32 bits is undefined behavior.
+    // Ref:
+    // https://stackoverflow.com/questions/18799344/shifting-a-32-bit-integer-by-32-bits
+    return num_bucket_bits == 0 ? 0 : hash >> (uint32_bits - num_bucket_bits);
+}
 
 /**
  * @brief shuffle information used to reverse shuffle later
