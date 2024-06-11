@@ -995,6 +995,60 @@ def test_alter_table_unset_property_error(
         drop_test_table(table_name, tabular_connection)
 
 
+## SET / UNSET COMMENT
+
+
+@pytest_mark_one_rank
+def test_alter_table_comment(tabular_catalog, tabular_connection, memory_leak_check):
+    """Tests that Bodo can set/unset table comments using a Tabular catalog."""
+    bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
+    table_name = gen_unique_id("TEST_TABLE").upper()
+    spark = get_spark_tabular(tabular_connection)
+
+    def assert_table_has_comment(expected_comment):
+        query = f"DESCRIBE TABLE EXTENDED {table_name}"
+        spark.catalog.refreshTable(table_name)
+        output = spark.sql(query).toPandas()
+        comment_str = output.loc[output["col_name"] == "Comment", "data_type"].values[0]
+        return comment_str == expected_comment
+
+    try:
+        create_test_table(table_name, bc)
+        verify_table_created(table_name, tabular_connection, bc)
+
+        # Set comment
+        query = f"ALTER TABLE {table_name} SET COMMENT 'test_comment1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that comment was set
+        assert assert_table_has_comment("test_comment1")
+
+        # Set empty comment while renaming
+        query = f"ALTER TABLE {table_name} SET COMMENT ''"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        assert assert_table_has_comment("")
+
+        # Remove comment
+        query = f"ALTER TABLE {table_name} UNSET COMMENT"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = bc.execute_ddl(query)
+        assert_equal_par(bodo_output, py_output)
+
+        spark.catalog.refreshTable(f"{table_name}")
+        output = spark.sql(f"DESCRIBE TABLE EXTENDED {table_name}").toPandas()
+        assert not (
+            output["col_name"] == "Comment"
+        ).any(), "Comment is not unset correctly"
+
+    finally:
+        drop_test_table(table_name, tabular_connection)
+
+
 # ADD COL TESTS
 
 
