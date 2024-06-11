@@ -87,3 +87,18 @@ ALTER TABLE [ IF EXISTS ] <name>
     UNSET ( PROPERTY | PROPERTIES | TAG | TAGS | TBLPROPERTY | TBLPROPERTIES ) 
     [ IF EXISTS ] '<tag_name>'[ , '<tag_name>' ... ]
 ```
+
+## Setting / unsetting table comments
+
+This operation functions as an alias for `ALTER TABLE SET PROPERTY COMMENT='comment'`.
+
+!!! note
+    This operation is currently only supported for Iceberg.
+
+```sql
+ALTER TABLE [ IF EXISTS ] <name> SET COMMENT '<comment>'
+```
+
+```sql
+ALTER TABLE [ IF EXISTS ] <name> UNSET COMMENT
+```

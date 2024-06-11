@@ -39,6 +39,7 @@ def iceberg_filesystem_catalog(tmp_path_factory):
     if bodo.get_rank() == 0:
         path = str(tmp_path_factory.mktemp("iceberg"))
     path = MPI.COMM_WORLD.bcast(path)
+
     assert Path(path).exists(), "Failed to create filesystem catalog across all ranks"
     return bodosql.FileSystemCatalog(path, "iceberg")
 
@@ -965,6 +966,90 @@ def test_alter_table_unset_property(
         for i in [2, 3]:
             test_row = {"key": f"test_tag{i}", "value": f"test_value{i}"}
             assert not check_row_exists(output, test_row)
+
+    finally:
+
+        @run_rank0
+        def cleanup():
+            query = f"DROP TABLE hadoop_prod.{db_schema}.{table_name}"
+            spark.sql(query)
+
+        cleanup()
+
+
+@pytest_mark_one_rank
+def test_alter_table_comment(
+    iceberg_filesystem_catalog, iceberg_database, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can set/unset comments on tables.
+    """
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Create a new table in the FileSystemCatalog and verify it exists
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    db_schema, _ = iceberg_database(table_name)
+    existing_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(existing_tables) == 1, "Unable to find testing table"
+
+    def assert_table_has_comment(expected_comment):
+        spark.catalog.refreshTable(f"hadoop_prod.{db_schema}.{table_name}")
+        output = spark.sql(
+            f"DESCRIBE TABLE EXTENDED hadoop_prod.{db_schema}.{table_name}"
+        ).toPandas()
+        comment_str = output.loc[output["col_name"] == "Comment", "data_type"].values[0]
+        return comment_str == expected_comment
+
+    try:
+        # Verify no properties are set
+
+        # Set a comment on the table
+        query = f'ALTER TABLE "{db_schema}"."{table_name}" SET COMMENT \'test_comment\''
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        spark.catalog.refreshTable(f"hadoop_prod.{db_schema}.{table_name}")
+
+        # Verify comments were set
+        assert assert_table_has_comment(
+            "test_comment"
+        ), f"Comment is not set correctly."
+
+        # Rename the comment
+        query = (
+            f'ALTER TABLE "{db_schema}"."{table_name}" SET COMMENT \'new_test_comment\''
+        )
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify comments were set
+        assert assert_table_has_comment(
+            "new_test_comment"
+        ), f"Comment is not set correctly."
+
+        # Remove comment
+        query = f'ALTER TABLE "{db_schema}"."{table_name}" UNSET COMMENT'
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = impl(bc, query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Verify the properties were unset
+        spark.catalog.refreshTable(f"hadoop_prod.{db_schema}.{table_name}")
+        output = spark.sql(
+            f"DESCRIBE TABLE EXTENDED hadoop_prod.{db_schema}.{table_name}"
+        ).toPandas()
+        assert not (
+            output["col_name"] == "Comment"
+        ).any(), "Comment is not unset correctly"
 
     finally:
 
