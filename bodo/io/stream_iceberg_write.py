@@ -525,6 +525,8 @@ iceberg_writer_payload_members = (
     ("txn_id", types.int64),
     # Arrow filesystem for Iceberg REST S3 FS
     ("arrow_fs", types.optional(ArrowFs())),
+    # location of the s3 bucket
+    ("bucket_region", types.unicode_type),
 )
 iceberg_writer_payload_members_dict = dict(iceberg_writer_payload_members)
 
@@ -937,6 +939,10 @@ def gen_iceberg_writer_init_impl(
             table_builder_state_type,
             input_dicts_unified=input_dicts_unified,
         )
+        writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_njit(
+            table_loc, _is_parallel
+        )
+
         allow_theta = allow_theta_sketches and get_enable_theta()
         if allow_theta:
             if mode == "append":
@@ -1141,6 +1147,7 @@ def gen_iceberg_writer_append_table_impl_inner(
         table_bytes = bodo.libs.table_builder.table_builder_nbytes(table_builder_state)
         ev_append_batch.add_attribute("table_bytes", table_bytes)
         ev_append_batch.finalize()
+        bucket_region = writer["bucket_region"]
 
         # ===== Part 2: Write Parquet file if file size threshold is exceeded
         if is_last or table_bytes >= ICEBERG_WRITE_PARQUET_CHUNK_SIZE:
@@ -1171,6 +1178,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                     writer["output_pyarrow_schema"],
                     writer["arrow_fs"],
                     writer["theta_sketches"],
+                    bucket_region=bucket_region,
                 )
                 append_py_list(writer["iceberg_files_info"], iceberg_files_info)
 
@@ -1226,9 +1234,7 @@ def gen_iceberg_writer_append_table_impl_inner(
                     snapshot_id, sequence_number, puffin_loc = fetch_puffin_metadata(
                         txn_id, conn, db_schema, table_name
                     )
-                bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
-                    puffin_loc, parallel=True
-                )
+
                 statistic_file_info = _write_puffin_file(
                     unicode_to_utf8(puffin_loc),
                     unicode_to_utf8(bucket_region),
