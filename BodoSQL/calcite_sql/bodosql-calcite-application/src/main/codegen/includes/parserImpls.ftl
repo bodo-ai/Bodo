@@ -746,18 +746,10 @@ SqlAlterTable SqlAlterTable(Span s) :
             { dropCols = new SqlNodeList(getPos()); }
             AddCompoundIdentifiers(dropCols)
         { alterNode = new SqlAlterTableDropCol(getPos(), ifExists, table, dropCols, ifColumnExists); })
-    |   ( <SET>
-              (
-                  <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
-              )
-           alterNode = SqlAlterTableSetProperty(s, ifExists, table)
-        )
-    |   ( <UNSET>
-              (
-                  <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
-              )
-           alterNode = SqlAlterTableUnsetProperty(s, ifExists, table)
-        )
+    |   ( alterNode = SqlAlterTableSetProperty(s, ifExists, table))
+    |   ( alterNode = SqlAlterTableUnsetProperty(s, ifExists, table))
+    |   ( alterNode = SqlAlterTableSetComment(s, ifExists, table))
+    |   ( alterNode = SqlAlterTableUnsetComment(s, ifExists, table))
     )
 
     { return alterNode; }
@@ -779,6 +771,10 @@ SqlAlterTableSetProperty SqlAlterTableSetProperty(Span s, boolean ifExists, SqlI
         propertyList = new SqlNodeList(s.pos());
         valueList = new SqlNodeList(s.pos());
     }
+    <SET>
+    (
+        <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
+    )
 
     property = StringLiteral() { propertyList.add(property); }
     <EQ>
@@ -814,6 +810,10 @@ SqlAlterTableUnsetProperty SqlAlterTableUnsetProperty(Span s, boolean ifExists, 
         s = span();
         propertyList = new SqlNodeList(s.pos());
     }
+    <UNSET>
+    (
+        <TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>
+    )
     ifPropertyExists = IfExistsOpt()
     property = StringLiteral() { propertyList.add(property); }
     (
@@ -827,6 +827,51 @@ SqlAlterTableUnsetProperty SqlAlterTableUnsetProperty(Span s, boolean ifExists, 
                         table,
                         propertyList,
                         ifPropertyExists);
+    }
+}
+
+
+// Parses SET/UNSET COMMENT.
+SqlAlterTableSetProperty SqlAlterTableSetComment(Span s, boolean ifExists, SqlIdentifier table) :
+{
+    final SqlNodeList propertyList;
+    SqlNode comment;
+    SqlNodeList commentList;
+    s = span();
+    propertyList = new SqlNodeList(s.pos());
+    commentList = new SqlNodeList(s.pos());
+    propertyList.add(SqlLiteral.createCharString("comment", getPos()));
+}
+{
+    <SET> <COMMENT> 
+    comment = StringLiteral() { commentList.add(comment); }
+    {
+        return new SqlAlterTableSetProperty(
+                    s.end(this),
+                    ifExists,
+                    table,
+                    propertyList,
+                    commentList);
+    }
+
+}
+
+SqlAlterTableUnsetProperty SqlAlterTableUnsetComment(Span s, boolean ifExists, SqlIdentifier table) :
+{
+    final SqlNodeList propertyList;
+    s = span();
+    propertyList = new SqlNodeList(s.pos());
+    propertyList.add(SqlLiteral.createCharString("comment", getPos()));
+}
+{
+    <UNSET> <COMMENT> 
+    {
+        return new SqlAlterTableUnsetProperty(
+                    s.addAll(propertyList).pos(),
+                    ifExists,
+                    table,
+                    propertyList,
+                    false);
     }
 }
 
