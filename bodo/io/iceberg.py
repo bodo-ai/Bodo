@@ -36,7 +36,6 @@ from bodo.ext import s3_reader
 from bodo.io.fs_io import (
     ArrowFs,
     arrow_filesystem_del,
-    get_s3_bucket_region_njit,
     validate_gcsfs_installed,
 )
 from bodo.io.helpers import (
@@ -3283,6 +3282,7 @@ def iceberg_pq_write(
     expected_schema,
     arrow_fs,
     sketch_collection,
+    bucket_region,
 ):  # pragma: no cover
     """
     Writes a table to Parquet files in an Iceberg table's data warehouse
@@ -3308,8 +3308,6 @@ def iceberg_pq_write(
         3) File size in bytes
         4) *partition-values
     """
-
-    bucket_region = get_s3_bucket_region_njit(table_loc, is_parallel)
     # TODO [BE-3248] compression and row-group-size (and other properties)
     # should be taken from table properties
     # https://iceberg.apache.org/docs/latest/configuration/#write-properties
@@ -3437,6 +3435,7 @@ def iceberg_write(
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
         alloc_false_bool_array(n_cols)
     )
+    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
         table_loc,
         bodo_table,
@@ -3448,6 +3447,7 @@ def iceberg_write(
         output_pyarrow_schema,
         fs,
         dummy_theta_sketch,
+        bucket_region,
     )
     arrow_filesystem_del(fs)
 
@@ -3636,6 +3636,7 @@ def iceberg_merge_cow(
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
         alloc_false_bool_array(num_cols)
     )
+    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
         table_loc,
         bodo_table,
@@ -3647,6 +3648,7 @@ def iceberg_merge_cow(
         output_pyarrow_schema,
         arrow_fs,
         dummy_theta_sketch,
+        bucket_region,
     )
 
     with bodo.no_warning_objmode(success="bool_"):
