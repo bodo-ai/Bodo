@@ -410,6 +410,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_framework.cpp"
     "bodo/tests/test_example.cpp"
     "bodo/tests/test_dict_builder.cpp"
+    "bodo/tests/test_groupby_common.cpp"
     "bodo/tests/test_groupby_and_window.cpp"
     "bodo/tests/test_json_col_reader.cpp"
     "bodo/tests/test_memory_budget.cpp"
