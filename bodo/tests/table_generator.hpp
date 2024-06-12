@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include "../io/arrow_reader.h"
 #include "../libs/_table_builder.h"
 #include "./test.hpp"
@@ -22,6 +23,51 @@ std::shared_ptr<arrow::Array> vecToArrowArray(const std::vector<T>& data) {
     std::shared_ptr<arrow::Array> ret;
     CHECK_ARROW_MEM(builder.Finish(&ret), "");
     return ret;
+}
+
+template <typename T>
+void _cppToArrow_inner(std::vector<std::shared_ptr<arrow::Array>>& arrays,
+                       std::vector<std::shared_ptr<arrow::Field>>& fields,
+                       const std::vector<std::string>& names,
+                       const std::vector<T>& input_column);
+
+/**
+ * @brief Specialization of _cppToArrow_inner for std::vector<std::string>.
+ *
+ * note that maybe_unused is needed because clang doesn't realize that this is
+ * being invoked as a specialization of the other declaration.
+ **/
+template <>
+[[maybe_unused]] void _cppToArrow_inner<std::vector<std::string>>(
+    std::vector<std::shared_ptr<arrow::Array>>& arrays,
+    std::vector<std::shared_ptr<arrow::Field>>& fields,
+    const std::vector<std::string>& names,
+    const std::vector<std::vector<std::string>>& input_column) {
+    size_t i = arrays.size();
+    bodo::tests::check(i < names.size(),
+                       "More input columns than column names");
+
+    std::vector<std::string> inner;
+    std::vector<offset_t> offsets;
+
+    offsets.push_back(0);
+    for (const auto& vec : input_column) {
+        inner.insert(inner.end(), vec.begin(), vec.end());
+        offset_t new_offset = offsets.back() + vec.size();
+        offsets.push_back(new_offset);
+    }
+    auto inner_array = vecToArrowArray(inner);
+    auto offset_buf = arrow::Buffer::FromVector(offsets);
+
+    auto inner_type = std::make_shared<arrow::Field>(
+        "element", arrow::CTypeTraits<std::string>::type_singleton());
+    auto type = arrow::large_list(inner_type);
+    auto field = arrow::field(names[i], type);
+    auto array = std::make_shared<arrow::LargeListArray>(
+        type, input_column.size(), offset_buf, inner_array);
+
+    arrays.push_back(array);
+    fields.push_back(field);
 }
 
 /**

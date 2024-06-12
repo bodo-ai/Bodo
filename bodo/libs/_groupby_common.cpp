@@ -872,9 +872,6 @@ void alloc_init_keys(
                 break;
             }
             case bodo_array_type::ARRAY_ITEM: {
-                offset_t* key_offset_arr =
-                    (offset_t*)key_col->data1<bodo_array_type::ARRAY_ITEM>();
-
                 // Allocate the ARRAY_ITEM array
                 new_key_col =
                     alloc_array_item(num_groups, nullptr, 0, pool, mm);
@@ -884,13 +881,21 @@ void alloc_init_keys(
                     (offset_t*)
                         new_key_col->data1<bodo_array_type::ARRAY_ITEM>();
 
-                // Collect child array pieces
+                offset_t pos = 0;
+
+                bool all_groups_have_same_key_col =
+                    (from_tables.size() == 1 && grp_infos.size() == 1);
+
+                // List of arrays to concat
                 std::vector<std::shared_ptr<array_info>> inner_arr_parts;
 
-                offset_t pos = 0;
+                std::vector<int64_t> idxs;
                 for (size_t j = 0; j < num_groups; j++) {
                     std::tie(key_col, key_row) =
                         find_key_for_group(j, from_tables, i, grp_infos);
+                    offset_t* key_offset_arr =
+                        (offset_t*)
+                            key_col->data1<bodo_array_type::ARRAY_ITEM>();
 
                     // construct new offsets in data1
                     offset_t start_offset = key_offset_arr[key_row];
@@ -899,15 +904,28 @@ void alloc_init_keys(
                     new_key_offset_arr[j] = pos;
                     pos += length;
 
-                    // TODO(aneesh): BSE-3437 - if key_col is the same for all
-                    // groups, collect indexes and only call
-                    // RetrieveArray_SingleColumn once.
-                    std::vector<int64_t> idxs(length);
-                    // fills idxs with [start_offset, start_offset + 1, ...,]
-                    std::iota(idxs.begin(), idxs.end(), start_offset);
-                    // add key_col->child_arrays[0][idxs] to inner_arr_parts
-                    inner_arr_parts.emplace_back(RetrieveArray_SingleColumn(
-                        key_col->child_arrays[0], idxs, false, pool, mm));
+                    if (all_groups_have_same_key_col) {
+                        // Collect the indices to make a single call to
+                        // RetrieveArray_SingleColumn later.
+
+                        // TODO(aneesh) this could be made more efficient by
+                        // using a custom iterator type and making
+                        // RetrieveArray_SingleColumn take an arbitrary
+                        // iterator, but this probably doesn't have a huge
+                        // impact on memory usage/time.
+                        for (offset_t k = start_offset; k < end_offset; k++) {
+                            idxs.push_back(k);
+                        }
+                    } else {
+                        idxs.resize(length);
+                        // fills idxs with [start_offset, start_offset + 1,
+                        // ..., end_offset - 1]
+                        std::iota(idxs.begin(), idxs.end(), start_offset);
+                        // add key_col->child_arrays[0][idxs] to inner_arr_parts
+                        inner_arr_parts.emplace_back(RetrieveArray_SingleColumn(
+                            key_col->child_arrays[0], idxs, false, pool, mm));
+                        idxs.clear();
+                    }
 
                     // null bitmask
                     bool bit =
@@ -918,16 +936,21 @@ void alloc_init_keys(
                 }
                 new_key_offset_arr[num_groups] = pos;
 
-                // Assemble child array fragments into a contiguous array
-                if (inner_arr_parts.empty()) {
-                    // concat_arrays expects a non-empty vector, so we instead
-                    // allocate an empty array that matches the type of the
-                    // input.
-                    new_key_col->child_arrays[0] =
-                        alloc_array_like(key_col->child_arrays[0], false);
+                if (all_groups_have_same_key_col && !idxs.empty()) {
+                    new_key_col->child_arrays[0] = RetrieveArray_SingleColumn(
+                        key_col->child_arrays[0], idxs, false, pool, mm);
                 } else {
-                    new_key_col->child_arrays[0] =
-                        concat_arrays(inner_arr_parts);
+                    // Assemble child array fragments into a contiguous array
+                    if (inner_arr_parts.empty()) {
+                        // concat_arrays expects a non-empty vector, so we
+                        // instead allocate an empty array that matches the type
+                        // of the input.
+                        new_key_col->child_arrays[0] =
+                            alloc_array_like(key_col->child_arrays[0], false);
+                    } else {
+                        new_key_col->child_arrays[0] =
+                            concat_arrays(inner_arr_parts);
+                    }
                 }
                 break;
             }
