@@ -938,6 +938,15 @@ boolean CascadeOpt() :
     { return cascade; }
 }
 
+boolean PurgeOpt() :
+{
+}
+{
+    <PURGE> {return true;}
+    |
+    {return false;}
+}
+
 SqlTruncateTable SqlTruncateTable(Span s) :
 {
     final boolean ifExists;
@@ -977,14 +986,16 @@ SqlDrop SqlDropTable(Span s) :
     final boolean ifExists;
     final boolean cascade;
     final SqlIdentifier id;
+    final boolean purge;
 }
 {
     <TABLE>
     ifExists = IfExistsOpt()
     id = CompoundIdentifier()
     cascade = CascadeOpt()
+    purge = PurgeOpt()
     {
-        return new SqlDropTable(s.end(this), ifExists, id, cascade);
+        return new SqlDropTable(s.end(this), ifExists, id, cascade, purge);
     }
 }
 

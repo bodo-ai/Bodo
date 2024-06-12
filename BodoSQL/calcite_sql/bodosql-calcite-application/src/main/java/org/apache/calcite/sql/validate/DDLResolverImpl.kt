@@ -306,7 +306,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual drop table operation
-            return catalogTable.getDDLExecutor().dropTable(catalogTable.fullPath, node.cascade)
+            return catalogTable.getDDLExecutor().dropTable(catalogTable.fullPath, node.cascade, node.purge)
         } catch (e: MissingObjectException) {
             if (node.ifExists) {
                 // If drop table doesn't care if the table exists, we still need to validate the

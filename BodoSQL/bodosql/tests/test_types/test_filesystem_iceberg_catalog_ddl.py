@@ -772,6 +772,102 @@ def test_show_tables_compiles_jit(iceberg_filesystem_catalog, memory_leak_check)
     bc.validate_query_compiles(query)
 
 
+@pytest.mark.parametrize("purge", [True, False])
+def test_iceberg_drop_table_purge_sql(
+    purge, iceberg_filesystem_catalog, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can drop a table and delete all underlying files with or without purge.
+    """
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    purge_str = "PURGE" if purge else ""
+    db_schema = "iceberg_db"
+    spark.sql(f"show tables in hadoop_prod.{db_schema} like '{table_name}'")
+
+    query_data_file = f"SELECT * FROM hadoop_prod.{db_schema}.{table_name}.data_files"
+    output = spark.sql(query_data_file).toPandas()
+    files_path = [output["file_path"][i] for i in range(len(output["file_path"]))]
+
+    query_drop_table_purge = f'DROP TABLE "{db_schema}"."{table_name}" {purge_str}'
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    bc.sql(query_drop_table_purge)
+    # Verify we can't find the table.
+    remaining_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(remaining_tables) == 0, "Table was not dropped"
+
+    for path in files_path:
+        with pytest.raises(FileNotFoundError):
+            pd.read_parquet(path)
+
+
+@pytest.mark.parametrize("purge", [True, False])
+def test_iceberg_drop_table_purge_execute_dll(
+    purge, iceberg_filesystem_catalog, memory_leak_check
+):
+    """
+    Tests that the filesystem catalog can drop a table and delete all underlying files with or without purge.
+    """
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    purge_str = "PURGE" if purge else ""
+    db_schema = "iceberg_db"
+    spark.sql(f"show tables in hadoop_prod.{db_schema} like '{table_name}'")
+
+    query_data_file = f"SELECT * FROM hadoop_prod.{db_schema}.{table_name}.data_files"
+    output = spark.sql(query_data_file).toPandas()
+    files_path = [output["file_path"][i] for i in range(len(output["file_path"]))]
+
+    query_drop_table_purge = f'DROP TABLE "{db_schema}"."{table_name}" {purge_str}'
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+    bc.execute_ddl(query_drop_table_purge)
+    # Verify we can't find the table.
+    remaining_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(remaining_tables) == 0, "Table was not dropped"
+
+    for path in files_path:
+        with pytest.raises(FileNotFoundError):
+            pd.read_parquet(path)
+
+
+@pytest.mark.parametrize("purge", [True, False])
+def test_iceberg_drop_table_purge(purge, iceberg_filesystem_catalog, memory_leak_check):
+    """
+    Tests that the filesystem catalog can drop a table and delete all underlying files with or without purge.
+    """
+    spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
+    table_name = create_simple_ddl_table(spark)
+    purge_str = "PURGE" if purge else ""
+    db_schema = "iceberg_db"
+    spark.sql(f"show tables in hadoop_prod.{db_schema} like '{table_name}'")
+
+    query_data_file = f"SELECT * FROM hadoop_prod.{db_schema}.{table_name}.data_files"
+    output = spark.sql(query_data_file).toPandas()
+    files_path = [output["file_path"][i] for i in range(len(output["file_path"]))]
+
+    query_drop_table_purge = f'DROP TABLE "{db_schema}"."{table_name}" {purge_str}'
+    bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
+
+    @bodo.jit
+    def impl(bc, query):
+        return bc.sql(query)
+
+    impl(bc, query_drop_table_purge)
+    # Verify we can't find the table.
+    remaining_tables = spark.sql(
+        f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
+    ).toPandas()
+    assert len(remaining_tables) == 0, "Table was not dropped"
+
+    for path in files_path:
+        with pytest.raises(FileNotFoundError):
+            pd.read_parquet(path)
+
+
 def test_show_no_terse_error(
     iceberg_filesystem_catalog, iceberg_database, memory_leak_check
 ):
