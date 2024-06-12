@@ -16,7 +16,13 @@ import org.apache.calcite.sql.parser.SqlParserPos
  * This is an expansion of the one within Calcite using the same SqlKind
  * as this one also supports specifying CASCADE or RESTRICT.
  */
-class SqlDropTable(pos: SqlParserPos, ifExists: Boolean, val name: SqlIdentifier, val cascade: Boolean) : SqlDrop(OPERATOR, pos, ifExists) {
+class SqlDropTable(
+    pos: SqlParserPos,
+    ifExists: Boolean,
+    val name: SqlIdentifier,
+    val cascade: Boolean,
+    val purge: Boolean,
+) : SqlDrop(OPERATOR, pos, ifExists) {
     companion object {
         @JvmStatic
         private val OPERATOR: SqlOperator =
@@ -38,5 +44,8 @@ class SqlDropTable(pos: SqlParserPos, ifExists: Boolean, val name: SqlIdentifier
         writer.keyword(
             if (cascade) "CASCADE" else "RESTRICT",
         )
+        if (purge) {
+            writer.keyword("PURGE")
+        }
     }
 }

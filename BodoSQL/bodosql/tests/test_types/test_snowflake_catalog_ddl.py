@@ -389,12 +389,14 @@ def test_drop_schema_if_exists_doesnt_exists(
     assert not check_schema_exists(conn, schema_name)
 
 
-def test_drop_table(test_db_snowflake_catalog, memory_leak_check):
+@pytest.mark.parametrize("purge", [True, False])
+def test_drop_table(purge, test_db_snowflake_catalog, memory_leak_check):
     """Tests that we can drop a table from Snowflake."""
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    purge_str = "PURGE" if purge else ""
 
     @bodo.jit
     def impl(bc, query):
@@ -407,7 +409,7 @@ def test_drop_table(test_db_snowflake_catalog, memory_leak_check):
     ) as table_name:
         case_insenstive_table_name = table_name.upper()
         # Drop Execute a drop table query.
-        query = f"DROP TABLE {table_name}"
+        query = f"DROP TABLE {table_name} {purge_str}"
         py_output = pd.DataFrame(
             {"STATUS": [f"{case_insenstive_table_name} successfully dropped."]}
         )
@@ -429,50 +431,15 @@ def test_drop_table(test_db_snowflake_catalog, memory_leak_check):
         assert len(tables) == 0, "Table was not dropped"
 
 
-def test_drop_table_python(test_db_snowflake_catalog, memory_leak_check):
-    """Tests that we can drop a table from Snowflake using regular bc.sql
-    from Python"""
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-    conn = get_snowflake_connection_string(db, schema)
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-
-    # Create a table
-    table_query = "SELECT 1 as A"
-    with create_snowflake_table_from_select_query(
-        table_query, "drop_table_test", db, schema
-    ) as table_name:
-        case_insenstive_table_name = table_name.upper()
-        # Drop Execute a drop table query.
-        query = f"DROP TABLE {table_name}"
-        py_output = pd.DataFrame(
-            {"STATUS": [f"{case_insenstive_table_name} successfully dropped."]}
-        )
-        bodo_output = bc.sql(query)
-        passed = _test_equal_guard(
-            bodo_output,
-            py_output,
-            sort_output=True,
-        )
-        # count how many pes passed the test, since throwing exceptions directly
-        # can lead to inconsistency across pes and hangs
-        n_passed = reduce_sum(passed)
-        assert n_passed == bodo.get_size(), "Sequential test failed"
-        # Verify we can't find the table.
-        tables = pd.read_sql(
-            f"SHOW TABLES LIKE '{case_insenstive_table_name}' STARTS WITH '{case_insenstive_table_name}'",
-            conn,
-        )
-        assert len(tables) == 0, "Table was not dropped"
-
-
-def test_drop_table_execute_ddl(test_db_snowflake_catalog, memory_leak_check):
+@pytest.mark.parametrize("purge", [True, False])
+def test_drop_table_execute_ddl(purge, test_db_snowflake_catalog, memory_leak_check):
     """Tests that we can drop a table from Snowflake using bc.execute_ddl
     from Python"""
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    purge_str = "PURGE" if purge else ""
 
     # Create a table
     table_query = "SELECT 1 as A"
@@ -481,7 +448,7 @@ def test_drop_table_execute_ddl(test_db_snowflake_catalog, memory_leak_check):
     ) as table_name:
         case_insenstive_table_name = table_name.upper()
         # Drop Execute a drop table query.
-        query = f"DROP TABLE {table_name}"
+        query = f"DROP TABLE {table_name} {purge_str}"
         py_output = pd.DataFrame(
             {"STATUS": [f"{case_insenstive_table_name} successfully dropped."]}
         )
@@ -503,13 +470,15 @@ def test_drop_table_execute_ddl(test_db_snowflake_catalog, memory_leak_check):
         assert len(tables) == 0, "Table was not dropped"
 
 
-def test_drop_table_case_sensitive(test_db_snowflake_catalog, memory_leak_check):
+@pytest.mark.parametrize("purge", [True, False])
+def test_drop_table_case_sensitive(purge, test_db_snowflake_catalog, memory_leak_check):
     """Tests that we can drop a table from Snowflake that
     is case sensitive."""
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    purge_str = "PURGE" if purge else ""
 
     @bodo.jit
     def impl(bc, query):
@@ -523,7 +492,7 @@ def test_drop_table_case_sensitive(test_db_snowflake_catalog, memory_leak_check)
         # Unwrap the quotes for non-identifier queries
         unwrapped_table_name = table_name[1:-1]
         # Drop Execute a drop table query.
-        query = f"DROP TABLE {table_name}"
+        query = f"DROP TABLE {table_name} {purge_str}"
         py_output = pd.DataFrame(
             {"STATUS": [f"{unwrapped_table_name} successfully dropped."]}
         )
@@ -545,12 +514,14 @@ def test_drop_table_case_sensitive(test_db_snowflake_catalog, memory_leak_check)
         assert len(tables) == 0, "Table was not dropped"
 
 
-def test_drop_table_not_found(test_db_snowflake_catalog, memory_leak_check):
+@pytest.mark.parametrize("purge", [True, False])
+def test_drop_table_not_found(purge, test_db_snowflake_catalog, memory_leak_check):
     """Tests a table that doesn't exist in Snowflake raises an error."""
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    purge_str = "PURGE" if purge else ""
 
     @bodo.jit
     def impl(bc, query):
@@ -564,17 +535,21 @@ def test_drop_table_not_found(test_db_snowflake_catalog, memory_leak_check):
     )
     assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
     with pytest.raises(BodoError, match=""):
-        query = f"DROP TABLE {table_name}"
+        query = f"DROP TABLE {table_name} {purge_str}"
         impl(bc, query)
 
 
-def test_drop_table_not_found_if_exists(test_db_snowflake_catalog, memory_leak_check):
+@pytest.mark.parametrize("purge", [True, False])
+def test_drop_table_not_found_if_exists(
+    purge, test_db_snowflake_catalog, memory_leak_check
+):
     """Tests a table that doesn't exist in Snowflake doesn't raise an error
     with IF EXISTS."""
     db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    purge_str = "PURGE" if purge else ""
 
     @bodo.jit
     def impl(bc, query):
@@ -586,8 +561,8 @@ def test_drop_table_not_found_if_exists(test_db_snowflake_catalog, memory_leak_c
         f"SHOW TABLES LIKE '{table_name}' STARTS WITH '{table_name}'",
         conn,
     )
-    assert len(tables) == 0, "Table exists. Need to test with a non-existent table."
-    query = f"DROP TABLE IF EXISTS {table_name}"
+    assert len(tables) == 0, "Table exists. Please choose a different table name."
+    query = f"DROP TABLE IF EXISTS {table_name} {purge_str}"
     py_output = pd.DataFrame(
         {
             "STATUS": [

@@ -45,13 +45,14 @@ interface DDLExecutor {
      * Drops a table from the catalog. Note: We don't need ifExists because we
      * have already checked for the existence of the table before calling this.
      * @param tablePath The path to the table to drop.
-     * @param cascade The cascade operation lag used by Snowflake. This is ignored
-     * by other connectors.
+     * @param cascade Specifies whether the table can be dropped if foreign keys exist that reference the table.
+     * @param purge Indicate whether (meta)data files are marked for permanent deletion.
      * @return The result of the operation.
      */
     fun dropTable(
         tablePath: ImmutableList<String>,
         cascade: Boolean,
+        purge: Boolean,
     ): DDLExecutionResult
 
     /**

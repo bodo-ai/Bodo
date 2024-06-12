@@ -2093,7 +2093,12 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
     @NotNull
     @Override
-    public DDLExecutionResult dropTable(@NotNull ImmutableList<String> tablePath, boolean cascade) {
+    public DDLExecutionResult dropTable(
+        @NotNull ImmutableList<String> tablePath, boolean cascade, boolean purge) {
+      if (purge) {
+        VERBOSE_LEVEL_ONE_LOGGER.warning(
+            "PURGE is not supported in Snowflake and will be ignored.");
+      }
       String tableName = generateSnowflakeObjectString(tablePath);
       String query =
           String.format(

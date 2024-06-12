@@ -330,6 +330,7 @@ data: {
         "POLICY"
         "POSITION"
         "PRESERVE_SPACE"
+        "PURGE"
         "RAW_DEFLATE"
         "RECORD_DELIMITER"
         "RECURSIVE"
