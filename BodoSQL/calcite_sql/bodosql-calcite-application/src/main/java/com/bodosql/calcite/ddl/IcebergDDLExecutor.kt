@@ -80,16 +80,18 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param tablePath The path to the table to drop.
      * @param cascade The cascade operation lag used by Snowflake. This is ignored
      * by other connectors.
+     * @param purge If purge is true, it will actually delete the data/metadata files which prevents time travel.
+     * If purge is false, even though the table is dropped the underlying data/metadata may still exist.
      * @return The result of the operation.
      */
     override fun dropTable(
         tablePath: ImmutableList<String>,
         cascade: Boolean,
+        purge: Boolean,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
-        // TOOD: Should we set purge=True. This will delete the data/metadata files but prevents time travel.
-        val result = icebergConnection.dropTable(tableIdentifier)
+        val result = icebergConnection.dropTable(tableIdentifier, purge)
         if (!result) {
             throw RuntimeException("Unable to drop table $tableName. Please check that you have sufficient permissions.")
         }
@@ -464,6 +466,11 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         }
     }
 
+    /**
+     * Drops a view from the catalog.
+     * @param viewPath The path to the view to drop.
+     * @return The result of the operation.
+     */
     override fun dropView(viewPath: ImmutableList<String>) {
         if (icebergConnection is ViewCatalog) {
             val viewName = viewPath[viewPath.size - 1]

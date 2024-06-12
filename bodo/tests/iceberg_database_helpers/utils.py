@@ -68,6 +68,15 @@ def get_spark_tabular(tabular_connection):
         .config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
         .config("spark.sql.defaultCatalog", "rest_prod")
         .config(
+            "spark.jars.packages",
+            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2,"
+            "software.amazon.awssdk:bundle:2.19.13,"
+            "software.amazon.awssdk:url-connection-client:2.19.13,",
+        )
+        .config(
+            "spark.sql.catalog.rest_prod.io-impl", "org.apache.iceberg.aws.s3.S3FileIO"
+        )
+        .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         )
