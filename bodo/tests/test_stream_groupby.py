@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -12,8 +14,8 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.tests.utils import check_func
-from bodo.utils.typing import BodoError
+from bodo.tests.utils import _get_dist_arg, check_func, temp_env_override
+from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 
 
 @pytest.mark.parametrize(
@@ -835,11 +837,11 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
         return pd.concat(out_dfs)
 
     match fstr:
-        case ("count"):
+        case "count":
             expected_df = df.groupby(
                 "A", as_index=False, dropna=False, sort=True
             ).count()
-        case ("first"):
+        case "first":
             expected_df = df.groupby("A", as_index=False, dropna=False, sort=True).agg(
                 {column: "first" for column in df.columns[1:]}
             )
@@ -860,11 +862,11 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
                 }
             )
             df = pd.DataFrame(cols)
-        case ("size"):
+        case "size":
             expected_df = df.groupby("A", as_index=False, dropna=False).agg(
                 {column: lambda x: len(x) for column in df.columns[1:]}
             )
-        case ("sum"):
+        case "sum":
             expected_df = pd.DataFrame()
     if fstr == "sum":
         with pytest.raises(
@@ -1104,4 +1106,198 @@ def test_groupby_timestamptz_key(memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
         sort_output=True,
+    )
+
+
+@pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
+def test_window_output_work_stealing(memory_leak_check, capfd):
+    """
+    Test that the window-output-redistribution works as expected.
+    """
+
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    df = pd.DataFrame(
+        {
+            "A": ([1] * 500_000) + ([15, 20] * 50_000),
+            "B": np.arange(600000),
+            "C": np.arange(300000, 900000),
+            # Dict-encoded column
+            "D": pd.array(
+                ["pizza", "pasta", "burrito"] * 200000,
+                dtype=pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())),
+            ),
+            # Regular string column
+            "E": pd.array(
+                [
+                    "breaking-bad",
+                    "better-call-saul",
+                    "sopranos",
+                    "the-wire",
+                    "west-wing",
+                ]
+                * 120000,
+            ),
+        }
+    )
+
+    # This is essentially the query we're executing:
+    # SELECT A, B, C, D, E, dense_rank() OVER (PARTITION BY A ORDER BY B ) AS RANK FROM DF
+    @bodo.jit(distributed=["df"])
+    def ref_impl(df):
+        out_rank = df.groupby(
+            "A", as_index=False, dropna=False, _is_bodosql=True
+        ).window((("dense_rank",),), ("B",), (True,), ("last",))
+        return out_rank
+
+    # Get expected output using the non-streaming path
+    local_df = _get_dist_arg(df)
+    expected_out_rank = ref_impl(local_df)
+    expected_out = local_df.copy()
+    expected_out["RANK"] = expected_out_rank["AGG_OUTPUT_0"]
+    expected_out = bodo.allgatherv(expected_out)
+
+    global_1 = MetaType((0, 1, 2, 3, 4))
+    global_2 = MetaType((0,))
+    global_3 = MetaType((1,))
+    global_4 = MetaType((True,))
+    global_5 = MetaType(("dense_rank",))
+    global_6 = MetaType((0, 1, 2, 3, 4))
+    global_7 = ColNamesMetaType(("A", "B", "C", "D", "E", "RANK"))
+    global_8 = MetaType((0, 1, 2, 3, 4, 5))
+
+    @bodo.jit(distributed=["df"])
+    def window_impl(df):
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), global_1, 5
+        )
+        T2 = T1
+        __bodo_is_last_streaming_output_1 = False
+        _iter_1 = 0
+        _temp1 = bodo.hiframes.table.local_len(T2)
+        state_1 = bodo.libs.stream_window.init_window_state(
+            -1,
+            global_2,
+            global_3,
+            global_4,
+            global_4,
+            global_5,
+            global_6,
+        )
+        __bodo_is_last_streaming_output_2 = False
+        while not (__bodo_is_last_streaming_output_2):
+            T3 = bodo.hiframes.table.table_local_filter(
+                T2, slice((_iter_1 * 4096), ((_iter_1 + 1) * 4096))
+            )
+            __bodo_is_last_streaming_output_1 = (_iter_1 * 4096) >= _temp1
+            __bodo_is_last_streaming_output_2 = (
+                bodo.libs.stream_window.window_build_consume_batch(
+                    state_1, T3, __bodo_is_last_streaming_output_1
+                )
+            )
+            _iter_1 = _iter_1 + 1
+        __bodo_is_last_streaming_output_3 = False
+        _produce_output_1 = True
+        __bodo_streaming_batches_table_builder_1 = (
+            bodo.libs.table_builder.init_table_builder_state(-1)
+        )
+        while not (__bodo_is_last_streaming_output_3):
+            (
+                T4,
+                __bodo_is_last_streaming_output_3,
+            ) = bodo.libs.stream_window.window_produce_output_batch(
+                state_1, _produce_output_1
+            )
+            T5 = T4
+            bodo.libs.table_builder.table_builder_append(
+                __bodo_streaming_batches_table_builder_1, T5
+            )
+        bodo.libs.stream_window.delete_window_state(state_1)
+        T6 = bodo.libs.table_builder.table_builder_finalize(
+            __bodo_streaming_batches_table_builder_1
+        )
+        T7 = bodo.hiframes.table.table_subset(T6, global_8, False)
+        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
+        df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index_1, global_7)
+        bodo.libs.query_profile_collector.finalize()
+        return df2
+
+    with temp_env_override(
+        {
+            # Sync often for testing purposes
+            "BODO_STREAM_GROUPBY_OUTPUT_WORK_STEALING_SYNC_ITER": "2",
+            # Start stealing immediately.
+            "BODO_STREAM_GROUPBY_OUTPUT_WORK_STEALING_TIME_THRESHOLD_SECONDS": "0",
+            "BODO_STREAM_GROUPBY_DEBUG_OUTPUT_WORK_STEALING": "1",
+            # Set a low value so we can test the multiple shuffles case.
+            "BODO_STREAM_GROUPBY_WORK_STEALING_MAX_SEND_RECV_BATCHES_PER_RANK": "2",
+            # Start re-distribution as soon as any rank is done.
+            "BODO_STREAM_GROUPBY_WORK_STEALING_PERCENT_RANKS_DONE_THRESHOLD": "0",
+        }
+    ):
+        output = window_impl(_get_dist_arg(df))
+        global_output = bodo.allgatherv(output)
+        stdout, stderr = capfd.readouterr()
+
+    ### Uncomment for debugging purposes ###
+    # with capfd.disabled():
+    #     for i in range(bodo.get_size()):
+    #         if bodo.get_rank() == i:
+    #             print(f"output:\n{output}")
+    #             print(f"stdout:\n{stdout}")
+    #             print(f"stderr:\n{stderr}")
+    #             if i == 0:
+    #                 print(f"expected_out:\n{expected_out}")
+    #         bodo.barrier()
+    ###
+
+    if bodo.get_rank() == 0:
+        expected_log_messages = [
+            "[DEBUG][GroupbyOutputState] Started work-stealing timer since 1 of 2 ranks are done outputting.",
+            "[DEBUG][GroupbyOutputState] Starting work stealing.",
+            "[DEBUG][GroupbyOutputState] Done with work stealing.",
+        ]
+    else:
+        expected_log_messages = [None] * 3
+
+    # Verify that the expected log messages are present.
+    for expected_log_message in expected_log_messages:
+        assert_success = True
+        if expected_log_message is not None:
+            assert_success = expected_log_message in stderr
+        assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+        assert assert_success
+
+    # Check for certain log messages using regex (in case the exact numbers present in the logs change)
+    if bodo.get_rank() == 0:
+        expected_log_messages = [
+            r"\[DEBUG\]\[GroupbyOutputState\] Performed \d+ shuffles to redistribute data.",
+            r"\[DEBUG\]\[GroupbyOutputState\] Received \d+ rows from other ranks during redistribution.",
+        ]
+    else:
+        expected_log_messages = [
+            r"\[DEBUG\]\[GroupbyOutputState\] Sent \d+ rows to other ranks during redistribution."
+        ] + ([None] * 1)
+
+    # Verify that the expected log messages are present.
+    for expected_log_message in expected_log_messages:
+        assert_success = True
+        if expected_log_message is not None:
+            assert_success = bool(re.search(expected_log_message, stderr))
+        assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+        assert assert_success
+
+    # Verify that the output itself is correct.
+    assert (
+        global_output.shape[0] == df.shape[0]
+    ), f"Final output size ({global_output.shape[0]}) is not as expected ({df.shape[0]})"
+
+    pd.testing.assert_frame_equal(
+        global_output.sort_values(list(expected_out.columns)).reset_index(drop=True),
+        expected_out.sort_values(list(expected_out.columns)).reset_index(drop=True),
+        check_dtype=False,
+        check_index_type=False,
+        atol=0.1,
     )

@@ -457,10 +457,9 @@ class GroupbyPartition {
      * retain in the output.
      * @param output_buffer The output buffer to append the generated output to.
      */
-    void FinalizeMrnf(
-        const std::vector<bool>& mrnf_part_cols_to_keep,
-        const std::vector<bool>& mrnf_sort_cols_to_keep,
-        const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
+    void FinalizeMrnf(const std::vector<bool>& mrnf_part_cols_to_keep,
+                      const std::vector<bool>& mrnf_sort_cols_to_keep,
+                      ChunkedTableBuilder& output_buffer);
 
     /**
      * @brief Finalize the partition in the Window case.
@@ -480,10 +479,9 @@ class GroupbyPartition {
      * retain in the output.
      * @param output_buffer The output buffer to append the generated output to.
      */
-    void FinalizeWindow(
-        const std::vector<bool>& partition_by_cols_to_keep,
-        const std::vector<bool>& order_by_cols_to_keep,
-        const std::shared_ptr<ChunkedTableBuilder>& output_buffer);
+    void FinalizeWindow(const std::vector<bool>& partition_by_cols_to_keep,
+                        const std::vector<bool>& order_by_cols_to_keep,
+                        ChunkedTableBuilder& output_buffer);
 
    private:
     const size_t num_top_bits = 0;
@@ -720,6 +718,167 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     GroupbyIncrementalShuffleMetrics metrics;
 };
 
+/**
+ * @brief Wrapper around the CTB that holds the output of a Groupby/MRNF/Window
+ * operator. This also enables work-stealing during the output production stage,
+ * if enabled.
+ *
+ */
+class GroupbyOutputState {
+   public:
+    // Output buffer and associated dict-builders.
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    ChunkedTableBuilder buffer;
+    // Iteration counter for the output production stage, must be updated by the
+    // caller.
+    uint64_t iter = 0;
+
+    GroupbyOutputState(
+        const std::shared_ptr<bodo::Schema>& schema,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        size_t chunk_size,
+        size_t max_resize_count_for_variable_size_dtypes =
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
+        bool enable_work_stealing_ = false);
+
+    /**
+     * @brief Finalize the output appends during the normal Groupby Build stage.
+     * If work-stealing is enabled, this will only finalize the active chunk
+     * since we may need to append more batches later after redistributing work.
+     *
+     */
+    void Finalize();
+
+    /**
+     * @brief Return an output batch and whether it was the final one. This will
+     * also perform work-stealing if it's required and enabled.
+     *
+     * @param produce_output Whether we should return an actual batch or just a
+     * dummy batch.
+     * @return std::tuple<std::shared_ptr<table_info>, bool>
+     */
+    std::tuple<std::shared_ptr<table_info>, bool> PopBatch(
+        const bool produce_output);
+
+   private:
+    /// Work-stealing state
+
+    // Whether work-stealing is enabled.
+    const bool enable_work_stealing = false;
+    // Debug mode for work-stealing.
+    bool debug_work_stealing = false;
+    // How many ranks are done outputting all of their output batches. Only
+    // updated when work-stealing is enabled.
+    uint64_t num_ranks_done = 0;
+    // Whether we've started the timer for work-stealing. This is started when a
+    // threshold fraction of ranks are done.
+    bool work_steal_timer_started = false;
+    // Stores the timestamp when the work-stealing timer was started. While this
+    // is stored on all ranks, we only use the value on rank-0 for any decisions
+    // to avoid issues related to clock synchronization.
+    time_pt work_steal_start_time;
+    // Whether work stealing has been done.
+    bool work_stealing_done = false;
+    // Sync frequency for work-stealing checks.
+    uint64_t work_stealing_sync_iter = DEFAULT_SYNC_ITERS;
+    // The number of ranks that must be done after which we will start the
+    // work-stealing timer.
+    uint64_t work_stealing_num_ranks_done_threshold = 1;
+    // The time since the work-stealing timer was started after which we will
+    // start redistributing the data.
+    // XXX This is a constant for now, but we should eventually consider the
+    // amount of work left and the amount of skew since it's possible that just
+    // one rank has 2 batches left, in which case work-stealing is not very
+    // useful. We might also want to consider how much slower it is compared to
+    // the "finished" ranks. e.g. If other ranks finished in 1s on average, then
+    // we should probably start work stealing very soon.
+    uint64_t work_stealing_timer_threshold_us = 30 * 1000 * 1000;
+    // Maximum number of batches that any rank can send/receive in a single
+    // shuffle during redistribution. This is to protect against OOM errors.
+    int64_t work_stealing_max_batched_send_recv_per_rank = -1;
+
+    ///
+
+    // MPI number of processes and this process' rank.
+    int n_pes, myrank;
+
+    /**
+     * @brief If work-stealing is enabled, this synchronizes output production
+     * state across all ranks and initiates work-redistribution if required.
+     *
+     */
+    void StealWorkIfNeeded();
+
+    /**
+     * @brief Helper to redistribute the remaining batches between ranks if
+     * we've determined that work-stealing is required.
+     *
+     */
+    void RedistributeWork();
+
+    /**
+     * @brief Static helper to determine how many batches should be moved from
+     * every rank to every other rank. Currently, this tries to move data evenly
+     * from all ranks with excess data to all ranks with remaining capacity.
+     *
+     * @param num_batches_ranks A vector of size 'n_pes' which contains the
+     * number of output batches remaining on each rank.
+     * @return std::vector<std::vector<size_t>> A matrix of shape n_pes x n_pes
+     * specifying the number of batches to move.
+     */
+    static std::vector<std::vector<size_t>> determine_redistribution(
+        const std::vector<uint64_t>& num_batches_ranks);
+
+    /**
+     * @brief Static helper to determine how many batches to send from every
+     * rank to every other rank during a batched shuffle/redistribution while
+     * ensuring that no rank sends or receives any more than
+     * max_batches_send_recv_per_rank batches.
+     *
+     * @param[in, out] batches_to_send_overall Number of remaining batches we
+     * need to send from every rank to every other rank. This is updated
+     * in-place. The update is essentially an element-wise subtraction of the
+     * output matrix.
+     * @param max_batches_send_recv_per_rank The maximum number of batches any
+     * rank can send/receive.
+     * @return std::vector<std::vector<size_t>> A matrix of shape n_pes x n_pes
+     * specifying the number of batches to move in this shuffle iteration.
+     */
+    static std::vector<std::vector<size_t>> determine_batched_send_counts(
+        std::vector<std::vector<size_t>>& batches_to_send_overall,
+        const size_t max_batches_send_recv_per_rank);
+
+    /**
+     * @brief Is another shuffle required. This just checks if there are any
+     * non-0 values in 'batches_to_send', i.e. are there any batches that still
+     * need to be moved.
+     * TODO Replace this with a simpler check, potentially in
+     * 'determine_batched_send_counts'.
+     *
+     * @param batches_to_send Number of batches remaining to be sent from every
+     * rank to every other rank.
+     * @return true Another round of shuffle is required.
+     * @return false All redistribution is done.
+     */
+    static bool needs_another_shuffle(
+        const std::vector<std::vector<size_t>>& batches_to_send);
+
+    /**
+     * @brief Helper for performing a round of shuffle/redistribution.
+     *
+     * @param to_send_this_iter n_pes x n_pes matrix specifying how many batches
+     * need to be moved from one rank to every other rank in this round.
+     * @param redistribution_tbb TBB to use accumulating the shuffle batches
+     * that need to be sent. We pass this in to reduce the number allocations by
+     * re-using it between all shuffle rounds. This is cleared after use.
+     * @return std::tuple<std::shared_ptr<table_info>, size_t> Received table
+     * and number of rows sent to other ranks.
+     */
+    std::tuple<std::shared_ptr<table_info>, size_t> redistribute_batches_helper(
+        const std::vector<std::vector<size_t>>& to_send_this_iter,
+        std::shared_ptr<TableBuildBuffer>& redistribution_tbb);
+};
+
 class GroupbyState {
    private:
     // NOTE: These need to be declared first so that they are
@@ -816,11 +975,17 @@ class GroupbyState {
     // performance reasons.
     std::vector<bool> append_row_to_build_table;
 
-    // Output buffer
-    // This will be lazily initialized during the end of
-    // the build step to simplify specifying the output column types.
+    // Output state
+    // This will be lazily initialized during the end of the build step to
+    // simplify specifying the output column types.
     // TODO(njriasan): Move to initialization information.
-    std::shared_ptr<ChunkedTableBuilder> output_buffer = nullptr;
+    std::shared_ptr<GroupbyOutputState> output_state = nullptr;
+    // By default, enable work-stealing for window and disable it for regular
+    // groupby (+ MRNF). This can be overriden by explicitly setting
+    // BODO_STREAM_WINDOW_ENABLE_OUTPUT_WORK_STEALING and
+    // BODO_STREAM_GROUPBY_ENABLE_OUTPUT_WORK_STEALING.
+    bool enable_output_work_stealing_groupby = false;
+    bool enable_output_work_stealing_window = true;
 
     // Simple concatenation of key_dict_builders and
     // non key dict builders. The key_dict_builders will be shared between the
@@ -830,9 +995,6 @@ class GroupbyState {
     // type is not dict encoded, the value is nullptr These will be shared
     // between build_table_buffers of all partitions.
     std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
-
-    // Dictionary builders for output columns
-    std::vector<std::shared_ptr<DictionaryBuilder>> out_dict_builders;
 
     // Has all of the input already been processed. This should be
     // updated after the last input to avoid repeating the final steps.

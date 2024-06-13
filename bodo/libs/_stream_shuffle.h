@@ -36,6 +36,15 @@ const int STREAMING_BATCH_SIZE = __env_streaming_batch_size_str != nullptr
 #endif
 
 /**
+ * @brief Get the default shuffle threshold for all streaming operators. We
+ * check the 'BODO_SHUFFLE_THRESHOLD' environment variable first. If it's not
+ * set, we decide based on available memory per rank.
+ *
+ * @return int64_t Threshold (in bytes)
+ */
+int64_t get_shuffle_threshold();
+
+/**
  * @brief Struct for Shuffle metrics.
  *
  */
