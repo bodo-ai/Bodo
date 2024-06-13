@@ -1,9 +1,15 @@
 #include "_stream_groupby.h"
 #include <fmt/format.h>
+#include <mpi.h>
+#include <cstring>
+#include <list>
+#include <memory>
+#include <tuple>
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_chunked_table_builder.h"
 #include "_distributed.h"
 #include "_groupby_col_set.h"
 #include "_groupby_common.h"
@@ -11,6 +17,7 @@
 #include "_query_profile_collector.h"
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
+#include "_table_builder.h"
 #include "_window_compute.h"
 #include "arrow/util/bit_util.h"
 
@@ -1376,7 +1383,7 @@ void GroupbyPartition::ActivatePartition() {
 void GroupbyPartition::FinalizeMrnf(
     const std::vector<bool>& mrnf_part_cols_to_keep,
     const std::vector<bool>& mrnf_sort_cols_to_keep,
-    const std::shared_ptr<ChunkedTableBuilder>& output_buffer) {
+    ChunkedTableBuilder& output_buffer) {
     // Make sure this partition is active. This is idempotent
     // and hence a NOP if the partition is already active.
     this->ActivatePartition();
@@ -1408,8 +1415,8 @@ void GroupbyPartition::FinalizeMrnf(
         std::make_shared<table_info>(cols_to_keep);
 
     // Append this "pruned" table to the output buffer using the bitmask.
-    output_buffer->AppendBatch(data_table_w_cols_to_keep,
-                               std::move(out_bitmask), n_bits_set, 0);
+    output_buffer.AppendBatch(data_table_w_cols_to_keep, std::move(out_bitmask),
+                              n_bits_set, 0);
 
     // Since we have added the output to the output buffer, we don't need the
     // build state anymore and can release that memory.
@@ -1419,7 +1426,7 @@ void GroupbyPartition::FinalizeMrnf(
 void GroupbyPartition::FinalizeWindow(
     const std::vector<bool>& partition_by_cols_to_keep,
     const std::vector<bool>& order_by_cols_to_keep,
-    const std::shared_ptr<ChunkedTableBuilder>& output_buffer) {
+    ChunkedTableBuilder& output_buffer) {
     // Make sure this partition is active. This is idempotent
     // and hence a NOP if the partition is already active.
     this->ActivatePartition();
@@ -1452,7 +1459,7 @@ void GroupbyPartition::FinalizeWindow(
         std::make_shared<table_info>(cols_to_keep);
 
     // Append the table to the output buffer.
-    output_buffer->AppendBatch(data_table_w_cols_to_keep);
+    output_buffer.AppendBatch(data_table_w_cols_to_keep);
 
     // Since we have added the output to the output buffer, we don't need the
     // build state anymore and can release that memory.
@@ -1710,6 +1717,479 @@ void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
 #pragma endregion  // GroupbyIncrementalShuffleState
 /* ------------------------------------------------------------------------ */
 
+/* -------------------------- GroupbyOutputState -------------------------- */
+#pragma region  // GroupbyOutputState
+
+GroupbyOutputState::GroupbyOutputState(
+    const std::shared_ptr<bodo::Schema>& schema,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+    size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes,
+    bool enable_work_stealing_)
+    : dict_builders(dict_builders_),
+      buffer(schema, dict_builders, chunk_size,
+             max_resize_count_for_variable_size_dtypes),
+      enable_work_stealing(enable_work_stealing_) {
+    MPI_Comm_size(MPI_COMM_WORLD, &(this->n_pes));
+    MPI_Comm_rank(MPI_COMM_WORLD, &(this->myrank));
+
+    // TODO Remove this once we make this async.
+    char* work_stealing_sync_iter_env_ =
+        std::getenv("BODO_STREAM_GROUPBY_OUTPUT_WORK_STEALING_SYNC_ITER");
+    if (work_stealing_sync_iter_env_) {
+        this->work_stealing_sync_iter = std::stoi(work_stealing_sync_iter_env_);
+    }
+
+    char* work_stealing_threshold_timer_env_ = std::getenv(
+        "BODO_STREAM_GROUPBY_OUTPUT_WORK_STEALING_TIME_THRESHOLD_SECONDS");
+    if (work_stealing_threshold_timer_env_) {
+        // Convert from seconds to microseconds.
+        this->work_stealing_timer_threshold_us =
+            std::stoi(work_stealing_threshold_timer_env_) * 1000 * 1000;
+    }
+
+    char* work_stealing_debug_env_ =
+        std::getenv("BODO_STREAM_GROUPBY_DEBUG_OUTPUT_WORK_STEALING");
+    if (work_stealing_debug_env_) {
+        this->debug_work_stealing =
+            (std::strcmp(work_stealing_debug_env_, "1") == 0);
+    }
+
+    // TODO Remove this and do a heuristic calculation instead.
+    char* work_stealing_max_send_recv_batches_env_ = std::getenv(
+        "BODO_STREAM_GROUPBY_WORK_STEALING_MAX_SEND_RECV_BATCHES_PER_RANK");
+    if (work_stealing_max_send_recv_batches_env_) {
+        this->work_stealing_max_batched_send_recv_per_rank =
+            std::stoi(work_stealing_max_send_recv_batches_env_);
+    }
+
+    // Use a 50% threshold by default.
+    double num_ranks_frac_ = 0.5;
+    char* work_stealing_percent_ranks_done_threshold_env_ = std::getenv(
+        "BODO_STREAM_GROUPBY_WORK_STEALING_PERCENT_RANKS_DONE_THRESHOLD");
+    if (work_stealing_percent_ranks_done_threshold_env_) {
+        num_ranks_frac_ = static_cast<double>(
+            std::stoi(work_stealing_percent_ranks_done_threshold_env_) / 100.0);
+    }
+    this->work_stealing_num_ranks_done_threshold =
+        std::floor(num_ranks_frac_ * this->n_pes);
+    // The threshold should be at least 1.
+    this->work_stealing_num_ranks_done_threshold = std::max(
+        static_cast<uint64_t>(1), this->work_stealing_num_ranks_done_threshold);
+}
+
+void GroupbyOutputState::Finalize() {
+    if (this->enable_work_stealing) {
+        // If work stealing is enabled, we might need to add more output to the
+        // buffer later on, so we will only finalize the active chunk for now.
+        this->buffer.FinalizeActiveChunk();
+    } else {
+        this->buffer.Finalize();
+    }
+}
+
+std::tuple<std::shared_ptr<table_info>, bool> GroupbyOutputState::PopBatch(
+    const bool produce_output) {
+    this->StealWorkIfNeeded();
+    std::shared_ptr<table_info> out_batch;
+    if (!produce_output) {
+        out_batch = this->buffer.dummy_output_chunk;
+    } else {
+        int64_t chunk_size;
+        // TODO[BSE-645]: Prune unused columns at this point.
+        // Note: We always finalize the active chunk the build step so we don't
+        // need to finalize here.
+        std::tie(out_batch, chunk_size) = this->buffer.PopChunk();
+    }
+    // If work stealing is disabled or is done (was done this iter), then we
+    // just need to check if our local output buffer is empty). If work stealing
+    // is not done yet, then we will only output is_last when all ranks are done
+    // (since work-stealing may happen in the future).
+    bool out_is_last =
+        (!this->enable_work_stealing || this->work_stealing_done)
+            ? (this->buffer.total_remaining == 0)
+            : (this->num_ranks_done == static_cast<uint64_t>(this->n_pes));
+    return std::tuple(out_batch, out_is_last);
+}
+
+void GroupbyOutputState::StealWorkIfNeeded() {
+    // If work-stealing not allowed, or if it has already happened, simply
+    // return.
+    if (!this->enable_work_stealing || this->work_stealing_done) {
+        return;
+    }
+
+    // Check how many ranks are done outputting.
+    if ((this->iter + 1) % this->work_stealing_sync_iter == 0) {
+        bool local_is_done = this->buffer.total_remaining == 0;
+        uint64_t send = local_is_done ? 1 : 0;
+        MPI_Allreduce(&send, &(this->num_ranks_done), 1, MPI_UINT64_T, MPI_SUM,
+                      MPI_COMM_WORLD);
+        if (this->num_ranks_done == static_cast<uint64_t>(this->n_pes)) {
+            // Exit if all ranks are done.
+            return;
+        }
+    }
+
+    // If timer hasn't started and if >50% are done, start the
+    // timer. Store the timer on rank0.
+    if (!this->work_steal_timer_started &&
+        (this->num_ranks_done >=
+         this->work_stealing_num_ranks_done_threshold)) {
+        this->work_steal_timer_started = true;
+        this->work_steal_start_time = start_timer();
+        if (this->myrank == 0 && this->debug_work_stealing) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Started work-stealing "
+                         "timer since "
+                      << this->num_ranks_done << " of " << this->n_pes
+                      << " ranks are done outputting." << std::endl;
+        }
+    }
+
+    // If timer has already started, and rank 0 determines it's above some
+    // threshold, then we will move work around.
+    bool should_steal_work = false;
+    if (this->work_steal_timer_started &&
+        ((this->iter + 1) % this->work_stealing_sync_iter == 0)) {
+        // This is in microseconds
+        uint64_t time_since_timer_start =
+            end_timer(this->work_steal_start_time);
+        should_steal_work =
+            time_since_timer_start > this->work_stealing_timer_threshold_us;
+        // Use rank 0 as the source of truth to avoid issues due to differences
+        // in exact clock time on different ranks.
+        MPI_Bcast(&should_steal_work, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+    }
+
+    if (should_steal_work) {
+        if (this->myrank == 0 && this->debug_work_stealing) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Starting work stealing."
+                      << std::endl;
+        }
+        this->RedistributeWork();
+        // Finalize output buffer now that all work-stealing is done.
+        this->buffer.Finalize();
+        // Set work-stealing to done.
+        this->work_stealing_done = true;
+        if (this->myrank == 0 && this->debug_work_stealing) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Done with work stealing."
+                      << std::endl;
+        }
+    }
+}
+
+std::vector<std::vector<size_t>> GroupbyOutputState::determine_redistribution(
+    const std::vector<uint64_t>& num_batches_ranks) {
+    int n_pes = num_batches_ranks.size();
+    const uint64_t num_batches_global =
+        std::reduce(num_batches_ranks.begin(), num_batches_ranks.end());
+    // How far from their "fair" distribution are these ranks.
+    std::vector<int64_t> diff_from_fair(n_pes);
+    // Group the ranks into "senders" and "receivers".
+    std::list<int> senders;
+    std::list<int> receivers;
+    for (int i = 0; i < n_pes; i++) {
+        int64_t fair_batches =
+            dist_get_node_portion(num_batches_global, n_pes, i);
+        int64_t diff =
+            fair_batches - static_cast<int64_t>(num_batches_ranks[i]);
+        diff_from_fair[i] = diff;
+        if (diff > 0) {
+            receivers.emplace_back(i);
+        } else if (diff < 0) {
+            senders.emplace_back(i);
+        }
+    }
+
+    const auto f = [&](const int& first, const int& second) -> bool {
+        int64_t a = std::abs(diff_from_fair[first]);
+        int64_t b = std::abs(diff_from_fair[second]);
+        // Handle tie-breaks deterministically.
+        return (a == b) ? (first < second) : (a < b);
+    };
+    // This orders the senders from from least to most data to send.
+    senders.sort(f);
+    // This orders the receivers from least to most capacity to
+    // receive.
+    receivers.sort(f);
+
+    std::vector<std::vector<size_t>> batches_to_send(n_pes);
+    for (auto& x : batches_to_send) {
+        x.resize(n_pes, 0);
+    }
+
+    // Loop through the "senders" in descending order. For every "sender":
+    // - Let's say the number of "receivers" (with non-0 excess capacity) is
+    // n_potential_receivers and the minimum remaining capacity within these
+    // groups is min_rem_capacity. Let's say the number or rows remaining to
+    // send it n_rows_to_send. Assign min(min_rem_capacity,
+    // n_rows_to_send/n_potential_receivers) to every receiver. If all rows
+    // for this rank are assigned, then remove "sender" from the list.
+    // Otherwise, repeat this process until all rows are assigned.
+    // XXX TODO Make this assignment more topology aware by prioritizing sending
+    // to ranks on the same shared memory host to reduce overall communication
+    // overheads.
+    while (senders.size() > 0) {
+        int sender = senders.back();
+        int min_capacity_receiver = receivers.front();
+        int64_t min_recv_capacity = diff_from_fair[min_capacity_receiver];
+        int64_t n_batches_to_send = -diff_from_fair[sender];
+        if (n_batches_to_send <= static_cast<int64_t>(receivers.size())) {
+            int64_t rem_batches = n_batches_to_send;
+            std::vector<int> receivers_to_remove;
+            for (const int& receiver : receivers) {
+                batches_to_send[sender][receiver] += 1;
+                diff_from_fair[sender] += 1;
+                diff_from_fair[receiver] -= 1;
+                rem_batches--;
+                if (diff_from_fair[receiver] == 0) {
+                    receivers_to_remove.push_back(receiver);
+                }
+                if (rem_batches == 0) {
+                    break;
+                }
+            }
+            for (auto x : receivers_to_remove) {
+                receivers.remove(x);
+            }
+        } else {
+            int64_t batches_ = std::min(
+                min_recv_capacity,
+                static_cast<int64_t>(n_batches_to_send / receivers.size()));
+            std::vector<int> receivers_to_remove;
+            for (const int& receiver : receivers) {
+                batches_to_send[sender][receiver] += batches_;
+                diff_from_fair[sender] += batches_;
+                diff_from_fair[receiver] -= batches_;
+                if (diff_from_fair[receiver] == 0) {
+                    receivers_to_remove.push_back(receiver);
+                }
+            }
+            for (auto x : receivers_to_remove) {
+                receivers.remove(x);
+            }
+        }
+
+        if (diff_from_fair[sender] == 0) {
+            senders.pop_back();
+        }
+    }
+    return batches_to_send;
+}
+
+std::vector<std::vector<size_t>>
+GroupbyOutputState::determine_batched_send_counts(
+    std::vector<std::vector<size_t>>& batches_to_send_overall,
+    const size_t max_batches_send_recv_per_rank) {
+    int n_pes = batches_to_send_overall.size();
+    std::vector<size_t> batches_to_recv_this_iter(n_pes, 0);
+    std::vector<std::vector<size_t>> to_send_this_iter(n_pes);
+    for (auto& x : to_send_this_iter) {
+        x.resize(n_pes, 0);
+    }
+
+    for (int sender = 0; sender < n_pes; sender++) {
+        const size_t total_batches_left_to_send =
+            std::reduce(batches_to_send_overall[sender].begin(),
+                        batches_to_send_overall[sender].end());
+        size_t batches_left_to_send_this_iter = std::min(
+            max_batches_send_recv_per_rank, total_batches_left_to_send);
+
+        for (int receiver = 0; receiver < n_pes; receiver++) {
+            if (batches_left_to_send_this_iter == 0) {
+                break;
+            }
+            const size_t max_batches_can_receive_this_iter =
+                max_batches_send_recv_per_rank -
+                batches_to_recv_this_iter[receiver];
+            if (batches_to_send_overall[sender][receiver] > 0 &&
+                max_batches_can_receive_this_iter > 0) {
+                size_t batches_ = std::min(
+                    std::min(batches_left_to_send_this_iter,
+                             batches_to_send_overall[sender][receiver]),
+                    max_batches_can_receive_this_iter);
+                batches_left_to_send_this_iter -= batches_;
+                batches_to_send_overall[sender][receiver] -= batches_;
+                to_send_this_iter[sender][receiver] += batches_;
+                batches_to_recv_this_iter[receiver] += batches_;
+            }
+        }
+    }
+
+    // An alternative approach could be to do this:
+    // For each receiver:
+    // - List all its senders and how many batches they must send to this rank.
+    // Take min(min_send_from_any_sender, N/n_senders) many batches from each
+    // sender. If we still have capacity to receive, then remove the senders
+    // that no longer have anything to send to this rank and repeat the process.
+    // This is similar to the logic in 'determine_redistribution' and has better
+    // "spread" in each shuffle iteration.
+
+    return to_send_this_iter;
+}
+
+bool GroupbyOutputState::needs_another_shuffle(
+    const std::vector<std::vector<size_t>>& batches_to_send) {
+    for (const auto& x : batches_to_send) {
+        for (const auto& y : x) {
+            if (y > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::tuple<std::shared_ptr<table_info>, size_t>
+GroupbyOutputState::redistribute_batches_helper(
+    const std::vector<std::vector<size_t>>& to_send_this_iter,
+    std::shared_ptr<TableBuildBuffer>& redistribution_tbb) {
+    // While any rank has any data left to send to any other rank:
+    // - Insert the relevant number of chunks into the TBB.
+    // - Simultaneously, maintain a counter of rows to send to each
+    // ranks based on the row counts of the chunks.
+    const std::vector<size_t>& send_batch_counts =
+        to_send_this_iter[this->myrank];
+    size_t total_send_row_count = 0;
+    std::vector<size_t> send_row_counts(this->n_pes, 0);
+    for (int recv_rank = 0; recv_rank < this->n_pes; recv_rank++) {
+        for (size_t i = 0; i < send_batch_counts[recv_rank]; i++) {
+            auto [chunk, chunk_row_count] = this->buffer.PopChunk();
+            send_row_counts[recv_rank] += chunk_row_count;
+            total_send_row_count += chunk_row_count;
+            redistribution_tbb->ReserveTable(chunk);
+            redistribution_tbb->UnsafeAppendBatch(chunk);
+        }
+    }
+
+    std::shared_ptr<table_info> shuffle_table = redistribution_tbb->data_table;
+    // - Unify dictionaries for dict-encoded arrays.
+    // TODO: Optimize to only do this once instead of per shuffle batch.
+    for (size_t i = 0; i < shuffle_table->ncols(); i++) {
+        std::shared_ptr<array_info> arr = shuffle_table->columns[i];
+        if (arr->arr_type == bodo_array_type::DICT) {
+            make_dictionary_global_and_unique(arr,
+                                              /*is_parallel*/ true);
+        }
+    }
+    // - Setup shuffle_hashes to be the destination rank for each row.
+    std::shared_ptr<uint32_t[]> shuffle_hashes =
+        std::make_shared<uint32_t[]>(total_send_row_count);
+    size_t offset = 0;
+    for (int i = 0; i < this->n_pes; i++) {
+        size_t start = offset;
+        size_t end = offset + send_row_counts[i];
+        for (size_t j = start; j < end; j++) {
+            shuffle_hashes[j] = i;
+        }
+        offset = end;
+    }
+
+    mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
+                                  /*is_parallel*/ true, /*filter*/ nullptr,
+                                  /*keep_row_bitmask*/ nullptr,
+                                  /*keep_filter_misses*/ false);
+
+    // - Append the received input into the output buffer.
+    // XXX Technically the shuffle_table already has the data laid out
+    // by rank, so the copy it will make internally is wasteful and
+    // something we should optimize for.
+    std::shared_ptr<table_info> recv_data =
+        shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
+                             comm_info_table, /*is_parallel*/ true);
+
+    // - Reset the shuffle TBB for the next iteration.
+    redistribution_tbb->Reset();
+
+    return std::make_tuple(recv_data, total_send_row_count);
+}
+
+void GroupbyOutputState::RedistributeWork() {
+    assert(!this->work_stealing_done);
+
+    // 1. Gather data about remaining number of batches on every rank.
+    uint64_t num_batches = this->buffer.chunks.size();
+    std::vector<uint64_t> num_batches_ranks(this->n_pes);
+    MPI_Allgather(&num_batches, 1, MPI_UINT64_T, num_batches_ranks.data(), 1,
+                  MPI_UINT64_T, MPI_COMM_WORLD);
+
+    // 2. Use a deterministic algorithm to assign the number of
+    // batches/rows that each rank needs to send to every other rank.
+    // TODO To reduce the size, this could only contain sub-vectors for the
+    // "senders", which should be relatively few (guaranteed to be <50% at
+    // the very least).
+    std::vector<std::vector<size_t>> batches_to_send =
+        GroupbyOutputState::determine_redistribution(num_batches_ranks);
+
+    if (this->work_stealing_max_batched_send_recv_per_rank == -1) {
+        // XXX TODO This could be modified to use the actual table size instead,
+        // but it's good enough as a starting point.
+        int64_t shuffle_threshold = get_shuffle_threshold();
+        int64_t estimated_batch_size =
+            get_row_bytes(this->buffer.dummy_output_chunk->schema()) *
+            this->buffer.active_chunk_capacity;
+        this->work_stealing_max_batched_send_recv_per_rank =
+            std::ceil(static_cast<double>(shuffle_threshold) /
+                      static_cast<double>(estimated_batch_size));
+    }
+
+    // 3. Use existing shuffle APIs to move the data around, but do this
+    // a few batches at a time. During any one round of data transfer, each
+    // sender will send at most N batches (overall) and any receiver must
+    // receive at most N batches (overall) to maintain good memory pressure.
+
+    // Temporary TBB to store intermediate data during the redistribution.
+    std::shared_ptr<TableBuildBuffer> redistribution_tbb =
+        std::make_shared<TableBuildBuffer>(
+            this->buffer.dummy_output_chunk->schema(), this->dict_builders);
+
+    size_t num_shuffles = 0;
+    size_t num_recv_rows = 0;
+    size_t num_sent_rows = 0;
+    // TODO Replace 'needs_another_shuffle' with a simpler check,
+    // potentially in 'determine_batched_send_counts'.
+    while (GroupbyOutputState::needs_another_shuffle(batches_to_send)) {
+        num_shuffles++;
+        std::vector<std::vector<size_t>> to_send_this_iter =
+            GroupbyOutputState::determine_batched_send_counts(
+                batches_to_send,
+                this->work_stealing_max_batched_send_recv_per_rank);
+
+        auto [recv_data, send_row_count] =
+            redistribute_batches_helper(to_send_this_iter, redistribution_tbb);
+        num_recv_rows += recv_data->nrows();
+        num_sent_rows += send_row_count;
+        if (recv_data->nrows() > 0) {
+            // Unify with local dict-builders and append into the CTB.
+            this->buffer.UnifyDictionariesAndAppend(recv_data,
+                                                    this->dict_builders);
+        }
+    }
+    // Release the shuffle buffer
+    redistribution_tbb.reset();
+
+    if (this->debug_work_stealing) {
+        if (this->myrank == 0) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Performed "
+                      << num_shuffles << " shuffles to redistribute data."
+                      << std::endl;
+        }
+        if (num_recv_rows > 0) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Received "
+                      << num_recv_rows
+                      << " rows from other ranks during redistribution."
+                      << std::endl;
+        }
+        if (num_sent_rows > 0) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Sent " << num_sent_rows
+                      << " rows to other ranks during redistribution."
+                      << std::endl;
+        }
+    }
+}
+
+#pragma endregion  // GroupbyOutputState
+/* ------------------------------------------------------------------------ */
+
 /* ----------------------------- GroupbyState ----------------------------- */
 #pragma region  // GroupbyState
 
@@ -1845,6 +2325,22 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                            this->mrnf_sort_cols_to_keep,
                            this->mrnf_part_cols_to_keep, in_schema_->ncols(),
                            this->n_keys, "GroupbyState::GroupbyState");
+    }
+
+    if (this->agg_type == AggregationType::WINDOW) {
+        char* enable_output_work_stealing_env_ =
+            std::getenv("BODO_STREAM_WINDOW_ENABLE_OUTPUT_WORK_STEALING");
+        if (enable_output_work_stealing_env_) {
+            this->enable_output_work_stealing_window =
+                (std::strcmp(enable_output_work_stealing_env_, "1") == 0);
+        }
+    } else {
+        char* enable_output_work_stealing_env_ =
+            std::getenv("BODO_STREAM_GROUPBY_ENABLE_OUTPUT_WORK_STEALING");
+        if (enable_output_work_stealing_env_) {
+            this->enable_output_work_stealing_groupby =
+                (std::strcmp(enable_output_work_stealing_env_, "1") == 0);
+        }
     }
 
     // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
@@ -2621,7 +3117,7 @@ void GroupbyState::InitOutputBufferMrnf(
     assert(this->agg_type == AggregationType::MRNF);
 
     // Skip if already initialized.
-    if (this->output_buffer != nullptr) {
+    if (this->output_state != nullptr) {
         return;
     }
 
@@ -2631,24 +3127,26 @@ void GroupbyState::InitOutputBufferMrnf(
 
     // List of column types in the output.
     std::vector<std::unique_ptr<bodo::DataType>> output_column_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders;
     for (size_t i = 0; i < n_cols; i++) {
         if (cols_to_keep_bitmask[i]) {
             output_column_types.push_back(
                 dummy_build_table->columns[i]->data_type());
             // We can re-use existing dictionaries.
-            this->out_dict_builders.push_back(
-                this->build_table_dict_builders[i]);
+            output_dict_builders.push_back(this->build_table_dict_builders[i]);
         }
     }
 
     // Build the output schema from the output column types.
     std::shared_ptr<bodo::Schema> output_schema =
         std::make_shared<bodo::Schema>(std::move(output_column_types));
-    // Initialize the output buffer using this schema.
-    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        output_schema, this->out_dict_builders,
+    // Initialize the output state using this schema.
+    this->output_state = std::make_shared<GroupbyOutputState>(
+        output_schema, output_dict_builders,
         /*chunk_size*/ this->output_batch_size,
-        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
+        /*enable_work_stealing_*/ this->parallel &&
+            this->enable_output_work_stealing_groupby);
 }
 
 void GroupbyState::InitOutputBufferWindow(
@@ -2658,7 +3156,7 @@ void GroupbyState::InitOutputBufferWindow(
     const std::shared_ptr<BasicColSet>& col_set = this->col_sets[0];
 
     // Skip if already initialized.
-    if (this->output_buffer != nullptr) {
+    if (this->output_state != nullptr) {
         return;
     }
 
@@ -2668,13 +3166,13 @@ void GroupbyState::InitOutputBufferWindow(
 
     // List of column types in the output.
     std::vector<std::unique_ptr<bodo::DataType>> output_column_types;
+    std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders;
     for (size_t i = 0; i < n_cols; i++) {
         if (cols_to_keep_bitmask[i]) {
             output_column_types.push_back(
                 dummy_build_table->columns[i]->data_type());
             // We can re-use existing dictionaries.
-            this->out_dict_builders.push_back(
-                this->build_table_dict_builders[i]);
+            output_dict_builders.push_back(this->build_table_dict_builders[i]);
         }
     }
 
@@ -2683,17 +3181,19 @@ void GroupbyState::InitOutputBufferWindow(
         col_set->getOutputTypes();
     for (size_t i = 0; i < window_output_types.size(); i++) {
         output_column_types.push_back(window_output_types[i]->copy());
-        out_dict_builders.push_back(nullptr);
+        output_dict_builders.push_back(nullptr);
     }
 
     // Build the output schema from the output column types.
     std::shared_ptr<bodo::Schema> output_schema =
         std::make_shared<bodo::Schema>(std::move(output_column_types));
     // Initialize the output buffer using this schema.
-    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        output_schema, this->out_dict_builders,
+    this->output_state = std::make_shared<GroupbyOutputState>(
+        output_schema, output_dict_builders,
         /*chunk_size*/ this->output_batch_size,
-        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
+        /*enable_work_stealing_*/ this->parallel &&
+            this->enable_output_work_stealing_window);
 }
 
 void GroupbyState::InitOutputBuffer(
@@ -2701,26 +3201,27 @@ void GroupbyState::InitOutputBuffer(
     assert(this->agg_type == AggregationType::AGGREGATE);
     auto schema = dummy_table->schema();
 
-    // This is not initialized until this point. Resize it to the required
-    // size.
-    this->out_dict_builders.resize(dummy_table->columns.size(), nullptr);
+    std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders(
+        dummy_table->columns.size(), nullptr);
 
     // Keys are always the first columns in groupby output and match input
     // array types and dictionaries for DICT arrays. See
     // https://github.com/Bodo-inc/Bodo/blob/f94ab6d2c78e3a536a8383ddf71956cc238fccc8/bodo/libs/_groupby_common.cpp#L604
     for (size_t i = 0; i < this->n_keys; i++) {
-        this->out_dict_builders[i] = this->build_table_dict_builders[i];
+        output_dict_builders[i] = this->build_table_dict_builders[i];
     }
     // Non-key columns may have different type and/or dictionaries from
     // input arrays
     for (size_t i = this->n_keys; i < dummy_table->ncols(); i++) {
-        this->out_dict_builders[i] =
+        output_dict_builders[i] =
             create_dict_builder_for_array(dummy_table->columns[i], false);
     }
-    this->output_buffer = std::make_shared<ChunkedTableBuilder>(
-        std::move(schema), this->out_dict_builders,
+    this->output_state = std::make_shared<GroupbyOutputState>(
+        std::move(schema), output_dict_builders,
         /*chunk_size*/ this->output_batch_size,
-        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
+        /*enable_work_stealing*/ this->parallel &&
+            this->enable_output_work_stealing_groupby);
 }
 
 std::shared_ptr<table_info> GroupbyState::UnifyBuildTableDictionaryArrays(
@@ -2745,6 +3246,7 @@ std::shared_ptr<table_info> GroupbyState::UnifyBuildTableDictionaryArrays(
 
 std::shared_ptr<table_info> GroupbyState::UnifyOutputDictionaryArrays(
     const std::shared_ptr<table_info>& out_table) {
+    assert(this->agg_type == AggregationType::AGGREGATE);
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(out_table->ncols());
     for (size_t i = 0; i < out_table->ncols(); i++) {
@@ -2752,10 +3254,13 @@ std::shared_ptr<table_info> GroupbyState::UnifyOutputDictionaryArrays(
         std::shared_ptr<array_info> out_arr;
         // Output key columns have the same dictionary as inputs and don't
         // need unification
-        if (this->out_dict_builders[i] == nullptr || (i < this->n_keys)) {
+        if (this->output_state->dict_builders[i] == nullptr ||
+            (i < this->n_keys)) {
             out_arr = in_arr;
         } else {
-            out_arr = this->out_dict_builders[i]->UnifyDictionaryArray(in_arr);
+            out_arr =
+                this->output_state->dict_builders[i]->UnifyDictionaryArray(
+                    in_arr);
         }
         out_arrs.emplace_back(out_arr);
     }
@@ -3033,9 +3538,9 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
                                             true));
             DictBuilderMetrics non_key_output_dict_builder_metrics;
             MetricBase::StatValue n_non_key_output_dict_builders = 0;
-            for (size_t i = this->n_keys; i < this->out_dict_builders.size();
-                 i++) {
-                const auto& dict_builder = this->out_dict_builders[i];
+            for (size_t i = this->n_keys;
+                 i < this->output_state->dict_builders.size(); i++) {
+                const auto& dict_builder = this->output_state->dict_builders[i];
                 if (dict_builder != nullptr) {
                     non_key_output_dict_builder_metrics.add_metrics(
                         dict_builder->GetMetrics());
@@ -3052,14 +3557,14 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
 
     if (is_final) {
         // Output buffer append time and total size.
-        metrics.emplace_back(TimerMetric("output_append_time",
-                                         this->output_buffer->append_time));
+        metrics.emplace_back(TimerMetric(
+            "output_append_time", this->output_state->buffer.append_time));
         MetricBase::StatValue output_total_size =
-            this->output_buffer->total_size;
+            this->output_state->buffer.total_size;
         metrics.emplace_back(
             StatMetric("output_total_nrows", output_total_size));
         MetricBase::StatValue output_n_chunks =
-            this->output_buffer->chunks.size();
+            this->output_state->buffer.chunks.size();
         metrics.emplace_back(StatMetric("output_n_chunks", output_n_chunks));
     }
 
@@ -3200,7 +3705,8 @@ void GroupbyState::FinalizeBuild() {
                     }
                     this->partitions[i_part]->FinalizeMrnf(
                         this->mrnf_part_cols_to_keep,
-                        this->mrnf_sort_cols_to_keep, this->output_buffer);
+                        this->mrnf_sort_cols_to_keep,
+                        this->output_state->buffer);
                 } else if (this->agg_type == AggregationType::WINDOW) {
                     // Initialize output buffer if this is the first
                     // partition.
@@ -3211,7 +3717,8 @@ void GroupbyState::FinalizeBuild() {
                     }
                     this->partitions[i_part]->FinalizeWindow(
                         this->mrnf_part_cols_to_keep,
-                        this->mrnf_sort_cols_to_keep, this->output_buffer);
+                        this->mrnf_sort_cols_to_keep,
+                        this->output_state->buffer);
                 } else {
                     output_table = this->partitions[i_part]->Finalize();
                 }
@@ -3254,7 +3761,7 @@ void GroupbyState::FinalizeBuild() {
                     // individual columns early.
                     output_table =
                         this->UnifyOutputDictionaryArrays(output_table);
-                    this->output_buffer->AppendBatch(output_table);
+                    this->output_state->buffer.AppendBatch(output_table);
                     output_table.reset();
                 }
                 if (this->debug_partitioning) {
@@ -3289,8 +3796,7 @@ void GroupbyState::FinalizeBuild() {
                   << this->partitions.size() << "." << std::endl;
     }
     this->metrics.n_partitions = this->partitions.size();
-
-    this->output_buffer->Finalize();
+    this->output_state->Finalize();
     // Release the ColSets, etc.
     this->ClearBuildState();
     this->build_input_finalized = true;
@@ -3574,18 +4080,10 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
  */
 std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
     GroupbyState* groupby_state, bool produce_output) {
-    if (!produce_output) {
-        return std::tuple(groupby_state->output_buffer->dummy_output_chunk,
-                          false);
-    }
-    // TODO[BSE-645]: Prune unused columns at this point.
-    // Note: We always finalize the active chunk the build step so we don't
-    // need to finalize here.
-    auto [out_table, chunk_size] = groupby_state->output_buffer->PopChunk();
-    // TODO[BSE-645]: Include total_rows to handle the dead key case
-    // *total_rows = chunk_size;
-    bool is_last = groupby_state->output_buffer->total_remaining == 0;
-    return std::tuple(out_table, is_last);
+    auto [batch, is_last] =
+        groupby_state->output_state->PopBatch(produce_output);
+    groupby_state->output_state->iter++;
+    return std::make_tuple(batch, is_last);
 }
 
 /**

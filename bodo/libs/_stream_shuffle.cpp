@@ -40,7 +40,7 @@ void IncrementalShuffleMetrics::add_to_metrics(
         StatMetric("shuffle_n_buffer_resets", this->n_buffer_resets));
 }
 
-static int64_t get_shuffle_threshold() {
+int64_t get_shuffle_threshold() {
     // Get shuffle threshold from an env var if provided.
     if (char* threshold_env_ = std::getenv("BODO_SHUFFLE_THRESHOLD")) {
         return std::stoi(threshold_env_);
