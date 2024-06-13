@@ -1075,27 +1075,11 @@ struct array_info {
     }
 
     void pin() {
-        switch (arr_type) {
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-                for (auto& buffer : this->buffers) {
-                    buffer->pin();
-                }
-                for (auto& arr : this->child_arrays) {
-                    arr->pin();
-                }
-                break;
-            case bodo_array_type::DICT:
-            case bodo_array_type::MAP:
-                for (auto& arr : this->child_arrays) {
-                    arr->pin();
-                }
-                break;
-            default:
-                for (auto& buffer : this->buffers) {
-                    buffer->pin();
-                }
-                break;
+        for (auto& buffer : this->buffers) {
+            buffer->pin();
+        }
+        for (auto& arr : this->child_arrays) {
+            arr->pin();
         }
     }
 
@@ -1114,19 +1098,12 @@ struct array_info {
                 }
                 this->child_arrays[1]->unpin();
                 break;
-            case bodo_array_type::ARRAY_ITEM:
-            case bodo_array_type::STRUCT:
-            case bodo_array_type::MAP:
+            default:
                 for (auto& buffer : this->buffers) {
                     buffer->unpin();
                 }
                 for (auto& arr : this->child_arrays) {
                     arr->unpin();
-                }
-                break;
-            default:
-                for (auto& buffer : this->buffers) {
-                    buffer->unpin();
                 }
                 break;
         }
