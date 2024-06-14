@@ -23,6 +23,7 @@ from bodo.libs.stream_join import (
 )
 from bodo.tests.utils import (
     _get_dist_arg,
+    get_query_profile_location,
     get_snowflake_connection_string,
     pytest_mark_snowflake,
     reduce_sum,
@@ -457,18 +458,6 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
     ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
 
 
-def get_profile(output_dir: str) -> str:
-    """Get the path to the query profile file given the output directory.
-    Note that this method will also assert that the expected files are present.
-    """
-    assert os.path.isdir(output_dir)
-    runs = os.listdir(output_dir)
-    assert len(runs) == 1
-    profile_path = os.path.join(output_dir, runs[0], "query_profile_0.json")
-    assert os.path.isfile(profile_path)
-    return profile_path
-
-
 def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     """
     Test that generated query profile has the metrics that we expect
@@ -596,7 +585,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
@@ -745,7 +734,7 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
@@ -858,7 +847,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df))
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
@@ -980,7 +969,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df))
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
@@ -1114,7 +1103,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df))
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
@@ -1326,7 +1315,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(_get_dist_arg(df1), _get_dist_arg(df2), _get_dist_arg(df3))
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 
@@ -1349,9 +1338,6 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             == "AGG"
         )
 
-    # Produce output doesn't have any additional metrics
-    assert "metrics" not in stage_4
-
     build_stage1_metrics = stage_1["metrics"]
     build_stage1_metrics_names: set[str] = set(
         [x["name"] for x in build_stage1_metrics]
@@ -1364,6 +1350,8 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
     build_stage3_metrics_names: set[str] = set(
         [x["name"] for x in build_stage3_metrics]
     )
+    output_stage_metrics = stage_4["metrics"]
+    output_metrics_dict = {x["name"]: x["stat"] for x in output_stage_metrics}
 
     # Some metrics should be reported in all stages
     for k in [
@@ -1386,6 +1374,9 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
         assert k not in build_stage1_metrics_names, k
         assert k not in build_stage2_metrics_names, k
         assert k in build_stage3_metrics_names, k
+
+    assert "work_stealing_enabled" in output_metrics_dict
+    assert output_metrics_dict["work_stealing_enabled"] == 0
 
 
 @pytest_mark_snowflake
@@ -1438,7 +1429,7 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     ):
         _ = impl(conn)
 
-    profile_path = get_profile(tmp_path_rank0)
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
     with open(profile_path, "r") as f:
         profile_json = json.load(f)
 

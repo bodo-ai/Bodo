@@ -1,3 +1,4 @@
+import json
 import re
 
 import numpy as np
@@ -14,7 +15,12 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.tests.utils import _get_dist_arg, check_func, temp_env_override
+from bodo.tests.utils import (
+    _get_dist_arg,
+    check_func,
+    get_query_profile_location,
+    temp_env_override,
+)
 from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 
 
@@ -1110,7 +1116,7 @@ def test_groupby_timestamptz_key(memory_leak_check):
 
 
 @pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
-def test_window_output_work_stealing(memory_leak_check, capfd):
+def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     """
     Test that the window-output-redistribution works as expected.
     """
@@ -1118,6 +1124,8 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
 
     df = pd.DataFrame(
         {
@@ -1170,6 +1178,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
 
     @bodo.jit(distributed=["df"])
     def window_impl(df):
+        bodo.libs.query_profile_collector.init()
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), global_1, 5
         )
@@ -1178,7 +1187,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
         _iter_1 = 0
         _temp1 = bodo.hiframes.table.local_len(T2)
         state_1 = bodo.libs.stream_window.init_window_state(
-            -1,
+            0,
             global_2,
             global_3,
             global_4,
@@ -1187,6 +1196,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
             global_6,
         )
         __bodo_is_last_streaming_output_2 = False
+        bodo.libs.query_profile_collector.start_pipeline(0)
         while not (__bodo_is_last_streaming_output_2):
             T3 = bodo.hiframes.table.table_local_filter(
                 T2, slice((_iter_1 * 4096), ((_iter_1 + 1) * 4096))
@@ -1198,6 +1208,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
                 )
             )
             _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
         __bodo_is_last_streaming_output_3 = False
         _produce_output_1 = True
         __bodo_streaming_batches_table_builder_1 = (
@@ -1235,6 +1246,9 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
             "BODO_STREAM_GROUPBY_WORK_STEALING_MAX_SEND_RECV_BATCHES_PER_RANK": "2",
             # Start re-distribution as soon as any rank is done.
             "BODO_STREAM_GROUPBY_WORK_STEALING_PERCENT_RANKS_DONE_THRESHOLD": "0",
+            # Enable tracing
+            "BODO_TRACING_LEVEL": "1",
+            "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0,
         }
     ):
         output = window_impl(_get_dist_arg(df))
@@ -1301,3 +1315,51 @@ def test_window_output_work_stealing(memory_leak_check, capfd):
         check_index_type=False,
         atol=0.1,
     )
+
+    ## Verify that the profile is as expected
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
+    with open(profile_path, "r") as f:
+        profile_json = json.load(f)
+    # Ensure that the temp directory isn't deleted until all ranks have read their respective file
+    bodo.barrier()
+    operator_report = profile_json["operator_reports"]["0"]
+    assert "stage_2" in operator_report
+    output_metrics = operator_report["stage_2"]["metrics"]
+    output_metrics_dict = {x["name"]: x["stat"] for x in output_metrics}
+
+    ### Uncomment for debugging purposes ###
+    # with capfd.disabled():
+    #     print(f"output_metrics: {output_metrics_dict}")
+    ###
+
+    assert "work_stealing_enabled" in output_metrics_dict
+    assert output_metrics_dict["work_stealing_enabled"] == 1
+    assert "started_work_stealing_timer" in output_metrics_dict
+    assert output_metrics_dict["started_work_stealing_timer"] == 1
+    assert "n_ranks_done_at_timer_start" in output_metrics_dict
+    assert output_metrics_dict["n_ranks_done_at_timer_start"] == 1
+    assert "performed_work_redistribution" in output_metrics_dict
+    assert output_metrics_dict["performed_work_redistribution"] == 1
+    assert "max_batches_send_recv_per_rank" in output_metrics_dict
+    assert output_metrics_dict["max_batches_send_recv_per_rank"] == 2
+    assert "n_ranks_done_before_work_redistribution" in output_metrics_dict
+    assert output_metrics_dict["n_ranks_done_before_work_redistribution"] == 1
+    assert "num_shuffles" in output_metrics_dict
+    assert output_metrics_dict["num_shuffles"] == 37
+    assert "redistribute_work_total_time" in output_metrics_dict
+    assert output_metrics_dict["redistribute_work_total_time"] > 0
+    assert "determine_redistribution_time" in output_metrics_dict
+    assert "determine_batched_send_counts_time" in output_metrics_dict
+    assert "shuffle_dict_unification_time" in output_metrics_dict
+    assert "shuffle_output_append_time" in output_metrics_dict
+    assert "shuffle_time" in output_metrics_dict
+    assert "num_recv_rows" in output_metrics_dict
+    if rank == 0:
+        assert output_metrics_dict["num_recv_rows"] == 299008
+    else:
+        assert output_metrics_dict["num_recv_rows"] == 0
+    assert "num_sent_rows" in output_metrics_dict
+    if rank == 0:
+        assert output_metrics_dict["num_sent_rows"] == 0
+    else:
+        assert output_metrics_dict["num_sent_rows"] == 299008

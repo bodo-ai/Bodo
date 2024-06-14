@@ -1830,8 +1830,8 @@ void GroupbyOutputState::StealWorkIfNeeded() {
         }
     }
 
-    // If timer hasn't started and if >50% are done, start the
-    // timer. Store the timer on rank0.
+    // If timer hasn't started and if the threshold fraction of ranks are done,
+    // start the timer. Store the timer on rank0.
     if (!this->work_steal_timer_started &&
         (this->num_ranks_done >=
          this->work_stealing_num_ranks_done_threshold)) {
@@ -1843,6 +1843,7 @@ void GroupbyOutputState::StealWorkIfNeeded() {
                       << this->num_ranks_done << " of " << this->n_pes
                       << " ranks are done outputting." << std::endl;
         }
+        this->metrics.n_ranks_done_at_timer_start = this->num_ranks_done;
     }
 
     // If timer has already started, and rank 0 determines it's above some
@@ -1865,6 +1866,8 @@ void GroupbyOutputState::StealWorkIfNeeded() {
             std::cerr << "[DEBUG][GroupbyOutputState] Starting work stealing."
                       << std::endl;
         }
+        this->metrics.n_ranks_done_before_work_redistribution =
+            this->num_ranks_done;
         this->RedistributeWork();
         // Finalize output buffer now that all work-stealing is done.
         this->buffer.Finalize();
@@ -2047,6 +2050,7 @@ GroupbyOutputState::redistribute_batches_helper(
     // - Insert the relevant number of chunks into the TBB.
     // - Simultaneously, maintain a counter of rows to send to each
     // ranks based on the row counts of the chunks.
+    time_pt start_data_prep = start_timer();
     const std::vector<size_t>& send_batch_counts =
         to_send_this_iter[this->myrank];
     size_t total_send_row_count = 0;
@@ -2060,10 +2064,12 @@ GroupbyOutputState::redistribute_batches_helper(
             redistribution_tbb->UnsafeAppendBatch(chunk);
         }
     }
+    this->metrics.shuffle_data_prep_time += end_timer(start_data_prep);
 
     std::shared_ptr<table_info> shuffle_table = redistribution_tbb->data_table;
     // - Unify dictionaries for dict-encoded arrays.
     // TODO: Optimize to only do this once instead of per shuffle batch.
+    time_pt start_dict_unif = start_timer();
     for (size_t i = 0; i < shuffle_table->ncols(); i++) {
         std::shared_ptr<array_info> arr = shuffle_table->columns[i];
         if (arr->arr_type == bodo_array_type::DICT) {
@@ -2071,6 +2077,8 @@ GroupbyOutputState::redistribute_batches_helper(
                                               /*is_parallel*/ true);
         }
     }
+    this->metrics.shuffle_dict_unification_time += end_timer(start_dict_unif);
+
     // - Setup shuffle_hashes to be the destination rank for each row.
     std::shared_ptr<uint32_t[]> shuffle_hashes =
         std::make_shared<uint32_t[]>(total_send_row_count);
@@ -2084,6 +2092,7 @@ GroupbyOutputState::redistribute_batches_helper(
         offset = end;
     }
 
+    time_pt start_shuffle = start_timer();
     mpi_comm_info comm_info_table(shuffle_table->columns, shuffle_hashes,
                                   /*is_parallel*/ true, /*filter*/ nullptr,
                                   /*keep_row_bitmask*/ nullptr,
@@ -2096,6 +2105,7 @@ GroupbyOutputState::redistribute_batches_helper(
     std::shared_ptr<table_info> recv_data =
         shuffle_table_kernel(std::move(shuffle_table), shuffle_hashes,
                              comm_info_table, /*is_parallel*/ true);
+    this->metrics.shuffle_time += end_timer(start_shuffle);
 
     // - Reset the shuffle TBB for the next iteration.
     redistribution_tbb->Reset();
@@ -2105,6 +2115,7 @@ GroupbyOutputState::redistribute_batches_helper(
 
 void GroupbyOutputState::RedistributeWork() {
     assert(!this->work_stealing_done);
+    time_pt start = start_timer();
 
     // 1. Gather data about remaining number of batches on every rank.
     uint64_t num_batches = this->buffer.chunks.size();
@@ -2117,8 +2128,10 @@ void GroupbyOutputState::RedistributeWork() {
     // TODO To reduce the size, this could only contain sub-vectors for the
     // "senders", which should be relatively few (guaranteed to be <50% at
     // the very least).
+    time_pt start_det_redis = start_timer();
     std::vector<std::vector<size_t>> batches_to_send =
         GroupbyOutputState::determine_redistribution(num_batches_ranks);
+    this->metrics.determine_redistribution_time += end_timer(start_det_redis);
 
     if (this->work_stealing_max_batched_send_recv_per_rank == -1) {
         // XXX TODO This could be modified to use the actual table size instead,
@@ -2142,26 +2155,28 @@ void GroupbyOutputState::RedistributeWork() {
         std::make_shared<TableBuildBuffer>(
             this->buffer.dummy_output_chunk->schema(), this->dict_builders);
 
-    size_t num_shuffles = 0;
-    size_t num_recv_rows = 0;
-    size_t num_sent_rows = 0;
     // TODO Replace 'needs_another_shuffle' with a simpler check,
     // potentially in 'determine_batched_send_counts'.
     while (GroupbyOutputState::needs_another_shuffle(batches_to_send)) {
-        num_shuffles++;
+        this->metrics.num_shuffles++;
+        time_pt start_det_batch_redis = start_timer();
         std::vector<std::vector<size_t>> to_send_this_iter =
             GroupbyOutputState::determine_batched_send_counts(
                 batches_to_send,
                 this->work_stealing_max_batched_send_recv_per_rank);
+        this->metrics.determine_batched_send_counts_time +=
+            end_timer(start_det_batch_redis);
 
         auto [recv_data, send_row_count] =
             redistribute_batches_helper(to_send_this_iter, redistribution_tbb);
-        num_recv_rows += recv_data->nrows();
-        num_sent_rows += send_row_count;
+        this->metrics.num_recv_rows += recv_data->nrows();
+        this->metrics.num_sent_rows += send_row_count;
         if (recv_data->nrows() > 0) {
             // Unify with local dict-builders and append into the CTB.
+            time_pt start_append = start_timer();
             this->buffer.UnifyDictionariesAndAppend(recv_data,
                                                     this->dict_builders);
+            this->metrics.shuffle_output_append_time += end_timer(start_append);
         }
     }
     // Release the shuffle buffer
@@ -2170,21 +2185,82 @@ void GroupbyOutputState::RedistributeWork() {
     if (this->debug_work_stealing) {
         if (this->myrank == 0) {
             std::cerr << "[DEBUG][GroupbyOutputState] Performed "
-                      << num_shuffles << " shuffles to redistribute data."
-                      << std::endl;
+                      << this->metrics.num_shuffles
+                      << " shuffles to redistribute data." << std::endl;
         }
-        if (num_recv_rows > 0) {
+        if (this->metrics.num_recv_rows > 0) {
             std::cerr << "[DEBUG][GroupbyOutputState] Received "
-                      << num_recv_rows
+                      << this->metrics.num_recv_rows
                       << " rows from other ranks during redistribution."
                       << std::endl;
         }
-        if (num_sent_rows > 0) {
-            std::cerr << "[DEBUG][GroupbyOutputState] Sent " << num_sent_rows
+        if (this->metrics.num_sent_rows > 0) {
+            std::cerr << "[DEBUG][GroupbyOutputState] Sent "
+                      << this->metrics.num_sent_rows
                       << " rows to other ranks during redistribution."
                       << std::endl;
         }
     }
+    this->metrics.redistribute_work_total_time += end_timer(start);
+}
+
+void GroupbyOutputState::ExportMetrics(std::vector<MetricBase>& metrics) {
+    MetricBase::StatValue work_stealing_enabled =
+        (this->enable_work_stealing ? 1 : 0);
+    metrics.emplace_back(
+        StatMetric("work_stealing_enabled", work_stealing_enabled, true));
+
+    if (!this->enable_work_stealing) {
+        return;
+    }
+
+    MetricBase::StatValue started_work_stealing_timer =
+        (this->work_steal_timer_started ? 1 : 0);
+    metrics.emplace_back(StatMetric("started_work_stealing_timer",
+                                    started_work_stealing_timer, true));
+    metrics.emplace_back(StatMetric("n_ranks_done_at_timer_start",
+                                    this->metrics.n_ranks_done_at_timer_start,
+                                    true));
+    MetricBase::StatValue performed_work_redistribution =
+        (this->work_stealing_done ? 1 : 0);
+    metrics.emplace_back(StatMetric("performed_work_redistribution",
+                                    performed_work_redistribution, true));
+
+    if (!this->work_stealing_done) {
+        return;
+    }
+
+    MetricBase::StatValue max_batches_send_recv_per_rank =
+        this->work_stealing_max_batched_send_recv_per_rank;
+    metrics.emplace_back(StatMetric("max_batches_send_recv_per_rank",
+                                    max_batches_send_recv_per_rank, true));
+    metrics.emplace_back(StatMetric(
+        "n_ranks_done_before_work_redistribution",
+        this->metrics.n_ranks_done_before_work_redistribution, true));
+    metrics.emplace_back(
+        StatMetric("num_shuffles", this->metrics.num_shuffles, true));
+    metrics.emplace_back(
+        TimerMetric("redistribute_work_total_time",
+                    this->metrics.redistribute_work_total_time));
+    metrics.emplace_back(
+        TimerMetric("determine_redistribution_time",
+                    this->metrics.determine_redistribution_time));
+    metrics.emplace_back(
+        TimerMetric("determine_batched_send_counts_time",
+                    this->metrics.determine_batched_send_counts_time));
+    metrics.emplace_back(
+        StatMetric("num_recv_rows", this->metrics.num_recv_rows));
+    metrics.emplace_back(
+        StatMetric("num_sent_rows", this->metrics.num_sent_rows));
+    metrics.emplace_back(TimerMetric("shuffle_data_prep_time",
+                                     this->metrics.shuffle_data_prep_time));
+    metrics.emplace_back(
+        TimerMetric("shuffle_dict_unification_time",
+                    this->metrics.shuffle_dict_unification_time));
+    metrics.emplace_back(
+        TimerMetric("shuffle_time", this->metrics.shuffle_time));
+    metrics.emplace_back(TimerMetric("shuffle_output_append_time",
+                                     this->metrics.shuffle_output_append_time));
 }
 
 #pragma endregion  // GroupbyOutputState
@@ -3580,6 +3656,20 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
     this->shuffle_state->ResetMetrics();
 }
 
+void GroupbyState::ReportOutputMetrics() {
+    std::vector<MetricBase> metrics;
+    metrics.reserve(32);
+
+    this->output_state->ExportMetrics(metrics);
+
+    if (this->op_id != -1) {
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(this->op_id,
+                                                       this->curr_stage_id),
+            std::move(metrics));
+    }
+}
+
 bool GroupbyState::MaxPartitionExceedsThreshold(size_t num_bits,
                                                 uint32_t bitmask,
                                                 double threshold) {
@@ -4158,11 +4248,14 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
             groupby_produce_output_batch(groupby_state, produce_output);
         *out_is_last = is_last;
         groupby_state->metrics.output_row_count += out->nrows();
-        if (is_last && (groupby_state->op_id != -1)) {
-            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
-                QueryProfileCollector::MakeOperatorStageID(
-                    groupby_state->op_id, groupby_state->curr_stage_id),
-                groupby_state->metrics.output_row_count);
+        if (is_last) {
+            if (groupby_state->op_id != -1) {
+                QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                    QueryProfileCollector::MakeOperatorStageID(
+                        groupby_state->op_id, groupby_state->curr_stage_id),
+                    groupby_state->metrics.output_row_count);
+            }
+            groupby_state->ReportOutputMetrics();
         }
         return new table_info(*out);
     } catch (const std::exception& e) {
