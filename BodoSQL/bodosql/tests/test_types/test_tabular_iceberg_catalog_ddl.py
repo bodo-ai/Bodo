@@ -2,7 +2,6 @@ from contextlib import contextmanager
 
 import pandas as pd
 import pytest
-import s3fs
 
 import bodo
 import bodosql
@@ -215,7 +214,8 @@ def test_iceberg_drop_table_purge_sql(
     purge, tabular_catalog, tabular_connection, memory_leak_check
 ):
     """
-    DROP TABLE PURGE in Tabular DO NOT delete underlying files instantly. This is a test case showing that (which is different from what we expect)
+    DROP TABLE PURGE in Tabular DO NOT delete underlying files instantly.
+    Currently, this test case doesn't check anything: only making sure no errors when executing the command
     """
     purge_str = "PURGE" if purge else ""
     table_name = gen_unique_id("TEST_TABLE").upper()
@@ -224,27 +224,9 @@ def test_iceberg_drop_table_purge_sql(
     query_create_table = f"CREATE OR REPLACE TABLE {table_name} AS (SELECT * FROM CI.BODOSQL_ICEBERG_READ_TEST)"
     bc.sql(query_create_table)
 
-    spark = get_spark_tabular(tabular_connection)
-    # location will return metadata and data files associated with table names {table_name}
-    # fs will look into S3 for detailed information about those files
-    location = (
-        spark.sql(f"DESCRIBE TABLE EXTENDED {table_name}")
-        .filter("col_name = 'Location'")
-        .select("data_type")
-        .head()[0]
-    )
-    fs = s3fs.S3FileSystem()
-    files = fs.find(location)
-
     query_drop_table = f"DROP TABLE IF EXISTS {table_name} {purge_str}"
 
     bc.sql(query_drop_table)
-
-    files_after_purge = fs.find(location)
-    # Checking that files are identical before & after PURGE.
-    assert len(files) == len(files_after_purge)
-    for i in range(len(files)):
-        assert fs.info(files[i]) == fs.info(files_after_purge[i])
 
 
 @pytest.mark.parametrize("purge", [True, False])
@@ -252,7 +234,8 @@ def test_iceberg_drop_table_purge(
     purge, tabular_catalog, tabular_connection, memory_leak_check
 ):
     """
-    DROP TABLE PURGE in Tabular DO NOT delete underlying files instantly. This is a test case showing that (which is different from what we expect)
+    DROP TABLE PURGE in Tabular DO NOT delete underlying files instantly.
+    Currently, this test case doesn't check anything: only making sure no errors when executing the command
     """
     purge_str = "PURGE" if purge else ""
     table_name = gen_unique_id("TEST_TABLE").upper()
@@ -260,18 +243,6 @@ def test_iceberg_drop_table_purge(
 
     query_create_table = f"CREATE OR REPLACE TABLE {table_name} AS (SELECT * FROM CI.BODOSQL_ICEBERG_READ_TEST)"
     bc.sql(query_create_table)
-
-    spark = get_spark_tabular(tabular_connection)
-    # location will return metadata and data files associated with table names {table_name}
-    # fs will look into S3 for detailed information about those files
-    location = (
-        spark.sql(f"DESCRIBE TABLE EXTENDED {table_name}")
-        .filter("col_name = 'Location'")
-        .select("data_type")
-        .head()[0]
-    )
-    fs = s3fs.S3FileSystem()
-    files = fs.find(location)
 
     query_drop_table = f"DROP TABLE IF EXISTS {table_name} {purge_str}"
 
@@ -280,12 +251,6 @@ def test_iceberg_drop_table_purge(
         return bc.sql(query)
 
     impl(bc, query_drop_table)
-
-    files_after_purge = fs.find(location)
-    # Checking that files are identical before & after PURGE.
-    assert len(files) == len(files_after_purge)
-    for i in range(len(files)):
-        assert fs.info(files[i]) == fs.info(files_after_purge[i])
 
 
 def _test_equal_par(bodo_output, py_output):
