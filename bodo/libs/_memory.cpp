@@ -698,6 +698,8 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
     if (char* memory_size_env_ =
             std::getenv("BODO_BUFFER_POOL_MEMORY_SIZE_MiB")) {
         options.memory_size = std::stoi(memory_size_env_);
+        // If user is setting the memory manually, we can allocate extra frames.
+        options._allocate_extra_frames = true;
     } else {
         // Fraction of total memory we should actually assign to the buffer
         // pool. We will read this from an environment variable if it's set, but
@@ -733,6 +735,11 @@ BufferPoolOptions BufferPoolOptions::Defaults() {
         // packing buffers more efficiently. Otherwise, use the default (64KiB).
         if (mem_fraction <= 1.0) {
             options.min_size_class = 16;
+            options._allocate_extra_frames = true;
+        } else {
+            // If we're already over-allocating address space, we don't need to
+            // further allocate extra frames.
+            options._allocate_extra_frames = false;
         }
     }
 
@@ -859,9 +866,7 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
             this->memory_size_bytes_ / size_class_bytes_[i]);
     }
 
-    // If we're not enforcing max limit, we will allocate extra frames to
-    // account for under-utilization.
-    if (!this->options_.enforce_max_limit_during_allocation) {
+    if (this->options_.allocate_extra_frames()) {
         int64_t n_size_classes_ = static_cast<int64_t>(num_size_classes);
         constexpr int64_t zero = 0;
         // 2x frames for the 8 largest SizeClasses
