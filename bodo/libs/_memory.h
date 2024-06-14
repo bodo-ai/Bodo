@@ -154,10 +154,26 @@ struct BufferPoolOptions {
     /// practical use cases.
     int64_t malloc_free_trim_threshold = MALLOC_FREE_TRIM_DEFAULT_THRESHOLD;
 
+    /// @brief Whether we should allocate extra frames in the larger
+    /// Size-Classes to account for potential under-utilization. In particular,
+    /// we should only do this when we're not already allocating extra memory
+    /// (we allocate 5x when spilling is not available).
+    /// Note that the actual value that the BufferPool uses to decide whether or
+    /// not to allocate extra frames comes from the 'allocate_extra_frames'
+    /// function which only returns true if the max-limit is not being
+    /// enforced.
+    bool _allocate_extra_frames = true;
+
     static BufferPoolOptions Defaults();
 
     /// @brief Is tracing mode enabled?
     bool tracing_mode() const noexcept { return trace_level > 0; }
+
+    bool allocate_extra_frames() const noexcept {
+        // Extra frames are only useful if max limit enforcement is disabled.
+        return this->_allocate_extra_frames &&
+               !this->enforce_max_limit_during_allocation;
+    }
 };
 
 /// @brief Statistics for a SizeClass
