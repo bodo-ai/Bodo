@@ -3209,3 +3209,16 @@ def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool 
     df1 = df1.reset_index(drop=True)
     df2 = df2.reset_index(drop=True)
     pd.testing.assert_frame_equal(df1, df2, check_dtype=check_dtype)
+
+
+def get_query_profile_location(output_dir: str, myrank: int) -> str:
+    """
+    Get the path to the query profile file given the output directory.
+    Note that this method will also assert that the expected files are present.
+    """
+    assert os.path.isdir(output_dir)
+    runs = os.listdir(output_dir)
+    assert len(runs) == 1
+    profile_path = os.path.join(output_dir, runs[0], f"query_profile_{myrank}.json")
+    assert os.path.isfile(profile_path)
+    return profile_path

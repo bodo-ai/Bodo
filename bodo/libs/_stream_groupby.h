@@ -719,6 +719,33 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
 };
 
 /**
+ * @brief Metrics for Groupby Output stage. In particular, this contains metrics
+ * for any work-redistribution that might've been done.
+ *
+ */
+struct GroupbyOutputStateMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+
+    // Global
+    stat_t n_ranks_done_at_timer_start = -1;
+    stat_t n_ranks_done_before_work_redistribution = -1;
+    stat_t num_shuffles = 0;
+
+    // Local
+    time_t redistribute_work_total_time = 0;
+    time_t determine_redistribution_time = 0;
+    time_t determine_batched_send_counts_time = 0;
+    stat_t num_recv_rows = 0;
+    stat_t num_sent_rows = 0;
+    time_t shuffle_data_prep_time = 0;
+    time_t shuffle_dict_unification_time = 0;
+    time_t shuffle_time = 0;
+    time_t shuffle_output_append_time = 0;
+};
+
+/**
  * @brief Wrapper around the CTB that holds the output of a Groupby/MRNF/Window
  * operator. This also enables work-stealing during the output production stage,
  * if enabled.
@@ -759,6 +786,13 @@ class GroupbyOutputState {
      */
     std::tuple<std::shared_ptr<table_info>, bool> PopBatch(
         const bool produce_output);
+
+    /**
+     * @brief Export output redistribution metrics into the provided vector.
+     *
+     * @param metrics
+     */
+    void ExportMetrics(std::vector<MetricBase>& metrics);
 
    private:
     /// Work-stealing state
@@ -801,6 +835,9 @@ class GroupbyOutputState {
 
     // MPI number of processes and this process' rank.
     int n_pes, myrank;
+
+    // Metrics
+    GroupbyOutputStateMetrics metrics;
 
     /**
      * @brief If work-stealing is enabled, this synchronizes output production
@@ -1213,6 +1250,14 @@ class GroupbyState {
      *
      */
     void ReportAndResetBuildMetrics(bool is_final);
+
+    /**
+     * @brief Report the metrics for the output production stage. This primarily
+     * consists of metrics related to any work redistribution that might've been
+     * performed during execution.
+     *
+     */
+    void ReportOutputMetrics();
 
     /**
      * @brief Finalize the build step. This will finalize all the partitions,
