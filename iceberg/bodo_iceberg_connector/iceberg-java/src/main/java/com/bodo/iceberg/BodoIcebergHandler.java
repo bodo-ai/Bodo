@@ -213,6 +213,32 @@ public class BodoIcebergHandler {
   }
 
   /**
+   * Return a boolean list indicating which columns have theta sketches enabled, as per the <code>
+   * bodo.write.theta_sketch_enabled.COLUMN_NAME</code> table property. If the property does not
+   * exist for a column, the decision will default to enabled / bodo's engine decision.
+   *
+   * <p>Note: This API is exposed to Python.
+   *
+   * @return List of booleans indicating which columns have theta sketches enabled. The booleans
+   *     correspond to the columns in the schema, not the field IDs.
+   */
+  public List<Boolean> tableColumnsEnabledThetaSketches() {
+    Table table = catalog.loadTable(id);
+    Schema schema = table.schema();
+    List<Types.NestedField> columns = schema.columns();
+    List<Boolean> enabledThetaSketches =
+        new ArrayList<>(Collections.nCopies(columns.size(), false));
+    // Iterate through properties
+    for (int i = 0; i < columns.size(); i++) {
+      String colName = columns.get(i).name();
+      String isEnabled = table.properties().get("bodo.write.theta_sketch_enabled." + colName);
+      if (isEnabled == null || isEnabled.equalsIgnoreCase("true"))
+        enabledThetaSketches.set(i, true);
+    }
+    return enabledThetaSketches;
+  }
+
+  /**
    * Helper function that returns the total number of files present in the given Iceberg table.
    * Currently only used for logging purposes.
    *

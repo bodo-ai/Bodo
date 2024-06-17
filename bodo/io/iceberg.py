@@ -3149,6 +3149,25 @@ def table_columns_have_theta_sketches(conn_str: str, db_name: str, table_name: s
 
 
 @run_rank0
+def table_columns_enabled_theta_sketches(conn_str: str, db_name: str, table_name: str):
+    """
+    Get an array of booleans indicating whether each column in the table
+    has theta sketches enabled, as per the table property of
+    'bodo.write.theta_sketch_enabled.<column_name>'.
+
+    Args:
+        conn_str (str): The Iceberg connector string.
+        db_name (str): The iceberg database name.
+        table_name (str): The iceberg table.
+    """
+    import bodo_iceberg_connector
+
+    return bodo_iceberg_connector.table_columns_enabled_theta_sketches(
+        conn_str, db_name, table_name
+    )
+
+
+@run_rank0
 def get_old_statistics_file_path(
     txn_id: int, conn_str: str, db_name: str, table_name: str
 ):
