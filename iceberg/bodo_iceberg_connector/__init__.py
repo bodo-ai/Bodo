@@ -39,6 +39,7 @@ from bodo_iceberg_connector.puffin import (
     StatisticsFile,
     get_old_statistics_file_path,
     table_columns_have_theta_sketches,
+    table_columns_enabled_theta_sketches,
 )
 
 # ----------------------- Version Import from Metadata -----------------------

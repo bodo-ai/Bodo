@@ -44,6 +44,7 @@ from bodo.io.iceberg import (
     python_list_of_heterogeneous_tuples_type,
     register_table_write,
     remove_transaction,
+    table_columns_enabled_theta_sketches,
     table_columns_have_theta_sketches,
     theta_sketch_collection_type,
     wrap_start_write,
@@ -946,7 +947,7 @@ def gen_iceberg_writer_init_impl(
         allow_theta = allow_theta_sketches and get_enable_theta()
         if allow_theta:
             if mode == "append":
-                # For insert into the columns are a union of the existing sketches
+                # For insert into the columns are an intersection of the existing sketches
                 # and the types we can support.
                 existing_columns = table_columns_have_theta_sketches_wrapper(
                     writer["conn"], writer["db_schema"], writer["table_name"]
@@ -959,6 +960,14 @@ def gen_iceberg_writer_init_impl(
                 theta_columns = get_default_theta_sketch_columns(
                     writer["output_pyarrow_schema"]
                 )
+
+            # Find the columns that are enabled for theta sketches
+            enabled_columns = table_columns_enabled_theta_sketches_wrapper(
+                writer["conn"], writer["db_schema"], writer["table_name"]
+            )
+            # The final enabled theta sketches are an intersection of the columns
+            # the have the property set and the supported columns by Bodo.
+            theta_columns = theta_columns & enabled_columns
         else:
             theta_columns = alloc_false_bool_array(_n_cols)
         use_theta_sketches = allow_theta and theta_columns.any()
@@ -995,6 +1004,28 @@ def overload_table_columns_have_theta_sketches_wrapper(conn, schema, table_name)
                 conn, schema, table_name
             )
         return existing_columns
+
+    return impl
+
+
+def table_columns_enabled_theta_sketches_wrapper(
+    conn, schema, table_name
+):  # pragma: no cover
+    pass
+
+
+@overload(table_columns_enabled_theta_sketches_wrapper)
+def overload_table_columns_enabled_theta_sketches_wrapper(conn, schema, table_name):
+    """Check if the columns in the table have theta sketches enabled. This extra
+    wrapper is added to avoid calling into objmode inside control flow."""
+    _output_type = bodo.boolean_array_type
+
+    def impl(conn, schema, table_name):  # pragma: no cover
+        with bodo.no_warning_objmode(enabled_columns=_output_type):
+            enabled_columns = table_columns_enabled_theta_sketches(
+                conn, schema, table_name
+            )
+        return enabled_columns
 
     return impl
 
