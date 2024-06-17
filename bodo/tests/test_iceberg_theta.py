@@ -17,6 +17,10 @@ from bodo.tests.iceberg_database_helpers.metadata_utils import (
     get_metadata_field,
     get_metadata_path,
 )
+from bodo.tests.iceberg_database_helpers.utils import (
+    create_iceberg_table,
+    get_spark,
+)
 from bodo.tests.utils import _get_dist_arg
 from bodo.utils.utils import run_rank0
 
@@ -433,5 +437,75 @@ def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_che
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
         pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+    finally:
+        bodo.enable_theta_sketches = orig_enable_theta
+
+
+def test_enable_sketches_per_column(
+    iceberg_database, iceberg_table_conn, memory_leak_check
+):
+    """
+    Test that we can enable/disable theta sketches on a per-column basis,
+    through setting the table property of `bodo.write.theta_sketch_enabled.<column_name>`.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
+            "B": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
+            "C": pd.array(list(range(10)) * 2, dtype=pd.Int64Dtype()),
+            # D and E are float types and thus should not generate theta sketches.
+            "D": pd.array([1.4, 1.5, 2.451, 0] * 5, dtype=pd.Float64Dtype()),
+            "E": pd.array([1.4, 1.5, 2.451, 0] * 5, dtype=pd.Float64Dtype()),
+        }
+    )
+    sql_schema = [
+        ("A", "int", True),
+        ("B", "int", True),
+        ("C", "int", True),
+        ("D", "float", True),
+        ("E", "float", True),
+    ]
+    # We will explicitly disable theta sketches for A, and explicitly enable them for D.
+    # This should result in theta sketches being generated for B and C, but not A, D, or E.
+    # Note that enabling theta sketches for D has no effect as floats are an unsupported type.
+
+    expected_ndvs = {
+        2: "10",
+        3: "10",
+    }
+    expected_ndvs_array = pd.array([None, 10, 10, None, None], dtype=pd.Float64Dtype())
+    table_name = "basic_puffin_table"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    orig_enable_theta = bodo.enable_theta_sketches
+    bodo.enable_theta_sketches = True
+    try:
+        spark = get_spark()
+        # Create empty table
+        if bodo.get_rank() == 0:
+            create_iceberg_table(df, sql_schema, table_name, spark)
+            # Set such that column A does not have theta sketches.
+            # BodoSQL would normally enable theta sketches for column A by default.
+            spark.sql(
+                f"ALTER TABLE hadoop_prod.iceberg_db.{table_name} SET TBLPROPERTIES ('bodo.write.theta_sketch_enabled.A'='false')"
+            )
+            # Set such that column D does have theta sketches, which should have no effect.
+            spark.sql(
+                f"ALTER TABLE hadoop_prod.iceberg_db.{table_name} SET TBLPROPERTIES ('bodo.write.theta_sketch_enabled.D'='true')"
+            )
+        bodo.barrier()
+        # Now write the data.
+        f = write_iceberg_table_with_puffin_files(
+            df, table_name, conn, db_schema, "replace"
+        )
+        df = _get_dist_arg(df, var_length=True)
+        bodo.jit(distributed=["df"])(f)(df, table_name, conn, db_schema, "replace")
+        # Now make sure that column A is disabled, and the rest are enabled.
+        puffin_file_name = check_ndv_metadata(
+            warehouse_loc, db_schema, table_name, expected_ndvs
+        )
+        pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
+        actual_ndvs_array = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
+        pd.testing.assert_extension_array_equal(actual_ndvs_array, expected_ndvs_array)
     finally:
         bodo.enable_theta_sketches = orig_enable_theta
