@@ -481,6 +481,7 @@ def test_alter_table_rename_diffschema(
 
     finally:
         drop_test_table(f"BODOSQL_DDL_TESTS.{table_name}", tabular_connection)
+        drop_test_table(f"BODOSQL_DDL_TESTS_ALTERNATE.{table_name}", tabular_connection)
 
 
 @pytest_mark_one_rank
