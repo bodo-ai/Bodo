@@ -139,3 +139,62 @@ def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
             stream,
             "Runtime join filter expression: ((ds.field('{C}') >= 1) & (ds.field('{C}') <= 5))",
         )
+
+
+def test_dict_keys(memory_leak_check, iceberg_database):
+    """
+    Variant of test_simple_join with dictionary encoded columns as keys.
+    """
+    table_names = [
+        "ENGLISH_DICTIONARY_TABLE",
+        "SHAKESPEARE_TABLE",
+    ]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    db_schema, warehouse_loc = iceberg_database(table_names)
+
+    # Join the shakespeare and english_dictionary tables to get the definitions
+    # of all words spoken by mark antony. This should produce a runtime join
+    # filter on english_dictionary where word is between "A" and "Autolycus".
+
+    query = """
+    WITH T1 AS (
+        SELECT Initcap(SPLIT_PART(player, ' ', 0)) as PLAYER 
+        FROM SHAKESPEARE_TABLE WHERE STARTSWITH(player, 'A') OR EDITDISTANCE(player, '') < 2
+    )
+    SELECT player, definition
+    FROM T1, ENGLISH_DICTIONARY_TABLE T2
+    WHERE player = word
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY player ORDER BY definition) = 1
+    """
+
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    py_output = pd.DataFrame(
+        {
+            "PLAYER": ["All", "Archbishop"],
+            "DEFINITION": [
+                '"Although; albeit."',
+                '"A chief bishop; a church dignitary of the first class (often called a metropolitan or primate) who superintends the conduct of the suffragan bishops in his province  and also exercises episcopal authority in his own diocese."',
+            ],
+        }
+    )
+
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(
+            stream,
+            "Runtime join filter expression: ((ds.field('{WORD}') >= 'A') & (ds.field('{WORD}') <= 'Autolycus'))",
+        )
+        check_logger_msg(stream, "Total number of files is 16. Reading 1 files:")

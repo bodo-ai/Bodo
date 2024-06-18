@@ -859,6 +859,11 @@ class HashJoinState : public JoinState {
     // has 2 values: the minimum key, and the maixmum key.
     std::vector<std::optional<std::shared_ptr<array_info>>> min_max_values;
 
+    // Vector that stores the bitmask of each dictionary encoded key column
+    // indicating which indices were hit 1+ times on the build side. For
+    // non dictionary encoded columns, the vectors are empty.
+    std::vector<std::vector<bool>> build_dict_hit_bitmap;
+
     HashJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                   const std::shared_ptr<bodo::Schema> probe_table_schema_,
                   uint64_t n_keys_, bool build_table_outer_,
@@ -1096,12 +1101,32 @@ class HashJoinState : public JoinState {
 
     /**
      * Processes a batch of data to include it in the accumulated min/max values
-     * for each key column.
+     * for a specific key column.
      *
-     * @param[in] in_table The batch of data that is being processed to update
-     * the min/max values.
+     * @param[in] arr The batch of data that is being processed to update
+     * the min/max values of a column.
+     * @param[in] col_idx: which column to insert.
      */
-    void UpdateKeysMinMax(std::shared_ptr<table_info>& in_table);
+    void UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
+                          size_t col_idx);
+
+    /**
+     * Helper for UpdateKeysMinMax on string arrays.
+     *
+     * @param[in] in_arr: the string array.
+     * @param[in] col_idx: the column index having its data inserted.
+     */
+    void UpdateKeysMinMaxString(const std::shared_ptr<array_info>& in_arr,
+                                size_t col_idx);
+
+    /**
+     * Helper for UpdateKeysMinMax on dictionary encoded arrays.
+     *
+     * @param[in] in_arr: the dictionary encoded array.
+     * @param[in] col_idx: the column index having its data inserted.
+     */
+    void UpdateKeysMinMaxDict(const std::shared_ptr<array_info>& in_arr,
+                              size_t col_idx);
 
     /**
      * Does the parallel finalization of the min/max values for each key column
