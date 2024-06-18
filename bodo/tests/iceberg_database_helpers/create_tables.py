@@ -1,4 +1,5 @@
 from bodo.tests.iceberg_database_helpers import (
+    english_dictionary_table,
     file_subset_deleted_rows_table,
     file_subset_empty_files_table,
     file_subset_partial_file_table,
@@ -9,6 +10,7 @@ from bodo.tests.iceberg_database_helpers import (
     partitions_dt_table,
     partitions_general_table,
     schema_evolution_eg_table,
+    shakespeare_table,
 )
 from bodo.tests.iceberg_database_helpers.partition_schema_evolution_tables import (
     PARTITION_SCHEMA_EVOLUTION_TABLE_NAME_MAP,
@@ -35,6 +37,8 @@ from bodo.tests.iceberg_database_helpers.sort_tables import (
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME, get_spark
 
 table_mods = [
+    english_dictionary_table,
+    shakespeare_table,
     filter_pushdown_test_table,
     partitions_dt_table,
     part_sort_table,

@@ -1507,7 +1507,7 @@ std::optional<std::shared_ptr<arrow::Buffer>> get_dictionary_hits(
         const auto &indices =
             std::dynamic_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
                 dict_chunk->indices());
-        int64_t n_rows = (int64_t)indices->length();
+        int64_t n_rows = (int64_t)(indices->length());
         // Loop over every row and mark that dictionary index location as set
         for (int64_t idx = 0; idx < n_rows; idx++) {
             if (indices->IsNull(idx)) {
