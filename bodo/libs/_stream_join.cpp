@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <memory>
 
+#include <arrow/array.h>
 #include <arrow/compute/api_aggregate.h>
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -1312,14 +1313,28 @@ HashJoinState::HashJoinState(
 
     // Allocate the min/max array values for each key columun
     for (size_t key_col = 0; key_col < n_keys; key_col++) {
-        if (IsValidRuntimeJoinFilterMinMaxColumn(
-                probe_table_schema_->column_types[key_col])) {
-            this->min_max_values.emplace_back(alloc_nullable_array_all_nulls(
-                2, probe_table_schema_->column_types[key_col]->c_type));
+        std::unique_ptr<bodo::DataType>& dtype =
+            probe_table_schema_->column_types[key_col];
+        if (IsValidRuntimeJoinFilterMinMaxColumn(dtype)) {
+            if (dtype->array_type == bodo_array_type::NUMPY ||
+                dtype->array_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                this->min_max_values.emplace_back(
+                    alloc_nullable_array_all_nulls(
+                        2, probe_table_schema_->column_types[key_col]->c_type));
+            } else {
+                assert(dtype->array_type == bodo_array_type::STRING ||
+                       dtype->array_type == bodo_array_type::DICT);
+                std::shared_ptr<array_info> str_arr =
+                    alloc_string_array(Bodo_CTypes::STRING, 2, 0);
+                str_arr->set_null_bit<bodo_array_type::STRING>(0, 0);
+                str_arr->set_null_bit<bodo_array_type::STRING>(1, 0);
+                this->min_max_values.emplace_back(str_arr);
+            }
         } else {
             this->min_max_values.emplace_back(std::nullopt);
         }
     }
+    build_dict_hit_bitmap.resize(n_keys);
 }
 
 bool HashJoinState::IsValidRuntimeJoinFilterMinMaxColumn(
@@ -1342,6 +1357,14 @@ bool HashJoinState::IsValidRuntimeJoinFilterMinMaxColumn(
                     return false;
                 }
             }
+        }
+        // For now, we do not allow computing the min/max on regular
+        // string columns. However, we do have support for computing
+        // them on string arrays as a sub-routine of the min/max
+        // computations on dictionary encoded arrays.
+        // case bodo_array_type::STRING:
+        case bodo_array_type::DICT: {
+            return true;
         }
         default: {
             return false;
@@ -2549,7 +2572,7 @@ void HashJoinState::DisablePartitioning() {
 template <Bodo_CTypes::CTypeEnum DType, typename ScalarType>
 void update_build_min_max_state_numeric(
     std::shared_ptr<array_info>& min_max_arr,
-    std::shared_ptr<array_info>& in_arr) {
+    const std::shared_ptr<array_info>& in_arr) {
     using T = typename dtype_to_type<DType>::type;
 
     // Convert the bodo array to an arrow array
@@ -2596,56 +2619,184 @@ void update_build_min_max_state_numeric(
     }
 }
 
-void HashJoinState::UpdateKeysMinMax(std::shared_ptr<table_info>& in_table) {
+void HashJoinState::UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
+                                     size_t col_idx) {
 #define MIN_MAX_NUMERIC_DTYPE_CASE(DType, ScalarType)          \
     case DType: {                                              \
         update_build_min_max_state_numeric<DType, ScalarType>( \
             min_max_values[col_idx].value(), arr);             \
         break;                                                 \
     }
-    for (size_t col_idx = 0; col_idx < min_max_values.size(); col_idx++) {
-        if (min_max_values[col_idx].has_value()) {
-            std::shared_ptr<array_info>& arr = in_table->columns[col_idx];
-            switch (arr->arr_type) {
-                case bodo_array_type::NUMPY:
-                case bodo_array_type::NULLABLE_INT_BOOL: {
-                    switch (arr->dtype) {
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT8,
-                                                   arrow::Int8Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT8,
-                                                   arrow::UInt8Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT16,
-                                                   arrow::Int16Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT16,
-                                                   arrow::UInt16Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT32,
-                                                   arrow::Int32Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT32,
-                                                   arrow::UInt32Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT64,
-                                                   arrow::Int64Scalar);
-                        MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT64,
-                                                   arrow::UInt64Scalar);
-                        default: {
-                            throw std::runtime_error(
-                                "Unsupported dtype for min/max runtime join "
-                                "filter: " +
-                                GetDtype_as_string(arr->dtype));
-                            break;
-                        }
+    if (min_max_values[col_idx].has_value()) {
+        switch (arr->arr_type) {
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                switch (arr->dtype) {
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT8,
+                                               arrow::Int8Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT8,
+                                               arrow::UInt8Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT16,
+                                               arrow::Int16Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT16,
+                                               arrow::UInt16Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT32,
+                                               arrow::Int32Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT32,
+                                               arrow::UInt32Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::INT64,
+                                               arrow::Int64Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT64,
+                                               arrow::UInt64Scalar);
+                    default: {
+                        throw std::runtime_error(
+                            "Unsupported dtype for min/max runtime join "
+                            "filter: " +
+                            GetDtype_as_string(arr->dtype));
+                        break;
                     }
-                    break;
                 }
-                default: {
-                    throw std::runtime_error(
-                        "Unsupported array type for min/max runtime join "
-                        "filter: " +
-                        GetArrType_as_string(arr->arr_type));
-                    break;
-                }
+                break;
+            }
+            case bodo_array_type::STRING: {
+                // This path is currently only ever invoked during the
+                // finalization step of Min/Max on dictionary-encoded strings
+                UpdateKeysMinMaxString(arr, col_idx);
+                break;
+            }
+            case bodo_array_type::DICT: {
+                UpdateKeysMinMaxDict(arr, col_idx);
+                break;
+            }
+            default: {
+                throw std::runtime_error(
+                    "Unsupported array type for min/max runtime join "
+                    "filter: " +
+                    GetArrType_as_string(arr->arr_type));
+                break;
             }
         }
-#undef min_max_numeric_dtype_case
+    }
+#undef MIN_MAX_NUMERIC_DTYPE_CASE
+}
+
+void HashJoinState::UpdateKeysMinMaxString(
+    const std::shared_ptr<array_info>& in_arr, size_t col_idx) {
+    assert(in_arr->arr_type == bodo_array_type::STRING);
+    // Convert the bodo array to an arrow array
+    std::shared_ptr<arrow::Array> arrow_arr;
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), in_arr, &arrow_arr,
+                        false, "", time_unit, false,
+                        bodo::default_buffer_memory_manager());
+
+    // Use the vectorized arrow kernel to compute the minimum & maximum,
+    // then extract the corresponding arrow scalars.
+    auto minMaxRes = arrow::compute::MinMax(arrow_arr);
+    CHECK_ARROW(minMaxRes.status(), "Error in computing min/max");
+    std::shared_ptr<arrow::Scalar> minMax =
+        std::move(minMaxRes.ValueOrDie()).scalar();
+    std::shared_ptr<arrow::StructScalar> minMaxStruct =
+        std::static_pointer_cast<arrow::StructScalar>(minMax);
+    std::shared_ptr<arrow::Scalar> min =
+        minMaxStruct->field(arrow::FieldRef("min")).ValueOrDie();
+    std::shared_ptr<arrow::Scalar> max =
+        minMaxStruct->field(arrow::FieldRef("max")).ValueOrDie();
+
+    // Skip if the scalars are nulls, since there is no relevant
+    // data to insert.
+    if (min->is_valid && max->is_valid) {
+        std::string min_str_res;
+        std::string max_str_res;
+
+        // Extract the min and max scalars from the new batch as string views
+        auto min_string_scalar =
+            std::static_pointer_cast<arrow::StringScalar>(min);
+        std::string_view min_str(
+            reinterpret_cast<const char*>(min_string_scalar->value->data()),
+            min_string_scalar->value->size());
+        auto max_string_scalar =
+            std::static_pointer_cast<arrow::StringScalar>(max);
+        std::string_view max_str(
+            reinterpret_cast<const char*>(max_string_scalar->value->data()),
+            max_string_scalar->value->size());
+
+        std::shared_ptr<array_info>& min_max_arr =
+            min_max_values[col_idx].value();
+        char* data = min_max_arr->data1<bodo_array_type::STRING, char>();
+        offset_t* offsets =
+            min_max_arr->data2<bodo_array_type::STRING, offset_t>();
+        offset_t mid = offsets[1];
+        offset_t end = offsets[2];
+
+        // Extract the min string from the existing data
+        // and use it to calculate the overall min.
+        if (min_max_arr->get_null_bit<bodo_array_type::STRING>(0)) {
+            std::string min_str_existing(data, mid);
+            min_str_res =
+                (min_str < min_str_existing) ? min_str : min_str_existing;
+        } else {
+            min_str_res = min_str;
+        }
+
+        // Extract the max string from the existing data
+        // and use it to calculate the overall max.
+        if (min_max_arr->get_null_bit<bodo_array_type::STRING>(1)) {
+            std::string max_str_existing(data + mid, end - mid);
+            max_str_res =
+                (max_str > max_str_existing) ? max_str : max_str_existing;
+        } else {
+            max_str_res = max_str;
+        }
+
+        // Build a new string array from the overall min/max. The null
+        // bitmap vector is set to all-1 since all of the rows must
+        // now be non-null.
+        size_t min_size = min_str_res.size();
+        size_t max_size = max_str_res.size();
+        size_t total_chars = min_size + max_size;
+        min_max_values[col_idx] =
+            alloc_string_array(Bodo_CTypes::STRING, 2, total_chars);
+        char* final_data = min_max_values[col_idx]
+                               .value()
+                               ->data1<bodo_array_type::STRING, char>();
+        offset_t* final_offsets =
+            min_max_values[col_idx]
+                .value()
+                ->data2<bodo_array_type::STRING, offset_t>();
+        memcpy(final_data, min_str_res.data(), min_size);
+        memcpy(final_data + min_size, max_str_res.data(), max_size);
+        final_offsets[0] = 0;
+        final_offsets[1] = min_size;
+        final_offsets[2] = total_chars;
+    }
+}
+
+void HashJoinState::UpdateKeysMinMaxDict(
+    const std::shared_ptr<array_info>& in_arr, size_t col_idx) {
+    assert(in_arr->arr_type == bodo_array_type::DICT);
+    assert(build_table_dict_builders[col_idx] != nullptr);
+    if (!is_matching_dictionary(
+            in_arr->child_arrays[0],
+            build_table_dict_builders[col_idx]->dict_buff->data_array)) {
+        throw std::runtime_error(
+            "HashJoinState::UpdateKeysMinMaxDict: Input dictionary not "
+            "unified!");
+    }
+    std::shared_ptr<array_info>& dictionary = in_arr->child_arrays[0];
+    size_t n_strings = dictionary->length;
+    if (build_dict_hit_bitmap[col_idx].size() < n_strings) {
+        build_dict_hit_bitmap[col_idx].resize(n_strings, false);
+    }
+    std::shared_ptr<array_info>& indices = in_arr->child_arrays[1];
+    dict_indices_t* index_buffer =
+        indices->data1<bodo_array_type::NULLABLE_INT_BOOL, dict_indices_t>();
+    size_t n_rows = indices->length;
+    for (size_t row = 0; row < n_rows; row++) {
+        if (indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row)) {
+            dict_indices_t index = index_buffer[row];
+            build_dict_hit_bitmap[col_idx][index] = true;
+        }
     }
 }
 
@@ -2656,32 +2807,43 @@ void HashJoinState::FinalizeKeysMinMax() {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    // Skip if doing a non-parallel build since the ranks then already have
-    // all of the data.
-    if (build_parallel) {
-        // Gather the min/max arrays onto every rank
-        std::shared_ptr<table_info> dummy_table =
-            std::make_shared<table_info>();
-        for (size_t col_idx = 0; col_idx < min_max_values.size(); col_idx++) {
-            if (min_max_values[col_idx].has_value()) {
-                // If this column is one of the ones with min max values stored
-                // in it, do an all2all so every rank has all the min/max
-                // values.
-                std::shared_ptr<array_info> combined_arr =
-                    gather_array(min_max_values[col_idx].value(), true, true, 0,
-                                 n_pes, myrank);
-                dummy_table->columns.emplace_back(combined_arr);
-            } else {
-                // Otherwise, insert a dummy column so we can still have a table
-                // with the correct column configuration for UpdateKeysMinMax.
-                dummy_table->columns.emplace_back(
-                    std::shared_ptr<array_info>());
+    // Gather the min/max arrays onto every rank
+    std::shared_ptr<table_info> dummy_table = std::make_shared<table_info>();
+    for (size_t col_idx = 0; col_idx < min_max_values.size(); col_idx++) {
+        if (min_max_values[col_idx].has_value()) {
+            if (probe_table_schema->column_types[col_idx]->array_type ==
+                bodo_array_type::DICT) {
+                // If we are computing the result on a dictionary encoded array,
+                // we need to use the bitmasks and dictionary builders to
+                // materialize the strings that were encountered at least once
+                // during build time.
+                std::shared_ptr<array_info>& dict_values =
+                    build_table_dict_builders[col_idx]->dict_buff->data_array;
+                std::vector<int64_t> indices_to_keep;
+                for (size_t i = 0; i < build_dict_hit_bitmap[col_idx].size();
+                     i++) {
+                    if (build_dict_hit_bitmap[col_idx][i]) {
+                        indices_to_keep.push_back((int64_t)i);
+                    }
+                }
+                std::shared_ptr<array_info> dictionary_subset =
+                    RetrieveArray_SingleColumn(dict_values, indices_to_keep);
+                // Insert the filtered string data as if it were a regular
+                // min/max batch.
+                UpdateKeysMinMax(dictionary_subset, col_idx);
             }
-        }
+            std::shared_ptr<array_info> existing_values =
+                min_max_values[col_idx].value();
+            // If this column is one of the ones with min max values stored
+            // in it, do an allgather so every rank has all the min/max
+            // values.
+            std::shared_ptr<array_info> combined_arr = gather_array(
+                existing_values, true, build_parallel, 0, n_pes, myrank);
 
-        // Insert the combined data as if it were a regular batch update,
-        // ensuring every rank has the same min/max values.
-        UpdateKeysMinMax(dummy_table);
+            // Insert the combined data as if it were a regular batch update,
+            // ensuring every rank has the same min/max values.
+            UpdateKeysMinMax(combined_arr, col_idx);
+        }
     }
 }
 
@@ -2764,7 +2926,9 @@ bool join_build_consume_batch(HashJoinState* join_state,
         // If this is not an outer probe, use the latest batch
         // to process the min/max values for each key column and
         // update the min_max_values vector.
-        join_state->UpdateKeysMinMax(in_table);
+        for (size_t col_idx = 0; col_idx < join_state->n_keys; col_idx++) {
+            join_state->UpdateKeysMinMax(in_table->columns[col_idx], col_idx);
+        }
         join_state->metrics.build_min_max_update_time +=
             end_timer(start_min_max);
     }
@@ -3827,6 +3991,29 @@ uint32_t get_partition_top_bitmask_by_idx(JoinState* join_state, int64_t idx) {
 }
 
 /**
+ * Helper for get_runtime_join_filter_min_max_py_entrypt on string/dictionary
+ * columns.
+ */
+PyObject* get_runtime_join_filter_min_max_string(HashJoinState* join_state,
+                                                 int64_t key_idx, bool is_min) {
+    size_t row = is_min ? 0 : 1;
+    if (join_state->min_max_values[key_idx].has_value() &&
+        join_state->min_max_values[key_idx].value()->get_null_bit(row)) {
+        char* data = join_state->min_max_values[key_idx]
+                         .value()
+                         ->data1<bodo_array_type::STRING, char>();
+        offset_t* offsets = join_state->min_max_values[key_idx]
+                                .value()
+                                ->data2<bodo_array_type::STRING, offset_t>();
+        offset_t start = offsets[row];
+        offset_t end = offsets[row + 1];
+        return PyUnicode_FromStringAndSize(data + start, end - start);
+    } else {
+        return Py_None;
+    }
+}
+
+/**
  * Python entrypoint to fetch the minimum or maximum value of a specific
  * join key as a PyObject so it can be used an a runtime join filter. If
  * there is no value to fetch, returns a None PyPObject.
@@ -3859,17 +4046,33 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
             return Py_None;                                                    \
         }                                                                      \
     }
-        switch (col_type->c_type) {
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT8);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT16);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT32);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT64);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT8);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT16);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT32);
-            RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT64);
-            default: {
-                return Py_None;
+        switch (col_type->array_type) {
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                switch (col_type->c_type) {
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT8);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT16);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT32);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT64);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT8);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT16);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT32);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT64);
+                    default: {
+                        // If the column is not a supported nullable/numpy
+                        // dtype for min/max pushdown, return None
+                        // back to Python so it knows not to insert the filter.
+                        return Py_None;
+                    }
+                }
+                case bodo_array_type::STRING:
+                case bodo_array_type::DICT: {
+                    return get_runtime_join_filter_min_max_string(
+                        join_state, key_idx, is_min);
+                }
+                default: {
+                    return Py_None;
+                }
             }
         }
 #undef RTJF_MIN_MAX_NUMERIC_CASE

@@ -494,6 +494,21 @@ def get_runtime_join_filter_min_max(typingctx, state_var_t, key_index_t, is_min_
     return sig, codegen
 
 
+def convert_pyobj_to_snowflake_str(pyobj):
+    """
+    Converts a Python object to the equivalent Snowflake
+    representation that can be injected as a string into
+    query text. For example:
+
+    42 -> '42'
+    "foo bar" -> "'foo bar'"
+    """
+    if isinstance(pyobj, str):
+        return f"'{pyobj}'"
+    else:
+        return str(pyobj)
+
+
 def gen_runtime_join_filter_cond(state_var, col_indices):
     pass
 
@@ -522,9 +537,13 @@ def overload_gen_runtime_join_filter_cond(state_var, col_indices):
             ):
                 min_result = max_result = ""
                 if min_val is not None:
-                    min_result = f"(${col_idx+1} >= {min_val})"
+                    min_result = (
+                        f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val)})"
+                    )
                 if max_val is not None:
-                    max_result = f"(${col_idx+1} <= {max_val})"
+                    max_result = (
+                        f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val)})"
+                    )
             # If the results were successful, add to the conjunction list
             if min_result != "":
                 cond_terms.append(min_result)

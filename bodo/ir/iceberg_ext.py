@@ -1012,6 +1012,20 @@ def add_rtjf_iceberg_filter(
     return combined_filters
 
 
+def convert_pyobj_to_arrow_filter_str(pyobj):
+    """
+    Converts a Python object to the equivalent arrow
+    representation that can be injected as a string into
+    an arrow filter. For example:
+    42 -> '42'
+    "foo bar" -> "'foo bar'"
+    """
+    if isinstance(pyobj, str):
+        return f"'{pyobj}'"
+    else:
+        return str(pyobj)
+
+
 @numba.njit
 def gen_runtime_join_filter_expr(
     filtered_cols: list[str],
@@ -1029,9 +1043,13 @@ def gen_runtime_join_filter_expr(
         exprs = []
         for col, (min, max) in zip(filtered_cols, bounds):
             if min is not None:
-                exprs.append(f"(ds.field('{{{col}}}') >= {min})")
+                exprs.append(
+                    f"(ds.field('{{{col}}}') >= {convert_pyobj_to_arrow_filter_str(min)})"
+                )
             if max is not None:
-                exprs.append(f"(ds.field('{{{col}}}') <= {max})")
+                exprs.append(
+                    f"(ds.field('{{{col}}}') <= {convert_pyobj_to_arrow_filter_str(max)})"
+                )
         rtjf_expr += " & ".join(exprs)
     return rtjf_expr
 
