@@ -939,6 +939,126 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         harness.drop_test_table(table_identifier)
 
 
+# ALTER TABLE RENAME COLUMN
+
+
+@pytest.mark.parametrize(
+    "harness_name",
+    [
+        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("filesystem_test_harness", id="filesystem"),
+    ],
+)
+def test_alter_table_rename_column(request, harness_name: str):
+    """Tests that Bodo can drop columns and nested columns
+    with the IF EXISTS keyword."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    assert isinstance(harness, DDLTestHarness)
+    try:
+        table_name = harness.gen_unique_id("test_table").upper()
+        table_identifier = harness.get_table_identifier(table_name)
+        harness.create_test_table(table_identifier)
+        assert harness.check_table_exists(table_identifier)
+        # Drop extraneous column created during table creation
+        harness.refresh_table(table_identifier)
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
+
+        # Create test columns
+        harness.run_spark_query(
+            f"ALTER TABLE {table_identifier} add column TESTCOL1 INT"
+        )
+        harness.run_spark_query(
+            f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
+        )
+        harness.run_spark_query(
+            f"ALTER TABLE {table_identifier} add column TESTCOL3 INT"
+        )
+        # Check
+        output = harness.describe_table(table_identifier)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1", "TESTCOL2", "TESTCOL3"],
+                "TYPE": ["INTEGER", "RecordType(DOUBLE X, DOUBLE Y)", "INTEGER"],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Rename top level column
+        query = (
+            f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1 TO TESTCOL1_RENAMED"
+        )
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        output = harness.describe_table(table_identifier)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1_RENAMED", "TESTCOL2", "TESTCOL3"],
+                "TYPE": [
+                    "INTEGER",
+                    "RecordType(DOUBLE X, DOUBLE Y)",
+                    "INTEGER",
+                ],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Rename again
+        query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED TO TESTCOL1_RENAMED2"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        output = harness.describe_table(table_identifier)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1_RENAMED2", "TESTCOL2", "TESTCOL3"],
+                "TYPE": [
+                    "INTEGER",
+                    "RecordType(DOUBLE X, DOUBLE Y)",
+                    "INTEGER",
+                ],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Rename nested column
+        # Note that we cannot change the hierarchy of nesting.
+        # The nested field to be renamed should be specified using the dot syntax;
+        # which will then be renamed to the new name (without changing the hierarchy).
+        query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL2.X TO X_RENAMED"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        output = harness.describe_table(table_identifier)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1_RENAMED2", "TESTCOL2", "TESTCOL3"],
+                "TYPE": [
+                    "INTEGER",
+                    "RecordType(DOUBLE X_RENAMED, DOUBLE Y)",
+                    "INTEGER",
+                ],
+            }
+        )
+        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        # Rename to existing column (should error)
+        query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED2 TO TESTCOL3"
+        with pytest.raises(BodoError, match="already exists; cannot rename"):
+            bodo_output = harness.run_bodo_query(query)
+
+        with pytest.raises(BodoError, match="Cannot rename missing column"):
+            # Rename non-existent column (should error)
+            query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL4 to TESTCOL4_RENAMED"
+            harness.run_bodo_query(query)
+
+    finally:
+        harness.drop_test_table(table_identifier)
+
+
 # ALTER TABLE ALTER COLUMN
 
 # COLUMN COMMENT
