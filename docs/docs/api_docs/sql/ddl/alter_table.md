@@ -19,7 +19,7 @@ ALTER TABLE [ IF EXISTS ] <name>
 ```
 
 ??? warning
-    - Note that BodoSQL does not yet support `ADD COLUMN` for Snowflake.
+    - This operation is currently only supported for Iceberg.
 
     - Only a subset of Iceberg types are supported for `ADD COLUMN`. The syntax corresponding to the Iceberg types are as follows:
 
@@ -46,7 +46,7 @@ ALTER TABLE [ IF EXISTS ] <name>
 ```
 
 ??? note
-    -  Note that BodoSQL does not yet support `DROP COLUMN` for Snowflake.
+    -  This operation is currently only supported for Iceberg.
 
     -  `DROP COLUMN` can be used to drop nested columns and fields of structs.
     
@@ -64,6 +64,24 @@ ALTER TABLE [ IF EXISTS ] <name>
         ALTER TABLE tblname DROP COLUMN colname.structname.fieldname
         ```
 
+
+## Altering columns
+
+```sql
+ALTER TABLE [ IF EXISTS ] <name>
+    ALTER [ COLUMN ] <column_name> alterColumnAction
+```
+
+!!! note
+    This operation is currently only supported for Iceberg.
+
+Currently, the following options for `alterColumnAction` are supported:
+
+### Setting column comments
+```sql
+ALTER TABLE [ IF EXISTS ] <name>
+    ALTER [ COLUMN ] <column_name> COMMENT 'comment_string'
+```
 
 
 ## Setting / unsetting table properties
