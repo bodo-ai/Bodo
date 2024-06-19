@@ -750,10 +750,28 @@ SqlAlterTable SqlAlterTable(Span s) :
     |   ( alterNode = SqlAlterTableUnsetProperty(s, ifExists, table))
     |   ( alterNode = SqlAlterTableSetComment(s, ifExists, table))
     |   ( alterNode = SqlAlterTableUnsetComment(s, ifExists, table))
+    |   ( alterNode = SqlAlterTableAlterColumn(s, ifExists, table))
     )
 
     { return alterNode; }
 }
+
+// Parses all `ALTER TABLE ALTER COLUMN` statements.
+SqlAlterTableAlterColumn SqlAlterTableAlterColumn(Span s, boolean ifExists, SqlIdentifier table) :
+{
+    SqlIdentifier column;
+    SqlNode comment; // Will be a SqlLiteral
+}
+{
+    <ALTER>
+    [ <COLUMN> ]
+    column = CompoundIdentifier()
+    (
+        ( <COMMENT> comment = StringLiteral()
+          { return new SqlAlterTableAlterColumnComment(s.end(this), ifExists, table, column, comment); } )
+    )
+}
+
 
 // Parses `SET PROPERTY` and its variants.
 // Keys and values are parsed as strings.

@@ -939,6 +939,115 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         harness.drop_test_table(table_identifier)
 
 
+# ALTER TABLE ALTER COLUMN
+
+# COLUMN COMMENT
+
+
+@pytest.mark.parametrize(
+    "harness_name",
+    [
+        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("filesystem_test_harness", id="filesystem"),
+    ],
+)
+def test_alter_table_alter_column_comment(request, harness_name: str):
+    """Tests that Bodo can alter column comments."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    try:
+        table_name = harness.gen_unique_id("test_table").upper()
+        table_identifier = harness.get_table_identifier(table_name)
+        harness.create_test_table(table_identifier)
+        assert harness.check_table_exists(table_identifier)
+        # Drop extraneous column created during table creation
+        harness.refresh_table(table_identifier)
+        harness.run_spark_query(f"ALTER TABLE {table_identifier} drop column A")
+
+        # Create test columns
+        harness.run_spark_query(
+            f"ALTER TABLE {table_identifier} add column TESTCOL1 INT"
+        )
+        harness.run_spark_query(
+            f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
+        )
+        # Check
+        output = harness.describe_table(table_identifier)
+        answer = pd.DataFrame(
+            {
+                "NAME": ["TESTCOL1", "TESTCOL2"],
+                "COMMENT": [
+                    None,
+                    None,
+                ],
+            }
+        )
+        assert_equal_par(output[["NAME", "COMMENT"]], answer)
+
+        # Change column comment
+        query = f"ALTER TABLE {table_identifier} ALTER COLUMN TESTCOL1 COMMENT 'test_comment1'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        output = harness.describe_table(table_identifier, spark=True)
+        answer = pd.DataFrame(
+            {
+                "col_name": ["TESTCOL1", "TESTCOL2"],
+                "comment": [
+                    "test_comment1",
+                    None,
+                ],
+            }
+        )
+        assert_equal_par(output[["col_name", "comment"]], answer)
+
+        # Change column comment again
+        query = f"ALTER TABLE {table_identifier} ALTER COLUMN TESTCOL1 COMMENT 'test_comment2'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        output = harness.describe_table(table_identifier, spark=True)
+        answer = pd.DataFrame(
+            {
+                "col_name": ["TESTCOL1", "TESTCOL2"],
+                "comment": [
+                    "test_comment2",
+                    None,
+                ],
+            }
+        )
+        assert_equal_par(output[["col_name", "comment"]], answer)
+
+        # Comment on nested column (should do nothing)
+        query = f"ALTER TABLE {table_identifier} ALTER COLUMN TESTCOL2.X COMMENT 'test_comment2'"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+        # Check
+        output = harness.describe_table(table_identifier, spark=True)
+        answer = pd.DataFrame(
+            {
+                "col_name": ["TESTCOL1", "TESTCOL2"],
+                "comment": [
+                    "test_comment2",
+                    None,
+                ],
+            }
+        )
+        assert_equal_par(output[["col_name", "comment"]], answer)
+
+        # comment on nonexistent column
+        with pytest.raises(
+            BodoError, match="Invalid column name or column does not exist"
+        ):
+            query = f"ALTER TABLE {table_identifier} ALTER COLUMN NONEXISTENT_COLUMN COMMENT 'test_comment'"
+            bodo_output = harness.run_bodo_query(query)
+
+    finally:
+        harness.drop_test_table(table_identifier)
+
+
 # SHOW
 
 

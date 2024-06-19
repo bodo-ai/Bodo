@@ -4,6 +4,8 @@ import com.bodosql.calcite.schema.CatalogSchema
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
+import org.apache.calcite.sql.SqlIdentifier
+import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.ddl.SqlCreateView
@@ -157,6 +159,22 @@ interface DDLExecutor {
         ifExists: Boolean,
         dropCols: SqlNodeList,
         ifColumnExists: Boolean,
+    ): DDLExecutionResult
+
+    /**
+     * Sets/changes a comment for a column in a table in the catalog.
+     *
+     * @param tablePath The path to the table to add the column to.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param column SqlIdentifier signifying the column to set the comment on.
+     * @param comment SqlLiteral containing the string of the comment to set.
+     * @return The result of the operation.
+     */
+    fun alterColumnComment(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        column: SqlIdentifier,
+        comment: SqlLiteral,
     ): DDLExecutionResult
 
     /**
