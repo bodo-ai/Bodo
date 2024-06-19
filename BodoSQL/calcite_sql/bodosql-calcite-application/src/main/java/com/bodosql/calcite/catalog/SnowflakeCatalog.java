@@ -2586,6 +2586,16 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
     @Override
     @NotNull
+    public DDLExecutionResult renameColumn(
+        @NotNull ImmutableList<String> tablePath,
+        boolean ifExists,
+        @NotNull SqlIdentifier renameColOld,
+        @NotNull SqlIdentifier renameColNew) {
+      throw new RuntimeException("RENAME COLUMN is not yet supported for Snowflake.");
+    }
+
+    @Override
+    @NotNull
     public DDLExecutionResult alterColumnComment(
         @NotNull ImmutableList<String> tablePath,
         boolean ifExists,
