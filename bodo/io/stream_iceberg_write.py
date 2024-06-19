@@ -1,6 +1,7 @@
 import operator
 import os
 import traceback
+import warnings
 
 import llvmlite.binding as ll
 import numba
@@ -71,6 +72,7 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
+from bodo.utils.utils import run_rank0
 
 ll.add_symbol("init_theta_sketches", theta_sketches.init_theta_sketches_py_entrypt)
 ll.add_symbol("delete_theta_sketches", theta_sketches.delete_theta_sketches_py_entrypt)
@@ -88,7 +90,6 @@ ll.add_symbol(
     theta_sketches.get_default_theta_sketch_columns_py_entrypt,
 )
 
-# TODO[BSE-2609] get max file size from Iceberg metadata
 ICEBERG_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
 
 
@@ -528,6 +529,8 @@ iceberg_writer_payload_members = (
     ("arrow_fs", types.optional(ArrowFs())),
     # location of the s3 bucket
     ("bucket_region", types.unicode_type),
+    # Max Parquet file chunk size
+    ("max_pq_chunksize", types.int64),
 )
 iceberg_writer_payload_members_dict = dict(iceberg_writer_payload_members)
 
@@ -818,6 +821,66 @@ def overload_get_empty_pylist():
     return impl
 
 
+def _get_table_target_file_size_bytes(con_str, schema, table_name):  # pragma no cover
+    from bodo_iceberg_connector.table_info import bodo_connector_get_table_property
+
+    try:
+        max_pq_chunksize = bodo_connector_get_table_property(
+            con_str, schema, table_name, "write.target-file-size-bytes"
+        )
+        # if the field is not present, use the default value
+        if max_pq_chunksize is None:
+            max_pq_chunksize = ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+        else:
+            # java long int format e.g. "536870912L"
+            if max_pq_chunksize[-1] == "L":
+                max_pq_chunksize = max_pq_chunksize[:-1]
+            max_pq_chunksize = int(max_pq_chunksize)
+    except Exception as e:
+        warnings.warn(
+            f"Got exception while trying to get write.target-file-size-bytes: {e}, continuing with default value"
+        )
+        max_pq_chunksize = ICEBERG_WRITE_PARQUET_CHUNK_SIZE
+
+    return max_pq_chunksize
+
+
+def get_table_target_file_size_bytes(
+    con_str, schema, table_name, is_parallel
+):  # pragma no cover
+    """Get's the 'write.target_file_size_bytes' property from a table. If the property is
+    not found or there is an issue with reading the property, a default value is used.
+
+    Args:
+        con_str (str): the connection string
+        schema (str): the name of the database
+        table_name (str): the name of the table
+        is_parallel (bool): if True, run on just rank 0
+    Returns:
+        int: The value of 'write.target_file_size_bytes'
+    """
+    pass
+
+
+@overload(get_table_target_file_size_bytes)
+def overload_get_table_target_file_size_bytes(con_str, schema, table_name, is_parallel):
+    """Returns 'the write.target-file-size-bytes' property of a table"""
+
+    def impl(con_str, schema, table_name, is_parallel):  # pragma: no cover
+        with bodo.no_warning_objmode(max_pq_chunksize="int64"):
+            if is_parallel:
+                max_pq_chunksize = run_rank0(_get_table_target_file_size_bytes)(
+                    con_str, schema, table_name
+                )
+            else:
+                max_pq_chunksize = _get_table_target_file_size_bytes(
+                    con_str, schema, table_name
+                )
+        return max_pq_chunksize
+
+    return impl
+
+
 def iceberg_writer_init(
     operator_id,
     conn,
@@ -943,7 +1006,9 @@ def gen_iceberg_writer_init_impl(
         writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_njit(
             table_loc, _is_parallel
         )
-
+        writer["max_pq_chunksize"] = get_table_target_file_size_bytes(
+            con_str, schema, table_name, _is_parallel
+        )
         allow_theta = allow_theta_sketches and get_enable_theta()
         if allow_theta:
             if mode == "append":
@@ -1181,7 +1246,7 @@ def gen_iceberg_writer_append_table_impl_inner(
         bucket_region = writer["bucket_region"]
 
         # ===== Part 2: Write Parquet file if file size threshold is exceeded
-        if is_last or table_bytes >= ICEBERG_WRITE_PARQUET_CHUNK_SIZE:
+        if is_last or table_bytes >= writer["max_pq_chunksize"]:
             # Note: Our write batches are at least as large as our read batches. It may
             # be advantageous in the future to split up large incoming batches into
             # multiple Parquet files to write.

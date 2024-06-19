@@ -27,3 +27,37 @@ def bodo_connector_get_current_snapshot_id(
         raise IcebergJavaError.from_java_error(e)
 
     return int(snapshot_id)
+
+
+def bodo_connector_get_table_property(
+    conn_str: str, db_name: str, table: str, property: str
+) -> str:
+    """Get the value of a property from table properties
+
+    Args:
+        conn_str (str): the connection string
+        db_name (str): name of the database
+        table (str): name of the table
+        property (str): name of the property
+
+    Raises:
+        IcebergJavaError.from_java_error: Propogates errors from Py4J
+
+    Returns:
+        str: The value of the property
+    """
+    catalog_type, _ = parse_conn_str(conn_str)
+
+    try:
+        bodo_iceberg_table_reader = get_java_table_handler(
+            conn_str,
+            catalog_type,
+            db_name,
+            table,
+        )
+
+        value = bodo_iceberg_table_reader.getTableProperty(property)
+    except Py4JError as e:
+        raise IcebergJavaError.from_java_error(e)
+
+    return value
