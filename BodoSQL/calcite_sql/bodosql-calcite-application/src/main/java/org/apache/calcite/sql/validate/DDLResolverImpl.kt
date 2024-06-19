@@ -10,6 +10,8 @@ import com.bodosql.calcite.schema.CatalogSchema
 import com.bodosql.calcite.sql.ddl.SqlDropTable
 import com.bodosql.calcite.sql.ddl.SqlDescribeView
 import com.bodosql.calcite.sql.ddl.SqlAlterTable
+import com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumn
+import com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnComment
 import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableSetProperty
 import com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty
@@ -31,6 +33,7 @@ import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.sql.SqlAlter
 import org.apache.calcite.sql.SqlDescribeTable
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.ddl.SqlCreateSchema
 import org.apache.calcite.sql.ddl.SqlDropSchema
@@ -140,7 +143,8 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             node !is SqlAlterTableSetProperty &&
             node !is SqlAlterTableUnsetProperty &&
             node !is SqlAlterTableAddCol &&
-            node !is SqlAlterTableDropCol) {
+            node !is SqlAlterTableDropCol &&
+            node !is SqlAlterTableAlterColumn) {
             throw RuntimeException("This DDL operation is currently unsupported.")
         }
 
@@ -191,6 +195,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
             is SqlAlterTableDropCol -> {
                 catalogTable.getDDLExecutor().dropColumn(catalogTable.fullPath,node.ifExists, node.dropCols, node.ifColumnExists)
+            }
+            is SqlAlterTableAlterColumnComment -> {
+                catalogTable.getDDLExecutor().alterColumnComment(catalogTable.fullPath,node.ifExists, node.column, node.comment as SqlLiteral)
             }
             else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyway, since type check is up front.
         }

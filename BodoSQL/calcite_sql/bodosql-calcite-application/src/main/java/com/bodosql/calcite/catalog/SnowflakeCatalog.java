@@ -2583,6 +2583,16 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         boolean ifColumnExists) {
       throw new RuntimeException("DROP COLUMN is not yet supported for Snowflake.");
     }
+
+    @Override
+    @NotNull
+    public DDLExecutionResult alterColumnComment(
+        @NotNull ImmutableList<String> tablePath,
+        boolean ifExists,
+        @NotNull SqlIdentifier column,
+        @NotNull SqlLiteral comment) {
+      throw new RuntimeException("ALTER COLUMN COMMENT is not yet supported for Snowflake.");
+    }
   }
 
   // HELPER FUNCTIONS
