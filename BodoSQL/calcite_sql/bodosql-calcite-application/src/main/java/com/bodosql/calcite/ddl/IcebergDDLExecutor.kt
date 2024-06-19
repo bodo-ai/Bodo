@@ -29,6 +29,7 @@ import org.apache.iceberg.exceptions.AlreadyExistsException
 import org.apache.iceberg.exceptions.NamespaceNotEmptyException
 import org.apache.iceberg.exceptions.NoSuchTableException
 import org.apache.iceberg.exceptions.NoSuchViewException
+import org.apache.iceberg.exceptions.ValidationException
 import org.apache.iceberg.types.Type
 import org.apache.iceberg.types.Types
 
@@ -506,6 +507,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
         val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
         val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
         var updater = table.updateProperties()
 
         for ((_property, _value) in propertyList.zip(valueList)) {
@@ -543,6 +546,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
         val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
         val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
         var updater = table.updateProperties()
         for (_property in propertyList) {
             val property = _property as SqlLiteral
@@ -583,6 +588,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
         val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
         val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
         // Column info
         val column = addCol as SqlSnowflakeColumnDeclaration
         if (!column.name.isSimple) {
@@ -626,6 +633,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
         val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
         val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
         var updater = table.updateSchema()
         // Execute queries
         for (col in dropCols) {
@@ -650,6 +659,47 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
     }
 
     /**
+     * Renames a column in a specified table in Iceberg.
+     * Effectively emulates `ALTER TABLE _ RENAME COLUMN _ TO _`.
+     *
+     * @param tablePath The table path to add the column to.
+     * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
+     *                 has no effect here, but is included to match signature.)
+     * @param renameColOld SqlIdentifier signifying the column to rename.
+     * @param renameColNew SqlIdentifier signifying what to rename renameColOld to.
+     * @return DDLExecutionResult
+     */
+    override fun renameColumn(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        renameColOld: SqlIdentifier,
+        renameColNew: SqlIdentifier,
+    ): DDLExecutionResult {
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
+        var updater = table.updateSchema()
+        // Build column name from compound identifier.
+        // @NOTE: The column name passed into renameColumn is period separated, and
+        // identified with the same function as is used in deleteColumn.
+        // It can either be the case that they are column names with dots in them, or subfields.
+        val colName = renameColOld.names.joinToString(separator = ".")
+        val renameColName = renameColNew.names.joinToString(separator = ".")
+        try {
+            updater = updater.renameColumn(colName, renameColName)
+            // Commit changes
+            updater.commit()
+        } catch (e: ValidationException) {
+            throw Exception("Column $renameColName already exists; cannot rename")
+        }
+
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+    }
+
+    /**
      * Sets a comment on a column for a specified table in Iceberg.
      * Effectively emulates `ALTER TABLE _ ALTER COLUMN _ SET COMMENT _`.
      *
@@ -670,6 +720,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
         val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
         val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
         // Build column name
         val colName = column.names.joinToString(separator = ".")
         try {

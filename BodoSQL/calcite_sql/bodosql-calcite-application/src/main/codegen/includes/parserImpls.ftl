@@ -740,7 +740,7 @@ SqlAlterTable SqlAlterTable(Span s) :
             ifNotExists = IfNotExistsOpt()
             addCol = ColumnWithType()
         { alterNode = new SqlAlterTableAddCol(getPos(), ifExists, ifNotExists, table, addCol); })
-    |   ( <RENAME> [ <COLUMN> ] renameColOriginal = SimpleIdentifier() <TO> renameColNew = SimpleIdentifier()
+    |   ( <RENAME> [ <COLUMN> ] renameColOriginal = CompoundIdentifier() <TO> renameColNew = CompoundIdentifier()
         { alterNode = new SqlAlterTableRenameCol(getPos(), ifExists, table, renameColOriginal, renameColNew); })
     |   ( <DROP> [ <COLUMN> ] ifColumnExists = IfExistsOpt()
             { dropCols = new SqlNodeList(getPos()); }

@@ -162,6 +162,22 @@ interface DDLExecutor {
     ): DDLExecutionResult
 
     /**
+     * Renames a column in a table in the catalog.
+     *
+     * @param tablePath The path to the table to add the column to.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param renameColOld SqlIdentifier signifying the column to rename.
+     * @param renameColNew SqlIdentifier signifying what to rename renameColOld to.
+     * @return The result of the operation.
+     */
+    fun renameColumn(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        renameColOld: SqlIdentifier,
+        renameColNew: SqlIdentifier,
+    ): DDLExecutionResult
+
+    /**
      * Sets/changes a comment for a column in a table in the catalog.
      *
      * @param tablePath The path to the table to add the column to.

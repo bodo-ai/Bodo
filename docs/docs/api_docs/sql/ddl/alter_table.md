@@ -64,6 +64,21 @@ ALTER TABLE [ IF EXISTS ] <name>
         ALTER TABLE tblname DROP COLUMN colname.structname.fieldname
         ```
 
+## Renaming columns
+```sql
+ALTER TABLE [ IF EXISTS ] <name> 
+    RENAME COLUMN <column_name> TO <new_column_name>
+```
+
+??? note
+    - This operation is currently only supported for Iceberg.
+    -  Nested columns can also be renamed. For example,
+    ```sql
+    ALTER TABLE table1 RENAME COLUMN column1.field1 TO field2
+    ```
+    will rename the nested field `field1` within the `column1` struct to `field2`.
+
+
 
 ## Altering columns
 
