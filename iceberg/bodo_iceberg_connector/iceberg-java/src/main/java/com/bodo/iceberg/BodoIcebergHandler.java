@@ -71,6 +71,19 @@ public class BodoIcebergHandler {
   }
 
   /**
+   * Get a specific property from Table properties
+   *
+   * <p>Note: This API is exposed to Python.
+   *
+   * @param property The name of the property to get.
+   * @return the corresponding property value or null if key does not exist
+   */
+  public String getTableProperty(String property) {
+    Table table = catalog.loadTable(id);
+    return table.properties().get(property);
+  }
+
+  /**
    * Remove a transaction from the transactions map if it exists. This is done manually, so we can
    * access the underlying transaction information even after the transaction has been committed.
    * This is useful because the Transaction.table() should hold the status of the last snapshot used

@@ -40,8 +40,10 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
     convert_non_pandas_columns,
+    pytest_mark_one_rank,
     reduce_sum,
 )
+from bodo.utils.utils import run_rank0
 
 pytestmark = pytest.mark.iceberg
 
@@ -256,3 +258,84 @@ def test_iceberg_field_ids_in_pq_schema(
     _verify_pq_schema_in_files(
         warehouse_loc, db_schema, table_name, data_files_before_write, expected_schema
     )
+
+
+@run_rank0
+def _get_pq_files(warehouse_loc, db_schema, table_name):
+    data_files = glob.glob(
+        os.path.join(warehouse_loc, db_schema, table_name, "data", "*.parquet")
+    )
+    return data_files
+
+
+@pytest_mark_one_rank
+@pytest.mark.parametrize("max_pq_chunksize", [6400000, 3200000, 1600000, 800000])
+def test_iceberg_max_pq_chunksize(
+    max_pq_chunksize, iceberg_database, iceberg_table_conn
+):
+    """
+    Test that number of raw bytes written to each parquet file are less than "write.target-file-size-bytes"
+    and that number of files generated is also consistent with the threshold
+    """
+    import math
+
+    import numpy as np
+
+    table_name = "SIMPLE_INT_TABLE_test_pq_chunksize"
+
+    db_schema, warehouse_loc = iceberg_database([table_name])
+    some_rows, sql_schema = (
+        {
+            "A": np.array([0]),
+            "B": np.array([400000]),
+        },
+        [
+            ("A", "long", True),
+            ("B", "long", True),
+        ],
+    )
+
+    # generate a large number of random data
+    np.random.seed(42)
+    large_number_of_rows = {
+        "A": np.arange(1, 400001),
+        "B": np.random.randint(1, 400000, size=400000),
+    }
+
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+    spark = get_spark()
+
+    @run_rank0
+    def setup():
+        df1 = pd.DataFrame(some_rows)
+        create_iceberg_table(df1, sql_schema, table_name, spark)
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.iceberg_db.{table_name} SET TBLPROPERTIES ('write.target-file-size-bytes'='{max_pq_chunksize}')"
+        )
+
+    setup()
+
+    files_before_write = _get_pq_files(warehouse_loc, db_schema, table_name)
+    df2 = pd.DataFrame(large_number_of_rows)
+    total_write_size = sum(df2.memory_usage(index=False))  # = 800000 * 8 bytes
+    bodo.barrier()
+
+    _write_iceberg_table(df2, table_name, conn, db_schema, if_exists="append")
+    bodo.barrier()
+    files_after_write = _get_pq_files(warehouse_loc, db_schema, table_name)
+
+    @run_rank0
+    def check_files():
+        expected_num_files = math.ceil(total_write_size / (max_pq_chunksize))
+        new_files = list(set(files_after_write) - set(files_before_write))
+        assert (
+            len(new_files) == expected_num_files
+        ), "Expected number of files does not match"
+        for file in new_files:
+            size_in_bytes = os.stat(file).st_size
+            # actual size of files may be much smaller after compression
+            assert (
+                size_in_bytes < max_pq_chunksize
+            ), "Found file larger than expected size"
+
+    check_files()
