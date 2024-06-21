@@ -65,6 +65,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumn"
       "com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnComment"
+      "com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnDropNotNull"
       "com.bodosql.calcite.sql.ddl.SqlAlterView"
       "com.bodosql.calcite.sql.ddl.SqlAlterViewRenameView"
       "com.bodosql.calcite.sql.ddl.SqlTruncateTable"
