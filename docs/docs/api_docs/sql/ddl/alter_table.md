@@ -87,9 +87,6 @@ ALTER TABLE [ IF EXISTS ] <name>
     ALTER [ COLUMN ] <column_name> alterColumnAction
 ```
 
-!!! note
-    This operation is currently only supported for Iceberg.
-
 Currently, the following options for `alterColumnAction` are supported:
 
 ### Setting column comments
@@ -98,6 +95,17 @@ ALTER TABLE [ IF EXISTS ] <name>
     ALTER [ COLUMN ] <column_name> COMMENT 'comment_string'
 ```
 
+### Changing nullability of columns
+
+```sql
+ALTER TABLE [ IF EXISTS ] <name>
+    ALTER [ COLUMN ] <column_name> DROP NOT NULL
+```
+
+This will change a required column (a column that cannot hold NULL values) to an optional column.
+
+!!! note
+    All `ALTER COLUMN` operations are currently only supported for Iceberg.
 
 ## Setting / unsetting table properties
 

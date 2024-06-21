@@ -12,6 +12,7 @@ import com.bodosql.calcite.sql.ddl.SqlDescribeView
 import com.bodosql.calcite.sql.ddl.SqlAlterTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumn
 import com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnComment
+import com.bodosql.calcite.sql.ddl.SqlAlterTableAlterColumnDropNotNull
 import com.bodosql.calcite.sql.ddl.SqlAlterTableRenameTable
 import com.bodosql.calcite.sql.ddl.SqlAlterTableSetProperty
 import com.bodosql.calcite.sql.ddl.SqlAlterTableUnsetProperty
@@ -149,7 +150,8 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             node !is SqlAlterTableAddCol &&
             node !is SqlAlterTableDropCol &&
             node !is SqlAlterTableRenameCol &&
-            node !is SqlAlterTableAlterColumn) {
+            node !is SqlAlterTableAlterColumn
+            ) {
             throw RuntimeException("This DDL operation is currently unsupported.")
         }
 
@@ -206,6 +208,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
             is SqlAlterTableAlterColumnComment -> {
                 catalogTable.getDDLExecutor().alterColumnComment(catalogTable.fullPath,node.ifExists, node.column, node.comment as SqlLiteral)
+            }
+            is SqlAlterTableAlterColumnDropNotNull -> {
+                catalogTable.getDDLExecutor().alterColumnDropNotNull(catalogTable.fullPath,node.ifExists, node.column)
             }
             else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyway, since type check is up front.
         }

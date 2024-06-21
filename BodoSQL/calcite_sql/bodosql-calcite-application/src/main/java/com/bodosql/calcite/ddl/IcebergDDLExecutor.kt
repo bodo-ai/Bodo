@@ -664,7 +664,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * Drops columns for a specified table in Iceberg.
      * Effectively emulates `ALTER TABLE _ DROP COLUMN`.
      *
-     * @param tablePath The table path to add the column to.
+     * @param tablePath The table path of the column.
      * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
      *                 has no effect here, but is included to match signature.)
      * @param dropCols SqlNodeList representing column names to be dropped.
@@ -711,7 +711,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * Renames a column in a specified table in Iceberg.
      * Effectively emulates `ALTER TABLE _ RENAME COLUMN _ TO _`.
      *
-     * @param tablePath The table path to add the column to.
+     * @param tablePath The table path of the column.
      * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
      *                 has no effect here, but is included to match signature.)
      * @param renameColOld SqlIdentifier signifying the column to rename.
@@ -752,7 +752,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * Sets a comment on a column for a specified table in Iceberg.
      * Effectively emulates `ALTER TABLE _ ALTER COLUMN _ SET COMMENT _`.
      *
-     * @param tablePath The table path to add the column to.
+     * @param tablePath The table path of the column.
      * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
      *                 has no effect here, but is included to match signature.)
      * @param column SqlIdentifier signifying the column to set the comment on.
@@ -776,6 +776,39 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         try {
             var updater = table.updateSchema()
             updater = updater.updateColumnDoc(colName, comment.toValue())
+            updater.commit()
+        } catch (e: IllegalArgumentException) {
+            throw Exception("Invalid column name or column does not exist: $colName")
+        }
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+    }
+
+    /**
+     * Changes a column to be nullable for a specified table in Iceberg.
+     * Effectively emulates `ALTER TABLE _ ALTER COLUMN _ DROP NOT NULL`.
+     *
+     * @param tablePath The table path of the column.
+     * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
+     *                 has no effect here, but is included to match signature.)
+     * @param column SqlIdentifier signifying the column to change to nullable.
+     * @return DDLExecutionResult
+     */
+    override fun alterColumnDropNotNull(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        column: SqlIdentifier,
+    ): DDLExecutionResult {
+        val tableName = tablePath[tablePath.size - 1]
+        val tableSchema = tablePath.subList(0, tablePath.size - 1)
+        val tableIdentifier = tablePathToTableIdentifier(tableSchema, tableName)
+        val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
+        // Build column name
+        val colName = column.names.joinToString(separator = ".")
+        try {
+            var updater = table.updateSchema()
+            updater = updater.makeColumnOptional(colName)
             updater.commit()
         } catch (e: IllegalArgumentException) {
             throw Exception("Invalid column name or column does not exist: $colName")
