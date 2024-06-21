@@ -1345,3 +1345,73 @@ def test_show_no_terse_error(request, harness_name: str):
 
     with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
         bodo_output = harness.run_bodo_query("SHOW VIEWS in PLACEHOLDER_SCHEMA")
+
+
+@pytest.mark.parametrize(
+    "harness_name",
+    [
+        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("filesystem_test_harness", id="filesystem"),
+    ],
+)
+def test_show_tblproperties(request, harness_name: str):
+    """Tests that Bodo can show table properties."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+
+    try:
+        table_name = harness.gen_unique_id("test_table").upper()
+        table_identifier = harness.get_table_identifier(table_name)
+        harness.create_test_table(table_identifier)
+        assert harness.check_table_exists(table_identifier)
+
+        # Set a few properties
+        query = f"ALTER TABLE {table_identifier} SET TBLPROPERTIES 'test_tag1'='test_value1', 'test_tag2'='test_value2'"
+        harness.run_bodo_query(query)
+
+        # test SHOW to show all properties
+        query = f"SHOW TBLPROPERTIES {table_identifier}"
+        output = harness.run_bodo_query(query)
+        answer = pd.DataFrame(
+            {"KEY": ["test_tag1", "test_tag2"], "VALUE": ["test_value1", "test_value2"]}
+        )
+        for i in range(len(answer)):
+            row = answer.iloc[i]
+            assert (
+                (output["KEY"] == row["KEY"]) & (output["VALUE"] == row["VALUE"])
+            ).any()
+
+        # test SHOW to show one property
+        query = f"SHOW TBLPROPERTIES {table_identifier} ('test_tag1')"
+        output = harness.run_bodo_query(query)
+        answer = pd.DataFrame({"VALUE": ["test_value1"]})
+        assert_equal_par(output, answer)
+
+        # change a property
+        query = f"ALTER TABLE {table_identifier} SET TBLPROPERTIES 'test_tag1'='new_test_value1'"
+        harness.run_bodo_query(query)
+
+        # test SHOW to see if changed
+        query = f"SHOW TBLPROPERTIES {table_identifier} ('test_tag1')"
+        output = harness.run_bodo_query(query)
+        answer = pd.DataFrame({"VALUE": ["new_test_value1"]})
+        assert_equal_par(output, answer)
+
+        # Test aliases such as PROPERTIES or TAGS
+        query = f"SHOW PROPERTIES {table_identifier} ('test_tag1')"
+        output = harness.run_bodo_query(query)
+        answer = pd.DataFrame({"VALUE": ["new_test_value1"]})
+        assert_equal_par(output, answer)
+        query = f"SHOW TAGS {table_identifier} ('test_tag1')"
+        output = harness.run_bodo_query(query)
+        answer = pd.DataFrame({"VALUE": ["new_test_value1"]})
+        assert_equal_par(output, answer)
+
+        # show non-existent property (should error)
+        with pytest.raises(
+            BodoError, match="The property nonexistent_tag was not found"
+        ):
+            query = f"SHOW TBLPROPERTIES {table_identifier} ('nonexistent_tag')"
+            output = harness.run_bodo_query(query)
+
+    finally:
+        harness.drop_test_table(table_identifier)

@@ -2586,6 +2586,13 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
 
     @Override
     @NotNull
+    public DDLExecutionResult showTableProperties(
+        @NotNull ImmutableList<String> tablePath, SqlLiteral property) {
+      throw new RuntimeException("SHOW TBLPROPERTIES is not supported for Snowflake.");
+    }
+
+    @Override
+    @NotNull
     public DDLExecutionResult renameColumn(
         @NotNull ImmutableList<String> tablePath,
         boolean ifExists,

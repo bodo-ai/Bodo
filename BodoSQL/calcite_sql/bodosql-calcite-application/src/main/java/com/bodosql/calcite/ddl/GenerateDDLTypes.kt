@@ -1,5 +1,6 @@
 package com.bodosql.calcite.ddl
 
+import com.bodosql.calcite.sql.ddl.SqlShowTblproperties
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.sql.SqlKind
@@ -110,6 +111,36 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                             stringType,
                         )
                     Pair(fieldNames, types)
+                }
+                SqlKind.SHOW_TBLPROPERTIES -> {
+                    // Return type is different when property is specified vs not specified.
+                    when (ddlNode) {
+                        is SqlShowTblproperties ->
+                            if (ddlNode.property == null) {
+                                val fieldNames =
+                                    listOf(
+                                        "KEY",
+                                        "VALUE",
+                                    )
+                                val types =
+                                    listOf(
+                                        stringType,
+                                        stringType,
+                                    )
+                                Pair(fieldNames, types)
+                            } else {
+                                val fieldNames =
+                                    listOf(
+                                        "VALUE",
+                                    )
+                                val types =
+                                    listOf(
+                                        stringType,
+                                    )
+                                Pair(fieldNames, types)
+                            }
+                        else -> throw UnsupportedOperationException("Unsupported DDL operation: ${ddlNode.kind}")
+                    }
                 }
 
                 else -> throw UnsupportedOperationException("Unsupported DDL operation: ${ddlNode.kind}")

@@ -51,6 +51,7 @@ data: {
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas"
       "com.bodosql.calcite.sql.ddl.SqlShowViews"
       "com.bodosql.calcite.sql.ddl.SqlShowTables"
+      "com.bodosql.calcite.sql.ddl.SqlShowTblproperties"
       "com.bodosql.calcite.sql.ddl.SqlSnowflakeUpdate"
       "com.bodosql.calcite.sql.ddl.SqlDropTable"
       "com.bodosql.calcite.sql.ddl.SqlDescribeView"
@@ -499,10 +500,6 @@ data: {
         "TERSE"
         "VIEWS"
         "TABLES"
-        "PROPERTY"
-        "PROPERTIES"
-        "TBLPROPERTY"
-        "TBLPROPERTIES"
         "TAG"
         "TAGS"
         "PROPERTY"
@@ -558,6 +555,7 @@ data: {
         "SqlShowSchemas"
         "SqlShowViews"
         "SqlShowTables"
+        "SqlShowTblproperties"
     ]
 
     # List of methods which are not extensions (don't have a corresponding preexisting parser method).
