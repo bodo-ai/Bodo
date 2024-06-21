@@ -39,6 +39,8 @@ abstract class GenTestFixture {
                 supportsTimestampTZ(),
                 // Enable Join Runtime filters for Testing
                 true,
+                // Disable Streaming Sort
+                false,
                 // Maintain case sensitivity in the Snowflake style by default
                 "SNOWFLAKE",
             )

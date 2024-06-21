@@ -189,6 +189,7 @@ public class RelationalAlgebraGenerator {
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
+      boolean enableStreamingSort,
       String sqlStyle) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
@@ -201,7 +202,7 @@ public class RelationalAlgebraGenerator {
             (root, defaults) -> {
               defaults.add(root.add(localSchema.getName(), localSchema));
             });
-    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
+    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(enableStreamingSort);
     this.typeSystem = typeSystem;
     this.sqlStyle = sqlStyle;
     setupPlanner(defaultSchemas, typeSystem);
@@ -222,6 +223,7 @@ public class RelationalAlgebraGenerator {
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
+      boolean enableStreamingSort,
       String sqlStyle,
       String defaultTz) {
     this.catalog = null;
@@ -236,7 +238,8 @@ public class RelationalAlgebraGenerator {
               defaults.add(root.add(localSchema.getName(), localSchema));
             });
     BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
-    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo, 0, 0, null);
+    RelDataTypeSystem typeSystem =
+        new BodoSQLRelDataTypeSystem(tzInfo, 0, 0, null, enableStreamingSort);
     this.typeSystem = typeSystem;
     this.sqlStyle = sqlStyle;
     setupPlanner(defaultSchemas, typeSystem);
@@ -266,6 +269,7 @@ public class RelationalAlgebraGenerator {
       boolean enableSnowflakeIcebergTables,
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
+      boolean enableStreamingSort,
       String sqlStyle) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
@@ -350,7 +354,8 @@ public class RelationalAlgebraGenerator {
             tzInfo,
             weekStart,
             weekOfYearPolicy,
-            new BodoSQLRelDataTypeSystem.CatalogContext(currentDatabase, catalog.getAccountName()));
+            new BodoSQLRelDataTypeSystem.CatalogContext(currentDatabase, catalog.getAccountName()),
+            enableStreamingSort);
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, typeSystem);
   }

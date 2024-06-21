@@ -15,7 +15,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.gener
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SampleCodeGen.generateSampleCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateExceptCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.generateIntersectCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
 import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKeyIndices;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
@@ -26,7 +25,6 @@ import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.utils.Utils.isSnowflakeCatalogTable;
 import static com.bodosql.calcite.application.utils.Utils.literalAggPrunedAggList;
 import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
-import static com.bodosql.calcite.application.utils.Utils.sqlTypenameToPandasTypename;
 import static com.bodosql.calcite.application.utils.Utils.stringsToStringLiterals;
 
 import com.bodosql.calcite.adapter.bodo.ArrayRexToBodoTranslator;
@@ -38,7 +36,6 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinus;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRowSample;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalSample;
-import com.bodosql.calcite.adapter.bodo.BodoPhysicalSort;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableCreate;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalTableModify;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalValues;
@@ -83,7 +80,6 @@ import java.util.Stack;
 import java.util.function.Supplier;
 import kotlin.jvm.functions.Function1;
 import org.apache.calcite.prepare.RelOptTableImpl;
-import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.AggregateCall;
@@ -101,7 +97,6 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
-import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -452,8 +447,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
       this.visitPandasRel((PandasRel) node);
     } else if (node instanceof BodoPhysicalJoin) {
       this.visitBodoJoin((BodoPhysicalJoin) node);
-    } else if (node instanceof BodoPhysicalSort) {
-      this.visitBodoSort((BodoPhysicalSort) node);
     } else if (node instanceof BodoPhysicalAggregate) {
       this.visitBodoAggregate((BodoPhysicalAggregate) node);
     } else if (node instanceof BodoPhysicalMinRowNumberFilter) {
@@ -732,77 +725,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
               generateExceptCode(
                   outVar, lhsVar, lhsColNames, rhsVar, rhsColNames, colNames, node.all, this));
           tableGenStack.push(ctx.convertDfToTable(outVar, node));
-        });
-  }
-
-  /**
-   * Visitor for Logical Sort node. Code generation for ORDER BY clauses in SQL
-   *
-   * @param node BodoPhysicalSort node to be visited
-   */
-  public void visitBodoSort(BodoPhysicalSort node) {
-    RelNode input = node.getInput();
-    this.visit(input, 0, node);
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
-    singleBatchTimer(
-        node,
-        () -> {
-          List<String> colNames = input.getRowType().getFieldNames();
-          /* handle case for queries with "ORDER BY" clause */
-          List<RelFieldCollation> sortOrders = node.getCollation().getFieldCollations();
-          BodoEngineTable inTable = tableGenStack.pop();
-          Variable inVar = ctx.convertTableToDf(inTable);
-          String limitStr = "";
-          String offsetStr = "";
-          /* handle case for queries with "LIMIT" clause */
-          RexNode fetch =
-              node.fetch; // for a select query including a clause LIMIT N, fetch returns N.
-          if (fetch != null) {
-            // Check type for fetch. If its not an integer it shouldn't be a legal limit.
-            // This is handled by the parser for all situations except namedParams
-            // TODO: Determine how to move this into Calcite
-            SqlTypeName typeName = fetch.getType().getSqlTypeName();
-            if ((typeName != SqlTypeName.TINYINT)
-                && (typeName != SqlTypeName.SMALLINT)
-                && (typeName != SqlTypeName.INTEGER)
-                && (typeName != SqlTypeName.BIGINT)) {
-              throw new BodoSQLCodegenException(
-                  "Limit value must be an integer, value is of type: "
-                      + sqlTypenameToPandasTypename(
-                          typeName, true, fetch.getType().getPrecision()));
-            }
-
-            // fetch is either a named Parameter or a literal from parsing.
-            // We visit the node to resolve the name.
-            RexToBodoTranslator translator = getRexTranslator(node, inVar.emit(), input);
-            limitStr = fetch.accept(translator).emit();
-          }
-          RexNode offset = node.offset;
-          if (offset != null) {
-            // Check type for fetch. If its not an integer it shouldn't be a legal offset.
-            // This is handled by the parser for all situations except namedParams
-            // TODO: Determine how to move this into Calcite
-            SqlTypeName typeName = offset.getType().getSqlTypeName();
-            if ((typeName != SqlTypeName.TINYINT)
-                && (typeName != SqlTypeName.SMALLINT)
-                && (typeName != SqlTypeName.INTEGER)
-                && (typeName != SqlTypeName.BIGINT)) {
-              throw new BodoSQLCodegenException(
-                  "Offset value must be an integer, value is of type: "
-                      + sqlTypenameToPandasTypename(
-                          typeName, true, offset.getType().getPrecision()));
-            }
-
-            // Offset is either a named Parameter or a literal from parsing.
-            // We visit the node to resolve the name.
-            RexToBodoTranslator translator = getRexTranslator(node, inVar.emit(), input);
-            offsetStr = offset.accept(translator).emit();
-          }
-
-          Expr sortExpr = generateSortCode(inVar, colNames, sortOrders, limitStr, offsetStr);
-          Variable sortVar = this.genDfVar();
-          this.generatedCode.add(new Op.Assign(sortVar, sortExpr));
-          tableGenStack.push(ctx.convertDfToTable(sortVar, node));
         });
   }
 

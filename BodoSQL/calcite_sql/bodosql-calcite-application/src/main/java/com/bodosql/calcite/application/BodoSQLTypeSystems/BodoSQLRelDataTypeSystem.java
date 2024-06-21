@@ -38,6 +38,9 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
    */
   private @Nullable Integer weekOfYearPolicy;
 
+  // TODO(aneesh) remove enableStreamingSort once streaming sort is fully implemented
+  public boolean enableStreamingSort;
+
   public static class CatalogContext {
     public String currentDatabase;
     public String currentAccount;
@@ -55,18 +58,24 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   private CatalogContext currentDatabase;
 
   public BodoSQLRelDataTypeSystem() {
-    this(BodoTZInfo.UTC, 0, 0, null);
+    this(BodoTZInfo.UTC, 0, 0, null, false);
+  }
+
+  public BodoSQLRelDataTypeSystem(boolean enableStreamingSort) {
+    this(BodoTZInfo.UTC, 0, 0, null, enableStreamingSort);
   }
 
   public BodoSQLRelDataTypeSystem(
       BodoTZInfo tzInfo,
       Integer weekStart,
       Integer weekOfYearPolicy,
-      @Nullable CatalogContext currentDatabase) {
+      @Nullable CatalogContext currentDatabase,
+      boolean enableStreamingSort) {
     defaultTZInfo = tzInfo;
     this.weekStart = weekStart;
     this.weekOfYearPolicy = weekOfYearPolicy;
     this.currentDatabase = currentDatabase;
+    this.enableStreamingSort = enableStreamingSort;
   }
 
   /**
