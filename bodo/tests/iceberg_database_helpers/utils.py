@@ -1,3 +1,4 @@
+import shutil
 from typing import List, NamedTuple, Optional
 
 import pandas as pd
@@ -20,44 +21,66 @@ class SortField(NamedTuple):
     nulls_first: bool  # First when True, Last when False
 
 
-def get_spark(path: str = ".") -> SparkSession:
-    spark = (
-        SparkSession.builder.appName("Iceberg with Spark")
-        .config(
-            "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
-        )
-        .config(
-            "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
-        )
-        .config("spark.sql.catalog.hadoop_prod.type", "hadoop")
-        .config("spark.sql.catalog.hadoop_prod.warehouse", path)
-        .config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        .config("spark.sql.session.timeZone", "UTC")
-        # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
-        .config("spark.sql.execution.arrow.enabled", "true")
-        .getOrCreate()
-    )
+# All spark instances must share the same set of jars - this is because
+# `spark.jars.packages` is not a run time option and cannot be modified.
+SPARK_JAR_PACKAGES = [
+    "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
+    "software.amazon.awssdk:bundle:2.19.13",
+    "software.amazon.awssdk:url-connection-client:2.19.13",
+]
 
-    # Spark throws a WARNING with a very long stacktrace whenever creating am
-    # Iceberg table with Hadoop because it is initially unable to determine that
-    # it wrote a `version-hint.text` file, even though it does.
-    # Setting the Log Level to "ERROR" hides it
-    spark.sparkContext.setLogLevel("ERROR")
-    return spark
+
+def reset_spark():
+    """Stop the running spark session if there is one. This allows a new session
+    to be made with a different config."""
+    if active := SparkSession.getActiveSession():
+        active.stop()
+
+
+def get_spark(path: str = ".") -> SparkSession:
+    def do_get_spark():
+        reset_spark()
+        spark = (
+            SparkSession.builder.appName("spark_filesystem")
+            .config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
+            .config(
+                "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
+            )
+            .config("spark.sql.catalog.hadoop_prod.type", "hadoop")
+            .config("spark.sql.catalog.hadoop_prod.warehouse", path)
+            .config(
+                "spark.sql.extensions",
+                "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+            )
+            .config("spark.sql.session.timeZone", "UTC")
+            # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
+            .config("spark.sql.execution.arrow.enabled", "true")
+            .getOrCreate()
+        )
+        # Spark throws a WARNING with a very long stacktrace whenever creating am
+        # Iceberg table with Hadoop because it is initially unable to determine that
+        # it wrote a `version-hint.text` file, even though it does.
+        # Setting the Log Level to "ERROR" hides it
+        spark.sparkContext.setLogLevel("ERROR")
+
+        return spark
+
+    try:
+        return do_get_spark()
+    except Exception:
+        # Clear cache and try again - note that this is only for use in CI
+        shutil.rmtree("/root/.ivy2", ignore_errors=True)
+        shutil.rmtree("/root/.m2/repository", ignore_errors=True)
+    return do_get_spark()
 
 
 def get_spark_tabular(tabular_connection):
+    reset_spark()
     rest_uri, tabular_warehouse, tabular_credential = tabular_connection
+
     spark = (
-        SparkSession.builder.appName("Iceberg with Spark")
-        .config(
-            "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2",
-        )
+        SparkSession.builder.appName("spark_tabular")
+        .config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
         .config("spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog")
         .config(
             "spark.sql.catalog.rest_prod.catalog-impl",
@@ -67,12 +90,6 @@ def get_spark_tabular(tabular_connection):
         .config("spark.sql.catalog.rest_prod.credential", tabular_credential)
         .config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
         .config("spark.sql.defaultCatalog", "rest_prod")
-        .config(
-            "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2,"
-            "software.amazon.awssdk:bundle:2.19.13,"
-            "software.amazon.awssdk:url-connection-client:2.19.13,",
-        )
         .config(
             "spark.sql.catalog.rest_prod.io-impl", "org.apache.iceberg.aws.s3.S3FileIO"
         )

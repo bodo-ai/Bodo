@@ -18,7 +18,7 @@ from bodosql.tests.utils import assert_equal_par
 pytestmark = pytest_tabular
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def filesystem_test_harness(tmp_path_factory):
     path = None
     if bodo.get_rank() == 0:
