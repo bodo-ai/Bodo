@@ -250,6 +250,55 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
     }
 
     /**
+     * Emulates SHOW TBLPROPERTIES [(property)] for a specified table in Iceberg.
+     *
+     * @param tablePath The table path.
+     * @param property The specific table property to display. If not specified, will be null.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     * @throws Exception if a property is specified but cannot be found
+     *
+     * The method uses the .listViews(namespace) method of the respective catalog
+     * to emulate SHOW TERSE VIEWS, if the catalog supports the method.
+     */
+    override fun showTableProperties(
+        tablePath: ImmutableList<String>,
+        property: SqlLiteral?,
+    ): DDLExecutionResult {
+        val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
+        val table = icebergConnection.loadTable(tableIdentifier)
+        // Metadata refresh
+        table.refresh()
+        val names: List<String>
+        val columnValues: List<ArrayList<String?>>
+
+        if (property != null) {
+            names =
+                listOf(
+                    "VALUE",
+                )
+            columnValues = List(1) { ArrayList<String?>() }
+            val key = property.toValue()
+            val value =
+                table.properties()[key]
+                    ?: throw Exception("The property $key was not found.")
+            columnValues[0].add(value)
+        } else {
+            names =
+                listOf(
+                    "KEY",
+                    "VALUE",
+                )
+            columnValues = List(2) { ArrayList<String?>() }
+            // Show all properties
+            table.properties().forEach {
+                columnValues[0].add(it.key)
+                columnValues[1].add(it.value)
+            }
+        }
+        return DDLExecutionResult(names, columnValues)
+    }
+
+    /**
      * Used to convert SQL relDataTypes into Iceberg-compatible types.
      *
      * @param dataType The RelDataType.

@@ -233,6 +233,17 @@ interface DDLExecutor {
      */
     fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult
 
+    /**
+     * Show properties of a table.
+     * @param tablePath: The identifier of the table to show properties of.
+     * @param property The property to show. If null, show all properties.
+     * @return DDLExecutionResult containing columns (KEY, VALUE) or just (VALUE) if property is null
+     */
+    fun showTableProperties(
+        tablePath: ImmutableList<String>,
+        property: SqlLiteral?,
+    ): DDLExecutionResult
+
     @Throws(ViewAlreadyExistsException::class)
     fun createOrReplaceView(
         viewPath: ImmutableList<String>,
