@@ -4,6 +4,7 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import java.util.ArrayList;
 import java.util.List;
+import kotlin.Triple;
 import org.apache.calcite.rel.RelFieldCollation;
 
 /**
@@ -30,6 +31,27 @@ public class SortCodeGen {
       String limitStr,
       String offsetStr) {
     // StringBuilder for the final expr
+    Triple<Expr.List, Expr.List, Expr.List> params = generateSortParameters(colNames, sortOrders);
+    Expr.List byList = params.getFirst();
+    Expr.List ascendingList = params.getSecond();
+    Expr.List naPositionList = params.getThird();
+
+    Expr sortExpr = new Expr.SortValues(inVar, byList, ascendingList, naPositionList);
+
+    if (!offsetStr.isEmpty()) {
+      Expr sliceStart = new Expr.Raw(offsetStr);
+      Expr sliceEnd = new Expr.Raw(offsetStr + " + " + limitStr);
+      Expr limitSlice = new Expr.Slice(sliceStart, sliceEnd);
+
+      sortExpr = new Expr.GetItem(new Expr.Attribute(sortExpr, "iloc"), limitSlice);
+    } else if (!limitStr.isEmpty()) {
+      sortExpr = new Expr.Method(sortExpr, "head", List.of(new Expr.Raw(limitStr)), List.of());
+    }
+    return sortExpr;
+  }
+
+  public static Triple<Expr.List, Expr.List, Expr.List> generateSortParameters(
+      List<String> colNames, List<RelFieldCollation> sortOrders) {
     List<Expr> byList = new ArrayList<>();
     List<Expr> ascendingList = new ArrayList<>();
     List<Expr.StringLiteral> naPositionList = new ArrayList<>();
@@ -42,23 +64,9 @@ public class SortCodeGen {
         ascendingList.add(getAscendingExpr(order.getDirection()));
       }
     }
-    Expr sortExpr =
-        new Expr.SortValues(
-            inVar,
-            new Expr.List(byList),
-            new Expr.List(ascendingList),
-            new Expr.List(naPositionList));
 
-    if (!offsetStr.isEmpty()) {
-      Expr sliceStart = new Expr.Raw(offsetStr);
-      Expr sliceEnd = new Expr.Raw(offsetStr + " + " + limitStr);
-      Expr limitSlice = new Expr.Slice(sliceStart, sliceEnd);
-
-      sortExpr = new Expr.GetItem(new Expr.Attribute(sortExpr, "iloc"), limitSlice);
-    } else if (!limitStr.isEmpty()) {
-      sortExpr = new Expr.Method(sortExpr, "head", List.of(new Expr.Raw(limitStr)), List.of());
-    }
-    return sortExpr;
+    return new Triple<>(
+        new Expr.List(byList), new Expr.List(ascendingList), new Expr.List(naPositionList));
   }
 
   /**

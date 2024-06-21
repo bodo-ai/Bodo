@@ -36,6 +36,7 @@ class OperatorType(Enum):
     UNION = 4
     WINDOW = 5
     ACCUMULATE_TABLE = 6
+    SORT = 7
 
 
 @intrinsic(prefer_literal=True)
