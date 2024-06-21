@@ -769,6 +769,10 @@ SqlAlterTableAlterColumn SqlAlterTableAlterColumn(Span s, boolean ifExists, SqlI
     (
         ( <COMMENT> comment = StringLiteral()
           { return new SqlAlterTableAlterColumnComment(s.end(this), ifExists, table, column, comment); } )
+        |
+        ( <DROP> <NOT> <NULL>
+          { return new SqlAlterTableAlterColumnDropNotNull(s.end(this), ifExists, table, column); }
+        )
     )
 }
 

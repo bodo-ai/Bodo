@@ -194,6 +194,19 @@ interface DDLExecutor {
     ): DDLExecutionResult
 
     /**
+     * Sets a column in a table to be nullable.
+     *
+     * @param tablePath The path to the table to add the column to.
+     * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param column SqlIdentifier signifying the column to change to nullable.
+     */
+    fun alterColumnDropNotNull(
+        tablePath: ImmutableList<String>,
+        ifExists: Boolean,
+        column: SqlIdentifier,
+    ): DDLExecutionResult
+
+    /**
      * Describes a table in the catalog. We use a type factory to create the Bodo
      * type consistently across all catalogs.
      * @param tablePath The path to the table to describe.

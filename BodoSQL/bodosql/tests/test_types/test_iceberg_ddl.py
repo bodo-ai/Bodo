@@ -1168,6 +1168,52 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
         harness.drop_test_table(table_identifier)
 
 
+@pytest.mark.parametrize(
+    "harness_name",
+    [
+        pytest.param("tabular_test_harness", id="tabular"),
+        pytest.param("filesystem_test_harness", id="filesystem"),
+    ],
+)
+def test_alter_table_alter_column_dropnotnull(request, harness_name: str):
+    """Tests that Bodo can change a column to nullable."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    try:
+        table_name = harness.gen_unique_id("test_table").upper()
+        table_identifier = harness.get_table_identifier(table_name)
+        harness.run_spark_query(
+            f"CREATE OR REPLACE TABLE {table_identifier} (A INT NOT NULL)"
+        )
+        assert harness.check_table_exists(table_identifier)
+
+        # Check that the column is not nullable
+        output = harness.describe_table(table_identifier)
+        assert output.loc[output["NAME"] == "A", "NULL?"].values[0] == "N"
+
+        # Change column to nullable
+        query = f"ALTER TABLE {table_identifier} ALTER COLUMN A DROP NOT NULL"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Check that it is nullable
+        output = harness.describe_table(table_identifier)
+        assert output.loc[output["NAME"] == "A", "NULL?"].values[0] == "Y"
+
+        # Try changing an already nullable column
+        query = f"ALTER TABLE {table_identifier} ALTER COLUMN A DROP NOT NULL"
+        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+
+        # Should remain unchanged
+        output = harness.describe_table(table_identifier)
+        assert output.loc[output["NAME"] == "A", "NULL?"].values[0] == "Y"
+
+    finally:
+        harness.drop_test_table(table_identifier)
+
+
 # SHOW
 
 
