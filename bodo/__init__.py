@@ -119,6 +119,9 @@ enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "1") != "0"
 enable_runtime_join_filters = (
     os.environ.get("BODO_ENABLE_RUNTIME_JOIN_FILTERS", "1") != "0"
 )
+# TODO(aneesh) remove this flag once streaming sort is fully implemented
+# Flag used to enable streaming sort
+enable_streaming_sort = os.environ.get("BODO_ENABLE_STREAMING_SORT", "0") != "0"
 # Flag used to enable creating theta sketches for columns when writing with Iceberg
 enable_theta_sketches = os.environ.get("BODO_ENABLE_THETA_SKETCHES", "1") != "0"
 # Should Bodo use decimal types when specified by BodoSQL.

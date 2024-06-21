@@ -446,6 +446,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
                     bodo.enable_runtime_join_filters,
+                    bodo.enable_streaming_sort,
                     bodo.bodo_sql_style,
                 )
             else:
@@ -465,6 +466,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_snowflake_iceberg,
                     bodo.enable_timestamp_tz,
                     bodo.enable_runtime_join_filters,
+                    bodo.enable_streaming_sort,
                     bodo.bodo_sql_style,
                     *extra_args,
                 )

@@ -97,6 +97,7 @@ public class PandasGenTest {
             true, // Enable Iceberg for testing
             true, // Enable TIMESTAMP_TZ for testing
             true, // Enable Join Runtime filters for Testing
+            false, // Disable Streaming Sort for Testing
             "SNOWFLAKE" // Maintain case sensitivity in the Snowflake style by default
             );
     List<ColumnDataTypeInfo> paramTypes =
