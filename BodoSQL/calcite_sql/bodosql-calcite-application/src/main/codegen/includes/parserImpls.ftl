@@ -1708,6 +1708,27 @@ SqlShowViews SqlShowViews(Span s, boolean ifTerse) :
 }
 
 /**
+ * Parses a SHOW TBLPROPERTIES statement.
+ */
+SqlShowTblproperties SqlShowTblproperties(Span s, boolean ifTerse) :
+{
+   final SqlIdentifier tableName;
+   SqlNode propertyName = null;
+}
+{
+    (<TBLPROPERTIES> | <PROPERTIES> | <TAGS>)
+    tableName = CompoundIdentifier()
+    [
+        <LPAREN>
+        propertyName = StringLiteral()
+        <RPAREN>
+    ]
+    {
+        return new SqlShowTblproperties(s.end(tableName), tableName, (SqlLiteral) propertyName);
+    }
+}
+
+/**
  * Helper to parse a TERSE keyword (for SHOW statements).
  */
 boolean TerseOpt() :

@@ -24,6 +24,7 @@ import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
 import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas
 import com.bodosql.calcite.sql.ddl.SqlShowTables
 import com.bodosql.calcite.sql.ddl.SqlShowViews
+import com.bodosql.calcite.sql.ddl.SqlShowTblproperties
 import com.bodosql.calcite.sql.validate.BodoSqlValidator
 import com.bodosql.calcite.sql.validate.DDLResolver
 import com.bodosql.calcite.table.BodoSqlTable
@@ -31,7 +32,6 @@ import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.prepare.RelOptTableImpl
-import org.apache.calcite.sql.SqlAlter
 import org.apache.calcite.sql.SqlDescribeTable
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlLiteral
@@ -105,6 +105,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             }
             SqlKind.SHOW_VIEWS-> {
                 executeShowViews(node as SqlShowViews)
+            }
+            SqlKind.SHOW_TBLPROPERTIES-> {
+                executeShowTblproperties(node as SqlShowTblproperties)
             }
             SqlKind.CREATE_VIEW -> {
                 executeCreateView(node as SqlCreateView)
@@ -437,6 +440,26 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             return schemaCat.ddlExecutor.showViews(schemaPath)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
+        }
+    }
+
+    /**
+     * Executes the "SHOW TBLPROPERTIES" command for a specified table and returns the result.
+     *
+     * @param node The SqlShowTblproperties SqlNode
+     * @return DDLExecutionResult containing the properties of the table.
+     * @throws RuntimeException if the table does not exist or the user is not authorized to access it.
+     */
+    private fun executeShowTblproperties(node: SqlShowTblproperties): DDLExecutionResult {
+        val tablePath = node.table.names
+        val tableName = tablePath.joinToString(separator = ".")
+        try {
+            val table = deriveTable(tablePath)
+            val catalogTable = validateTable(table, node.kind, tableName)
+            // Perform the actual describe table operation
+            return catalogTable.getDDLExecutor().showTableProperties(catalogTable.fullPath, node.property)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Table $tableName does not exist or not authorized to show properties.")
         }
     }
 

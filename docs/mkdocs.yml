@@ -206,6 +206,7 @@ nav:
                   - api_docs/sql/ddl/show_objects.md
                   - api_docs/sql/ddl/show_schemas.md
                   - api_docs/sql/ddl/show_tables.md
+                  - api_docs/sql/ddl/show_tblproperties.md
                   - api_docs/sql/ddl/show_views.md
               - DML:
                   - api_docs/sql/dml/index.md
