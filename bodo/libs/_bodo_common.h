@@ -1287,6 +1287,11 @@ std::unique_ptr<array_info> alloc_string_array(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+std::unique_ptr<array_info> alloc_interval_array(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm);
+
 //  NOTE: extra_null_bytes is used to account for padding in null buffer
 //  for process boundaries in shuffle (bits of two different processes cannot be
 //  packed in the same byte).
@@ -1376,6 +1381,8 @@ std::unique_ptr<array_info> create_dict_string_array(
  * -- Dummy child arrays are returned. The caller is responsible for
  * initializing the child arrays
  */
+template <
+    bodo_array_type::arr_type_enum const_arr_type = bodo_array_type::UNKNOWN>
 std::unique_ptr<array_info> alloc_array_top_level(
     int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
     bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
@@ -1384,7 +1391,53 @@ std::unique_ptr<array_info> alloc_array_top_level(
     bool is_locally_unique = false, bool is_locally_sorted = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager()) {
+    switch (const_arr_type != bodo_array_type::UNKNOWN ? const_arr_type
+                                                       : arr_type) {
+        case bodo_array_type::STRING:
+            return alloc_string_array(dtype, length, n_sub_elems, array_id,
+                                      extra_null_bytes, is_globally_replicated,
+                                      is_locally_unique, is_locally_sorted,
+                                      pool, std::move(mm));
+
+        case bodo_array_type::NULLABLE_INT_BOOL:
+            return alloc_nullable_array(length, dtype, extra_null_bytes, pool,
+                                        std::move(mm));
+
+        case bodo_array_type::INTERVAL:
+            return alloc_interval_array(length, dtype, pool, std::move(mm));
+
+        case bodo_array_type::NUMPY:
+            return alloc_numpy(length, dtype, pool, std::move(mm));
+
+        case bodo_array_type::CATEGORICAL:
+            return alloc_categorical(length, dtype, num_categories, pool,
+                                     std::move(mm));
+
+        case bodo_array_type::DICT:
+            return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
+                                           extra_null_bytes, pool,
+                                           std::move(mm));
+        case bodo_array_type::TIMESTAMPTZ:
+            return alloc_timestamptz_array(length, extra_null_bytes, pool,
+                                           std::move(mm));
+        case bodo_array_type::ARRAY_ITEM:
+            return alloc_array_item(length, nullptr, extra_null_bytes, pool,
+                                    std::move(mm));
+        case bodo_array_type::STRUCT:
+            return alloc_struct(length, {}, extra_null_bytes, pool,
+                                std::move(mm));
+        case bodo_array_type::MAP: {
+            std::unique_ptr<array_info> inner_array = alloc_array_item(
+                length, nullptr, extra_null_bytes, pool, std::move(mm));
+            return alloc_map(length, std::move(inner_array));
+        }
+        default:
+            throw std::runtime_error("alloc_array: array type (" +
+                                     GetArrType_as_string(arr_type) +
+                                     ") not supported");
+    }
+}
 
 /**
  * @brief Allocate an empty array with the same schema as 'in_arr', similar to
@@ -1463,13 +1516,15 @@ struct mpi_comm_info {
      * This is useful in the outer join case. In groupby, this is used in the
      * MRNF and nunique cases to drop rows using a local reduction before
      * shuffling them. Defaults to false.
+     * @param send_only only initialize send counts and not recv counts. This
+     * avoids alltoall collectives which is necessary for async shuffle.
      */
     explicit mpi_comm_info(
         const std::vector<std::shared_ptr<array_info>>& arrays,
         const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
         const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr,
         const uint8_t* keep_row_bitmask = nullptr,
-        bool keep_filter_misses = false);
+        bool keep_filter_misses = false, bool send_only = false);
 
     /**
      * @brief Construct mpi_comm_info for inner array of array item array.
@@ -1508,9 +1563,11 @@ struct mpi_str_comm_info {
      * @param arr_info The input array. If arr_info is neither string nor list
      * string array, the constructor will be a no-op
      * @param comm_info The mpi_comm_info of arr_info
+     * @param send_only only initialize send counts and not recv counts. This
+     * avoids alltoall collectives which is necessary for async shuffle.
      */
     mpi_str_comm_info(const std::shared_ptr<array_info>& arr_info,
-                      const mpi_comm_info& comm_info);
+                      const mpi_comm_info& comm_info, bool send_only = false);
 };
 
 struct table_info {

@@ -981,58 +981,6 @@ void decref_numpy_payload(numpy_arr_payload arr) {
     }
 }
 
-std::unique_ptr<array_info> alloc_array_top_level(
-    int64_t length, int64_t n_sub_elems, int64_t n_sub_sub_elems,
-    bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
-    int64_t array_id, int64_t extra_null_bytes, int64_t num_categories,
-    bool is_globally_replicated, bool is_locally_unique, bool is_locally_sorted,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
-    switch (arr_type) {
-        case bodo_array_type::STRING:
-            return alloc_string_array(dtype, length, n_sub_elems, array_id,
-                                      extra_null_bytes, is_globally_replicated,
-                                      is_locally_unique, is_locally_sorted,
-                                      pool, std::move(mm));
-
-        case bodo_array_type::NULLABLE_INT_BOOL:
-            return alloc_nullable_array(length, dtype, extra_null_bytes, pool,
-                                        std::move(mm));
-
-        case bodo_array_type::INTERVAL:
-            return alloc_interval_array(length, dtype, pool, std::move(mm));
-
-        case bodo_array_type::NUMPY:
-            return alloc_numpy(length, dtype, pool, std::move(mm));
-
-        case bodo_array_type::CATEGORICAL:
-            return alloc_categorical(length, dtype, num_categories, pool,
-                                     std::move(mm));
-
-        case bodo_array_type::DICT:
-            return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                           extra_null_bytes, pool,
-                                           std::move(mm));
-        case bodo_array_type::TIMESTAMPTZ:
-            return alloc_timestamptz_array(length, extra_null_bytes, pool,
-                                           std::move(mm));
-        case bodo_array_type::ARRAY_ITEM:
-            return alloc_array_item(length, nullptr, extra_null_bytes, pool,
-                                    std::move(mm));
-        case bodo_array_type::STRUCT:
-            return alloc_struct(length, {}, extra_null_bytes, pool,
-                                std::move(mm));
-        case bodo_array_type::MAP: {
-            std::unique_ptr<array_info> inner_array = alloc_array_item(
-                length, nullptr, extra_null_bytes, pool, std::move(mm));
-            return alloc_map(length, std::move(inner_array));
-        }
-        default:
-            throw std::runtime_error("alloc_array: array type (" +
-                                     GetArrType_as_string(arr_type) +
-                                     ") not supported");
-    }
-}
-
 std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
                                              bool reuse_dictionaries) {
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
