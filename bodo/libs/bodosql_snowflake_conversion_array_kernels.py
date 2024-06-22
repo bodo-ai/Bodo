@@ -1180,7 +1180,9 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
         double series/scalar: the double value of the number(s) with the
         specified null handling rules
     """
-    verify_string_numeric_arg(val, "TO_DOUBLE and TRY_TO_DOUBLE", "val")
+    verify_string_numeric_arg(
+        val, "TO_DOUBLE and TRY_TO_DOUBLE", "val", include_decimal=True
+    )
     verify_string_arg(
         optional_format_string, "TO_DOUBLE and TRY_TO_DOUBLE", "optional_format_string"
     )
@@ -1188,6 +1190,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
     is_float = is_valid_float_arg(val)
     is_int = is_valid_int_arg(val)
     is_bool = is_valid_boolean_arg(val)
+    is_decimal = is_valid_decimal_arg(val)
     _try = get_overload_const_bool(_try)
 
     if _try:  # pragma: no cover
@@ -1214,6 +1217,8 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
         scalar_text = f"res[i] = arg0\n"
     elif is_int or is_bool:  # pragma: no cover
         scalar_text = f"res[i] = np.float64(arg0)\n"
+    elif is_decimal:
+        scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.decimal_to_float64(arg0)\n"
     else:  # pragma: no cover
         raise raise_bodo_error(
             f"Internal error: unsupported type passed to to_double_util for argument val: {val}"
@@ -1910,7 +1915,9 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
         return impl
 
     else:
-        assert expr == bodo.dict_str_arr_type, "string_to_decimal_overload: dictionary-encoded string array type expected"
+        assert (
+            expr == bodo.dict_str_arr_type
+        ), "string_to_decimal_overload: dictionary-encoded string array type expected"
 
         def impl(expr, precision, scale, null_on_error):  # pragma: no cover
             # Just cast the data array. Note: Since a value may no longer exist

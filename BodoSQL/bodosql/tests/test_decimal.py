@@ -62,7 +62,7 @@ def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
         SELECT DISTINCT benchmark_cashflow_group_ids
         FROM TABLE_1
     )
-    SELECT 
+    SELECT
         TABLE2.group_ids,
         SUM(TABLE2.amounts) AS AMOUNTS,
         TABLE2.cashflow_type_ids,
@@ -419,3 +419,24 @@ def test_float_to_decimal_error(expr, error_message):
             )
     finally:
         bodo.bodo_use_decimal = old_use_decimal
+
+
+def test_decimal_to_float_cast(memory_leak_check):
+    query = "Select A::DOUBLE as OUTPUT from TABLE1"
+    df = pd.DataFrame(
+        {
+            "A": pa.array(
+                [Decimal("0"), None, Decimal("7.5"), None, Decimal("51.25")],
+                type=pa.decimal128(38, 2),
+            )
+        }
+    )
+    ctx = {"TABLE1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        expected_output=pd.DataFrame({"OUTPUT": [0.0, None, 7.5, None, 51.25]}),
+        sort_output=False,
+    )
