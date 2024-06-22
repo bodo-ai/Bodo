@@ -90,6 +90,72 @@ class IncrementalShuffleMetrics {
 };
 
 /**
+ * @brief (MPI_Issend calls). Buffers cannot be freed until send is completed.
+ */
+class AsyncShuffleSendState {
+   public:
+    std::shared_ptr<array_info> send_arr;
+    std::vector<MPI_Request> send_requests;
+    std::vector<uint8_t> bits_in_last_byte;
+
+    AsyncShuffleSendState(std::shared_ptr<array_info>& _send_arr)
+        : send_arr(_send_arr) {}
+
+    /**
+     * @brief Returns true if send is done which allows this state to be freed.
+     *
+     */
+    bool sendDone() {
+        int flag;
+        MPI_Testall(send_requests.size(), send_requests.data(), &flag,
+                    MPI_STATUSES_IGNORE);
+        return flag;
+    }
+};
+
+/**
+ * @brief (MPI_Irecv calls). Buffers cannot be used or freed until recvs
+ * are completed.
+ */
+class AsyncShuffleRecvState {
+   public:
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    std::vector<MPI_Request> recv_requests;
+    // Track whether a nullable boolean arrays length needs adjusted and
+    // which rows are valid in the last byte
+    // used to adjust the size of the output array
+    // in case the last byte is not fully used and we don't have the length
+    std::vector<std::tuple<bool, uint8_t>> bits_in_last_byte;
+    // Length of array for simple array types (numpy, nullable except bool)
+    // used so we don't have to probe incoming messages unnecessarily
+    int64_t simple_array_len = -1;
+
+    AsyncShuffleRecvState() {}
+
+    /**
+     * @brief Returns true and fills output table builder if recvs of all arrays
+     are done. This allows the state to be freed.
+    * @param[out] out_builder output table builder to fill.
+    */
+    bool recvDone(TableBuildBuffer& out_builder);
+
+    /**
+     * @brief Initialize simple array length for the case where we have a single
+     * simple array type (numpy, nullable except bool). This is used to avoid
+     * probing incoming messages unnecessarily. We will only probe the message
+     * if we don't already know the length.
+     *
+     * @param source Source rank
+     * @param tag Incoming message tag
+     * @param comm Communicator
+     * @param mpi_datatype MPI datatype of the incoming message
+     */
+    void initSimpleArrayLen(const int source, const int tag,
+                            const MPI_Comm comm,
+                            const MPI_Datatype mpi_datatype);
+};
+
+/**
  * @brief Common hash-shuffle functionality for streaming operators such as
  * HashJoin and Groupby.
  *

@@ -10,6 +10,7 @@
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
 
@@ -166,7 +167,7 @@ mpi_comm_info::mpi_comm_info(
     const std::vector<std::shared_ptr<array_info>>& arrays,
     const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
     const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
-    const uint8_t* keep_row_bitmask, bool keep_filter_misses)
+    const uint8_t* keep_row_bitmask, bool keep_filter_misses, bool send_only)
     : has_nulls(false), n_null_bytes(0), row_dest(arrays[0]->length, -1) {
     tracing::Event ev("mpi_comm_info", is_parallel);
     const uint64_t& n_rows = arrays[0]->length;
@@ -204,9 +205,12 @@ mpi_comm_info::mpi_comm_info(
     // Rows can get filtered if either a bloom-filter or a null filter is
     // provided
     this->filtered = (keep_row_bitmask != nullptr) || (filter != nullptr);
-    // get recv count
-    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
+    // NOTE: avoiding alltoall collective for async shuffle cases
+    if (!send_only) {
+        // get recv count
+        MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
+                     MPI_INT64_T, MPI_COMM_WORLD);
+    }
 
     n_rows_send =
         std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
@@ -293,8 +297,8 @@ mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
 }
 
 mpi_str_comm_info::mpi_str_comm_info(
-    const std::shared_ptr<array_info>& arr_info,
-    const mpi_comm_info& comm_info) {
+    const std::shared_ptr<array_info>& arr_info, const mpi_comm_info& comm_info,
+    bool send_only) {
     if (arr_info->arr_type == bodo_array_type::STRING) {
         // initialization
         send_count_sub.resize(comm_info.n_pes);
@@ -309,9 +313,12 @@ mpi_str_comm_info::mpi_str_comm_info(
                     (int64_t)(offsets[i + 1] - offsets[i]);
             }
         }
-        // get recv count
-        MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
-                     recv_count_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
+        // NOTE: avoiding alltoall collective for async shuffle cases
+        if (!send_only) {
+            // get recv count
+            MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
+                         recv_count_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD);
+        }
         // get displacements
         calc_disp(send_disp_sub, send_count_sub);
         calc_disp(recv_disp_sub, recv_count_sub);
@@ -456,15 +463,10 @@ static void fill_send_array_null_inner(
     return;
 }
 
-/**
- * @param is_parallel: Used to indicate whether tracing should be parallel
- * or not
- */
-static void fill_send_array(std::shared_ptr<array_info> send_arr,
-                            std::shared_ptr<array_info> in_arr,
-                            const mpi_comm_info& comm_info,
-                            const mpi_str_comm_info& str_comm_info,
-                            bool is_parallel) {
+void fill_send_array(std::shared_ptr<array_info> send_arr,
+                     std::shared_ptr<array_info> in_arr,
+                     const mpi_comm_info& comm_info,
+                     const mpi_str_comm_info& str_comm_info, bool is_parallel) {
     tracing::Event ev("fill_send_array", is_parallel);
     const size_t n_rows = (size_t)in_arr->length;
     // dispatch to proper function
@@ -611,8 +613,7 @@ static void fill_send_array(std::shared_ptr<array_info> send_arr,
 /* Internal function. Convert counts to displacements
  */
 #if OFFSET_BITWIDTH == 32
-static void convert_len_arr_to_offset32(uint32_t* offsets,
-                                        size_t const& num_strs) {
+void convert_len_arr_to_offset32(uint32_t* offsets, size_t const& num_strs) {
     uint32_t curr_offset = 0;
     for (size_t i = 0; i < num_strs; i++) {
         uint32_t val = offsets[i];
@@ -623,8 +624,10 @@ static void convert_len_arr_to_offset32(uint32_t* offsets,
 }
 #endif
 
-static void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
-                                      size_t num_strs) {
+void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
+                               size_t num_strs) {
+    static_assert(sizeof(offset_t) * 8 == OFFSET_BITWIDTH,
+                  "offset_t must be 8 bytes");
     offset_t curr_offset = 0;
     for (size_t i = 0; i < num_strs; i++) {
         uint32_t length = lens[i];
@@ -632,26 +635,6 @@ static void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
         curr_offset += length;
     }
     offsets[num_strs] = curr_offset;
-}
-
-template <class T>
-static void copy_gathered_null_bytes(
-    uint8_t* null_bitmask, const std::span<const uint8_t> tmp_null_bytes,
-    std::vector<T> const& recv_count_null, std::vector<T> const& recv_count) {
-    size_t curr_tmp_byte = 0;  // current location in buffer with all data
-    size_t curr_str = 0;       // current string in output bitmap
-    // for each chunk
-    for (size_t i = 0; i < recv_count.size(); i++) {
-        size_t n_strs = recv_count[i];
-        size_t n_bytes = recv_count_null[i];
-        const uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
-        // for each string in chunk
-        for (size_t j = 0; j < n_strs; j++) {
-            SetBitTo(null_bitmask, curr_str, GetBit(chunk_bytes, j));
-            curr_str += 1;
-        }
-        curr_tmp_byte += n_bytes;
-    }
 }
 
 /**

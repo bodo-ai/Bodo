@@ -267,6 +267,24 @@ table_info* shuffle_renormalization_group_py_entrypt(
     table_info* in_table, int random, int64_t random_seed, bool parallel,
     int64_t n_dest_ranks, int* dest_ranks);
 
+/**
+ * @brief Fill buffers of send array to be ready for shuffle (make data of
+ target ranks contiguous, add padding to null bits, convert offsets to lengths,
+...)
+ *
+ * @param send_arr send array with buffers to fill for shuffle
+ * @param in_arr original input array
+ * @param comm_info communication info (send counts, displacements, ...)
+ * @param str_comm_info communication info for string data (send counts,
+ * displacements, ...)
+ * @param is_parallel: Used to indicate whether tracing should be parallel or
+ * not.
+*/
+void fill_send_array(std::shared_ptr<array_info> send_arr,
+                     std::shared_ptr<array_info> in_arr,
+                     const mpi_comm_info& comm_info,
+                     const mpi_str_comm_info& str_comm_info, bool is_parallel);
+
 /* This function is used for the reverse shuffling of numpy data.
  *
  * It takes the rows after the MPI_alltoall and put them at their right position
@@ -284,6 +302,33 @@ inline void fill_recv_data_inner(T* recv_buff, T* data,
         tmp_offset[node]++;
     }
 }
+
+template <class T>
+void copy_gathered_null_bytes(uint8_t* null_bitmask,
+                              const std::span<const uint8_t> tmp_null_bytes,
+                              std::vector<T> const& recv_count_null,
+                              std::vector<T> const& recv_count) {
+    size_t curr_tmp_byte = 0;  // current location in buffer with all data
+    size_t curr_str = 0;       // current string in output bitmap
+    // for each chunk
+    for (size_t i = 0; i < recv_count.size(); i++) {
+        size_t n_strs = recv_count[i];
+        size_t n_bytes = recv_count_null[i];
+        const uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
+        // for each string in chunk
+        for (size_t j = 0; j < n_strs; j++) {
+            SetBitTo(null_bitmask, curr_str, GetBit(chunk_bytes, j));
+            curr_str += 1;
+        }
+        curr_tmp_byte += n_bytes;
+    }
+}
+
+/**
+ * Convert an array of lengths to an array of offsets.
+ */
+void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
+                               size_t num_strs);
 
 /**
  * @brief Update dictionary encoded array to drop any duplicates in its
