@@ -1000,6 +1000,18 @@ def is_valid_boolean_arg(arg):  # pragma: no cover
     )
 
 
+def is_valid_decimal_arg(arg):  # pragma: no cover
+    """
+    Args:
+        arg (dtype): the dtype of the argument being checked
+    returns: False if the argument is not a decimal or decimal column
+    """
+    return not (
+        isinstance(arg, bodo.Decimal128Type)
+        and not isinstance(arg, bodo.DecimalArrayType)
+    )
+
+
 def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is an array
        (scalar or vector)
@@ -1102,7 +1114,9 @@ def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
-def verify_string_numeric_arg(arg, f_name, a_name):  # pragma: no cover
+def verify_string_numeric_arg(
+    arg, f_name, a_name, include_decimal=False
+):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a string, integer, float, or boolean
         (scalar or vector)
     Args:
@@ -1113,9 +1127,10 @@ def verify_string_numeric_arg(arg, f_name, a_name):  # pragma: no cover
             integer column, float column, or boolean column
     """
     if not is_valid_string_arg(arg) and not is_valid_numeric_bool(arg):
-        raise_bodo_error(
-            f"{f_name} {a_name} argument must be a string, integer, float, boolean, string column, integer column, float column, or boolean column, but was {arg}"
-        )
+        if not include_decimal or not is_valid_decimal_arg(arg):
+            raise_bodo_error(
+                f"{f_name} {a_name} argument must be a string, integer, float, boolean, string column, integer column, float column, or boolean column, but was {arg}"
+            )
 
 
 def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
