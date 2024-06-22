@@ -45,6 +45,9 @@ static int64_t dist_get_node_portion(int64_t total, int num_pes,
 static double dist_get_time() __UNUSED__;
 static double get_time() __UNUSED__;
 static int barrier() __UNUSED__;
+
+template <int typ_enum>
+static MPI_Datatype get_MPI_typ() __UNUSED__;
 static MPI_Datatype get_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) __UNUSED__;
 static MPI_Op get_MPI_op(int op_enum) __UNUSED__;
@@ -522,16 +525,8 @@ static bool stream_sync_is_last(bool local_is_last, const uint64_t iter,
     return global_is_last;
 }
 
-static MPI_Datatype get_MPI_typ(int typ_enum) {
-    // data type for Decimal128 values (2 64-bit ints)
-    static MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
-    // initialize decimal_mpi_type
-    // TODO: free when program exits
-    if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-        MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-        MPI_Type_commit(&decimal_mpi_type);
-    }
-
+template <int typ_enum>
+static MPI_Datatype get_MPI_typ() {
     switch (typ_enum) {
         case Bodo_CTypes::_BOOL:
             return MPI_UNSIGNED_CHAR;  // MPI_C_BOOL doesn't support operations
@@ -565,12 +560,71 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
             return MPI_UNSIGNED_SHORT;
         case Bodo_CTypes::INT128:
         case Bodo_CTypes::DECIMAL:
+            // data type for Decimal128 values (2 64-bit ints)
+            static MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
+            // initialize decimal_mpi_type
+            // TODO: free when program exits
+            if (decimal_mpi_type == MPI_DATATYPE_NULL) {
+                MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
+                MPI_Type_commit(&decimal_mpi_type);
+            }
             return decimal_mpi_type;
         case Bodo_CTypes::COMPLEX128:
             return MPI_C_DOUBLE_COMPLEX;
         case Bodo_CTypes::COMPLEX64:
             return MPI_C_FLOAT_COMPLEX;
 
+        default:
+            std::cerr << "Invalid MPI_Type " << typ_enum << "\n";
+    }
+    // dummy value in case of error
+    // TODO: raise error properly
+    return MPI_LONG_LONG_INT;
+}
+
+static MPI_Datatype get_MPI_typ(int typ_enum) {
+    switch (typ_enum) {
+        case Bodo_CTypes::_BOOL:
+            return get_MPI_typ<Bodo_CTypes::_BOOL>();
+        case Bodo_CTypes::INT8:
+            return get_MPI_typ<Bodo_CTypes::INT8>();
+        case Bodo_CTypes::UINT8:
+            return get_MPI_typ<Bodo_CTypes::UINT8>();
+        case Bodo_CTypes::INT32:
+            return get_MPI_typ<Bodo_CTypes::INT32>();
+        case Bodo_CTypes::DATE:
+            return get_MPI_typ<Bodo_CTypes::DATE>();
+        case Bodo_CTypes::UINT32:
+            return get_MPI_typ<Bodo_CTypes::UINT32>();
+        case Bodo_CTypes::INT64:
+            return get_MPI_typ<Bodo_CTypes::INT64>();
+        case Bodo_CTypes::DATETIME:
+            return get_MPI_typ<Bodo_CTypes::DATETIME>();
+        case Bodo_CTypes::TIMEDELTA:
+            return get_MPI_typ<Bodo_CTypes::TIMEDELTA>();
+        case Bodo_CTypes::TIMESTAMPTZ:
+            return get_MPI_typ<Bodo_CTypes::TIMESTAMPTZ>();
+        // TODO: [BE-4106] Split Time into Time32 and Time64
+        case Bodo_CTypes::TIME:
+            return get_MPI_typ<Bodo_CTypes::TIME>();
+        case Bodo_CTypes::UINT64:
+            return get_MPI_typ<Bodo_CTypes::UINT64>();
+        case Bodo_CTypes::FLOAT32:
+            return get_MPI_typ<Bodo_CTypes::FLOAT32>();
+        case Bodo_CTypes::FLOAT64:
+            return get_MPI_typ<Bodo_CTypes::FLOAT64>();
+        case Bodo_CTypes::INT16:
+            return get_MPI_typ<Bodo_CTypes::INT16>();
+        case Bodo_CTypes::UINT16:
+            return get_MPI_typ<Bodo_CTypes::UINT16>();
+        case Bodo_CTypes::INT128:
+            return get_MPI_typ<Bodo_CTypes::INT128>();
+        case Bodo_CTypes::DECIMAL:
+            return get_MPI_typ<Bodo_CTypes::DECIMAL>();
+        case Bodo_CTypes::COMPLEX128:
+            return get_MPI_typ<Bodo_CTypes::COMPLEX128>();
+        case Bodo_CTypes::COMPLEX64:
+            return get_MPI_typ<Bodo_CTypes::COMPLEX64>();
         default:
             std::cerr << "Invalid MPI_Type " << typ_enum << "\n";
     }

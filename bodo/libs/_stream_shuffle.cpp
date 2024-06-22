@@ -2,12 +2,15 @@
 
 #include <iostream>
 #include <numeric>
+#include <optional>
 
 #include <arrow/util/bit_util.h>
 #include <mpi.h>
 
 #include "_array_hash.h"
+#include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_distributed.h"
 #include "_memory_budget.h"
 #include "_query_profile_collector.h"
 #include "_shuffle.h"
@@ -430,6 +433,741 @@ IncrementalShuffleState::GetShuffleTableAndHashes() {
                            std::unique_ptr<uint8_t[]>(nullptr));
 }
 
+template <bodo_array_type::arr_type_enum arr_type>
+inline void send_shuffle_null_bitmask(
+    AsyncShuffleSendState& send_state, const MPI_Comm shuffle_comm,
+    const mpi_comm_info& comm_info, const std::shared_ptr<array_info>& send_arr,
+    std::vector<int>& curr_tags, size_t p) {
+    MPI_Datatype mpi_type_null = MPI_UNSIGNED_CHAR;
+    const void* buf =
+        send_arr->null_bitmask<arr_type>() +
+        comm_info.send_disp_null[p] * numpy_item_size[Bodo_CTypes::UINT8];
+
+    MPI_Request send_req_null;
+    // TODO: check err return
+    MPI_Issend(buf, comm_info.send_count_null[p], mpi_type_null, p,
+               curr_tags[p]++, shuffle_comm, &send_req_null);
+    send_state.send_requests.push_back(send_req_null);
+}
+
+template <bodo_array_type::arr_type_enum arr_type>
+void recv_null_bitmask(std::shared_ptr<array_info>& out_arr,
+                       const MPI_Comm shuffle_comm, const int source,
+                       int& curr_tag, AsyncShuffleRecvState& recv_state) {
+    const MPI_Datatype mpi_type_null = MPI_UNSIGNED_CHAR;
+    int recv_size_null = arrow::bit_util::BytesForBits(out_arr->length);
+    MPI_Request recv_req_null;
+    MPI_Irecv(out_arr->null_bitmask<arr_type>(), recv_size_null, mpi_type_null,
+              source, curr_tag++, shuffle_comm, &recv_req_null);
+    recv_state.recv_requests.push_back(recv_req_null);
+}
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::NUMPY)
+void send_shuffle_data(AsyncShuffleSendState& send_state, MPI_Comm shuffle_comm,
+                       const mpi_comm_info& comm_info,
+                       const mpi_str_comm_info& str_comm_info,
+                       const std::shared_ptr<array_info>& send_arr,
+                       std::vector<int>& curr_tags) {
+    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    for (int p = 0; p < comm_info.n_pes; p++) {
+        if (comm_info.send_count[p] == 0) {
+            continue;
+        }
+        const void* buff = send_arr->data1<arr_type>() +
+                           (numpy_item_size[dtype] * comm_info.send_disp[p]);
+        MPI_Request send_req;
+        // TODO: check err return
+        MPI_Issend(buff, comm_info.send_count[p], mpi_type, p, curr_tags[p]++,
+                   shuffle_comm, &send_req);
+        send_state.send_requests.push_back(send_req);
+    }
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::NUMPY)
+std::shared_ptr<array_info> recv_shuffle_data(
+    const MPI_Comm shuffle_comm, const int source, int& curr_tag,
+    AsyncShuffleRecvState& recv_state) {
+    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    recv_state.initSimpleArrayLen(source, curr_tag, shuffle_comm, mpi_type);
+
+    std::shared_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
+        recv_state.simple_array_len, 0, 0, arr_type, dtype, -1, 0, 0);
+    MPI_Request recv_req;
+    MPI_Irecv(out_arr->data1<arr_type>(), recv_state.simple_array_len, mpi_type,
+              source, curr_tag++, shuffle_comm, &recv_req);
+    recv_state.recv_requests.push_back(recv_req);
+    return out_arr;
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+             dtype != Bodo_CTypes::_BOOL)
+void send_shuffle_data(AsyncShuffleSendState& send_state,
+                       const MPI_Comm shuffle_comm,
+                       const mpi_comm_info& comm_info,
+                       const mpi_str_comm_info& str_comm_info,
+                       const std::shared_ptr<array_info>& send_arr,
+                       std::vector<int>& curr_tags) {
+    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    for (int p = 0; p < comm_info.n_pes; p++) {
+        if (comm_info.send_count[p] == 0) {
+            continue;
+        }
+
+        MPI_Request send_req;
+        const void* buff = send_arr->data1<arr_type>() +
+                           (numpy_item_size[dtype] * comm_info.send_disp[p]);
+        // TODO: check err return
+        MPI_Issend(buff, comm_info.send_count[p], mpi_type, p, curr_tags[p]++,
+                   shuffle_comm, &send_req);
+
+        send_state.send_requests.push_back(send_req);
+        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
+                                            send_arr, curr_tags, p);
+    }
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+             dtype != Bodo_CTypes::_BOOL)
+std::shared_ptr<array_info> recv_shuffle_data(
+    const MPI_Comm shuffle_comm, const int source, int& curr_tag,
+    AsyncShuffleRecvState& recv_state) {
+    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    recv_state.initSimpleArrayLen(source, curr_tag, shuffle_comm, mpi_type);
+
+    std::shared_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
+        recv_state.simple_array_len, 0, 0, arr_type, dtype, -1, 0, 0);
+
+    MPI_Request recv_req;
+    MPI_Irecv(out_arr->data1<arr_type>(), recv_state.simple_array_len, mpi_type,
+              source, curr_tag++, shuffle_comm, &recv_req);
+    recv_state.recv_requests.push_back(recv_req);
+
+    recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
+                                recv_state);
+    return out_arr;
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+             dtype == Bodo_CTypes::_BOOL)
+void send_shuffle_data(AsyncShuffleSendState& send_state,
+                       const MPI_Comm shuffle_comm,
+                       const mpi_comm_info& comm_info,
+                       const mpi_str_comm_info& str_comm_info,
+                       const std::shared_ptr<array_info>& send_arr,
+                       std::vector<int>& curr_tags) {
+    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    for (int p = 0; p < comm_info.n_pes; p++) {
+        if (comm_info.send_count[p] == 0) {
+            continue;
+        }
+
+        // Since the data is stored as bits, we need to send the number
+        // of bits used in the last byte so the receiver knows the
+        // array's length
+        // TODO: technically we only need to do this if
+        // there hasn't been a simple array sent first
+        send_state.bits_in_last_byte.push_back(comm_info.send_count[p] % 8);
+        // TODO: check err return
+        MPI_Request bits_in_last_byte_req;
+        MPI_Issend(&send_state.bits_in_last_byte.back(), sizeof(uint8_t),
+                   mpi_type, p, curr_tags[p]++, shuffle_comm,
+                   &bits_in_last_byte_req);
+        send_state.send_requests.push_back(bits_in_last_byte_req);
+
+        // Send the data
+        MPI_Request send_req;
+        char* buff = send_arr->data1<arr_type>() + comm_info.send_disp_null[p];
+        MPI_Issend(buff, comm_info.send_count_null[p], mpi_type, p,
+                   curr_tags[p]++, shuffle_comm, &send_req);
+        send_state.send_requests.push_back(send_req);
+
+        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
+                                            send_arr, curr_tags, p);
+    }
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+             dtype == Bodo_CTypes::_BOOL)
+std::shared_ptr<array_info> recv_shuffle_data(
+    const MPI_Comm shuffle_comm, const int source, int& curr_tag,
+    AsyncShuffleRecvState& recv_state) {
+    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+
+    // Add a new entry to the bits_in_last_byte vector
+    recv_state.bits_in_last_byte.emplace_back();
+    // Only adjust the resulting length if we don't already have a simple array
+    std::get<0>(recv_state.bits_in_last_byte.back()) =
+        recv_state.simple_array_len == -1;
+    uint8_t& bits_in_last_byte =
+        std::get<1>(recv_state.bits_in_last_byte.back());
+
+    // Receive a message telling us how many bits of the last byte are valid
+    MPI_Request bits_in_last_byte_req;
+    MPI_Irecv(&bits_in_last_byte, sizeof(uint8_t), mpi_type, source, curr_tag++,
+              shuffle_comm, &bits_in_last_byte_req);
+    recv_state.recv_requests.push_back(bits_in_last_byte_req);
+
+    int recv_size;
+    size_t out_arr_len = -1;
+    if (recv_state.simple_array_len == -1) {
+        // If we don't have a simple array length, we need to get the incoming
+        // message size we can't set simple_array_len here because the size of
+        // the incoming message might not be the same as the size of the array
+        // (some of the bits might not be valid)
+        MPI_Status status;
+        MPI_Probe(source, curr_tag, shuffle_comm, &status);
+        MPI_Get_count(&status, mpi_type, &recv_size);
+
+        out_arr_len = recv_size * 8;
+    } else {
+        // If we already have a simple array length, we can just use that to get
+        // the size of the incoming message and set the array's length
+        out_arr_len = recv_state.simple_array_len;
+        recv_size = arrow::bit_util::BytesForBits(out_arr_len);
+    }
+    std::shared_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
+        out_arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
+
+    MPI_Request recv_req;
+    MPI_Irecv(out_arr->data1<arr_type>(), recv_size, mpi_type, source,
+              curr_tag++, shuffle_comm, &recv_req);
+    recv_state.recv_requests.push_back(recv_req);
+
+    recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
+                                recv_state);
+    return out_arr;
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::STRING)
+void send_shuffle_data(AsyncShuffleSendState& send_state,
+                       const MPI_Comm shuffle_comm,
+                       const mpi_comm_info& comm_info,
+                       const mpi_str_comm_info& str_comm_info,
+                       const std::shared_ptr<array_info>& send_arr,
+                       std::vector<int>& curr_tags) {
+    const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
+    // Fill_send_array converts offsets to send lengths of type uint32_t
+    const MPI_Datatype len_mpi_type = MPI_UINT32_T;
+    for (int p = 0; p < comm_info.n_pes; p++) {
+        if (comm_info.send_count[p] == 0) {
+            continue;
+        }
+        MPI_Request data_send_req;
+        const void* data_buff =
+            send_arr->data1<arr_type>() + str_comm_info.send_disp_sub[p];
+        // TODO: check err return
+        MPI_Issend(data_buff, str_comm_info.send_count_sub[p], data_mpi_type, p,
+                   curr_tags[p]++, shuffle_comm, &data_send_req);
+        send_state.send_requests.push_back(data_send_req);
+
+        MPI_Request len_send_req;
+        const void* len_buff = send_arr->data2<arr_type>() +
+                               (sizeof(uint32_t) * comm_info.send_disp[p]);
+
+        MPI_Issend(len_buff, comm_info.send_count[p], len_mpi_type, p,
+                   curr_tags[p]++, shuffle_comm, &len_send_req);
+        send_state.send_requests.push_back(len_send_req);
+
+        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
+                                            send_arr, curr_tags, p);
+    }
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::STRING)
+std::shared_ptr<array_info> recv_shuffle_data(
+    const MPI_Comm shuffle_comm, const int source, int& curr_tag,
+    AsyncShuffleRecvState& recv_state) {
+    const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
+    // Fill_send_array converts offsets to lengths of type uint32_t
+    const MPI_Datatype len_mpi_type = MPI_UINT32_T;
+
+    // Get the sizes of each incoming message
+    MPI_Status data_status;
+    int recv_size_sub;
+    MPI_Probe(source, curr_tag, shuffle_comm, &data_status);
+    MPI_Get_count(&data_status, data_mpi_type, &recv_size_sub);
+
+    recv_state.initSimpleArrayLen(source, curr_tag + 1, shuffle_comm,
+                                  data_mpi_type);
+
+    std::shared_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
+        recv_state.simple_array_len, recv_size_sub, 0, arr_type, dtype, -1, 0,
+        0);
+
+    MPI_Request data_req;
+    MPI_Irecv(out_arr->data1<arr_type>(), recv_size_sub, data_mpi_type, source,
+              curr_tag++, shuffle_comm, &data_req);
+    recv_state.recv_requests.push_back(data_req);
+
+    MPI_Request len_req;
+    // Receive the lens, we know we can fit them in the offset buffer because
+    // sizeof(offset_t) >= sizeof(uint32_t)
+    MPI_Irecv(out_arr->data2<arr_type, offset_t>(), recv_state.simple_array_len,
+              len_mpi_type, source, curr_tag++, shuffle_comm, &len_req);
+    recv_state.recv_requests.push_back(len_req);
+
+    recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
+                                recv_state);
+    return out_arr;
+}
+
+template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
+    requires(arr_type == bodo_array_type::DICT)
+void send_shuffle_data(AsyncShuffleSendState& send_state,
+                       const MPI_Comm shuffle_comm,
+                       const mpi_comm_info& comm_info,
+                       const mpi_str_comm_info& str_comm_info,
+                       const std::shared_ptr<array_info>& send_arr,
+                       std::vector<int>& curr_tags) {
+    throw std::runtime_error("send_shuffle_data: DICT not implemented");
+}
+
+#define SEND_SHUFFLE_DATA(ARR_TYPE, DTYPE)                                 \
+    send_shuffle_data<ARR_TYPE, DTYPE>(send_states.back(), shuffle_comm,   \
+                                       comm_info, str_comm_info, send_arr, \
+                                       curr_tags);
+
+void shuffle_issend(std::shared_ptr<table_info> in_table,
+                    const std::shared_ptr<uint32_t[]>& hashes,
+                    std::vector<AsyncShuffleSendState>& send_states,
+                    MPI_Comm shuffle_comm) {
+    mpi_comm_info comm_info(in_table->columns, hashes,
+                            /*is_parallel*/ true, /*filter*/ nullptr, nullptr,
+                            /*keep_filter_misses*/ false, /*send_only*/ true);
+
+    std::vector<int> curr_tags(comm_info.n_pes, 0);
+
+    for (uint64_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        mpi_str_comm_info str_comm_info(in_arr, comm_info,
+                                        /*send_only*/ true);
+        std::shared_ptr<array_info> send_arr = alloc_array_top_level(
+            comm_info.n_rows_send, str_comm_info.n_sub_send, 0,
+            in_arr->arr_type, in_arr->dtype, -1, 2 * comm_info.n_pes,
+            in_arr->num_categories);
+        fill_send_array(send_arr, in_arr, comm_info, str_comm_info, true);
+        send_states.emplace_back(send_arr);
+        if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            switch (in_arr->dtype) {
+                case Bodo_CTypes::INT8:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::INT8);
+                    break;
+                case Bodo_CTypes::INT16:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::INT16);
+                    break;
+                case Bodo_CTypes::INT32:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::INT32);
+                    break;
+                case Bodo_CTypes::INT64:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::INT64);
+                    break;
+                case Bodo_CTypes::UINT8:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::UINT8);
+                    break;
+                case Bodo_CTypes::UINT16:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::UINT16);
+                    break;
+                case Bodo_CTypes::UINT32:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::UINT32);
+                    break;
+                case Bodo_CTypes::UINT64:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::UINT64);
+                    break;
+                case Bodo_CTypes::FLOAT32:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::FLOAT32);
+                    break;
+                case Bodo_CTypes::FLOAT64:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::FLOAT64);
+                    break;
+                case Bodo_CTypes::_BOOL:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::_BOOL);
+                    break;
+                case Bodo_CTypes::DATETIME:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::DATETIME);
+                    break;
+                case Bodo_CTypes::TIMEDELTA:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::TIMEDELTA);
+                    break;
+                case Bodo_CTypes::TIME:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::TIME);
+                    break;
+                case Bodo_CTypes::DATE:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::DATE);
+                    break;
+                case Bodo_CTypes::DECIMAL:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::DECIMAL);
+                    break;
+                case Bodo_CTypes::INT128:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                      Bodo_CTypes::INT128);
+                    break;
+                default:
+                    throw std::runtime_error("Unsupported dtype " +
+                                             GetDtype_as_string(in_arr->dtype) +
+                                             "for shuffle "
+                                             "send nullable int/bool");
+                    break;
+            }
+        } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+            switch (in_arr->dtype) {
+                case Bodo_CTypes::INT8:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT8);
+                    break;
+                case Bodo_CTypes::INT16:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT16);
+                    break;
+                case Bodo_CTypes::INT32:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT32);
+                    break;
+                case Bodo_CTypes::INT64:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT64);
+                    break;
+                case Bodo_CTypes::UINT8:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::UINT8);
+                    break;
+                case Bodo_CTypes::UINT16:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::UINT16);
+                    break;
+                case Bodo_CTypes::UINT32:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::UINT32);
+                    break;
+                case Bodo_CTypes::UINT64:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::UINT64);
+                    break;
+                case Bodo_CTypes::FLOAT32:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::FLOAT32);
+                    break;
+                case Bodo_CTypes::FLOAT64:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::FLOAT64);
+                    break;
+                case Bodo_CTypes::_BOOL:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::_BOOL);
+                    break;
+                case Bodo_CTypes::DATETIME:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::DATETIME);
+                    break;
+                case Bodo_CTypes::TIMEDELTA:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::TIMEDELTA);
+                    break;
+                case Bodo_CTypes::TIME:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::TIME);
+                    break;
+                case Bodo_CTypes::DATE:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::DATE);
+                    break;
+                case Bodo_CTypes::DECIMAL:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::DECIMAL);
+                    break;
+                case Bodo_CTypes::INT128:
+                    SEND_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                      Bodo_CTypes::INT128);
+                    break;
+                default:
+                    throw std::runtime_error("Unsupported dtype " +
+                                             GetDtype_as_string(in_arr->dtype) +
+                                             "for shuffle "
+                                             "send numpy");
+                    break;
+            }
+        } else if (in_arr->arr_type == bodo_array_type::STRING) {
+            if (in_arr->dtype == Bodo_CTypes::STRING) {
+                SEND_SHUFFLE_DATA(bodo_array_type::STRING, Bodo_CTypes::STRING);
+            } else {
+                assert(in_arr->dtype == Bodo_CTypes::BINARY);
+                SEND_SHUFFLE_DATA(bodo_array_type::STRING, Bodo_CTypes::BINARY);
+            }
+            //} else if (in_arr->arr_type == bodo_array_type::DICT) {
+            //    assert(in_arr->dtype == Bodo_CTypes::STRING);
+            //    SEND_SHUFFLE_DATA(bodo_array_type::DICT, Bodo_CTypes::STRING);
+            //} else if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+            //    assert(in_arr->dtype == Bodo_CTypes::LIST);
+            //    SEND_SHUFFLE_DATA(bodo_array_type::ARRAY_ITEM,
+            //    Bodo_CTypes::LIST);
+            //} else if (in_arr->arr_type == bodo_array_type::MAP) {
+            //    assert(in_arr->dtype == Bodo_CTypes::MAP);
+            //    SEND_SHUFFLE_DATA(bodo_array_type::MAP, Bodo_CTypes::MAP);
+            //} else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+            //    assert(in_arr->dtype == Bodo_CTypes::STRUCT);
+            //    SEND_SHUFFLE_DATA(bodo_array_type::STRUCT,
+            //    Bodo_CTypes::STRUCT);
+            //} else if (in_arr->arr_type == bodo_array_type::TIMESTAMPTZ) {
+            //    assert(in_arr->dtype == Bodo_CTypes::TIMESTAMPTZ);
+            //    SEND_SHUFFLE_DATA(bodo_array_type::TIMESTAMPTZ,
+            //                      Bodo_CTypes::TIMESTAMPTZ);
+        } else {
+            throw std::runtime_error(
+                "Unsupported array type for shuffle send: " +
+                GetArrType_as_string(in_arr->arr_type));
+        }
+    }
+}
+#undef SEND_SHUFFLE_DATA
+
+#define RECV_SHUFFLE_DATA(ARR_TYPE, DTYPE)                             \
+    out_arr = recv_shuffle_data<ARR_TYPE, DTYPE>(shuffle_comm, source, \
+                                                 curr_tag, recv_state);
+
+void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
+                   std::vector<AsyncShuffleRecvState>& recv_states) {
+    // TODO: add output buffer size limit
+    while (true) {
+        int flag;
+        MPI_Status status;
+        // TODO: check err return
+        MPI_Iprobe(MPI_ANY_SOURCE, 0, shuffle_comm, &flag, &status);
+        if (!flag) {
+            break;
+        }
+
+        int source = status.MPI_SOURCE;
+        assert(in_table->ncols() > 0);
+
+        // Post irecv for all data
+        int curr_tag = 0;
+        recv_states.emplace_back();
+        AsyncShuffleRecvState& recv_state = recv_states.back();
+        for (uint64_t i = 0; i < in_table->ncols(); i++) {
+            std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+            std::shared_ptr<array_info> out_arr;
+            if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                switch (in_arr->dtype) {
+                    case Bodo_CTypes::INT8:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT8);
+                        break;
+                    case Bodo_CTypes::INT16:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT16);
+                        break;
+                    case Bodo_CTypes::INT32:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT32);
+                        break;
+                    case Bodo_CTypes::INT64:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT64);
+                        break;
+                    case Bodo_CTypes::UINT8:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT8);
+                        break;
+                    case Bodo_CTypes::UINT16:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT16);
+                        break;
+                    case Bodo_CTypes::UINT32:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT32);
+                        break;
+                    case Bodo_CTypes::UINT64:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::UINT64);
+                        break;
+                    case Bodo_CTypes::FLOAT32:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::FLOAT32);
+                        break;
+                    case Bodo_CTypes::FLOAT64:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::FLOAT64);
+                        break;
+                    case Bodo_CTypes::_BOOL:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::_BOOL);
+                        break;
+                    case Bodo_CTypes::DATETIME:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::DATETIME);
+                        break;
+                    case Bodo_CTypes::TIMEDELTA:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::TIMEDELTA);
+                        break;
+                    case Bodo_CTypes::TIME:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::TIME);
+                        break;
+                    case Bodo_CTypes::DATE:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::DATE);
+                        break;
+                    case Bodo_CTypes::DECIMAL:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::DECIMAL);
+                        break;
+                    case Bodo_CTypes::INT128:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NULLABLE_INT_BOOL,
+                                          Bodo_CTypes::INT128);
+                        break;
+                    default:
+                        throw std::runtime_error(
+                            "Unsupported dtype " +
+                            GetDtype_as_string(in_arr->dtype) +
+                            "for shuffle "
+                            "recv nullable int/bool");
+                        break;
+                }
+            } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+                switch (in_arr->dtype) {
+                    case Bodo_CTypes::INT8:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT8);
+                        break;
+                    case Bodo_CTypes::INT16:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT16);
+                        break;
+                    case Bodo_CTypes::INT32:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT32);
+                        break;
+                    case Bodo_CTypes::INT64:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT64);
+                        break;
+                    case Bodo_CTypes::UINT8:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT8);
+                        break;
+                    case Bodo_CTypes::UINT16:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT16);
+                        break;
+                    case Bodo_CTypes::UINT32:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT32);
+                        break;
+                    case Bodo_CTypes::UINT64:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::UINT64);
+                        break;
+                    case Bodo_CTypes::FLOAT32:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::FLOAT32);
+                        break;
+                    case Bodo_CTypes::FLOAT64:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::FLOAT64);
+                        break;
+                    case Bodo_CTypes::_BOOL:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::_BOOL);
+                        break;
+                    case Bodo_CTypes::DATETIME:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::DATETIME);
+                        break;
+                    case Bodo_CTypes::TIMEDELTA:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::TIMEDELTA);
+                        break;
+                    case Bodo_CTypes::TIME:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::TIME);
+                        break;
+                    case Bodo_CTypes::DATE:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::DATE);
+                        break;
+                    case Bodo_CTypes::DECIMAL:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::DECIMAL);
+                        break;
+                    case Bodo_CTypes::INT128:
+                        RECV_SHUFFLE_DATA(bodo_array_type::NUMPY,
+                                          Bodo_CTypes::INT128);
+                        break;
+                    default:
+                        throw std::runtime_error(
+                            "Unsupported dtype " +
+                            GetDtype_as_string(in_arr->dtype) +
+                            "for shuffle "
+                            "recv numpy");
+                        break;
+                }
+            } else if (in_arr->arr_type == bodo_array_type::STRING) {
+                if (in_arr->dtype == Bodo_CTypes::STRING) {
+                    RECV_SHUFFLE_DATA(bodo_array_type::STRING,
+                                      Bodo_CTypes::STRING);
+                } else {
+                    assert(in_arr->dtype == Bodo_CTypes::BINARY);
+                    RECV_SHUFFLE_DATA(bodo_array_type::STRING,
+                                      Bodo_CTypes::BINARY);
+                }
+                //} else if (in_arr->arr_type == bodo_array_type::DICT) {
+                //    assert(in_arr->dtype == Bodo_CTypes::STRING);
+                //    RECV_SHUFFLE_DATA(bodo_array_type::DICT,
+                //    Bodo_CTypes::STRING);
+                //} else if (in_arr->arr_type ==
+                // bodo_array_type::ARRAY_ITEM) {
+                //    assert(in_arr->dtype == Bodo_CTypes::LIST);
+                //    RECV_SHUFFLE_DATA(bodo_array_type::ARRAY_ITEM,
+                //    Bodo_CTypes::LIST);
+                //} else if (in_arr->arr_type == bodo_array_type::MAP) {
+                //    assert(in_arr->dtype == Bodo_CTypes::MAP);
+                //    RECV_SHUFFLE_DATA(bodo_array_type::MAP,
+                //    Bodo_CTypes::MAP);
+                //} else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+                //    assert(in_arr->dtype == Bodo_CTypes::STRUCT);
+                //    RECV_SHUFFLE_DATA(bodo_array_type::STRUCT,
+                //    Bodo_CTypes::STRUCT);
+                //} else if (in_arr->arr_type ==
+                // bodo_array_type::TIMESTAMPTZ) {
+                //    assert(in_arr->dtype == Bodo_CTypes::TIMESTAMPTZ);
+                //    RECV_SHUFFLE_DATA(bodo_array_type::TIMESTAMPTZ,
+                //                      Bodo_CTypes::TIMESTAMPTZ);
+            } else {
+                throw std::runtime_error(
+                    "Unsupported array type for shuffle recv: " +
+                    GetArrType_as_string(in_arr->arr_type));
+            }
+            out_arr->precision = in_arr->precision;
+            out_arr->scale = in_arr->scale;
+            recv_state.out_arrs.push_back(out_arr);
+        }
+    }
+}
+#undef RECV_SHUFFLE_DATA
+
 std::optional<std::shared_ptr<table_info>>
 IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     bool shuffle_now =
@@ -518,4 +1256,60 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
 void IncrementalShuffleState::Finalize() {
     this->dict_builders.clear();
     this->table_buffer.reset();
+}
+
+bool AsyncShuffleRecvState::recvDone(TableBuildBuffer& out_builder) {
+    // This could be optimized by allocating the required size upfront and
+    // having the recv step fill it directly instead of each rank having its own
+    // array and inserting them all into a builder
+    int flag;
+    MPI_Testall(recv_requests.size(), recv_requests.data(), &flag,
+                MPI_STATUSES_IGNORE);
+    if (flag) {
+        size_t nullable_bool_count = 0;
+        for (auto& arr : out_arrs) {
+            if (arr->arr_type == bodo_array_type::STRING) {
+                // Now all the data in data2 is lengths not offsets, we need to
+                // convert
+                static_assert(sizeof(uint64_t) == sizeof(offset_t),
+                              "uint64_t and offset_t must have the same size");
+                std::vector<uint32_t> lens(arr->length);
+                memcpy(lens.data(), arr->data2<bodo_array_type::STRING>(),
+                       arr->length * sizeof(uint32_t));
+                convert_len_arr_to_offset(
+                    lens.data(),
+                    arr->data2<bodo_array_type::STRING, offset_t>(),
+                    arr->length);
+            } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                       arr->dtype == Bodo_CTypes::_BOOL) {
+                // Calculate the length of the data array in bits
+                auto [adjust_length, used_bits_in_last_byte] =
+                    this->bits_in_last_byte[nullable_bool_count];
+                if (adjust_length && used_bits_in_last_byte != 0) {
+                    arr->length = arr->length - 8 + used_bits_in_last_byte;
+                }
+                nullable_bool_count++;
+            }
+        }
+
+        std::shared_ptr<table_info> out_table =
+            std::make_shared<table_info>(out_arrs);
+        out_builder.ReserveTable(out_table);
+        out_builder.UnsafeAppendBatch(out_table);
+    }
+    return flag;
+}
+
+void AsyncShuffleRecvState::initSimpleArrayLen(
+    const int source, const int tag, const MPI_Comm comm,
+    const MPI_Datatype mpi_datatype) {
+    if (this->simple_array_len != -1) {
+        return;
+    }
+
+    MPI_Status status;
+    MPI_Probe(source, tag, comm, &status);
+    int count;
+    MPI_Get_count(&status, mpi_datatype, &count);
+    this->simple_array_len = count;
 }
