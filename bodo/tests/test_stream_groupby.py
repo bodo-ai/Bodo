@@ -1152,12 +1152,12 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     )
 
     # This is essentially the query we're executing:
-    # SELECT A, B, C, D, E, dense_rank() OVER (PARTITION BY A ORDER BY B ) AS RANK FROM DF
+    # SELECT A, B, C, D, E, rank() OVER (PARTITION BY A ORDER BY B ) AS RANK FROM DF
     @bodo.jit(distributed=["df"])
     def ref_impl(df):
         out_rank = df.groupby(
             "A", as_index=False, dropna=False, _is_bodosql=True
-        ).window((("dense_rank",),), ("B",), (True,), ("last",))
+        ).window((("rank",),), ("B",), (True,), ("last",))
         return out_rank
 
     # Get expected output using the non-streaming path
@@ -1171,7 +1171,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     global_2 = MetaType((0,))
     global_3 = MetaType((1,))
     global_4 = MetaType((True,))
-    global_5 = MetaType(("dense_rank",))
+    global_5 = MetaType(("rank",))
     global_6 = MetaType((0, 1, 2, 3, 4))
     global_7 = ColNamesMetaType(("A", "B", "C", "D", "E", "RANK"))
     global_8 = MetaType((0, 1, 2, 3, 4, 5))

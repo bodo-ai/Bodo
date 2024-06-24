@@ -72,7 +72,7 @@ void min_row_number_filter_no_sort(
  * the groups. In some situations it may be possible to do a partial sort
  * or avoid sorting.
  * @param[in] window_func The name(s) of the window function(s) being computed.
- * @param[out] out_arr The output array being population.
+ * @param[out] out_arr The output array(s) being populated.
  * @param[in] grp_info Struct containing information about the groups.
  * @param[in] asc Should the arrays be sorted in ascending order?
  * @param[in] na_pos Should NA's be placed at the end of the arrays?
@@ -92,3 +92,26 @@ void window_computation(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Handles computing window functions based on the table that
+ * has already been sorted. This code path uses sort based computation,
+ * so we must pass the all the partition by values as we do not have grouping
+ * information.
+ *
+ * If this computation is being done in parallel on distributed data, then there
+ * may be an extra communication step where a rank needs to talk to its
+ * neighbor(s) to update its value(s).
+ *
+ * @param[in] partition_by_arrs The arrays that hold the partition by values.
+ * @param[in] order_by_arrs The arrays that hold the order by values.
+ * @param[in] window_funcs The name(s) of the window function(s) being computed.
+ * @param[out] out_arrs The output array(s) being populated.
+ * @param is_parallel Is the data distributed? This is used for communicating
+ * with a neighboring rank for boundary groups.
+ */
+void sorted_window_computation(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::vector<int32_t>& window_funcs,
+    std::vector<std::shared_ptr<array_info>> out_arrs, bool is_parallel);

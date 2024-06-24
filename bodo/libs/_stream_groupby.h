@@ -1414,3 +1414,29 @@ class GroupbyState {
     bool MaxPartitionExceedsThreshold(size_t num_bits, uint32_t bitmask,
                                       double threshold);
 };
+
+/**
+ * @brief Helper function to get a bitmask specifying the columns
+ * to keep in the output in a Window case.
+ * We assume that the columns are in the order:
+ * - Partition columns
+ * - Order-By columns
+ * - Remaining columns
+ * We will keep the partition columns corresponding to
+ * true bits in the partition_by_cols_to_keep bitmask.
+ * Similarly for the order-by columns using order_by_cols_to_keep.
+ * All remaining columns will be retained.
+ * The output is essentially:
+ * partition_by_cols_to_keep.extend(order_by_cols_to_keep).extend(
+ *  [True] * (n_cols - len(partition_by_cols_to_keep) -
+ *  len(order_by_cols_to_keep))
+ * )
+ *
+ * @param partition_by_cols_to_keep Bitmask of the partition columns to retain.
+ * @param order_by_cols_to_keep Bitmask of the order-by columns to retain.
+ * @param n_cols Total number of columns.
+ * @return std::vector<bool> Combined bitmask of the columns to retain.
+ */
+std::vector<bool> get_window_cols_to_keep_bitmask(
+    const std::vector<bool>& partition_by_cols_to_keep,
+    const std::vector<bool>& order_by_cols_to_keep, const size_t n_cols);

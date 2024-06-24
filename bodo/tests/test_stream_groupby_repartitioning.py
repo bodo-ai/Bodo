@@ -1400,7 +1400,7 @@ global_1 = MetaType((0, 1, 2, 3))
 global_6 = MetaType((0, 2, 3))
 global_7 = ColNamesMetaType(("A", "C", "D", "RANK"))
 global_4 = MetaType((True,))
-global_5 = MetaType(("dense_rank",))
+global_5 = MetaType(("rank",))
 
 
 @bodo.jit(distributed=["df"])
@@ -1462,7 +1462,7 @@ def window_skew_impl(df):
 
 
 @pytest_mark_one_rank
-def test_dense_rank_skew_repartition(capfd):
+def test_rank_skew_repartition(capfd):
     """
     Test that we avoid repartitioning unnecessarily when we
     have a large partition. This test is very sensitive to the associated
