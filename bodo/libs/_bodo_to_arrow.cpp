@@ -1380,10 +1380,26 @@ std::shared_ptr<array_info> arrow_array_to_bodo(
             return arrow_numeric_array_to_bodo<arrow::Int8Array>(
                 std::static_pointer_cast<arrow::Int8Array>(arrow_arr),
                 Bodo_CTypes::INT8);
-        case arrow::Type::TIME64:
+        case arrow::Type::TIME64: {
+            // Ensure we are always working with nanosecond precision.
+            std::shared_ptr<arrow::Time64Array> time_arr =
+                std::static_pointer_cast<arrow::Time64Array>(arrow_arr);
+            std::shared_ptr<arrow::Time64Type> type =
+                std::static_pointer_cast<arrow::Time64Type>(time_arr->type());
+            if (type->unit() != arrow::TimeUnit::NANO) {
+                auto res = arrow::compute::Cast(
+                    *time_arr, arrow::time64(arrow::TimeUnit::NANO),
+                    arrow::compute::CastOptions::Safe(),
+                    bodo::default_buffer_exec_context());
+                std::shared_ptr<arrow::Array> casted_arr;
+                CHECK_ARROW_AND_ASSIGN(res, "Cast", casted_arr);
+                time_arr =
+                    std::static_pointer_cast<arrow::Time64Array>(casted_arr);
+            }
             return arrow_numeric_array_to_bodo<arrow::Time64Array>(
-                std::static_pointer_cast<arrow::Time64Array>(arrow_arr),
+                std::static_pointer_cast<arrow::Time64Array>(time_arr),
                 Bodo_CTypes::TIME);
+        }
         case arrow::Type::DICTIONARY:
             return arrow_dictionary_array_to_bodo(
                 std::static_pointer_cast<arrow::DictionaryArray>(arrow_arr),

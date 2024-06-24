@@ -11,6 +11,7 @@
 #include <arrow/compute/api_aggregate.h>
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_datetime_utils.h"
 #include "_dict_builder.h"
 #include "_distributed.h"
 #include "_memory_budget.h"
@@ -1350,7 +1351,11 @@ bool HashJoinState::IsValidRuntimeJoinFilterMinMaxColumn(
                 case Bodo_CTypes::UINT8:
                 case Bodo_CTypes::UINT16:
                 case Bodo_CTypes::UINT32:
-                case Bodo_CTypes::UINT64: {
+                case Bodo_CTypes::UINT64:
+                case Bodo_CTypes::DATE:
+                case Bodo_CTypes::FLOAT32:
+                case Bodo_CTypes::FLOAT64:
+                case Bodo_CTypes::DATETIME: {
                     return true;
                 }
                 default: {
@@ -2647,6 +2652,15 @@ void HashJoinState::UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
                                                arrow::Int64Scalar);
                     MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::UINT64,
                                                arrow::UInt64Scalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::FLOAT32,
+                                               arrow::FloatScalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::FLOAT64,
+                                               arrow::DoubleScalar);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(
+                        Bodo_CTypes::DATE,
+                        arrow::DateScalar<arrow::Date32Type>);
+                    MIN_MAX_NUMERIC_DTYPE_CASE(Bodo_CTypes::DATETIME,
+                                               arrow::TimestampScalar);
                     default: {
                         throw std::runtime_error(
                             "Unsupported dtype for min/max runtime join "
@@ -4020,26 +4034,26 @@ PyObject* get_runtime_join_filter_min_max_string(HashJoinState* join_state,
  *            from the build table.
  * @param[in] key_idx: the column index of the join key being requested.
  * @param[in] is_min: if true, fetches the min. If false, fetches the max.
+ * @param[in] precision: the precision to use for types like Time.
  */
 PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
                                                      int64_t key_idx,
-                                                     bool is_min) {
+                                                     bool is_min,
+                                                     int64_t precision) {
     try {
         HashJoinState* join_state = (HashJoinState*)join_state_;
         std::unique_ptr<bodo::DataType>& col_type =
             join_state->build_table_schema->column_types[key_idx];
         assert(key_idx < join_state->n_keys);
         assert(join_state->build_input_finalized);
-// Dummy macro to generate a simple filter. Will be replaced with the real logic
-// later.
-#define RTJF_MIN_MAX_NUMERIC_CASE(dtype)                                       \
+#define RTJF_MIN_MAX_NUMERIC_CASE(dtype, ctype, py_func)                       \
     case dtype: {                                                              \
         using T = typename dtype_to_type<dtype>::type;                         \
         size_t row = is_min ? 0 : 1;                                           \
         if (join_state->min_max_values[key_idx].has_value() &&                 \
             join_state->min_max_values[key_idx].value()->get_null_bit(row)) {  \
             T val = getv<T>(join_state->min_max_values[key_idx].value(), row); \
-            return PyLong_FromSsize_t((long)val);                              \
+            return py_func((ctype)val);                                        \
         } else {                                                               \
             return Py_None;                                                    \
         }                                                                      \
@@ -4048,14 +4062,30 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
             case bodo_array_type::NUMPY:
             case bodo_array_type::NULLABLE_INT_BOOL: {
                 switch (col_type->c_type) {
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT8);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT16);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT32);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT64);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT8);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT16);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT32);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT64);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT8, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT16, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT32, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT64, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT8, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT16, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT32, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT64, size_t,
+                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::FLOAT32, double,
+                                              PyFloat_FromDouble);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::FLOAT64, double,
+                                              PyFloat_FromDouble);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::DATE, size_t,
+                                              py_date_from_int);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::DATETIME, size_t,
+                                              py_timestamp_from_int);
                     default: {
                         // If the column is not a supported nullable/numpy
                         // dtype for min/max pushdown, return None
