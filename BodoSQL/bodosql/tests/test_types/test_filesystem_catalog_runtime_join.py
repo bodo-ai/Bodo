@@ -1,11 +1,16 @@
 import datetime
 import io
 
+import numpy as np
 import pandas as pd
 import pytest
 from mpi4py import MPI
 
 import bodosql
+from bodo.tests.iceberg_database_helpers.utils import (
+    create_iceberg_table,
+    get_spark,
+)
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -14,6 +19,7 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
 )
+from bodo.utils.utils import run_rank0
 
 comm = MPI.COMM_WORLD
 
@@ -96,7 +102,6 @@ def test_multiple_filter_join(memory_leak_check, iceberg_database, join_same_col
             sort_output=True,
             reset_index=True,
         )
-        print(stream.getvalue())
 
         check_logger_msg(
             stream,
@@ -140,6 +145,72 @@ def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
             stream,
             "Runtime join filter expression: ((ds.field('{C}') >= 1) & (ds.field('{C}') <= 5))",
         )
+
+
+def test_string_keys(memory_leak_check, iceberg_database):
+    """
+    Variant of test_simple_join with string columns as keys.
+    """
+    table_names = [
+        "ENGLISH_DICTIONARY_TABLE",
+        "SHAKESPEARE_TABLE",
+    ]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    db_schema, warehouse_loc = iceberg_database(table_names)
+
+    # Join the shakespeare and english_dictionary tables to get
+    # the definition of every word with at least 6 characters.
+    # This should produce a runtime join filter on english_dictionary
+    # where word is between "Aaron" and "Zounds".
+
+    query = """
+    WITH shake_words AS (
+        SELECT lat.value as word 
+        FROM SHAKESPEARE_TABLE,
+        LATERAL FLATTEN(STRTOK_TO_ARRAY(PLAYERLINE, ' ')) lat
+        WHERE LENGTH(lat.value) >= 6
+    )
+    SELECT sw.word, edt.definition
+    FROM shake_words sw, ENGLISH_DICTIONARY_TABLE edt
+    WHERE sw.word = edt.word
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY sw.word ORDER BY edt.definition) = 1
+    """
+
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    py_output = pd.DataFrame(
+        {
+            "WORD": ["Return", "Charge", "Strike", "Spring", "Draught", "Square"],
+            "DEFINITION": [
+                '"A day in bank. See Return day  below."',
+                '"A bearing. See Bearing  n. 8."',
+                '"A bushel; four pecks."',
+                '"A crack or fissure in a mast or yard  running obliquely or transversely."',
+                '"A current of air moving through an inclosed place  as through a room or up a chimney."',
+                '"A body of troops formed in a square  esp. one formed to resist a charge of cavalry; a squadron."',
+            ],
+        }
+    )
+
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        ##### Disabled RTJF on non-dictionary-encoded string columns #####
+        # check_logger_msg(
+        #     stream,
+        #     "Runtime join filter expression: ((ds.field('{WORD}') >= 'Aarons') & (ds.field('{WORD}') <= 'Zounds'))",
+        # )
 
 
 def test_dict_keys(memory_leak_check, iceberg_database):
@@ -199,6 +270,130 @@ def test_dict_keys(memory_leak_check, iceberg_database):
             "Runtime join filter expression: ((ds.field('{WORD}') >= 'A') & (ds.field('{WORD}') <= 'Autolycus'))",
         )
         check_logger_msg(stream, "Total number of files is 16. Reading 1 files:")
+
+
+@pytest.fixture
+def rtjf_test_tables():
+    return {
+        "FILTERKEYS1": (
+            {"KEYS1": np.array([1, 2, 2, 4, 5] * 1, dtype=np.int32)},
+            (("KEYS1", "int", True),),
+        ),
+        "FILTERKEYS2": (
+            {"KEYS2": np.array([1, 3, 3, 4, 5] * 1, dtype=np.int64)},
+            (("KEYS2", "long", True),),
+        ),
+        "FILTERKEYS3": (
+            {"KEYS3": np.array([1, 3, 3, 3, 5] * 1, dtype=np.int32)},
+            (("KEYS3", "int", True),),
+        ),
+        "INT_TABLE1": (
+            {
+                "A1": np.array([1, 2, 3, 4, 5] * 2, dtype=np.int32),
+                "B1": np.array([9, 6, 7, 8, 5] * 2, dtype=np.int32),
+                "C1": np.array([5, 10, 11, 12, 13] * 2, dtype=np.int32),
+            },
+            [
+                ("A1", "int", True),
+                ("B1", "int", True),
+                ("C1", "int", True),
+            ],
+        ),
+        "INT_TABLE2": (
+            {
+                "A2": np.array([1, 3, 5, 7, 9] * 2, dtype=np.int32),
+                "B2": np.array([5, 7, 13, 9, 15] * 2, dtype=np.int32),
+            },
+            [
+                ("A2", "int", True),
+                ("B2", "int", True),
+            ],
+        ),
+        "INTERESTING_TABLE1": (
+            {
+                "STRCOL1": pd.Series(
+                    ["pastas", "pizza", "tacos", "adidas", "nike"] * 2, dtype="string"
+                ),
+                "INTCOL1": pd.Series([21, 22, 23, 24, 25] * 2, dtype="int32"),
+                "LONGINTCOL1": pd.Series(
+                    [9000000000000000000, 222, 23, -1, 5] * 2, dtype="int64"
+                ),
+            },
+            [
+                ("STRCOL1", "string", False),
+                ("INTCOL1", "int", True),
+                ("LONGINTCOL1", "long", True),
+            ],
+        ),
+        "INTERESTING_TABLE2": (
+            {
+                "STRCOL2": pd.Series(
+                    ["pastas", "pizza", "tacos", "adida", "puma"] * 2, dtype="string"
+                ),
+                "INTCOL2": pd.Series([21, 22, 25, 26, 25] * 2, dtype="int32"),
+                "LONGINTCOL2": pd.Series(
+                    [9000000000000000001, 222, 23, -1, 5] * 2, dtype="int64"
+                ),
+            },
+            [
+                ("STRCOL2", "string", False),
+                ("INTCOL2", "int", True),
+                ("LONGINTCOL2", "long", True),
+            ],
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "query, expected_out",
+    [
+        pytest.param(
+            """
+            SELECT STRCOL2, COUNT(*) as NMATCH FROM
+                INTERESTING_TABLE2
+                JOIN
+                (SELECT * FROM INTERESTING_TABLE1)
+            ON STRCOL2 = STRCOL1
+            GROUP BY 1
+            """,
+            pd.DataFrame({"STRCOL2": ["pastas", "pizza", "tacos"], "NMATCH": [4] * 3}),
+            id="string_single_key",
+        ),
+    ],
+)
+def test_merged_rtjf(
+    memory_leak_check, iceberg_database, query, expected_out, rtjf_test_tables
+):
+    def impl(bc, query):
+        return bc.sql(query)
+
+    table_names = list(rtjf_test_tables.keys())
+    db_schema, warehouse_loc = iceberg_database(table_names)
+
+    @run_rank0
+    def setup():
+        spark = get_spark()
+        for table_name, (rows, sql_schema) in rtjf_test_tables.items():
+            create_iceberg_table(pd.DataFrame(rows), sql_schema, table_name, spark)
+
+    setup()
+
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=expected_out,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+            use_dict_encoded_strings=True,
+        )
 
 
 def test_date_keys(memory_leak_check, iceberg_database):
