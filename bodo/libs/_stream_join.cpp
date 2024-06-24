@@ -2576,11 +2576,10 @@ void update_build_min_max_state_numeric(
     using T = typename dtype_to_type<DType>::type;
 
     // Convert the bodo array to an arrow array
-    std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), in_arr, &arrow_arr,
-                        false, "", time_unit, false,
-                        bodo::default_buffer_memory_manager());
+    auto arrow_arr = bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), in_arr,
+                                         false, "", time_unit, false,
+                                         bodo::default_buffer_memory_manager());
 
     // Use the vectorized arrow kernel to compute the minimum & maximum,
     // then extract the corresponding arrow scalars.
@@ -2684,11 +2683,10 @@ void HashJoinState::UpdateKeysMinMaxString(
     const std::shared_ptr<array_info>& in_arr, size_t col_idx) {
     assert(in_arr->arr_type == bodo_array_type::STRING);
     // Convert the bodo array to an arrow array
-    std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), in_arr, &arrow_arr,
-                        false, "", time_unit, false,
-                        bodo::default_buffer_memory_manager());
+    auto arrow_arr = bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), in_arr,
+                                         false, "", time_unit, false,
+                                         bodo::default_buffer_memory_manager());
 
     // Use the vectorized arrow kernel to compute the minimum & maximum,
     // then extract the corresponding arrow scalars.

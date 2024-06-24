@@ -358,7 +358,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                     if (time_unit == arrow::TimeUnit::NANO) {
                         return;
                     }
-
+                    [[fallthrough]];
                 default:
                     // Fallthrough for unsupported zero-copy cases
                     // TODO support timestamp types
