@@ -618,13 +618,12 @@ void* pd_pyarrow_array_from_string_array(array_info* str_arr) {
 
     // convert to Arrow array with copy (since passing to Pandas)
     // only str_arr and true arguments are relevant here
-    std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(),
-                        std::shared_ptr<array_info>(str_arr), &arrow_arr,
-                        false /*convert_timedelta_to_int64*/, "", time_unit,
-                        false /*downcast_time_ns_to_us*/,
-                        bodo::default_buffer_memory_manager());
+    auto arrow_arr = bodo_array_to_arrow(
+        bodo::BufferPool::DefaultPtr(), std::shared_ptr<array_info>(str_arr),
+        false /*convert_timedelta_to_int64*/, "", time_unit,
+        false /*downcast_time_ns_to_us*/,
+        bodo::default_buffer_memory_manager());
 
     // https://arrow.apache.org/docs/python/integration/extending.html
     CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");

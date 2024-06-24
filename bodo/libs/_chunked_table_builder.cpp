@@ -1573,6 +1573,7 @@ void ChunkedTableBuilder::AppendJoinOutput(
                         APPEND_ROWS_COL(bodo_array_type::NUMPY,
                                         bodo_array_type::NUMPY,
                                         Bodo_CTypes::TIMEDELTA);
+                        break;
                     default:
                         break;
                 }

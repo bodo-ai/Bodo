@@ -1833,6 +1833,7 @@ void apply_to_column_nullable(
                     i_grp, true);                                                                                                           \
                 break;                                                                                                                      \
             }                                                                                                                               \
+            [[fallthrough]];                                                                                                                \
         case Bodo_FTypes::min:                                                                                                              \
             if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
                 bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \
@@ -1841,6 +1842,7 @@ void apply_to_column_nullable(
                 out_col->set_null_bit(i_grp, true);                                                                                         \
                 break;                                                                                                                      \
             }                                                                                                                               \
+            [[fallthrough]];                                                                                                                \
         default:                                                                                                                            \
             if (DType == Bodo_CTypes::_BOOL) {                                                                                              \
                 bool data_bit = GetBit((uint8_t*)in_col->data1<ArrType>(), i);                                                              \

@@ -404,9 +404,29 @@ if (DEFINED ENV{BUILD_WITH_V8})
       )
 endif()
 
+# Some files cannot be compiled with -Werror=implict-fallthrough, but we want
+# the flag to be enabled for most files, so we create an exclude list of files
+# that are incomptible
+set(allow_implicit_fallthrough_list
+  "bodo/io/arrow.cpp"
+  "bodo/io/arrow_reader.cpp"
+  "bodo/io/iceberg_parquet_reader.cpp"
+  "bodo/io/iceberg_parquet_write.cpp"
+  "bodo/io/json_col_parser.cpp"
+  "bodo/io/parquet_reader.cpp"
+  "bodo/io/parquet_write.cpp"
+  "bodo/io/snowflake_reader.cpp"
+  "bodo/io/timestamptz_parser.cpp"
+  "bodo/libs/_murmurhash3.cpp"
+  "bodo/libs/_puffin.cpp"
+  "bodo/libs/_theta_sketches.cpp"
+  "bodo/libs/gason/gason.cpp"
+
+)
+
 # TODO: Replace with ctest when integrating Catch2
 if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
-  set(sources_list "${sources_list}"
+  set(test_list
     "bodo/tests/test_framework.cpp"
     "bodo/tests/test_example.cpp"
     "bodo/tests/test_dict_builder.cpp"
@@ -429,10 +449,14 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
     "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
   )
   if (DEFINED ENV{BUILD_WITH_V8})
-      set(sources_list "${sources_list}"
+      set(test_list "${test_list}"
       "bodo/tests/test_javascript.cpp"
       )
   endif()
+  list(APPEND sources_list "${test_list}")
+  # TODO(aneesh) tests can be compiled without -Werror=implict-fallthrough for
+  # now, but it's not ideal - this should be fixed over time
+  list(APPEND allow_implicit_fallthrough_list ${test_list})
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
@@ -460,6 +484,18 @@ else()
       "IS_TESTING=1"
   )
 endif()
+
+# Enable erroring on implicit fallthrough in switch/case statements this is
+# critical because we use switch/case statements to handle variants of code for
+# different array types in a lot of places.
+list(APPEND error_on_fallthrough ${sources_list})
+# TODO(aneesh) [BSE-3514] avoid having files exempt from implicit-fallthrough
+list(REMOVE_ITEM error_on_fallthrough ${allow_implicit_fallthrough_list})
+SET_SOURCE_FILES_PROPERTIES(
+  ${error_on_fallthrough}
+  PROPERTIES
+  COMPILE_FLAGS "-Werror=implicit-fallthrough"
+)
 
 target_compile_options(
 	ext

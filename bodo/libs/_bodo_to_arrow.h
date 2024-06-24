@@ -25,11 +25,11 @@
     lhs = std::move(res).ValueOrDie();
 #endif
 
-std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
+std::shared_ptr<arrow::Array> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const std::shared_ptr<array_info> array,
-    std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,
-    const std::string &tz, arrow::TimeUnit::type &time_unit,
-    bool downcast_time_ns_to_us, std::shared_ptr<::arrow::MemoryManager> mm);
+    bool convert_timedelta_to_int64, const std::string &tz,
+    arrow::TimeUnit::type &time_unit, bool downcast_time_ns_to_us,
+    std::shared_ptr<::arrow::MemoryManager> mm);
 
 /**
  * @brief convert Bodo table to Arrow table

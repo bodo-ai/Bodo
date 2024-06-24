@@ -503,13 +503,11 @@ std::string Schema::ToString() {
 // ---------------------------------------------------------------------------
 
 std::shared_ptr<arrow::Array> to_arrow(const std::shared_ptr<array_info> arr) {
-    std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
-                        &arrow_arr, false /*convert_timedelta_to_int64*/, "",
-                        time_unit, false /*downcast_time_ns_to_us*/,
-                        bodo::default_buffer_memory_manager());
-    return arrow_arr;
+    return bodo_array_to_arrow(bodo::BufferPool::DefaultPtr(), std::move(arr),
+                               false /*convert_timedelta_to_int64*/, "",
+                               time_unit, false /*downcast_time_ns_to_us*/,
+                               bodo::default_buffer_memory_manager());
 }
 
 std::unique_ptr<BodoBuffer> AllocateBodoBuffer(
