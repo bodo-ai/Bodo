@@ -1194,19 +1194,18 @@ def _gen_iceberg_reader_chunked_py(
     for i, var_name in enumerate(rtjf_states_vars_names):
         # Fetch the precision and time zone for each of the used columns
         precisions, time_zones = get_rtjf_cols_extra_info(col_typs, rtjf_cols[i])
-        rtjf_str += (
-            # Fetch the precision for each of the used columns
-            # Get runtime join filter column min/max map
-            f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
-            # Add runtime join filters to Iceberg file scan filters
-            f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, bounds)\n"
-            # Add runtime join filters to Iceberg expression filters for Arrow data filtering
-            f"  rtjf_exprs.append(gen_runtime_join_filter_expr(filtered_cols, bounds, {time_zones}))\n"
-        )
+        # Get runtime join filter column min/max map
+        rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
+        # Add runtime join filters to Iceberg file scan filters
+        rtjf_str += f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, bounds)\n"
+        # Add runtime join filters to Iceberg expression filters for Arrow data filtering
+        rtjf_str += f"  rtjf_expr_{i} = gen_runtime_join_filter_expr(filtered_cols, bounds, {time_zones})\n"
+        rtjf_str += f"  if rtjf_expr_{i} != '':\n"
+        rtjf_str += f"    rtjf_exprs.append(rtjf_expr_{i})\n"
     rtjf_str += f"  combined_iceberg_expr_filter_f_str = (iceberg_expr_filter_f_str_{call_id})\n"
     if len(rtjf_states_vars_names):
-        rtjf_str += f"  rtjf_expr = f\"({{' & '.join(rtjf_exprs)}})\"\n"
-        rtjf_str += f'  combined_iceberg_expr_filter_f_str +=  " & " if len(rtjf_exprs) and len(iceberg_expr_filter_f_str_{call_id}) else ""\n'
+        rtjf_str += f'  rtjf_expr = f"({{\' & \'.join(rtjf_exprs)}})" if len(rtjf_exprs) else "True"\n'
+        rtjf_str += f'  combined_iceberg_expr_filter_f_str +=  " & " if len(iceberg_expr_filter_f_str_{call_id}) else ""\n'
         rtjf_str += "  combined_iceberg_expr_filter_f_str += rtjf_expr\n"
         if bodo.user_logging.get_verbose_level() >= 2:
             rtjf_str += "  log_message('Iceberg I/O', f'Runtime join filter expression: {rtjf_expr}')\n"
