@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import datetime
 import typing as pt
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
@@ -32,6 +34,7 @@ from bodo.ir.filter import Filter, FilterVisitor
 from bodo.ir.sql_ext import (
     RtjfMinMaxValueType,
     extract_rtjf_terms,
+    get_rtjf_cols_extra_info,
     get_runtime_join_filter_min_max,
     rtjf_term_repr,
 )
@@ -955,6 +958,8 @@ def get_rtjf_col_min_max_map(
     rtjf_state: bodo.libs.stream_join.JoinStateType,
     rtjf_cols: npt.NDArray,
     col_names: list[str],
+    precisions: list[int],
+    time_zones: list[str | None],
 ) -> tuple[
     list[str], list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]]
 ]:  # pragma: no cover
@@ -966,11 +971,17 @@ def get_rtjf_col_min_max_map(
     bounds = []
     for i in range(n_cols):
         col_idx = rtjf_cols[i]
-        if col_idx == -1:
+        tz = time_zones[i]
+        # [BSE-3493] fix LTZ support with Iceberg
+        if col_idx == -1 or tz is not None:
             continue
         # Get the min/max value bounds for the current key column from the join state
-        min_val = get_runtime_join_filter_min_max(rtjf_state, np.int64(i), True)
-        max_val = get_runtime_join_filter_min_max(rtjf_state, np.int64(i), False)
+        min_val = get_runtime_join_filter_min_max(
+            rtjf_state, np.int64(i), True, precisions[i]
+        )
+        max_val = get_runtime_join_filter_min_max(
+            rtjf_state, np.int64(i), False, precisions[i]
+        )
         col_name = col_names[col_idx]
         out_col_names.append(col_name)
         bounds.append((min_val, max_val))
@@ -1012,16 +1023,43 @@ def add_rtjf_iceberg_filter(
     return combined_filters
 
 
-def convert_pyobj_to_arrow_filter_str(pyobj):
+def convert_pyobj_to_arrow_filter_str(pyobj, tz):
     """
     Converts a Python object to the equivalent arrow
     representation that can be injected as a string into
     an arrow filter. For example:
     42 -> '42'
     "foo bar" -> "'foo bar'"
+    datetime.date(2024, 1, 1) -> "pa.scalar(19723, pa.date32())"
+        (since 2024-01-01 = 19723 days since 1970-01-01)
+    bodo.Time(12, 30, 59, 0, 12, precision=6) -> "pa.scalar(45059000012, pa.time64('us'))"
+    pd.Timestamp("2024-07-04 12:30:01.025601") -> "pa.scalar(1720096201025601000, pa.timestamp('ns'))"
     """
     if isinstance(pyobj, str):
         return f"'{pyobj}'"
+    elif isinstance(pyobj, pd.Timestamp):
+        if tz is not None:
+            suffix = f", '{tz}'"
+            # Convert the Timestamp from a UTC value to an equivalent value in the desired timezone,
+            # thus allowing us to get the correct number of nanoseconds in the desired timezone.
+            pyobj = pyobj.tz_localize("UTC").tz_convert(tz)
+        else:
+            suffix = ""
+        return f"pa.scalar({pyobj.value}, pa.timestamp('ns'{suffix}))"
+    elif isinstance(pyobj, datetime.date):
+        since_1970 = pyobj.toordinal() - 719163
+        return f"pa.scalar({since_1970}, pa.date32())"
+    elif isinstance(pyobj, bodo.Time):
+        if pyobj.precision == 0:
+            return f"pa.scalar({pyobj.value}, pa.time64('s'))"
+        elif pyobj.precision == 3:
+            return f"pa.scalar({pyobj.value}, pa.time64('ms'))"
+        elif pyobj.precision == 6:
+            return f"pa.scalar({pyobj.value}, pa.time64('us'))"
+        elif pyobj.precision == 9:
+            return f"pa.scalar({pyobj.value}, pa.time64('ns'))"
+        else:
+            raise_bodo_error(f"Unsupported Time precision: {pyobj.precision}")
     else:
         return str(pyobj)
 
@@ -1030,6 +1068,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj):
 def gen_runtime_join_filter_expr(
     filtered_cols: list[str],
     bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
+    time_zones: list[str | None],
 ) -> str:  # pragma: no cover
     """
     Create a string that evaluates to an arrow filter expression
@@ -1041,14 +1080,14 @@ def gen_runtime_join_filter_expr(
 
     with bodo.no_warning_objmode(rtjf_expr="unicode_type"):
         exprs = []
-        for col, (min, max) in zip(filtered_cols, bounds):
+        for col, (min, max), tz in zip(filtered_cols, bounds, time_zones):
             if min is not None:
                 exprs.append(
-                    f"(ds.field('{{{col}}}') >= {convert_pyobj_to_arrow_filter_str(min)})"
+                    f"(ds.field('{{{col}}}') >= {convert_pyobj_to_arrow_filter_str(min, tz)})"
                 )
             if max is not None:
                 exprs.append(
-                    f"(ds.field('{{{col}}}') <= {convert_pyobj_to_arrow_filter_str(max)})"
+                    f"(ds.field('{{{col}}}') <= {convert_pyobj_to_arrow_filter_str(max, tz)})"
                 )
         rtjf_expr += " & ".join(exprs)
     return rtjf_expr
@@ -1153,13 +1192,16 @@ def _gen_iceberg_reader_chunked_py(
     if len(rtjf_states_vars_names):
         rtjf_str = "  rtjf_exprs = []\n"
     for i, var_name in enumerate(rtjf_states_vars_names):
+        # Fetch the precision and time zone for each of the used columns
+        precisions, time_zones = get_rtjf_cols_extra_info(col_typs, rtjf_cols[i])
         rtjf_str += (
+            # Fetch the precision for each of the used columns
             # Get runtime join filter column min/max map
-            f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, rtjf_cols_{call_id}[{i}], used_cols_{call_id})\n"
+            f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
             # Add runtime join filters to Iceberg file scan filters
             f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, bounds)\n"
             # Add runtime join filters to Iceberg expression filters for Arrow data filtering
-            f"  rtjf_exprs.append(gen_runtime_join_filter_expr(filtered_cols, bounds))\n"
+            f"  rtjf_exprs.append(gen_runtime_join_filter_expr(filtered_cols, bounds, {time_zones}))\n"
         )
     rtjf_str += f"  combined_iceberg_expr_filter_f_str = (iceberg_expr_filter_f_str_{call_id})\n"
     if len(rtjf_states_vars_names):

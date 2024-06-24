@@ -35,6 +35,26 @@ def test_db_snowflake_catalog(request):
             os.environ.get("SF_PASSWORD", ""),
             "bodopartner.us-east-1",
             "DEMO_WH",
+            "TEST_DB",
+            connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+            iceberg_volume="exvol",
+        )
+    ]
+)
+def test_db_snowflake_iceberg_catalog(request):
+    """
+    Variant of test_db_snowflake_catalog used for Snowflake Iceberg testing.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        bodosql.SnowflakeCatalog(
+            os.environ.get("SF_USERNAME", ""),
+            os.environ.get("SF_PASSWORD", ""),
+            "bodopartner.us-east-1",
+            "DEMO_WH",
             "SNOWFLAKE_SAMPLE_DATA",
             connection_params={
                 "schema": "TPCH_SF1",
