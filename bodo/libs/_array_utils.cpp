@@ -228,7 +228,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         auto dict_array =
             std::dynamic_pointer_cast<arrow::DictionaryArray>(input_array);
         auto dict_indices =
-            std::dynamic_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
+            std::static_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
                 dict_array->indices());
 
         // NOTE: Arrow as of v11.0 uses DictionaryBuilder instead of
