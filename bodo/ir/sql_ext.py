@@ -4,6 +4,7 @@ Implementation of pd.read_sql in Bodo.
 We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
+import datetime
 import sys
 from typing import (
     TYPE_CHECKING,
@@ -454,7 +455,9 @@ install_py_obj_class(
 
 
 @intrinsic
-def get_runtime_join_filter_min_max(typingctx, state_var_t, key_index_t, is_min_t):
+def get_runtime_join_filter_min_max(
+    typingctx, state_var_t, key_index_t, is_min_t, precision_t
+):
     """
     Fetches the minimum or maximum value from a runtime join filter corresponding
     to the specified key index, if one exists. Returns as a PyObject that is
@@ -462,16 +465,15 @@ def get_runtime_join_filter_min_max(typingctx, state_var_t, key_index_t, is_min_
     Whether the min or max is returned depends on the is_min argument.
     """
     assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
-    # assert key_index_t == types.int64
-    # assert is_min_t == types.bool_, breakpoint()
 
     def codegen(context, builder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),  # join state
-                lir.IntType(64),  # key_index_t
+                lir.IntType(64),  # key_index
                 lir.IntType(1),  # is_min
+                lir.IntType(64),  # precision
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -490,11 +492,11 @@ def get_runtime_join_filter_min_max(typingctx, state_var_t, key_index_t, is_min_
         inlined_check_and_propagate_cpp_exception(context, builder)
         return rtjf_min_struct._getvalue()
 
-    sig = types.rtjf_min_max_value_type(state_var_t, key_index_t, is_min_t)
+    sig = types.rtjf_min_max_value_type(state_var_t, key_index_t, is_min_t, precision_t)
     return sig, codegen
 
 
-def convert_pyobj_to_snowflake_str(pyobj):
+def convert_pyobj_to_snowflake_str(pyobj, time_zone):
     """
     Converts a Python object to the equivalent Snowflake
     representation that can be injected as a string into
@@ -502,26 +504,44 @@ def convert_pyobj_to_snowflake_str(pyobj):
 
     42 -> '42'
     "foo bar" -> "'foo bar'"
+    datetime.date(2024, 3, 14) -> "DATE '2024-03-14'"
+    bodo.Time(12, 30, 59, 0, 0, 99) -> "TIME_FROM_PARTS(0, 0, 0, 45059000000091)"
+    pd.Timestamp("2024-07-04 12:30:01.025601") -> "TIMESTAMP_FROM_PARTS(2024, 7, 4, 12, 30, 1, 25601000)"
     """
     if isinstance(pyobj, str):
         return f"'{pyobj}'"
+    elif isinstance(pyobj, pd.Timestamp):
+        if time_zone is None:
+            suffix = "_NTZ"
+        else:
+            suffix = "_LTZ"
+            # Convert the Timestamp from a UTC value to an equivalent value in the desired timezone,
+            # thus allowing us to get the correct value of each date/time component in the desired timezone.
+            pyobj = pyobj.tz_localize("UTC").tz_convert(time_zone)
+        return f"TIMESTAMP{suffix}_FROM_PARTS({pyobj.year}, {pyobj.month}, {pyobj.day}, {pyobj.hour}, {pyobj.minute}, {pyobj.second}, {pyobj.value % 1_000_000_000})"
+    elif isinstance(pyobj, datetime.date):
+        return f"DATE '{pyobj.year:04}-{pyobj.month:02}-{pyobj.day:02}'"
+    elif isinstance(pyobj, bodo.Time):
+        return f"TIME_FROM_PARTS(0, 0, 0, {pyobj.value})"
     else:
         return str(pyobj)
 
 
-def gen_runtime_join_filter_cond(state_var, col_indices):
+def gen_runtime_join_filter_cond(state_var, col_indices, precisions, time_zones):
     pass
 
 
 @overload(gen_runtime_join_filter_cond)
-def overload_gen_runtime_join_filter_cond(state_var, col_indices):
+def overload_gen_runtime_join_filter_cond(
+    state_var, col_indices, precisions, time_zones
+):
     """
     Takes in a join state and tuple of column indices and uses them to construct a string
     representing a conjunction of bounds checks based on the minimum/maximum values inferred
     from the runtime join filter. This is used for Snowflake reads.
     """
 
-    def impl(state_var, col_indices):  # pragma: no cover
+    def impl(state_var, col_indices, precisions, time_zones):  # pragma: no cover
         cond_terms = ["TRUE"]
         n_cols = len(col_indices)
         for i in range(n_cols):
@@ -529,21 +549,21 @@ def overload_gen_runtime_join_filter_cond(state_var, col_indices):
             if col_idx == -1:
                 continue
             # Get the min/max value bounds for the current key column from the join state
-            min_val = get_runtime_join_filter_min_max(state_var, np.int64(i), True)
-            max_val = get_runtime_join_filter_min_max(state_var, np.int64(i), False)
+            min_val = get_runtime_join_filter_min_max(
+                state_var, np.int64(i), True, precisions[i]
+            )
+            max_val = get_runtime_join_filter_min_max(
+                state_var, np.int64(i), False, precisions[i]
+            )
             # Use object mode to convert to a string representation of the bounds check
             with bodo.no_warning_objmode(
                 min_result="unicode_type", max_result="unicode_type"
             ):
                 min_result = max_result = ""
                 if min_val is not None:
-                    min_result = (
-                        f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val)})"
-                    )
+                    min_result = f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
                 if max_val is not None:
-                    max_result = (
-                        f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val)})"
-                    )
+                    max_result = f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
             # If the results were successful, add to the conjunction list
             if min_result != "":
                 cond_terms.append(min_result)
@@ -592,6 +612,26 @@ def extract_rtjf_terms(
         rtjf_state_args.append(state_var)
         rtjf_state_names.append(state_name)
     return rtjf_state_col_indices, rtjf_state_args, rtjf_state_names
+
+
+def get_rtjf_cols_extra_info(column_types, desired_indices):
+    """
+    Fetches the column precisions and timezones for any columns where this information
+    is requried for min/max I/O runtime join filters.
+    """
+    precisions = []
+    time_zones = []
+    for col_idx in desired_indices:
+        if isinstance(column_types[col_idx], bodo.TimeArrayType):
+            precisions.append(column_types[col_idx].precision)
+            time_zones.append(None)
+        elif isinstance(column_types[col_idx], bodo.DatetimeArrayType):
+            precisions.append(-1)
+            time_zones.append(column_types[col_idx].tz)
+        else:
+            precisions.append(-1)
+            time_zones.append(None)
+    return precisions, time_zones
 
 
 def sql_distributed_run(
@@ -721,7 +761,11 @@ def sql_distributed_run(
             sql_node.rtjf_terms
         )
         for state_var, col_indices in zip(rtjf_state_names, rtjf_state_cols):
-            rtjf_suffix += f"    runtime_join_filter_cond = gen_runtime_join_filter_cond({state_var}, {col_indices})\n"
+            # Fetch the precision and time zone for each of the used columns
+            precisions, time_zones = get_rtjf_cols_extra_info(
+                sql_node.out_table_col_types, col_indices
+            )
+            rtjf_suffix += f"    runtime_join_filter_cond = gen_runtime_join_filter_cond({state_var}, {col_indices}, {precisions}, {time_zones})\n"
             rtjf_suffix += '    sql_request = f"SELECT * FROM ({sql_request}) WHERE {runtime_join_filter_cond}"\n'
 
         if bodo.user_logging.get_verbose_level() >= 2:

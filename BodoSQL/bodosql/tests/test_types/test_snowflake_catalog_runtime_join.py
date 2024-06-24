@@ -2,6 +2,113 @@
 """
 Tests reading data from a SnowflakeCatalog in a manner that will cause a runtime join filter 
 to be pushed down to I/O.
+
+Note, the following sequence of Snowflake commands were used to set up several of the tables 
+referenced in this file:
+
+----------------------------------
+--- Creating RTJF_TEST_TABLE_A ---
+----------------------------------
+
+CREATE OR REPLACE ICEBERG TABLE rtjf_test_table_a(
+    id int,
+    value decimal(10,5),
+    hsh binary,
+    time_of_day time(6),
+    neutral_time timestamp_ntz(6),
+    utc_time timestamp_ltz(6)
+)
+  CATALOG = 'SNOWFLAKE'
+  EXTERNAL_VOLUME = 'exvol'
+  BASE_LOCATION = 'rtjf_test_table_a'
+;
+GRANT OWNERSHIP ON rtjf_test_table_a TO SYSADMIN;
+
+INSERT INTO rtjf_test_table_a (
+SELECT 
+    SEQ8(), 
+    SEQ8() / 2500, 
+    TO_BINARY(BASE64_ENCODE(SEQ8()::VARCHAR), 'base64'), 
+    TIME_FROM_PARTS(SEQ1(), SEQ1(), SEQ1(), SEQ8()*1000),
+    TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8(), 0, 0),
+    TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ8(), SEQ1(), 0, 0),
+FROM TABLE(GENERATOR(ROWCOUNT=>10000))
+);
+
+----------------------------------
+--- Creating RTJF_TEST_TABLE_B ---
+----------------------------------
+
+CREATE OR REPLACE ICEBERG TABLE rtjf_test_table_b(
+    id int,
+    value decimal(10,5),
+    hsh binary,
+    time_of_day time(6),
+    neutral_time timestamp_ntz(6),
+    utc_time timestamp_ltz(6)
+)
+  CATALOG = 'SNOWFLAKE'
+  EXTERNAL_VOLUME = 'exvol'
+  BASE_LOCATION = 'rtjf_test_table_b'
+;
+GRANT OWNERSHIP ON rtjf_test_table_b TO SYSADMIN;
+
+INSERT INTO rtjf_test_table_b (
+SELECT 
+    SEQ8()+4000, 
+    (SEQ8() * SEQ8()) / 2500, 
+    TO_BINARY(BASE64_ENCODE((SEQ8()-123)::VARCHAR), 'base64'), 
+    TIME_FROM_PARTS(SEQ1(), 0, SEQ1(), SEQ8()*1000),
+    TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8()+1234, 0, 0),
+    TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ1(), SEQ8(), 0, 0),
+FROM TABLE(GENERATOR(ROWCOUNT=>5000))
+);
+
+----------------------------------
+--- Creating RTJF_TEST_TABLE_C ---
+----------------------------------
+
+CREATE OR REPLACE TABLE rtjf_test_table_c(
+    id int,
+    value decimal(10,5),
+    hsh binary,
+    time_of_day time(6),
+    neutral_time timestamp_ntz(6),
+    utc_time timestamp_ltz(6)
+) AS SELECT 
+    SEQ8(), 
+    SEQ8() / 2500, 
+    TO_BINARY(BASE64_ENCODE(SEQ8()::VARCHAR), 'base64'), 
+    TIME_FROM_PARTS(SEQ1(), SEQ1(), SEQ1(), SEQ8()*1000),
+    TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8(), 0, 0),
+    TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ8(), SEQ1(), 0, 0),
+FROM TABLE(GENERATOR(ROWCOUNT=>10000))
+;
+GRANT OWNERSHIP ON rtjf_test_table_c TO SYSADMIN;
+
+
+
+----------------------------------
+--- Creating RTJF_TEST_TABLE_D ---
+----------------------------------
+
+CREATE OR REPLACE TABLE rtjf_test_table_d(
+    id int,
+    value decimal(10,5),
+    hsh binary,
+    time_of_day time(6),
+    neutral_time timestamp_ntz(6),
+    utc_time timestamp_ltz(6)
+) AS SELECT 
+    SEQ8()+4000, 
+    (SEQ8() * SEQ8()) / 2500, 
+    TO_BINARY(BASE64_ENCODE((SEQ8()-123)::VARCHAR), 'base64'), 
+    TIME_FROM_PARTS(SEQ1(), 0, SEQ1(), SEQ8()*1000),
+    TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8()+1234, 0, 0),
+    TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ1(), SEQ8(), 0, 0),
+FROM TABLE(GENERATOR(ROWCOUNT=>5000))
+;
+GRANT OWNERSHIP ON rtjf_test_table_d TO SYSADMIN;
 """
 
 
@@ -19,10 +126,12 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
     pytest_snowflake,
+    temp_env_override,
 )
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     snowflake_sample_data_snowflake_catalog,
     test_db_snowflake_catalog,
+    test_db_snowflake_iceberg_catalog,
 )
 
 pytestmark = pytest_snowflake
@@ -331,6 +440,253 @@ def test_dict_key_join(test_db_snowflake_catalog, memory_leak_check):
             stream,
             "pos: DictionaryArrayType(StringArrayType())",
         )
+
+
+def test_date_key_join(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Variant of test_simple_join where the join is being done on date keys.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # Joins the LINEITEM and ORDERS tables in a way that will
+    # cause the following runtime join filters on lineitem:
+    # - l_shipdate >= 1995-02-21
+    # - l_shipdate <= 1998-08-02
+    query = """
+    SELECT YEAR(L_SHIPDATE) as Y, COUNT(*) as C
+    FROM tpch_sf1.orders, tpch_sf1.lineitem
+    WHERE O_ORDERPRIORITY='1-URGENT' AND O_ORDERSTATUS='O' AND L_SHIPDATE = O_ORDERDATE
+    GROUP BY 1
+    """
+    py_output = pd.DataFrame(
+        {
+            "Y": [1995, 1996, 1997, 1998],
+            "C": [70830467, 114831846, 113988017, 66500233],
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(
+            stream,
+            'SELECT * FROM (SELECT "L_SHIPDATE" FROM (SELECT "L_SHIPDATE" FROM "TEST_DB"."TPCH_SF1"."LINEITEM" WHERE "L_SHIPDATE" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= DATE \'1995-02-21\') AND ($1 <= DATE \'1998-08-02\')',
+        )
+
+
+def test_float_key_join(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Variant of test_simple_join where the join is being done on float keys.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+
+    # Joins the SUPPLIER and CUSTOMER tables in a way that will
+    # cause the following runtime join filters on customer:
+    # - c_acctbal >= -935.13
+    # - c_acctbal <= 9931.82
+    query = """
+    SELECT s_nationkey, COUNT(*) as n_match
+    FROM tpch_sf1.supplier, tpch_sf1.customer
+    WHERE supplier.s_acctbal = customer.c_acctbal
+    AND s_nationkey BETWEEN 10 AND 15
+    AND STARTSWITH(s_phone, '21')
+    GROUP BY 1
+    """
+    py_output = pd.DataFrame(
+        {
+            "S_NATIONKEY": [11],
+            "N_MATCH": [64],
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(
+            stream,
+            'SELECT * FROM (SELECT "C_ACCTBAL" FROM (SELECT "C_ACCTBAL" FROM "TEST_DB"."TPCH_SF1"."CUSTOMER" WHERE "C_ACCTBAL" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= -935.13) AND ($1 <= 9931.82)',
+        )
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+@pytest.mark.parametrize(
+    "use_iceberg, table_1, table_2, log_message",
+    [
+        pytest.param(
+            True,
+            "rtjf_test_table_a",
+            "rtjf_test_table_b",
+            "Runtime join filter expression: ((ds.field('{NEUTRAL_TIME}') >= pa.scalar(1708513200000000000, pa.timestamp('ns'))) & (ds.field('{NEUTRAL_TIME}') <= pa.scalar(1726491600000000000, pa.timestamp('ns'))))",
+            id="snowflake_iceberg",
+        ),
+        pytest.param(
+            False,
+            "rtjf_test_table_c",
+            "rtjf_test_table_d",
+            'Runtime join filter query: SELECT * FROM (SELECT "NEUTRAL_TIME" FROM (SELECT "NEUTRAL_TIME" FROM "TEST_DB"."PUBLIC"."RTJF_TEST_TABLE_C" WHERE "NEUTRAL_TIME" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= TIMESTAMP_FROM_PARTS(2024, 2, 21, 11, 0, 0, 0)) AND ($1 <= TIMESTAMP_FROM_PARTS(2024, 9, 16, 13, 0, 0, 0))',
+            id="snowflake_native",
+        ),
+    ],
+)
+def test_timestamp_ntz_key_join(
+    use_iceberg,
+    table_1,
+    table_2,
+    log_message,
+    test_db_snowflake_catalog,
+    test_db_snowflake_iceberg_catalog,
+    memory_leak_check,
+):
+    """
+    Variant of test_simple_join where the join is being done on timestamp_ntz keys.
+    Tested on a Snowflake native table, and a Snowflake Iceberg table.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    catalog = (
+        test_db_snowflake_iceberg_catalog if use_iceberg else test_db_snowflake_catalog
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    # Joins the Snowflake Iceberg RTJF tables 1 & 2 in a way that will
+    # cause the following runtime join filters on table 2:
+    # - neutral_time >= 2024-02-21 11:00:00.000
+    # - neutral_time <= 2024-09-16 13:00:00.000
+    query = ""
+    query += f"SELECT HOUR({table_1}.neutral_time) as hod, COUNT(*) as n_match\n"
+    query += f"FROM {table_1}, {table_2}\n"
+    query += f"WHERE {table_1}.neutral_time = {table_2}.neutral_time\n"
+    query += f"AND HOUR({table_2}.time_of_day) BETWEEN 1 AND 3\n"
+    query += "GROUP BY 1\n"
+    py_output = pd.DataFrame(
+        {
+            "HOD": [3, 4, 5, 11, 12, 13, 19, 20, 21],
+            "N_MATCH": [78] * 3 + [79] * 3 + [78] * 3,
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(stream, log_message)
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+@pytest.mark.parametrize(
+    "use_iceberg, table_1, table_2, log_message",
+    [
+        pytest.param(
+            True,
+            "rtjf_test_table_a",
+            "rtjf_test_table_b",
+            "Runtime join filter expression: ((ds.field('{UTC_TIME}') >= pa.scalar(1704070800000000000, pa.timestamp('ns'))) & (ds.field('{UTC_TIME}') <= pa.scalar(1732561200000000000, pa.timestamp('ns'))))",
+            id="snowflake_iceberg",
+            marks=pytest.mark.skip(
+                reason="[BSE-3493] Support min/max I/O runtime join filters on TIMESTAMP_LTZ for Iceberg"
+            ),
+        ),
+        pytest.param(
+            False,
+            "rtjf_test_table_c",
+            "rtjf_test_table_d",
+            'Runtime join filter query: SELECT * FROM (SELECT "UTC_TIME" FROM (SELECT "UTC_TIME" FROM "TEST_DB"."PUBLIC"."RTJF_TEST_TABLE_C" WHERE "UTC_TIME" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= TIMESTAMP_LTZ_FROM_PARTS(2024, 1, 1, 1, 0, 0, 0)) AND ($1 <= TIMESTAMP_LTZ_FROM_PARTS(2024, 11, 25, 19, 0, 0, 0))',
+            id="snowflake_native",
+        ),
+    ],
+)
+def test_timestamp_ltz_key_join(
+    use_iceberg,
+    table_1,
+    table_2,
+    log_message,
+    test_db_snowflake_catalog,
+    test_db_snowflake_iceberg_catalog,
+    memory_leak_check,
+):
+    """
+    Variant of test_simple_join where the join is being done on timestamp_ntz keys.
+    Tested on a Snowflake native table, and a Snowflake Iceberg table.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    catalog = (
+        test_db_snowflake_iceberg_catalog if use_iceberg else test_db_snowflake_catalog
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+
+    # Joins the Snowflake Iceberg RTJF tables 1 & 2 in a way that will
+    # cause the following runtime join filters on table 2:
+    # - utc_time >= 2024-01-01 01:00:00.000000
+    # - utc_time <= 2024-11-25 19:00:00.000000
+    query = ""
+    query += f"SELECT HOUR({table_1}.utc_time) as hod, COUNT(*) as n_match\n"
+    query += f"FROM {table_1}, {table_2}\n"
+    query += f"WHERE {table_1}.utc_time = {table_2}.utc_time\n"
+    query += f"AND HOUR({table_2}.time_of_day) BETWEEN 1 AND 3\n"
+    query += "GROUP BY 1\n"
+    py_output = pd.DataFrame(
+        {
+            "HOD": [1, 2, 3],
+            "N_MATCH": [12] * 3,
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(stream, log_message)
 
 
 @pytest.mark.skip("Disabled RTJF on non-dictionary-encoded string columns")

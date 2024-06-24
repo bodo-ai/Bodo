@@ -1,3 +1,4 @@
+import datetime
 import io
 
 import pandas as pd
@@ -198,3 +199,176 @@ def test_dict_keys(memory_leak_check, iceberg_database):
             "Runtime join filter expression: ((ds.field('{WORD}') >= 'A') & (ds.field('{WORD}') <= 'Autolycus'))",
         )
         check_logger_msg(stream, "Total number of files is 16. Reading 1 files:")
+
+
+def test_date_keys(memory_leak_check, iceberg_database):
+    """
+    Variant of test_simple_join with date columns as keys.
+    """
+    table_names = [
+        "MOCK_NEWS_TABLE",
+        "MOCK_HOLIDAY_TABLE",
+    ]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    db_schema, warehouse_loc = iceberg_database(table_names)
+
+    # Join the news & holiday tables on the date. This should produce a runtime
+    # join filter on the news table where the date is between 2021-02-04 and 2021-12-31
+
+    query = """
+    SELECT news.day as DAY, news.event as EVENT, holiday.name as NAME
+    FROM MOCK_NEWS_TABLE news, MOCK_HOLIDAY_TABLE holiday
+    WHERE news.DAY = holiday.DAY
+    """
+
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    py_output = pd.DataFrame(
+        {
+            "DAY": [
+                datetime.date(2021, 2, 14),
+                datetime.date(2021, 7, 4),
+                datetime.date(2021, 12, 25),
+                datetime.date(2021, 10, 31),
+                datetime.date(2021, 6, 19),
+                datetime.date(2021, 9, 6),
+                datetime.date(2021, 5, 31),
+                datetime.date(2021, 11, 25),
+            ],
+            "EVENT": [
+                "P10",
+                "V50",
+                "\\24",
+                "Z69",
+                "U35",
+                "X14",
+                "T16",
+                "[94",
+            ],
+            "NAME": [
+                "VALENTINE'S DAY",
+                "INDEPENDENCE DAY",
+                "CHRISTMAS",
+                "HALLOWEEN",
+                "JUNETEENTH",
+                "LABOR DAY",
+                "MEMORIAL DAY",
+                "THANKSGIVING",
+            ],
+        }
+    )
+
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(
+            stream,
+            "Runtime join filter expression: ((ds.field('{DAY}') >= pa.scalar(18672, pa.date32())) & (ds.field('{DAY}') <= pa.scalar(18986, pa.date32())))",
+        )
+        check_logger_msg(stream, "Total number of files is 3. Reading 1 files:")
+
+
+def test_float_keys(memory_leak_check, iceberg_database):
+    """
+    Variant of test_simple_join with float columns as keys.
+    """
+    table_names = [
+        "BANK_ACCOUNTS_TABLE",
+        "SUSPICIOUS_SUMS_TABLE",
+    ]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    db_schema, warehouse_loc = iceberg_database(table_names)
+
+    # Join the bank accounts & suspicious sums tables on the date. This should produce a
+    # runtime join filter on the accounts table where the balance is between 0.0 and 488000.09
+
+    query = """
+    SELECT acct.ACCTNMBR as ACCTNMBR, susp.FLAG as FLAG
+    FROM BANK_ACCOUNTS_TABLE acct, SUSPICIOUS_SUMS_TABLE susp
+    WHERE acct.BALANCE = susp.BALANCE
+    """
+
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    py_output = pd.DataFrame(
+        {
+            "ACCTNMBR": [
+                10000,
+                19100,
+                28200,
+                37300,
+                46400,
+                55500,
+                20325,
+                31525,
+                53925,
+                21750,
+                24550,
+                26950,
+                29750,
+                35750,
+                38550,
+                40950,
+                43750,
+                58150,
+                29920,
+                39920,
+                47420,
+                57420,
+            ],
+            "FLAG": [
+                "EMPTY",
+                "EMPTY",
+                "EMPTY",
+                "EMPTY",
+                "EMPTY",
+                "EMPTY",
+                "SHELL",
+                "SHELL",
+                "SHELL",
+                "HACK",
+                "HACK",
+                "HACK",
+                "HACK",
+                "HACK",
+                "HACK",
+                "HACK",
+                "HACK",
+                "HACK",
+                "CAYMAN",
+                "CAYMAN",
+                "CAYMAN",
+                "CAYMAN",
+            ],
+        }
+    )
+
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(
+            stream,
+            "Runtime join filter expression: ((ds.field('{BALANCE}') >= 0.0) & (ds.field('{BALANCE}') <= 488000.09))",
+        )
