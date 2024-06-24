@@ -126,7 +126,7 @@ add_compile_options(
   "-Wno-c99-designator"         # Check if still necessary?
   "-Wno-return-type-c-linkage"  # Check if still necessary?
   "-Wno-macro-redefined"        # Check if still necessary?
-  "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches        
+  "-Wno-implicit-const-int-float-conversion" # Necessary for DataSketches
   "-fwrapv"                     # Conda used to force-add. Remove in follow up PR
   "-fstack-protector-strong"    # Conda used to force-add. Remove in follow up PR
   "-D_FORTIFY_SOURCE=2"         # Conda used to force-add. Remove in follow up PR
@@ -279,7 +279,7 @@ add_custom_command(
   DEPENDS bodo/memory.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp" "bodo/memory.pyx"  
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/memory.cpp" "bodo/memory.pyx"
   COMMENT "Cythonizing Source bodo/memory.pyx into bodo/memory.cpp"
 )
 
@@ -296,7 +296,7 @@ add_custom_command(
   DEPENDS bodo/tests/memory_tester.pyx
   VERBATIM
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"  
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/tests/memory_tester.cpp" "bodo/tests/memory_tester.pyx"
   COMMENT "Cythonizing Source bodo/tests/memory_tester.pyx into bodo/tests/memory_tester.cpp"
 )
 
@@ -377,6 +377,7 @@ set(sources_list
   "bodo/libs/_stream_join.cpp"
   "bodo/libs/_stream_nested_loop_join.cpp"
   "bodo/libs/_stream_groupby.cpp"
+  "bodo/libs/_stream_window.cpp"
   "bodo/libs/_dict_builder.cpp"
   "bodo/libs/_table_builder_utils.cpp"
   "bodo/libs/_table_builder.cpp"

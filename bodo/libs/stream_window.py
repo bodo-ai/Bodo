@@ -5,23 +5,29 @@ Support for streaming window functions.
 import typing as pt
 from functools import cached_property
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
-from numba.core import types
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
     AbstractTemplate,
     infer_global,
     signature,
 )
-from numba.extending import lower_builtin, models, overload, register_model
+from numba.extending import intrinsic, lower_builtin, models, overload, register_model
 
 import bodo
+from bodo.ext import stream_window_cpp
 from bodo.hiframes.pd_groupby_ext import get_window_func_types
 from bodo.ir.aggregate import supported_agg_funcs
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
     py_data_to_cpp_table,
+)
+from bodo.libs.array import (
+    table_type as cpp_table_type,
 )
 from bodo.libs.stream_base import StreamingStateType
 from bodo.utils.transform import get_call_expr_arg
@@ -32,6 +38,19 @@ from bodo.utils.typing import (
     is_overload_none,
     unwrap_typeref,
 )
+
+ll.add_symbol(
+    "window_state_init_py_entry", stream_window_cpp.window_state_init_py_entry
+)
+ll.add_symbol(
+    "window_build_consume_batch_py_entry",
+    stream_window_cpp.window_build_consume_batch_py_entry,
+)
+ll.add_symbol(
+    "window_produce_output_batch_py_entry",
+    stream_window_cpp.window_produce_output_batch_py_entry,
+)
+ll.add_symbol("delete_window_state", stream_window_cpp.delete_window_state)
 
 
 class WindowStateType(StreamingStateType):
@@ -84,6 +103,59 @@ class WindowStateType(StreamingStateType):
             self.func_names,
             self.build_table_type,
         )
+
+    @staticmethod
+    def is_sort_supported_array_type(arr_type: types.Type) -> bool:
+        """Is the given type an array type supported with sort.
+
+        Args:
+            arr_type (types.Type): The array type to check
+
+        Returns:
+            bool: Can the array be used in the sort implementation.
+        """
+        return isinstance(
+            arr_type,
+            (
+                types.Array,
+                bodo.IntegerArrayType,
+                bodo.TimeArrayType,
+                bodo.DecimalArrayType,
+                bodo.FloatingArrayType,
+                bodo.DatetimeArrayType,
+            ),
+        ) or arr_type in (
+            bodo.boolean_array_type,
+            bodo.datetime_date_array_type,
+            bodo.null_array_type,
+            bodo.string_array_type,
+            bodo.binary_array_type,
+            bodo.datetime_timedelta_array_type,
+        )
+
+    @cached_property
+    def is_sort_impl(self) -> bool:
+        sort_supporting_funcs = all(
+            [name in self.sort_supporting_func_names() for name in self.func_names]
+        )
+        if sort_supporting_funcs:
+            # Verify that all types in the partition by and order by columns are supported.
+            # These are regular numpy arrays, nullable arrays, and string/binary arrays.
+            key_types = self.partition_by_types + self.order_by_types
+            for arr_type in key_types:
+                if not self.is_sort_supported_array_type(arr_type):
+                    return False
+            return True
+        return False
+
+    @staticmethod
+    def sort_supporting_func_names():
+        """Determine which function names can take the sort based path.
+
+        Returns:
+            Set[str]: Set of function names that can support sort.
+        """
+        return {"dense_rank"}
 
     @staticmethod
     def _derive_input_type(
@@ -338,6 +410,134 @@ class WindowStateType(StreamingStateType):
 register_model(WindowStateType)(models.OpaqueModel)
 
 
+@intrinsic
+def _init_window_state(
+    typingctx,
+    operator_id,
+    build_arr_dtypes,
+    build_arr_array_types,
+    n_build_arrs,
+    window_ftypes_t,
+    n_funcs_t,
+    order_by_asc_t,
+    order_by_na_t,
+    n_order_by_keys_t,
+    partition_by_cols_to_keep_t,
+    order_by_cols_to_keep_t,
+    output_state_type,
+    parallel_t,
+):
+    """Initialize C++ GroupbyState pointer
+
+    Args:
+        operator_id (int64): ID of this operator (used for looking up budget),
+        build_arr_dtypes (int8*): pointer to array of ints representing array dtypes
+                                   (as provided by numba_to_c_type)
+        build_arr_array_types (int8*): pointer to array of ints representing array types
+                                    (as provided by numba_to_c_array_type)
+        n_build_arrs (int32): number of build columns
+        ftypes (int32*): List of window functions to use
+        n_funcs (int): Number of window functions.
+        order_by_asc_t (bool*): Bitmask for sort direction of order-by columns.
+        order_by_na_t (bool*): Bitmask for null sort direction of order-by columns.
+        n_order_by_keys_t (int): Number of order-by columns.
+        partition_by_cols_to_keep_t (bool*): Bitmask of partition/key columns to retain in output.
+        order_by_cols_to_keep_t (bool*): Bitmask of order-by columns to retain in output.
+        output_state_type (TypeRef[WindowStateType]): The output type for the state
+                                                    that should be generated.
+        parallel_t (bool): Is this executed in parallel.
+    """
+    output_type = unwrap_typeref(output_state_type)
+
+    def codegen(context, builder, sig, args):
+        (
+            operator_id,
+            build_arr_dtypes,
+            build_arr_array_types,
+            n_build_arrs,
+            window_ftypes,
+            n_funcs,
+            order_by_asc,
+            order_by_na,
+            n_order_by_keys,
+            partition_by_cols_to_keep,
+            order_by_cols_to_keep,
+            _,  # output_state_type
+            parallel,
+        ) = args
+        n_keys = context.get_constant(types.uint64, output_type.n_keys)
+        output_batch_size = context.get_constant(
+            types.int64, bodo.bodosql_streaming_batch_size
+        )
+        # We don't support adaptive shuffling yet.
+        stream_loop_sync_iters = (
+            bodo.default_stream_loop_sync_iters
+            if bodo.stream_loop_sync_iters == -1
+            else bodo.stream_loop_sync_iters
+        )
+        sync_iter = context.get_constant(types.int64, stream_loop_sync_iters)
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="window_state_init_py_entry"
+        )
+        input_args = (
+            operator_id,
+            build_arr_dtypes,
+            build_arr_array_types,
+            n_build_arrs,
+            window_ftypes,
+            n_funcs,
+            n_keys,
+            order_by_asc,
+            order_by_na,
+            n_order_by_keys,
+            partition_by_cols_to_keep,
+            order_by_cols_to_keep,
+            output_batch_size,
+            parallel,
+            sync_iter,
+        )
+        ret = builder.call(fn_tp, input_args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = output_type(
+        types.int64,
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        types.CPointer(types.int32),
+        types.int32,
+        types.CPointer(types.bool_),
+        types.CPointer(types.bool_),
+        types.int64,
+        types.CPointer(types.bool_),
+        types.CPointer(types.bool_),
+        output_state_type,
+        parallel_t,
+    )
+    return sig, codegen
+
+
 def init_window_state(
     operator_id,
     partition_indices,
@@ -404,44 +604,77 @@ def overload_init_window_state(
     sort_nulls_last_arr = np.array(output_type.nulls_last, np.bool_)
     kept_partition_cols_arr = np.array(output_type.kept_partition_by_cols, np.bool_)
     kept_order_by_cols_arr = np.array(output_type.kept_order_by_cols, np.bool_)
-
     n_orderby_cols = len(output_type.order_by_indices)
 
-    def impl(
-        operator_id,
-        partition_indices,
-        order_by_indices,
-        is_ascending,
-        nulls_last,
-        func_names,
-        kept_input_indices,
-        op_pool_size_bytes=-1,
-        expected_state_type=None,
-        parallel=False,
-    ):  # pragma: no cover
-        # Currently the window state C++ object is just a group by state.
-        output_val = bodo.libs.stream_groupby._init_groupby_state(
+    if output_type.is_sort_impl:
+        # The internal C++ window state object is just for sort implementations
+        # right now.
+        def impl(
             operator_id,
-            build_arr_dtypes.ctypes,
-            build_arr_array_types.ctypes,
-            n_build_arrs,
-            ftypes_arr.ctypes,
-            window_ftypes_arr.ctypes,
-            f_in_offsets_arr.ctypes,
-            f_in_cols_arr.ctypes,
-            n_funcs,
-            sort_ascending_arr.ctypes,
-            sort_nulls_last_arr.ctypes,
-            n_orderby_cols,
-            kept_partition_cols_arr.ctypes,
-            kept_order_by_cols_arr.ctypes,
-            op_pool_size_bytes,
-            output_type,
-            parallel,
-        )
-        return output_val
+            partition_indices,
+            order_by_indices,
+            is_ascending,
+            nulls_last,
+            func_names,
+            kept_input_indices,
+            op_pool_size_bytes=-1,
+            expected_state_type=None,
+            parallel=False,
+        ):  # pragma: no cover
+            output_val = bodo.libs.stream_window._init_window_state(
+                operator_id,
+                build_arr_dtypes.ctypes,
+                build_arr_array_types.ctypes,
+                n_build_arrs,
+                window_ftypes_arr.ctypes,
+                n_funcs,
+                sort_ascending_arr.ctypes,
+                sort_nulls_last_arr.ctypes,
+                n_orderby_cols,
+                kept_partition_cols_arr.ctypes,
+                kept_order_by_cols_arr.ctypes,
+                output_type,
+                parallel,
+            )
+            return output_val
 
-    return impl
+        return impl
+    else:
+        # The hash partition window state C++ object is just a group by state.
+        def impl(
+            operator_id,
+            partition_indices,
+            order_by_indices,
+            is_ascending,
+            nulls_last,
+            func_names,
+            kept_input_indices,
+            op_pool_size_bytes=-1,
+            expected_state_type=None,
+            parallel=False,
+        ):  # pragma: no cover
+            output_val = bodo.libs.stream_groupby._init_groupby_state(
+                operator_id,
+                build_arr_dtypes.ctypes,
+                build_arr_array_types.ctypes,
+                n_build_arrs,
+                ftypes_arr.ctypes,
+                window_ftypes_arr.ctypes,
+                f_in_offsets_arr.ctypes,
+                f_in_cols_arr.ctypes,
+                n_funcs,
+                sort_ascending_arr.ctypes,
+                sort_nulls_last_arr.ctypes,
+                n_orderby_cols,
+                kept_partition_cols_arr.ctypes,
+                kept_order_by_cols_arr.ctypes,
+                op_pool_size_bytes,
+                output_type,
+                parallel,
+            )
+            return output_val
+
+        return impl
 
 
 def window_build_consume_batch(window_state, table, is_last):
@@ -462,16 +695,58 @@ def gen_window_build_consume_batch_impl(window_state: WindowStateType, table, is
     in_col_inds = MetaType(window_state.build_indices)
     n_table_cols = len(in_col_inds)
 
-    def impl_window_build_consume_batch(
-        window_state, table, is_last
-    ):  # pragma: no cover
-        cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
-        # Currently the window state C++ object is just a group by state.
-        return bodo.libs.stream_groupby._groupby_build_consume_batch(
-            window_state, cpp_table, is_last, True
-        )
+    if window_state.is_sort_impl:
 
-    return impl_window_build_consume_batch
+        def impl_window_build_consume_batch(
+            window_state, table, is_last
+        ):  # pragma: no cover
+            cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
+            # Currently the window state C++ object is just a group by state.
+            return bodo.libs.stream_window._window_build_consume_batch(
+                window_state, cpp_table, is_last
+            )
+
+        return impl_window_build_consume_batch
+
+    else:
+
+        def impl_window_build_consume_batch(
+            window_state, table, is_last
+        ):  # pragma: no cover
+            cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
+            # Currently the window state C++ object is just a group by state.
+            return bodo.libs.stream_groupby._groupby_build_consume_batch(
+                window_state, cpp_table, is_last, True
+            )
+
+        return impl_window_build_consume_batch
+
+
+@intrinsic
+def _window_build_consume_batch(
+    typingctx,
+    groupby_state,
+    cpp_table,
+    is_last,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="window_build_consume_batch_py_entry"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.bool_(groupby_state, cpp_table, is_last)
+    return sig, codegen
 
 
 @infer_global(window_build_consume_batch)
@@ -514,24 +789,79 @@ def gen_window_produce_output_batch_impl(window_state: WindowStateType, produce_
         out_cols = window_state.cpp_output_table_to_py_table_indices
         out_cols_arr = np.array(out_cols, dtype=np.int64)
 
-    def impl_window_produce_output_batch(
+    if window_state.is_sort_impl:
+
+        def impl_window_produce_output_batch(
+            window_state,
+            produce_output,
+        ):  # pragma: no cover
+            (
+                out_cpp_table,
+                out_is_last,
+            ) = bodo.libs.stream_window._window_produce_output_batch(
+                window_state, produce_output
+            )
+            out_table = cpp_table_to_py_table(
+                out_cpp_table, out_cols_arr, out_table_type, 0
+            )
+            delete_table(out_cpp_table)
+            return out_table, out_is_last
+
+        return impl_window_produce_output_batch
+
+    else:
+
+        def impl_window_produce_output_batch(
+            window_state,
+            produce_output,
+        ):  # pragma: no cover
+            # Currently the window state C++ object is just a group by state.
+            (
+                out_cpp_table,
+                out_is_last,
+            ) = bodo.libs.stream_groupby._groupby_produce_output_batch(
+                window_state, produce_output
+            )
+            out_table = cpp_table_to_py_table(
+                out_cpp_table, out_cols_arr, out_table_type, 0
+            )
+            delete_table(out_cpp_table)
+            return out_table, out_is_last
+
+        return impl_window_produce_output_batch
+
+
+@intrinsic
+def _window_produce_output_batch(
+    typingctx,
+    window_state,
+    produce_output,
+):
+    def codegen(context, builder, sig, args):
+        out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(1).as_pointer(), lir.IntType(1)],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="window_produce_output_batch_py_entry"
+        )
+        func_args = [
+            args[0],
+            out_is_last,
+            args[1],
+        ]
+        table_ret = builder.call(fn_tp, func_args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        items = [table_ret, builder.load(out_is_last)]
+        return context.make_tuple(builder, sig.return_type, items)
+
+    ret_type = types.Tuple([cpp_table_type, types.bool_])
+    sig = ret_type(
         window_state,
         produce_output,
-    ):  # pragma: no cover
-        # Currently the window state C++ object is just a group by state.
-        (
-            out_cpp_table,
-            out_is_last,
-        ) = bodo.libs.stream_groupby._groupby_produce_output_batch(
-            window_state, produce_output
-        )
-        out_table = cpp_table_to_py_table(
-            out_cpp_table, out_cols_arr, out_table_type, 0
-        )
-        delete_table(out_cpp_table)
-        return out_table, out_is_last
-
-    return impl_window_produce_output_batch
+    )
+    return sig, codegen
 
 
 @infer_global(window_produce_output_batch)
@@ -573,7 +903,34 @@ def overload_delete_window_state(window_state):
             f"for first arg `window_state`, found {window_state}"
         )
 
-    # Currently the window state C++ object is just a group by state.
-    return lambda window_state: bodo.libs.stream_groupby.delete_groupby_state(
-        window_state
-    )  # pragma: no cover
+    if window_state.is_sort_impl:
+        return lambda window_state: bodo.libs.stream_window._delete_window_state(
+            window_state
+        )
+    else:
+        # Currently the window state C++ object is just a group by state.
+        return lambda window_state: bodo.libs.stream_groupby.delete_groupby_state(
+            window_state
+        )  # pragma: no cover
+
+
+@intrinsic
+def _delete_window_state(
+    typingctx,
+    window_state,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_window_state"
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    sig = types.void(window_state)
+    return sig, codegen

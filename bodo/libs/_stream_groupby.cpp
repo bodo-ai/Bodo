@@ -520,51 +520,27 @@ void validate_mrnf_args(const std::vector<int32_t>& ftypes,
     }
 }
 
-/**
- * @brief Helper function to get a bitmask specifying the columns
- * to keep in the output in the Min Row-Number Filter case.
- * We assume that the columns are in the order:
- * - Partition columns
- * - Order-By columns
- * - Remaining columns
- * We will keep the partition columns corresponding to
- * true bits in the mrnf_part_cols_to_keep bitmask.
- * Similarly for the order-by columns using mrnf_sort_cols_to_keep.
- * All remaining columns will be retained.
- * The output is essentially:
- * mrnf_part_cols_to_keep.extend(mrnf_sort_cols_to_keep).extend(
- *  [True] * (n_cols - len(mrnf_part_cols_to_keep) -
- *  len(mrnf_sort_cols_to_keep))
- * )
- *
- * TODO: Rename this functions since its shared by window and mrnf.
- *
- * @param mrnf_part_cols_to_keep Bitmask of the partition columns to retain.
- * @param mrnf_sort_cols_to_keep Bitmask of the order-by columns to retain.
- * @param n_cols Total number of columns.
- * @return std::vector<bool> Combined bitmask of the columns to retain.
- */
-std::vector<bool> get_mrnf_cols_to_keep_bitmask(
-    const std::vector<bool>& mrnf_part_cols_to_keep,
-    const std::vector<bool>& mrnf_sort_cols_to_keep, const size_t n_cols) {
+std::vector<bool> get_window_cols_to_keep_bitmask(
+    const std::vector<bool>& partition_by_cols_to_keep,
+    const std::vector<bool>& order_by_cols_to_keep, const size_t n_cols) {
     std::vector<bool> cols_to_keep(n_cols, false);
     // Set bitmask to true for partition columns to keep based on
-    // mrnf_part_cols_to_keep.
-    for (size_t i = 0; i < mrnf_part_cols_to_keep.size(); i++) {
-        if (mrnf_part_cols_to_keep[i]) {
+    // partition_by_cols_to_keep.
+    for (size_t i = 0; i < partition_by_cols_to_keep.size(); i++) {
+        if (partition_by_cols_to_keep[i]) {
             cols_to_keep[i] = true;
         }
     }
     // Set bitmask to true for order-by columns to keep based on
-    // mrnf_sort_cols_to_keep.
-    for (size_t i = 0; i < mrnf_sort_cols_to_keep.size(); i++) {
-        if (mrnf_sort_cols_to_keep[i]) {
-            cols_to_keep[mrnf_part_cols_to_keep.size() + i] = true;
+    // order_by_cols_to_keep.
+    for (size_t i = 0; i < order_by_cols_to_keep.size(); i++) {
+        if (order_by_cols_to_keep[i]) {
+            cols_to_keep[partition_by_cols_to_keep.size() + i] = true;
         }
     }
     // Set bitmask to true for all the remaining columns.
     for (size_t i =
-             (mrnf_part_cols_to_keep.size() + mrnf_sort_cols_to_keep.size());
+             (partition_by_cols_to_keep.size() + order_by_cols_to_keep.size());
          i < n_cols; i++) {
         cols_to_keep[i] = true;
     }
@@ -1401,7 +1377,7 @@ void GroupbyPartition::FinalizeMrnf(
     // Use mrnf_part_cols_to_keep and mrnf_sort_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
     size_t n_cols = this->build_table_buffer->data_table->columns.size();
-    std::vector<bool> cols_to_keep_bitmask = get_mrnf_cols_to_keep_bitmask(
+    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         mrnf_part_cols_to_keep, mrnf_sort_cols_to_keep, n_cols);
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
 
@@ -1444,7 +1420,7 @@ void GroupbyPartition::FinalizeWindow(
     // Use partition_by_cols_to_keep and order_by_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
     size_t n_cols = this->build_table_buffer->data_table->columns.size();
-    std::vector<bool> cols_to_keep_bitmask = get_mrnf_cols_to_keep_bitmask(
+    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         partition_by_cols_to_keep, order_by_cols_to_keep, n_cols);
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
 
@@ -2280,15 +2256,15 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                            std::vector<bool> mrnf_sort_cols_to_keep_,
                            int64_t output_batch_size_, bool parallel_,
                            int64_t sync_iter_, int64_t op_id_,
-                           int64_t op_pool_size_bytes)
+                           int64_t op_pool_size_bytes_)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
-          ((op_pool_size_bytes == -1)
+          ((op_pool_size_bytes_ == -1)
                ? static_cast<uint64_t>(
                      bodo::BufferPool::Default()->get_memory_size_bytes() *
                      GROUPBY_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL)
-               : op_pool_size_bytes),
+               : op_pool_size_bytes_),
           bodo::BufferPool::Default(),
           GROUPBY_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD)),
       op_mm(bodo::buffer_memory_manager(op_pool.get())),
@@ -3198,7 +3174,7 @@ void GroupbyState::InitOutputBufferMrnf(
     }
 
     size_t n_cols = dummy_build_table->columns.size();
-    std::vector<bool> cols_to_keep_bitmask = get_mrnf_cols_to_keep_bitmask(
+    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep, n_cols);
 
     // List of column types in the output.
@@ -3237,7 +3213,7 @@ void GroupbyState::InitOutputBufferWindow(
     }
 
     size_t n_cols = dummy_build_table->columns.size();
-    std::vector<bool> cols_to_keep_bitmask = get_mrnf_cols_to_keep_bitmask(
+    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep, n_cols);
 
     // List of column types in the output.

@@ -402,3 +402,11 @@ class IncrementalShuffleState {
     std::shared_ptr<table_info> unify_table_dicts(
         const std::shared_ptr<table_info>& in_table);
 };
+
+void shuffle_issend(std::shared_ptr<table_info> in_table,
+                    const std::shared_ptr<uint32_t[]>& hashes,
+                    std::vector<AsyncShuffleSendState>& send_states,
+                    MPI_Comm shuffle_comm);
+
+void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
+                   std::vector<AsyncShuffleRecvState>& recv_states);
