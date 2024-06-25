@@ -177,7 +177,7 @@ def test_drop_table(iceberg_filesystem_catalog, iceberg_database, memory_leak_ch
 
     spark = get_spark(path=iceberg_filesystem_catalog.connection_string)
     table_name = create_simple_ddl_table(spark)
-    db_schema, _ = iceberg_database(table_name)
+    db_schema, _ = iceberg_database(table_name, spark=spark)
     existing_tables = spark.sql(
         f"show tables in hadoop_prod.{db_schema} like '{table_name}'"
     ).toPandas()

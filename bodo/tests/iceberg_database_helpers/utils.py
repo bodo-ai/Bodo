@@ -2,6 +2,7 @@ import shutil
 from typing import List, NamedTuple, Optional
 
 import pandas as pd
+import pyspark
 from pyspark.sql import SparkSession
 
 DATABASE_NAME = "iceberg_db"
@@ -33,8 +34,20 @@ SPARK_JAR_PACKAGES = [
 def reset_spark():
     """Stop the running spark session if there is one. This allows a new session
     to be made with a different config."""
-    if active := SparkSession.getActiveSession():
+    active = SparkSession.getActiveSession()
+    if active:
+        # Before we muck with internal state, we need to make sure there's no
+        # active sessions.
         active.stop()
+
+    # TODO(aneesh) Overtime, the spark instances will leak memory. There doesn't
+    # seem to be a work around without stopping the jvm process and letting the
+    # library create a new one. Eventually we should move to spawning spark
+    # servers (one per config) that live for the duration of all tests.
+    if pyspark.SparkContext._gateway:
+        pyspark.SparkContext._gateway.proc.kill()
+        pyspark.SparkContext._gateway = None
+        pyspark.SparkContext._jvm = None
 
 
 def get_spark(path: str = ".") -> SparkSession:

@@ -11,7 +11,7 @@ import subprocess
 import time
 import traceback
 from pathlib import Path
-from typing import Callable, Generator, List, Protocol, Tuple, Union
+from typing import Callable, Generator, List, Optional, Protocol, Tuple, Union
 
 import pandas as pd
 import psutil
@@ -19,6 +19,7 @@ import pyarrow as pa
 import pytest
 from mpi4py import MPI
 from numba.core.runtime import rtsys
+from pyspark.sql import SparkSession
 
 import bodo
 import bodo.utils.allocation_tracking
@@ -536,27 +537,26 @@ def iceberg_database() -> (
     from bodo.tests.iceberg_database_helpers.create_tables import (
         create_tables,
     )
-    from bodo.tests.iceberg_database_helpers.utils import get_spark
 
     comm = MPI.COMM_WORLD
-    if bodo.get_rank() == 0:
-        spark = get_spark()
-    bodo.barrier()
 
     warehouse_loc = os.path.abspath(os.getcwd())
 
     # Use a list to store the database schema, so that it can be accessed by the fixture
     database_schema = []
 
+    # TODO(aneesh) this should probably take in a spark instance explicitly to
+    # make this safer to use - calling this function will invalidate all old
+    # spark referneces.
     def create_tables_on_rank_one(
-        tables: Union[List[str], str] = []
+        tables: Union[List[str], str] = [], spark: Optional[SparkSession] = None
     ) -> Tuple[str, str]:
         if not isinstance(tables, list):
             tables = [tables]
         database_schema_or_e = None
         if bodo.get_rank() == 0:
             try:
-                database_schema_or_e = create_tables(tables, spark)
+                database_schema_or_e = create_tables(tables, spark=spark)
             except Exception as e:
                 database_schema_or_e = e
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
