@@ -2268,6 +2268,43 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     /**
+     * Emulates DESCRIBE SCHEMA for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, KIND
+     * @throws RuntimeException on error
+     *     <p>The method executes a Snowflake query DESCRIBE SCHEMAS to show tables within a
+     *     specified schema, and translates the Snowflake query result to a DDLExecutionResult.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult describeSchema(@NotNull ImmutableList<String> schemaPath) {
+      String schemaName = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "DESCRIBE SCHEMA %s", schemaName);
+      List<List<String>> columnValues = new ArrayList<>();
+      List<String> columnNames = List.of("CREATED_ON", "NAME", "KIND");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          columnValues.get(0).add(output.getString("created_on"));
+          columnValues.get(1).add(output.getString("name"));
+          columnValues.get(2).add(output.getString("kind"));
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to describe schema %s. Error: %s",
+                schemaName,
+                e.getMessage()));
+      }
+    }
+
+    /**
      * Emulates SHOW TERSE OBJECTS for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
