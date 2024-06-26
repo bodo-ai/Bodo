@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.prepare.CalciteCatalogReader
 import org.apache.calcite.prepare.RelOptTableImpl
 import org.apache.calcite.sql.SqlDescribeTable
+import org.apache.calcite.sql.SqlDescribeSchema
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.SqlLiteral
 import org.apache.calcite.sql.SqlNode
@@ -94,6 +95,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             
             SqlKind.DESCRIBE_TABLE -> {
                 executeDescribeTable(node as SqlDescribeTable)
+            }
+            SqlKind.DESCRIBE_SCHEMA -> {
+                executeDescribeSchema(node as SqlDescribeSchema)
             }
             SqlKind.SHOW_OBJECTS-> {
                 executeShowObjects(node as SqlSnowflakeShowObjects)
@@ -356,6 +360,25 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             return catalogTable.getDDLExecutor().describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Table $tableName does not exist or not authorized to describe.")
+        }
+    }
+
+    /**
+     * Executes the "DESCRIBE SCHEMA" command for a specified schema and returns the result.
+     *
+     * @param node The SqlSnowflakeShowObjects SqlNode
+     * @return DDLExecutionResult containing the details of the schema.
+     * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
+     */
+    private fun executeDescribeSchema(node: SqlDescribeSchema): DDLExecutionResult {
+        val schemaPath = node.schema.names
+        val schemaName = schemaPath.joinToString(separator = ".")
+        try {
+            val schema = deriveSchema(schemaPath)
+            val schemaCat = validateSchema(schema, node.kind, schemaName)
+            return schemaCat.ddlExecutor.describeSchema(schemaPath)
+        } catch (e: MissingObjectException) {
+            throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }
     }
 

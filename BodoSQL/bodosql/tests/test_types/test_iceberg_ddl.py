@@ -135,6 +135,58 @@ def test_create_schema_ifnotexists_already_exists(request, harness_name: str):
         harness.run_spark_query(f"DROP SCHEMA IF EXISTS {schema_name}")
 
 
+# DESCRIBE SCHEMA
+
+
+@pytest.mark.parametrize(
+    "harness_name, test_views",
+    [
+        pytest.param("tabular_test_harness", True, id="tabular-views"),
+        pytest.param("filesystem_test_harness", False, id="filesystem-no_views"),
+    ],
+)
+def test_describe_schema(request, harness_name: str, test_views: bool):
+    """Tests that Bodo can show tables in a terse format."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    table_name = harness.gen_unique_id("test_table").upper()
+    db_schema = harness.gen_unique_id("test_schema").upper()
+    table_identifier = harness.get_table_identifier(table_name, db_schema)
+    view_name = harness.gen_unique_id("test_view").upper()
+    view_identifier = harness.get_table_identifier(view_name, db_schema)
+    try:
+        # Create blank schema
+        query = f"CREATE SCHEMA {db_schema}"
+        harness.run_spark_query(query)
+        harness.check_schema_exists(db_schema)
+        # Create table
+        harness.create_test_table(table_identifier)
+        assert harness.check_table_exists(table_identifier)
+        # Create view if catalog supports it
+        if test_views:
+            harness.create_test_view(view_identifier)
+            assert harness.check_view_exists(view_identifier)
+            py_output = pd.DataFrame(
+                {
+                    "CREATED_ON": [None, None],
+                    "NAME": [table_name, view_name],
+                    "KIND": ["TABLE", "VIEW"],
+                }
+            )
+        else:
+            py_output = pd.DataFrame(
+                {"CREATED_ON": [None], "NAME": [table_name], "KIND": ["TABLE"]}
+            )
+        # Describe schema
+        query = f"DESCRIBE SCHEMA {db_schema}"
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+    finally:
+        harness.drop_test_table(table_identifier)
+        if test_views:
+            harness.drop_test_view(view_identifier)
+        harness.run_spark_query(f"DROP SCHEMA {db_schema}")
+
+
 # ALTER TABLE RENAME TO
 
 

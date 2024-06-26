@@ -142,6 +142,41 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
     }
 
     /**
+     * Emulates DESCRIBE SCHEMA for a specified namespace in Iceberg.
+     * The method will list out all tables, and if applicable, views, in the
+     * namespace provided by schemaPath.
+     *
+     * @param schemaPath The schema path to describe.
+     * @return DDLExecutionResult containing columns CREATED_ON, NAME, KIND
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     */
+    override fun describeSchema(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        val fieldNames =
+            listOf("CREATED_ON", "NAME", "KIND")
+        val columnValues = List(4) { ArrayList<String?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        // Loop over all objects in the schema,
+        // and add their details to the result.
+        // Tables
+        icebergConnection.listTables(namespace).forEach {
+            columnValues[0].add(null)
+            columnValues[1].add(it.name())
+            columnValues[2].add("TABLE")
+        }
+        // Views
+        if (icebergConnection is ViewCatalog) {
+            icebergConnection.listViews(namespace).forEach {
+                // Iceberg tables do not store created timestamps, so we
+                // always store them as null.
+                columnValues[0].add(null)
+                columnValues[1].add(it.name())
+                columnValues[2].add("VIEW")
+            }
+        }
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    /**
      * Emulates SHOW TERSE OBJECTS for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.

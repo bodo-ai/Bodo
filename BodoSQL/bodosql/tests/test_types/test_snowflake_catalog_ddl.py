@@ -1947,6 +1947,27 @@ def test_describe_view_error_does_not_exist(
             )
 
 
+def test_describe_schema(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that describe schema works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("DESCRIBE SCHEMA TEST_DB.DDL_READ_TEST")
+    expected_output = pd.DataFrame(
+        {
+            "CREATED_ON": [
+                "2024-06-26 09:17:47.175 -0700",
+                "2024-06-26 09:18:23.413 -0700",
+            ],
+            "NAME": ["TEST_TABLE_1", "TEST_VIEW_1"],
+            "KIND": ["TABLE", "VIEW"],
+        }
+    )
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "DESCRIBE SCHEMA test failed"
+
+
 @pytest.mark.parametrize("if_exists", [True, False])
 def test_drop_view(if_exists, test_db_snowflake_catalog, memory_leak_check):
     """Tests that Bodo can drop a view in Snowflake if the view does exist."""
