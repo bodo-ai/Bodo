@@ -219,6 +219,13 @@ interface DDLExecutor {
     ): DDLExecutionResult
 
     /**
+     * Describes a schema in the catalog.
+     * @param schemaPath The path to the schema to describe.
+     * @return The result of the operation.
+     */
+    fun describeSchema(schemaPath: ImmutableList<String>): DDLExecutionResult
+
+    /**
      * Show objects in the database.
      * @param schemaPath The path to the schema to show objects from.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
