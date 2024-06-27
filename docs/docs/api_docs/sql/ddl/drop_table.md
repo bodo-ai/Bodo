@@ -12,6 +12,8 @@ The optional keyword `CASCADE` or `RESTRICT` is a no-op in Iceberg catalogs, but
 
 See the [Snowflake documentation](https://docs.snowflake.com/en/sql-reference/sql/drop-table) for more details.
 
+## Syntax
+
 Currently, BodoSQL only supports the following syntax:
 
 ```sql

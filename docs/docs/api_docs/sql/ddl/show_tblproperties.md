@@ -5,13 +5,13 @@ Returns the value of a table property given an optional value for a property key
 !!! note
     This operation is an Iceberg-only operation.
 
-### Syntax
+## Syntax
 
 ```sql
 SHOW ( TBLPROPERTIES | PROPERTIES | TAGS ) <table_identifier> [ ('property_key') ] 
 ```
 
-### Examples
+## Examples
 
 ```sql
 SHOW TBLPROPERTIES my_table;

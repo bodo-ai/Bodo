@@ -4,6 +4,8 @@ Describes either the columns in a table or the current values, as well as the de
 
 See the [Snowflake documentation](https://docs.snowflake.com/en/sql-reference/sql/desc-table) for more details.
 
+## Syntax
+
 Currently, BodoSQL only supports the following syntax:
 
 ```sql

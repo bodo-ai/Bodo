@@ -391,15 +391,16 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
     private fun executeShowObjects(node: SqlSnowflakeShowObjects): DDLExecutionResult {
-        if (!node.isTerse){
-            throw RuntimeException("SHOW OBJECTS: Only SHOW TERSE is currently supported.")
-        }
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            return schemaCat.ddlExecutor.showObjects(schemaPath)
+            if (node.isTerse){
+                return schemaCat.ddlExecutor.showTerseObjects(schemaPath)
+            } else {
+                return schemaCat.ddlExecutor.showObjects(schemaPath)
+            }
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }
@@ -413,15 +414,17 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the DB does not exist or the user is not authorized to access it.
      */
     private fun executeShowSchemas(node: SqlSnowflakeShowSchemas): DDLExecutionResult {
-        if (!node.isTerse){
-            throw RuntimeException("SHOW SCHEMAS: Only SHOW TERSE is currently supported.")
-        }
         val dbPath = node.dbName.names
         val dbName = dbPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(dbPath)
             val schemaCat = validateSchema(schema, node.kind, dbName)
-            return schemaCat.ddlExecutor.showSchemas(dbPath)
+            if (node.isTerse){
+                return schemaCat.ddlExecutor.showTerseSchemas(dbPath)
+            } else {
+                return schemaCat.ddlExecutor.showSchemas(dbPath)
+            }
+
         } catch (e: MissingObjectException) {
             throw RuntimeException("Database $dbName does not exist or not authorized.")
         }
@@ -435,15 +438,18 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
     private fun executeShowTables(node: SqlShowTables): DDLExecutionResult {
-        if (!node.isTerse){
-            throw RuntimeException("SHOW TABLES: Only SHOW TERSE is currently supported.")
-        }
+
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            return schemaCat.ddlExecutor.showTables(schemaPath)
+            if (node.isTerse){
+                return schemaCat.ddlExecutor.showTerseTables(schemaPath)
+            }
+            else {
+                return schemaCat.ddlExecutor.showTables(schemaPath)
+            }
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }
@@ -457,15 +463,16 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
     private fun executeShowViews(node: SqlShowViews): DDLExecutionResult {
-        if (!node.isTerse){
-            throw RuntimeException("SHOW VIEWS: Only SHOW TERSE is currently supported.")
-        }
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            return schemaCat.ddlExecutor.showViews(schemaPath)
+            if (node.isTerse){
+                return schemaCat.ddlExecutor.showTerseViews(schemaPath)
+            } else {
+                return schemaCat.ddlExecutor.showViews(schemaPath)
+            }
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }

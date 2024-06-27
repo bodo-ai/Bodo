@@ -1,6 +1,10 @@
 package com.bodosql.calcite.ddl
 
+import com.bodosql.calcite.sql.ddl.SqlShowTables
 import com.bodosql.calcite.sql.ddl.SqlShowTblproperties
+import com.bodosql.calcite.sql.ddl.SqlShowViews
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowObjects
+import com.bodosql.calcite.sql.ddl.SqlSnowflakeShowSchemas
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
 import org.apache.calcite.sql.SqlKind
@@ -14,6 +18,7 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
     fun generateType(ddlNode: SqlNode): RelDataType {
         // All DDL types likely use a string type.
         val stringType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true)
+        val intType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.INTEGER), true)
         val (fieldsNames, columnTypes) =
             when (ddlNode.kind) {
                 // DDL queries that only return a status message
@@ -52,75 +57,229 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
 
                 // SHOW Queries
                 SqlKind.SHOW_OBJECTS -> {
-                    val fieldNames =
-                        listOf(
-                            "CREATED_ON",
-                            "NAME",
-                            "SCHEMA_NAME",
-                            "KIND",
-                        )
+                    val fieldNames: List<String>
+                    val types: List<RelDataType>
                     // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
-                    val types =
-                        listOf(
-                            stringType,
-                            stringType,
-                            stringType,
-                            stringType,
-                        )
+                    if ((ddlNode as SqlSnowflakeShowObjects).isTerse) {
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "SCHEMA_NAME",
+                                "KIND",
+                            )
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    } else {
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "SCHEMA_NAME",
+                                "KIND",
+                                "COMMENT",
+                                "CLUSTER_BY",
+                                "ROWS",
+                                "BYTES",
+                                "OWNER",
+                                "RETENTION_TIME",
+                                "OWNER_ROLE_TYPE",
+                            )
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                // ROWS and BYTES are of type int
+                                intType,
+                                intType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    }
                     Pair(fieldNames, types)
                 }
                 SqlKind.SHOW_SCHEMAS -> {
-                    val fieldNames =
-                        listOf(
-                            "CREATED_ON",
-                            "NAME",
-                            "SCHEMA_NAME",
-                            "KIND",
-                        )
-                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
-                    val types =
-                        listOf(
-                            stringType,
-                            stringType,
-                            stringType,
-                            stringType,
-                        )
+                    val fieldNames: List<String>
+                    val types: List<RelDataType>
+                    if ((ddlNode as SqlSnowflakeShowSchemas).isTerse) {
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "SCHEMA_NAME",
+                                "KIND",
+                            )
+                        // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    } else {
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "IS_DEFAULT",
+                                "IS_CURRENT",
+                                "DATABASE_NAME",
+                                "OWNER",
+                                "COMMENT",
+                                "OPTIONS",
+                                "RETENTION_TIME",
+                                "OWNER_ROLE_TYPE",
+                            )
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    }
+
                     Pair(fieldNames, types)
                 }
                 SqlKind.SHOW_TABLES -> {
-                    val fieldNames =
-                        listOf(
-                            "CREATED_ON",
-                            "NAME",
-                            "SCHEMA_NAME",
-                            "KIND",
-                        )
-                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
-                    val types =
-                        listOf(
-                            stringType,
-                            stringType,
-                            stringType,
-                            stringType,
-                        )
+                    val fieldNames: List<String>
+                    val types: List<RelDataType>
+                    if ((ddlNode as SqlShowTables).isTerse) {
+                        // Return type for SHOW TERSE TABLES
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "SCHEMA_NAME",
+                                "KIND",
+                            )
+                        // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    } else {
+                        // Return type for SHOW TABLES
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "SCHEMA_NAME",
+                                "KIND",
+                                "COMMENT",
+                                "CLUSTER_BY",
+                                "ROWS",
+                                "BYTES",
+                                "OWNER",
+                                "RETENTION_TIME",
+                                "AUTOMATIC_CLUSTERING",
+                                "CHANGE_TRACKING",
+                                "IS_EXTERNAL",
+                                "ENABLE_SCHEMA_EVOLUTION",
+                                "OWNER_ROLE_TYPE",
+                                "IS_EVENT",
+                                "IS_HYBRID",
+                                "IS_ICEBERG",
+                                "IS_IMMUTABLE",
+                            )
+                        // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                // ROWS and BYTES are of type int
+                                intType,
+                                intType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    }
                     Pair(fieldNames, types)
                 }
                 SqlKind.SHOW_VIEWS -> {
-                    val fieldNames =
-                        listOf(
-                            "CREATED_ON",
-                            "NAME",
-                            "SCHEMA_NAME",
-                            "KIND",
-                        )
-                    // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
-                    val types =
-                        listOf(
-                            stringType,
-                            stringType,
-                            stringType,
-                            stringType,
-                        )
+                    val fieldNames: List<String>
+                    val types: List<RelDataType>
+                    if ((ddlNode as SqlShowViews).isTerse) {
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "SCHEMA_NAME",
+                                "KIND",
+                            )
+                        // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    } else {
+                        fieldNames =
+                            listOf(
+                                "CREATED_ON",
+                                "NAME",
+                                "RESERVED",
+                                "SCHEMA_NAME",
+                                "COMMENT",
+                                "OWNER",
+                                "TEXT",
+                                "IS_SECURE",
+                                "IS_MATERIALIZED",
+                                "OWNER_ROLE_TYPE",
+                                "CHANGE_TRACKING",
+                            )
+                        // TODO: created_on type from Snowflake is TIMESTAMP_LTZ
+                        types =
+                            listOf(
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                                stringType,
+                            )
+                    }
+
                     Pair(fieldNames, types)
                 }
                 SqlKind.SHOW_TBLPROPERTIES -> {
