@@ -1,8 +1,8 @@
+import os
 import shutil
 from typing import List, NamedTuple, Optional
 
 import pandas as pd
-import pyspark
 from pyspark.sql import SparkSession
 
 DATABASE_NAME = "iceberg_db"
@@ -31,45 +31,57 @@ SPARK_JAR_PACKAGES = [
 ]
 
 
-def reset_spark():
-    """Stop the running spark session if there is one. This allows a new session
-    to be made with a different config."""
-    active = SparkSession.getActiveSession()
-    if active:
-        # Before we muck with internal state, we need to make sure there's no
-        # active sessions.
-        active.stop()
-
-    # TODO(aneesh) Overtime, the spark instances will leak memory. There doesn't
-    # seem to be a work around without stopping the jvm process and letting the
-    # library create a new one. Eventually we should move to spawning spark
-    # servers (one per config) that live for the duration of all tests.
-    if pyspark.SparkContext._gateway:
-        pyspark.SparkContext._gateway.proc.kill()
-        pyspark.SparkContext._gateway = None
-        pyspark.SparkContext._jvm = None
-
-
 def get_spark(path: str = ".") -> SparkSession:
     def do_get_spark():
-        reset_spark()
-        spark = (
-            SparkSession.builder.appName("spark_filesystem")
-            .config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
-            .config(
-                "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
-            )
-            .config("spark.sql.catalog.hadoop_prod.type", "hadoop")
-            .config("spark.sql.catalog.hadoop_prod.warehouse", path)
-            .config(
-                "spark.sql.extensions",
-                "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-            )
-            .config("spark.sql.session.timeZone", "UTC")
-            # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
-            .config("spark.sql.execution.arrow.enabled", "true")
-            .getOrCreate()
+        builder = SparkSession.builder.appName("spark")
+        builder.config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
+
+        builder.config(
+            "spark.sql.catalog.hadoop_prod", "org.apache.iceberg.spark.SparkCatalog"
         )
+        builder.config("spark.sql.catalog.hadoop_prod.type", "hadoop")
+        builder.config("spark.sql.catalog.hadoop_prod.warehouse", path)
+        builder.config(
+            "spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        )
+
+        # Note that we need to have all catalogs registered on the same instance
+        # because otherwise spark will cache the instance, and not pick up new
+        # configuration changes.
+        if "TABULAR_CREDENTIAL" in os.environ:
+            # TODO(aneesh) this is mildly sketchy - ideally a tabular spark
+            # instance should be provided as pytest fixture
+            from bodo.tests.conftest import get_tabular_connection
+
+            rest_uri, tabular_warehouse, tabular_credential = get_tabular_connection(
+                os.getenv("TABULAR_CREDENTIAL")
+            )
+            builder.config(
+                "spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog"
+            )
+            builder.config(
+                "spark.sql.catalog.rest_prod.catalog-impl",
+                "org.apache.iceberg.rest.RESTCatalog",
+            )
+            builder.config("spark.sql.catalog.rest_prod.uri", rest_uri)
+            builder.config("spark.sql.catalog.rest_prod.credential", tabular_credential)
+            builder.config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
+            builder.config("spark.sql.defaultCatalog", "rest_prod")
+            builder.config(
+                "spark.sql.catalog.rest_prod.io-impl",
+                "org.apache.iceberg.aws.s3.S3FileIO",
+            )
+
+        builder.config(
+            "spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        )
+        builder.config("spark.sql.session.timeZone", "UTC")
+        # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
+        builder.config("spark.sql.execution.arrow.enabled", "true")
+        spark = builder.getOrCreate()
+
         # Spark throws a WARNING with a very long stacktrace whenever creating am
         # Iceberg table with Hadoop because it is initially unable to determine that
         # it wrote a `version-hint.text` file, even though it does.
@@ -81,46 +93,16 @@ def get_spark(path: str = ".") -> SparkSession:
     try:
         return do_get_spark()
     except Exception:
-        # Clear cache and try again - note that this is only for use in CI
+        # Clear cache and try again - note that this is only for use in CI.
+        # Sometimes packages fail to download - if this happens to you locally,
+        # clear your cache manually. The path is in the logs.
         shutil.rmtree("/root/.ivy2", ignore_errors=True)
         shutil.rmtree("/root/.m2/repository", ignore_errors=True)
     return do_get_spark()
 
 
-def get_spark_tabular(tabular_connection):
-    reset_spark()
-    rest_uri, tabular_warehouse, tabular_credential = tabular_connection
-
-    spark = (
-        SparkSession.builder.appName("spark_tabular")
-        .config("spark.jars.packages", ",".join(SPARK_JAR_PACKAGES))
-        .config("spark.sql.catalog.rest_prod", "org.apache.iceberg.spark.SparkCatalog")
-        .config(
-            "spark.sql.catalog.rest_prod.catalog-impl",
-            "org.apache.iceberg.rest.RESTCatalog",
-        )
-        .config("spark.sql.catalog.rest_prod.uri", rest_uri)
-        .config("spark.sql.catalog.rest_prod.credential", tabular_credential)
-        .config("spark.sql.catalog.rest_prod.warehouse", tabular_warehouse)
-        .config("spark.sql.defaultCatalog", "rest_prod")
-        .config(
-            "spark.sql.catalog.rest_prod.io-impl", "org.apache.iceberg.aws.s3.S3FileIO"
-        )
-        .config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        .config("spark.sql.session.timeZone", "UTC")
-        # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
-        .config("spark.sql.execution.arrow.enabled", "true")
-        .getOrCreate()
-    )
-
-    # Spark throws a WARNING with a very long stacktrace whenever creating am
-    # Iceberg table with Hadoop because it is initially unable to determine that
-    # it wrote a `version-hint.text` file, even though it does.
-    # Setting the Log Level to "ERROR" hides it
-    spark.sparkContext.setLogLevel("ERROR")
+def get_spark_tabular(tabular_connection, path="."):
+    spark = get_spark(path=path)
     spark.sql("use default;")
     return spark
 

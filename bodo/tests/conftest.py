@@ -874,6 +874,14 @@ pytest_mark_javascript = pytest.mark.skipif(
 )
 
 
+def get_tabular_connection(tabular_credential: str):
+    return (
+        "https://api.tabular.io/ws",
+        os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
+        os.getenv("TABULAR_CREDENTIAL"),
+    )
+
+
 @pytest.fixture
 def tabular_connection(request):
     """
@@ -893,11 +901,7 @@ def tabular_connection(request):
             "AWS_SESSION_TOKEN": None,
         }
     ):
-        yield (
-            "https://api.tabular.io/ws",
-            os.getenv("TABULAR_WAREHOUSE", "Bodo-Test-Iceberg-Warehouse"),
-            os.getenv("TABULAR_CREDENTIAL"),
-        )
+        yield get_tabular_connection(os.getenv("TABULAR_CREDENTIAL"))
 
 
 def pytest_runtest_setup(item):
