@@ -6,8 +6,8 @@ from bodo.utils.utils import run_rank0
 
 
 class TabularTestHarness(DDLTestHarness):
-    def __init__(self, tabular_catalog, tabular_connection):
-        self.spark = get_spark_tabular(tabular_connection)
+    def __init__(self, tabular_catalog, tabular_connection, tmppath):
+        self.spark = get_spark_tabular(tabular_connection, tmppath)
         self.bc = bodosql.BodoSQLContext(catalog=tabular_catalog)
 
     def run_bodo_query(self, query):
