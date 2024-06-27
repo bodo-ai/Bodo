@@ -508,8 +508,10 @@ void hash_arrow_array(const hashes_t& out_hashes,
         std::shared_ptr<uint32_t[]> dict_hashes =
             bodo::make_shared_arr<uint32_t>(dictionary->length(),
                                             bodo::BufferPool::DefaultPtr());
-        hash_arrow_array(dict_hashes, list_offsets, n_rows, dictionary,
-                         start_row_offset);
+        std::vector<offset_t> dict_offsets(dictionary->length() + 1);
+        std::iota(dict_offsets.begin(), dict_offsets.end(), 0);
+        hash_arrow_array(dict_hashes, dict_offsets, dictionary->length(),
+                         dictionary, 0);
 
         // Define a hash value for nulls
         uint32_t null_hash = 0;
