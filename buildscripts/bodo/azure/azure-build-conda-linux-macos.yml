@@ -64,7 +64,7 @@ jobs:
 
   - script: |
       set -exo pipefail
-      pip install ruff
+      pip install ruff==0.1.14
       ruff .
     displayName: 'Ruff'
 
