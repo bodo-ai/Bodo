@@ -1341,7 +1341,97 @@ def test_describe_table_compiles_jit(test_db_snowflake_catalog, memory_leak_chec
 ###################
 
 
-def _show_schemas_snowflake_sample_data_tpch_sf1_output():
+def _show_tables_snowflake_sample_data_tpch_sf1_output(terse=True):
+    if terse:
+        return pd.DataFrame(
+            {
+                "CREATED_ON": [
+                    "2021-11-11 13:17:32.899 -0800",
+                    "2021-11-11 13:17:33.269 -0800",
+                    "2021-11-11 13:17:33.308 -0800",
+                    "2021-11-11 13:17:33.242 -0800",
+                    "2021-11-11 13:17:33.225 -0800",
+                    "2021-11-11 13:17:33.199 -0800",
+                    "2021-11-11 13:17:34.582 -0800",
+                    "2021-11-11 13:17:34.593 -0800",
+                ],
+                "NAME": [
+                    "CUSTOMER",
+                    "LINEITEM",
+                    "NATION",
+                    "ORDERS",
+                    "PART",
+                    "PARTSUPP",
+                    "REGION",
+                    "SUPPLIER",
+                ],
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.TPCH_SF1"] * 8,
+                "KIND": ["TABLE"] * 8,
+            }
+        )
+    else:
+        return pd.DataFrame(
+            {
+                "CREATED_ON": [
+                    "2021-11-11 13:17:32.899 -0800",
+                    "2021-11-11 13:17:33.269 -0800",
+                    "2021-11-11 13:17:33.308 -0800",
+                    "2021-11-11 13:17:33.242 -0800",
+                    "2021-11-11 13:17:33.225 -0800",
+                    "2021-11-11 13:17:33.199 -0800",
+                    "2021-11-11 13:17:34.582 -0800",
+                    "2021-11-11 13:17:34.593 -0800",
+                ],
+                "NAME": [
+                    "CUSTOMER",
+                    "LINEITEM",
+                    "NATION",
+                    "ORDERS",
+                    "PART",
+                    "PARTSUPP",
+                    "REGION",
+                    "SUPPLIER",
+                ],
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.TPCH_SF1"] * 8,
+                "KIND": ["TABLE"] * 8,
+                "COMMENT": [
+                    "Customer data as defined by TPC-H",
+                    "Lineitem data as defined by TPC-H",
+                    "Nation data as defined by TPC-H",
+                    "Orders data as defined by TPC-H",
+                    "Part data as defined by TPC-H",
+                    "Partsupp data as defined by TPC-H",
+                    "Region data as defined by TPC-H",
+                    "Supplier data as defined by TPC-H",
+                ],
+                "CLUSTER_BY": [""] * 8,
+                "ROWS": [150000, 6001215, 25, 1500000, 200000, 800000, 5, 10000],
+                "BYTES": [
+                    10747904,
+                    165228544,
+                    4096,
+                    42303488,
+                    5214208,
+                    36589568,
+                    4096,
+                    692224,
+                ],
+                "OWNER": [""] * 8,
+                "RETENTION_TIME": ["1"] * 8,
+                "AUTOMATIC_CLUSTERING": ["OFF"] * 8,
+                "CHANGE_TRACKING": ["OFF"] * 8,
+                "IS_EXTERNAL": ["N"] * 8,
+                "ENABLE_SCHEMA_EVOLUTION": ["N"] * 8,
+                "OWNER_ROLE_TYPE": [""] * 8,
+                "IS_EVENT": ["N"] * 8,
+                "IS_HYBRID": ["N"] * 8,
+                "IS_ICEBERG": ["N"] * 8,
+                "IS_IMMUTABLE": ["N"] * 8,
+            }
+        )
+
+
+def _show_objects_snowflake_sample_data_tpch_sf1_output():
     return pd.DataFrame(
         {
             "CREATED_ON": [
@@ -1366,16 +1456,41 @@ def _show_schemas_snowflake_sample_data_tpch_sf1_output():
             ],
             "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.TPCH_SF1"] * 8,
             "KIND": ["TABLE"] * 8,
+            "COMMENT": [
+                "Customer data as defined by TPC-H",
+                "Lineitem data as defined by TPC-H",
+                "Nation data as defined by TPC-H",
+                "Orders data as defined by TPC-H",
+                "Part data as defined by TPC-H",
+                "Partsupp data as defined by TPC-H",
+                "Region data as defined by TPC-H",
+                "Supplier data as defined by TPC-H",
+            ],
+            "CLUSTER_BY": [""] * 8,
+            "ROWS": [150000, 6001215, 25, 1500000, 200000, 800000, 5, 10000],
+            "BYTES": [
+                10747904,
+                165228544,
+                4096,
+                42303488,
+                5214208,
+                36589568,
+                4096,
+                692224,
+            ],
+            "OWNER": [""] * 8,
+            "RETENTION_TIME": ["1"] * 8,
+            "OWNER_ROLE_TYPE": [""] * 8,
         }
     )
 
 
-def test_show_objects(test_db_snowflake_catalog, memory_leak_check):
+def test_show_objects_terse(test_db_snowflake_catalog, memory_leak_check):
     """Tests that show objects works on Snowflake."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     bodo_output = bc.execute_ddl("SHOW TERSE OBJECTS in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
 
-    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    expected_output = _show_tables_snowflake_sample_data_tpch_sf1_output()
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -1383,7 +1498,7 @@ def test_show_objects(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Show Objects test failed"
 
 
-def test_show_objects_jit(test_db_snowflake_catalog, memory_leak_check):
+def test_show_objects_terse_jit(test_db_snowflake_catalog, memory_leak_check):
     """Verify that show objects works in JIT. This is needed because we need
     to ensure the type information is correct."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
@@ -1393,7 +1508,7 @@ def test_show_objects_jit(test_db_snowflake_catalog, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    expected_output = _show_tables_snowflake_sample_data_tpch_sf1_output()
     bodo_output = impl(bc, query)
     passed = _test_equal_guard(
         bodo_output,
@@ -1406,38 +1521,91 @@ def test_show_objects_jit(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
-def _show_schemas_snowflake_sample_data_output():
-    return pd.DataFrame(
-        {
-            "CREATED_ON": [
-                "2024-05-14 20:12:27.165 -0700",
-                "2021-11-11 13:17:31.657 -0800",
-                "2023-09-05 18:34:28.256 -0700",
-                "2021-11-11 13:17:31.816 -0800",
-                "2021-11-11 13:17:31.807 -0800",
-                "2021-11-11 13:17:31.656 -0800",
-                "2021-11-11 13:17:31.793 -0800",
-            ],
-            "NAME": [
-                "INFORMATION_SCHEMA",
-                "TPCDS_SF100TCL",
-                "TPCDS_SF10TCL",
-                "TPCH_SF1",
-                "TPCH_SF10",
-                "TPCH_SF100",
-                "TPCH_SF1000",
-            ],
-            "SCHEMA_NAME": [
-                "SNOWFLAKE_SAMPLE_DATA",
-            ]
-            * 7,
-            "KIND": [None] * 7,
-        }
-    )
+def test_show_objects(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show objects works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("SHOW OBJECTS in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
+
+    expected_output = _show_objects_snowflake_sample_data_tpch_sf1_output()
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Objects test failed"
 
 
-def test_show_schemas(test_db_snowflake_catalog, memory_leak_check):
-    """Tests that show schemas works on Snowflake."""
+def _show_schemas_snowflake_sample_data_output(terse=True):
+    if terse:
+        return pd.DataFrame(
+            {
+                "CREATED_ON": [
+                    "2024-05-14 20:12:27.165 -0700",
+                    "2021-11-11 13:17:31.657 -0800",
+                    "2023-09-05 18:34:28.256 -0700",
+                    "2021-11-11 13:17:31.816 -0800",
+                    "2021-11-11 13:17:31.807 -0800",
+                    "2021-11-11 13:17:31.656 -0800",
+                    "2021-11-11 13:17:31.793 -0800",
+                ],
+                "NAME": [
+                    "INFORMATION_SCHEMA",
+                    "TPCDS_SF100TCL",
+                    "TPCDS_SF10TCL",
+                    "TPCH_SF1",
+                    "TPCH_SF10",
+                    "TPCH_SF100",
+                    "TPCH_SF1000",
+                ],
+                "SCHEMA_NAME": [
+                    "SNOWFLAKE_SAMPLE_DATA",
+                ]
+                * 7,
+                "KIND": [None] * 7,
+            }
+        )
+    else:
+        return pd.DataFrame(
+            {
+                "CREATED_ON": [
+                    "2024-06-24 12:36:45.585 -0700",
+                    "2021-11-11 13:17:31.657 -0800",
+                    "2023-09-05 18:34:28.256 -0700",
+                    "2021-11-11 13:17:31.816 -0800",
+                    "2021-11-11 13:17:31.807 -0800",
+                    "2021-11-11 13:17:31.656 -0800",
+                    "2021-11-11 13:17:31.793 -0800",
+                ],
+                "NAME": [
+                    "INFORMATION_SCHEMA",
+                    "TPCDS_SF100TCL",
+                    "TPCDS_SF10TCL",
+                    "TPCH_SF1",
+                    "TPCH_SF10",
+                    "TPCH_SF100",
+                    "TPCH_SF1000",
+                ],
+                "IS_DEFAULT": ["N"] * 7,
+                "IS_CURRENT": ["N"] * 7,
+                "DATABASE_NAME": ["SNOWFLAKE_SAMPLE_DATA"] * 7,
+                "OWNER": [""] * 7,
+                "COMMENT": [
+                    "Views describing the contents of schemas in this database",
+                    "",
+                    "",
+                    "TPC-H scaling factor 1",
+                    "TPC-H scaling factor 10",
+                    "TPC-H scaling factor 100",
+                    "TPC-H scaling factor 1000",
+                ],
+                "OPTIONS": [""] * 7,
+                "RETENTION_TIME": ["1"] * 7,
+                "OWNER_ROLE_TYPE": [""] * 7,
+            }
+        )
+
+
+def test_show_schemas_terse(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show schemas terse works on Snowflake."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     bodo_output = bc.execute_ddl("SHOW TERSE SCHEMAS in SNOWFLAKE_SAMPLE_DATA")
     expected_output = _show_schemas_snowflake_sample_data_output()
@@ -1447,11 +1615,11 @@ def test_show_schemas(test_db_snowflake_catalog, memory_leak_check):
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size(), "Show Objects test failed"
+    assert n_passed == bodo.get_size(), "Show schemas test failed"
 
 
-def test_show_schemas_jit(test_db_snowflake_catalog, memory_leak_check):
-    """Verify that show schemas works in JIT. This is needed because we need
+def test_show_schemas_terse_jit(test_db_snowflake_catalog, memory_leak_check):
+    """Verify that show schemas terse works in JIT. This is needed because we need
     to ensure the type information is correct."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     query = "SHOW TERSE SCHEMAS IN SNOWFLAKE_SAMPLE_DATA"
@@ -1473,6 +1641,20 @@ def test_show_schemas_jit(test_db_snowflake_catalog, memory_leak_check):
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Sequential test failed"
+
+
+def test_show_schemas(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show schemas works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("SHOW SCHEMAS in SNOWFLAKE_SAMPLE_DATA")
+    expected_output = _show_schemas_snowflake_sample_data_output(terse=False)
+    # excluding INFORMATION_SCHEMA
+    # INFORMATION_SCHEMA: created_on changes with each run
+    passed = _test_equal_guard(bodo_output.drop([0]), expected_output.drop([0]))
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show schemas test failed"
 
 
 def check_view_exists(conn_str, view_name) -> bool:
@@ -1500,12 +1682,12 @@ def view_helper(conn_str, view_name, create=True):
             assert not check_view_exists(conn_str, view_name)
 
 
-def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
+def test_show_tables_terse(test_db_snowflake_catalog, memory_leak_check):
     """Tests that show tables works on Snowflake."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     bodo_output = bc.execute_ddl("SHOW TERSE TABLES in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
 
-    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    expected_output = _show_tables_snowflake_sample_data_tpch_sf1_output()
     passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -1513,7 +1695,7 @@ def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Show Tables test failed"
 
 
-def test_show_tables_jit(test_db_snowflake_catalog, memory_leak_check):
+def test_show_tables_terse_jit(test_db_snowflake_catalog, memory_leak_check):
     """Verify that show tables works in JIT. This is needed because we need
     to ensure the type information is correct."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
@@ -1523,7 +1705,7 @@ def test_show_tables_jit(test_db_snowflake_catalog, memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
 
-    expected_output = _show_schemas_snowflake_sample_data_tpch_sf1_output()
+    expected_output = _show_tables_snowflake_sample_data_tpch_sf1_output()
     bodo_output = impl(bc, query)
     passed = _test_equal_guard(
         bodo_output,
@@ -1536,61 +1718,172 @@ def test_show_tables_jit(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
-def _show_views_snowflake_sample_data_output():
+def test_show_tables(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show tables works on Snowflake."""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bodo_output = bc.execute_ddl("SHOW TABLES in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
+    expected_output = _show_tables_snowflake_sample_data_tpch_sf1_output(terse=False)
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show Tables test failed"
+
+
+def _show_views_snowflake_sample_data_output(terse=True):
     # This is a long test, yes, but this is the only reliably available
     # query for SHOW VIEWS in the Snowflake sample database.
-    return pd.DataFrame(
-        {
-            "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 40,
-            "NAME": [
-                "APPLICABLE_ROLES",
-                "CLASSES",
-                "CLASS_INSTANCES",
-                "CLASS_INSTANCE_FUNCTIONS",
-                "CLASS_INSTANCE_PROCEDURES",
-                "COLUMNS",
-                "CURRENT_PACKAGES_POLICY",
-                "DATABASES",
-                "ELEMENT_TYPES",
-                "ENABLED_ROLES",
-                "EVENT_TABLES",
-                "EXTERNAL_TABLES",
-                "FIELDS",
-                "FILE_FORMATS",
-                "FUNCTIONS",
-                "GIT_REPOSITORIES",
-                "HYBRID_TABLES",
-                "INDEXES",
-                "INDEX_COLUMNS",
-                "INFORMATION_SCHEMA_CATALOG_NAME",
-                "LOAD_HISTORY",
-                "MODEL_VERSIONS",
-                "OBJECT_PRIVILEGES",
-                "PACKAGES",
-                "PIPES",
-                "PROCEDURES",
-                "REFERENTIAL_CONSTRAINTS",
-                "REPLICATION_DATABASES",
-                "REPLICATION_GROUPS",
-                "SCHEMATA",
-                "SEQUENCES",
-                "SERVICES",
-                "STAGES",
-                "STREAMLITS",
-                "TABLES",
-                "TABLE_CONSTRAINTS",
-                "TABLE_PRIVILEGES",
-                "TABLE_STORAGE_METRICS",
-                "USAGE_PRIVILEGES",
-                "VIEWS",
-            ],
-            "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 40,
-            "KIND": ["VIEW"] * 40,
-        }
-    )
+    if terse:
+        return pd.DataFrame(
+            {
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 40,
+                "NAME": [
+                    "APPLICABLE_ROLES",
+                    "CLASSES",
+                    "CLASS_INSTANCES",
+                    "CLASS_INSTANCE_FUNCTIONS",
+                    "CLASS_INSTANCE_PROCEDURES",
+                    "COLUMNS",
+                    "CURRENT_PACKAGES_POLICY",
+                    "DATABASES",
+                    "ELEMENT_TYPES",
+                    "ENABLED_ROLES",
+                    "EVENT_TABLES",
+                    "EXTERNAL_TABLES",
+                    "FIELDS",
+                    "FILE_FORMATS",
+                    "FUNCTIONS",
+                    "GIT_REPOSITORIES",
+                    "HYBRID_TABLES",
+                    "INDEXES",
+                    "INDEX_COLUMNS",
+                    "INFORMATION_SCHEMA_CATALOG_NAME",
+                    "LOAD_HISTORY",
+                    "MODEL_VERSIONS",
+                    "OBJECT_PRIVILEGES",
+                    "PACKAGES",
+                    "PIPES",
+                    "PROCEDURES",
+                    "REFERENTIAL_CONSTRAINTS",
+                    "REPLICATION_DATABASES",
+                    "REPLICATION_GROUPS",
+                    "SCHEMATA",
+                    "SEQUENCES",
+                    "SERVICES",
+                    "STAGES",
+                    "STREAMLITS",
+                    "TABLES",
+                    "TABLE_CONSTRAINTS",
+                    "TABLE_PRIVILEGES",
+                    "TABLE_STORAGE_METRICS",
+                    "USAGE_PRIVILEGES",
+                    "VIEWS",
+                ],
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 40,
+                "KIND": ["VIEW"] * 40,
+            }
+        )
+    else:
+        return pd.DataFrame(
+            {
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 40,
+                "NAME": [
+                    "APPLICABLE_ROLES",
+                    "CLASSES",
+                    "CLASS_INSTANCES",
+                    "CLASS_INSTANCE_FUNCTIONS",
+                    "CLASS_INSTANCE_PROCEDURES",
+                    "COLUMNS",
+                    "CURRENT_PACKAGES_POLICY",
+                    "DATABASES",
+                    "ELEMENT_TYPES",
+                    "ENABLED_ROLES",
+                    "EVENT_TABLES",
+                    "EXTERNAL_TABLES",
+                    "FIELDS",
+                    "FILE_FORMATS",
+                    "FUNCTIONS",
+                    "GIT_REPOSITORIES",
+                    "HYBRID_TABLES",
+                    "INDEXES",
+                    "INDEX_COLUMNS",
+                    "INFORMATION_SCHEMA_CATALOG_NAME",
+                    "LOAD_HISTORY",
+                    "MODEL_VERSIONS",
+                    "OBJECT_PRIVILEGES",
+                    "PACKAGES",
+                    "PIPES",
+                    "PROCEDURES",
+                    "REFERENTIAL_CONSTRAINTS",
+                    "REPLICATION_DATABASES",
+                    "REPLICATION_GROUPS",
+                    "SCHEMATA",
+                    "SEQUENCES",
+                    "SERVICES",
+                    "STAGES",
+                    "STREAMLITS",
+                    "TABLES",
+                    "TABLE_CONSTRAINTS",
+                    "TABLE_PRIVILEGES",
+                    "TABLE_STORAGE_METRICS",
+                    "USAGE_PRIVILEGES",
+                    "VIEWS",
+                ],
+                "RESERVED": [""] * 40,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 40,
+                "COMMENT": [
+                    "The roles that can be applied to the current user.",
+                    "The BUNDLE CLASS that the current user has privileges to view.",
+                    "The BUNDLE INSTANCE that the current user has privileges to view.",
+                    "The functions defined in a bundle that are accessible to the current user's role.",
+                    "The procedures defined in a bundle that are accessible to the current user's role.",
+                    "The columns of tables defined in this database that are accessible to the current user's role.",
+                    "The packages policy set on the current account",
+                    "The databases that are accessible to the current user's role.",
+                    "The element types of structured array types defined in this database that are accessible to the current user's role.",
+                    "The roles that are enabled to the current user.",
+                    "The event tables defined in this database that are accessible to the current user's role.",
+                    "The external tables defined in this database that are accessible to the current user's role.",
+                    "The fields of structured object and map types defined in this database that are accessible to the current user's role.",
+                    "The file formats defined in this database that are accessible to the current user's role.",
+                    "The user-defined functions defined in this database that are accessible to the current user's role.",
+                    "Git repositories in this database that are accessible by the current user's role",
+                    "The hybrid tables defined in this database that are accessible to the current user's role.",
+                    "The indexes defined in this database that are accessible to the current user's role.",
+                    "The columns of indexes defined in this database that are accessible to the current user's role.",
+                    "Identifies the database (or catalog, in SQL terminology) that contains the information_schema",
+                    "The loading information of the copy command",
+                    "The MODEL VERSIONS that the current user has privileges to view ",
+                    "The privileges on all objects defined in this database that are accessible to the current user's role.",
+                    "Available packages in current account",
+                    "The pipes defined in this database that are accessible to the current user's role.",
+                    "The stored procedures defined in this database that are accessible to the current user's role.",
+                    "Referential Constraints in this database that are accessible to the current user",
+                    "The databases for replication that are accessible to the current user's role.",
+                    "The replication groups that are accessible to the current user's role.",
+                    "The schemas defined in this database that are accessible to the current user's role.",
+                    "The sequences defined in this database that are accessible to the current user's role.",
+                    "The services in this database that are accessible to the current user's role.",
+                    "Stages in this database that are accessible by the current user's role",
+                    "Streamlits in this database that are accessible by the current user's role",
+                    "The tables defined in this database that are accessible to the current user's role.",
+                    "Constraints defined on the tables in this database that are accessible to the current user",
+                    "The privileges on tables defined in this database that are accessible to the current user's role.",
+                    "All tables within an account, including expired tables.",
+                    "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
+                    "The views defined in this database that are accessible to the current user's role.",
+                ],
+                "OWNER": [""] * 40,
+                "TEXT": [""] * 40,
+                "IS_SECURE": ["false"] * 40,
+                "IS_MATERIALIZED": ["false"] * 40,
+                "OWNER_ROLE_TYPE": [""] * 40,
+                "CHANGE_TRACKING": ["OFF"] * 40,
+            }
+        )
 
 
-def test_show_views(test_db_snowflake_catalog, memory_leak_check):
+def test_show_views_terse(test_db_snowflake_catalog, memory_leak_check):
     """Tests that show views works on Snowflake."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     # Using Snowflake sample data to test to avoid overhead of creating a view
@@ -1606,7 +1899,7 @@ def test_show_views(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Show views test failed"
 
 
-def test_show_views_jit(test_db_snowflake_catalog, memory_leak_check):
+def test_show_views_terse_jit(test_db_snowflake_catalog, memory_leak_check):
     """Verify that show views works in JIT. This is needed because we need
     to ensure the type information is correct."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
@@ -1629,19 +1922,20 @@ def test_show_views_jit(test_db_snowflake_catalog, memory_leak_check):
     assert n_passed == bodo.get_size(), "Sequential test failed"
 
 
-def test_show_no_terse_error(test_db_snowflake_catalog, memory_leak_check):
-    """Tests that SHOW commands without the TERSE option
-    raises an appropriate error."""
+def test_show_views(test_db_snowflake_catalog, memory_leak_check):
+    """Tests that show views works on Snowflake."""
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
     # Using Snowflake sample data to test to avoid overhead of creating a view
-    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
-        bodo_output = bc.execute_ddl("SHOW TABLES in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
-    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
-        bodo_output = bc.execute_ddl("SHOW VIEWS in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
-    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
-        bodo_output = bc.execute_ddl("SHOW OBJECTS in SNOWFLAKE_SAMPLE_DATA.TPCH_SF1")
-    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
-        bodo_output = bc.execute_ddl("SHOW SCHEMAS in SNOWFLAKE_SAMPLE_DATA")
+    bodo_output = bc.execute_ddl(
+        "SHOW VIEWS in SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"
+    )
+
+    expected_output = _show_views_snowflake_sample_data_output(terse=False)
+    passed = _test_equal_guard(bodo_output, expected_output, sort_output=True)
+    # count how many pes passed the test, since throwing exceptions directly
+    # can lead to inconsistency across pes and hangs
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Show views test failed"
 
 
 def test_create_view(test_db_snowflake_catalog, memory_leak_check):

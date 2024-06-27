@@ -4,6 +4,8 @@ Removes a view from the current/specified schema.
 
 See the [Snowflake documentation](https://docs.snowflake.com/en/sql-reference/sql/drop-view) for more details.
 
+## Syntax
+
 Currently, BodoSQL only supports the following syntax:
 
 ```sql

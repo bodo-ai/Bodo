@@ -1314,6 +1314,59 @@ def test_show_tables_terse(request, harness_name: str, db_schema: str):
 
 @pytest.mark.parametrize(
     "harness_name, db_schema",
+    [
+        pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular"),
+        pytest.param("filesystem_test_harness", "iceberg_db", id="filesystem"),
+    ],
+)
+def test_show_tables(request, harness_name: str, db_schema: str):
+    """Tests that Bodo can show tables in the full format."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    table_name = harness.gen_unique_id("test_table").upper()
+    db_schema = harness.gen_unique_id(db_schema).upper()
+    table_identifier = harness.get_table_identifier(table_name, db_schema)
+    try:
+        # Create blank schema
+        query = f"CREATE SCHEMA {db_schema}"
+        harness.run_spark_query(query)
+        harness.check_schema_exists(db_schema)
+        # Create table
+        harness.create_test_table(table_identifier)
+        assert harness.check_table_exists(table_identifier)
+        # Show tables
+        query = f"SHOW TABLES in {db_schema}"
+        py_output = pd.DataFrame(
+            {
+                "CREATED_ON": [None],
+                "NAME": [table_name.replace('"', "")],
+                "SCHEMA_NAME": [db_schema.replace('"', "")],
+                "KIND": ["TABLE"],
+                "COMMENT": [None],
+                "CLUSTER_BY": [None],
+                "ROWS": [None],
+                "BYTES": [None],
+                "OWNER": [None],
+                "RETENTION_TIME": [None],
+                "AUTOMATIC_CLUSTERING": [None],
+                "CHANGE_TRACKING": [None],
+                "IS_EXTERNAL": [None],
+                "ENABLE_SCHEMA_EVOLUTION": [None],
+                "OWNER_ROLE_TYPE": [None],
+                "IS_EVENT": [None],
+                "IS_HYBRID": [None],
+                "IS_ICEBERG": ["Y"],
+                "IS_IMMUTABLE": [None],
+            }
+        )
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+    finally:
+        harness.drop_test_table(table_identifier)
+        harness.run_spark_query(f"DROP SCHEMA {db_schema}")
+
+
+@pytest.mark.parametrize(
+    "harness_name, db_schema",
     [pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular")],
 )
 def test_show_views_terse(request, harness_name: str, db_schema: str):
@@ -1338,6 +1391,48 @@ def test_show_views_terse(request, harness_name: str, db_schema: str):
                 "NAME": [view_name],
                 "KIND": ["VIEW"],
                 "SCHEMA_NAME": [db_schema.replace('"', "")],
+            }
+        )
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+    finally:
+        harness.drop_test_view(view_identifier)
+        harness.run_spark_query(f"DROP SCHEMA {db_schema}")
+
+
+@pytest.mark.parametrize(
+    "harness_name, db_schema",
+    [pytest.param("tabular_test_harness", "BODOSQL_SHOW_TESTS", id="tabular")],
+)
+def test_show_views(request, harness_name: str, db_schema: str):
+    """Tests that Bodo can show views in a full format."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    view_name = harness.gen_unique_id("test_view").upper()
+    db_schema = harness.gen_unique_id(db_schema).upper()
+    view_identifier = harness.get_table_identifier(view_name, db_schema)
+    try:
+        # Create blank schema
+        query = f"CREATE SCHEMA {db_schema}"
+        harness.run_spark_query(query)
+        harness.check_schema_exists(db_schema)
+        # Create view
+        harness.create_test_view(view_identifier)
+        assert harness.check_view_exists(view_identifier)
+        # Show views
+        query = f"SHOW VIEWS in {db_schema}"
+        py_output = pd.DataFrame(
+            {
+                "CREATED_ON": [None],
+                "NAME": [view_name.replace('"', "")],
+                "RESERVED": [None],
+                "SCHEMA_NAME": [db_schema.replace('"', "")],
+                "COMMENT": [None],
+                "OWNER": [None],
+                "TEXT": [None],
+                "IS_SECURE": [None],
+                "IS_MATERIALIZED": [None],
+                "OWNER_ROLE_TYPE": [None],
+                "CHANGE_TRACKING": [None],
             }
         )
         bodo_output = harness.run_bodo_query(query)
@@ -1382,6 +1477,80 @@ def test_show_objects_terse(request, harness_name: str, db_schema: str):
         assert_equal_par(bodo_output, py_output)
     finally:
         harness.drop_test_table(table_identifier)
+        harness.run_spark_query(f"DROP SCHEMA {db_schema}")
+
+
+@pytest.mark.parametrize(
+    "harness_name, db_schema, test_views",
+    [
+        pytest.param(
+            "tabular_test_harness", "BODOSQL_SHOW_TESTS", True, id="tabular-views"
+        ),
+        pytest.param(
+            "filesystem_test_harness", "iceberg_db", False, id="filesystem-no_views"
+        ),
+    ],
+)
+def test_show_objects(request, harness_name: str, db_schema: str, test_views: bool):
+    """Tests that Bodo can show objects in a terse format."""
+    harness: DDLTestHarness = request.getfixturevalue(harness_name)
+    table_name = harness.gen_unique_id("test_table").upper()
+    db_schema = harness.gen_unique_id(db_schema).upper()
+    table_identifier = harness.get_table_identifier(table_name, db_schema)
+    view_name = harness.gen_unique_id("test_view").upper()
+    view_identifier = harness.get_table_identifier(view_name, db_schema)
+    try:
+        # Create blank schema
+        query = f"CREATE SCHEMA {db_schema}"
+        harness.run_spark_query(query)
+        harness.check_schema_exists(db_schema)
+        # Create test table
+        harness.create_test_table(table_identifier)
+        assert harness.check_table_exists(table_identifier)
+        # Create view (not for filesystem)
+        if test_views:
+            harness.create_test_view(view_identifier)
+            assert harness.check_view_exists(view_identifier)
+            py_output = pd.DataFrame(
+                {
+                    "CREATED_ON": [None, None],
+                    "NAME": [table_name, view_name],
+                    "SCHEMA_NAME": [db_schema, db_schema],
+                    "KIND": ["TABLE", "VIEW"],
+                    "COMMENT": [None, None],
+                    "CLUSTER_BY": [None, None],
+                    "ROWS": [None, None],
+                    "BYTES": [None, None],
+                    "OWNER": [None, None],
+                    "RETENTION_TIME": [None, None],
+                    "OWNER_ROLE_TYPE": [None, None],
+                }
+            )
+        else:
+            py_output = pd.DataFrame(
+                {
+                    "CREATED_ON": [None],
+                    "NAME": [table_name],
+                    "SCHEMA_NAME": [db_schema],
+                    "KIND": ["TABLE"],
+                    "COMMENT": [None],
+                    "CLUSTER_BY": [None],
+                    "ROWS": [None],
+                    "BYTES": [None],
+                    "OWNER": [None],
+                    "RETENTION_TIME": [None],
+                    "OWNER_ROLE_TYPE": [None],
+                }
+            )
+        # Show objects
+        query = f"SHOW OBJECTS in {db_schema}"
+
+        bodo_output = harness.run_bodo_query(query)
+        assert_equal_par(bodo_output, py_output)
+    finally:
+        harness.drop_test_table(table_identifier)
+        if test_views:
+            harness.drop_test_view(view_identifier)
         harness.run_spark_query(f"DROP SCHEMA {db_schema}")
 
 
@@ -1434,20 +1603,54 @@ def test_show_schemas_terse(request, harness_name: str, db_schema: str):
 
 
 @pytest.mark.parametrize(
-    "harness_name",
-    [
-        pytest.param("tabular_test_harness", id="tabular"),
-        pytest.param("filesystem_test_harness", id="filesystem"),
-    ],
+    "harness_name, db_schema",
+    [pytest.param("filesystem_test_harness", "iceberg_db", id="filesystem")],
 )
-def test_show_no_terse_error(request, harness_name: str):
-    """Tests that Bodo throws an error when trying to use SHOW in a non-terse format."""
+def test_show_schemas(request, harness_name: str, db_schema: str):
+    """Tests that Bodo can show schemas in a full format."""
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
-    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
-        bodo_output = harness.run_bodo_query("SHOW TABLES in PLACEHOLDER_SCHEMA")
+    # Don't test Tabular, as doesn't support nested schemas?
+    try:
+        db_name = harness.gen_unique_id(db_schema).upper()
+        query = f'CREATE SCHEMA "{db_name}"'
+        harness.run_bodo_query(query)
+        schema_name1 = harness.gen_unique_id("TEST_SCHEMA_DDL").upper()
+        query = f'CREATE SCHEMA "{db_name}"."{schema_name1}"'
+        harness.run_bodo_query(query)
+        schema_name2 = harness.gen_unique_id("TEST_SCHEMA_DDL").upper()
+        query = f'CREATE SCHEMA "{db_name}"."{schema_name2}"'
+        harness.run_bodo_query(query)
 
-    with pytest.raises(BodoError, match="Only SHOW TERSE is currently supported"):
-        bodo_output = harness.run_bodo_query("SHOW VIEWS in PLACEHOLDER_SCHEMA")
+        query = f'SHOW SCHEMAS IN "{db_name}"'
+        py_output = pd.DataFrame(
+            {
+                "CREATED_ON": [None, None],
+                "NAME": [schema_name1, schema_name2],
+                "IS_DEFAULT": [None, None],
+                "IS_CURRENT": [None, None],
+                "DATABASE_NAME": [db_name, db_name],
+                "OWNER": [None, None],
+                "COMMENT": [None, None],
+                "OPTIONS": [None, None],
+                "RETENTION_TIME": [None, None],
+                "OWNER_ROLE_TYPE": [None, None],
+            }
+        )
+        bodo_output = harness.run_bodo_query(query)
+        bodo_output_sorted = bodo_output.sort_values(
+            by=list(bodo_output.columns)
+        ).reset_index(drop=True)
+        py_output_sorted = py_output.sort_values(
+            by=list(py_output.columns)
+        ).reset_index(drop=True)
+        assert_equal_par(bodo_output_sorted, py_output_sorted)
+    finally:
+        query = f'DROP SCHEMA "{db_name}"."{schema_name1}"'
+        harness.run_bodo_query(query)
+        query = f'DROP SCHEMA "{db_name}"."{schema_name2}"'
+        harness.run_bodo_query(query)
+        query = f'DROP SCHEMA "{db_name}"'
+        harness.run_bodo_query(query)
 
 
 @pytest.mark.parametrize(

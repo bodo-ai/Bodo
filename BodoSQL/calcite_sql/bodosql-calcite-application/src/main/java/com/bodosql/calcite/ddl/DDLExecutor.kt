@@ -226,30 +226,58 @@ interface DDLExecutor {
     fun describeSchema(schemaPath: ImmutableList<String>): DDLExecutionResult
 
     /**
-     * Show objects in the database.
+     * Show objects in the database in a terse format.
      * @param schemaPath The path to the schema to show objects from.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     */
+    fun showTerseObjects(schemaPath: ImmutableList<String>): DDLExecutionResult
+
+    /**
+     * Show objects in the database.
+     * @param schemaPath The path to the schema to show objects from.
+     * @return DDLExecutionResult
      */
     fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult
 
     /**
-     * Show schemas in the database.
+     * Show schemas in the database in a terse format.
      * @param dbPath The path to schema to show all sub-schemas from.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     */
+    fun showTerseSchemas(dbPath: ImmutableList<String>): DDLExecutionResult
+
+    /**
+     * Show schemas in the database.
+     * @param dbPath The path to schema to show all sub-schemas from.
+     * @return DDLExecutionResult
      */
     fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult
 
     /**
-     * Show tables in the database.
+     * Show tables in the database in a terse format.
      * @param schemaPath The path to the schema to show tables from.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     */
+    fun showTerseTables(schemaPath: ImmutableList<String>): DDLExecutionResult
+
+    /**
+     * Show tables in the database.
+     * @param schemaPath The path to the schema to show tables from.
+     * @return DDLExecutionResult
      */
     fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult
 
     /**
-     * Show views in the database.
+     * Show views in the database in a terse format.
      * @param schemaPath The path to the schema to show views from.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
+     */
+    fun showTerseViews(schemaPath: ImmutableList<String>): DDLExecutionResult
+
+    /**
+     * Show views in the database.
+     * @param schemaPath The path to the schema to show views from.
+     * @return DDLExecutionResult
      */
     fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult
 

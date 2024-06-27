@@ -2317,7 +2317,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showObjects(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTerseObjects(@NotNull ImmutableList<String> schemaPath) {
 
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW OBJECTS IN %s", schemaName);
@@ -2348,6 +2348,67 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     /**
+     * Emulates SHOW OBJECTS for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult
+     * @throws RuntimeException on error The method executes a Snowflake query SHOW OBJECTS to show
+     *     objects within a specified schema, and processes the result set. It builds up and returns
+     *     a DDLExecutionResult object which contains the column names and their respective values.
+     *     Note that the database name and schema name columns of the original query are combined
+     *     due to compatibility with Iceberg, which uses namespaces instead of DB/schemas.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult showObjects(@NotNull ImmutableList<String> schemaPath) {
+      String schemaName = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "SHOW OBJECTS IN %s", schemaName);
+      List<List<Object>> columnValues = new ArrayList();
+      List<String> columnNames =
+          List.of(
+              "CREATED_ON",
+              "NAME",
+              "SCHEMA_NAME",
+              "KIND",
+              "COMMENT",
+              "CLUSTER_BY",
+              "ROWS",
+              "BYTES",
+              "OWNER",
+              "RETENTION_TIME",
+              "OWNER_ROLE_TYPE");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          columnValues.get(0).add(output.getString("created_on"));
+          columnValues.get(1).add(output.getString("name"));
+          String db_schema =
+              output.getString("database_name") + "." + output.getString("schema_name");
+          columnValues.get(2).add(db_schema);
+          columnValues.get(3).add(output.getString("kind"));
+          columnValues.get(4).add(output.getString("comment"));
+          columnValues.get(5).add(output.getString("cluster_by"));
+          columnValues.get(6).add(output.getInt("rows"));
+          columnValues.get(7).add(output.getInt("bytes"));
+          for (int i = 8; i < columnNames.size(); i++) {
+            columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
+          }
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Unable to show objects in %s. Error: %s",
+                schemaName,
+                e.getMessage()));
+      }
+    }
+
+    /**
      * Emulates SHOW TERSE TABLES for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
@@ -2360,7 +2421,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showTables(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTerseTables(@NotNull ImmutableList<String> schemaPath) {
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW TABLES IN %s", schemaName);
       List<List<String>> columnValues = new ArrayList();
@@ -2387,6 +2448,70 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     /**
+     * Emulates SHOW TABLES for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult
+     * @throws RuntimeException on error The method executes a Snowflake query SHOW TABLES to show
+     *     tables within a specified schema, and processes the result set. It builds up and returns
+     *     a DDLExecutionResult object which contains the column names and their respective values.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult showTables(@NotNull ImmutableList<String> schemaPath) {
+      String schemaName = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "SHOW TABLES IN %s", schemaName);
+      List<List<Object>> columnValues = new ArrayList();
+      List<String> columnNames =
+          List.of(
+              "CREATED_ON",
+              "NAME",
+              "SCHEMA_NAME",
+              "KIND",
+              "COMMENT",
+              "CLUSTER_BY",
+              "ROWS",
+              "BYTES",
+              "OWNER",
+              "RETENTION_TIME",
+              "AUTOMATIC_CLUSTERING",
+              "CHANGE_TRACKING",
+              "IS_EXTERNAL",
+              "ENABLE_SCHEMA_EVOLUTION",
+              "OWNER_ROLE_TYPE",
+              "IS_EVENT",
+              "IS_HYBRID",
+              "IS_ICEBERG",
+              "IS_IMMUTABLE");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          columnValues.get(0).add(output.getString("created_on"));
+          columnValues.get(1).add(output.getString("name"));
+          String db_schema =
+              output.getString("database_name") + "." + output.getString("schema_name");
+          columnValues.get(2).add(db_schema);
+          columnValues.get(3).add(output.getString("kind"));
+          columnValues.get(4).add(output.getString("comment"));
+          columnValues.get(5).add(output.getString("cluster_by"));
+          columnValues.get(6).add(output.getInt("rows"));
+          columnValues.get(7).add(output.getInt("bytes"));
+          for (int i = 8; i < columnNames.size(); i++) {
+            columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
+          }
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT, "Unable to show tables in %s. Error: %s", schemaName, e.getMessage()));
+      }
+    }
+
+    /**
      * Emulates SHOW TERSE SCHEMAS for a specified db in Snowflake.
      *
      * @param dbPath The db path.
@@ -2399,7 +2524,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showSchemas(@NotNull ImmutableList<String> dbPath) {
+    public DDLExecutionResult showTerseSchemas(@NotNull ImmutableList<String> dbPath) {
 
       String dbName = generateSnowflakeObjectString(dbPath);
       String query = String.format(Locale.ROOT, "SHOW SCHEMAS IN %s", dbName);
@@ -2429,6 +2554,55 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     }
 
     /**
+     * Emulates SHOW SCHEMAS for a specified db in Snowflake.
+     *
+     * <p>The method executes a Snowflake query SHOW SCHEMAS to show schemas within a specified
+     * schema, and processes the result set. It builds up and returns a DDLExecutionResult object
+     * which contains the column names and their respective values. Note that the database name
+     * column of the original query is renamed to SCHEMA_NAME due to compatibility with Iceberg,
+     * which uses namespaces instead of DB/schemas.
+     *
+     * @param dbPath The db path.
+     * @return DDLExecutionResult
+     * @throws RuntimeException on error
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult showSchemas(@NotNull ImmutableList<String> dbPath) {
+      String dbName = generateSnowflakeObjectString(dbPath);
+      String query = String.format(Locale.ROOT, "SHOW SCHEMAS IN %s", dbName);
+      List<List<String>> columnValues = new ArrayList();
+      List<String> columnNames =
+          List.of(
+              "CREATED_ON",
+              "NAME",
+              "IS_DEFAULT",
+              "IS_CURRENT",
+              "DATABASE_NAME",
+              "OWNER",
+              "COMMENT",
+              "OPTIONS",
+              "RETENTION_TIME",
+              "OWNER_ROLE_TYPE");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          for (int i = 0; i < columnNames.size(); i++) {
+            columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
+          }
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT, "Unable to show schemas in %s. Error: %s", dbName, e.getMessage()));
+      }
+    }
+
+    /**
      * Emulates SHOW TERSE VIEWS for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
@@ -2442,7 +2616,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showViews(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTerseViews(@NotNull ImmutableList<String> schemaPath) {
 
       String schemaName = generateSnowflakeObjectString(schemaPath);
       // NOTE: Normal SHOW VIEWS does not provide a "kind" column.
@@ -2461,6 +2635,63 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
               output.getString("database_name") + "." + output.getString("schema_name");
           columnValues.get(2).add(db_schema);
           columnValues.get(3).add(output.getString("kind"));
+        }
+        return new DDLExecutionResult(columnNames, columnValues);
+      } catch (SQLException e) {
+        throw new RuntimeException(
+            String.format(
+                Locale.ROOT, "Unable to show views in %s. Error: %s", schemaName, e.getMessage()));
+      }
+    }
+
+    /**
+     * Emulates SHOW VIEWS for a specified schema in Snowflake.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult
+     * @throws RuntimeException on error
+     *     <p>The method executes a Snowflake query SHOW TABLES to show tables within a specified
+     *     schema, and processes the result set. It builds up and returns a DDLExecutionResult
+     *     object which contains the column names and their respective values. Note that the
+     *     database name and schema name columns of the original query are combined due to
+     *     compatibility with Iceberg, which uses namespaces instead of DB/schemas.
+     */
+    @NotNull
+    @Override
+    public DDLExecutionResult showViews(@NotNull ImmutableList<String> schemaPath) {
+      String schemaName = generateSnowflakeObjectString(schemaPath);
+      String query = String.format(Locale.ROOT, "SHOW VIEWS IN %s", schemaName);
+      List<List<Object>> columnValues = new ArrayList();
+      List<String> columnNames =
+          List.of(
+              "CREATED_ON",
+              "NAME",
+              "RESERVED",
+              "SCHEMA_NAME",
+              "COMMENT",
+              "OWNER",
+              "TEXT",
+              "IS_SECURE",
+              "IS_MATERIALIZED",
+              "OWNER_ROLE_TYPE",
+              "CHANGE_TRACKING");
+      for (int i = 0; i < columnNames.size(); i++) {
+        columnValues.add(new ArrayList<>());
+      }
+      try {
+        ResultSet output = executeSnowflakeQuery(query);
+        while (output.next()) {
+          columnValues.get(0).add(output.getString("created_on"));
+          columnValues.get(1).add(output.getString("name"));
+          String db_schema =
+              output.getString("database_name") + "." + output.getString("schema_name");
+          columnValues.get(3).add(db_schema);
+          // For some reason, Snowflake does not return the "kind" column when TERSE is not
+          // specified, despite the documentation claiming it should.
+          columnValues.get(2).add("");
+          for (int i = 4; i < columnNames.size(); i++) {
+            columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
+          }
         }
         return new DDLExecutionResult(columnNames, columnValues);
       } catch (SQLException e) {

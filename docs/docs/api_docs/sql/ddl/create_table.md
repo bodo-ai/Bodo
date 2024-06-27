@@ -4,6 +4,8 @@ Creates a new table in the current/specified schema.
 
 See the [Snowflake documentation](https://docs.snowflake.com/en/sql-reference/sql/create-table) for more details.
 
+## Syntax
+
 Currently, BodoSQL only supports the `CREATE TABLE ... AS SELECT` (CTAS) form, and only with the following syntax:
 
 ```sql

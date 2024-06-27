@@ -183,16 +183,16 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
-     * The method uses the .listTables(namespace) method of the respective catalog
-     * to emulate the table part of SHOW TERSE OBJECTS. Views are a TODO.
+     * The method uses the .listTables(namespace) and .listViews(namespace) method of the respective catalog
+     * to emulate SHOW TERSE OBJECTS.
      */
-    override fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
-        // TODO:
+    override fun showTerseObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
         val namespace = Namespace.of(*schemaPath.toTypedArray())
-        // LOOP over objects
+        // Loop over all objects in the schema,
+        // and add their details to the result.
         // Tables
         icebergConnection.listTables(namespace).forEach {
             columnValues[0].add(null)
@@ -200,7 +200,85 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[2].add("TABLE")
             columnValues[3].add(namespace.levels().joinToString("."))
         }
-        // TODO: Views
+        // Views
+        if (icebergConnection is ViewCatalog) {
+            icebergConnection.listViews(namespace).forEach {
+                columnValues[0].add(null)
+                columnValues[1].add(it.name())
+                columnValues[2].add("VIEW")
+                columnValues[3].add(namespace.levels().joinToString("."))
+            }
+        }
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    /**
+     * Emulates SHOW OBJECTS for a specified namespace in Iceberg.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     *
+     * The method uses the .listTables(namespace) and .listViews(namespace) method of the respective catalog
+     * to emulate the table part of SHOW TERSE OBJECTS.
+     */
+    override fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        // Short helper to update the last element of a list.
+        fun <T> MutableList<T>.setLast(value: T) {
+            if (this.isNotEmpty()) {
+                this[this.size - 1] = value
+            }
+        }
+        val fieldNames =
+            listOf(
+                "CREATED_ON",
+                "NAME",
+                "SCHEMA_NAME",
+                "KIND",
+                "COMMENT",
+                "CLUSTER_BY",
+                "ROWS",
+                "BYTES",
+                "OWNER",
+                "RETENTION_TIME",
+                "OWNER_ROLE_TYPE",
+            )
+        val columnValues = List(fieldNames.size) { ArrayList<String?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        // Loop over all objects in the schema,
+        // and add their details to the result.
+        // Tables
+        icebergConnection.listTables(namespace).forEach {
+            val table = icebergConnection.loadTable(it)
+            // Iceberg tables do not store created timestamps, so we
+            // always store them as null. All unsupported fields are
+            // also null by default.
+            for (i in fieldNames.indices) {
+                columnValues[i].add(null)
+            }
+            // We only modify the supported fields.
+            columnValues[fieldNames.indexOf("NAME")].setLast(it.name())
+            columnValues[fieldNames.indexOf("KIND")].setLast("TABLE")
+            columnValues[fieldNames.indexOf("SCHEMA_NAME")].setLast(namespace.levels().joinToString("."))
+            columnValues[fieldNames.indexOf("COMMENT")].setLast(table.properties()["comment"])
+        }
+        // Views
+        if (icebergConnection is ViewCatalog) {
+            icebergConnection.listViews(namespace).forEach {
+                val table = icebergConnection.loadView(it)
+                // Iceberg views do not store created timestamps, so we
+                // always store them as null. All unsupported fields are
+                // also null by default.
+                for (i in fieldNames.indices) {
+                    columnValues[i].add(null)
+                }
+                // We only modify the supported fields.
+                columnValues[fieldNames.indexOf("NAME")].setLast(it.name())
+                columnValues[fieldNames.indexOf("KIND")].setLast("VIEW")
+                columnValues[fieldNames.indexOf("SCHEMA_NAME")].setLast(namespace.levels().joinToString("."))
+                columnValues[fieldNames.indexOf("COMMENT")].setLast(table.properties()["comment"])
+            }
+        }
         return DDLExecutionResult(fieldNames, columnValues)
     }
 
@@ -214,7 +292,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * The method uses the .listNamespaces(namespace) method of the respective catalog
      * to emulate SHOW TERSE SCHEMAS.
      */
-    override fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
@@ -227,6 +305,52 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[2].add(null)
             // get full schema path
             columnValues[3].add(it.toString())
+        }
+
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    /**
+     * Emulates SHOW SCHEMAS for a specified namespace in Iceberg.
+     *
+     * @param dbPath The db path.
+     * @return DDLExecutionResult
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     *
+     * The method uses the .listNamespaces(namespace) method of the respective catalog
+     * to emulate SHOW SCHEMAS.
+     */
+    override fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
+        // Short helper to update the last element of a list.
+        fun <T> MutableList<T>.setLast(value: T) {
+            if (this.isNotEmpty()) {
+                this[this.size - 1] = value
+            }
+        }
+        val fieldNames =
+            listOf(
+                "CREATED_ON",
+                "NAME",
+                "IS_DEFAULT",
+                "IS_CURRENT",
+                "DATABASE_NAME",
+                "OWNER",
+                "COMMENT",
+                "OPTIONS",
+                "RETENTION_TIME",
+                "OWNER_ROLE_TYPE",
+            )
+        val columnValues = List(fieldNames.size) { ArrayList<String?>() }
+        // LOOP over objects
+        val namespace = Namespace.of(*dbPath.toTypedArray())
+        icebergConnection.listNamespaces(namespace).forEach {
+            // Set all fields to null by default,
+            // and only add supported fields.
+            for (i in fieldNames.indices) {
+                columnValues[i].add(null)
+            }
+            columnValues[fieldNames.indexOf("NAME")].setLast(it.level(it.levels().size - 1))
+            columnValues[fieldNames.indexOf("DATABASE_NAME")].setLast(namespace.levels().joinToString("."))
         }
         return DDLExecutionResult(fieldNames, columnValues)
     }
@@ -241,7 +365,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * The method uses the .listTables(namespace) method of the respective catalog
      * to emulate SHOW TERSE TABLES.
      */
-    override fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseTables(schemaPath: ImmutableList<String>): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
@@ -257,6 +381,65 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
     }
 
     /**
+     * Emulates SHOW TABLES for a specified namespace in Iceberg.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     *
+     * The method uses the .listTables(namespace) method of the respective catalog
+     * to emulate SHOW TABLES.
+     */
+    override fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        // Short helper to update the last element of a list.
+        fun <T> MutableList<T>.setLast(value: T) {
+            if (this.isNotEmpty()) {
+                this[this.size - 1] = value
+            }
+        }
+        val fieldNames =
+            listOf(
+                "CREATED_ON",
+                "NAME",
+                "SCHEMA_NAME",
+                "KIND",
+                "COMMENT",
+                "CLUSTER_BY",
+                "ROWS",
+                "BYTES",
+                "OWNER",
+                "RETENTION_TIME",
+                "AUTOMATIC_CLUSTERING",
+                "CHANGE_TRACKING",
+                "IS_EXTERNAL",
+                "ENABLE_SCHEMA_EVOLUTION",
+                "OWNER_ROLE_TYPE",
+                "IS_EVENT",
+                "IS_HYBRID",
+                "IS_ICEBERG",
+                "IS_IMMUTABLE",
+            )
+        val columnValues = List(fieldNames.size) { ArrayList<Any?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        icebergConnection.listTables(namespace).forEach {
+            val table = icebergConnection.loadTable(it)
+            // Iceberg tables do not store created timestamps, so we
+            // always store them as null. All unsupported fields are
+            // also null by default.
+            for (i in fieldNames.indices) {
+                columnValues[i].add(null)
+            }
+            // We only modify the supported fields.
+            columnValues[fieldNames.indexOf("NAME")].setLast(it.name())
+            columnValues[fieldNames.indexOf("KIND")].setLast("TABLE")
+            columnValues[fieldNames.indexOf("SCHEMA_NAME")].setLast(namespace.levels().joinToString("."))
+            columnValues[fieldNames.indexOf("COMMENT")].setLast(table.properties()["comment"])
+            columnValues[fieldNames.indexOf("IS_ICEBERG")].setLast("Y")
+        }
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    /**
      * Emulates SHOW TERSE VIEWS for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
@@ -267,7 +450,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * The method uses the .listViews(namespace) method of the respective catalog
      * to emulate SHOW TERSE VIEWS, if the catalog supports the method.
      */
-    override fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseViews(schemaPath: ImmutableList<String>): DDLExecutionResult {
         if (icebergConnection !is ViewCatalog) {
             throw RuntimeException("SHOW VIEWS is unimplemented for the current catalog")
         }
@@ -280,6 +463,59 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[1].add(it.name())
             columnValues[2].add("VIEW")
             columnValues[3].add(namespace.levels().joinToString("."))
+        }
+        return DDLExecutionResult(fieldNames, columnValues)
+    }
+
+    /**
+     * Emulates SHOW VIEWS for a specified namespace in Iceberg.
+     *
+     * @param schemaPath The schema path.
+     * @return DDLExecutionResult
+     * @throws NoSuchNamespaceException if namespace cannot be found
+     * @throws RuntimeException if catalog does not support view operations
+     *
+     * The method uses the .listViews(namespace) method of the respective catalog
+     * to emulate SHOW VIEWS, if the catalog supports the method.
+     */
+    override fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult {
+        // Short helper to update the last element of a list.
+        fun <T> MutableList<T>.setLast(value: T) {
+            if (this.isNotEmpty()) {
+                this[this.size - 1] = value
+            }
+        }
+        if (icebergConnection !is ViewCatalog) {
+            throw RuntimeException("SHOW VIEWS is unimplemented for the current catalog")
+        }
+        val fieldNames =
+            listOf(
+                "CREATED_ON",
+                "NAME",
+                "RESERVED",
+                "SCHEMA_NAME",
+                "COMMENT",
+                "OWNER",
+                "TEXT",
+                "IS_SECURE",
+                "IS_MATERIALIZED",
+                "OWNER_ROLE_TYPE",
+                "CHANGE_TRACKING",
+            )
+        val columnValues = List(fieldNames.size) { ArrayList<String?>() }
+        val namespace = Namespace.of(*schemaPath.toTypedArray())
+        icebergConnection.listViews(namespace).forEach {
+            val view = icebergConnection.loadView(it)
+            // Iceberg tables do not store created timestamps, so we
+            // always store them as null. All unsupported fields are
+            // also null by default.
+            for (i in fieldNames.indices) {
+                columnValues[i].add(null)
+            }
+            // We only modify the supported fields.
+            columnValues[fieldNames.indexOf("NAME")].setLast(it.name())
+            columnValues[fieldNames.indexOf("SCHEMA_NAME")].setLast(namespace.levels().joinToString("."))
+            columnValues[fieldNames.indexOf("COMMENT")].setLast(view.properties()["comment"])
         }
         return DDLExecutionResult(fieldNames, columnValues)
     }
