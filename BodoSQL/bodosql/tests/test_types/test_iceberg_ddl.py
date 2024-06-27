@@ -18,21 +18,25 @@ from bodosql.tests.utils import assert_equal_par
 pytestmark = pytest_tabular
 
 
-@pytest.fixture
-def filesystem_test_harness(tmp_path_factory):
+@pytest.fixture(scope="session")
+def test_harness_path(tmp_path_factory):
     path = None
     if bodo.get_rank() == 0:
         path = str(tmp_path_factory.mktemp("iceberg"))
     path = MPI.COMM_WORLD.bcast(path)
-
     assert Path(path).exists(), "Failed to create filesystem catalog across all ranks"
-    catalog = bodosql.FileSystemCatalog(path, "iceberg")
+    return path
+
+
+@pytest.fixture(scope="session")
+def filesystem_test_harness(test_harness_path):
+    catalog = bodosql.FileSystemCatalog(test_harness_path, "iceberg")
     return FilesystemTestHarness(catalog)
 
 
 @pytest.fixture
-def tabular_test_harness(tabular_catalog, tabular_connection):
-    return TabularTestHarness(tabular_catalog, tabular_connection)
+def tabular_test_harness(tabular_catalog, tabular_connection, test_harness_path):
+    return TabularTestHarness(tabular_catalog, tabular_connection, test_harness_path)
 
 
 ###############################################
@@ -948,6 +952,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         harness.run_spark_query(
             f"ALTER TABLE {table_identifier} add column TESTCOL2 struct<X: double, Y: double>"
         )
+        harness.run_spark_query(f"REFRESH TABLE {table_identifier}")
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame(
