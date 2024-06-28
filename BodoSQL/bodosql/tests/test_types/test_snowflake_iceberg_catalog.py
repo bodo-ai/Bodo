@@ -213,7 +213,7 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         "E2E_TESTS_DB",
-        connection_params={"schema": "PUBLIC"},
+        connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
         iceberg_volume="exvol",
     )
     db = "E2E_TESTS_DB"
@@ -527,7 +527,7 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
         "bodopartner.us-east-1",
         "DEMO_WH",
         database,
-        connection_params={"schema": schema},
+        connection_params={"schema": schema, "role": "ACCOUNTADMIN"},
         iceberg_volume=iceberg_volume,
     )
     bc = bodosql.BodoSQLContext(catalog=catalog)
