@@ -377,6 +377,7 @@ set(sources_list
   "bodo/libs/_stream_join.cpp"
   "bodo/libs/_stream_nested_loop_join.cpp"
   "bodo/libs/_stream_groupby.cpp"
+  "bodo/libs/_stream_sort.cpp"
   "bodo/libs/_stream_window.cpp"
   "bodo/libs/_dict_builder.cpp"
   "bodo/libs/_table_builder_utils.cpp"

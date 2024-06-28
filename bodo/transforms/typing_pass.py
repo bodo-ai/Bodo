@@ -3038,6 +3038,9 @@ class TypingTransforms:
         if func_mod == "bodo.libs.stream_union":
             return self._run_call_stream_union(assign, rhs, func_name, label)
 
+        if func_mod == "bodo.libs.stream_sort":
+            return self._run_call_stream_sort(assign, rhs, func_name, label)
+
         if func_mod == "bodo.libs.table_builder":
             return self._run_call_table_builder(assign, rhs, func_name, label)
 
@@ -5696,6 +5699,176 @@ class TypingTransforms:
                     args,
                     union_state,
                     union_def,
+                    label,
+                )
+
+        return [assign]
+
+    def _run_call_stream_sort(self, assign, rhs, func_name, label):
+        if func_name == "init_stream_sort_state":
+            expected_arg = get_call_expr_arg(
+                "init_stream_sort_state",
+                rhs.args,
+                dict(rhs.kws),
+                5,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            # If we can't determine the expected type we need to transform -
+            # this transformation is done by looking at calls to
+            # sort_build_consume_batch and using that to determine the type that
+            # expected_arg should be.
+            # TODO(aneesh): this could use some serious refactoring - we do this
+            # in many places in this file, and it's hard to tell exactly what's
+            # happening here for new readers.
+            if expected_arg is None:
+                self.needs_transform = True
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+                # If the expected type is unknown we need to transform
+                if expected_type in unresolved_types:
+                    self.needs_transform = True
+                else:
+                    expected_type = self.typemap.get(expected_arg.name, None)
+                    # If the expected type is unknown we need to transform
+                    if expected_type in unresolved_types:
+                        self.needs_transform = True
+        elif func_name == "finalize":
+            # Use the type of the arguments to sort_build_consume_batch to
+            # set the type of the table on the state object.
+            builder_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(builder_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            builder_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                builder_state,
+                ("init_stream_sort_state", "bodo.libs.stream_sort"),
+            )
+            if builder_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_stream_sort_state",
+                builder_def.args,
+                dict(builder_def.kws),
+                5,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+        elif func_name == "sort_build_consume_batch":
+            # Use the type of the arguments to sort_build_consume_batch to
+            # set the type of the table on the state object.
+            builder_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(builder_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            builder_def = guard(
+                _get_state_defining_call,
+                self.func_ir,
+                builder_state,
+                ("init_stream_sort_state", "bodo.libs.stream_sort"),
+            )
+            if builder_def is None:
+                self.needs_transform = True
+                return [assign]
+            # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_stream_sort_state",
+                builder_def.args,
+                dict(builder_def.kws),
+                5,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            if input_table_type != output_type.build_table_type:
+                num_pos_args = 5
+                arg_variables = []
+                arg_values = []
+                for i in range(num_pos_args):
+                    var = get_call_expr_arg(
+                        "init_stream_sort_state",
+                        builder_def.args,
+                        dict(builder_def.kws),
+                        i,
+                        "",
+                    )
+                    arg_variables.append(var)
+
+                if any(
+                    self.typemap.get(var.name, None) is None for var in arg_variables
+                ):
+                    self.needs_transform = True
+                    return [assign]
+                arg_values = [
+                    self._get_const_value(v, label, "arguments to sort must be const")
+                    for v in arg_variables
+                ]
+                # Stringify args so that we can use them in the function call
+                # below
+                const_args = " ,".join([f"{val}" for val in arg_values])
+
+                # `by` is the 1st argument to init_stream_sort_state, and
+                # stores the columns that we are sorting by as a list of
+                # strings. We want to convert that to a list of indices into the
+                # list of columns to store in the state type. The list of
+                # columns is available as the 4th argument.
+                by = arg_values[1]
+                col_names = arg_values[4]
+                key_inds = tuple(col_names.index(col) for col in by)
+                new_type = bodo.libs.stream_sort.SortStateType(
+                    input_table_type, key_inds
+                )
+
+                func_text = (
+                    "def impl():\n"
+                    "  return bodo.libs.stream_sort.init_stream_sort_state(\n"
+                    f"    {const_args},\n"
+                    "    expected_state_type=_expected_state_type\n"
+                    "  )\n"
+                )
+
+                args = []
+                self._replace_state_definition(
+                    func_text,
+                    "impl",
+                    {"_expected_state_type": new_type},
+                    args,
+                    builder_state,
+                    builder_def,
                     label,
                 )
 
