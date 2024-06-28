@@ -91,6 +91,8 @@ interface BodoPhysicalRel : TimerSupportedRel {
     interface BuildContext {
         fun operatorID(): OperatorID
 
+        fun fetchParentMappings(): HashMap<RelNode, List<RelNode>>
+
         /**
          * Visits a child relational expression and returns the result as a BodoEngineTable.
          */

@@ -11,7 +11,8 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                          std::vector<bool> order_by_cols_to_keep_,
                          int64_t output_batch_size_, bool parallel_,
                          int64_t sync_iter_, int64_t op_id_,
-                         int64_t op_pool_size_bytes_)
+                         int64_t op_pool_size_bytes_,
+                         bool allow_work_stealing_)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -39,12 +40,14 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
       sync_iter(sync_iter_),
       op_id(op_id_) {
     // Enable/disable work stealing
-    char* enable_output_work_stealing_env_ =
-        std::getenv("BODO_STREAM_WINDOW_ENABLE_OUTPUT_WORK_STEALING");
-    if (enable_output_work_stealing_env_) {
-        this->enable_output_work_stealing =
-            (std::strcmp(enable_output_work_stealing_env_, "1") == 0);
+    char* disable_output_work_stealing_env_ =
+        std::getenv("BODO_STREAM_WINDOW_DISABLE_OUTPUT_WORK_STEALING");
+    bool allow_work_stealing = allow_work_stealing_;
+    if (disable_output_work_stealing_env_) {
+        allow_work_stealing &=
+            std::strcmp(disable_output_work_stealing_env_, "0") == 0;
     }
+    this->enable_output_work_stealing = allow_work_stealing;
 
     // Build schema always matches the input schema.
     std::shared_ptr<bodo::Schema> build_table_schema =
@@ -432,7 +435,7 @@ WindowState* window_state_init_py_entry(
     int32_t n_funcs, uint64_t n_keys, bool* order_by_asc, bool* order_by_na,
     uint64_t n_order_by_keys, bool* partition_by_cols_to_keep,
     bool* order_by_cols_to_keep, int64_t output_batch_size, bool parallel,
-    int64_t sync_iter) {
+    int64_t sync_iter, bool allow_work_stealing) {
     // TODO: Consider allowing op pool size bytes to be set
     int64_t op_pool_size_bytes =
         OperatorComptroller::Default()->GetOperatorBudget(operator_id);
@@ -455,7 +458,7 @@ WindowState* window_state_init_py_entry(
         std::vector<int32_t>(window_ftypes, window_ftypes + n_funcs), n_keys,
         order_by_asc_vec, order_by_na_vec, partition_by_cols_to_keep_vec,
         order_by_cols_to_keep_vec, output_batch_size, parallel, sync_iter,
-        operator_id, op_pool_size_bytes);
+        operator_id, op_pool_size_bytes, allow_work_stealing);
 }
 
 /**
