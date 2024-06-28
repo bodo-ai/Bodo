@@ -431,6 +431,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
   set(test_list
     "bodo/tests/test_framework.cpp"
     "bodo/tests/test_example.cpp"
+    "bodo/tests/test_external_sort.cpp"
     "bodo/tests/test_dict_builder.cpp"
     "bodo/tests/test_groupby_common.cpp"
     "bodo/tests/test_groupby_and_window.cpp"
