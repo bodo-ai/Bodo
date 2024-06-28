@@ -135,10 +135,10 @@ class BodoPhysicalSort(
                         val pipeline = builder.getCurrentStreamingPipeline()
                         val outputControl: Variable = builder.symbolTable.genOutputControlVar()
                         pipeline.addOutputControl(outputControl)
-                        // TODO supply limit/offset to finalize and handle LIMIT in streaming
+                        // TODO supply limit/offset to produce_output_batch and handle LIMIT in streaming
                         val outputCall =
                             Expr.Call(
-                                "bodo.libs.stream_sort.finalize",
+                                "bodo.libs.stream_sort.produce_output_batch",
                                 listOf(stateVar, outputControl),
                             )
                         val outTable: Variable = builder.symbolTable.genTableVar()
@@ -193,7 +193,18 @@ class BodoPhysicalSort(
         val stateCall =
             Expr.Call(
                 "bodo.libs.stream_sort.init_stream_sort_state",
-                listOf(ctx.operatorID().toExpr(), byList, ascendingList, naPositionList),
+                listOf(
+                    ctx.operatorID().toExpr(),
+                    byList,
+                    ascendingList,
+                    naPositionList,
+                    Expr.Tuple(
+                        colNames.map {
+                                it ->
+                            Expr.StringLiteral(it)
+                        },
+                    ),
+                ),
             )
         val sortInit = Assign(sortStateVar, stateCall)
         // TODO(aneesh) provide a better memory estimate
