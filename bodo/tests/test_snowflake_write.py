@@ -721,7 +721,7 @@ def test_to_sql_wrong_password():
         df = pd.DataFrame({"A": np.arange(100)})
         df.to_sql("table", conn_str, schema="Public", index=False, if_exists="append")
 
-    with pytest.raises(RuntimeError, match="Failed to connect to DB"):
+    with pytest.raises(RuntimeError, match="Could not connect to Snowflake backend"):
         impl(
             "snowflake://SF_USERNAME:SF_PASSWORD@sf_account/database/PUBLIC?warehouse=warehouse"
         )
