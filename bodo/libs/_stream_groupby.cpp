@@ -2380,11 +2380,11 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
     }
 
     if (this->agg_type == AggregationType::WINDOW) {
-        char* enable_output_work_stealing_env_ =
-            std::getenv("BODO_STREAM_WINDOW_ENABLE_OUTPUT_WORK_STEALING");
-        if (enable_output_work_stealing_env_) {
+        char* disable_output_work_stealing_env_ =
+            std::getenv("BODO_STREAM_WINDOW_DISABLE_OUTPUT_WORK_STEALING");
+        if (disable_output_work_stealing_env_) {
             this->enable_output_work_stealing_window =
-                (std::strcmp(enable_output_work_stealing_env_, "1") == 0);
+                (std::strcmp(disable_output_work_stealing_env_, "0") == 0);
         }
     } else {
         char* enable_output_work_stealing_env_ =

@@ -426,6 +426,7 @@ def _init_window_state(
     order_by_cols_to_keep_t,
     output_state_type,
     parallel_t,
+    allow_work_stealing_t,
 ):
     """Initialize C++ GroupbyState pointer
 
@@ -446,6 +447,7 @@ def _init_window_state(
         output_state_type (TypeRef[WindowStateType]): The output type for the state
                                                     that should be generated.
         parallel_t (bool): Is this executed in parallel.
+        allow_work_stealing_t (bool): Is work stealing allowed?
     """
     output_type = unwrap_typeref(output_state_type)
 
@@ -464,6 +466,7 @@ def _init_window_state(
             order_by_cols_to_keep,
             _,  # output_state_type
             parallel,
+            allow_work_stealing,
         ) = args
         n_keys = context.get_constant(types.uint64, output_type.n_keys)
         output_batch_size = context.get_constant(
@@ -494,6 +497,7 @@ def _init_window_state(
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(64),
+                lir.IntType(1),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -515,6 +519,7 @@ def _init_window_state(
             output_batch_size,
             parallel,
             sync_iter,
+            allow_work_stealing,
         )
         ret = builder.call(fn_tp, input_args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -534,6 +539,7 @@ def _init_window_state(
         types.CPointer(types.bool_),
         output_state_type,
         parallel_t,
+        allow_work_stealing_t,
     )
     return sig, codegen
 
@@ -546,6 +552,7 @@ def init_window_state(
     nulls_last,
     func_names,
     kept_input_indices,
+    allow_work_stealing,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
@@ -562,6 +569,7 @@ def overload_init_window_state(
     nulls_last,
     func_names,
     kept_input_indices,
+    allow_work_stealing,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
@@ -617,6 +625,7 @@ def overload_init_window_state(
             nulls_last,
             func_names,
             kept_input_indices,
+            allow_work_stealing,
             op_pool_size_bytes=-1,
             expected_state_type=None,
             parallel=False,
@@ -635,6 +644,7 @@ def overload_init_window_state(
                 kept_order_by_cols_arr.ctypes,
                 output_type,
                 parallel,
+                allow_work_stealing,
             )
             return output_val
 
@@ -649,6 +659,7 @@ def overload_init_window_state(
             nulls_last,
             func_names,
             kept_input_indices,
+            allow_work_stealing,
             op_pool_size_bytes=-1,
             expected_state_type=None,
             parallel=False,

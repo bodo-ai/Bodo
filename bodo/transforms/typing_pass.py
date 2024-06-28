@@ -5445,7 +5445,7 @@ class TypingTransforms:
                 "init_window_state",
                 rhs.args,
                 dict(rhs.kws),
-                8,
+                9,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5487,7 +5487,7 @@ class TypingTransforms:
                 "init_window_state",
                 window_def.args,
                 dict(window_def.kws),
-                8,
+                9,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5518,7 +5518,7 @@ class TypingTransforms:
                     "init_window_state",
                     window_def.args,
                     dict(window_def.kws),
-                    7,
+                    8,
                     "op_pool_size_bytes",
                     default=None,
                     use_default=True,
@@ -5531,6 +5531,7 @@ class TypingTransforms:
                     "nulls_last",
                     "func_names",
                     "kept_input_indices",
+                    "allow_work_stealing",
                 ]
                 args = [x for x in window_def.args]
                 # If there is a op_pool_size_bytes we need to include it in
@@ -5552,6 +5553,7 @@ class TypingTransforms:
                         nulls_last,
                         func_names,
                         kept_input_indices,
+                        allow_work_stealing,
                         op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,
                     )
