@@ -1019,7 +1019,7 @@ class GroupbyState {
     std::shared_ptr<GroupbyOutputState> output_state = nullptr;
     // By default, enable work-stealing for window and disable it for regular
     // groupby (+ MRNF). This can be overriden by explicitly setting
-    // BODO_STREAM_WINDOW_ENABLE_OUTPUT_WORK_STEALING and
+    // BODO_STREAM_WINDOW_DISABLE_OUTPUT_WORK_STEALING and
     // BODO_STREAM_GROUPBY_ENABLE_OUTPUT_WORK_STEALING.
     bool enable_output_work_stealing_groupby = false;
     bool enable_output_work_stealing_window = true;

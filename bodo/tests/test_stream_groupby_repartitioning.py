@@ -1420,6 +1420,7 @@ def window_skew_impl(df):
         global_4,
         global_5,
         global_6,
+        True,
         op_pool_size_bytes=WINDOW_PARTITION_BUDGET,
     )
     __bodo_is_last_streaming_output_2 = False

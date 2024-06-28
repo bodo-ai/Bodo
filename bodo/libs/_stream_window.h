@@ -53,7 +53,7 @@ class WindowState {
     std::shared_ptr<GroupbyOutputState> output_state = nullptr;
     // By default, enable work-stealing for window.
     // This can be overriden by explicitly setting
-    // BODO_STREAM_WINDOW_ENABLE_OUTPUT_WORK_STEALING.
+    // BODO_STREAM_DISABLE_ENABLE_OUTPUT_WORK_STEALING.
     bool enable_output_work_stealing = true;
 
     // Has all of the input already been processed. This should be
@@ -70,7 +70,8 @@ class WindowState {
                 std::vector<bool> partition_by_cols_to_keep_,
                 std::vector<bool> order_by_cols_to_keep_,
                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                int64_t op_id_, int64_t op_pool_size_bytes_);
+                int64_t op_id_, int64_t op_pool_size_bytes_,
+                bool allow_work_stealing_);
 
     /**
      * @brief Unify dictionaries of input table with the given dictionary

@@ -20,12 +20,14 @@ import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelFieldCollation
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.RelVisitor
 import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.ImmutableBitSet
+import org.apache.calcite.util.Util
 import kotlin.math.ceil
 
 class BodoPhysicalWindow(
@@ -162,6 +164,88 @@ class BodoPhysicalWindow(
     }
 
     /**
+     * Iteratively traverses upward through the subtree starting at
+     * the current RelNode to detect whether there is a nested loop
+     * join in the same pipeline as the window node (and the window
+     * is on the probe side).
+     */
+    private fun pipelineAncestorNestedJoin(parentMapping: Map<RelNode, List<RelNode>>): Boolean {
+        var currentNode: RelNode = this
+        while (true) {
+            // Stop if we have hit the top of the main tree
+            // or a cached subtree (0 ancestors, or multiple)
+            val parents = parentMapping[currentNode]
+            if (parents == null || parents.size > 1) {
+                return false
+            }
+            val currentParent = parents[0]
+            when (currentParent) {
+                is BodoPhysicalJoin -> {
+                    // If we hit a join, return true if it is a nested join
+                    // & we are on the left side (probe), and false otherwise
+                    return currentParent.analyzeCondition().leftKeys.isEmpty() && currentParent.getInput(0) == currentNode
+                }
+                is BodoPhysicalFilter,
+                is BodoPhysicalRuntimeJoinFilter,
+                is BodoPhysicalProject,
+                is BodoPhysicalFlatten,
+                -> {
+                    // On pass-through nodes, keep searching upward
+                    // through the parent nodes.
+                    currentNode = currentParent
+                }
+                else -> {
+                    // On all other nodes, return false since they
+                    // are pipeline breakers.
+                    return false
+                }
+            }
+        }
+    }
+
+    /**
+     * Recursively traverses downward through the subtree starting at
+     * the current RelNode to detect whether there is a nested loop
+     * join in the same pipeline as the window node.
+     */
+    private fun pipelineDescendantNestedJoin(): Boolean {
+        return try {
+            object : RelVisitor() {
+                override fun visit(
+                    node: RelNode,
+                    ordinal: Int,
+                    parent: RelNode?,
+                ) {
+                    when (node) {
+                        is BodoPhysicalJoin -> {
+                            // If we hit a join, throw the indicator exception
+                            // but only if it is a nested loop join.
+                            if (node.analyzeCondition().leftKeys.isEmpty()) {
+                                throw Util.FoundOne.NULL
+                            }
+                        }
+                        is BodoPhysicalFilter,
+                        is BodoPhysicalRuntimeJoinFilter,
+                        is BodoPhysicalProject,
+                        is BodoPhysicalFlatten,
+                        -> {
+                            // On pass-through nodes, keep recursively
+                            // searching through the child nodesz
+                            super.visit(node, ordinal, parent)
+                        }
+                    }
+                    // For all other nodes, we stop recursing since
+                    // we have hit the end of the pipeline without finding
+                    // a nested loop join
+                }
+            }.go(this.getInput())
+            false
+        } catch (e: Util.FoundOne) {
+            true
+        }
+    }
+
+    /**
      * Function to create the initial state for a streaming pipeline.
      * This should be called from emit.
      */
@@ -194,6 +278,11 @@ class BodoPhysicalWindow(
         val nullPosGlobal = ctx.lowerAsMetaType(Expr.Tuple(orderNullPos))
         val funcNamesGlobal = ctx.lowerAsMetaType(Expr.Tuple(funcNames))
         val keptInputsGlobal = ctx.lowerAsMetaType(Expr.Tuple(keptInputsArray))
+        val allowWorkStealing =
+            !(
+                pipelineAncestorNestedJoin(ctx.fetchParentMappings()) ||
+                    pipelineDescendantNestedJoin()
+            )
         val stateCall =
             Expr.Call(
                 "bodo.libs.stream_window.init_window_state",
@@ -205,6 +294,7 @@ class BodoPhysicalWindow(
                     nullPosGlobal,
                     funcNamesGlobal,
                     keptInputsGlobal,
+                    Expr.BooleanLiteral(allowWorkStealing),
                 ),
             )
         val windowInit = Op.Assign(stateVar, stateCall)

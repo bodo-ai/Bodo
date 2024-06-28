@@ -44,6 +44,7 @@ import com.bodosql.calcite.adapter.bodo.ScalarRexToBodoTranslator;
 import com.bodosql.calcite.adapter.bodo.StreamingOptions;
 import com.bodosql.calcite.adapter.bodo.StreamingRexToBodoTranslator;
 import com.bodosql.calcite.adapter.common.TimerSupportedRel;
+import com.bodosql.calcite.adapter.common.TreeReverserDuplicateTracker;
 import com.bodosql.calcite.adapter.pandas.PandasRel;
 import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer;
@@ -183,6 +184,20 @@ public class BodoCodeGenVisitor extends RelVisitor {
   // that by 1.5 to allow for some wiggle room.
   private final int SNOWFLAKE_WRITE_MEMORY_ESTIMATE = ((int) (1.5 * 256 * 1024 * 1024));
   private BodoSqlTable table;
+
+  private @Nullable TreeReverserDuplicateTracker reverseVisitor = null;
+
+  @Override
+  public @Nullable RelNode go(RelNode p) {
+    reverseVisitor = new TreeReverserDuplicateTracker();
+    reverseVisitor.go(p);
+    return super.go(p);
+  }
+
+  @NotNull
+  public HashMap<RelNode, List<RelNode>> getParentMappings() {
+    return reverseVisitor.getReversedTree();
+  }
 
   public BodoCodeGenVisitor(
       HashMap<String, String> loweredGlobalVariablesMap,
@@ -610,7 +625,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
    */
   private void visitBodoPhysicalRel(BodoPhysicalRel node) {
     // Note: All timer handling is done in emit
-    BodoEngineTable out = node.emit(new Implementor(node));
+    BodoEngineTable out = node.emit(new Implementor(node, this.getParentMappings()));
     if (out != null) {
       tableGenStack.push(out);
     } else {
@@ -660,7 +675,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Intersect should be between exactly two inputs");
     }
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
@@ -698,7 +713,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
       throw new BodoSQLCodegenException(
           "Internal Error: Except should be between exactly two inputs");
     }
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
 
     // Visit the two inputs
     RelNode lhs = node.getInput(0);
@@ -741,7 +756,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
       CatalogSchema outputSchemaAsCatalog,
       IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType) {
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
     singleBatchTimer(
         node,
         () -> {
@@ -893,7 +908,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
    */
   public void visitMergeInto(BodoPhysicalTableModify node) {
     assert node.getOperation() == TableModify.Operation.MERGE;
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
 
     RelNode input = node.getInput();
     this.visit(input, 0, node);
@@ -993,7 +1008,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     singleBatchTimer(
         node,
         () -> {
-          BuildContext ctx = new BuildContext(node, genDefaultTZ());
+          BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
           Variable inDf = ctx.convertTableToDf(inputTable);
           Expr castedAndRenamedDfExpr = handleRenameBeforeWrite(inDf, colNames, bodoSqlTable);
           Variable castedAndRenamedDfVar = this.genDfVar();
@@ -1240,7 +1255,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
    * @param node aggregate node being visited
    */
   private void visitSingleBatchedBodoAggregate(BodoPhysicalAggregate node) {
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
     final List<Integer> groupingVariables = node.getGroupSet().asList();
     final List<ImmutableBitSet> groups = node.getGroupSets();
 
@@ -1490,7 +1505,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     final BodoEngineTable table;
     if (filteredAggCallList.size() != node.getAggCallList().size()) {
       // Append any Literal data if it exists.
-      final BuildContext ctx = new BuildContext(node, genDefaultTZ());
+      final BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
       table = concatenateLiteralAggValue(this.generatedCode, ctx, intermediateTable, node);
     } else {
       table = intermediateTable;
@@ -1742,7 +1757,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
    */
   public void visitPandasRel(PandasRel node) {
     // Note: All timer handling is done in emit
-    BodoEngineTable out = node.emit(new Implementor(node));
+    BodoEngineTable out = node.emit(new Implementor(node, this.getParentMappings()));
     tableGenStack.push(out);
   }
 
@@ -1797,7 +1812,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
           mergeIntoTargetNode = node;
           mergeIntoTargetTable = readVar;
           BodoEngineTable outTable;
-          BuildContext ctx = new BuildContext(node, genDefaultTZ());
+          BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
 
           Expr castExpr = table.generateReadCastCode(readVar);
           if (!castExpr.equals(readVar)) {
@@ -1831,7 +1846,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
    * @param node join node being visited
    */
   private void visitBatchedBodoJoin(BodoPhysicalJoin node) {
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
     /* get left/right tables */
 
     List<String> outputColNames = node.getRowType().getFieldNames();
@@ -2042,7 +2057,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
   public void visitBodoRowSample(BodoPhysicalRowSample node) {
     // We always assume row sample has exactly one input
     assert node.getInputs().size() == 1;
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
 
     // Visit the input
     RelNode inp = node.getInput(0);
@@ -2068,7 +2083,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
   public void visitBodoSample(BodoPhysicalSample node) {
     // We always assume sample has exactly one input
     assert node.getInputs().size() == 1;
-    BuildContext ctx = new BuildContext(node, genDefaultTZ());
+    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
 
     // Visit the input
     RelNode inp = node.getInput(0);
@@ -2202,9 +2217,12 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
   private class Implementor implements BodoPhysicalRel.Implementor {
     private final @NotNull TimerSupportedRel node;
+    private final @NotNull HashMap<RelNode, List<RelNode>> parentMappings;
 
-    public Implementor(@NotNull TimerSupportedRel node) {
+    public Implementor(
+        @NotNull TimerSupportedRel node, @NotNull HashMap<RelNode, List<RelNode>> parentMappings) {
       this.node = node;
+      this.parentMappings = parentMappings;
     }
 
     @NotNull
@@ -2212,7 +2230,9 @@ public class BodoCodeGenVisitor extends RelVisitor {
     public BodoEngineTable build(
         @NotNull final Function1<? super BodoPhysicalRel.BuildContext, BodoEngineTable> fn) {
       return singleBatchTimer(
-          node, () -> fn.invoke(new BodoCodeGenVisitor.BuildContext(node, genDefaultTZ())));
+          node,
+          () ->
+              fn.invoke(new BodoCodeGenVisitor.BuildContext(node, genDefaultTZ(), parentMappings)));
     }
 
     @Nullable
@@ -2220,7 +2240,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     public BodoEngineTable buildStreaming(@NotNull OperatorEmission operatorEmission) {
       OperatorID operatorID = generatedCode.newOperatorID(node);
       BodoCodeGenVisitor.BuildContext buildContext =
-          new BodoCodeGenVisitor.BuildContext(node, operatorID, genDefaultTZ());
+          new BodoCodeGenVisitor.BuildContext(node, operatorID, genDefaultTZ(), parentMappings);
       // Must init the first pipeline before we can generate any timers.
       BodoEngineTable table = operatorEmission.initFirstPipeline(buildContext);
       StreamingRelNodeTimer timerInfo =
@@ -2251,15 +2271,24 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     private final BodoTZInfo defaultTz;
 
+    private final HashMap<RelNode, List<RelNode>> parentMappings;
+
     public BuildContext(
-        @NotNull TimerSupportedRel node, OperatorID operatorID, BodoTZInfo defaultTz) {
+        @NotNull TimerSupportedRel node,
+        OperatorID operatorID,
+        BodoTZInfo defaultTz,
+        HashMap<RelNode, List<RelNode>> parentMappings) {
       this.node = node;
       this.operatorID = operatorID;
       this.defaultTz = defaultTz;
+      this.parentMappings = parentMappings;
     }
 
-    public BuildContext(@NotNull TimerSupportedRel node, BodoTZInfo defaultTz) {
-      this(node, null, defaultTz);
+    public BuildContext(
+        @NotNull TimerSupportedRel node,
+        BodoTZInfo defaultTz,
+        HashMap<RelNode, List<RelNode>> parentMappings) {
+      this(node, null, defaultTz, parentMappings);
     }
 
     @Override
@@ -2278,6 +2307,12 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @Override
     public Module.Builder builder() {
       return generatedCode;
+    }
+
+    @NotNull
+    @Override
+    public HashMap<RelNode, List<RelNode>> fetchParentMappings() {
+      return parentMappings;
     }
 
     @NotNull
