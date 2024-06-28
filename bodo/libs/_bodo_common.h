@@ -1946,6 +1946,7 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void);
 PyMODINIT_FUNC PyInit_csv_cpp(void);
 PyMODINIT_FUNC PyInit_json_cpp(void);
 PyMODINIT_FUNC PyInit_stream_join_cpp(void);
+PyMODINIT_FUNC PyInit_stream_sort_cpp(void);
 PyMODINIT_FUNC PyInit_listagg(void);
 PyMODINIT_FUNC PyInit_memory_budget_cpp(void);
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void);
