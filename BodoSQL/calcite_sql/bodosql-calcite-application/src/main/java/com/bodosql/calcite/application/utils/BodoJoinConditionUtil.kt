@@ -10,6 +10,7 @@ import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexPermuteInputsShuttle
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
 import org.apache.calcite.sql.type.SqlTypeName
 
 /**
@@ -58,7 +59,9 @@ class BodoJoinConditionUtil {
          * generated code.
          */
         @JvmStatic private fun isValidBuiltinFunction(call: RexCall): Boolean {
-            return validBuiltinFunctionKinds.contains(call.kind)
+            return (call.op != SqlStdOperatorTable.DATETIME_PLUS) &&
+                (call.op != SqlStdOperatorTable.MINUS_DATE) &&
+                validBuiltinFunctionKinds.contains(call.kind)
         }
 
         /**
@@ -279,7 +282,7 @@ class BodoJoinConditionUtil {
                     false
                 }
                 else -> {
-                    isPushableFunction(join.condition, join.left.getRowType().fieldCount, join.getRowType().fieldCount)
+                    isPushableFunction(join.condition, join.left.rowType.fieldCount, join.rowType.fieldCount)
                 }
             }
         }

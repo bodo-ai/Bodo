@@ -99,7 +99,7 @@ class SnowflakeProjectPushdownHelpers {
                 return null
             }
             // Split the needed projects into two expressions, a project on top of each of the inputs
-            val leftBound = toReplace.left.getRowType().fieldCount
+            val leftBound = toReplace.left.rowType.fieldCount
 
             // NOTE: we don't need to care about left/right/outer joins here,
             // since we're only pushing the join condition.
@@ -144,14 +144,14 @@ class SnowflakeProjectPushdownHelpers {
                         idx,
                         node,
                     ->
-                    Pair(node, idx + oldLeft.getRowType().fieldCount)
+                    Pair(node, idx + oldLeft.rowType.fieldCount)
                 }
             val rightExpressionsIndexed: Iterable<Pair<RexNode, Int>> =
                 rightProjects.mapIndexed {
                         idx,
                         node,
                     ->
-                    Pair(node, idx + oldRight.getRowType().fieldCount)
+                    Pair(node, idx + oldRight.rowType.fieldCount)
                 }
             val expressionMap: Map<RexNode, RexNode> =
                 leftExpressionsIndexed.plus(rightExpressionsIndexed).map { rexNodeAndNewIndex: Pair<RexNode, Int> ->
@@ -161,8 +161,8 @@ class SnowflakeProjectPushdownHelpers {
                     )
                 }.toMap()
             // Update the input refs in the join condition
-            val oldLeftFieldCount = oldLeft.getRowType().fieldCount
-            val oldRightFieldCount = oldRight.getRowType().fieldCount
+            val oldLeftFieldCount = oldLeft.rowType.fieldCount
+            val oldRightFieldCount = oldRight.rowType.fieldCount
             val leftMapping: TargetMapping = Mappings.createIdentity(oldLeftFieldCount)
             val rightMapping =
                 Mappings.createShiftMapping(
@@ -184,14 +184,14 @@ class SnowflakeProjectPushdownHelpers {
             )
             // Generate a projection to get the original type.
             val finalFields: MutableList<RexNode> = ArrayList()
-            for (i in 0 until oldLeft.getRowType().fieldCount) {
+            for (i in 0 until oldLeft.rowType.fieldCount) {
                 finalFields.add(builder.field(i))
             }
-            val totalLeft = oldLeft.getRowType().fieldCount + leftProjects.size
-            for (i in totalLeft until totalLeft + oldRight.getRowType().fieldCount) {
+            val totalLeft = oldLeft.rowType.fieldCount + leftProjects.size
+            for (i in totalLeft until totalLeft + oldRight.rowType.fieldCount) {
                 finalFields.add(builder.field(i))
             }
-            builder.project(finalFields, toReplace.getRowType().fieldNames)
+            builder.project(finalFields, toReplace.rowType.fieldNames)
             return builder.build()
         }
 
@@ -209,7 +209,7 @@ class SnowflakeProjectPushdownHelpers {
         ): RelNode? {
             val filterInput = filter.input
             // Returns a list of values that need to be extracted/pushed below the provided project and filter
-            val replacer = Replacer(filterInput.getRowType().fieldCount, builder.rexBuilder)
+            val replacer = Replacer(filterInput.rowType.fieldCount, builder.rexBuilder)
             val newProjects = replacer.apply(project.projects)
             val newFilterCond = replacer.apply(filter.condition)
 
