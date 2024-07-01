@@ -18,11 +18,13 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import (
     check_func,
     pytest_tabular,
+    temp_env_override,
 )
 
 pytestmark = pytest_tabular
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_simple_join(tabular_catalog, memory_leak_check):
     """
     Test data and file pruning runtime join filters are generated correctly when reading from tabular catalog

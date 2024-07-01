@@ -1,4 +1,5 @@
 #pragma once
+#include <unordered_set>
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -25,6 +26,10 @@ using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
 #define JOIN_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
 
 #define JOIN_MAX_PARTITION_DEPTH 15
+
+// The default maximum number of unique join keys allowed before
+// the join build stops trying to build the hash set of unique keys.
+#define DEFAULT_UNIQUE_VALUES_LIMIT 20
 
 // Chunk size of build_table_buffer_chunked and probe_table_buffer_chunked in
 // JoinPartition
@@ -177,6 +182,12 @@ struct HashJoinMetrics : public JoinMetrics {
 
     // Time spent dealing with the min/max parallel finalization
     time_t build_min_max_finalize_time = 0;
+
+    // Time spent dealing with unique values updates
+    time_t build_unique_values_update_time = 0;
+
+    // Time spent dealing with the unique values parallel finalization
+    time_t build_unique_values_finalize_time = 0;
 
     // Partitioning state
     blob_t final_partitioning_state;
@@ -864,6 +875,16 @@ class HashJoinState : public JoinState {
     // non dictionary encoded columns, the vectors are empty.
     std::vector<std::vector<bool>> build_dict_hit_bitmap;
 
+    // Vector that stores an array for each equi-join key. Each set
+    // stores the unique values encountered so far (as type int64_t). If
+    // it ever goes above a certain threshold, replace with std::nullopt
+    // to indicate that a low-cardinality filter is not possible
+    std::vector<std::optional<std::unordered_set<int64_t>>> unique_values;
+
+    // The magic number used to determine how many unique values are allowed in
+    // the build side of a join before a low-NDV runtime join filter is aborted.
+    size_t unique_values_limit = DEFAULT_UNIQUE_VALUES_LIMIT;
+
     HashJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                   const std::shared_ptr<bodo::Schema> probe_table_schema_,
                   uint64_t n_keys_, bool build_table_outer_,
@@ -1100,6 +1121,13 @@ class HashJoinState : public JoinState {
         std::unique_ptr<bodo::DataType>& dtype);
 
     /**
+     * Returns whether a key column of a hash join can have a runtime
+     * join filter based on its unique values.
+     */
+    static bool IsValidRuntimeJoinFilterUniqueValuesColumn(
+        std::unique_ptr<bodo::DataType>& dtype);
+
+    /**
      * Processes a batch of data to include it in the accumulated min/max values
      * for a specific key column.
      *
@@ -1134,6 +1162,24 @@ class HashJoinState : public JoinState {
      * any runtime join filters.
      */
     void FinalizeKeysMinMax();
+
+    /**
+     * Processes a batch of data to include it in the accumulated unique
+     * values for a specific key column.
+     *
+     * @param[in] arr The batch of data that is being processed to update
+     * the min/max values of a column.
+     * @param[in] col_idx: which column to insert.
+     */
+    void UpdateKeysUniqueValues(const std::shared_ptr<array_info>& arr,
+                                size_t col_idx);
+
+    /**
+     * Does the parallel finalization of the unique values for each key column
+     * to ensure that ever rank has the global unique of the key columns before
+     * any runtime join filters.
+     */
+    void FinalizeKeysUniqueValues();
 
     /// @brief Get the current budget of the op-pool for this Join operator.
     uint64_t op_pool_budget_bytes() const;

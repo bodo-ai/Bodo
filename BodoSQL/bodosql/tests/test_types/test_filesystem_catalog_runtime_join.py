@@ -16,14 +16,13 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import (
-    check_func,
-)
+from bodo.tests.utils import check_func, temp_env_override
 from bodo.utils.utils import run_rank0
 
 comm = MPI.COMM_WORLD
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_simple_join(memory_leak_check, iceberg_database):
     """
     Test data and file pruning runtime join filters are generated correctly when reading from filesystem catalog
@@ -65,6 +64,7 @@ def test_simple_join(memory_leak_check, iceberg_database):
         check_logger_msg(stream, "Total number of files is 5. Reading 1 files:")
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.parametrize("join_same_col", [True, False])
 def test_multiple_filter_join(memory_leak_check, iceberg_database, join_same_col):
     """
@@ -109,6 +109,7 @@ def test_multiple_filter_join(memory_leak_check, iceberg_database, join_same_col
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
     """
     Test data runtime join filters are generated correctly when reading a schema evolved table from filesystem catalog
@@ -147,6 +148,7 @@ def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_string_keys(memory_leak_check, iceberg_database):
     """
     Variant of test_simple_join with string columns as keys.
@@ -213,6 +215,7 @@ def test_string_keys(memory_leak_check, iceberg_database):
         # )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_dict_keys(memory_leak_check, iceberg_database):
     """
     Variant of test_simple_join with dictionary encoded columns as keys.
@@ -344,6 +347,7 @@ def rtjf_test_tables():
     }
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.parametrize(
     "query, expected_out",
     [
@@ -396,6 +400,7 @@ def test_merged_rtjf(
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_date_keys(memory_leak_check, iceberg_database):
     """
     Variant of test_simple_join with date columns as keys.
@@ -474,6 +479,7 @@ def test_date_keys(memory_leak_check, iceberg_database):
         check_logger_msg(stream, "Total number of files is 3. Reading 1 files:")
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_float_keys(memory_leak_check, iceberg_database):
     """
     Variant of test_simple_join with float columns as keys.
