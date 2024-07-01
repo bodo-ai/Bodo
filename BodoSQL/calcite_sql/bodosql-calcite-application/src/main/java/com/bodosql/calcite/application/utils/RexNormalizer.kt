@@ -56,8 +56,8 @@ class RexNormalizer private constructor(private val rexBuilder: RexBuilder) : Re
         ): RexNode {
             val normalizer = RexNormalizer(rexBuilder)
             val result = node.accept(normalizer)
-            return if (matchType && result.getType() != node.getType()) {
-                rexBuilder.makeCast(node.getType(), result, true, false)
+            return if (matchType && result.type != node.type) {
+                rexBuilder.makeCast(node.type, result, true, false)
             } else {
                 result
             }
