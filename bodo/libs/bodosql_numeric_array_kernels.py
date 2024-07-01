@@ -1581,13 +1581,10 @@ def overload_multiply_decimals(arr1, arr2):
     else:
         p2, s2 = arr2.precision, arr2.scale
 
-    # If both arguments are arrays, call the specialized function to reduce function
+    # If any argument is an array, call the specialized function to reduce function
     # call overhead on every element, else use gen_vectorized.
-    if (
-        (not is_overload_none(arr1))
-        and isinstance(arr1, bodo.DecimalArrayType)
-        and (not is_overload_none(arr2))
-        and isinstance(arr2, bodo.DecimalArrayType)
+    if (isinstance(arr1, bodo.DecimalArrayType) and (not is_overload_none(arr2))) or (
+        isinstance(arr2, bodo.DecimalArrayType) and (not is_overload_none(arr1))
     ):
 
         def impl(arr1, arr2):
@@ -1595,26 +1592,25 @@ def overload_multiply_decimals(arr1, arr2):
 
         return impl
 
-    else:
-        p, s = bodo.libs.decimal_arr_ext.decimal_multiplication_output_precision_scale(
-            p1, s1, p2, s2
-        )
-        out_dtype = bodo.DecimalArrayType(p, s)
+    p, s = bodo.libs.decimal_arr_ext.decimal_multiplication_output_precision_scale(
+        p1, s1, p2, s2
+    )
+    out_dtype = bodo.DecimalArrayType(p, s)
 
-        arg_names = ["arr1", "arr2"]
-        arg_types = [arr1, arr2]
-        propagate_null = [True, True]
-        scalar_text = (
-            "res[i] = bodo.libs.decimal_arr_ext.multiply_decimal_scalars(arg0, arg1)"
-        )
+    arg_names = ["arr1", "arr2"]
+    arg_types = [arr1, arr2]
+    propagate_null = [True, True]
+    scalar_text = (
+        "res[i] = bodo.libs.decimal_arr_ext.multiply_decimal_scalars(arg0, arg1)"
+    )
 
-        return gen_vectorized(
-            arg_names,
-            arg_types,
-            propagate_null,
-            scalar_text,
-            out_dtype,
-        )
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
 
 
 def divide_decimals(arr1, arr2):  # pragma: no cover

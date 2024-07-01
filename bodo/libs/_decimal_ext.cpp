@@ -322,29 +322,45 @@ arrow::Decimal128 multiply_decimal_scalars_py_entry(
  * @param arr2 Second nullable decimal array.
  * @param out_precision Output precision
  * @param out_scale Output scale
+ * @param is_scalar_arg1 first argument is scalar (passed as a one element
+ * array)
+ * @param is_scalar_arg2 second argument is scalar (passed as a one element
+ * array)
  * @param[out] overflow Overflow flag.
  * @return std::shared_ptr<array_info> Output nullable decimal array.
  */
 std::unique_ptr<array_info> multiply_decimal_arrays(
     const std::unique_ptr<array_info>& arr1,
     const std::unique_ptr<array_info>& arr2, int64_t out_precision,
-    int64_t out_scale, bool* const overflow) noexcept {
+    int64_t out_scale, bool is_scalar_arg1, bool is_scalar_arg2,
+    bool* const overflow) noexcept {
     int64_t s1 = arr1->scale;
     int64_t s2 = arr2->scale;
+    int32_t delta_scale = s1 + s2 - out_scale;
+
+    size_t len = is_scalar_arg1 ? arr2->length : arr1->length;
+
     // Allocate output array.
     std::unique_ptr<array_info> out_arr =
-        alloc_nullable_array_no_nulls(arr1->length, Bodo_CTypes::DECIMAL);
+        alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
     out_arr->precision = out_precision;
     out_arr->scale = out_scale;
-    bool fast_multiply = out_precision < decimalops::kMaxPrecision;
-    int32_t delta_scale = s1 + s2 - out_scale;
-    bool rescale = delta_scale != 0;
+
     bool out_overflow = false;
+
+    bool fast_multiply = out_precision < decimalops::kMaxPrecision;
+    bool rescale = delta_scale != 0;
+
 #ifndef DECIMAL_ARRAY_MULTIPLY
 #define DECIMAL_ARRAY_MULTIPLY(FAST_MULTIPLY, RESCALE)                        \
-    for (size_t i = 0; i < arr1->length; i++) {                               \
-        if (!arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i) ||     \
-            !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {     \
+    for (size_t i = 0; i < len; i++) {                                        \
+        bool v1_null =                                                        \
+            !is_scalar_arg1 &&                                                \
+            !arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i);       \
+        bool v2_null =                                                        \
+            !is_scalar_arg2 &&                                                \
+            !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i);       \
+        if (v1_null || v2_null) {                                             \
             out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i,      \
                                                                       false); \
         } else {                                                              \
@@ -352,15 +368,17 @@ std::unique_ptr<array_info> multiply_decimal_arrays(
                 out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,            \
                                arrow::Decimal128>() +                         \
                 i;                                                            \
-            bool overflow_i;                                                  \
+            size_t d1_ind = is_scalar_arg1 ? 0 : i;                           \
             const arrow::Decimal128& d1 =                                     \
                 *(arr1->data1<bodo_array_type::NULLABLE_INT_BOOL,             \
                               arrow::Decimal128>() +                          \
-                  i);                                                         \
+                  d1_ind);                                                    \
+            size_t d2_ind = is_scalar_arg2 ? 0 : i;                           \
             const arrow::Decimal128& d2 =                                     \
                 *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,             \
                               arrow::Decimal128>() +                          \
-                  i);                                                         \
+                  d2_ind);                                                    \
+            bool overflow_i;                                                  \
             decimalops::Multiply<FAST_MULTIPLY, RESCALE>(                     \
                 d1, d2, out_scale, delta_scale, &overflow_i, out_ptr);        \
             out_overflow |= overflow_i;                                       \
@@ -382,21 +400,20 @@ std::unique_ptr<array_info> multiply_decimal_arrays(
 
 #undef DECIMAL_ARRAY_MULTIPLY
 
-array_info* multiply_decimal_arrays_py_entry(array_info* arr1_,
-                                             array_info* arr2_,
-                                             int64_t out_precision,
-                                             int64_t out_scale,
-                                             bool* overflow) noexcept {
+array_info* multiply_decimal_arrays_py_entry(
+    array_info* arr1_, array_info* arr2_, int64_t out_precision,
+    int64_t out_scale, bool is_scalar_arg1, bool is_scalar_arg2,
+    bool* overflow) noexcept {
     try {
         std::unique_ptr<array_info> arr1 = std::unique_ptr<array_info>(arr1_);
         std::unique_ptr<array_info> arr2 = std::unique_ptr<array_info>(arr2_);
         assert(arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                arr2->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                arr1->dtype == Bodo_CTypes::DECIMAL &&
-               arr2->dtype == Bodo_CTypes::DECIMAL &&
-               arr1->length == arr2->length);
-        std::unique_ptr<array_info> out_arr = multiply_decimal_arrays(
-            arr1, arr2, out_precision, out_scale, overflow);
+               arr2->dtype == Bodo_CTypes::DECIMAL);
+        std::unique_ptr<array_info> out_arr =
+            multiply_decimal_arrays(arr1, arr2, out_precision, out_scale,
+                                    is_scalar_arg1, is_scalar_arg2, overflow);
         return new array_info(*out_arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
