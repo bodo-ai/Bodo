@@ -52,7 +52,54 @@ DTYPE_TO_C_TYPE(__int128, Bodo_CTypes::INT128)
 DTYPE_TO_C_TYPE(std::complex<double>, Bodo_CTypes::COMPLEX128)
 DTYPE_TO_C_TYPE(std::complex<float>, Bodo_CTypes::COMPLEX64)
 
+// convert a C type to the 64-bit version using a trait class, similar to:
+// https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141
+template <typename T>
+struct type_to_max_type {
+    using type = void;
+};
+
+#ifndef C_TYPE_TO_64_C_TYPE
+#define C_TYPE_TO_64_C_TYPE(Type, Type64) \
+    template <>                           \
+    struct type_to_max_type<Type> {       \
+        using type = Type64;              \
+    };
+#endif
+
+C_TYPE_TO_64_C_TYPE(int8_t, int64_t)
+C_TYPE_TO_64_C_TYPE(int16_t, int64_t)
+C_TYPE_TO_64_C_TYPE(int32_t, int64_t)
+C_TYPE_TO_64_C_TYPE(int64_t, int64_t)
+C_TYPE_TO_64_C_TYPE(uint8_t, uint64_t)
+C_TYPE_TO_64_C_TYPE(uint16_t, uint64_t)
+C_TYPE_TO_64_C_TYPE(uint32_t, uint64_t)
+C_TYPE_TO_64_C_TYPE(uint64_t, uint64_t)
+C_TYPE_TO_64_C_TYPE(float, double)
+C_TYPE_TO_64_C_TYPE(double, double)
+
 #define DICT_INDEX_C_TYPE int32_t
+
+/**
+ * Casts a scalar value of type SrcType to type DestType
+ * in a way that preserves the underlying bit pattern.
+ * Requires that the SrcType and DestType have the same
+ * number of bytes.
+ */
+template <typename SrcType, typename DestType>
+    requires(std::same_as<SrcType, DestType>)
+inline DestType bit_preserving_cast(SrcType in) {
+    return in;
+}
+
+template <typename SrcType, typename DestType>
+    requires(!std::same_as<SrcType, DestType> &&
+             (sizeof(SrcType) == sizeof(DestType)))
+inline DestType bit_preserving_cast(SrcType in) {
+    DestType out;
+    memcpy(&out, &in, sizeof(out));
+    return out;
+}
 
 // ------------------------------------------------
 

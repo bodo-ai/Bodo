@@ -1312,6 +1312,11 @@ HashJoinState::HashJoinState(
 
     this->global_bloom_filter = create_bloom_filter();
 
+    if (char* unique_vals_limit_env_ =
+            std::getenv("BODO_JOIN_UNIQUE_VALUES_LIMIT")) {
+        this->unique_values_limit = (size_t)(std::atol(unique_vals_limit_env_));
+    }
+
     // Allocate the min/max array values for each key columun
     for (size_t key_col = 0; key_col < n_keys; key_col++) {
         std::unique_ptr<bodo::DataType>& dtype =
@@ -1333,6 +1338,12 @@ HashJoinState::HashJoinState(
             }
         } else {
             this->min_max_values.emplace_back(std::nullopt);
+        }
+        if (IsValidRuntimeJoinFilterUniqueValuesColumn(dtype)) {
+            std::unordered_set<int64_t> unique_set;
+            this->unique_values.emplace_back(unique_set);
+        } else {
+            this->unique_values.emplace_back(std::nullopt);
         }
     }
     build_dict_hit_bitmap.resize(n_keys);
@@ -1370,6 +1381,37 @@ bool HashJoinState::IsValidRuntimeJoinFilterMinMaxColumn(
         // case bodo_array_type::STRING:
         case bodo_array_type::DICT: {
             return true;
+        }
+        default: {
+            return false;
+        }
+    }
+}
+
+bool HashJoinState::IsValidRuntimeJoinFilterUniqueValuesColumn(
+    std::unique_ptr<bodo::DataType>& dtype) {
+    switch (dtype->array_type) {
+        case bodo_array_type::NUMPY:
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            switch (dtype->c_type) {
+                case Bodo_CTypes::INT8:
+                case Bodo_CTypes::INT16:
+                case Bodo_CTypes::INT32:
+                case Bodo_CTypes::INT64:
+                case Bodo_CTypes::UINT8:
+                case Bodo_CTypes::UINT16:
+                case Bodo_CTypes::UINT32:
+                case Bodo_CTypes::UINT64:
+                case Bodo_CTypes::DATE:
+                case Bodo_CTypes::FLOAT32:
+                case Bodo_CTypes::FLOAT64:
+                case Bodo_CTypes::DATETIME: {
+                    return true;
+                }
+                default: {
+                    return false;
+                }
+            }
         }
         default: {
             return false;
@@ -1766,6 +1808,12 @@ void HashJoinState::ReportBuildStageMetrics() {
                                      this->metrics.build_min_max_update_time));
     metrics.emplace_back(TimerMetric(
         "min_max_finalize_time", this->metrics.build_min_max_finalize_time));
+    metrics.emplace_back(
+        TimerMetric("unique_values_update_time",
+                    this->metrics.build_unique_values_update_time));
+    metrics.emplace_back(
+        TimerMetric("unique_values_finalize_time",
+                    this->metrics.build_unique_values_finalize_time));
 
     // Get shuffle stats from build shuffle state
     this->build_shuffle_state.ExportMetrics(metrics);
@@ -2859,6 +2907,149 @@ void HashJoinState::FinalizeKeysMinMax() {
     }
 }
 
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+void update_keys_unique_values_numeric_helper(
+    HashJoinState* join_state, const std::shared_ptr<array_info>& arr,
+    size_t col_idx) {
+    using T = typename dtype_to_type<DType>::type;
+    using MT = typename type_to_max_type<T>::type;
+    if (join_state->unique_values[col_idx].has_value() && arr->length > 0) {
+        std::unordered_set<int64_t>& unique_set =
+            join_state->unique_values[col_idx].value();
+        T* data_arr = arr->data1<ArrType, T>();
+        for (size_t row = 0; row < arr->length; row++) {
+            if (non_null_at<ArrType, T, DType>(*arr, row)) {
+                MT upcasted_value = static_cast<MT>(data_arr[row]);
+                int64_t as_int64 =
+                    bit_preserving_cast<MT, int64_t>(upcasted_value);
+                unique_set.insert(as_int64);
+            }
+        }
+        if (unique_set.size() > join_state->unique_values_limit) {
+            join_state->unique_values[col_idx] = std::nullopt;
+        }
+    }
+}
+
+void HashJoinState::UpdateKeysUniqueValues(
+    const std::shared_ptr<array_info>& arr, size_t col_idx) {
+#define UPDATE_NUMERIC_UNIQUE_KEYS(ArrType, DType)                          \
+    case DType: {                                                           \
+        update_keys_unique_values_numeric_helper<ArrType, DType>(this, arr, \
+                                                                 col_idx);  \
+        break;                                                              \
+    }
+    switch (arr->arr_type) {
+        case bodo_array_type::NULLABLE_INT_BOOL: {
+            switch (arr->dtype) {
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::INT8);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::INT16);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::INT32);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::INT64);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::UINT8);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::UINT16);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::UINT32);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::UINT64);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::FLOAT32);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::FLOAT64);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::DATE);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NULLABLE_INT_BOOL,
+                                           Bodo_CTypes::TIME);
+                default: {
+                    break;
+                }
+            }
+            break;
+        }
+        case bodo_array_type::NUMPY: {
+            switch (arr->dtype) {
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::INT8);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::INT16);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::INT32);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::INT64);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::UINT8);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::UINT16);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::UINT32);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::UINT64);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::FLOAT32);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::FLOAT64);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::DATE);
+                UPDATE_NUMERIC_UNIQUE_KEYS(bodo_array_type::NUMPY,
+                                           Bodo_CTypes::TIME);
+                default: {
+                    break;
+                }
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+#undef UPDATE_NUMERIC_UNIQUE_KEYS
+}
+
+void HashJoinState::FinalizeKeysUniqueValues() {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    std::shared_ptr<table_info> dummy_table = std::make_shared<table_info>();
+    for (size_t col_idx = 0; col_idx < unique_values.size(); col_idx++) {
+        bool local_has_unique = unique_values[col_idx].has_value();
+        bool global_has_unique;
+        MPI_Allreduce(&local_has_unique, &global_has_unique, 1, MPI_C_BOOL,
+                      MPI_LAND, MPI_COMM_WORLD);
+        if (global_has_unique) {
+            std::unordered_set<int64_t>& existing_values =
+                unique_values[col_idx].value();
+            std::shared_ptr<array_info> existing_array =
+                alloc_nullable_array_no_nulls(existing_values.size(),
+                                              Bodo_CTypes::INT64);
+            int64_t* data =
+                existing_array
+                    ->data1<bodo_array_type::NULLABLE_INT_BOOL, int64_t>();
+            size_t row = 0;
+            for (int64_t elem : existing_values) {
+                data[row] = elem;
+                row++;
+            }
+            // If this column is one of the ones with min max values stored
+            // in it, do an allgather so every rank has all the unique values
+            // values.
+            std::shared_ptr<array_info> combined_arr = gather_array(
+                existing_array, true, build_parallel, 0, n_pes, myrank);
+
+            // Insert the combined data as if it were a regular batch update,
+            // ensuring every rank has the same unique values.
+            UpdateKeysUniqueValues(combined_arr, col_idx);
+        } else {
+            unique_values[col_idx] = std::nullopt;
+        }
+    }
+}
+
 /**
  * @brief consume build table batch in streaming join (insert into hash
  * table)
@@ -2934,15 +3125,23 @@ bool join_build_consume_batch(HashJoinState* join_state,
     join_state->metrics.build_filter_na_output_nrows += in_table->nrows();
 
     if (!join_state->probe_table_outer) {
-        time_pt start_min_max = start_timer();
         // If this is not an outer probe, use the latest batch
         // to process the min/max values for each key column and
         // update the min_max_values vector.
+        time_pt start_min_max = start_timer();
         for (size_t col_idx = 0; col_idx < join_state->n_keys; col_idx++) {
             join_state->UpdateKeysMinMax(in_table->columns[col_idx], col_idx);
         }
         join_state->metrics.build_min_max_update_time +=
             end_timer(start_min_max);
+        // And do the same for the unique values.
+        time_pt start_unique_timer = start_timer();
+        for (size_t col_idx = 0; col_idx < join_state->n_keys; col_idx++) {
+            join_state->UpdateKeysUniqueValues(in_table->columns[col_idx],
+                                               col_idx);
+        }
+        join_state->metrics.build_unique_values_update_time +=
+            end_timer(start_unique_timer);
     }
 
     // Get hashes of the new batch (different hashes for partitioning and
@@ -2992,16 +3191,21 @@ bool join_build_consume_batch(HashJoinState* join_state,
     batch_hashes_partition.reset();
     in_table.reset();
 
-    // If this is not an outer probe, finalize the min/max
-    // values for each key by shuffling across multiple ranks.
-    // This is done before the broadcast handling since
-    // the finalization deals with the parallel handling
-    // of the accumulated min/max state.
     if (is_last && !join_state->probe_table_outer) {
+        // If this is not an outer probe, finalize the min/max
+        // values for each key by shuffling across multiple ranks.
+        // This is done before the broadcast handling since
+        // the finalization deals with the parallel handling
+        // of the accumulated min/max state.
         time_pt start_min_max = start_timer();
         join_state->FinalizeKeysMinMax();
         join_state->metrics.build_min_max_finalize_time +=
             end_timer(start_min_max);
+        // Do the same for the unique values
+        time_pt start_unique_values = start_timer();
+        join_state->FinalizeKeysUniqueValues();
+        join_state->metrics.build_unique_values_finalize_time +=
+            end_timer(start_unique_values);
     }
 
     // If the build table is small enough, broadcast it to all ranks
@@ -4062,14 +4266,14 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
             case bodo_array_type::NUMPY:
             case bodo_array_type::NULLABLE_INT_BOOL: {
                 switch (col_type->c_type) {
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT8, size_t,
-                                              PyLong_FromSsize_t);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT16, size_t,
-                                              PyLong_FromSsize_t);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT32, size_t,
-                                              PyLong_FromSsize_t);
-                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT64, size_t,
-                                              PyLong_FromSsize_t);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT8, int64_t,
+                                              PyLong_FromLong);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT16, int64_t,
+                                              PyLong_FromLong);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT32, int64_t,
+                                              PyLong_FromLong);
+                    RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::INT64, int64_t,
+                                              PyLong_FromLong);
                     RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT8, size_t,
                                               PyLong_FromSsize_t);
                     RTJF_MIN_MAX_NUMERIC_CASE(Bodo_CTypes::UINT16, size_t,
@@ -4110,6 +4314,105 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
     }
 }
 
+/**
+ * Function to be called before get_runtime_join_filter_unique_values_py_entrypt
+ * to determine if the list of unique values even exists.
+ *
+ * @param[in] join_state: the state object containing any unique value
+ *            information from the build table.
+ * @param[in] key_idx: the column index of the join key being requested.
+ */
+bool has_runtime_join_filter_unique_values_py_entrypt(JoinState* join_state_,
+                                                      int64_t key_idx) {
+    HashJoinState* join_state = (HashJoinState*)join_state_;
+    return (key_idx < (int64_t)(join_state->n_keys)) &&
+           (join_state->build_input_finalized) &&
+           (join_state->unique_values[key_idx].has_value());
+}
+
+/**
+ * Python entrypoint to fetch the unique values of a specific
+ * join key as a PyObject so it can be used an a runtime join filter. If
+ * there is no value to fetch, throws an exception.
+ *
+ * @param[in] join_state: the state object containing any unique value
+ *            information from the build table.
+ * @param[in] key_idx: the column index of the join key being requested.
+ */
+PyObject* get_runtime_join_filter_unique_values_py_entrypt(
+    JoinState* join_state_, int64_t key_idx, bool is_min) {
+    try {
+        auto result = PyList_New(0);
+        HashJoinState* join_state = (HashJoinState*)join_state_;
+        std::unique_ptr<bodo::DataType>& col_type =
+            join_state->build_table_schema->column_types[key_idx];
+        assert(key_idx < join_state->n_keys);
+        assert(join_state->build_input_finalized);
+        assert(join_state->unique_values[key_idx].has_value());
+        std::unordered_set<int64_t>& unique_vals_set =
+            join_state->unique_values[key_idx].value();
+#define RTJF_UNIQUE_VALUES_NUMERIC_CASE(dtype, ctype, pyfunc)          \
+    case dtype: {                                                      \
+        for (int64_t val : unique_vals_set) {                          \
+            ctype as_ctype = bit_preserving_cast<int64_t, ctype>(val); \
+            PyObject* obj = pyfunc(as_ctype);                          \
+            PyList_Append(result, obj);                                \
+            Py_DECREF(obj);                                            \
+        }                                                              \
+        break;                                                         \
+    }
+        switch (col_type->array_type) {
+            case bodo_array_type::NUMPY:
+            case bodo_array_type::NULLABLE_INT_BOOL: {
+                switch (col_type->c_type) {
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::INT8, int64_t,
+                                                    PyLong_FromLong);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::INT16, int64_t,
+                                                    PyLong_FromLong);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::INT32, int64_t,
+                                                    PyLong_FromLong);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::INT64, int64_t,
+                                                    PyLong_FromLong);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::UINT8, size_t,
+                                                    PyLong_FromSsize_t);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::UINT16, size_t,
+                                                    PyLong_FromSsize_t);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::UINT32, size_t,
+                                                    PyLong_FromSsize_t);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::UINT64, size_t,
+                                                    PyLong_FromSsize_t);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::FLOAT32,
+                                                    double, PyFloat_FromDouble);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::FLOAT64,
+                                                    double, PyFloat_FromDouble);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(Bodo_CTypes::DATE, size_t,
+                                                    py_date_from_int);
+                    RTJF_UNIQUE_VALUES_NUMERIC_CASE(
+                        Bodo_CTypes::DATETIME, size_t, py_timestamp_from_int);
+                    default: {
+                        throw std::runtime_error(
+                            "get_runtime_join_filter_unique_values_py_entrypt: "
+                            "Unsupported dtype type " +
+                            GetDtype_as_string(col_type->c_type));
+                    }
+                }
+                break;
+            }
+            default: {
+                throw std::runtime_error(
+                    "get_runtime_join_filter_unique_values_py_entrypt: "
+                    "Unsupported array type " +
+                    GetArrType_as_string(col_type->array_type));
+            }
+        }
+        return result;
+#undef RTJF_UNIQUE_NUMERIC_CASE
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "stream_join_cpp", "No docs", NULL);
@@ -4132,6 +4435,10 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     SetAttrStringFromVoidPtr(m, get_partition_num_top_bits_by_idx);
     SetAttrStringFromVoidPtr(m, get_partition_top_bitmask_by_idx);
     SetAttrStringFromVoidPtr(m, get_runtime_join_filter_min_max_py_entrypt);
+    SetAttrStringFromVoidPtr(m,
+                             has_runtime_join_filter_unique_values_py_entrypt);
+    SetAttrStringFromVoidPtr(m,
+                             get_runtime_join_filter_unique_values_py_entrypt);
 
     return m;
 }
