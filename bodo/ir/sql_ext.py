@@ -85,6 +85,14 @@ ll.add_symbol(
     "get_runtime_join_filter_min_max_py_entrypt",
     stream_join_cpp.get_runtime_join_filter_min_max_py_entrypt,
 )
+ll.add_symbol(
+    "has_runtime_join_filter_unique_values_py_entrypt",
+    stream_join_cpp.has_runtime_join_filter_unique_values_py_entrypt,
+)
+ll.add_symbol(
+    "get_runtime_join_filter_unique_values_py_entrypt",
+    stream_join_cpp.get_runtime_join_filter_unique_values_py_entrypt,
+)
 
 MPI_ROOT = 0
 
@@ -443,10 +451,10 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
                 return f"({sql_func}({', '.join(self.visit(c) for c in op.args)}))"
 
 
-# Class for a the RTJF min/max stored value
+# Class for a the RTJF min/max/unique stored values
 this_module = sys.modules[__name__]
 install_py_obj_class(
-    types_name="rtjf_min_max_value_type",
+    types_name="rtjf_value_type",
     python_type=None,
     module=this_module,
     class_name="RtjfMinMaxValueType",
@@ -480,7 +488,7 @@ def get_runtime_join_filter_min_max(
             builder.module, fnty, name="get_runtime_join_filter_min_max_py_entrypt"
         )
         rtjf_min = builder.call(fn_tp, args)
-        rtjf_min_struct = cgutils.create_struct_proxy(types.rtjf_min_max_value_type)(
+        rtjf_min_struct = cgutils.create_struct_proxy(types.rtjf_value_type)(
             context, builder
         )
         pyapi = context.get_python_api(builder)
@@ -492,7 +500,74 @@ def get_runtime_join_filter_min_max(
         inlined_check_and_propagate_cpp_exception(context, builder)
         return rtjf_min_struct._getvalue()
 
-    sig = types.rtjf_min_max_value_type(state_var_t, key_index_t, is_min_t, precision_t)
+    sig = types.rtjf_value_type(state_var_t, key_index_t, is_min_t, precision_t)
+    return sig, codegen
+
+
+@intrinsic
+def has_runtime_join_filter_unique_values(typingctx, state_var_t, key_index_t):
+    """
+    Returns whether a join state has a list of unique values for a specific
+    join key column.
+    """
+    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(8).as_pointer(),  # join state
+                lir.IntType(64),  # key_index_t
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module,
+            fnty,
+            name="has_runtime_join_filter_unique_values_py_entrypt",
+        )
+        ret = builder.call(fn_tp, args)
+        inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.bool_(state_var_t, key_index_t)
+    return sig, codegen
+
+
+@intrinsic
+def get_runtime_join_filter_unique_values(typingctx, state_var_t, key_index_t):
+    """
+    Returns whether the list of unique values from the join state corresponding
+    to a certain key column.
+    """
+    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # join state
+                lir.IntType(64),  # key_index_t
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module,
+            fnty,
+            name="get_runtime_join_filter_unique_values_py_entrypt",
+        )
+        unique_vals = builder.call(fn_tp, args)
+        unique_vals_struct = cgutils.create_struct_proxy(types.rtjf_value_type)(
+            context, builder
+        )
+        pyapi = context.get_python_api(builder)
+        # borrows and manages a reference for obj (see comments in py_objs.py)
+        unique_vals_struct.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+            context.get_constant_null(types.voidptr), unique_vals
+        )
+        unique_vals_struct.pyobj = unique_vals
+        inlined_check_and_propagate_cpp_exception(context, builder)
+        return unique_vals_struct._getvalue()
+
+    sig = types.rtjf_value_type(state_var_t, key_index_t)
     return sig, codegen
 
 
@@ -548,27 +623,50 @@ def overload_gen_runtime_join_filter_cond(
             col_idx = col_indices[i]
             if col_idx == -1:
                 continue
-            # Get the min/max value bounds for the current key column from the join state
-            min_val = get_runtime_join_filter_min_max(
-                state_var, np.int64(i), True, precisions[i]
-            )
-            max_val = get_runtime_join_filter_min_max(
-                state_var, np.int64(i), False, precisions[i]
-            )
-            # Use object mode to convert to a string representation of the bounds check
-            with bodo.no_warning_objmode(
-                min_result="unicode_type", max_result="unicode_type"
-            ):
-                min_result = max_result = ""
-                if min_val is not None:
-                    min_result = f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
-                if max_val is not None:
-                    max_result = f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
-            # If the results were successful, add to the conjunction list
-            if min_result != "":
-                cond_terms.append(min_result)
-            if max_result != "":
-                cond_terms.append(max_result)
+
+            included_low_ndv_filter = False
+            # If it exists, get the list of unique values from the join state
+            if has_runtime_join_filter_unique_values(state_var, np.int64(i)):
+                unique_values = get_runtime_join_filter_unique_values(
+                    state_var, np.int64(i)
+                )
+                # Use object mode to convert to a string representation of the containment check
+                with bodo.no_warning_objmode(unique_as_strings="list_str_type"):
+                    unique_as_strings = []
+                    for elem in unique_values:
+                        unique_as_strings.append(
+                            convert_pyobj_to_snowflake_str(elem, time_zones[i])
+                        )
+
+                if len(unique_as_strings) > 0:
+                    cond_terms.append(
+                        f"(${col_idx+1} IN ({', '.join(sorted(unique_as_strings))}))"
+                    )
+                    included_low_ndv_filter = True
+
+            if not included_low_ndv_filter:
+                # Otherwise, get the min/max value bounds for the current key column
+                # from the join state
+                min_val = get_runtime_join_filter_min_max(
+                    state_var, np.int64(i), True, precisions[i]
+                )
+                max_val = get_runtime_join_filter_min_max(
+                    state_var, np.int64(i), False, precisions[i]
+                )
+                # Use object mode to convert to a string representation of the bounds check
+                with bodo.no_warning_objmode(
+                    min_result="unicode_type", max_result="unicode_type"
+                ):
+                    min_result = max_result = ""
+                    if min_val is not None:
+                        min_result = f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
+                    if max_val is not None:
+                        max_result = f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
+                # If the results were successful, add to the conjunction list
+                if min_result != "":
+                    cond_terms.append(min_result)
+                if max_result != "":
+                    cond_terms.append(max_result)
         return " AND ".join(cond_terms)
 
     return impl

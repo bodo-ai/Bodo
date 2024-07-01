@@ -111,7 +111,6 @@ FROM TABLE(GENERATOR(ROWCOUNT=>5000))
 GRANT OWNERSHIP ON rtjf_test_table_d TO SYSADMIN;
 """
 
-
 import io
 
 import pandas as pd
@@ -137,9 +136,10 @@ from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
 pytestmark = pytest_snowflake
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_simple_join(snowflake_sample_data_snowflake_catalog, memory_leak_check):
     """
-    Tests the presence of runtime join filters in a Snowflake read.
+    Tests the presence of runtime join filters in a Snowflake read on numeric keys.
     """
 
     def impl(bc, query):
@@ -147,29 +147,26 @@ def test_simple_join(snowflake_sample_data_snowflake_catalog, memory_leak_check)
 
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
 
-    # Joins region, nation, and customer to count the number of
-    # customers per region, but first filters the regions to only
-    # include Europe or Asia.
+    # Joins part and partsupp on the partkey with several filters
+    # on the build side.
     # This should result in the nation table producing a runtime
-    # join filter on the customer key to only read the rows with
-    # the relevant 10 nation keys, with nationkey values between
-    # 6 and 23.
+    # join filter on partsupp to only read the rows with ps_partkey
+    # between 5544 and 194830
     query = """
-    SELECT r_name, COUNT(*) as n_cust
-    FROM tpch_sf1.region, tpch_sf1.nation, tpch_sf1.customer
-    WHERE region.r_regionkey = nation.n_regionkey
-    AND nation.n_nationkey = customer.c_nationkey
-    AND region.r_name IN ('EUROPE', 'ASIA')
-    GROUP BY r_name
+    SELECT SPLIT_PART(p.p_type, ' ', 3) AS METAL, COUNT(*) as NMATCH
+    FROM tpch_sf1.part p, tpch_sf1.partsupp ps
+    WHERE STARTSWITH(p_comment, 'alo')
+    AND STARTSWITH(p_type, 'ECO')
+    AND p.p_partkey = ps.ps_partkey
+    GROUP BY 1
     """
 
     py_output = pd.DataFrame(
         {
-            "r_name": ["ASIA", "EUROPE"],
-            "n_cust": [30183, 30197],
+            "METAL": ["COPPER", "TIN", "STEEL", "BRASS", "NICKEL"],
+            "NMATCH": [56, 48, 48, 20, 24],
         }
     )
-    py_output.columns = py_output.columns.str.upper()
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
@@ -186,14 +183,11 @@ def test_simple_join(snowflake_sample_data_snowflake_catalog, memory_leak_check)
         # from Snowflake.
         check_logger_msg(
             stream,
-            'Runtime join filter query: SELECT * FROM (SELECT "N_NATIONKEY", "N_REGIONKEY" FROM (SELECT "N_NATIONKEY", "N_REGIONKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."NATION") as TEMP) WHERE TRUE AND ($2 >= 2) AND ($2 <= 3)',
-        )
-        check_logger_msg(
-            stream,
-            'Runtime join filter query: SELECT * FROM (SELECT "C_NATIONKEY" FROM (SELECT "C_NATIONKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."CUSTOMER") as TEMP) WHERE TRUE AND ($1 >= 6) AND ($1 <= 23)',
+            'Runtime join filter query: SELECT * FROM (SELECT "PS_PARTKEY" FROM (SELECT "PS_PARTKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP") as TEMP) WHERE TRUE AND ($1 >= 5544) AND ($1 <= 194830)',
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_larger_join(snowflake_sample_data_snowflake_catalog, memory_leak_check):
     """
     Variant of test_simple_join where the nature of the join will create a more complicated
@@ -246,6 +240,7 @@ def test_larger_join(snowflake_sample_data_snowflake_catalog, memory_leak_check)
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.skip("Disabled RTJF on non-dictionary-encoded string columns")
 def test_string_key_join(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -323,6 +318,7 @@ def test_string_key_join(test_db_snowflake_catalog, memory_leak_check):
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_dict_key_join(test_db_snowflake_catalog, memory_leak_check):
     """
     Variant of test_simple_join where the join is being done on string keys
@@ -442,6 +438,7 @@ def test_dict_key_join(test_db_snowflake_catalog, memory_leak_check):
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_date_key_join(test_db_snowflake_catalog, memory_leak_check):
     """
     Variant of test_simple_join where the join is being done on date keys.
@@ -488,6 +485,7 @@ def test_date_key_join(test_db_snowflake_catalog, memory_leak_check):
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_float_key_join(test_db_snowflake_catalog, memory_leak_check):
     """
     Variant of test_simple_join where the join is being done on float keys.
@@ -536,7 +534,7 @@ def test_float_key_join(test_db_snowflake_catalog, memory_leak_check):
         )
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
+@temp_env_override({"AWS_REGION": "us-east-1", "BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.parametrize(
     "use_iceberg, table_1, table_2, log_message",
     [
@@ -551,7 +549,7 @@ def test_float_key_join(test_db_snowflake_catalog, memory_leak_check):
             False,
             "rtjf_test_table_c",
             "rtjf_test_table_d",
-            'Runtime join filter query: SELECT * FROM (SELECT "NEUTRAL_TIME" FROM (SELECT "NEUTRAL_TIME" FROM "TEST_DB"."PUBLIC"."RTJF_TEST_TABLE_C" WHERE "NEUTRAL_TIME" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= TIMESTAMP_FROM_PARTS(2024, 2, 21, 11, 0, 0, 0)) AND ($1 <= TIMESTAMP_FROM_PARTS(2024, 9, 16, 13, 0, 0, 0))',
+            'Runtime join filter query: SELECT * FROM (SELECT "NEUTRAL_TIME" FROM (SELECT "NEUTRAL_TIME" FROM "TEST_DB"."PUBLIC"."RTJF_TEST_TABLE_C" WHERE "NEUTRAL_TIME" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= TIMESTAMP_NTZ_FROM_PARTS(2024, 2, 21, 11, 0, 0, 0)) AND ($1 <= TIMESTAMP_NTZ_FROM_PARTS(2024, 9, 16, 13, 0, 0, 0))',
             id="snowflake_native",
         ),
     ],
@@ -611,7 +609,7 @@ def test_timestamp_ntz_key_join(
         check_logger_msg(stream, log_message)
 
 
-@temp_env_override({"AWS_REGION": "us-east-1"})
+@temp_env_override({"AWS_REGION": "us-east-1", "BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.parametrize(
     "use_iceberg, table_1, table_2, log_message",
     [
@@ -689,6 +687,7 @@ def test_timestamp_ltz_key_join(
         check_logger_msg(stream, log_message)
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 @pytest.mark.skip("Disabled RTJF on non-dictionary-encoded string columns")
 def test_larger_string_join(test_db_snowflake_catalog, memory_leak_check):
     """
@@ -822,6 +821,7 @@ def test_larger_string_join(test_db_snowflake_catalog, memory_leak_check):
         )
 
 
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
 def test_multiple_filter_join(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
@@ -870,4 +870,253 @@ def test_multiple_filter_join(
         check_logger_msg(
             stream,
             'SELECT * FROM (SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP") as TEMP) WHERE TRUE AND ($1 >= 449) AND ($1 <= 199589)) WHERE TRUE AND ($2 >= 33) AND ($2 <= 9990)',
+        )
+
+
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
+def test_numeric_low_ndv_join(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests a join with numeric keys on Snowflake tables that should generate a
+    runtime join filter with IN instead of min/max.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+
+    # Joins supplier and partsupp after filtering supplier so it only has
+    # 2 s_suppkey values (1 and 4260). This causes a runtime join filter on
+    # partsupp that checks when `ps_suppkey IN (1, 4260)`.
+    query = """
+    SELECT s.s_suppkey as SK, COUNT(*) as NM
+    FROM tpch_sf1.supplier s, tpch_sf1.partsupp ps
+    WHERE STARTSWITH(s.s_comment, 'each')
+    AND s.s_suppkey = ps.ps_suppkey
+    GROUP BY 1
+    """
+
+    py_output = pd.DataFrame(
+        {
+            "SK": [1, 4260],
+            "NM": [80, 80],
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_output,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(
+            stream,
+            'Runtime join filter query: SELECT * FROM (SELECT "PS_SUPPKEY" FROM (SELECT "PS_SUPPKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP") as TEMP) WHERE TRUE AND ($1 IN (1, 4260))',
+        )
+
+
+@pytest.mark.parametrize(
+    "in_df, answer, unique_limit, filter_text",
+    [
+        pytest.param(
+            pd.DataFrame({"KEY": [120500 + i // 10 for i in range(300)]}),
+            pd.DataFrame(
+                {
+                    "METAL": ["BRASS", "COPPER", "NICKEL", "STEEL", "TIN"],
+                    "NMATCH": [40, 60, 70, 70, 60],
+                }
+            ),
+            "20",
+            'Runtime join filter query: SELECT * FROM (SELECT "P_PARTKEY", "P_TYPE" FROM (SELECT "P_PARTKEY", "P_TYPE" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PART") as TEMP) WHERE TRUE AND ($1 >= 120500) AND ($1 <= 120529)',
+            id="total_over_unique_threshold",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "KEY": pd.array(
+                        [121000 + i // 100 + i % 10 for i in range(500)]
+                        + [-1, -987654321]
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "METAL": ["BRASS", "COPPER", "NICKEL", "STEEL", "TIN"],
+                    "NMATCH": [130, 120, 100, 100, 50],
+                }
+            ),
+            "20",
+            'Runtime join filter query: SELECT * FROM (SELECT "P_PARTKEY", "P_TYPE" FROM (SELECT "P_PARTKEY", "P_TYPE" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PART") as TEMP) WHERE TRUE AND ($1 IN (-1, -987654321, 121000, 121001, 121002, 121003, 121004, 121005, 121006, 121007, 121008, 121009, 121010, 121011, 121012, 121013))',
+            id="total_under_unique_threshold",
+        ),
+        pytest.param(
+            pd.DataFrame({"KEY": [12700 + i for i in range(300)]}),
+            pd.DataFrame(
+                {
+                    "METAL": ["BRASS", "COPPER", "NICKEL", "STEEL", "TIN"],
+                    "NMATCH": [54, 76, 53, 49, 68],
+                }
+            ),
+            "20",
+            'Runtime join filter query: SELECT * FROM (SELECT "P_PARTKEY", "P_TYPE" FROM (SELECT "P_PARTKEY", "P_TYPE" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PART") as TEMP) WHERE TRUE AND ($1 >= 12700) AND ($1 <= 12999)',
+            id="all_unique",
+        ),
+        pytest.param(
+            pd.DataFrame({"KEY": [121000 + i // 100 + i % 10 for i in range(500)]}),
+            pd.DataFrame(
+                {
+                    "METAL": ["BRASS", "COPPER", "NICKEL", "STEEL", "TIN"],
+                    "NMATCH": [130, 120, 100, 100, 50],
+                }
+            ),
+            "10",
+            'Runtime join filter query: SELECT * FROM (SELECT "P_PARTKEY", "P_TYPE" FROM (SELECT "P_PARTKEY", "P_TYPE" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PART") as TEMP) WHERE TRUE AND ($1 >= 121000) AND ($1 <= 121013)',
+            id="reduced_threshold",
+        ),
+    ],
+)
+def test_sf_unique_values_edge(
+    snowflake_sample_data_snowflake_catalog,
+    in_df,
+    answer,
+    unique_limit,
+    filter_text,
+    memory_leak_check,
+):
+    """
+    Tests edge cases that may cause a runtime join filter to be a min/max filter versus
+    a unique values filter, especially when run with multiple ranks.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+    bc = bc.add_or_replace_view("TABLE1", in_df)
+
+    # Joins in_df and part. This should result in a runtime join filter on
+    # part that matches the filter_text argument.
+    query = """
+    SELECT SPLIT_PART(p_type, ' ', 3) AS METAL, COUNT(*) as NMATCH
+    FROM tpch_sf1.part p, TABLE1 t
+    WHERE p.p_partkey = t.key
+    GROUP BY 1
+    """
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": unique_limit}):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=answer,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify that the correct bounds were added to the data requested
+            # from Snowflake.
+            check_logger_msg(
+                stream,
+                filter_text,
+            )
+
+
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
+def test_sf_small_subset(
+    snowflake_sample_data_snowflake_catalog,
+    memory_leak_check,
+):
+    """
+    Tests a subset of small query, with additional filters
+    to make it practical to test w/o the large warehouse.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+
+    query = """
+    WITH 
+        golden_rules_exclusions_31701_SMALL as (
+            select ss_sold_date_sk, ss_customer_sk, ss_ticket_number
+            from SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.STORE_SALES
+            -- EXTRA FILTER TO REDUCE TOTAL ROWS READ FOR TESTING PURPOSES
+            WHERE SS_CUSTOMER_SK BETWEEN 31618850 AND 31628850
+        ),
+        cte_date_tbl as (
+            select
+                d_year,
+                d_date_sk,
+                d_date,
+                timeadd(YEAR, -1, d_date)       as year_ago_d_date
+            from SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.date_dim
+            where d_week_seq = 5218    --first week of year 2000
+        ),
+        stage_time_period_selections_31701_SMALL as (
+            select
+                d_year,
+                d_date_sk,
+                'CURRENT YEAR' AS time_period_comparison_name,
+                'CY' AS time_period_comparison_code,
+                d_date
+            from cte_date_tbl
+            union all
+            select
+                d_tbl.d_year,
+                d_dim.d_date_sk,
+                'YEAR AGO' as time_period_comparison_name,
+                'YA' as time_period_comparison_code,
+                d_dim.d_date
+            from cte_date_tbl d_tbl
+            inner join SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.date_dim d_dim
+                on d_tbl.year_ago_d_date = d_dim.d_date
+        )
+    select
+        time_period_selections.d_year,
+        time_period_selections.TIME_PERIOD_COMPARISON_CODE,
+        COUNT(DISTINCT(facts.SS_CUSTOMER_SK)) AS households,
+        COUNT(DISTINCT(facts.SS_TICKET_NUMBER)) AS trips
+    from golden_rules_exclusions_31701_SMALL facts
+    inner join stage_time_period_selections_31701_SMALL time_period_selections
+        on facts.ss_sold_date_sk = time_period_selections.d_date_sk
+    GROUP BY 1, 2
+    """
+
+    answer = pd.DataFrame(
+        {
+            "D_YEAR": [1999, 1999, 2000, 2000],
+            "TIME_PERIOD_COMPARISON_CODE": ["CY", "YA", "YA", "CY"],
+            "HOUSEHOLDS": [1346, 1299, 918, 872],
+            "TRIPS": [1566, 1587, 1030, 1021],
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=answer,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(
+            stream,
+            'Runtime join filter query: SELECT * FROM (SELECT "SS_SOLD_DATE_SK", "SS_CUSTOMER_SK", "SS_TICKET_NUMBER" FROM (SELECT "SS_SOLD_DATE_SK", "SS_CUSTOMER_SK", "SS_TICKET_NUMBER" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCDS_SF10TCL"."STORE_SALES" WHERE "SS_SOLD_DATE_SK" IS NOT NULL AND "SS_CUSTOMER_SK" >= 31618850 AND "SS_CUSTOMER_SK" <= 31628850) as TEMP) WHERE TRUE AND ($1 IN (2451176, 2451177, 2451178, 2451179, 2451180, 2451181, 2451182, 2451541, 2451542, 2451543, 2451544, 2451545, 2451546, 2451547))',
         )
