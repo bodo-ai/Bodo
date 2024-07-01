@@ -1292,12 +1292,17 @@ def overload_multiply_decimal_arrays(d1, d2):
     Multiply two decimal arrays together. If overflow occurs,
     this raises an exception.
     """
-    from bodo.libs.array import array_to_info, delete_info, info_to_array
+    from bodo.libs.array import delete_info, info_to_array
 
-    if not isinstance(d1, DecimalArrayType) or not isinstance(d2, DecimalArrayType):
-        raise BodoError(
-            "multiply_decimal_arrays: DecimalArrayType expected for both inputs"
-        )
+    assert isinstance(
+        d1, (DecimalArrayType, Decimal128Type)
+    ), "multiply_decimal_arrays: decimal input1 expected"
+    assert isinstance(
+        d2, (DecimalArrayType, Decimal128Type)
+    ), "multiply_decimal_arrays: decimal input2 expected"
+    assert isinstance(d1, DecimalArrayType) or isinstance(
+        d2, DecimalArrayType
+    ), "multiply_decimal_arrays: decimal array expected"
 
     p, s = decimal_multiplication_output_precision_scale(
         d1.precision, d1.scale, d2.precision, d2.scale
@@ -1305,9 +1310,13 @@ def overload_multiply_decimal_arrays(d1, d2):
     output_decimal_arr_type = DecimalArrayType(p, s)
 
     def impl(d1, d2):  # pragma: no cover
-        d1_info = array_to_info(d1)
-        d2_info = array_to_info(d2)
-        out_arr_info, overflow = _multiply_decimal_arrays(d1_info, d2_info, p, s)
+        # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
+        # convert back to scalars
+        d1_info, is_scalar_d1 = array_or_scalar_to_info(d1)
+        d2_info, is_scalar_d2 = array_or_scalar_to_info(d2)
+        out_arr_info, overflow = _multiply_decimal_arrays(
+            d1_info, d2_info, p, s, is_scalar_d1, is_scalar_d2
+        )
         out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
         delete_info(out_arr_info)
         if overflow:
@@ -1318,11 +1327,13 @@ def overload_multiply_decimal_arrays(d1, d2):
 
 
 @intrinsic(prefer_literal=True)
-def _multiply_decimal_arrays(typingctx, d1_t, d2_t, out_precision_t, out_scale_t):
+def _multiply_decimal_arrays(
+    typingctx, d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+):
     from bodo.libs.array import array_info_type
 
     def codegen(context, builder, signature, args):
-        d1, d2, output_precision, output_scale = args
+        d1, d2, output_precision, output_scale, is_scalar_d1, is_scalar_d2 = args
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -1330,6 +1341,8 @@ def _multiply_decimal_arrays(typingctx, d1_t, d2_t, out_precision_t, out_scale_t
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(1),
                 lir.IntType(1).as_pointer(),
             ],
         )
@@ -1344,6 +1357,8 @@ def _multiply_decimal_arrays(typingctx, d1_t, d2_t, out_precision_t, out_scale_t
                 d2,
                 output_precision,
                 output_scale,
+                is_scalar_d1,
+                is_scalar_d2,
                 overflow_pointer,
             ],
         )
@@ -1352,7 +1367,12 @@ def _multiply_decimal_arrays(typingctx, d1_t, d2_t, out_precision_t, out_scale_t
         return context.make_tuple(builder, signature.return_type, [ret, overflow])
 
     ret_type = types.Tuple([array_info_type, types.bool_])
-    return ret_type(d1_t, d2_t, out_precision_t, out_scale_t), codegen
+    return (
+        ret_type(
+            d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+        ),
+        codegen,
+    )
 
 
 def decimal_division_output_precision_scale(p1, s1, p2, s2):
