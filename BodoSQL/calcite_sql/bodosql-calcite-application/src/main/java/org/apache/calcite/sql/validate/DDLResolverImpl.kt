@@ -557,9 +557,9 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val catalogView = validateTable(view, node.kind, viewName)
             catalogView.getDDLExecutor().dropView(catalogView.fullPath)
         } catch (e: MissingObjectException) {
-            ifexists()
+            return ifexists()
         } catch (e: NamespaceNotFoundException) {
-            ifexists()
+            return ifexists()
         }
         return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$viewName' successfully dropped.")))
     }
@@ -583,7 +583,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         if (resolved.count() != 1) {
             throw MissingObjectException("Unable to find table $tableName")
         }
-        val namespace = resolved.only().namespace
+        val singleResolve = resolved.only()
+        // resolveTable will give the namespace of the schema if the table cannot
+        // be found, although this is not documented.
+        if (singleResolve.remainingNames.isNotEmpty()) {
+            throw MissingObjectException("Unable to find table $tableName")
+        }
+        val namespace = singleResolve.namespace
         if (namespace !is TableNamespace) {
             throw RuntimeException("Table path does not resolve to a table: $tableName")
         }
