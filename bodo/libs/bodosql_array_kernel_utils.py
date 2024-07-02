@@ -655,6 +655,36 @@ def gen_vectorized(
     return impl_gen_vectorized
 
 
+def gen_coerced(func_name, cast_func_name, arg_names, index_to_cast):
+    """Generates a function that coerces the argument at the given index
+    to the correct type for the function.
+
+    Args:
+        func_name (str): the name of the function that will be called
+        cast_func_name (str): the name of the function that will be called to cast the argument, with a format
+            string for the argument
+        arg_names (list of str): the names of the arguments to the function
+        index_to_cast (int): the index of the argument to coerce
+
+    Returns:
+        function: the generated function
+    """
+
+    arg_strings = []
+    for i in range(len(arg_names)):
+        if i == index_to_cast:
+            arg_strings.append(cast_func_name.format(arg_names[i]))
+        else:
+            arg_strings.append(arg_names[i])
+    func_text = f"def impl({', '.join(arg_names)}):\n"
+    func_text += f"  return {func_name}({', '.join(arg_strings)})"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+
+    return loc_vars["impl"]
+
+
 def convert_numeric_to_int(func_name, arg_names, args, numeric_args_to_cast):
     func_text = f"def impl({', '.join(arg_names)}):\n"
     for arg_name, arg in zip(arg_names, args):
@@ -781,6 +811,23 @@ def unopt_argument(
     impl = loc_vars["impl"]
 
     return impl
+
+
+def is_decimal_float_pair(arg1, arg2):
+    """
+    Verifies that the pair of arguments to a SQL function is a decimal and a float
+    (scalar or vector)
+
+    Args:
+        arg1 (dtype): the dtype of the first argument being checked
+        arg2 (dtype): the dtype of the second argument being checked
+
+    returns: True if the arguments are a decimal and a float, False otherwise
+    """
+
+    return (is_valid_float_arg(arg1) and is_valid_decimal_arg(arg2)) or (
+        is_valid_float_arg(arg2) and is_valid_decimal_arg(arg1)
+    )
 
 
 def is_valid_int_arg(arg):  # pragma: no cover
@@ -1006,10 +1053,7 @@ def is_valid_decimal_arg(arg):  # pragma: no cover
         arg (dtype): the dtype of the argument being checked
     returns: False if the argument is not a decimal or decimal column
     """
-    return not (
-        isinstance(arg, bodo.Decimal128Type)
-        and not isinstance(arg, bodo.DecimalArrayType)
-    )
+    return isinstance(arg, (bodo.Decimal128Type, bodo.DecimalArrayType))
 
 
 def verify_array_arg(arg, is_scalar, f_name, a_name):  # pragma: no cover

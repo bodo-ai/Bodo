@@ -1441,6 +1441,766 @@ def test_decimal_array_division_error_handling():
         print(out)
 
 
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    2,
+                    2.55,
+                    2.56,
+                    11.56,
+                    1001.5,
+                    None,
+                    None,
+                    10005.1,
+                    -10.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    2,
+                    2.55,
+                    2.56,
+                    11.56,
+                    1001.5,
+                    None,
+                    None,
+                    10005.1,
+                    -10.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(1.0),
+            float(16.50),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(16.50),
+            id="scalar-float_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    3.5,
+                    101.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-float_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            float(1.0),
+            pd.array(
+                [
+                    3.5,
+                    101.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    3.5,
+                    101.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    3.5,
+                    101.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-decimal_first",
+        ),
+    ],
+)
+def test_decimal_array_float_addition(arg1, arg2, expected, memory_leak_check):
+    """
+    Tests decimal/float addition works correctly.
+    """
+
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.add_numeric(arr1, arr2)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    0,
+                    0.55,
+                    0.56,
+                    9.56,
+                    999.5,
+                    None,
+                    None,
+                    10003.1,
+                    -12.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    0,
+                    -0.55,
+                    -0.56,
+                    -9.56,
+                    -999.5,
+                    None,
+                    None,
+                    -10003.1,
+                    12.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(1.0),
+            float(14.50),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(-14.50),
+            id="scalar-float_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    -1.5,
+                    -99.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-float_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            float(1.0),
+            pd.array(
+                [
+                    1.5,
+                    99.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    1.5,
+                    99.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    -1.5,
+                    -99.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-decimal_first",
+        ),
+    ],
+)
+def test_decimal_array_float_subtraction(arg1, arg2, expected, memory_leak_check):
+    """
+    Tests decimal/float subtraction works correctly.
+    """
+
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.subtract_numeric(arr1, arr2)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    1,
+                    1.55,
+                    1.56,
+                    10.56,
+                    1000.5,
+                    None,
+                    None,
+                    10004.1,
+                    -11.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1,
+                    1.55,
+                    1.56,
+                    10.56,
+                    1000.5,
+                    None,
+                    None,
+                    10004.1,
+                    -11.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(1.0),
+            float(15.50),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(15.50),
+            id="scalar-float_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-float_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            float(1.0),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-decimal_first",
+        ),
+    ],
+)
+def test_decimal_array_float_multiplication(arg1, arg2, expected, memory_leak_check):
+    """
+    Tests decimal/float multiplication works correctly.
+    """
+
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.multiply_numeric(arr1, arr2)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    1,
+                    1.55,
+                    1.56,
+                    10.56,
+                    1000.5,
+                    None,
+                    None,
+                    10004.1,
+                    -11.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    1.0,
+                    None,
+                    None,
+                    1.0,
+                    1.0,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1 / 1,
+                    1 / 1.55,
+                    1 / 1.56,
+                    1 / 10.56,
+                    1 / 1000.5,
+                    None,
+                    None,
+                    1 / 10004.1,
+                    1 / -11.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(1.0),
+            float(15.50),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
+            float(1 / 15.50),
+            id="scalar-float_first",
+        ),
+        pytest.param(
+            float(1.0),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1 / 2.5,
+                    1 / 100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-float_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            float(1.0),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="array-scalar-float_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(2, 1)),
+            pd.array(
+                [
+                    2.5,
+                    100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    1 / 2.5,
+                    1 / 100.25,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="scalar-array-decimal_first",
+        ),
+    ],
+)
+def test_decimal_array_float_division(arg1, arg2, expected, memory_leak_check):
+    """
+    Tests decimal/float division works correctly.
+    """
+
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.divide_numeric(arr1, arr2)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
 def test_str_to_decimal_scalar(memory_leak_check):
     """
     Test converting a string scalar to decimal.
