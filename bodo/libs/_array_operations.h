@@ -73,8 +73,8 @@ table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
 
 std::shared_ptr<table_info> sort_values_table_local(
     std::shared_ptr<table_info> in_table, int64_t n_key_t,
-    int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
-    bool is_parallel,
+    const int64_t* vect_ascending, const int64_t* na_position,
+    const int64_t* dead_keys, bool is_parallel,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());

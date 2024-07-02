@@ -29,25 +29,24 @@ struct TableAndRange {
 struct HeapComprator {
     int64_t n_key_t;
     // TODO(aneesh) can these be vectors instead?
-    int64_t* vect_ascending;
-    int64_t* na_position;
-    int64_t* dead_keys;
+    const std::vector<int64_t>& vect_ascending;
+    const std::vector<int64_t>& na_position;
+    const std::vector<int64_t>& dead_keys;
 
     // TODO(aneesh) we should either templetize KeyComparisonAsPython or move to
     // something like converting rows to bitstrings for faster comparision.
     bool operator()(const TableAndRange& a, const TableAndRange& b) {
-        return !KeyComparisonAsPython(n_key_t, vect_ascending, a.range->columns,
-                                      0, 0, b.range->columns, 0, 0,
-                                      na_position);
+        return !KeyComparisonAsPython(n_key_t, vect_ascending.data(),
+                                      a.range->columns, 0, 0, b.range->columns,
+                                      0, 0, na_position.data());
     }
 };
 
 struct SortedChunkedTableBuilder {
-    int64_t n_key_t;
-    // TODO(aneesh) can these be vectors instead?
-    int64_t* vect_ascending;
-    int64_t* na_position;
-    int64_t* dead_keys;
+    const int64_t n_key_t;
+    const std::vector<int64_t>& vect_ascending;
+    const std::vector<int64_t>& na_position;
+    const std::vector<int64_t>& dead_keys;
 
     const size_t chunk_size;
 
@@ -58,8 +57,10 @@ struct SortedChunkedTableBuilder {
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::unique_ptr<ChunkedTableBuilder> sorted_table_builder;
 
-    SortedChunkedTableBuilder(int64_t n_key_t, int64_t* vect_ascending,
-                              int64_t* na_position, int64_t* dead_keys,
+    SortedChunkedTableBuilder(int64_t n_key_t,
+                              const std::vector<int64_t>& vect_ascending,
+                              const std::vector<int64_t>& na_position,
+                              const std::vector<int64_t>& dead_keys,
                               size_t chunk_size = 4096)
         : n_key_t(n_key_t),
           vect_ascending(vect_ascending),
