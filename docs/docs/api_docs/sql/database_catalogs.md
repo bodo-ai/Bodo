@@ -277,3 +277,118 @@ The `TabularCatalog` currently supports the following types of SQL queries:
 The `TabularCatalog` supports reading and writing tables stored on S3.
 S3 access is provided by the Tabular Warehouse and does not require any additional configuration.
 
+## GlueCatalog {#glue-catalog-api}
+
+The `GlueCatalog` allows users to read and write tables using AWS Glue.
+To use this catalog, you will have to select a warehouse that is the Glue S3 bucket.
+The bucket must exist. The `s3://` prefix is optional. I.e., both `s3://bucket_name` and `bucket_name` are valid.
+
+```py
+catalog = bodosql.GlueCatalog(
+    warehouse="warehouse_name",
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT * FROM MY_SCHEMA.MY_TABLE")
+
+run_query(bc)
+```
+
+When constructing a query you must follow the BodoSQL rules for [identifier case sensitivity][identifier-case-sensitivity].
+
+### Authentication / Authorization
+
+Before creating a catalog for the Glue S3 bucket, you must first ensure that the cloud config role for the workspace has access to the Glue S3 bucket with the following permissions:
+```
+{
+    "Sid": "BodoPlatformCatalog",
+    "Effect": "Allow",
+    "Action": [
+        "s3:ListBucket"
+    ],
+    "Resource": "arn:aws:s3:::<backet>"
+}
+```
+
+The following are the steps to find the cloud config role:
+  * find the `Cloud Config uuid` in the workpace details.
+  * find the `Cloud Config` that has the same uuid in the `Cloud Configurations` page.
+  * find the `Role ARN` in the details of the `Cloud Config`. It may look like `BodoPlatformUser-XXXXXXXX`
+  if it was created using `Cloud Formation` or `Access Key`. 
+
+The Bodo clusters that run the queries on the Glue Catalog need to be created with an instance role. This instance role needs to have read/write access to
+the Glue S3 bucket and also appropreate Glue permissions. The exact set of Glue permissions depend on the queries on the Glue database. The following is 
+an example that could work for most of the use cases.
+
+```
+{
+    "Sid": "BodoPlatformAccessGlueCatalog",
+    "Effect": "Allow",
+    "Action": [
+        "glue:CreateDatabase",
+        "glue:CreateSchema",
+        "glue:CreateTable",
+        "glue:DeleteDatabase",
+        "glue:DeleteSchema",
+        "glue:DeleteTable",
+        "glue:GetDatabase",
+        "glue:GetDatabases",
+        "glue:GetSchema",
+        "glue:GetSchemaByDefinition",
+        "glue:GetSchemaVersion",
+        "glue:GetSchemaVersionsDiff",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:GetTableVersion",
+        "glue:GetTableVersions",
+        "glue:ListSchemas",
+        "glue:ListSchemaVersions",
+        "glue:PutSchemaVersionMetadata",
+        "glue:QuerySchemaVersionMetadata",
+        "glue:RegisterSchemaVersion",
+        "glue:RemoveSchemaVersionMetadata",
+        "glue:UpdateDatabase",
+        "glue:UpdateSchema",
+        "glue:UpdateTable"
+    ],
+    "Resource": [
+      "arn:aws:glue:*:*:catalog",
+      "arn:aws:glue:*:*:database/*<bodo-db>*",
+      "arn:aws:glue:*:*:table/*<bodo-db>*/<table>",
+      "arn:aws:glue:*:*:connection/*<bodo-connection>*",
+      "arn:aws:glue:*:*:session/*<bodo-session>*"
+    ]
+}, {
+    "Sid": "BodoPlatformAccessGlueBucket",
+    "Effect": "Allow",
+    "Action": [
+        "s3:*",
+    ],
+   "Resource": "arn:aws:s3:::<backet>"
+}
+```
+
+For workspaces that have PrivateLink enabled, or have no internet access, users need to create AWS Glue endpoint in the VPC to allow access to Glue.
+
+### API Reference
+
+- `bodosql.GlueCatalog(warehouse: str)`
+<br><br>
+
+    Constructor for `GlueCatalog`. This allows users to use an AWS Glue Iceberg Warehouse as a database for querying
+    or writing tables with a `BodoSQLContext`.
+
+    ***Arguments***
+
+    - `warehouse`: Name of the Glue S3 bucket, with or without the `s3://` prefix. I.e., both `s3://bucket_name` and `bucket_name` are valid.
+
+#### Supported Query Types
+
+The `GlueCatalog` currently supports the following types of SQL queries:
+
+  * `#!sql SELECT`
+  * `#!sql CREATE TABLE AS`
+
+
