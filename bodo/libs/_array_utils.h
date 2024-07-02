@@ -947,11 +947,11 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
  * @return true if (shift_key1,iRow1) < (shift_key2,iRow2) , false otherwise
  */
 bool KeyComparisonAsPython(
-    size_t const& n_key, int64_t* vect_ascending,
+    size_t const& n_key, const int64_t* vect_ascending,
     std::vector<std::shared_ptr<array_info>> const& columns1,
     size_t const& shift_key1, size_t const& iRow1,
     std::vector<std::shared_ptr<array_info>> const& columns2,
-    size_t const& shift_key2, size_t const& iRow2, int64_t* na_position);
+    size_t const& shift_key2, size_t const& iRow2, const int64_t* na_position);
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
                                  const std::shared_ptr<array_info>& arr1,

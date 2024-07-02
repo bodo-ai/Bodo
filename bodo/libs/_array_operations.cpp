@@ -259,8 +259,8 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
  */
 std::shared_ptr<table_info> sort_values_table_local(
     std::shared_ptr<table_info> in_table, int64_t n_key_t,
-    int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
-    bool is_parallel, bodo::IBufferPool* const pool,
+    const int64_t* vect_ascending, const int64_t* na_position,
+    const int64_t* dead_keys, bool is_parallel, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
