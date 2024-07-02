@@ -1242,6 +1242,10 @@ def _test_equal(
     elif isinstance(py_out, pd.CategoricalDtype):
         np.testing.assert_equal(bodo_out.categories.values, py_out.categories.values)
         assert bodo_out.ordered == py_out.ordered
+    elif isinstance(bodo_out, pa.Decimal128Scalar) and isinstance(
+        py_out, pa.Decimal128Scalar
+    ):
+        assert pa.compute.equal(bodo_out, py_out).as_py()
     else:
         np.testing.assert_equal(bodo_out, py_out)
 

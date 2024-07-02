@@ -1403,7 +1403,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             # future we can grab this information from SQL or the original function
             return bodo.utils.typing.to_nullable_type(types.Array(out_dtype, 1, "C"))
 
-        if func_name in ("multiply_numeric", "divide_numeric"):
+        if func_name in ("add_numeric", "multiply_numeric", "divide_numeric"):
             # We only support decimal arithmetic on multiplication and division.
             verify_numeric_arg(arr0, "multiply_numeric", "arr0")
             verify_numeric_arg(arr1, "multiply_numeric", "arr1")
@@ -1414,6 +1414,13 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
         if isinstance(
             arr0, (bodo.DecimalArrayType, bodo.Decimal128Type)
         ) and isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type)):
+            if func_name == "add_numeric":
+
+                def impl(arr0, arr1):  # pragma: no cover
+                    return bodo.libs.bodosql_array_kernels.add_decimals(arr0, arr1)
+
+                return impl
+
             if func_name == "multiply_numeric":
 
                 def impl(arr0, arr1):  # pragma: no cover
@@ -1545,6 +1552,75 @@ def _install_numeric_operators_overload():
 
 
 _install_numeric_operators_overload()
+
+
+def add_decimals(arr1, arr2):  # pragma: no cover
+    pass
+
+
+@overload(add_decimals)
+def overload_add_decimals(arr1, arr2):
+    """
+    Implementation to add two decimal arrays or scalars. This does
+    not handle optional type support and so it should not be called directly
+    from BodoSQL. This is meant as a convenience function to simplify the
+    addition logic.
+    """
+    if not (
+        is_overload_none(arr1)
+        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("add_decimals: arr1 must be a decimal array or scalar")
+    if not (
+        is_overload_none(arr2)
+        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("add_decimals: arr2 must be a decimal array or scalar")
+
+    if is_overload_none(arr1):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        p1, s1 = 38, 0
+    else:
+        p1, s1 = arr1.precision, arr1.scale
+    if is_overload_none(arr2):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        p2, s2 = 38, 0
+    else:
+        p2, s2 = arr2.precision, arr2.scale
+
+    if (
+        isinstance(arr1, bodo.DecimalArrayType)
+        or isinstance(arr2, bodo.DecimalArrayType)
+    ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
+        # If either argument is an arrays, call the specialized function to reduce function
+        # call overhead on every element.
+
+        def impl(arr1, arr2):  # pragma no cover
+            return bodo.libs.decimal_arr_ext.add_decimal_arrays(arr1, arr2)
+
+        return impl
+
+    else:
+        # If just operating on scalars, use gen_vectorized.
+        p, s = bodo.libs.decimal_arr_ext.decimal_addition_output_precision_scale(
+            p1, s1, p2, s2
+        )
+        out_dtype = bodo.DecimalArrayType(p, s)
+
+        arg_names = ["arr1", "arr2"]
+        arg_types = [arr1, arr2]
+        propagate_null = [True, True]
+        scalar_text = (
+            "res[i] = bodo.libs.decimal_arr_ext.add_decimal_scalars(arg0, arg1)"
+        )
+
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
 
 
 def multiply_decimals(arr1, arr2):  # pragma: no cover
