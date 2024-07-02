@@ -4,6 +4,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.operatorTables.ArrayOperatorTable
 import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
@@ -130,7 +131,15 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                                     SqlTypeName.BIGINT,
                                 ).contains(operands[1].type.sqlTypeName)
                             ) {
-                                val newOperands = listOf(rexBuilder.makeLiteral("DAY"), operands[1], operands[0])
+                                val newOperands =
+                                    listOf(
+                                        rexBuilder.makeLiteral(
+                                            DatetimeFnUtils.DateTimePart.DAY,
+                                            cx.typeFactory.createSqlType(SqlTypeName.SYMBOL),
+                                        ),
+                                        operands[1],
+                                        operands[0],
+                                    )
                                 rexBuilder.makeCall(
                                     rex.getType(),
                                     DatetimeOperatorTable.DATEADD,
@@ -158,7 +167,15 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                             )
                         }
                         SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT -> {
-                            val newOperands = listOf(rexBuilder.makeLiteral("DAY"), operands[0], operands[1])
+                            val newOperands =
+                                listOf(
+                                    rexBuilder.makeLiteral(
+                                        DatetimeFnUtils.DateTimePart.DAY,
+                                        cx.typeFactory.createSqlType(SqlTypeName.SYMBOL),
+                                    ),
+                                    operands[0],
+                                    operands[1],
+                                )
                             rexBuilder.makeCall(
                                 rex.getType(),
                                 DatetimeOperatorTable.DATEADD,
@@ -192,7 +209,7 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                     SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT -> {
                         val newOperands =
                             listOf(
-                                rexBuilder.makeLiteral("DAY"),
+                                rexBuilder.makeLiteral(DatetimeFnUtils.DateTimePart.DAY, cx.typeFactory.createSqlType(SqlTypeName.SYMBOL)),
                                 // Reuse add by negating the integer input.
                                 rexBuilder.makeCall(operands[1].type, SqlStdOperatorTable.UNARY_MINUS, listOf(operands[1])),
                                 operands[0],

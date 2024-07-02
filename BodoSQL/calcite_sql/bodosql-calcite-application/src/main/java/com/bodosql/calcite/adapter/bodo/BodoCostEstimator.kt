@@ -31,7 +31,7 @@ interface BodoCostEstimator {
                     }
 
                 SqlTypeName.VARBINARY ->
-                    if (type.precision <= 0) {
+                    if (type.precision <= 0 || type.precision > 1000000) {
                         DEFAULT_VARBINARY_PRECISION
                     } else {
                         type.precision.toDouble()

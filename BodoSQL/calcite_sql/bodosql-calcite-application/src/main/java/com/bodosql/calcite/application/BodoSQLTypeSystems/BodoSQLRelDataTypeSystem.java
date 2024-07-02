@@ -17,6 +17,10 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   // Added it here for simplicity.
   // TODO (HA): update with other default tickets.
   public static final int MAX_DATETIME_PRECISION = 9;
+
+  public static final int MAX_STRING_PRECISION = 16777216;
+
+  public static final int MAX_BINARY_PRECISION = 8388608;
   /*
   WEEK_START parameter that determines which weekday a week starts with.
   We follow Snowflake behavior, mapping 0 and 1 to Monday (default), and
@@ -121,8 +125,9 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case CHAR:
         return 1;
       case BINARY:
+      case VARBINARY:
       case VARCHAR:
-        return RelDataType.PRECISION_NOT_SPECIFIED;
+        return getMaxPrecision(typeName);
         // Snowflake:
         // INT , INTEGER , BIGINT , SMALLINT , TINYINT , BYTEINT
         // Synonymous with NUMBER, except that precision and scale cannot be specified
@@ -161,10 +166,10 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
         return MAX_DATETIME_PRECISION;
       case VARBINARY:
       case BINARY:
-        return 8388608;
+        return MAX_BINARY_PRECISION;
       case CHAR:
       case VARCHAR:
-        return 16777216;
+        return MAX_STRING_PRECISION;
       default:
         return super.getMaxPrecision(typeName);
     }
