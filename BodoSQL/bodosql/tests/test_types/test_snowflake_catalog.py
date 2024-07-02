@@ -9,6 +9,7 @@ import io
 import os
 import random
 import time
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -33,6 +34,7 @@ from bodo.tests.utils import (
     create_snowflake_table,
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
+    enable_bodo_use_decimal,
     enable_timestamptz,
     gen_unique_table_id,
     get_snowflake_connection_string,
@@ -3444,3 +3446,52 @@ def test_write_timestamptz_ctas(test_db_snowflake_catalog, memory_leak_check):
             output = bodo.jit()(impl)(bc, f"SELECT * FROM {bodo_write_tablename}")
             expected = bodo.jit()(impl)(bc, f"SELECT A FROM TZ_TEST")
             assert_tables_equal(output, expected)
+
+
+def test_snowflake_catalog_read_and_sum_decimal(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+
+    query = """
+    SELECT MOD(SS_STORE_SK, 10) as key, SUM(SS_NET_PAID) as total 
+    FROM (
+        SELECT * 
+        FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.STORE_SALES
+        LIMIT 100
+        )
+    GROUP BY 1
+    """
+    answer = pd.DataFrame(
+        {
+            "KEY": pd.array([1, 2, 3, 4, 5, 6, 7, 8, 9, None], dtype=pd.Int8Dtype()),
+            "TOTAL": [
+                Decimal("5284.29"),
+                Decimal("38856.49"),
+                Decimal("23072.91"),
+                Decimal("10063.76"),
+                Decimal("5165.80"),
+                Decimal("14811.66"),
+                Decimal("4895.12"),
+                Decimal("40322.77"),
+                Decimal("28496.07"),
+                Decimal("6408.64"),
+            ],
+        }
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        with enable_bodo_use_decimal():
+            check_func(
+                impl,
+                (bc, query),
+                py_output=answer,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "ss_net_paid: DecimalArrayType(7, 2)")

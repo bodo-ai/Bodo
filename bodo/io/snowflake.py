@@ -642,6 +642,8 @@ def snowflake_connect(
             "This can be installed by calling 'conda install -c conda-forge snowflake-connector-python' "
             "or 'pip install snowflake-connector-python'."
         )
+    # If bodo_use_decimal is enabled, reads NUMBER columns as decimals instead of float64
+    params["arrow_number_to_decimal"] = bodo.bodo_use_decimal
     conn = snowflake.connector.connect(**params)
     platform_region_str = os.environ.get("BODO_PLATFORM_WORKSPACE_REGION", None)
     if platform_region_str and bodo.get_rank() == 0:
@@ -834,8 +836,11 @@ def get_number_types_from_metadata(
             else:
                 # Maintain the precision from Snowflake
                 out_dtype = dtype
-        # Any non-16 byte decimal columns map to double
-        elif byte_size <= 8 or downcast_decimal_to_double:
+        # Any non-16 byte decimal columns map to double, unless
+        # we force them to be decimals.
+        elif (
+            byte_size <= 8 or downcast_decimal_to_double
+        ) and not bodo.bodo_use_decimal:
             out_dtype = pa.float64()
         # Stick to existing decimal type in this case
         else:
