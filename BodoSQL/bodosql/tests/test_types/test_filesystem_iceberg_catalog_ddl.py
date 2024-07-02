@@ -391,7 +391,13 @@ def test_iceberg_drop_view_unsupported_catalog_error_does_not_exist(
     view_name = gen_unique_id("TEST_VIEW").upper()
     if_exists_str = "IF EXISTS" if if_exists else ""
     query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
-    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+    py_output = pd.DataFrame(
+        {
+            "STATUS": [
+                f"Drop statement executed successfully ({view_name} already dropped)."
+            ]
+        }
+    )
     # execute_ddl Version
     if if_exists:
         bodo_output = bc.execute_ddl(query_drop_view)
