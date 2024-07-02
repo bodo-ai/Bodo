@@ -1439,6 +1439,60 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
             auto casted_datum = res.ValueOrDie();
             new_cols.push_back(casted_datum.chunked_array());
 
+        } else if (act_type->id() == Type::DECIMAL128 &&
+                   exp_type->id() == Type::DECIMAL128 && nullable_eq) {
+            int32_t act_scale =
+                std::reinterpret_pointer_cast<arrow::Decimal128Type>(act_type)
+                    ->scale();
+            int32_t exp_scale =
+                std::reinterpret_pointer_cast<arrow::Decimal128Type>(exp_type)
+                    ->scale();
+            int32_t exp_precision =
+                std::reinterpret_pointer_cast<arrow::Decimal128Type>(exp_type)
+                    ->precision();
+            if (act_scale == exp_scale) {
+                // Cast between decimal types that have the same scale, but
+                // first verify that the values can all fit in the new
+                // precision.
+                int n_chunks = col->num_chunks();
+                for (int cur_chunk = 0; cur_chunk < n_chunks; cur_chunk++) {
+                    const std::shared_ptr<arrow::Array>& chunk =
+                        col->chunk(cur_chunk);
+                    size_t n_rows = chunk->length();
+                    std::shared_ptr<arrow::Decimal128Array> array =
+                        std::reinterpret_pointer_cast<arrow::Decimal128Array>(
+                            chunk);
+                    const uint8_t* raw_data = array->values()->data();
+                    auto* decimal_data =
+                        reinterpret_cast<const arrow::Decimal128*>(raw_data);
+                    for (size_t row = 0; row < n_rows; row++) {
+                        if (array->IsValid(row) &&
+                            !decimal_data[row].FitsInPrecision(exp_precision)) {
+                            throw std::runtime_error(
+                                "cast_arrow_table: number out of representable "
+                                "range when casted to type " +
+                                exp_type->ToString());
+                        }
+                    }
+                }
+
+                auto opt = arrow::compute::CastOptions::Safe();
+                opt.allow_decimal_truncate = true;
+
+                auto res = arrow::compute::Cast(
+                    col, exp_type, opt, bodo::default_buffer_exec_context());
+                CHECK_ARROW(res.status(), "Failed to cast from " +
+                                              col->type()->ToString() + " to " +
+                                              exp_type->ToString());
+
+                auto casted_datum = res.ValueOrDie();
+                new_cols.push_back(casted_datum.chunked_array());
+            } else {
+                throw std::runtime_error(
+                    "Unsupported cast from " + col->type()->ToString() +
+                    " to " + exp_type->ToString() +
+                    " (decimal casting currently requires the same scale)");
+            }
         } else {
             // TODO: Use fmt::format or std::format on C++23
             throw std::runtime_error("Invalid Downcast from " +
