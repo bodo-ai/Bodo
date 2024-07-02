@@ -18,8 +18,8 @@ Click on _CREATE CATALOG_ and fill up the form with the required values.
 ![Catalogs](../platform2-screenshots/catalogspage.png#center) 
 
 
-Currently, we support Snowflake Database Catalogs and Tabular Database Catalogs on the Bodo Platform.  
-See [`SnowflakeCatalog`][snowflake-catalog-api] and [`TabularCatalog`][tabular-catalog-api] for details on
+Currently, we support Snowflake Database Catalogs, Tabular Database Catalogs and AWS Glue Catalogs on the Bodo Platform.  
+See [`SnowflakeCatalog`][snowflake-catalog-api], [`TabularCatalog`][tabular-catalog-api] and [`GlueCatalog`][glue-catalog-api] for details on
 the required parameters.
 
 Upon submitting the form, you will see that your Catalog has been created and is now
