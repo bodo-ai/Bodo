@@ -619,6 +619,56 @@ def test_drop_view(if_exists, test_db_snowflake_catalog, memory_leak_check):
 
 
 @pytest.mark.parametrize("if_exists", [True, False])
+@pytest.mark.parametrize("tableview", ["Table", "View"])
+def test_drop_viewortable_bug(
+    test_db_snowflake_catalog, if_exists, tableview, memory_leak_check
+):
+    """Test for fix for both drop view and drop table"""
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    tableview_name = "TEST_DB.TPCH_SF1.UNEXIST_TABLE"
+    if_exists_str = "IF EXISTS" if if_exists else ""
+    query_drop_view = f"DROP {tableview} {if_exists_str} {tableview_name}"
+    py_success_output = pd.DataFrame(
+        {
+            "STATUS": [
+                f"Drop statement executed successfully ({tableview_name} already dropped)."
+            ]
+        }
+    )
+
+    # execute_ddl Version
+    if if_exists:
+        bodo_output = bc.execute_ddl(query_drop_view)
+        _test_equal_guard(bodo_output, py_success_output)
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"{tableview} '{tableview_name}' does not exist or not authorized to drop.",
+        ):
+            bodo_output = bc.execute_ddl(query_drop_view)
+
+    # Jit Version
+    if if_exists:
+        check_func_seq(
+            lambda bc, query: bc.sql(query),
+            (bc, query_drop_view),
+            py_output=py_success_output,
+            test_str_literal=False,
+        )
+    else:
+        with pytest.raises(
+            BodoError,
+            match=f"{tableview} '{tableview_name}' does not exist or not authorized to drop.",
+        ):
+            check_func_seq(
+                lambda bc, query: bc.sql(query),
+                (bc, query_drop_view),
+                py_output="",
+                test_str_literal=False,
+            )
+
+
+@pytest.mark.parametrize("if_exists", [True, False])
 def test_drop_view_error_does_not_exist(
     if_exists, test_db_snowflake_catalog, memory_leak_check
 ):
@@ -633,7 +683,13 @@ def test_drop_view_error_does_not_exist(
     view_name = gen_unique_id("TEST_VIEW").upper()
     if_exists_str = "IF EXISTS" if if_exists else ""
     query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
-    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
+    py_output = pd.DataFrame(
+        {
+            "STATUS": [
+                f"Drop statement executed successfully ({view_name} already dropped)."
+            ]
+        }
+    )
 
     with view_helper(conn, view_name, create=True):
         pass
@@ -2260,140 +2316,3 @@ def test_describe_schema(test_db_snowflake_catalog, memory_leak_check):
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "DESCRIBE SCHEMA test failed"
-
-
-@pytest.mark.parametrize("if_exists", [True, False])
-def test_drop_view(if_exists, test_db_snowflake_catalog, memory_leak_check):
-    """Tests that Bodo can drop a view in Snowflake if the view does exist."""
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-    conn = get_snowflake_connection_string(db, schema)
-
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    view_name = gen_unique_id("TEST_VIEW").upper()
-    if_exists_str = "IF EXISTS" if if_exists else ""
-    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
-    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
-
-    # execute_ddl Version
-    with view_helper(conn, view_name, create=True):
-        bodo_output = bc.execute_ddl(query_drop_view)
-        _test_equal_guard(bodo_output, py_output)
-        assert not check_view_exists(conn, view_name)
-
-    # Python Version
-    with view_helper(conn, view_name, create=True):
-        bodo_output = bc.sql(query_drop_view)
-        _test_equal_guard(bodo_output, py_output)
-        assert not check_view_exists(conn, view_name)
-
-    # Jit Version
-    with view_helper(conn, view_name, create=True):
-        check_func_seq(
-            lambda bc, query: bc.sql(query),
-            (bc, query_drop_view),
-            py_output=py_output,
-            test_str_literal=False,
-        )
-        assert not check_view_exists(conn, view_name)
-
-
-@pytest.mark.parametrize("if_exists", [True, False])
-def test_drop_view_error_does_not_exist(
-    if_exists, test_db_snowflake_catalog, memory_leak_check
-):
-    """Tests that Bodo can drop a view in Snowflake if the view does not exist with if_exists.
-    Tests that Bodo signals error in Snowflake if the view does not exist without if_exists.
-    """
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-    conn = get_snowflake_connection_string(db, schema)
-
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-    view_name = gen_unique_id("TEST_VIEW").upper()
-    if_exists_str = "IF EXISTS" if if_exists else ""
-    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
-    py_output = pd.DataFrame({"STATUS": [f"View '{view_name}' successfully dropped."]})
-
-    with view_helper(conn, view_name, create=True):
-        pass
-    # execute_ddl Version
-    if if_exists:
-        bodo_output = bc.execute_ddl(query_drop_view)
-        _test_equal_guard(bodo_output, py_output)
-    else:
-        with pytest.raises(
-            BodoError,
-            match=f"View '{view_name}' does not exist or not authorized to drop.",
-        ):
-            bc.execute_ddl(query_drop_view)
-
-    # Python Version
-    if if_exists:
-        bodo_output = bc.sql(query_drop_view)
-        _test_equal_guard(bodo_output, py_output)
-    else:
-        with pytest.raises(
-            BodoError,
-            match=f"View '{view_name}' does not exist or not authorized to drop.",
-        ):
-            bc.sql(query_drop_view)
-
-    # Jit Version
-    if if_exists:
-        check_func_seq(
-            lambda bc, query: bc.sql(query),
-            (bc, query_drop_view),
-            py_output=py_output,
-            test_str_literal=False,
-        )
-    else:
-        with pytest.raises(
-            BodoError,
-            match=f"View '{view_name}' does not exist or not authorized to drop.",
-        ):
-            check_func_seq(
-                lambda bc, query: bc.sql(query),
-                (bc, query_drop_view),
-                py_output=py_output,
-                test_str_literal=False,
-            )
-
-
-@pytest.mark.parametrize("if_exists", [True, False])
-def test_drop_view_error_non_view(
-    if_exists, test_db_snowflake_catalog, memory_leak_check
-):
-    """Tests that Bodo signals error in Snowflake if the path is not a view."""
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-    conn = get_snowflake_connection_string(db, schema)
-
-    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
-
-    view_name = gen_unique_id("TEST_VIEW").upper()
-    if_exists_str = "IF EXISTS" if if_exists else ""
-    query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
-    with table_helper(conn, view_name, create=True):
-        # execute_ddl Version
-        with pytest.raises(
-            BodoError, match=f"Unable to drop Snowflake view from query"
-        ):
-            bc.execute_ddl(query_drop_view)
-
-        # Python Version
-        with pytest.raises(
-            BodoError, match=f"Unable to drop Snowflake view from query"
-        ):
-            bc.sql(query_drop_view)
-
-        # Jit Version
-        with pytest.raises(
-            BodoError, match=f"Unable to drop Snowflake view from query"
-        ):
-            check_func_seq(
-                lambda bc, query: bc.sql(query),
-                (bc, query_drop_view),
-                py_output="",
-                test_str_literal=False,
-            )
