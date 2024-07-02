@@ -1403,13 +1403,15 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             # future we can grab this information from SQL or the original function
             return bodo.utils.typing.to_nullable_type(types.Array(out_dtype, 1, "C"))
 
-        if func_name in ("add_numeric", "multiply_numeric", "divide_numeric"):
-            # We only support decimal arithmetic on multiplication and division.
-            verify_numeric_arg(arr0, "multiply_numeric", "arr0")
-            verify_numeric_arg(arr1, "multiply_numeric", "arr1")
-        else:
-            verify_int_float_arg(arr0, func_name, "arr0")
-            verify_int_float_arg(arr1, func_name, "arr1")
+        # All float + decimal operations are supported through upcasting the decimal to float
+        if not is_decimal_float_pair(arr0, arr1):
+            if func_name in ("add_numeric", "multiply_numeric", "divide_numeric"):
+                # We only support decimal arithmetic on addition, multiplication, division.
+                verify_numeric_arg(arr0, "multiply_numeric", "arr0")
+                verify_numeric_arg(arr1, "multiply_numeric", "arr1")
+            else:
+                verify_int_float_arg(arr0, func_name, "arr0")
+                verify_int_float_arg(arr1, func_name, "arr1")
 
         if isinstance(
             arr0, (bodo.DecimalArrayType, bodo.Decimal128Type)
@@ -1445,6 +1447,29 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             and not is_overload_none(arr0)
             and not is_overload_none(arr1)
         ):
+            # For all decimal/float binary ops, we can cast the decimal to float.
+            func_names = [
+                "add_numeric",
+                "subtract_numeric",
+                "multiply_numeric",
+                "divide_numeric",
+            ]
+            for f_name in func_names:
+                if func_name == f_name:
+                    args = [arr0, arr1]
+                    arg_names = ["arr0", "arr1"]
+                    for arg_idx in range(len(args)):
+                        if isinstance(args[arg_idx], types.Float) or (
+                            is_array_typ(args[arg_idx])
+                            and isinstance(args[arg_idx].dtype, types.Float)
+                        ):
+                            return gen_coerced(
+                                f"bodo.libs.bodosql_array_kernels.{func_name}",
+                                "bodo.libs.bodosql_array_kernels.to_double({}, None)",
+                                arg_names,
+                                1 - arg_idx,
+                            )
+
             if func_name == "multiply_numeric":
                 if isinstance(arr0, types.Integer) or (
                     is_array_typ(arr0) and isinstance(arr0.dtype, types.Integer)
