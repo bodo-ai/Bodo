@@ -561,12 +561,12 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     } else if (typeName.equals("TEXT") || typeName.equals("STRING")) {
       columnDataType = BodoSQLColumnDataType.STRING;
       // TEXT/STRING using no defined limit.
-      precision = RelDataType.PRECISION_NOT_SPECIFIED;
+      precision = BodoSQLRelDataTypeSystem.MAX_STRING_PRECISION;
       return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("VARCHAR") || typeName.startsWith("CHAR")) {
       columnDataType = BodoSQLColumnDataType.STRING;
       // Load max string information if it exists
-      precision = RelDataType.PRECISION_NOT_SPECIFIED;
+      precision = BodoSQLRelDataTypeSystem.MAX_STRING_PRECISION;
       // Snowflake columns should contain precision, but UDFs may not.
       if (typeName.contains("(")) {
         String[] typeFields = typeName.split("\\(|\\)");
@@ -624,7 +624,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       return new ColumnDataTypeInfo(columnDataType, isNullable, precision);
     } else if (typeName.startsWith("BINARY") || typeName.startsWith("VARBINARY")) {
       columnDataType = BodoSQLColumnDataType.BINARY;
-      precision = RelDataType.PRECISION_NOT_SPECIFIED;
+      precision = BodoSQLRelDataTypeSystem.MAX_BINARY_PRECISION;
       // Snowflake columns should contain precision, but UDFs may not.
       if (typeName.contains("(")) {
         String[] typeFields = typeName.split("\\(|\\)");
@@ -641,7 +641,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       // TODO: Replace with a map type if possible.
       columnDataType = BodoSQLColumnDataType.JSON_OBJECT;
       // Assume keys and values are always nullable
-      ColumnDataTypeInfo key = new ColumnDataTypeInfo(BodoSQLColumnDataType.STRING, true);
+      ColumnDataTypeInfo key =
+          new ColumnDataTypeInfo(
+              BodoSQLColumnDataType.STRING, true, BodoSQLRelDataTypeSystem.MAX_STRING_PRECISION);
       ColumnDataTypeInfo value = new ColumnDataTypeInfo(BodoSQLColumnDataType.VARIANT, true);
       return new ColumnDataTypeInfo(columnDataType, isNullable, key, value);
     } else if (typeName.startsWith("ARRAY")) {
