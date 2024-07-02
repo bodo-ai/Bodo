@@ -365,6 +365,31 @@
                                         <exclude>org/apache/calcite/plan/RelOptTable$ToRelContext.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable$ViewExpander.class</exclude>
                                         <exclude>org/apache/calcite/plan/RelOptTable.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$1.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$1JoinCounter.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$2.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$3.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$4.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$5.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$6.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$7.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$8.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$9.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$CorrelationCollector.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$Exists.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$InputFinder.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$InputReferencedVisitor.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$Logic.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$RelHintPropagateShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$ResetHintsShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$RexInputConverter.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$Side.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$SubQueryType.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$SubTreeHintPropagateShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$TypeDumper.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$VariableSetVisitor.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil$VariableUsedVisitor.class</exclude>
+                                        <exclude>org/apache/calcite/plan/RelOptUtil.class</exclude>
                                         <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$1.class</exclude>
                                         <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$DeferringRuleCall.class</exclude>
                                         <exclude>org/apache/calcite/plan/volcano/VolcanoPlanner$DirectProvenance.class</exclude>
@@ -416,6 +441,37 @@
                                         <exclude>org/apache/calcite/rex/RexSimplify.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable$EquivConvertlet.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexSqlStandardConvertletTable.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$10.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$11.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$12.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$13.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$2.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$3.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$4.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$5.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$6.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$7.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$8.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$9.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$CnfHelper$OverflowError.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$CnfHelper.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ConstantFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$CorrelationFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$DnfHelper.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ExprSimplifier.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ExpressionNormalizer$SubExprExistsException.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ExpressionNormalizer.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$FieldAccessFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$FixNullabilityShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ForwardRefFinder$IllegalForwardRefException.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$ForwardRefFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$RangeToRex.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$RexFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$RexShiftShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$SearchExpandingShuttle.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil$SubQueryFinder.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexUtil.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlAbstractDateTimeLiteral.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlBasicTypeNameSpec.class</exclude>
                                         <exclude>org/apache/calcite/sql/SqlTimeTzLiteral.class</exclude>
