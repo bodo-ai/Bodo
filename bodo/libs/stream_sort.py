@@ -30,7 +30,6 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     MetaType,
     get_overload_const_list,
-    get_overload_const_tuple,
     unwrap_typeref,
 )
 
@@ -114,19 +113,25 @@ register_model(SortStateType)(models.OpaqueModel)
 
 
 @intrinsic(prefer_literal=True)
-def _init_stream_sort_state(typingctx, output_state_type):
+def _init_stream_sort_state(
+    typingctx, output_state_type, n_table_cols, vect_ascending, na_position
+):
     output_type = unwrap_typeref(output_state_type)
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [])
+        _, n_table_cols, vect_ascending, na_position = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(64), lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
+        )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="stream_sort_state_init_py_entry"
         )
-        ret = builder.call(fn_tp, tuple())
+        ret = builder.call(fn_tp, (n_table_cols, vect_ascending, na_position))
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = output_type(output_state_type)
+    sig = output_type(output_state_type, types.int64, types.voidptr, types.voidptr)
     return sig, codegen
 
 
@@ -137,18 +142,24 @@ def init_stream_sort_state(
     """Initialize the C++ TableBuilderState pointer"""
     if expected_state_type:
         output_type = expected_state_type
+        n_table_cols = len(unwrap_typeref(output_type).build_table_type.arr_types)
     else:
         output_type = SortStateType()
+        n_table_cols = 0
 
-    by_ = get_overload_const_list(by)
     asc_cols_ = get_overload_const_list(asc_cols)
+    asc_cols_ = [int(asc) for asc in asc_cols_]
     na_position_ = get_overload_const_list(na_position)
-    col_names_ = get_overload_const_tuple(col_names)
+    na_position_ = [int(pos == "first") for pos in na_position_]
 
     def impl(
         operator_id, by, asc_cols, na_position, col_names, expected_state_type=None
     ):  # pragma: no cover
-        return _init_stream_sort_state(output_type)
+        vect_asc = np.array(asc_cols_, np.int64)
+        na_pos = np.array(na_position_, np.int64)
+        return _init_stream_sort_state(
+            output_type, n_table_cols, vect_asc.ctypes, na_pos.ctypes
+        )
 
     return impl
 
@@ -187,13 +198,14 @@ def delete_stream_sort_state(sort_state):
 
 
 @intrinsic(prefer_literal=True)
-def _sort_build_consume_batch(typingctx, sort_state, cpp_table, is_last):
+def _sort_build_consume_batch(typingctx, sort_state, cpp_table, parallel, is_last):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(1),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),
                 lir.IntType(1),
             ],
         )
@@ -204,15 +216,18 @@ def _sort_build_consume_batch(typingctx, sort_state, cpp_table, is_last):
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = types.bool_(sort_state, cpp_table, is_last)
+    sig = types.bool_(sort_state, cpp_table, parallel, is_last)
     return sig, codegen
 
 
-def sort_build_consume_batch(sort_state, table, is_last):  # pragma: no cover
+# TODO(aneesh) this probably needs an update to distributed_pass.py
+def sort_build_consume_batch(
+    sort_state, table, is_last, parallel=True
+):  # pragma: no cover
     pass
 
 
-def gen_sort_build_consume_batch_impl(sort_state, table, is_last):
+def gen_sort_build_consume_batch_impl(sort_state, table, is_last, parallel=True):
     """Consume a table batch in streaming sort
 
     Args:
@@ -225,9 +240,12 @@ def gen_sort_build_consume_batch_impl(sort_state, table, is_last):
     n_table_cols = len(sort_state.build_table_type.arr_types)
     in_col_inds = MetaType(tuple(sort_state.column_mapping))
 
-    def impl_sort_build_consume_batch(sort_state, table, is_last):  # pragma: no cover
+    def impl_sort_build_consume_batch(
+        sort_state, table, is_last, parallel=True
+    ):  # pragma: no cover
         cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
-        return _sort_build_consume_batch(sort_state, cpp_table, is_last)
+        # TODO(aneesh) don't hardcode parallel as true
+        return _sort_build_consume_batch(sort_state, cpp_table, parallel, is_last)
 
     return impl_sort_build_consume_batch
 

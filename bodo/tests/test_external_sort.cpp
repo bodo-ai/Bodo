@@ -6,8 +6,9 @@ bodo::tests::suite external_sort_tests([] {
     bodo::tests::test("test_external_sort_empty", [] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
-        SortedChunkedTableBuilder builder(1, vect_ascending.data(),
-                                          na_position.data(), nullptr, 1);
+        std::vector<int64_t> dead_keys;
+        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+                                          dead_keys, 1);
 
         auto res = builder.Finalize();
         bodo::tests::check(res.size() == 0);
@@ -19,24 +20,17 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        SortedChunkedTableBuilder builder(
-            1, vect_ascending.data(), na_position.data(), dead_keys.data(), 3);
+        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+                                          dead_keys, 3);
 
         builder.AppendChunk(table);
         auto res = builder.Finalize();
-        bodo::tests::check(res.size() == 2);
+        bodo::tests::check(res.size() == 1);
 
-        std::vector<std::shared_ptr<array_info>> arrays;
-        for (const auto& chunk : res) {
-            chunk.table->pin();
-            arrays.push_back(chunk.table->columns[0]);
-        }
-        auto bodo_arr = concat_arrays(arrays);
-        auto arrow_arr = to_arrow(bodo_arr);
+        res[0].table->pin();
+        auto arrow_arr = to_arrow(res[0].table->columns[0]);
         arrow::Int64Array* int_arr =
             static_cast<arrow::Int64Array*>(arrow_arr.get());
-        bodo::tests::check(int_arr->length() == 5);
-
         bodo::tests::check(int_arr->Value(0) == 5);
         bodo::tests::check(int_arr->Value(1) == 4);
         bodo::tests::check(int_arr->Value(2) == 3);
@@ -52,8 +46,8 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        SortedChunkedTableBuilder builder(
-            1, vect_ascending.data(), na_position.data(), dead_keys.data(), 5);
+        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+                                          dead_keys, 5);
 
         builder.AppendChunk(table_0);
         builder.AppendChunk(table_1);
@@ -93,8 +87,8 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        SortedChunkedTableBuilder builder(
-            1, vect_ascending.data(), na_position.data(), dead_keys.data(), 3);
+        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+                                          dead_keys, 3);
 
         builder.AppendChunk(table_2);
         builder.AppendChunk(table_1);
