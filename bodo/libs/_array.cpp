@@ -1121,6 +1121,30 @@ char* array_info_getdata1(array_info* arr) { return arr->data1(); }
 /// test_memory.py::test_array_unpinned
 void array_info_unpin(array_info* arr) { arr->unpin(); }
 
+/**
+ * @brief Python entrypoint for retrieve table.
+ *
+ * @param in_table The table to filter.
+ * @param row_bitmask_arr The bitmask whether row is included. Expects
+ * array_type=NULLABLE_INTO_BOOL, dtype=BOOL.
+ * @return table_info* the filtered table after applying the row bitmask
+ */
+table_info* retrieve_table_py_entry(table_info* in_table,
+                                    array_info* row_bitmask_arr) {
+    try {
+        assert(row_bitmask_arr->arr_type ==
+                   bodo_array_type::NULLABLE_INT_BOOL &&
+               row_bitmask_arr->dtype == Bodo_CTypes::_BOOL);
+        auto row_bitmask_ptr = std::unique_ptr<array_info>(row_bitmask_arr);
+        auto in_table_ptr = std::unique_ptr<table_info>(in_table);
+        return new table_info(*RetrieveTable(std::move(in_table_ptr),
+                                             std::move(row_bitmask_ptr)));
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     MOD_DEF(m, "array_ext", "No docs", NULL);
@@ -1261,6 +1285,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, check_like_kernel_cache);
     SetAttrStringFromVoidPtr(m, dealloc_like_kernel_cache);
     SetAttrStringFromVoidPtr(m, NRT_MemInfo_alloc_safe_aligned);
+
+    SetAttrStringFromVoidPtr(m, retrieve_table_py_entry);
 
     return m;
 }

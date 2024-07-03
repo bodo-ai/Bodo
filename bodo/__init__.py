@@ -119,6 +119,12 @@ enable_timestamp_tz = os.environ.get("BODO_ENABLE_TIMESTAMP_TZ", "1") != "0"
 enable_runtime_join_filters = (
     os.environ.get("BODO_ENABLE_RUNTIME_JOIN_FILTERS", "1") != "0"
 )
+# When applying multiple filters in a single call to runtime_join_filter, materialization
+# occurs after each filter unless the table has at least this many variable-length type
+# columns at which point materialization occurs just once after all filters have been applied.
+runtime_join_filters_copy_threshold = os.environ.get(
+    "BODO_RUNTIME_JOIN_FILTERS_COPY_THRESHOLD", 1
+)
 # TODO(aneesh) remove this flag once streaming sort is fully implemented
 # Flag used to enable streaming sort
 enable_streaming_sort = os.environ.get("BODO_ENABLE_STREAMING_SORT", "0") != "0"

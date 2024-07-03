@@ -363,6 +363,61 @@ def rtjf_test_tables():
             pd.DataFrame({"STRCOL2": ["pastas", "pizza", "tacos"], "NMATCH": [4] * 3}),
             id="string_single_key",
         ),
+        pytest.param(
+            """
+            SELECT A1 FROM
+                (SELECT * FROM
+                    (SELECT * FROM
+                        (SELECT * FROM
+                                FILTERKEYS1
+                                JOIN
+                                (SELECT * FROM INT_TABLE1)
+                            ON A1 = KEYS1
+                    ) JOIN FILTERKEYS2
+                    ON A1 = KEYS2
+                ) JOIN FILTERKEYS3
+            ON A1 = KEYS3
+            ) 
+            """,
+            pd.DataFrame({"A1": [1, 5] * 2}),
+            id="multiple_join_same_key",
+        ),
+        pytest.param(
+            """
+            SELECT *
+            FROM
+            (SELECT *
+                FROM
+                (
+                    SELECT *
+                        FROM
+                            (SELECT * FROM
+                                INT_TABLE2
+                                JOIN
+                                (SELECT * FROM INT_TABLE1)
+                            ON A2 = A1
+                            )
+                            JOIN INT_TABLE2 as t0
+                            ON t0.B2 = C1
+                )
+                JOIN INT_TABLE2 as t1
+                ON t1.A2 = B1
+            )""",
+            pd.DataFrame(
+                {
+                    "A2": np.array([1, 5] * 16, dtype=np.int32),
+                    "B2": np.array([5, 13] * 16, dtype=np.int32),
+                    "A1": np.array([1, 5] * 16, dtype=np.int32),
+                    "B1": np.array([9, 5] * 16, dtype=np.int32),
+                    "C1": np.array([5, 13] * 16, dtype=np.int32),
+                    "A20": np.array([1, 5] * 16, dtype=np.int32),
+                    "B20": np.array([5, 13] * 16, dtype=np.int32),
+                    "A21": np.array([9, 5] * 16, dtype=np.int32),
+                    "B21": np.array([15, 13] * 16, dtype=np.int32),
+                }
+            ),
+            id="multiple_join_multiple_keys",
+        ),
     ],
 )
 def test_merged_rtjf(

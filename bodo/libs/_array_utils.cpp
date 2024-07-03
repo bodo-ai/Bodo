@@ -1058,6 +1058,32 @@ std::shared_ptr<table_info> RetrieveTable(
     return std::make_shared<table_info>(out_arrs);
 }
 
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    std::shared_ptr<array_info> row_bitmask) {
+    // convert bitmask to selection vector
+    std::vector<int64_t> rows_to_keep(
+        std::max(in_table->nrows(), static_cast<uint64_t>(1)), -1);
+    size_t next_idx = 0;
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        rows_to_keep[next_idx] = i_row;
+        size_t delta =
+            arrow::bit_util::GetBit(
+                row_bitmask
+                    ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>(),
+                i_row)
+                ? 1
+                : 0;
+        next_idx += delta;
+    }
+    rows_to_keep.resize(next_idx);
+    if (rows_to_keep.size() == in_table->nrows()) {
+        // Nothing was filtered out, so skip the copy.
+        return in_table;
+    }
+    return RetrieveTable(std::move(in_table), std::move(rows_to_keep));
+}
+
 // @brief Compare the bitmap of two arrow arrays at a given position
 // @param na_position_bis True if NA should be considered greater than any value
 // @param arrow1 First array

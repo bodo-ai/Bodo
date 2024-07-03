@@ -160,6 +160,7 @@ ll.add_symbol("dealloc_like_kernel_cache", array_ext.dealloc_like_kernel_cache)
 ll.add_symbol(
     "BODO_NRT_MemInfo_alloc_safe_aligned", array_ext.NRT_MemInfo_alloc_safe_aligned
 )
+ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 
 
 class LikeKernelCache(types.Opaque):
@@ -3786,6 +3787,37 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     raise BodoError(
         f"General Join Conditions with '{col_array_dtype}' column type not supported"
     )
+
+
+@intrinsic(prefer_literal=True)
+def _retrieve_table(typingctx, cpp_table, row_bitmask):
+    """This function takes in a cpp table and a bitmask over it's rows
+    and returns a new table after applying the bitmask. If the bitmask is
+    all True copying is skipped.
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),  # output is a table
+            [
+                lir.IntType(8).as_pointer(),  # in_table
+                lir.IntType(8).as_pointer(),  # row_bitmask
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="retrieve_table_py_entry"
+        )
+        func_args = [args[0], args[1]]
+        table_ret = builder.call(fn_tp, func_args)  # change this to bitmask
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    sig = cpp_table(
+        cpp_table,
+        array_info_type,
+    )
+
+    return sig, codegen
 
 
 # ----------- Export Array and Table Info Unpin for Testing -----------------

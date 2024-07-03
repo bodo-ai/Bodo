@@ -249,15 +249,7 @@ struct HashJoinMetrics : public JoinMetrics {
     stat_t probe_outer_bloom_filter_misses = 0;
 
     ///// JoinFilter (only relevant in the probe-inner case)
-
-    // Track the number of misses pruned by the runtime filter.
-    // This can either be from the bloom filter or dictionary-builder
-    // based pruning in RuntimeFilter.
-    stat_t num_runtime_filter_misses = 0;
     stat_t num_runtime_filter_applied_rows = 0;
-    // Materialization time
-    time_t join_filter_materialization_time = 0;
-    stat_t join_filter_materialization_nrows = 0;
     // Time spent hashing for bloom filter
     time_t join_filter_bloom_filter_hashing_time = 0;
     stat_t join_filter_bloom_filter_hashing_nrows = 0;
@@ -1008,6 +1000,8 @@ class HashJoinState : public JoinState {
      * function.
      * @param in_table Table to filter. We assume this is a small batch (e.g. 4K
      * rows).
+     * @param row_bitmask Bitmask representing which rows to keep after
+     * filtering. Expects array_type=NULLABLE_INTO_BOOL, dtype=BOOL.
      * @param join_key_idxs A vector of length this->n_keys. The element at the
      * i'th index is the index of the column in the input table that corresponds
      * to the i'th join key. -1 indicates that a column corresponding to the
@@ -1021,12 +1015,12 @@ class HashJoinState : public JoinState {
      * whether or not to apply a column level filter for the i'th join key. This
      * is required because ideally we only want to apply the column level filter
      * only once.
-     * @return std::shared_ptr<table_info> Filtered table.
+     * @return bool whether any filters were applied.
      */
-    std::shared_ptr<table_info> RuntimeFilter(
-        std::shared_ptr<table_info> in_table,
-        const std::vector<int64_t>& join_key_idxs,
-        const std::vector<bool>& process_col_bitmask);
+    bool RuntimeFilter(std::shared_ptr<table_info> in_table,
+                       std::shared_ptr<array_info> row_bitmask,
+                       const std::vector<int64_t>& join_key_idxs,
+                       const std::vector<bool>& process_col_bitmask);
 
     /**
      * @brief Finalize any statistic information
