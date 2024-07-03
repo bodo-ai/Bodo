@@ -17,6 +17,8 @@
 package org.apache.calcite.sql2rel;
 
 import com.bodosql.calcite.adapter.pandas.PandasTargetTableScan;
+import com.bodosql.calcite.rel.core.RowSample;
+import com.bodosql.calcite.rel.logical.BodoLogicalFlatten;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
@@ -619,6 +621,16 @@ public class RelStructuredTypeFlattener implements ReflectiveVisitor {
   }
 
   public void rewriteRel(LogicalSortExchange rel) {
+    rewriteGeneric(rel);
+  }
+
+  // Bodo Change: Link the additional rewriteRel methods for custom nodes
+  // because the internal visitors don't seem to work on subclasses.
+  public void rewriteRel(RowSample rel) {
+    rewriteGeneric(rel);
+  }
+
+  public void rewriteRel(BodoLogicalFlatten rel) {
     rewriteGeneric(rel);
   }
 
