@@ -1996,8 +1996,9 @@ void HashJoinState::FinalizeBuild() {
     JoinState::FinalizeBuild();
 }
 
-std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
+bool HashJoinState::RuntimeFilter(
     std::shared_ptr<table_info> in_table,
+    std::shared_ptr<array_info> row_bitmask,
     const std::vector<int64_t>& join_key_idxs,
     const std::vector<bool>& process_col_bitmask) {
     assert(this->n_keys == join_key_idxs.size());
@@ -2008,12 +2009,7 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
     // would raise an exception if it did, so we just add an assert for now.
     assert(!this->probe_table_outer);
 
-    // Create a bitmask for the rows to keep and filter
-    // rows using the dict-builders and the bloom filter.
-    // TODO Cache this allocation in the JoinState
     size_t n_bytes = ::arrow::bit_util::BytesForBits(in_table->nrows());
-    bodo::vector<uint8_t> bitmask(n_bytes, 0xff);
-
     // If none of the entries in join_key_idxs are -1, then also apply
     // the bloom filter if one is available.
     bool apply_bloom_filter = (this->global_bloom_filter != nullptr);
@@ -2027,8 +2023,6 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
         key_arrs_for_bf_hashes.reserve(this->n_keys);
     }
 
-    // Were any filters applied. If they weren't, we can short-circuit
-    // expensive steps and just return the table as is.
     bool applied_any_filter = false;
 
     // If join_key_idxs[i] is not -1 and process_col_bitmask[i] is true,
@@ -2074,7 +2068,9 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
                             (uint8_t*)(unified_arr->null_bitmask<
                                        bodo_array_type::DICT>());
                         for (size_t i = 0; i < n_bytes; i++) {
-                            bitmask[i] &= out_arr_bitmask[i];
+                            row_bitmask
+                                ->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                        uint8_t>()[i] &= out_arr_bitmask[i];
                         }
                         applied_any_filter = true;
                     }
@@ -2170,10 +2166,17 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
             unified_in_table_only_keys->nrows();
         time_pt start_bloom = start_timer();
         for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            bool keep = arrow::bit_util::GetBit(bitmask.data(), i_row) &&
-                        this->global_bloom_filter->Find(
-                            in_table_hashes_partition[i_row]);
-            arrow::bit_util::SetBitTo(bitmask.data(), i_row, keep);
+            bool keep =
+                arrow::bit_util::GetBit(
+                    row_bitmask
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>(),
+                    i_row) &&
+                this->global_bloom_filter->Find(
+                    in_table_hashes_partition[i_row]);
+            arrow::bit_util::SetBitTo(
+                row_bitmask
+                    ->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>(),
+                i_row, keep);
         }
         this->metrics.join_filter_bloom_filter_probe_time +=
             end_timer(start_bloom);
@@ -2182,32 +2185,10 @@ std::shared_ptr<table_info> HashJoinState::RuntimeFilter(
     }
 
     if (applied_any_filter) {
-        // TODO Cache this allocation in the JoinState.
-        std::vector<int64_t> rows_to_keep(
-            std::max(in_table->nrows(), static_cast<uint64_t>(1)), -1);
-        size_t next_idx = 0;
-        for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-            rows_to_keep[next_idx] = i_row;
-            size_t delta =
-                arrow::bit_util::GetBit(bitmask.data(), i_row) ? 1 : 0;
-            next_idx += delta;
-        }
-        rows_to_keep.resize(next_idx);
-        if (rows_to_keep.size() == in_table->nrows()) {
-            // Nothing was filtered out, so skip the copy.
-            return in_table;
-        }
         this->metrics.num_runtime_filter_applied_rows += in_table->nrows();
-        this->metrics.num_runtime_filter_misses +=
-            (in_table->nrows() - rows_to_keep.size());
-        this->metrics.join_filter_materialization_nrows += rows_to_keep.size();
-        time_pt start_mat = start_timer();
-        std::shared_ptr<table_info> out =
-            RetrieveTable(std::move(in_table), std::move(rows_to_keep));
-        this->metrics.join_filter_materialization_time += end_timer(start_mat);
-        return out;
     }
-    return in_table;
+
+    return applied_any_filter;
 }
 
 void HashJoinState::ReportProbeStageMetrics() {
@@ -2264,18 +2245,6 @@ void HashJoinState::ReportProbeStageMetrics() {
                        this->metrics.probe_outer_bloom_filter_misses));
     } else {
         metrics.emplace_back(
-            StatMetric("num_runtime_filter_misses",
-                       this->metrics.num_runtime_filter_misses));
-        metrics.emplace_back(
-            StatMetric("num_runtime_filter_applied_rows",
-                       this->metrics.num_runtime_filter_applied_rows));
-        metrics.emplace_back(
-            TimerMetric("join_filter_materialization_time",
-                        this->metrics.join_filter_materialization_time));
-        metrics.emplace_back(
-            StatMetric("join_filter_materialization_nrows",
-                       this->metrics.join_filter_materialization_nrows));
-        metrics.emplace_back(
             TimerMetric("join_filter_bloom_filter_hashing_time",
                         this->metrics.join_filter_bloom_filter_hashing_time));
         metrics.emplace_back(
@@ -2287,6 +2256,9 @@ void HashJoinState::ReportProbeStageMetrics() {
         metrics.emplace_back(
             StatMetric("join_filter_bloom_filter_probe_nrows",
                        this->metrics.join_filter_bloom_filter_probe_nrows));
+        metrics.emplace_back(
+            StatMetric("num_runtime_filter_applied_rows",
+                       this->metrics.num_runtime_filter_applied_rows));
     }
 
     // Get shuffle stats from probe shuffle state
@@ -4099,6 +4071,9 @@ table_info* join_probe_consume_batch_py_entry(
  *
  * @param join_state_ Pointer to the join state.
  * @param in_table_ The table to filter.
+ * @param[in, out] row_bitmask_arr The bitmask whether row is included in the
+ * current set. Note that this will be modified in place. Expects
+ * array_type=NULLABLE_INTO_BOOL, dtype=BOOL.
  * @param join_key_idxs_ An array of length join_state->n_keys specifying the
  * indices in the input table that correspond to the join keys.
  * @param join_key_idxs_len Length of join_key_idxs_. This must be equal to
@@ -4107,35 +4082,44 @@ table_info* join_probe_consume_batch_py_entry(
  * level filter for the i'th key should be applied.
  * @param process_col_bitmask_len Length of process_col_bitmask_. This must be
  * equal to join_state->n_keys.
- * @return table_info* Filtered table.
+ * @param applied_any_filter Whether any filters have been applied in previous
+ * RTJFs.
+ * @return bool whether any filters were applied.
  */
-table_info* runtime_join_filter_py_entry(JoinState* join_state_,
-                                         table_info* in_table_,
-                                         int64_t* join_key_idxs_,
-                                         int64_t join_key_idxs_len,
-                                         bool* process_col_bitmask_,
-                                         int64_t process_col_bitmask_len) {
+bool runtime_join_filter_py_entry(JoinState* join_state_, table_info* in_table_,
+                                  array_info* row_bitmask_arr,
+                                  int64_t* join_key_idxs_,
+                                  int64_t join_key_idxs_len,
+                                  bool* process_col_bitmask_,
+                                  int64_t process_col_bitmask_len,
+                                  bool applied_any_filter) {
     try {
         assert(join_key_idxs_len == process_col_bitmask_len);
         assert(join_key_idxs_len == static_cast<int64_t>(join_state_->n_keys));
+        assert(row_bitmask_arr->arr_type ==
+                   bodo_array_type::NULLABLE_INT_BOOL &&
+               row_bitmask_arr->dtype == Bodo_CTypes::_BOOL);
+
         if (join_state_->n_keys == 0) {
             // Filters are only supported for equi hash joins.
-            return in_table_;
+            return applied_any_filter;
         } else {
             HashJoinState* join_state = (HashJoinState*)join_state_;
-            std::unique_ptr<table_info> in_table =
-                std::unique_ptr<table_info>(in_table_);
+            auto in_table_ptr = std::unique_ptr<table_info>(in_table_);
+            auto row_bitmask_ptr = std::unique_ptr<array_info>(row_bitmask_arr);
             std::vector<int64_t> join_key_idxs(
                 join_key_idxs_, join_key_idxs_ + join_key_idxs_len);
             std::vector<bool> process_col_bitmask(
                 process_col_bitmask_,
                 process_col_bitmask_ + process_col_bitmask_len);
-            return new table_info(*(join_state->RuntimeFilter(
-                std::move(in_table), join_key_idxs, process_col_bitmask)));
+            bool result = join_state->RuntimeFilter(
+                std::move(in_table_ptr), std::move(row_bitmask_ptr),
+                join_key_idxs, process_col_bitmask);
+            return result || applied_any_filter;
         }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return nullptr;
+        return false;
     }
 }
 

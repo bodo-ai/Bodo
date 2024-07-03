@@ -123,22 +123,22 @@ open class RuntimeJoinFilterBase(
                         Triple(it.joinFilterIDs[idx], it.filterColumns[idx], it.filterIsFirstLocations[idx])
                     }
                 val sortedJoinFilters = joinFilters.sortedByDescending { it.first }
+                val joinFilterIDs = sortedJoinFilters.map { it.first }
+                val columnsLists = sortedJoinFilters.map { it.second }
+                val isFirstLocationLists = sortedJoinFilters.map { it.third }
 
-                for (joinFilter in sortedJoinFilters) {
-                    val (joinFilterID, columns, isFirstLocation) = joinFilter
-                    val rtjfResult =
-                        BodoPhysicalRuntimeJoinFilter.generateRuntimeJoinFilterCode(
-                            ctx,
-                            joinFilterID,
-                            columns,
-                            isFirstLocation,
-                            result,
-                        )
-                    rtjfResult?.let {
-                        val tableChunkVar = builder.symbolTable.genTableVar()
-                        builder.add(Op.Assign(tableChunkVar, rtjfResult))
-                        result = tableChunkVar
-                    }
+                val rtjfResult =
+                    BodoPhysicalRuntimeJoinFilter.generateRuntimeJoinFilterCode(
+                        ctx,
+                        joinFilterIDs,
+                        columnsLists,
+                        isFirstLocationLists,
+                        result,
+                    )
+                rtjfResult?.let {
+                    val tableChunkVar = builder.symbolTable.genTableVar()
+                    builder.add(Op.Assign(tableChunkVar, rtjfResult))
+                    result = tableChunkVar
                 }
             }
             return BodoEngineTable(result.emit(), rel)

@@ -369,6 +369,18 @@ std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+/** This function takes a table, a bitmask representing rows to keep
+ * and returns the rows that are true in the bitmask
+ *
+ * @param in_table     : the input table.
+ * @param row_bitmask  : bitmask of rows to include. Expects
+ * array_type=NULLABLE_INTO_BOOL, dtype=BOOL
+ * @return the table output.
+ */
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    std::shared_ptr<array_info> row_bitmask);
+
 template <typename T, int dtype>
     requires std::integral<T>
 inline bool isnan_categorical(T const& val) {
