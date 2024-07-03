@@ -9,7 +9,6 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexVisitorImpl
 import org.apache.calcite.util.ImmutableBitSet
-import org.apache.calcite.util.Util
 
 /**
  * Set of utilities used to help with pushing non-window function filters past
@@ -46,23 +45,6 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
     }
 
     companion object {
-        /** Determine if a RexNode contains a RexOver.  */
-        @JvmStatic
-        fun containsRexOver(node: RexNode): Boolean {
-            val visitor =
-                object : RexVisitorImpl<Unit>(true) {
-                    override fun visitOver(over: RexOver) {
-                        throw Util.FoundOne.NULL
-                    }
-                }
-            return try {
-                node.accept(visitor)
-                false
-            } catch (e: Util.FoundOne) {
-                true
-            }
-        }
-
         /**
          * Wrapper to call WindowFilterTranspose and determine which columns can be safely
          * filtered.
@@ -100,7 +82,7 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
             val canPushCache = arrayOfNulls<Boolean?>(project.projects.size)
             val overNodes = ArrayList<RexNode>()
             project.projects.forEachIndexed { idx, node ->
-                val containsOver = containsRexOver(node)
+                val containsOver = RexOver.containsOver(node)
                 if (containsOver) {
                     overNodes.add(node)
                     canPushCache[idx] = false
@@ -155,7 +137,7 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
             val filterOverNodes = ArrayList<RexNode>()
             val pushedFilterCandidates = ArrayList<RexNode>()
             for (node in conditionParts) {
-                val containsOver = containsRexOver(node)
+                val containsOver = RexOver.containsOver(node)
                 if (containsOver) {
                     filterOverNodes.add(node)
                 } else {

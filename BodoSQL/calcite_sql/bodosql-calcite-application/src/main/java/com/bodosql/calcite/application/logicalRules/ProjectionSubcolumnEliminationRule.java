@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.logicalRules;
 
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
-import com.bodosql.calcite.rel.logical.BodoLogicalProject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -62,7 +61,7 @@ public class ProjectionSubcolumnEliminationRule
     final Project project = call.rel(0);
     final RelNode input = call.rel(1);
     final RelBuilder builder = call.builder();
-    RelNode x = apply(builder, project, input);
+    RelNode x = applySubColumnElimination(builder, project, input);
     if (x != null) {
       call.transformTo(x);
     }
@@ -88,8 +87,11 @@ public class ProjectionSubcolumnEliminationRule
     return countMap;
   }
 
-  private static @Nullable RelNode apply(
-      final RelBuilder builder, final Project project, final RelNode input) {
+  public static @Nullable RelNode applySubColumnElimination(
+      RelBuilder builder, final Project project, final RelNode input) {
+    // Ensure the builder always allows full projections so the rule doesn't
+    // hit an infinite loop.
+    builder = builder.transform(b -> b.withBloat(-1));
     // Ensure we run on this node only once.
     seenNodes.add(project.getId());
     // The input to enable creating input refs
@@ -192,19 +194,15 @@ public class ProjectionSubcolumnEliminationRule
         // We decrease the project to account for removed columns.
         adjustments[i] = -numRemoved;
       }
-      BodoLogicalProject prunedProject =
-          BodoLogicalProject.create(input, project.getHints(), keptCols, keptFieldNames);
-      // Add the pruned projection to the cache
-      seenNodes.add(prunedProject.getId());
+      builder.clear();
+      builder.push(input).project(keptCols, keptFieldNames);
       // Set the correct types for any updated input refs
-      builder.push(prunedProject);
-      // Update the outerProjectionNodes with the adjustments.
+      // and update the outerProjectionNodes with the adjustments.
       for (int i = 0; i < outerProjectionNodes.size(); i++) {
         outerProjectionNodes.set(
             i, adjustInputRefs(builder, outerProjectionNodes.get(i), adjustments));
       }
-      return BodoLogicalProject.create(
-          prunedProject, project.getHints(), outerProjectionNodes, fieldNames);
+      return builder.project(outerProjectionNodes, fieldNames).build();
     } else {
       // If no column needed to be updated just exit.
       return null;
