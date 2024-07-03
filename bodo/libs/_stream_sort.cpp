@@ -1,8 +1,10 @@
 #include "_stream_sort.h"
+#include <numeric>
 #include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_chunked_table_builder.h"
 #include "_dict_builder.h"
+#include "_shuffle.h"
 
 TableAndRange::TableAndRange(std::shared_ptr<table_info> table, int64_t n_key_t,
                              int64_t offset)
@@ -111,40 +113,109 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
     return output;
 }
 
-enum class StreamSortPhase { INIT, BUILD, PRODUCE_OUTPUT, INVALID };
+bool StreamSortState::consume_batch(std::shared_ptr<table_info> table,
+                                    bool parallel, bool is_last) {
+    if (phase == StreamSortPhase::PRE_BUILD) {
+        // TODO(aneesh) fix arrow_buffer_to_bodo - currently the pool isn't
+        // stored in the dtor_info, so pinning/unpinning semi-structured data
+        // after calling sort_values_table_local will crash. Remove this code
+        // after fixing that.
+        for (auto& col : table->columns) {
+            switch (col->arr_type) {
+                case bodo_array_type::STRUCT:
+                case bodo_array_type::MAP:
+                case bodo_array_type::ARRAY_ITEM: {
+                    throw std::runtime_error("Not implemented");
+                }
+                default: {
+                    // allow all other types
+                }
+            }
+        }
 
-struct StreamSortState {
-    int64_t n_key_t;
-    std::vector<int64_t> vect_ascending;
-    std::vector<int64_t> na_position;
-    std::vector<int64_t> dead_keys;
+        // Populate the dummy output with the correct types
+        dummy_output_chunk =
+            alloc_table_like(table, /*reuse_dictionaries*/ false);
 
-    SortedChunkedTableBuilder builder;
-    std::vector<TableAndRange> local_chunks;
+        phase = StreamSortPhase::BUILD;
+    }
+    builder.AppendChunk(table);
+    if (is_last) {
+        local_chunks = builder.Finalize();
+        phase = StreamSortPhase::PRODUCE_OUTPUT;
+    }
+    return is_last;
+}
 
-    size_t output_idx = 0;
-    // TODO(aneesh) it would be better to make this a ChunkedTableBuilder
-    std::vector<std::shared_ptr<table_info>> output_chunks;
-
-    StreamSortPhase phase = StreamSortPhase::INIT;
-
-    // TODO(aneesh) populate this with an actual chunk!!!
-    std::shared_ptr<table_info> dummy_output_chunk_;
-
-    std::shared_ptr<table_info> dummy_output_chunk() {
-        throw std::runtime_error("Not implemented");
+std::shared_ptr<table_info> StreamSortState::get_parallel_sort_bounds() {
+    int64_t n_local = std::accumulate(
+        local_chunks.begin(), local_chunks.end(), 0,
+        [](int64_t acc, const TableAndRange& tableAndRange) {
+            return acc + static_cast<int64_t>(tableAndRange.table->nrows());
+        });
+    int64_t n_total = n_local;
+    if (parallel) {
+        MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                      MPI_COMM_WORLD);
     }
 
-    StreamSortState(int64_t n_key_t_, std::vector<int64_t>&& vect_ascending_,
-                    std::vector<int64_t>&& na_position_)
-        : n_key_t(n_key_t_),
-          vect_ascending(vect_ascending_),
-          na_position(na_position_),
-          // Note that builder only stores references to the vectors owned by
-          // this object, so we must refer to the instances on this class, not
-          // the arguments.
-          builder(n_key_t, vect_ascending, na_position, dead_keys) {}
-};
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    // Compute samples from the locally sorted table.
+    // (Filled on rank 0, empty on all other ranks)
+    int64_t n_loc_sample =
+        get_num_samples_from_local_table(n_pes, n_total, n_local);
+    auto sample_idxs = get_sample_selection_vector(n_local, n_loc_sample);
+
+    // We can't directly use the indices we got above because we have a
+    // collection of unpinned chunks instead of a pinned contiguous table.
+    // We need to determine which indices belong to which chunk.
+    std::vector<std::vector<int64_t>> indices_per_chunk(local_chunks.size());
+    int64_t cursor = 0;
+    size_t idx = 0;
+    for (size_t chunk = 0; chunk < local_chunks.size(); chunk++) {
+        int64_t next_cursor = cursor + local_chunks[chunk].table->nrows();
+        while (idx < sample_idxs.size() && sample_idxs[idx] < next_cursor) {
+            indices_per_chunk[chunk].push_back(sample_idxs[idx] - cursor);
+            idx++;
+        }
+        cursor = next_cursor;
+        if (idx >= sample_idxs.size()) {
+            break;
+        }
+    }
+    assert(idx == sample_idxs.size());
+
+    // Retrieve the data, pinning and unpinning as we go
+    std::vector<std::shared_ptr<table_info>> local_sample_chunks;
+    for (size_t i = 0; i < local_chunks.size(); i++) {
+        const auto& idxs = indices_per_chunk[i];
+        if (idxs.empty()) {
+            continue;
+        }
+        local_chunks[i].table->pin();
+        local_sample_chunks.push_back(
+            RetrieveTable(local_chunks[i].table, idxs, n_key_t));
+        local_chunks[i].table->unpin();
+    }
+
+    auto local_samples = concat_tables(local_sample_chunks);
+    local_sample_chunks.clear();
+
+    // Collecting all samples globally
+    bool all_gather = false;
+    std::shared_ptr<table_info> all_samples =
+        gather_table(std::move(local_samples), n_key_t, all_gather, parallel);
+
+    // Compute split bounds from the samples.
+    // Output is broadcasted to all ranks.
+    std::shared_ptr<table_info> bounds = compute_bounds_from_samples(
+        std::move(all_samples), dummy_output_chunk, n_key_t,
+        vect_ascending.data(), na_position.data(), myrank, n_pes, parallel);
+
+    return bounds;
+}
 
 StreamSortState* stream_sort_state_init_py_entry(int64_t n_key_t,
                                                  int64_t* vect_ascending,
@@ -158,7 +229,7 @@ StreamSortState* stream_sort_state_init_py_entry(int64_t n_key_t,
     }
     auto* state = new StreamSortState(n_key_t, std::move(vect_ascending_),
                                       std::move(na_position_));
-    state->phase = StreamSortPhase::BUILD;
+    state->phase = StreamSortPhase::PRE_BUILD;
     return state;
 }
 
@@ -166,37 +237,12 @@ bool stream_sort_build_consume_batch_py_entry(StreamSortState* state,
                                               table_info* in_table,
                                               bool parallel, bool is_last) {
     try {
-        // TODO(aneesh) fix arrow_buffer_to_bodo - currently the pool isn't
-        // stored in the dtor_info, so pinning/unpinning semi-structured data
-        // after calling sort_values_table_local will crash. Remove this code
-        // after fixing that.
-        for (auto& col : in_table->columns) {
-            switch (col->arr_type) {
-                case bodo_array_type::STRUCT:
-                case bodo_array_type::MAP:
-                case bodo_array_type::ARRAY_ITEM: {
-                    throw std::runtime_error("Not implemented");
-                }
-                default: {
-                    // allow all other types
-                }
-            }
-        }
         std::shared_ptr<table_info> table(in_table);
-        state->builder.AppendChunk(table);
-        if (is_last) {
-            state->local_chunks = state->builder.Finalize();
-            state->phase = StreamSortPhase::PRODUCE_OUTPUT;
-        }
-        return is_last;
+        return state->consume_batch(table, parallel, is_last);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return true;
     }
-}
-
-std::shared_ptr<table_info> get_parallel_sort_bounds() {
-    throw std::runtime_error("Not implemented");
 }
 
 table_info* stream_sort_product_output_batch_py_entry(StreamSortState* state,
@@ -210,15 +256,14 @@ table_info* stream_sort_product_output_batch_py_entry(StreamSortState* state,
             state->output_idx++;
         } else {
             *out_is_last = true;
-            output = state->dummy_output_chunk();
+            output = state->dummy_output_chunk;
         }
     } else {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
         // most of this needs to be moved to state
-        auto bounds = get_parallel_sort_bounds(/*TODO*/);
+        auto bounds = state->get_parallel_sort_bounds();
         std::vector<uint32_t> chunkToStartRank;
         std::vector<size_t> rankToFirstChunk(n_pes);
         for (uint32_t rank_id = 0; rank_id < static_cast<uint32_t>(n_pes);
@@ -244,7 +289,6 @@ table_info* stream_sort_product_output_batch_py_entry(StreamSortState* state,
 
         std::vector<size_t> rankToidx = rankToFirstChunk;
         // send `n_pes` chunks to every host and return
-        throw std::runtime_error("Not implemented");
     }
     return nullptr;
 }

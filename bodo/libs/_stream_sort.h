@@ -73,3 +73,55 @@ struct SortedChunkedTableBuilder {
 
     std::vector<TableAndRange> Finalize();
 };
+
+enum class StreamSortPhase { INIT, PRE_BUILD, BUILD, PRODUCE_OUTPUT, INVALID };
+
+struct StreamSortState {
+    int64_t n_key_t;
+    std::vector<int64_t> vect_ascending;
+    std::vector<int64_t> na_position;
+    std::vector<int64_t> dead_keys;
+
+    SortedChunkedTableBuilder builder;
+    std::vector<TableAndRange> local_chunks;
+
+    size_t output_idx = 0;
+    std::vector<std::shared_ptr<table_info>> output_chunks;
+
+    StreamSortPhase phase = StreamSortPhase::INIT;
+
+    bool parallel = true;
+
+    std::shared_ptr<table_info> dummy_output_chunk;
+
+    StreamSortState(int64_t n_key_t_, std::vector<int64_t>&& vect_ascending_,
+                    std::vector<int64_t>&& na_position_,
+                    size_t chunk_size = 4096)
+        : n_key_t(n_key_t_),
+          vect_ascending(vect_ascending_),
+          na_position(na_position_),
+          // Note that builder only stores references to the vectors owned by
+          // this object, so we must refer to the instances on this class, not
+          // the arguments.
+          builder(n_key_t, vect_ascending, na_position, dead_keys, chunk_size) {
+    }
+
+    /**
+     * @brief Consume an unsorted table and use it for global sorting
+     *
+     * @param table unsorted input table
+     * @param parallel whether or not multiple ranks are participating in the
+     * sort
+     * @param is_last if this table is guaranteed to be the last input this
+     * state will see.
+     * @return boolean indicating if the consume phase is complete
+     */
+    bool consume_batch(std::shared_ptr<table_info> table, bool parallel,
+                       bool is_last);
+
+    /**
+     * Get bounds for parallel sorting based on the chunks consumed so far.
+     * These bounds determine which elements are assigned to which ranks.
+     */
+    std::shared_ptr<table_info> get_parallel_sort_bounds();
+};

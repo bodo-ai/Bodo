@@ -151,59 +151,14 @@ void array_isin_py_entry(array_info* p_out_arr, array_info* p_in_arr,
 //
 
 /**
- * @brief Get n_loc_sample many samples from a locally sorted table.
- * This function splits the input table into roughly n_loc_sample blocks, and
- * then picks a row randomly from each block.
+ * @brief Get the number of samples based on the size of the local table.
  *
- * @param local_sort Locally sorted table
- * @param n_key_t Number of sort keys
- * @param n_loc_sample Number of samples to get
- * @param n_local Length of the table
- * @param parallel Only for tracing purposes
- * @return std::shared_ptr<table_info> Table with samples. Shape: n_loc_sample
- * rows, n_key_t columns
- */
-std::shared_ptr<table_info> get_samples_from_table_local(
-    std::shared_ptr<table_info> local_sort, int64_t n_key_t,
-    int64_t n_loc_sample, int64_t n_local, bool parallel) {
-    tracing::Event ev("get_samples_from_table_local", parallel);
-    std::mt19937 gen(1234567890);
-    double block_size = double(n_local) / n_loc_sample;
-    bodo::vector<int64_t> ListIdx(n_loc_sample);
-    double cur_lo = 0;
-    for (int64_t i = 0; i < n_loc_sample; i++) {
-        int64_t lo = round(cur_lo);
-        int64_t hi = round(cur_lo + block_size) - 1;
-        ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
-        cur_lo += block_size;
-    }
-    std::shared_ptr<table_info> samples =
-        RetrieveTable(std::move(local_sort), ListIdx, n_key_t);
-    return samples;
-}
-
-/**
- * @brief Get samples from locally sorted chunks of a distributed table.
- * Number of samples required for a reasonable sampling is determined
- * based on the total length of the table, number of ranks.
- *
- * @param local_sort Locally sorted table chunk.
- * @param n_key_t Number of sort keys.
  * @param n_pes Number of MPI ranks.
- * @param n_total Global table length.
- * @param n_local Local table length (=> length of local_sort)
- * @param parallel Whether the execution is happening in parallel. Passed for
- * consistency and tracing purposes.
- * @return std::shared_ptr<table_info> Table of samples on rank 0, empty table
- * on all other ranks.
+ * @param n_total Total number of rows in the table.
+ * @param n_local Number of rows in the local table.
  */
-std::shared_ptr<table_info> get_samples_from_table_parallel(
-    std::shared_ptr<table_info> local_sort, int64_t n_key_t, int n_pes,
-    int64_t n_total, int64_t n_local, bool parallel) {
-    tracing::Event ev("get_samples_from_table_parallel", parallel);
-    ev.add_attribute("n_key_t", n_key_t);
-    ev.add_attribute("n_local", n_local);
-    ev.add_attribute("n_total", n_total);
+int64_t get_num_samples_from_local_table(int n_pes, int64_t n_total,
+                                         int64_t n_local) {
     // Sample sort with random sampling (we use a fixed seed for the random
     // generator for deterministic results across runs).
     // With random sampling as described by Blelloch et al. [1], each
@@ -232,7 +187,72 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
     double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
     n_global_sample =
         std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
-    int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
+    return std::min(n_global_sample / n_pes, double(n_local));
+}
+
+bodo::vector<int64_t> get_sample_selection_vector(int64_t n_local,
+                                                  int64_t n_loc_sample) {
+    std::mt19937 gen(1234567890);
+    double block_size = double(n_local) / n_loc_sample;
+    bodo::vector<int64_t> ListIdx(n_loc_sample);
+    double cur_lo = 0;
+    for (int64_t i = 0; i < n_loc_sample; i++) {
+        int64_t lo = round(cur_lo);
+        int64_t hi = round(cur_lo + block_size) - 1;
+        ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
+        cur_lo += block_size;
+    }
+    return ListIdx;
+}
+
+/**
+ * @brief Get n_loc_sample many samples from a locally sorted table.
+ * This function splits the input table into roughly n_loc_sample blocks, and
+ * then picks a row randomly from each block.
+ *
+ * @param local_sort Locally sorted table
+ * @param n_key_t Number of sort keys
+ * @param n_loc_sample Number of samples to get
+ * @param n_local Length of the table
+ * @param parallel Only for tracing purposes
+ * @return std::shared_ptr<table_info> Table with samples. Shape: n_loc_sample
+ * rows, n_key_t columns
+ */
+std::shared_ptr<table_info> get_samples_from_table_local(
+    std::shared_ptr<table_info> local_sort, int64_t n_key_t,
+    int64_t n_loc_sample, int64_t n_local, bool parallel) {
+    tracing::Event ev("get_samples_from_table_local", parallel);
+    std::shared_ptr<table_info> samples = RetrieveTable(
+        std::move(local_sort),
+        get_sample_selection_vector(n_local, n_loc_sample), n_key_t);
+    return samples;
+}
+
+/**
+ * @brief Get samples from locally sorted chunks of a distributed table.
+ * Number of samples required for a reasonable sampling is determined
+ * based on the total length of the table, number of ranks.
+ *
+ * @param local_sort Locally sorted table chunk.
+ * @param n_key_t Number of sort keys.
+ * @param n_pes Number of MPI ranks.
+ * @param n_total Global table length.
+ * @param n_local Local table length (=> length of local_sort)
+ * @param parallel Whether the execution is happening in parallel. Passed for
+ * consistency and tracing purposes.
+ * @return std::shared_ptr<table_info> Table of samples on rank 0, empty table
+ * on all other ranks.
+ */
+std::shared_ptr<table_info> get_samples_from_table_parallel(
+    std::shared_ptr<table_info> local_sort, int64_t n_key_t, int n_pes,
+    int64_t n_total, int64_t n_local, bool parallel) {
+    tracing::Event ev("get_samples_from_table_parallel", parallel);
+    ev.add_attribute("n_key_t", n_key_t);
+    ev.add_attribute("n_local", n_local);
+    ev.add_attribute("n_total", n_total);
+
+    int64_t n_loc_sample =
+        get_num_samples_from_local_table(n_pes, n_total, n_local);
 
     // Get n_loc_sample many local samples from the local sorted chunk
     std::shared_ptr<table_info> samples = get_samples_from_table_local(

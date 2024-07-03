@@ -1,3 +1,4 @@
+#include <random>
 #include "../libs/_stream_sort.h"
 #include "./test.hpp"
 #include "table_generator.hpp"
@@ -119,5 +120,52 @@ bodo::tests::suite external_sort_tests([] {
         bodo::tests::check(int_arr->Value(8) == 9);
         bodo::tests::check(int_arr->Value(9) == 10);
         bodo::tests::check(int_arr->Value(10) == 11);
+    });
+
+    bodo::tests::test("test_sampling", [] {
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(1, std::move(vect_ascending),
+                              std::move(na_position), 10);
+
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        const int64_t n_elem = 1000;
+        int64_t per_host_size = n_elem / n_pes;
+        // Create a table with numbers from 1 to 1000
+        std::vector<int64_t> data(per_host_size);
+        std::iota(data.begin(), data.end(), myrank * per_host_size);
+
+        // Randomly shuffle the input
+        const int seed = 1234;
+        std::mt19937 gen(seed);
+        std::uniform_int_distribution<> dis(0, per_host_size - 1);
+        for (size_t i = 0; i < static_cast<size_t>(per_host_size); i++) {
+            // pick two indices and swap them
+            int64_t idx0 = dis(gen);
+            int64_t idx1 = dis(gen);
+            std::swap(data[idx0], data[idx1]);
+        }
+
+        std::shared_ptr<table_info> table =
+            bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
+        state.phase = StreamSortPhase::PRE_BUILD;
+        state.consume_batch(table, true, true);
+
+        auto res = state.get_parallel_sort_bounds();
+        if (myrank == 0) {
+            bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
+
+            auto arrow_arr = to_arrow(res->columns[0]);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+            for (int64_t i = 0; i < (n_pes - 1); i++) {
+                bodo::tests::check(int_arr->Value(i) ==
+                                   ((i + 1) * per_host_size));
+            }
+        }
     });
 });
