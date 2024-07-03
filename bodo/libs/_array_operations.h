@@ -319,3 +319,56 @@ array_info* get_replace_regex_dict_state_py_entry(array_info* p_in_arr,
                                                   char const* replacement,
                                                   DictEncodingState* state,
                                                   int64_t func_id);
+
+//
+// Sampling Utilities
+//
+
+/**
+ * @brief Get the number of samples based on the size of the local table.
+ *
+ * @param n_pes Number of MPI ranks.
+ * @param n_total Total number of rows in the table.
+ * @param n_local Number of rows in the local table.
+ */
+int64_t get_num_samples_from_local_table(int n_pes, int64_t n_total,
+                                         int64_t n_local);
+
+/**
+ * @brief Get a vector of random samples from a locally sorted table.
+ *
+ * @param n_local Number of rows in the local table.
+ * @param n_loc_sample Number of samples to get.
+ */
+bodo::vector<int64_t> get_sample_selection_vector(int64_t n_local,
+                                                  int64_t n_loc_sample);
+
+/**
+ * @brief Compute bounds for the ranks based on the collected samples.
+ * All samples are assumed to be on rank 0. Tables on the rest of the
+ * ranks are assumed to be empty.
+ * The samples are first sorted, and then the bounds are computed
+ * by picking the elements at the appropriate location for the rank.
+ *
+ * @param all_samples Table with all samples (gathered on rank 0). It is assumed
+ * to be unsorted.
+ * @param ref_table Reference table to use for the broadcast step. This is
+ * mainly needed for dict encoded string arrays. In those cases, it is important
+ * for the dictionary in this reference table to be same as the dictionary of
+ * the actual array.
+ * @param n_key_t Number of key columns.
+ * @param vect_ascending Vector of booleans (one for each key column) describing
+ * whether to sort in ascending order on the key columns.
+ * @param na_position Vector of booleans (one for each key column) describing
+ * where to put the NAs (last or first) in the key columns.
+ * @param myrank MPI rank of the calling process.
+ * @param n_pes Total number of MPI ranks.
+ * @param parallel Is the process parallel.
+ * @return std::shared_ptr<table_info> Bounds table with n_pes-1 rows. A full
+ * bounds table is computed on rank 0, broadcasted to all ranks and returned.
+ */
+std::shared_ptr<table_info> compute_bounds_from_samples(
+    std::shared_ptr<table_info> all_samples,
+    std::shared_ptr<table_info> ref_table, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int myrank, int n_pes,
+    bool parallel);
