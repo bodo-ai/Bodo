@@ -8,6 +8,7 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.UnusedStateVariable
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -82,16 +83,16 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
                             Triple(joinFilterIDs[it], filterColumns[it], filterIsFirstLocations[it])
                         }
                     val sortedJoinFilters = joinFilters.sortedByDescending { it.first }
+                    val joinFilterIDs = sortedJoinFilters.map { it.first }
+                    val columnsLists = sortedJoinFilters.map { it.second }
+                    val isFirstLocationLists = sortedJoinFilters.map { it.third }
 
-                    for (joinFilter in sortedJoinFilters) {
-                        val (joinFilterID, columns, isFirstLocation) = joinFilter
-                        val rtjfExpr = generateRuntimeJoinFilterCode(ctx, joinFilterID, columns, isFirstLocation, currentTable)
-                        rtjfExpr?.let {
-                            val tableVar = ctx.builder().symbolTable.genTableVar()
-                            val assign = Op.Assign(tableVar, rtjfExpr)
-                            ctx.builder().add(assign)
-                            currentTable = BodoEngineTable(tableVar.emit(), this)
-                        }
+                    val rtjfExpr = generateRuntimeJoinFilterCode(ctx, joinFilterIDs, columnsLists, isFirstLocationLists, currentTable)
+                    rtjfExpr?.let {
+                        val tableVar = ctx.builder().symbolTable.genTableVar()
+                        val assign = Op.Assign(tableVar, rtjfExpr)
+                        ctx.builder().add(assign)
+                        currentTable = BodoEngineTable(tableVar.emit(), this)
                     }
                     currentTable
                 },
@@ -158,31 +159,46 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
         @JvmStatic
         fun generateRuntimeJoinFilterCode(
             ctx: BodoPhysicalRel.BuildContext,
-            joinFilterID: Int,
-            columns: List<Int>,
-            isFirstLocation: List<Boolean>,
+            joinFilterIDs: List<Int>,
+            columnsLists: List<List<Int>>,
+            isFirstLocationLists: List<List<Boolean>>,
             input: Expr,
         ): Expr? {
             val joinStateCache = ctx.builder().getJoinStateCache()
-            val (stateVar, keyLocations) = joinStateCache.getStreamingJoinInfo(joinFilterID)
+            val joinStatesInfo = joinFilterIDs.map { joinStateCache.getStreamingJoinInfo(it) } // (stateVar, keyLocations)
+
+            val stateVars = mutableListOf<StateVariable>()
+            val columnVars = mutableListOf<Variable>()
+            val isFirstLocationVars = mutableListOf<Variable>()
             // If we don't have the state stored assume we have disabled
             // streaming entirely and this is a no-op.
-            return stateVar?.let {
-                val columnOrderedList = MutableList(columns.size) { Expr.NegativeOne }
-                val isFirstList: MutableList<Expr.BooleanLiteral> = MutableList(isFirstLocation.size) { Expr.BooleanLiteral(false) }
-                keyLocations.forEachIndexed { index, keyLocation ->
-                    columnOrderedList[keyLocation] = Expr.IntegerLiteral(columns[index])
-                    isFirstList[keyLocation] = Expr.BooleanLiteral(isFirstLocation[index])
+            joinStatesInfo.forEachIndexed { stateIdx, (stateVar, keyLocations) ->
+                stateVar?.let {
+                    val columnOrderedList = MutableList(columnsLists[stateIdx].size) { Expr.NegativeOne }
+                    val isFirstList: MutableList<Expr.BooleanLiteral> =
+                        MutableList(isFirstLocationLists[stateIdx].size) { Expr.BooleanLiteral(false) }
+                    keyLocations.forEachIndexed { locIdx, keyLocation ->
+                        columnOrderedList[keyLocation] = Expr.IntegerLiteral(columnsLists[stateIdx][locIdx])
+                        isFirstList[keyLocation] = Expr.BooleanLiteral(isFirstLocationLists[stateIdx][locIdx])
+                    }
+                    val columnsTuple = Expr.Tuple(columnOrderedList)
+                    val isFirstLocationTuple = Expr.Tuple(isFirstList)
+                    columnVars.add(ctx.lowerAsMetaType(columnsTuple))
+                    isFirstLocationVars.add(ctx.lowerAsMetaType(isFirstLocationTuple))
+                    stateVars.add(stateVar)
                 }
-                val columnsTuple = Expr.Tuple(columnOrderedList)
-                val tupleVar = ctx.lowerAsMetaType(columnsTuple)
-                val isFirstLocationTuple = Expr.Tuple(isFirstList)
-                val isFirstLocationVar = ctx.lowerAsMetaType(isFirstLocationTuple)
-                Expr.Call(
-                    "bodo.libs.stream_join.runtime_join_filter",
-                    listOf(stateVar, input, tupleVar, isFirstLocationVar),
-                )
             }
+            if (stateVars.size == 0) {
+                return null
+            }
+
+            val stateVarsTuple = Expr.Tuple(stateVars)
+            val columnVarsTuple = Expr.Tuple(columnVars)
+            val isFirstLocationVarsTuple = Expr.Tuple(isFirstLocationVars)
+            return Expr.Call(
+                "bodo.libs.stream_join.runtime_join_filter",
+                listOf(stateVarsTuple, input, columnVarsTuple, isFirstLocationVarsTuple),
+            )
         }
     }
 }

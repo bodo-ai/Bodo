@@ -622,7 +622,6 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     assert "shuffle_buffer_append_time" in probe_metrics_dict
     assert "ht_probe_time" in probe_metrics_dict
     assert "finalize_inactive_partitions_total_time" in probe_metrics_dict
-    assert "join_filter_materialization_time" in probe_metrics_dict
 
 
 def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
