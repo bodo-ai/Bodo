@@ -58,7 +58,7 @@ object IcebergConvertProgram : Program {
 
     private class Visitor(private val rexBuilder: RexBuilder, private val simplify: RexSimplify) : RelShuttleImpl() {
         /**
-         * Note the RelShuttleImpl() is design for logical nodes and therefore
+         * Note the RelShuttleImpl() is designed for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
          * support and as a result we cannot add methods for our individual
          * implementations. We could replace this with a custom ReflectiveVisitor,

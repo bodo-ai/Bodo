@@ -81,7 +81,7 @@ public class ConversionCodeGen {
     if (operands.size() == 2) {
       // 2nd argument is a format string
       if (operands.get(1) instanceof Expr.StringLiteral) {
-        // kernel argument order: conversionVal, format_str, time_zone, scale
+        // kernel argument order: conversion_val, format_str, time_zone, scale
         args = List.of(operands.get(0), operands.get(1), tzExpr, new Expr.IntegerLiteral(0));
       } else {
         // 2nd argument is a scale (integer)

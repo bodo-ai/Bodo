@@ -136,25 +136,25 @@ def to_boolean_util(arr, _try, dict_encoding_state, func_id):
 
 
 def to_date(
-    conversionVal, format_str, dict_encoding_state=None, func_id=-1
+    conversion_val, format_str, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
     return
 
 
 def try_to_date(
-    conversionVal, format_str, dict_encoding_state=None, func_id=-1
+    conversion_val, format_str, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
     return
 
 
 def to_date_util(
-    conversionVal, format_str, dict_encoding_state, func_id
+    conversion_val, format_str, dict_encoding_state, func_id
 ):  # pragma: no cover
     return
 
 
 def try_to_date_util(
-    conversionVal, format_str, dict_encoding_state, func_id
+    conversion_val, format_str, dict_encoding_state, func_id
 ):  # pragma: no cover
     return
 
@@ -176,18 +176,18 @@ def create_date_cast_util(func, error_on_fail):
     else:
         error_str = "bodo.libs.array_kernels.setna(res, i)"
 
-    def overload_impl(conversionVal, format_str, dict_encoding_state, func_id):
+    def overload_impl(conversion_val, format_str, dict_encoding_state, func_id):
         verify_string_arg(format_str, func, "format_str")
 
         # When returning a scalar we return a pd.Timestamp type.
         is_out_arr = bodo.utils.utils.is_array_typ(
-            conversionVal, True
+            conversion_val, True
         ) or bodo.utils.utils.is_array_typ(format_str, True)
         unbox_str = "unbox_if_tz_naive_timestamp" if is_out_arr else ""
 
         # If the format string is specified, then arg0 must be a string
         if not is_overload_none(format_str):
-            verify_string_arg(conversionVal, func, "conversionVal")
+            verify_string_arg(conversion_val, func, "conversion_val")
             scalar_text = (
                 "was_successful, tmp_val = to_date_error_checked(arg0, arg1)\n"
             )
@@ -198,7 +198,7 @@ def create_date_cast_util(func, error_on_fail):
 
         # NOTE: gen_vectorized will automatically map this function over the values dictionary
         # of a dict encoded string array instead of decoding it whenever possible
-        elif is_valid_string_arg(conversionVal):
+        elif is_valid_string_arg(conversion_val):
             """
             If no format string is specified, attempt to parse the string according to these date formats:
             https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
@@ -244,28 +244,28 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += f"      res[i] = tmp_val\n"
 
         # For date just assign equality
-        elif is_valid_date_arg(conversionVal):
+        elif is_valid_date_arg(conversion_val):
             scalar_text = f"res[i] = arg0\n"
 
         # If a tz-aware timestamp, extract the date
-        elif is_valid_tz_aware_datetime_arg(conversionVal):
+        elif is_valid_tz_aware_datetime_arg(conversion_val):
             scalar_text = f"res[i] = arg0.date()\n"
 
         # If a non-tz timestamp/datetime, round it down to the nearest day
-        elif is_valid_datetime_or_date_arg(conversionVal):
+        elif is_valid_datetime_or_date_arg(conversion_val):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).date())\n"
 
         # If a tz timestamp, extract the date from the local timestamp
-        elif is_valid_timestamptz_arg(conversionVal):
+        elif is_valid_timestamptz_arg(conversion_val):
             scalar_text = f"res[i] = arg0.local_timestamp().date()\n"
 
         else:  # pragma: no cover
             raise raise_bodo_error(
-                f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
+                f"Internal error: unsupported type passed to to_date_util for argument conversion_val: {conversion_val}"
             )
 
-        arg_names = ["conversionVal", "format_str", "dict_encoding_state", "func_id"]
-        arg_types = [conversionVal, format_str, dict_encoding_state, func_id]
+        arg_names = ["conversion_val", "format_str", "dict_encoding_state", "func_id"]
+        arg_types = [conversion_val, format_str, dict_encoding_state, func_id]
         propagate_null = [True, False, False, False]
 
         out_dtype = DatetimeDateArrayType()
@@ -299,21 +299,21 @@ def create_date_cast_func(func_name):
     the wrapper function for the corresponding kernel.
     """
 
-    def overload_func(conversionVal, format_str, dict_encoding_state=None, func_id=-1):
+    def overload_func(conversion_val, format_str, dict_encoding_state=None, func_id=-1):
         """Handles cases where func_name receives an optional argument and forwards
         to the appropriate version of the real implementation"""
-        args = [conversionVal, format_str]
+        args = [conversion_val, format_str]
         for i, arg in enumerate(args):
             if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{func_name.lower()}_util",
-                    ["conversionVal", "format_str", "dict_encoding_state", "func_id"],
+                    ["conversion_val", "format_str", "dict_encoding_state", "func_id"],
                     i,
                     default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(conversionVal, format_str, dict_encoding_state=None, func_id=-1):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str, dict_encoding_state, func_id)"
+        func_text = "def impl(conversion_val, format_str, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversion_val, format_str, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 
@@ -336,25 +336,25 @@ _install_date_cast_overloads()
 
 
 def to_timestamp(
-    conversionVal, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1
+    conversion_val, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
     return
 
 
 def try_to_timestamp(
-    conversionVal, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1
+    conversion_val, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1
 ):  # pragma: no cover
     return
 
 
 def to_timestamp_util(
-    conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id
+    conversion_val, format_str, time_zone, scale, dict_encoding_state, func_id
 ):  # pragma: no cover
     return
 
 
 def try_to_timestamp_util(
-    conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id
+    conversion_val, format_str, time_zone, scale, dict_encoding_state, func_id
 ):  # pragma: no cover
     return
 
@@ -392,7 +392,7 @@ def create_timestamp_cast_util(func, error_on_fail):
         error_str = "bodo.libs.array_kernels.setna(res, i)"
 
     def overload_impl(
-        conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id
+        conversion_val, format_str, time_zone, scale, dict_encoding_state, func_id
     ):
         verify_string_arg(format_str, func, "format_str")
 
@@ -407,7 +407,7 @@ def create_timestamp_cast_util(func, error_on_fail):
 
         # Infer the correct way to adjust the timezones of the Timestamps calculated
         # based on the timezone of the current data (if there is any), and the target timezone.
-        current_tz = get_tz_if_exists(conversionVal)
+        current_tz = get_tz_if_exists(conversion_val)
         time_zone = get_literal_value(time_zone)
         if is_overload_constant_str(time_zone):
             time_zone = str(time_zone)
@@ -437,7 +437,7 @@ def create_timestamp_cast_util(func, error_on_fail):
                 time_zone = None
 
         is_out_arr = bodo.utils.utils.is_array_typ(
-            conversionVal, True
+            conversion_val, True
         ) or bodo.utils.utils.is_array_typ(format_str, True)
 
         # When returning a scalar we return a pd.Timestamp type.
@@ -445,7 +445,7 @@ def create_timestamp_cast_util(func, error_on_fail):
 
         # If the format string is specified, then arg0 must be string
         if not is_overload_none(format_str):
-            verify_string_arg(conversionVal, func, "conversionVal")
+            verify_string_arg(conversion_val, func, "conversion_val")
             scalar_text = (
                 "py_format_str = convert_snowflake_date_format_str_to_py_format(arg1)\n"
             )
@@ -457,7 +457,7 @@ def create_timestamp_cast_util(func, error_on_fail):
 
         # NOTE: gen_vectorized will automatically map this function over the values dictionary
         # of a dict encoded string array instead of decoding it whenever possible
-        elif is_valid_string_arg(conversionVal):
+        elif is_valid_string_arg(conversion_val):
             """
             If no format string is specified, attempt to parse the string according to these date formats:
             https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
@@ -480,18 +480,18 @@ def create_timestamp_cast_util(func, error_on_fail):
             scalar_text += "   else:\n"
             scalar_text += f"      res[i] = {unbox_str}(tmp_val{localize_str})\n"
 
-        elif is_valid_int_arg(conversionVal):
+        elif is_valid_int_arg(conversion_val):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
 
-        elif is_valid_float_arg(conversionVal):
+        elif is_valid_float_arg(conversion_val):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0 * (10 ** (9 - arg3))){localize_str})\n"
 
-        elif is_valid_tz_aware_datetime_arg(conversionVal):
+        elif is_valid_tz_aware_datetime_arg(conversion_val):
             scalar_text = f"res[i] = {unbox_str}(arg0{localize_str})\n"
 
-        elif is_valid_datetime_or_date_arg(conversionVal):
+        elif is_valid_datetime_or_date_arg(conversion_val):
             scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){localize_str})\n"
-        elif is_valid_timestamptz_arg(conversionVal):
+        elif is_valid_timestamptz_arg(conversion_val):
             # TimestampTZ is slightly different from the other types - if we are
             # casting to a different timezone, we need to convert the timestamp to
             # UTC first, then convert it to the target timezone. Otherwise, we
@@ -500,13 +500,17 @@ def create_timestamp_cast_util(func, error_on_fail):
                 scalar_text = f"res[i] = {unbox_str}(arg0.utc_timestamp.tz_localize('UTC').tz_convert('{time_zone}'))\n"
             else:
                 scalar_text = f"res[i] = {unbox_str}(arg0.local_timestamp())\n"
+        elif conversion_val == bodo.null_array_type:
+            # Note: We could just pass a null array, but this adds typing information
+            # + validates the other arguments.
+            scalar_text = f"res[i] = None\n"
         else:  # pragma: no cover
             raise raise_bodo_error(
-                f"Internal error: unsupported type passed to to_timestamp_util for argument conversionVal: {conversionVal}"
+                f"Internal error: unsupported type passed to to_timestamp_util for argument conversion_val: {conversion_val}"
             )
 
         arg_names = [
-            "conversionVal",
+            "conversion_val",
             "format_str",
             "time_zone",
             "scale",
@@ -514,7 +518,7 @@ def create_timestamp_cast_util(func, error_on_fail):
             "func_id",
         ]
         arg_types = [
-            conversionVal,
+            conversion_val,
             format_str,
             time_zone,
             scale,
@@ -557,7 +561,7 @@ def create_timestamp_cast_util(func, error_on_fail):
 
 def create_timestamp_cast_func(func_name):
     def overload_func(
-        conversionVal,
+        conversion_val,
         format_str,
         time_zone,
         scale,
@@ -566,13 +570,13 @@ def create_timestamp_cast_func(func_name):
     ):
         """Handles cases where func_name receives an optional argument and forwards
         to the appropriate version of the real implementation"""
-        args = [conversionVal, format_str, time_zone, scale]
+        args = [conversion_val, format_str, time_zone, scale]
         for i, arg in enumerate(args):
             if isinstance(arg, types.optional):  # pragma: no cover
                 return unopt_argument(
                     f"bodo.libs.bodosql_array_kernels.{func_name.lower()}_util",
                     [
-                        "conversionVal",
+                        "conversion_val",
                         "format_str",
                         "time_zone",
                         "scale",
@@ -583,8 +587,8 @@ def create_timestamp_cast_func(func_name):
                     default_map={"dict_encoding_state": None, "func_id": -1},
                 )
 
-        func_text = "def impl(conversionVal, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1):\n"
-        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversionVal, format_str, time_zone, scale, dict_encoding_state, func_id)"
+        func_text = "def impl(conversion_val, format_str, time_zone, scale, dict_encoding_state=None, func_id=-1):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{func_name.lower()}_util(conversion_val, format_str, time_zone, scale, dict_encoding_state, func_id)"
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
 

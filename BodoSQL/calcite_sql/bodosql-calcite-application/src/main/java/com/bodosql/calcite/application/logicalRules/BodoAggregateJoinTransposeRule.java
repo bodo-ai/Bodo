@@ -210,7 +210,11 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
             }
           }
         }
-        relBuilder.project(projects);
+        // Ensure we don't have issues with empty projections.
+        // We cannot prune every column.
+        if (!projects.isEmpty()) {
+          relBuilder.project(projects);
+        }
         side.newInput = relBuilder.build();
       } else {
         side.aggregate = true;
