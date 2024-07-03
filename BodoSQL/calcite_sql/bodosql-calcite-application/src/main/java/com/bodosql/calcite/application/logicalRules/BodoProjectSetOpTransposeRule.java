@@ -28,6 +28,7 @@ import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.PushProjector;
 import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexOver;
 import org.immutables.value.Value;
 
 /**
@@ -111,7 +112,7 @@ public class BodoProjectSetOpTransposeRule extends RelRule<BodoProjectSetOpTrans
   public interface Config extends RelRule.Config {
     Config DEFAULT =
         ImmutableBodoProjectSetOpTransposeRule.Config.builder()
-            .withPreserveExprCondition(expr -> !WindowFilterTranspose.containsRexOver(expr))
+            .withPreserveExprCondition(expr -> !RexOver.containsOver(expr))
             .build()
             .withOperandSupplier(
                 b0 ->

@@ -404,7 +404,8 @@ public class RexSimplify {
         if (e.operands.equals(operands)) {
             return e;
         }
-        return rexBuilder.makeCall(e.getType(), e.getOperator(), operands);
+        // Bodo Change: Avoid passing the output type to allow deriving it.
+        return rexBuilder.makeCall(e.getOperator(), operands);
     }
 
     /**

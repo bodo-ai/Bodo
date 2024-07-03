@@ -155,6 +155,8 @@ object BodoPrograms {
             SnowflakeCleanupProgram,
             // Update Iceberg Nodes
             IcebergConvertProgram,
+            // Remove common column computation
+            SubColumnEliminationProgram,
             TrimFieldsProgram(true),
             // TODO(jsternberg): This can likely be adapted and integrated directly with
             // the VolcanoPlanner, but that hasn't been done so leave this here.

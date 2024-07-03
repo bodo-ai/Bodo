@@ -40,8 +40,6 @@ import com.bodosql.calcite.application.logicalRules.PartialJoinConditionIntoChil
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.SingleValuePruneRule
-import com.bodosql.calcite.application.logicalRules.TrivialProjectJoinTransposeRule
-import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
 import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
@@ -87,6 +85,7 @@ import org.apache.calcite.rel.rules.SortMergeRule
 import org.apache.calcite.rel.rules.SortProjectTransposeRule
 import org.apache.calcite.rel.rules.UnionMergeRule
 import org.apache.calcite.rex.RexNode
+import org.apache.calcite.rex.RexOver
 
 object BodoRules {
     // INDIVIDUAL RULES
@@ -217,23 +216,13 @@ object BodoRules {
             .toRule()
 
     /**
-     * Filters tables for unused columns before join.
-     */
-    @JvmField
-    val TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
-        TrivialProjectJoinTransposeRule.Config.DEFAULT
-            .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
-            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-            .toRule()
-
-    /**
      * Pushes full projects past joins when possible.
      */
     @JvmField
     val FULL_PROJECT_JOIN_TRANSPOSE_RULE: RelOptRule =
         ProjectJoinTransposeRule.Config.DEFAULT
             .withOperandFor(BodoLogicalProject::class.java, BodoLogicalJoin::class.java)
-            .withPreserveExprCondition { expr: RexNode -> !WindowFilterTranspose.containsRexOver(expr) }
+            .withPreserveExprCondition { expr: RexNode -> !RexOver.containsOver(expr) }
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -456,6 +445,7 @@ object BodoRules {
                     OperandTransform { b1: OperandBuilder -> b1.operand(BodoLogicalProject::class.java).anyInputs() },
                 )
             }
+            .withDescription("BodoJoinProjectTransposeLeftIncludeOuterRule")
             .toRule()
 
     // JOIN
@@ -479,6 +469,7 @@ object BodoRules {
                     OperandTransform { b2: OperandBuilder -> b2.operand(BodoLogicalProject::class.java).anyInputs() },
                 )
             }
+            .withDescription("BodoJoinProjectTransposeRightIncludeOuterRule")
             .toRule()
 
     // If a column has been repeated or rewritten as a part of another column, possibly
@@ -1118,8 +1109,6 @@ object BodoRules {
             JOIN_CONDITION_TO_FILTER_RULE,
             LEFT_JOIN_REMOVE_RULE,
             RIGHT_JOIN_REMOVE_RULE,
-            // Should be handled by RelFieldTrimmer now. Needs join fully supported.
-            TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
         )
 
     /**
@@ -1170,7 +1159,6 @@ object BodoRules {
             AGGREGATE_JOIN_REMOVE_RULE,
             AGGREGATE_MERGE_RULE,
             AGGREGATE_JOIN_TRANSPOSE_RULE,
-            TRIVIAL_PROJECT_JOIN_TRANSPOSE_RULE,
             FILTER_REDUCE_EXPRESSIONS_RULE,
             PROJECT_REDUCE_EXPRESSIONS_RULE,
             JOIN_PUSH_TRANSITIVE_PREDICATES,
@@ -1184,7 +1172,6 @@ object BodoRules {
             JOIN_REORDER_CONDITION_RULE,
             FILTER_REORDER_CONDITION_RULE,
             LIMIT_PROJECT_TRANSPOSE_RULE,
-            PROJECTION_SUBCOLUMN_ELIMINATION_RULE,
             FILTER_EXTRACT_CASE_RULE,
             PROJECT_FILTER_PROJECT_COLUMN_ELIMINATION_RULE,
             JOIN_COMMUTE_RULE,
@@ -1193,5 +1180,8 @@ object BodoRules {
             FILTER_WINDOW_TRANSPOSE_RULE,
             PROJECT_WINDOW_TRANSPOSE_RULE,
             FILTER_WINDOW_MRNF_RULE,
+            // Make cost based decisions for Project push down
+            PROJECT_SET_OP_TRANSPOSE,
+            FULL_PROJECT_JOIN_TRANSPOSE_RULE,
         )
 }
