@@ -262,11 +262,15 @@ boost::json::object QueryProfileCollector::OperatorToJson(
     return op_output;
 }
 
-void QueryProfileCollector::Finalize() {
+void QueryProfileCollector::Finalize(int64_t verbose_level) {
     DISABLE_IF_TRACING_DISABLED;
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (rank == 0 && verbose_level > 0) {
+        std::cerr << "Writing profiles to " << output_dir << "\n";
+    }
 
     boost::json::object profile;
     profile["rank"] = rank;
@@ -366,9 +370,9 @@ static double get_operator_duration_query_profile_collector_py_entry(
            1e6;
 }
 
-static void finalize_query_profile_collector_py_entry() {
+static void finalize_query_profile_collector_py_entry(int64_t verbose_level) {
     try {
-        QueryProfileCollector::Default().Finalize();
+        QueryProfileCollector::Default().Finalize(verbose_level);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }

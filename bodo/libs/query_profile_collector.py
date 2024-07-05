@@ -180,20 +180,31 @@ def get_operator_duration(typingctx, operator_id):
 
 
 @intrinsic(prefer_literal=True)
-def finalize(typingctx):
+def _finalize(typingctx, verbose_level):
     """Wrapper for finalize in _query_profile_collector.cpp"""
 
     def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.VoidType(), [])
+        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(64)])
         fn_typ = cgutils.get_or_insert_function(
             builder.module, fnty, name="finalize_query_profile_collector_py_entry"
         )
-        builder.call(fn_typ, ())
+        builder.call(fn_typ, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return context.get_dummy_value()
 
-    sig = types.none()
+    sig = types.none(verbose_level)
     return sig, codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
+def finalize():
+    """Wrapper for finalize in _query_profile_collector.cpp"""
+
+    def impl():  # pragma: no cover
+        verbose_level = bodo.user_logging.get_verbose_level()
+        _finalize(verbose_level)
+
+    return impl
 
 
 ## Only used for unit testing purposes
