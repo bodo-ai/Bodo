@@ -29,6 +29,14 @@
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
 1. Build Bodo: `psh pip install --no-deps --no-build-isolation -ve .`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
+1. Install bodo-platform-utils for bodosqlwrapper use: `cd bodo-platform-image/bodo-platform-utils/ && psh python setup.py develop && cd ../..`
+1. Set same modify time for bodosqlwrapper.py on all nodes: `psh python -c "import os; os.utime(r'/home/bodo/Bodo/bodo-platform-image/bodo-platform-utils/bodo_platform_utils/bodosqlwrapper.py', (1602179630, 1602179630))"`
+
+>[!NOTE]
+> Modify time for bodosqlwrapper.py has to be the same when installed from source on different nodes since files having different timestamps breaks Numba caching.
+> Therefore, the last command has to run after any source code changes to `bodosqlwrapper.py`.
+> See https://bodo.atlassian.net/browse/BSE-3582
+
 
 ## Workflow
 
