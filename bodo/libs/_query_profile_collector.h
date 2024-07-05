@@ -220,7 +220,7 @@ class QueryProfileCollector {
     void RegisterOperatorStageMetrics(operator_stage_t op_stage,
                                       std::vector<MetricBase> metrics);
 
-    void Finalize();
+    void Finalize(int64_t verbose_level = 0);
 
     // Getters for testing
     std::unordered_map<pipeline_id_t, std::pair<uint64_t, uint64_t>>&
