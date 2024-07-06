@@ -1197,6 +1197,7 @@ class BodoSQLContext:
                 bodo.enable_runtime_join_filters,
                 bodo.enable_streaming_sort,
                 bodo.bodo_sql_style,
+                bodo.bodosql_full_caching,
             )
         extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
@@ -1211,6 +1212,7 @@ class BodoSQLContext:
             bodo.enable_runtime_join_filters,
             bodo.enable_streaming_sort,
             bodo.bodo_sql_style,
+            bodo.bodosql_full_caching,
             *extra_args,
         )
         return generator
