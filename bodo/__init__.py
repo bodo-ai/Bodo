@@ -134,6 +134,8 @@ enable_theta_sketches = os.environ.get("BODO_ENABLE_THETA_SKETCHES", "1") != "0"
 bodo_use_decimal = os.environ.get("BODO_USE_DECIMAL", "0") != "0"
 # Which SQL defaults should BODOSQL use (Snowflake vs Spark)
 bodo_sql_style = os.environ.get("BODO_SQL_STYLE", "SNOWFLAKE").upper()
+# Should we enable full covering set caching.
+bodosql_full_caching = os.environ.get("BODO_USE_PARTIAL_CACHING", "0") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
 

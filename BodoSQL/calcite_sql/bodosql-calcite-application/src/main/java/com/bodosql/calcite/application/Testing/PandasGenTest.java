@@ -98,7 +98,8 @@ public class PandasGenTest {
             true, // Enable TIMESTAMP_TZ for testing
             true, // Enable Join Runtime filters for Testing
             false, // Disable Streaming Sort for Testing
-            "SNOWFLAKE" // Maintain case sensitivity in the Snowflake style by default
+            "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
+            false // Only cache identical nodes
             );
     List<ColumnDataTypeInfo> paramTypes =
         List.of(new ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false));

@@ -448,6 +448,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_runtime_join_filters,
                     bodo.enable_streaming_sort,
                     bodo.bodo_sql_style,
+                    bodo.bodosql_full_caching,
                 )
             else:
                 extra_args = (
@@ -468,6 +469,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_runtime_join_filters,
                     bodo.enable_streaming_sort,
                     bodo.bodo_sql_style,
+                    bodo.bodosql_full_caching,
                     *extra_args,
                 )
         except Exception as e:
