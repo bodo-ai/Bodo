@@ -43,6 +43,7 @@ abstract class GenTestFixture {
                 false,
                 // Maintain case sensitivity in the Snowflake style by default
                 "SNOWFLAKE",
+                false,
             )
 
         println("SQL query:")

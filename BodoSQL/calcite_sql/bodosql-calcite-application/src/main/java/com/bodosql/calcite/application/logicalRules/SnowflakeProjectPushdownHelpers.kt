@@ -26,7 +26,6 @@ import org.apache.calcite.rex.RexWindow
 import org.apache.calcite.tools.RelBuilder
 import org.apache.calcite.util.mapping.Mappings
 import org.apache.calcite.util.mapping.Mappings.TargetMapping
-import org.locationtech.proj4j.parser.Proj4Keyword.k
 
 /**
  * File that contains a selection of helper functions for rules that enable pushing down projections to Snowflake.

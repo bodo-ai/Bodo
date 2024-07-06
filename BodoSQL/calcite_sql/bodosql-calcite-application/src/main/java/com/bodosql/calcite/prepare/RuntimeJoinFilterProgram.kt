@@ -104,7 +104,29 @@ object RuntimeJoinFilterProgram : Program {
                 val intersectFilter = filters.reduce { acc, joinFilters -> acc.intersection(joinFilters) }
                 // We 0 wasted work if any consumer gets all its filters pushed.
                 val keepCache = filters.any { it == intersectFilter }
-                if (keepCache) {
+                val (unionFilter, tryInline) =
+                    if (!keepCache) {
+                        try {
+                            // Note: In some cases it's not possible to union together the results of RTJFs. For example,
+                            // consider the following example case.
+                            //                            UNION
+                            //                          /       \
+                            //              Project (0, 1)        Project (1, 0)
+                            //                  |                       |
+                            //                  C                       C
+                            //
+                            // Right now we don't have any way to expression that our join requires column 0 or 1
+                            // for any key. As a result, when we encounter this case we will not inline the cache node.
+                            val unionFilter = filters.reduce { acc, joinFilters -> acc.union(joinFilters) }
+                            unionFilter to true
+                        } catch (e: IllegalArgumentException) {
+                            // If we can't union the filters, then we can't inline the cache node.
+                            null to false
+                        }
+                    } else {
+                        null to false
+                    }
+                if (!tryInline) {
                     // Just visit the cache node once.
                     liveJoins = intersectFilter
                     plan.cachedPlan.plan = visit(plan.cachedPlan.plan)
@@ -119,10 +141,10 @@ object RuntimeJoinFilterProgram : Program {
                     // that we need to inline all the nodes. We only need to inline until all RTJFs would have
                     // been generated. If this happens, and we reach a node that is valid to cache, then we can cache
                     // subsections of the original cached plan.
-                    val unionFilter = filters.reduce { acc, joinFilters -> acc.union(joinFilters) }
+                    //
                     // TODO: Update the number of consumers for the cache node when we check if any consumers have
                     // completely identical filters.
-                    val inlineVisitor = InlineCacheVisitor(cluster, unionFilter, consumerInfo.size)
+                    val inlineVisitor = InlineCacheVisitor(cluster, unionFilter!!, consumerInfo.size)
                     inlineVisitor.visit(plan.cachedPlan.plan)
                     val oldCacheIDs = createdCacheIDs
                     this.createdCacheIDs = inlineVisitor.getNewCacheNodes().associateWith { null }.toMutableMap()

@@ -140,6 +140,9 @@ public class RelationalAlgebraGenerator {
    */
   public static String sqlStyle = "SNOWFLAKE";
 
+  /** Should we use the covering expression approach to cache or only exact matches. */
+  public static boolean coveringExpressionCaching = false;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
@@ -190,7 +193,8 @@ public class RelationalAlgebraGenerator {
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
       boolean enableStreamingSort,
-      String sqlStyle) {
+      String sqlStyle,
+      boolean coveringExpressionCaching) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -210,6 +214,7 @@ public class RelationalAlgebraGenerator {
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
+    this.coveringExpressionCaching = coveringExpressionCaching;
   }
 
   /** Constructor for the relational algebra generator class that takes in the default timezone. */
@@ -225,6 +230,7 @@ public class RelationalAlgebraGenerator {
       boolean enableRuntimeJoinFilters,
       boolean enableStreamingSort,
       String sqlStyle,
+      boolean coveringExpressionCaching,
       String defaultTz) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
@@ -247,6 +253,7 @@ public class RelationalAlgebraGenerator {
     this.enableSnowflakeIcebergTables = enableSnowflakeIcebergTables;
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
+    this.coveringExpressionCaching = coveringExpressionCaching;
   }
 
   /**
@@ -270,7 +277,8 @@ public class RelationalAlgebraGenerator {
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
       boolean enableStreamingSort,
-      String sqlStyle) {
+      String sqlStyle,
+      boolean coveringExpressionCaching) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -281,6 +289,7 @@ public class RelationalAlgebraGenerator {
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     this.sqlStyle = sqlStyle;
+    this.coveringExpressionCaching = coveringExpressionCaching;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
     final @Nullable String currentDatabase;
