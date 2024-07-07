@@ -259,4 +259,24 @@ public abstract class ListScope extends DelegatingScope {
         }
     }
 
+    // Bodo Change: Add an API for Join aliases with hints. Ideally we can
+    // add a much better implementation in the future.
+    /**
+     * Returns the index of the child namespace with the given alias.
+     *
+     * @param name The name to check.
+     * @param nameMatcher The name matcher to use.
+     * @return Index of the child namespace with the given alias. -1 if no child
+     * matches.
+     */
+    public int getNameIndex(String name, SqlNameMatcher nameMatcher) {
+        List<@Nullable String> childNames = getChildNames();
+        for (int i = 0; i < childNames.size(); i++) {
+            if (nameMatcher.matches(name, childNames.get(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
 }

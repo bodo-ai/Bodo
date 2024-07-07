@@ -20,7 +20,11 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import pytest_mark_one_rank, pytest_slow_unless_join
+from bodo.tests.utils import (
+    pytest_mark_one_rank,
+    pytest_slow_unless_join,
+    temp_env_override,
+)
 from bodo.utils.typing import BodoError
 from bodosql.tests.utils import check_query
 
@@ -703,3 +707,35 @@ def test_join_invalid_condition(memory_leak_check):
         check_query(
             query1, ctx, None, check_dtype=False, check_names=False, expected_output=1
         )
+
+
+def test_join_broadcast_hint(memory_leak_check, capfd):
+    """
+    Test that providing a broadcast hint for a join provides
+    a runtime broadcast even though the testing infrastructure
+    disables the dynamic broadcast decision
+    """
+    df1 = pd.DataFrame({"A": pd.array([2, 4, 3, None] * 4, dtype="Int64")})
+    df2 = pd.DataFrame({"A": pd.array([1, None, 2] * 3, dtype="Int64")})
+    query = f"select /*+ broadcast(t1) */ t1.A as OUTPUT from table1 t1 join table2 t2 on t1.A = t2.A"
+    ctx = {
+        "TABLE1": df1,
+        "TABLE2": df2,
+    }
+    py_output = pd.DataFrame({"OUTPUT": pd.array([2] * 12, dtype="Int64")})
+
+    with temp_env_override({"BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1"}):
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=py_output,
+            check_dtype=False,
+            check_names=False,
+        )
+        stdout, stderr = capfd.readouterr()
+        expected_log_messages = ["Converting to a broadcast hash join"]
+        for expected_log_message in expected_log_messages:
+            assert (
+                expected_log_message in stderr
+            ), f"Expected log message ('{expected_log_message}') not in logs!"

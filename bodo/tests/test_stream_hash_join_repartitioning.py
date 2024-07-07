@@ -71,6 +71,7 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
             probe_col_meta,
             build_outer,
             probe_outer,
+            False,
             op_pool_size_bytes,
         )
         _temp1 = 0

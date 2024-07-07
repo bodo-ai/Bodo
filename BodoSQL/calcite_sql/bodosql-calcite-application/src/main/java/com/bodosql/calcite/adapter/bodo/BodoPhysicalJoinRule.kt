@@ -40,6 +40,6 @@ class BodoPhysicalJoinRule private constructor(config: Config) : ConverterRule(c
             join.inputs.map { input ->
                 convert(input, input.traitSet.replace(BodoPhysicalRel.CONVENTION))
             }
-        return BodoPhysicalJoin.create(inputs[0], inputs[1], join.condition, join.joinType)
+        return BodoPhysicalJoin.create(inputs[0], inputs[1], join.hints, join.condition, join.joinType)
     }
 }

@@ -1961,6 +1961,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
         new Expr.BooleanLiteral(node.getJoinType().generatesNullsOnRight());
     Expr.BooleanLiteral isRightOuter =
         new Expr.BooleanLiteral(node.getJoinType().generatesNullsOnLeft());
+    Expr.BooleanLiteral forceBroadcast = new Expr.BooleanLiteral(node.getBroadcastBuildSide());
     Expr.Call stateCall =
         new Expr.Call(
             "bodo.libs.stream_join.init_join_state",
@@ -1971,7 +1972,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
                 buildNamesGlobal,
                 probeNamesGlobal,
                 isRightOuter,
-                isLeftOuter),
+                isLeftOuter,
+                forceBroadcast),
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
 

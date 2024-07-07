@@ -124,6 +124,7 @@ def test_join_row_count_collection(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -488,6 +489,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -651,6 +653,7 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
             non_equi_condition=non_equi_condition,

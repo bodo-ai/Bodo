@@ -485,13 +485,15 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       return BodoPhysicalJoin.Companion.create(
           oldBodoJoin.getCluster(),
           oldBodoJoin.getTraitSet(),
+          oldBodoJoin.getHints(),
           newLeft,
           newRight,
           newConditionExpr,
           oldBodoJoin.getJoinType(),
           oldBodoJoin.getRebalanceOutput(),
           oldBodoJoin.getJoinFilterID(),
-          keyLocationMapping);
+          keyLocationMapping,
+          oldBodoJoin.getBroadcastBuildSide());
     } else {
       relBuilder.push(newLeft);
       relBuilder.push(newRight);

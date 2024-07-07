@@ -145,9 +145,12 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
 
   @Override
   protected void convertFrom(
-      Blackboard bb, @Nullable SqlNode from, @Nullable List<String> fieldNames) {
+      Blackboard bb,
+      @Nullable SqlNode from,
+      @Nullable List<String> fieldNames,
+      List<RelHint> propagatingHints) {
     if (from == null) {
-      super.convertFrom(bb, null, fieldNames);
+      super.convertFrom(bb, null, fieldNames, propagatingHints);
       return;
     }
 
@@ -160,7 +163,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
         if (sampleSpec instanceof SqlTableSampleRowLimitSpec) {
           SqlTableSampleRowLimitSpec tableSampleRowLimitSpec =
               (SqlTableSampleRowLimitSpec) sampleSpec;
-          convertFrom(bb, operands.get(0));
+          convertFrom(bb, operands.get(0), propagatingHints);
           RelOptRowSamplingParameters params =
               new RelOptRowSamplingParameters(
                   tableSampleRowLimitSpec.isBernoulli(),
@@ -176,7 +179,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
     }
 
     // Defer all other conversions to calcite core.
-    super.convertFrom(bb, from, fieldNames);
+    super.convertFrom(bb, from, fieldNames, propagatingHints);
   }
 
   /**
@@ -237,7 +240,8 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
     // which we use to convert this table
 
     final Blackboard bb = createBlackboard(createTableScope, null, false);
-    convertFrom(bb, createTableDef);
+    // No hints are available at this stage.
+    convertFrom(bb, createTableDef, List.of());
     final RelCollation emptyCollation = cluster.traitSet().canonize(RelCollations.of());
 
     // Create Table like creates a table with an identical schema, copies no rows.
