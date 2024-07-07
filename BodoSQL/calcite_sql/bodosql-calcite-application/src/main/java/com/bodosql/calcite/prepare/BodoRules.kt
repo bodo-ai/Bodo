@@ -587,8 +587,20 @@ object BodoRules {
     @JvmField
     val JOIN_COMMUTE_RULE: RelOptRule =
         JoinCommuteRule.Config.DEFAULT
-            .withOperandFor(BodoLogicalJoin::class.java)
             .withSwapOuter(true)
+            // Disable join commute rules for joins that contain hints.
+            // The only hints we support define the join ordering.
+            .withOperandSupplier { b: OperandBuilder ->
+                b.operand(BodoLogicalJoin::class.java)
+                    // FIXME Enable this rule for joins with system fields
+                    .predicate { j: Join ->
+                        (
+                            j.left.id != j.right.id &&
+                                j.systemFieldList.isEmpty() && j.hints.isEmpty()
+                        )
+                    }
+                    .anyInputs()
+            }
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 

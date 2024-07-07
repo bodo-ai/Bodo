@@ -292,6 +292,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             probe_col_meta,
             build_outer,
             probe_outer,
+            False,
             16 * 1024 * 1024,
         )
 
@@ -575,6 +576,7 @@ def test_nested_loop_join(
             probe_col_meta,
             build_outer,
             probe_outer,
+            False,
             non_equi_condition=non_equi_condition,
         )
 
@@ -710,6 +712,7 @@ def test_broadcast_nested_loop_join(
             probe_col_meta,
             False,
             False,
+            False,
             non_equi_condition=non_equi_condition,
         )
 
@@ -831,6 +834,7 @@ def test_hash_join_reorder(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -957,6 +961,7 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
             probe_col_meta,
             build_outer,
             probe_outer,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -1099,6 +1104,7 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
             probe_col_meta,
             False,
             probe_outer,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -1230,6 +1236,7 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
             probe_col_meta,
             build_outer,
             probe_outer,
+            False,
             non_equi_condition=non_equi_cond,
         )
         _temp1 = 0
@@ -1370,6 +1377,7 @@ def test_join_key_prune(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -1468,6 +1476,7 @@ def test_key_multicast(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -1608,6 +1617,7 @@ def test_only_one_distributed(
             probe_col_meta,
             build_outer,
             probe_outer,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -1755,6 +1765,7 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -2100,6 +2111,7 @@ def test_prune_na(build_outer, memory_leak_check):
             probe_col_meta,
             build_outer,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -2241,6 +2253,7 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
             probe_col_meta,
             True,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -2363,6 +2376,7 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -2513,6 +2527,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
             non_equi_condition=non_equi_condition,
@@ -2667,6 +2682,7 @@ def test_request_input(df_size, memory_leak_check):
             probe_col_meta,
             True,
             True,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -2770,6 +2786,7 @@ def test_produce_output(memory_leak_check):
             probe_col_meta,
             True,
             True,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -2891,6 +2908,7 @@ def test_hash_join_nested_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -3010,6 +3028,7 @@ def test_nested_loop_join_nested_array(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
             non_equi_condition="right.A <= left.C",
@@ -3199,6 +3218,7 @@ def test_hash_join_struct_array(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -3416,6 +3436,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
             non_equi_condition="right.A > left.C",
         )
         _temp1 = 0
@@ -3584,6 +3605,7 @@ def test_hash_join_map_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -3727,6 +3749,7 @@ def test_nested_loop_join_map_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
             non_equi_condition="right.A > left.C",
         )
         _temp1 = 0
@@ -3868,6 +3891,7 @@ def test_hash_join_tuple_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -4006,6 +4030,7 @@ def test_nested_loop_join_tuple_array(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
             non_equi_condition="right.A > left.C",
@@ -4476,6 +4501,7 @@ def test_hash_join_semistructured_keys(
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -4584,6 +4610,7 @@ def test_join_semistructured_cond_func(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            False,
             non_equi_condition="right.A > left.C",
         )
         _temp1 = 0
@@ -4683,6 +4710,7 @@ def test_shuffle_batching(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -4797,6 +4825,7 @@ def test_runtime_join_filter(memory_leak_check):
             probe_keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -4940,6 +4969,7 @@ def test_runtime_join_filter_dict_encoding(merge_join_filters, memory_leak_check
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -5075,6 +5105,7 @@ def test_runtime_join_filter_err_checking():
             probe_col_meta,
             False,
             True,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -5184,6 +5215,7 @@ def test_runtime_join_filter_simple_casts(merge_join_filters, memory_leak_check)
             keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -5360,6 +5392,7 @@ def test_runtime_join_filter_str_input_dict_key(merge_join_filters, memory_leak_
             keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -5548,6 +5581,7 @@ def test_runtime_join_filter_dict_to_str_cast(merge_join_filters, memory_leak_ch
             keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )
@@ -5793,6 +5827,7 @@ def test_merging_runtime_join_filters(materialization_threshold, memory_leak_che
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False
@@ -5927,6 +5962,7 @@ def test_runtime_join_no_materialization(memory_leak_check):
             keys_inds,
             build_col_meta,
             probe_col_meta,
+            False,
             False,
             False,
         )

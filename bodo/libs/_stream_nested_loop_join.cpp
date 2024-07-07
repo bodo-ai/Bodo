@@ -101,7 +101,7 @@ void NestedLoopJoinState::FinalizeBuild() {
         }
         MPI_Allreduce(MPI_IN_PLACE, &table_size, 1, MPI_INT64_T, MPI_SUM,
                       MPI_COMM_WORLD);
-        if (table_size < get_bcast_join_threshold()) {
+        if (this->force_broadcast || table_size < get_bcast_join_threshold()) {
             this->build_parallel = false;
             this->metrics.is_build_bcast_join = 1;
             time_pt start_bcast = start_timer();

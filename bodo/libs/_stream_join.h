@@ -692,6 +692,7 @@ class JoinState {
     cond_expr_fn_t cond_func;
     const bool build_table_outer;
     const bool probe_table_outer;
+    const bool force_broadcast;
     // Note: This isn't constant because we may change it
     // via broadcast decisions.
     bool build_parallel;
@@ -737,7 +738,7 @@ class JoinState {
 
     JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
               const std::shared_ptr<bodo::Schema> probe_table_schema_,
-              uint64_t n_keys_, bool build_table_outer_,
+              uint64_t n_keys_, bool build_table_outer_, bool force_broadcast_,
               bool probe_table_outer_, cond_expr_fn_t cond_func_,
               bool build_parallel_, bool probe_parallel_,
               int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_);
@@ -880,10 +881,10 @@ class HashJoinState : public JoinState {
     HashJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                   const std::shared_ptr<bodo::Schema> probe_table_schema_,
                   uint64_t n_keys_, bool build_table_outer_,
-                  bool probe_table_outer_, cond_expr_fn_t cond_func_,
-                  bool build_parallel_, bool probe_parallel_,
-                  int64_t output_batch_size_, int64_t sync_iter_,
-                  int64_t op_id_,
+                  bool probe_table_outer_, bool force_broadcast_,
+                  cond_expr_fn_t cond_func_, bool build_parallel_,
+                  bool probe_parallel_, int64_t output_batch_size_,
+                  int64_t sync_iter_, int64_t op_id_,
                   // If -1, we'll use 100% of the total buffer
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
@@ -1266,15 +1267,16 @@ class NestedLoopJoinState : public JoinState {
     NestedLoopJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                         const std::shared_ptr<bodo::Schema> probe_table_schema_,
                         bool build_table_outer_, bool probe_table_outer_,
-                        cond_expr_fn_t cond_func_, bool build_parallel_,
-                        bool probe_parallel_, int64_t output_batch_size_,
-                        int64_t sync_iter_, int64_t op_id_)
+                        bool force_broadcast_, cond_expr_fn_t cond_func_,
+                        bool build_parallel_, bool probe_parallel_,
+                        int64_t output_batch_size_, int64_t sync_iter_,
+                        int64_t op_id_)
         : JoinState(
               build_table_schema_, probe_table_schema_,
               /*n_keys_*/ 0,  // NestedLoopJoin is only used when n_keys is 0
-              build_table_outer_, probe_table_outer_, cond_func_,
-              build_parallel_, probe_parallel_, output_batch_size_, sync_iter_,
-              op_id_) {
+              build_table_outer_, probe_table_outer_, force_broadcast_,
+              cond_func_, build_parallel_, probe_parallel_, output_batch_size_,
+              sync_iter_, op_id_) {
         // TODO: Integrate dict_builders for nested loop join.
         this->sync_iter =
             this->sync_iter == -1 ? DEFAULT_SYNC_ITERS : this->sync_iter;

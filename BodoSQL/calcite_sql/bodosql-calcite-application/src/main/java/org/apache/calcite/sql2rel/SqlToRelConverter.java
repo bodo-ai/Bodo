@@ -158,7 +158,7 @@ import org.apache.calcite.sql.util.SqlVisitor;
 import org.apache.calcite.sql.validate.AggregatingSelectScope;
 import org.apache.calcite.sql.validate.CollectNamespace;
 import org.apache.calcite.sql.validate.DelegatingScope;
-import org.apache.calcite.sql.validate.IdentifierNamespace;
+import org.apache.calcite.sql.validate.JoinScope;
 import org.apache.calcite.sql.validate.ListScope;
 import org.apache.calcite.sql.validate.MatchRecognizeScope;
 import org.apache.calcite.sql.validate.ParameterScope;
@@ -232,7 +232,6 @@ import static org.apache.calcite.sql.SqlUtil.getAliasedString;
 import static org.apache.calcite.sql.SqlUtil.stripAs;
 
 import static java.util.Objects.requireNonNull;
-import static org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE;
 
 /**
  * Converts a SQL parse tree (consisting of
@@ -659,19 +658,10 @@ public class SqlToRelConverter {
 
     final RelDataType validatedRowType = validator().getValidatedNodeType(query);
     List<RelHint> hints = new ArrayList<>();
-    if (query.getKind() == SqlKind.SELECT) {
-      final SqlSelect select = (SqlSelect) query;
-      if (select.hasHints()) {
-        hints = SqlUtil.getRelHint(hintStrategies, select.getHints());
-      }
-    }
-
+    // Bodo Change: Remove hint propagation.
     if (config.isAddJsonTypeOperatorEnabled()) {
       result = result.accept(new NestedJsonFunctionRelRewriter());
     }
-
-    // propagate the hints.
-    result = RelOptUtil.propagateRelHints(result, false);
     return RelRoot.of(result, validatedRowType, query.getKind())
         .withCollation(collation)
         .withHints(hints);
@@ -761,9 +751,20 @@ public class SqlToRelConverter {
     // Doing this rewrite prior to anything else simplifies the rest of the SqlToRel conversion
     handleNonAggregateHavingReWrite(select);
 
+    // Bodo Changes:
+    // If we have hints check if we need to forward them
+    // to our inputs.
+    final List<RelHint> hints;
+    if (select.hasHints()) {
+      hints = SqlUtil.getRelHint(hintStrategies, select.getHints());
+    } else {
+      hints = ImmutableList.of();
+    }
+
     convertFrom(
         bb,
-        select.getFrom());
+        select.getFrom(),
+        hints);
 
 
     // We would like to remove ORDER BY clause from an expanded view, except if
@@ -865,26 +866,9 @@ public class SqlToRelConverter {
         select, bb, collation, orderExprList, select.getOffset(),
         select.getFetch());
 
-    if (select.hasHints()) {
-      final List<RelHint> hints = SqlUtil.getRelHint(hintStrategies, select.getHints());
-      // Attach the hints to the first Hintable node we found from the root node.
-      bb.setRoot(bb.root()
-          .accept(
-              new RelShuttleImpl() {
-                boolean attached = false;
-
-                @Override public RelNode visitChild(RelNode parent, int i, RelNode child) {
-                  if (parent instanceof Hintable && !attached) {
-                    attached = true;
-                    return ((Hintable) parent).attachHints(hints);
-                  } else {
-                    return super.visitChild(parent, i, child);
-                  }
-                }
-              }), true);
-    } else {
-      bb.setRoot(bb.root(), true);
-    }
+    // Bodo Change: Avoid always/ever placing hints on the root node. This breaks
+    // the hint support inside Calcite.
+    bb.setRoot(bb.root(), true);
   }
 
   /**
@@ -2476,8 +2460,9 @@ public class SqlToRelConverter {
 
   protected void convertFrom(
       Blackboard bb,
-      @Nullable SqlNode from) {
-    convertFrom(bb, from, Collections.emptyList());
+      @Nullable SqlNode from,
+      List<RelHint> propagatingHints) {
+    convertFrom(bb, from, Collections.emptyList(), propagatingHints);
   }
 
   /**
@@ -2497,11 +2482,14 @@ public class SqlToRelConverter {
    * </ul>
    *
    * @param fieldNames Field aliases, usually come from AS clause, or null
+   * @param propagatingHints Hints that may need to be propaged from a select
+   *                         to its inputs.
    */
   protected void convertFrom(
       Blackboard bb,
       @Nullable SqlNode from,
-      @Nullable List<String> fieldNames) {
+      @Nullable List<String> fieldNames,
+      List<RelHint> propagatingHints) {
     if (from == null) {
       bb.setRoot(LogicalValues.createOneRow(cluster), false);
       return;
@@ -2515,27 +2503,27 @@ public class SqlToRelConverter {
       final List<String> fieldNameList = call.operandCount() > 2
           ? SqlIdentifier.simpleNames(Util.skip(call.getOperandList(), 2))
           : null;
-      convertFrom(bb, firstOperand, fieldNameList);
+      convertFrom(bb, firstOperand, fieldNameList, propagatingHints);
       return;
 
     case MATCH_RECOGNIZE:
-      convertMatchRecognize(bb, (SqlMatchRecognize) from);
+      convertMatchRecognize(bb, (SqlMatchRecognize) from, propagatingHints);
       return;
 
     case PIVOT:
-      convertPivot(bb, (SqlPivot) from);
+      convertPivot(bb, (SqlPivot) from, propagatingHints);
       return;
 
     case UNPIVOT:
-      convertUnpivot(bb, (SqlUnpivot) from);
+      convertUnpivot(bb, (SqlUnpivot) from, propagatingHints);
       return;
 
     case WITH_ITEM:
-      convertFrom(bb, ((SqlWithItem) from).query);
+      convertFrom(bb, ((SqlWithItem) from).query, propagatingHints);
       return;
 
     case WITH:
-      convertFrom(bb, ((SqlWith) from).body);
+      convertFrom(bb, ((SqlWith) from).body, propagatingHints);
       return;
 
     case TABLESAMPLE:
@@ -2548,12 +2536,12 @@ public class SqlToRelConverter {
             ((SqlSampleSpec.SqlSubstitutionSampleSpec) sampleSpec)
                 .getName();
         datasetStack.push(sampleName);
-        convertFrom(bb, operands.get(0));
+        convertFrom(bb, operands.get(0), propagatingHints);
         datasetStack.pop();
       } else if (sampleSpec instanceof SqlSampleSpec.SqlTableSampleSpec) {
         SqlSampleSpec.SqlTableSampleSpec tableSampleSpec =
             (SqlSampleSpec.SqlTableSampleSpec) sampleSpec;
-        convertFrom(bb, operands.get(0));
+        convertFrom(bb, operands.get(0), propagatingHints);
 
         bb.setRoot(
             relBuilder.push(bb.root())
@@ -2602,7 +2590,7 @@ public class SqlToRelConverter {
       return;
 
     case JOIN:
-      convertJoin(bb, (SqlJoin) from);
+      convertJoin(bb, (SqlJoin) from, propagatingHints);
       return;
 
     case SELECT:
@@ -2673,7 +2661,7 @@ public class SqlToRelConverter {
   }
 
   protected void convertMatchRecognize(Blackboard bb,
-      SqlMatchRecognize matchRecognize) {
+      SqlMatchRecognize matchRecognize, List<RelHint> propagatingHints) {
     final SqlValidatorNamespace ns = getNamespace(matchRecognize);
     final SqlValidatorScope scope = validator().getMatchRecognizeScope(matchRecognize);
 
@@ -2681,7 +2669,7 @@ public class SqlToRelConverter {
     final RelDataType rowType = ns.getRowType();
     // convert inner query, could be a table name or a derived table
     SqlNode expr = matchRecognize.getTableRef();
-    convertFrom(matchBb, expr);
+    convertFrom(matchBb, expr, propagatingHints);
     final RelNode input = matchBb.root();
 
     // PARTITION BY
@@ -2839,12 +2827,12 @@ public class SqlToRelConverter {
     bb.setRoot(rel, false);
   }
 
-  protected void convertPivot(Blackboard bb, SqlPivot pivot) {
+  protected void convertPivot(Blackboard bb, SqlPivot pivot, List<RelHint> propagatingHints) {
     final SqlValidatorScope scope = validator().getJoinScope(pivot);
     final Blackboard pivotBb = createBlackboard(scope, null, false);
 
     // Convert input
-    convertFrom(pivotBb, pivot.query);
+    convertFrom(pivotBb, pivot.query, propagatingHints);
     final RelNode input = pivotBb.root();
 
     final RelDataType inputRowType = input.getRowType();
@@ -2924,12 +2912,12 @@ public class SqlToRelConverter {
     bb.setRoot(rel, true);
   }
 
-  protected void convertUnpivot(Blackboard bb, SqlUnpivot unpivot) {
+  protected void convertUnpivot(Blackboard bb, SqlUnpivot unpivot, List<RelHint> propagatingHints) {
     final SqlValidatorScope scope = validator().getJoinScope(unpivot);
     final Blackboard unpivotBb = createBlackboard(scope, null, false);
 
     // Convert input
-    convertFrom(unpivotBb, unpivot.query);
+    convertFrom(unpivotBb, unpivot.query, propagatingHints);
     final RelNode input = unpivotBb.root();
     relBuilder.push(input);
 
@@ -2979,7 +2967,7 @@ public class SqlToRelConverter {
       @Nullable SqlNodeList extendedColumns, @Nullable SqlNodeList tableHints) {
     final SqlValidatorNamespace fromNamespace = getNamespace(id).resolve();
     if (fromNamespace.getNode() != null) {
-      convertFrom(bb, fromNamespace.getNode());
+      convertFrom(bb, fromNamespace.getNode(), List.of());
       return;
     }
     final String datasetName =
@@ -3019,7 +3007,7 @@ public class SqlToRelConverter {
       @Nullable SqlNodeList extendedColumns, @Nullable SqlNodeList tableHints) {
     final SqlValidatorNamespace fromNamespace = getNamespace(id).resolve();
     if (fromNamespace.getNode() != null) {
-      convertFrom(bb, fromNamespace.getNode());
+      convertFrom(bb, fromNamespace.getNode(), List.of());
       return;
     }
     final String datasetName =
@@ -3146,7 +3134,7 @@ public class SqlToRelConverter {
 
     // convert inner query, could be a table name or a derived table
     SqlNode expr = snapshot.getTableRef();
-    convertFrom(bb, expr);
+    convertFrom(bb, expr, List.of());
 
     final RelNode snapshotRel = relBuilder.push(bb.root()).snapshot(period).build();
 
@@ -3410,11 +3398,38 @@ public class SqlToRelConverter {
     return Collections.emptyList();
   }
 
-  private void convertJoin(Blackboard bb, SqlJoin join) {
+  private void convertJoin(Blackboard bb, SqlJoin join, List<RelHint> propagatingHints) {
     SqlValidator validator = validator();
     final SqlValidatorScope scope = validator.getJoinScope(join);
     final Blackboard fromBlackboard = createBlackboard(scope, null, false);
 
+    List<RelHint> appliedHints = new ArrayList();
+    List<RelHint> forwardedHints = new ArrayList();
+    for (RelHint hint: propagatingHints) {
+      // Right now the only hints that we support are join hints.
+      // In the future we should require an actual check for extending this.
+      List<String> listOptions = hint.listOptions;
+      if (listOptions.isEmpty() || !(scope instanceof JoinScope)) {
+        forwardedHints.add(hint);
+        continue;
+      }
+      // Check if the left or right child matters.
+      JoinScope joinScope = (JoinScope) scope;
+      int joinTarget = joinScope.getNameIndex(listOptions.get(0), catalogReader.nameMatcher());
+      int numChildren = joinScope.getChildren().size();
+      // Joins are processed in pairs left deep.
+      if (joinTarget < 0 || numChildren > 2 && (joinTarget != numChildren - 1)) {
+        forwardedHints.add(hint);
+      } else {
+        // Rewrite the RelHint in terms of "LEFT" and "RIGHT". It's too
+        // complicated to try and reorder the joins right now.
+        // TODO: Replace the hint name so we can have a separate validation
+        // step.
+        RelHint.Builder newHintBuilder = RelHint.builder(hint.hintName);
+        newHintBuilder.hintOptions(List.of(joinTarget == 0 ? "LEFT" : "RIGHT"));
+        appliedHints.add(newHintBuilder.build());
+      }
+    }
     SqlNode left = join.getLeft();
     SqlNode right = join.getRight();
     final SqlValidatorScope leftScope = validator.getJoinScope(left);
@@ -3423,9 +3438,9 @@ public class SqlToRelConverter {
     final SqlValidatorScope rightScope = validator.getJoinScope(right);
     final Blackboard rightBlackboard =
         createBlackboard(rightScope, null, false);
-    convertFrom(leftBlackboard, left);
+    convertFrom(leftBlackboard, left, forwardedHints);
     final RelNode leftRel = requireNonNull(leftBlackboard.root, "leftBlackboard.root");
-    convertFrom(rightBlackboard, right);
+    convertFrom(rightBlackboard, right, forwardedHints);
     final RelNode tempRightRel = requireNonNull(rightBlackboard.root, "rightBlackboard.root");
 
 
@@ -3482,6 +3497,7 @@ public class SqlToRelConverter {
         createJoin(fromBlackboard, leftRel, rightRel, condition,
             convertJoinType(join.getJoinType()));
     relBuilder.push(joinRel);
+    relBuilder.hints(appliedHints);
     relBuilder.project(relBuilder.fields());
     bb.setRoot(relBuilder.build(), false);
   }
@@ -5801,14 +5817,7 @@ public class SqlToRelConverter {
     RelNode result = convertQueryRecursive(query, top, null).rel;
     final RelDataType validatedRowType = validator().getValidatedNodeType(with);
     List<RelHint> hints = new ArrayList<>();
-    if (query.getKind() == SqlKind.SELECT) {
-      final SqlSelect select = (SqlSelect) query;
-      if (select.hasHints()) {
-        hints = SqlUtil.getRelHint(hintStrategies, select.getHints());
-      }
-    }
-    // propagate the hints.
-    result = RelOptUtil.propagateRelHints(result, false);
+    // Bodo Change: Remove hint propagation.
     return RelRoot.of(result, validatedRowType, query.getKind())
         .withCollation(RelCollations.EMPTY)
         .withHints(hints);

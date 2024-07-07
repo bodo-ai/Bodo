@@ -365,6 +365,7 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
             global_5,
             global_build_outer,
             global_probe_outer,
+            False,
         )
 
         # Build loop: add all of T1 to the build table
@@ -565,6 +566,7 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
             global_5,
             global_build_outer,
             global_probe_outer,
+            False,
         )
 
         # Build loop: add all of T1 to the build table
