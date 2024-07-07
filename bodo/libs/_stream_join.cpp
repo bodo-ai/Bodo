@@ -1024,16 +1024,17 @@ void JoinPartition::unpin() {
 JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                      const std::shared_ptr<bodo::Schema> probe_table_schema_,
                      uint64_t n_keys_, bool build_table_outer_,
-                     bool probe_table_outer_, cond_expr_fn_t cond_func_,
-                     bool build_parallel_, bool probe_parallel_,
-                     int64_t output_batch_size_, int64_t sync_iter_,
-                     int64_t op_id_)
+                     bool probe_table_outer_, bool force_broadcast_,
+                     cond_expr_fn_t cond_func_, bool build_parallel_,
+                     bool probe_parallel_, int64_t output_batch_size_,
+                     int64_t sync_iter_, int64_t op_id_)
     : build_table_schema(build_table_schema_),
       probe_table_schema(probe_table_schema_),
       n_keys(n_keys_),
       cond_func(cond_func_),
       build_table_outer(build_table_outer_),
       probe_table_outer(probe_table_outer_),
+      force_broadcast(force_broadcast_),
       build_parallel(build_parallel_),
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
@@ -1224,14 +1225,14 @@ void JoinState::ReportProbeStageMetrics() {
 HashJoinState::HashJoinState(
     const std::shared_ptr<bodo::Schema> build_table_schema_,
     const std::shared_ptr<bodo::Schema> probe_table_schema_, uint64_t n_keys_,
-    bool build_table_outer_, bool probe_table_outer_, cond_expr_fn_t cond_func_,
-    bool build_parallel_, bool probe_parallel_, int64_t output_batch_size_,
-    int64_t sync_iter_, int64_t op_id_, int64_t op_pool_size_bytes,
-    size_t max_partition_depth_)
+    bool build_table_outer_, bool probe_table_outer_, bool force_broadcast_,
+    cond_expr_fn_t cond_func_, bool build_parallel_, bool probe_parallel_,
+    int64_t output_batch_size_, int64_t sync_iter_, int64_t op_id_,
+    int64_t op_pool_size_bytes, size_t max_partition_depth_)
     : JoinState(build_table_schema_, probe_table_schema_, n_keys_,
-                build_table_outer_, probe_table_outer_, cond_func_,
-                build_parallel_, probe_parallel_, output_batch_size_,
-                sync_iter_, op_id_),
+                build_table_outer_, probe_table_outer_, force_broadcast_,
+                cond_func_, build_parallel_, probe_parallel_,
+                output_batch_size_, sync_iter_, op_id_),
       // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -3196,7 +3197,8 @@ bool join_build_consume_batch(HashJoinState* join_state,
                 join_state->partitions[0]->build_table_buffer->data_table);
             global_table_size += table_global_memory_size(
                 join_state->build_shuffle_state.table_buffer->data_table);
-            if (global_table_size < get_bcast_join_threshold()) {
+            if (join_state->force_broadcast ||
+                global_table_size < get_bcast_join_threshold()) {
                 if (join_state->debug_partitioning && myrank == 0) {
                     std::cerr
                         << fmt::format(
@@ -3795,6 +3797,8 @@ bool join_probe_consume_batch(HashJoinState* join_state,
  * condition. If there is no non-equality condition, this should be NULL.
  * @param build_parallel whether the build table is distributed
  * @param probe_parallel whether the probe table is distributed
+ * @param force_broadcast Should we broadcast the build side regardless
+ * of size.
  * @param output_batch_size Batch size for reading output.
  * @param op_pool_size_bytes Size of the operator buffer pool for this join
  * operator. This is only applicable for the hash join case at this time.
@@ -3806,9 +3810,9 @@ JoinState* join_state_init_py_entry(
     int64_t operator_id, int8_t* build_arr_c_types,
     int8_t* build_arr_array_types, int n_build_arrs, int8_t* probe_arr_c_types,
     int8_t* probe_arr_array_types, int n_probe_arrs, uint64_t n_keys,
-    bool build_table_outer, bool probe_table_outer, cond_expr_fn_t cond_func,
-    bool build_parallel, bool probe_parallel, int64_t output_batch_size,
-    int64_t sync_iter, int64_t op_pool_size_bytes) {
+    bool build_table_outer, bool probe_table_outer, bool force_broadcast,
+    cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
+    int64_t output_batch_size, int64_t sync_iter, int64_t op_pool_size_bytes) {
     // If the memory budget has not been explicitly set, then ask the
     // OperatorComptroller for the budget.
     if (op_pool_size_bytes == -1) {
@@ -3828,8 +3832,9 @@ JoinState* join_state_init_py_entry(
                                     probe_arr_array_types + n_probe_arrs),
                 std::vector<int8_t>(probe_arr_c_types,
                                     probe_arr_c_types + n_probe_arrs)),
-            build_table_outer, probe_table_outer, cond_func, build_parallel,
-            probe_parallel, output_batch_size, sync_iter, operator_id);
+            build_table_outer, probe_table_outer, force_broadcast, cond_func,
+            build_parallel, probe_parallel, output_batch_size, sync_iter,
+            operator_id);
     }
 
     return new HashJoinState(
@@ -3843,9 +3848,9 @@ JoinState* join_state_init_py_entry(
                                 probe_arr_array_types + n_probe_arrs),
             std::vector<int8_t>(probe_arr_c_types,
                                 probe_arr_c_types + n_probe_arrs)),
-        n_keys, build_table_outer, probe_table_outer, cond_func, build_parallel,
-        probe_parallel, output_batch_size, sync_iter, operator_id,
-        op_pool_size_bytes);
+        n_keys, build_table_outer, probe_table_outer, force_broadcast,
+        cond_func, build_parallel, probe_parallel, output_batch_size, sync_iter,
+        operator_id, op_pool_size_bytes);
 }
 
 /**

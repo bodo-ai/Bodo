@@ -810,6 +810,7 @@ def _init_join_state(
     probe_arr_dtypes,
     probe_arr_array_types,
     n_probe_arrs,
+    force_broadcast_t,
     op_pool_size_bytes_t,
     output_state_type,
     cfunc_cond_t,
@@ -830,6 +831,7 @@ def _init_join_state(
         probe_arr_array_types (int8*): pointer to array of ints representing array types
                                    (as provided by numba_to_c_array_type)
         n_probe_arrs (int32): number of probe columns
+        force_broadcast_t (bool): Should we broadcast the build side regardless of size.
         op_pool_size_bytes_t (int64): Number of pinned bytes that this operator is allowed
             to use. Set this to -1 to let the operator use a pre-determined portion of
             the total available memory.
@@ -851,6 +853,7 @@ def _init_join_state(
             probe_arr_dtypes,
             probe_arr_array_types,
             n_probe_arrs,
+            force_broadcast,
             op_pool_size_bytes,
             _,
             cfunc_cond,
@@ -877,6 +880,7 @@ def _init_join_state(
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(1),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -899,6 +903,7 @@ def _init_join_state(
             n_keys,
             build_table_outer,
             probe_table_outer,
+            force_broadcast,
             cfunc_cond,
             build_parallel,
             probe_parallel,
@@ -918,6 +923,7 @@ def _init_join_state(
         types.voidptr,
         types.voidptr,
         types.int32,
+        types.bool_,
         types.int64,  # op_pool_size_bytes_t
         output_state_type,
         types.voidptr,
@@ -936,6 +942,7 @@ def init_join_state(
     probe_colnames,
     build_outer,
     probe_outer,
+    force_broadcast,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     # The non-equality portion of the join condition. If None then
@@ -1037,6 +1044,7 @@ def init_join_state(
             probe_colnames,
             build_outer,
             probe_outer,
+            force_broadcast,
             op_pool_size_bytes=-1,
             expected_state_type=None,
             non_equi_condition=None,
@@ -1055,6 +1063,7 @@ def init_join_state(
                 probe_arr_dtypes.ctypes,
                 probe_arr_array_types.ctypes,
                 n_probe_arrs,
+                force_broadcast,
                 op_pool_size_bytes,
                 output_type,
                 cfunc_cond,
@@ -1072,6 +1081,7 @@ def init_join_state(
         probe_colnames,
         build_outer,
         probe_outer,
+        force_broadcast,
         op_pool_size_bytes=-1,
         expected_state_type=None,
         non_equi_condition=None,
@@ -1086,6 +1096,7 @@ def init_join_state(
             probe_arr_dtypes.ctypes,
             probe_arr_array_types.ctypes,
             n_probe_arrs,
+            force_broadcast,
             op_pool_size_bytes,
             output_type,
             0,
@@ -1459,10 +1470,10 @@ def impl_runtime_join_filter(
     else:
         out_table = bodo.libs.array.cpp_table_to_py_table(
         cpp_table, col_ind_arr, cast_table_types[{curr_table_idx}], 0
-        ) 
+        )
         bodo.libs.array.delete_table(cpp_table)
         bodo.libs.array.delete_info(row_bitmask_arr)
-        
+
     return out_table
 """
 

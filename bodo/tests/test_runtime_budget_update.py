@@ -72,6 +72,7 @@ def hash_join_impl(df1, df2):
             probe_col_meta,
             False,
             False,
+            False,
         )
         _temp1 = 0
         is_last1 = False

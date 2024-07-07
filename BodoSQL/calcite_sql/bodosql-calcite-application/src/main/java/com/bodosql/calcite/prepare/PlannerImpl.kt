@@ -29,6 +29,8 @@ import org.apache.calcite.avatica.util.Casing
 import org.apache.calcite.config.NullCollation
 import org.apache.calcite.jdbc.CalciteSchema
 import org.apache.calcite.prepare.CalciteCatalogReader
+import org.apache.calcite.rel.hint.HintPredicates
+import org.apache.calcite.rel.hint.HintStrategyTable
 import org.apache.calcite.rel.type.RelDataTypeSystem
 import org.apache.calcite.schema.SchemaPlus
 import org.apache.calcite.sql.parser.SqlParser
@@ -45,6 +47,16 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
     private val defaultSchemas = config.defaultSchemas
 
     companion object {
+        /**
+         * @return The table with the hints that BodoSQL supports.
+         */
+        private fun getHintStrategyTable(): HintStrategyTable {
+            val hintStrategies = HintStrategyTable.builder()
+            hintStrategies.hintStrategy("broadcast", HintPredicates.JOIN)
+            hintStrategies.hintStrategy("build", HintPredicates.JOIN)
+            return hintStrategies.build()
+        }
+
         private fun frameworkConfig(config: Config): FrameworkConfig {
             // Set up the parser config based on which case sensitivity
             // protocol was selected
@@ -90,7 +102,8 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                 .typeSystem(config.typeSystem)
                 .sqlToRelConverterConfig(
                     SqlToRelConverter.config()
-                        .withInSubQueryThreshold(Integer.MAX_VALUE),
+                        .withInSubQueryThreshold(Integer.MAX_VALUE)
+                        .withHintStrategyTable(getHintStrategyTable()),
                 )
                 .parserConfig(parserConfig)
                 .convertletTable(

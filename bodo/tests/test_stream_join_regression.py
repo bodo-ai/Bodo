@@ -146,6 +146,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         global_4,
         global_build_outer,
         global_probe_outer,
+        False,
         -1,
     )
     _temp20 = time.time()

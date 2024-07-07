@@ -21,7 +21,14 @@ public class MultiJoinRules {
   /** Gather join nodes into a single multi join for optimization. */
   public static final RelOptRule JOIN_TO_MULTI_JOIN =
       JoinToMultiJoinRule.Config.DEFAULT
-          .withOperandFor(BodoLogicalJoin.class)
+          // Disable Join to MultiJoin conversion if the join has hints
+          .withOperandSupplier(
+              b0 ->
+                  b0.operand(BodoLogicalJoin.class)
+                      .predicate(join -> join.getHints().isEmpty())
+                      .inputs(
+                          b1 -> b1.operand(RelNode.class).anyInputs(),
+                          b2 -> b2.operand(RelNode.class).anyInputs()))
           .withRelBuilderFactory(BodoLogicalRelFactories.BODO_LOGICAL_BUILDER)
           .toRule();
 

@@ -530,11 +530,13 @@ object RuntimeJoinFilterProgram : Program {
                     BodoPhysicalJoin.create(
                         leftInput,
                         rightInput,
+                        join.hints,
                         join.condition,
                         join.joinType,
                         rebalanceOutput = join.rebalanceOutput,
                         joinFilterID = filterKey,
                         originalJoinFilterKeyLocations = originalLocations,
+                        broadcastBuildSide = join.broadcastBuildSide,
                     )
                 return applyFilters(newJoin, outputJoinInfo)
             } else {

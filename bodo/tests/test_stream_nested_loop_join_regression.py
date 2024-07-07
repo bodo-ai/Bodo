@@ -229,6 +229,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         global_5,
         global_build_outer,
         global_probe_outer,
+        False,
         non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
     _temp23 = time.time()
@@ -473,6 +474,7 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         global_5_2,
         global_build_outer,
         global_probe_outer,
+        False,
     )
     _temp23 = time.time()
     _temp24 = _temp23 - _temp2
@@ -713,6 +715,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         global_5,
         global_build_outer,
         global_probe_outer,
+        False,
         non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
     _temp23 = time.time()

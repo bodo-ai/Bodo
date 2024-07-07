@@ -214,7 +214,7 @@ object BodoPhysicalRelFactories {
 
         val retVal =
             if (inputConvention == BodoPhysicalRel.CONVENTION) {
-                val output = BodoPhysicalJoin.create(left, right, condition, joinType)
+                val output = BodoPhysicalJoin.create(left, right, hints, condition, joinType)
                 // Ensure we have a streaming trait updated.
                 val inputStreamingTrait = left.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE)
                 if (inputStreamingTrait != null) {

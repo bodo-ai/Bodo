@@ -6,13 +6,12 @@ import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.JoinBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
-import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelWriter
-import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
+import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rex.RexNode
 import kotlin.math.ceil
@@ -20,6 +19,7 @@ import kotlin.math.ceil
 class BodoPhysicalJoin(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
+    hints: List<RelHint>,
     left: RelNode,
     right: RelNode,
     condition: RexNode,
@@ -27,7 +27,8 @@ class BodoPhysicalJoin(
     val rebalanceOutput: Boolean,
     val joinFilterID: Int,
     val originalJoinFilterKeyLocations: List<Int>,
-) : JoinBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), ImmutableList.of(), left, right, condition, joinType), BodoPhysicalRel {
+    val broadcastBuildSide: Boolean,
+) : JoinBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), hints, left, right, condition, joinType), BodoPhysicalRel {
     init {
         if (joinFilterID != -1) {
             assert(originalJoinFilterKeyLocations.isNotEmpty())
@@ -41,7 +42,7 @@ class BodoPhysicalJoin(
         right: RelNode,
         joinType: JoinRelType,
         semiJoinDone: Boolean,
-    ): Join {
+    ): BodoPhysicalJoin {
         assert(BodoJoinConditionUtil.isValidNode(conditionExpr))
         if (originalJoinFilterKeyLocations.isNotEmpty()) {
             assert(conditionExpr == condition)
@@ -49,6 +50,7 @@ class BodoPhysicalJoin(
         return BodoPhysicalJoin(
             cluster,
             traitSet,
+            hints,
             left,
             right,
             conditionExpr,
@@ -56,6 +58,23 @@ class BodoPhysicalJoin(
             rebalanceOutput,
             joinFilterID,
             originalJoinFilterKeyLocations,
+            broadcastBuildSide,
+        )
+    }
+
+    override fun withHints(hintList: MutableList<RelHint>): BodoPhysicalJoin {
+        return BodoPhysicalJoin(
+            cluster,
+            traitSet,
+            hintList,
+            left,
+            right,
+            condition,
+            joinType,
+            rebalanceOutput,
+            joinFilterID,
+            originalJoinFilterKeyLocations,
+            broadcastBuildSide,
         )
     }
 
@@ -78,12 +97,14 @@ class BodoPhysicalJoin(
         return super.explainTerms(pw)
             .itemIf("rebalanceOutput", rebalanceOutput, rebalanceOutput)
             .itemIf("JoinID", joinFilterID, joinFilterID != -1)
+            .itemIf("Broadcast", broadcastBuildSide, broadcastBuildSide)
     }
 
     fun withRebalanceOutput(rebalanceOutput: Boolean): BodoPhysicalJoin {
         return BodoPhysicalJoin(
             cluster,
             traitSet,
+            hints,
             left,
             right,
             condition,
@@ -91,6 +112,23 @@ class BodoPhysicalJoin(
             rebalanceOutput,
             joinFilterID,
             originalJoinFilterKeyLocations,
+            broadcastBuildSide,
+        )
+    }
+
+    fun withBroadcastBuildSide(broadcastBuildSide: Boolean): BodoPhysicalJoin {
+        return BodoPhysicalJoin(
+            cluster,
+            traitSet,
+            hints,
+            left,
+            right,
+            condition,
+            joinType,
+            rebalanceOutput,
+            joinFilterID,
+            originalJoinFilterKeyLocations,
+            broadcastBuildSide,
         )
     }
 
@@ -113,6 +151,7 @@ class BodoPhysicalJoin(
         fun create(
             cluster: RelOptCluster,
             traitSet: RelTraitSet,
+            hints: List<RelHint>,
             left: RelNode,
             right: RelNode,
             condition: RexNode,
@@ -120,6 +159,7 @@ class BodoPhysicalJoin(
             rebalanceOutput: Boolean = false,
             joinFilterID: Int = -1,
             originalJoinFilterKeyLocations: List<Int> = listOf(),
+            broadcastBuildSide: Boolean = false,
         ): BodoPhysicalJoin {
             if (originalJoinFilterKeyLocations.isEmpty()) {
                 assert(joinFilterID == -1)
@@ -127,6 +167,7 @@ class BodoPhysicalJoin(
             return BodoPhysicalJoin(
                 cluster,
                 traitSet,
+                hints,
                 left,
                 right,
                 condition,
@@ -134,22 +175,26 @@ class BodoPhysicalJoin(
                 rebalanceOutput = rebalanceOutput,
                 joinFilterID = joinFilterID,
                 originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
+                broadcastBuildSide = broadcastBuildSide,
             )
         }
 
         fun create(
             left: RelNode,
             right: RelNode,
+            hints: List<RelHint>,
             condition: RexNode,
             joinType: JoinRelType,
             rebalanceOutput: Boolean = false,
             joinFilterID: Int = -1,
             originalJoinFilterKeyLocations: List<Int> = listOf(),
+            broadcastBuildSide: Boolean = false,
         ): BodoPhysicalJoin {
             val cluster = left.cluster
             return create(
                 cluster,
                 cluster.traitSet(),
+                hints,
                 left,
                 right,
                 condition,
@@ -157,6 +202,7 @@ class BodoPhysicalJoin(
                 rebalanceOutput = rebalanceOutput,
                 joinFilterID = joinFilterID,
                 originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
+                broadcastBuildSide = broadcastBuildSide,
             )
         }
     }
