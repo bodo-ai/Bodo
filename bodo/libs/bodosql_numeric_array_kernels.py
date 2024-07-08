@@ -1460,6 +1460,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                     args = [arr0, arr1]
                     arg_names = ["arr0", "arr1"]
                     for arg_idx in range(len(args)):
+                        # For all decimal/float binary ops, we can cast the decimal to float.
                         if isinstance(args[arg_idx], types.Float) or (
                             is_array_typ(args[arg_idx])
                             and isinstance(args[arg_idx].dtype, types.Float)
@@ -1470,49 +1471,18 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                                 arg_names,
                                 1 - arg_idx,
                             )
+                        # For all decimal/int binary ops, we can cast the int to decimal.
+                        if isinstance(args[arg_idx], types.Integer) or (
+                            is_array_typ(args[arg_idx])
+                            and isinstance(args[arg_idx].dtype, types.Integer)
+                        ):
+                            return gen_coerced(
+                                f"bodo.libs.bodosql_array_kernels.{func_name}",
+                                "bodo.libs.decimal_arr_ext.int_to_decimal({})",
+                                arg_names,
+                                arg_idx,
+                            )
 
-            if func_name == "multiply_numeric":
-                if isinstance(arr0, types.Integer) or (
-                    is_array_typ(arr0) and isinstance(arr0.dtype, types.Integer)
-                ):
-
-                    def impl(arr0, arr1):  # pragma: no cover
-                        return bodo.libs.bodosql_array_kernels.multiply_decimals(
-                            bodo.libs.decimal_arr_ext.int_to_decimal(arr0), arr1
-                        )
-
-                    return impl
-                if isinstance(arr1, types.Integer) or (
-                    is_array_typ(arr1) and isinstance(arr1.dtype, types.Integer)
-                ):
-
-                    def impl(arr0, arr1):  # pragma: no cover
-                        return bodo.libs.bodosql_array_kernels.multiply_decimals(
-                            arr0, bodo.libs.decimal_arr_ext.int_to_decimal(arr1)
-                        )
-
-                    return impl
-            elif func_name == "divide_numeric":
-                if isinstance(arr0, types.Integer) or (
-                    is_array_typ(arr0) and isinstance(arr0.dtype, types.Integer)
-                ):
-
-                    def impl(arr0, arr1):  # pragma: no cover
-                        return bodo.libs.bodosql_array_kernels.divide_decimals(
-                            bodo.libs.decimal_arr_ext.int_to_decimal(arr0), arr1
-                        )
-
-                    return impl
-                if isinstance(arr1, types.Integer) or (
-                    is_array_typ(arr1) and isinstance(arr1.dtype, types.Integer)
-                ):
-
-                    def impl(arr0, arr1):  # pragma: no cover
-                        return bodo.libs.bodosql_array_kernels.divide_decimals(
-                            arr0, bodo.libs.decimal_arr_ext.int_to_decimal(arr1)
-                        )
-
-                    return impl
             raise_bodo_error(
                 f"Unsupported arithmetic: {func_name} between operands of type {arr0} and {arr1}"
             )

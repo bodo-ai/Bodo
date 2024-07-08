@@ -2583,6 +2583,438 @@ def test_decimal_array_float_division(arg1, arg2, expected, memory_leak_check):
     check_func(impl, (arg1, arg2), py_output=expected)
 
 
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    2,
+                    2,
+                    None,
+                    None,
+                    2,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    "2.00",
+                    "3.10",
+                    "3.12",
+                    "21.12",
+                    "2001.00",
+                    None,
+                    None,
+                    "20008.20",
+                    "-22.82",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    2,
+                    2,
+                    None,
+                    None,
+                    2,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                [
+                    "2.00",
+                    "3.10",
+                    "3.12",
+                    "21.12",
+                    "2001.00",
+                    None,
+                    None,
+                    "20008.20",
+                    "-22.82",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1.5"), pa.decimal128(38, 2)),
+            np.int32(2),
+            pa.scalar(Decimal("3.0"), pa.decimal128(38, 2)),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            np.int32(2),
+            pa.scalar(Decimal("1.5"), pa.decimal128(38, 2)),
+            pa.scalar(Decimal("3.0"), pa.decimal128(38, 2)),
+            id="scalar-int_first",
+        ),
+        pytest.param(
+            np.int32(2),
+            pd.array(
+                ["1.0", "2.0", "3.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            pd.array(
+                ["2.0", "4.0", "6.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-decimal-array",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("2.0"), pa.decimal128(38, 2)),
+            pd.array(
+                [1, 2, 3],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["2.0", "4.0", "6.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-int-array",
+        ),
+    ],
+)
+def test_decimal_int_multiplication(arg1, arg2, expected):
+    """
+    Tests multiplication of integer and decimal arrays, through casting of
+    integer into decimal.
+    """
+
+    def impl(a, b):
+        return bodo.libs.bodosql_array_kernels.multiply_numeric(a, b)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    None,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["1", "10", "100", None, "1000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(
+                ["2", "0.2", "0.02", None, "0.002"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                ["1", "10", "100", None, "1000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    None,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["0.5", "5", "50", None, "500"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1.5"), pa.decimal128(38, 2)),
+            np.int32(2),
+            pa.scalar(Decimal("0.75"), pa.decimal128(38, 8)),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            np.int32(2),
+            pa.scalar(Decimal("2.0"), pa.decimal128(38, 2)),
+            pa.scalar(Decimal("1.0"), pa.decimal128(18, 6)),
+            id="scalar-int_first",
+        ),
+        pytest.param(
+            np.int32(2),
+            pd.array(
+                ["2.0", "2.0", "2.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            pd.array(
+                ["1.0", "1.0", "1.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-decimal-array",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("2.0"), pa.decimal128(38, 2)),
+            pd.array(
+                [2, 2, 2],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["1.0", "1.0", "1.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-int-array",
+        ),
+    ],
+)
+def test_decimal_int_division(arg1, arg2, expected):
+    """
+    Tests multiplication of integer and decimal arrays, through casting of
+    integer into decimal.
+    """
+
+    def impl(a, b):
+        return bodo.libs.bodosql_array_kernels.divide_numeric(a, b)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    None,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["-1", "-10", "-100", None, "-1000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(
+                ["1", "-8", "-98", None, "-998"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                ["1", "10", "100", None, "1000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(
+                [
+                    -2,
+                    -2,
+                    -2,
+                    None,
+                    -2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["-1", "8", "98", None, "998"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("3.25"), pa.decimal128(38, 2)),
+            np.int32(-2),
+            pa.scalar(Decimal("1.25"), pa.decimal128(38, 2)),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            np.int32(5),
+            pa.scalar(Decimal("-1.5"), pa.decimal128(38, 2)),
+            pa.scalar(Decimal("3.5"), pa.decimal128(38, 2)),
+            id="scalar-int_first",
+        ),
+        pytest.param(
+            np.int32(5),
+            pd.array(
+                ["-2.0", "-2.0", "-2.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            pd.array(
+                ["3.0", "3.0", "3.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-decimal-array",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("5.5"), pa.decimal128(38, 2)),
+            pd.array(
+                [-2, -2, -2],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["3.5", "3.5", "3.5"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-int-array",
+        ),
+    ],
+)
+def test_decimal_int_addition(arg1, arg2, expected):
+    """
+    Tests multiplication of integer and decimal arrays, through casting of
+    integer into decimal.
+    TODO: Not yet supported. Currently only casts the integer to decimal,
+          then recalls add_numeric. Thus, will raise bodo.utils.typing.BodoError
+    """
+
+    def impl(a, b):
+        return bodo.libs.bodosql_array_kernels.add_numeric(a, b)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    None,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["1", "10", "100", None, "1000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(
+                ["1", "-8", "-98", None, "-998"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pd.array(
+                ["1", "10", "100", None, "1000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(
+                [
+                    2,
+                    2,
+                    2,
+                    None,
+                    2,
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["-1", "8", "98", None, "998"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            id="array-decimal_first",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("3.25"), pa.decimal128(38, 2)),
+            np.int32(2),
+            pa.scalar(Decimal("1.25"), pa.decimal128(38, 2)),
+            id="scalar-decimal_first",
+        ),
+        pytest.param(
+            np.int32(5),
+            pa.scalar(Decimal("1.5"), pa.decimal128(38, 2)),
+            pa.scalar(Decimal("3.5"), pa.decimal128(38, 2)),
+            id="scalar-int_first",
+        ),
+        pytest.param(
+            np.int32(5),
+            pd.array(
+                ["2.0", "2.0", "2.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            pd.array(
+                ["3.0", "3.0", "3.0"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-decimal-array",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("5.5"), pa.decimal128(38, 2)),
+            pd.array(
+                [2, 2, 2],
+                dtype=pd.Int32Dtype(),
+            ),
+            pd.array(
+                ["3.5", "3.5", "3.5"],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            id="scalar-int-array",
+        ),
+    ],
+)
+def test_decimal_int_subtraction(arg1, arg2, expected):
+    """
+    Tests multiplication of integer and decimal arrays, through casting of
+    integer into decimal.
+    TODO: Not yet supported. Currently only casts the integer to decimal,
+          then recalls add_numeric. Thus, will raise bodo.utils.typing.BodoError
+    """
+
+    def impl(a, b):
+        return bodo.libs.bodosql_array_kernels.subtract_numeric(a, b)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
 def test_str_to_decimal_scalar(memory_leak_check):
     """
     Test converting a string scalar to decimal.
