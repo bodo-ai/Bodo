@@ -278,7 +278,8 @@ public class BodoAggregateJoinTransposeRule extends RelRule<BodoAggregateJoinTra
     relBuilder
         .push(side0)
         .push(requireNonNull(sides.get(1).newInput, "sides.get(1).newInput"))
-        .join(join.getJoinType(), newCondition);
+        .join(join.getJoinType(), newCondition)
+        .hints(join.getHints());
 
     // Aggregate above to sum up the sub-totals
     final List<AggregateCall> newAggCalls = new ArrayList<>();

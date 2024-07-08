@@ -181,6 +181,7 @@ class SnowflakeProjectPushdownHelpers {
                 toReplace.joinType,
                 newJoinCondition,
             )
+            builder.hints(toReplace.hints)
             // Generate a projection to get the original type.
             val finalFields: MutableList<RexNode> = ArrayList()
             for (i in 0 until oldLeft.rowType.fieldCount) {
