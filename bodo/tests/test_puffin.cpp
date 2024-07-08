@@ -18,11 +18,11 @@ std::string read_data_file(std::string name) {
     // Open a new stream at the start of the file and read a number of bytes
     // into a temporary buffer based on the observed file size
     std::ifstream fstream(full_path, std::ios::in | std::ios::binary);
-    char buffer[file_size + 1];
-    fstream.read(buffer, file_size);
+    std::vector<char> buffer(file_size + 1);
+    fstream.read(buffer.data(), file_size);
     fstream.close();
     // Convert into a std::string and return the string.
-    std::string result(buffer, file_size);
+    std::string result(buffer.data(), file_size);
     return result;
 }
 

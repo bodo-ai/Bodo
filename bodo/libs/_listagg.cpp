@@ -156,8 +156,8 @@ char *listagg_seq(std::shared_ptr<table_info> in_table,
     assert(num_order_cols = in_table->ncols());
 
     // Convert bool* to int64_t*
-    int64_t ascending_real[num_order_cols];
-    int64_t na_position_real[num_order_cols];
+    std::vector<int64_t> ascending_real(num_order_cols);
+    std::vector<int64_t> na_position_real(num_order_cols);
 
     // Initialize the group ordering
     // Ignore the value for the separator argument and data argument
@@ -177,8 +177,8 @@ char *listagg_seq(std::shared_ptr<table_info> in_table,
 
     // Sort the table
     std::shared_ptr<table_info> sorted_table =
-        sort_values_table_local(in_table, num_order_cols, ascending_real,
-                                na_position_real, dead_keys.data(),
+        sort_values_table_local(in_table, num_order_cols, ascending_real.data(),
+                                na_position_real.data(), dead_keys.data(),
                                 // TODO: set this correctly
                                 false /* This is just used for tracing */);
 
