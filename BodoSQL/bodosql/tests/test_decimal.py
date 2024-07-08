@@ -657,3 +657,220 @@ def test_decimal_addition(df, expr, answer, memory_leak_check):
         )
     finally:
         bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("89.10"),
+                            Decimal("-11.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("-13.14"),
+                            None,
+                            Decimal("-15.16"),
+                            None,
+                            Decimal("17.18"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            "D1 - D2",
+            pd.array(
+                [Decimal("14.37"), None, Decimal("-30.51"), None, Decimal("-28.30")],
+                dtype=pd.ArrowDtype(pa.decimal128(11, 2)),
+            ),
+            id="array-array-same_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("10"),
+                            None,
+                            Decimal("20"),
+                            Decimal("30"),
+                            Decimal("-40"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(2, 0)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("-3.14"),
+                            None,
+                            Decimal("-95.12"),
+                            None,
+                            Decimal("65.5"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
+                    ),
+                }
+            ),
+            "D1 - D2",
+            pd.array(
+                [Decimal("13.14"), None, Decimal("115.12"), None, Decimal("-105.5")],
+                dtype=pd.ArrowDtype(pa.decimal128(5, 2)),
+            ),
+            id="array-array-smaller_scale",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1234.5"),
+                            None,
+                            Decimal("9876.5"),
+                            Decimal("9090.9"),
+                            Decimal("-9999.9"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(5, 1)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("-54321"),
+                            None,
+                            Decimal("-11110"),
+                            None,
+                            Decimal("99999"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(5, 0)),
+                    ),
+                }
+            ),
+            "D1 - D2",
+            pd.array(
+                [
+                    Decimal("55555.5"),
+                    None,
+                    Decimal("20986.5"),
+                    None,
+                    Decimal("-109998.9"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(7, 1)),
+            ),
+            id="array-array-larger_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("-11.12"),
+                            Decimal("89.10"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
+                    ),
+                }
+            ),
+            # Using an expression that does not currently simplify to a float literal in BodoSQL
+            "D1 - (LEFT('15.3', 4) :: NUMBER(4, 2))",
+            pd.array(
+                [
+                    Decimal("-14.07"),
+                    None,
+                    Decimal("-60.97"),
+                    Decimal("-26.42"),
+                    Decimal("73.80"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(5, 2)),
+            ),
+            id="array-scalar-same_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D2": pd.array(
+                        [
+                            Decimal("-12.34"),
+                            None,
+                            Decimal("-56.78"),
+                            Decimal("12.34"),
+                            Decimal("56.78"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(4, 2)),
+                    ),
+                }
+            ),
+            # Using an expression that does not currently simplify to a float literal in BodoSQL
+            "(LEFT('9999', 4) :: NUMBER(4, 0)) - D2",
+            pd.array(
+                [
+                    Decimal("10011.34"),
+                    None,
+                    Decimal("10055.78"),
+                    Decimal("9986.66"),
+                    Decimal("9942.22"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(7, 2)),
+            ),
+            id="scalar-array-smaller_scale",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("89.10"),
+                            Decimal("-11.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("-13.14"),
+                            None,
+                            Decimal("-15.16"),
+                            None,
+                            Decimal("17.18"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            "(CASE WHEN D1 IS NULL THEN '' ELSE (D1 - D2)::VARCHAR END)",
+            pd.array(["14.37", "", "-30.51", None, "-28.3"]),
+            id="scalar-scalar-same_scale",
+        ),
+    ],
+)
+def test_decimal_subtraction(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal subtraction against other decimals.
+    """
+    query = f"SELECT {expr} AS res FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
