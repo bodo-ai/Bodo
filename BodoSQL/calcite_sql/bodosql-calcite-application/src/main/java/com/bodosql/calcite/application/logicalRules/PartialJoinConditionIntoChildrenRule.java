@@ -172,6 +172,7 @@ public class PartialJoinConditionIntoChildrenRule
     builder.push(newLeft);
     builder.push(newRight);
     builder.join(join.getJoinType(), finalCondition);
+    builder.hints(join.getHints());
     // Step 8: Wrap the result in a final projection. This is necessary
     // to ensure the result is type stable.
     List<RexNode> finalFields = new ArrayList<>();
