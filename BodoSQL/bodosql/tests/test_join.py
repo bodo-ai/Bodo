@@ -732,6 +732,8 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
             expected_output=py_output,
             check_dtype=False,
             check_names=False,
+            # Sequential execution won't trigger the "broadcast" message
+            only_jit_1DVar=True,
         )
         stdout, stderr = capfd.readouterr()
         expected_log_messages = ["Converting to a broadcast hash join"]
