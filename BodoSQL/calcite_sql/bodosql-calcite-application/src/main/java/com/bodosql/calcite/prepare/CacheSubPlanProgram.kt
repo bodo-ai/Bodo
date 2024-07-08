@@ -1,6 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalCachedSubPlan
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.adapter.common.TreeReverserDuplicateTracker
 import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
@@ -914,7 +915,15 @@ class CacheSubPlanProgram : Program {
                                 // Remove the other side from the paused caching.
                                 inProgressNodes.remove(otherCacheRoot)
                                 val condition = conditionSet.first()
-                                val newRoot = relBuilder.join((parents[0].second as Join).joinType, condition).build()
+                                val initialRoot = relBuilder.join((parents[0].second as Join).joinType, condition).build()
+                                val rebalanceOutput = parents.any { (it.second as BodoPhysicalJoin).rebalanceOutput }
+                                val broadcastBuild = parents.any { (it.second as BodoPhysicalJoin).broadcastBuildSide }
+                                val newRoot =
+                                    if (initialRoot is BodoPhysicalJoin) {
+                                        initialRoot.withRebalanceOutput(rebalanceOutput).withBroadcastBuildSide(broadcastBuild)
+                                    } else {
+                                        initialRoot
+                                    }
                                 relBuilder.push(newRoot)
                                 val filters =
                                     leftStates.withIndex().map {
