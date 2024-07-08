@@ -16,9 +16,7 @@ python:
 numpy:
   - 1.23
 
-# TODO: Remove when libcxx 17 is available on conda-forge
-# Clang 17 doesn't support libcxx 16, so we need to force-use Clang 16
 c_compiler_version:    # [osx]
-  - 16                 # [osx]
+  - 18                 # [osx]
 cxx_compiler_version:  # [osx]
-  - 16                 # [osx]
+  - 18                 # [osx]

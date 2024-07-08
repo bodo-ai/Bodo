@@ -978,8 +978,8 @@ std::shared_ptr<table_info> grouped_sort(
     const bodo::vector<int64_t>& row_to_group = grp_info.row_to_group;
     int64_t num_rows = row_to_group.size();
     int64_t n_keys = orderby_cols.size() + 1;
-    int64_t vect_ascending[n_keys];
-    int64_t na_position[n_keys];
+    std::vector<int64_t> vect_ascending(n_keys);
+    std::vector<int64_t> na_position(n_keys);
 
     // Wrap the row_to_group in an array info so we can use it
     // to sort.
@@ -1014,7 +1014,7 @@ std::shared_ptr<table_info> grouped_sort(
     // Sort the table so that all window functions that use the
     // sorted table can access it
     std::shared_ptr<table_info> iter_table = sort_values_table_local(
-        sort_table, n_keys, vect_ascending, na_position, nullptr,
+        sort_table, n_keys, vect_ascending.data(), na_position.data(), nullptr,
         is_parallel /* This is just used for tracing */, pool, std::move(mm));
     sort_table.reset();
     return iter_table;

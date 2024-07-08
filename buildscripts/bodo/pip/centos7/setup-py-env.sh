@@ -12,10 +12,10 @@ for PYBIN in /opt/python/cp*/bin; do
     # packages prior to 1.21 do not build.
     if "${PYBIN}/python" -c 'import sys; sys.exit(sys.version_info[:2] >= (3, 10))'; then
         # exit code 0 when version < 3.10
-        "${PYBIN}/pip" install astor twine Cython numpy==1.18.* wheel pyarrow==16.0.0
+        "${PYBIN}/pip" install astor twine Cython numpy==1.18.* wheel pyarrow==16.1.0
     else
         # exit code 1 when version >= 3.10
-        "${PYBIN}/pip" install astor twine Cython numpy==1.21.* wheel pyarrow==16.0.0
+        "${PYBIN}/pip" install astor twine Cython numpy==1.21.* wheel pyarrow==16.1.0
     fi
     PYARROW_PATH=`"${PYBIN}/python" -c "import pyarrow; print('/'.join(pyarrow.__file__.split('/')[:-1]))"`
     ln -s $PYARROW_PATH/libarrow.so.1500        $PYARROW_PATH/libarrow.so

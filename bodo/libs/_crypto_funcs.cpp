@@ -95,8 +95,8 @@ void run_base64_encode(char *in_str, int in_len, int out_len, int max_line_len,
     // Use the base64 library to do the regular encoding scheme, writing into
     // a temporary character buffer
     int encode_length = Base64encode_len(in_len);
-    char temp[encode_length];
-    Base64encode(temp, in_str, in_len);
+    std::vector<char> temp(encode_length);
+    Base64encode(temp.data(), in_str, in_len);
 
     // Copy over the characters from the temporary buffer into the output
     // buffer, adding newline characters and replacing the 62/63/pad characters
@@ -155,7 +155,7 @@ bool run_base64_decode_string(char *in_str, int in_len, char *char_62_str,
     // Convert the characters from the input string to the original encoding
     // setup, writing the result into a temporary buffer, plus an extra null
     // terminator.
-    char temp_in[in_len + 1];
+    std::vector<char> temp_in(in_len + 1);
     for (int read_offset = 0; read_offset < in_len; read_offset++) {
         char c = in_str[read_offset];
         if (c == char_62) {
@@ -185,8 +185,8 @@ bool run_base64_decode_string(char *in_str, int in_len, char *char_62_str,
     // Use the base64 library to do the decoding encoding scheme, writing into
     // a temporary output buffer which has room for an extra null terminator.
     int out_len = (in_len >> 2) * 3;
-    char temp_out[out_len + 1];
-    int decoded_length = Base64decode(temp_out, temp_in);
+    std::vector<char> temp_out(out_len + 1);
+    int decoded_length = Base64decode(temp_out.data(), temp_in.data());
 
     // Copy the result to the output buffer, without the extra null terminator.
     for (int write_offset = 0; write_offset < decoded_length; write_offset++) {

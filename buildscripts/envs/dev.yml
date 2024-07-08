@@ -22,20 +22,20 @@ dependencies:
   - sccache
 
   # C++ Compilers
-  - clang_osx-arm64 =16    #[arm64]
-  - clangxx_osx-arm64 =16  #[arm64]
-  - clang_osx-64 =16       #[osx64]
-  - clangxx_osx-64 =16     #[osx64]
+  - clang_osx-arm64 =18    #[arm64]
+  - clangxx_osx-arm64 =18  #[arm64]
+  - clang_osx-64 =18       #[osx64]
+  - clangxx_osx-64 =18     #[osx64]
   - gcc_linux-64>=9        #[linux64]
   - gxx_linux-64>=9        #[linux64]
 
   # Build Tools
-  - clang-tools =16        #[osx64]
-  - clang-tools =16        #[arm64]
+  - clang-tools =18        #[osx64]
+  - clang-tools =18        #[arm64]
 
   # C++ Deps
-  - boost-cpp =1.84
-  - fmt =10.1
+  - boost-cpp =1.85
+  - fmt =10.2
 
   # BodoSQL or Iceberg
   # PySpark 3.5 is necessary for Python 3.12
