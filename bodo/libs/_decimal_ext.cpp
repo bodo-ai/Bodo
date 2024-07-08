@@ -278,11 +278,13 @@ double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
     return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
 }
 
-template <bool fast_add, bool rescale_left, bool rescale_right>
-inline void add_decimal_scalars(const arrow::Decimal128& d1,
-                                const arrow::Decimal128& d2, int64_t s1,
-                                int64_t s2, int64_t out_scale, bool* overflow,
-                                arrow::Decimal128* result) {
+template <bool fast_add, bool rescale_left, bool rescale_right,
+          bool do_addition>
+inline void add_or_subtract_decimal_scalars(const arrow::Decimal128& d1,
+                                            const arrow::Decimal128& d2,
+                                            int64_t s1, int64_t s2,
+                                            int64_t out_scale, bool* overflow,
+                                            arrow::Decimal128* result) {
     if constexpr (fast_add) {
         arrow::Decimal128 lhs = d1;
         arrow::Decimal128 rhs = d2;
@@ -293,7 +295,11 @@ inline void add_decimal_scalars(const arrow::Decimal128& d1,
         if constexpr (rescale_right) {
             rhs = d2.Rescale(s2, out_scale).ValueOrDie();
         }
-        *result = lhs + rhs;
+        if constexpr (do_addition) {
+            *result = lhs + rhs;
+        } else {
+            *result = lhs - rhs;
+        }
     } else {
         // Ensure the two decimals have the same scale (but are first upcasted
         // to 256)
@@ -305,13 +311,18 @@ inline void add_decimal_scalars(const arrow::Decimal128& d1,
         if constexpr (rescale_right) {
             rhs = decimalops::IncreaseScaleBy(rhs, out_scale - s2);
         }
-        auto combined_decimal = lhs + rhs;
+        boost::multiprecision::int256_t combined_decimal;
+        if constexpr (do_addition) {
+            combined_decimal = lhs + rhs;
+        } else {
+            combined_decimal = lhs - rhs;
+        }
         *result = decimalops::ConvertToDecimal128(combined_decimal, overflow);
     }
 }
 
 /**
- * @brief Add two decimal scalars with the given precision and scale
+ * @brief Add or subtract two decimal scalars with the given precision and scale
  * and return the output. The output should have its scale truncated to
  * the provided output scale. If overflow is detected, then the overflow
  * need to be updated to true.
@@ -324,41 +335,68 @@ inline void add_decimal_scalars(const arrow::Decimal128& d1,
  * @param s2 Scale of second decimal value
  * @param out_precision Output precision
  * @param out_scale Output scale
+ * @param do_addition True if we are adding the two decimals, false if we are
+ *                    subtracting them.
  * @param[out] overflow Overflow flag
  * @return arrow::Decimal128
  */
-arrow::Decimal128 add_decimal_scalars_py_entry(arrow::Decimal128 v1, int64_t p1,
-                                               int64_t s1, arrow::Decimal128 v2,
-                                               int64_t p2, int64_t s2,
-                                               int64_t out_precision,
-                                               int64_t out_scale,
-                                               bool* overflow) noexcept {
+arrow::Decimal128 add_or_subtract_decimal_scalars_py_entry(
+    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
+    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
+    bool do_addition, bool* overflow) noexcept {
     try {
         bool fast_add = out_precision < decimalops::kMaxPrecision;
         arrow::Decimal128 result;
-        if (fast_add) {
-            if (s1 < s2) {
-                add_decimal_scalars<true, true, false>(
-                    v1, v2, s1, s2, out_scale, overflow, &result);
-            } else if (s2 < s1) {
-                add_decimal_scalars<true, false, true>(
-                    v1, v2, s1, s2, out_scale, overflow, &result);
+        if (do_addition) {
+            if (fast_add) {
+                if (s1 < s2) {
+                    add_or_subtract_decimal_scalars<true, true, false, true>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else if (s2 < s1) {
+                    add_or_subtract_decimal_scalars<true, false, true, true>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else {
+                    add_or_subtract_decimal_scalars<true, false, false, true>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                }
             } else {
-                add_decimal_scalars<true, false, false>(
-                    v1, v2, s1, s2, out_scale, overflow, &result);
+                if (s1 < s2) {
+                    add_or_subtract_decimal_scalars<false, true, false, true>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else if (s2 < s1) {
+                    add_or_subtract_decimal_scalars<false, false, true, true>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else {
+                    add_or_subtract_decimal_scalars<false, false, false, true>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                }
             }
         } else {
-            if (s1 < s2) {
-                add_decimal_scalars<false, true, false>(
-                    v1, v2, s1, s2, out_scale, overflow, &result);
-            } else if (s2 < s1) {
-                add_decimal_scalars<false, false, true>(
-                    v1, v2, s1, s2, out_scale, overflow, &result);
+            if (fast_add) {
+                if (s1 < s2) {
+                    add_or_subtract_decimal_scalars<true, true, false, false>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else if (s2 < s1) {
+                    add_or_subtract_decimal_scalars<true, false, true, false>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else {
+                    add_or_subtract_decimal_scalars<true, false, false, false>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                }
             } else {
-                add_decimal_scalars<false, false, false>(
-                    v1, v2, s1, s2, out_scale, overflow, &result);
+                if (s1 < s2) {
+                    add_or_subtract_decimal_scalars<false, true, false, false>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else if (s2 < s1) {
+                    add_or_subtract_decimal_scalars<false, false, true, false>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                } else {
+                    add_or_subtract_decimal_scalars<false, false, false, false>(
+                        v1, v2, s1, s2, out_scale, overflow, &result);
+                }
             }
         }
+
         return result;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -367,11 +405,12 @@ arrow::Decimal128 add_decimal_scalars_py_entry(arrow::Decimal128 v1, int64_t p1,
 }
 
 /**
- * @brief Helper for add_decimal_arrays that deals with the tempalted loop body.
+ * @brief Helper for add_or_subtract_decimal_arrays that deals with the
+ * templated loop body.
  */
 template <bool is_scalar_1, bool is_scalar_2, bool fast_add, bool rescale_left,
-          bool rescale_right>
-inline void add_decimal_arrays_loop_body(
+          bool rescale_right, bool do_addition>
+inline void add_or_subtract_decimal_arrays_loop_body(
     const std::unique_ptr<array_info>& arr1,
     const std::unique_ptr<array_info>& arr2,
     std::unique_ptr<array_info>& out_arr, int64_t s1, int64_t s2,
@@ -414,8 +453,16 @@ inline void add_decimal_arrays_loop_body(
             *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,
                           arrow::Decimal128>() +
               idx2);
-        add_decimal_scalars<fast_add, rescale_left, rescale_right>(
-            d1, d2, s1, s2, out_scale, &overflow_i, out_ptr);
+        if constexpr (!do_addition) {
+            add_or_subtract_decimal_scalars<fast_add, rescale_left,
+                                            rescale_right, do_addition>(
+                d1, d2, s1, s2, out_scale, &overflow_i, out_ptr);
+        } else {
+            add_or_subtract_decimal_scalars<fast_add, rescale_left,
+                                            rescale_right, do_addition>(
+                d1, d2, s1, s2, out_scale, &overflow_i, out_ptr);
+        }
+
         out_overflow |= overflow_i;
     }
 }
@@ -432,8 +479,8 @@ inline void add_decimal_arrays_loop_body(
  * @param[out] overflow Overflow flag.
  * @return std::shared_ptr<array_info> Output nullable decimal array.
  */
-template <bool is_scalar_1, bool is_scalar_2>
-std::unique_ptr<array_info> add_decimal_arrays(
+template <bool is_scalar_1, bool is_scalar_2, bool do_addition>
+std::unique_ptr<array_info> add_or_subtract_decimal_arrays(
     const std::unique_ptr<array_info>& arr1,
     const std::unique_ptr<array_info>& arr2, int64_t out_precision,
     int64_t out_scale, bool* const overflow) noexcept {
@@ -451,11 +498,12 @@ std::unique_ptr<array_info> add_decimal_arrays(
         bool rescale_right = s2 < s1;
         bool out_overflow = false;
 #ifndef DECIMAL_ARRAY_ADD
-#define DECIMAL_ARRAY_ADD(FAST_ADD, RESCALE_LEFT, RESCALE_RIGHT)         \
-    for (size_t i = 0; i < out_length; i++) {                            \
-        add_decimal_arrays_loop_body<is_scalar_1, is_scalar_2, FAST_ADD, \
-                                     RESCALE_LEFT, RESCALE_RIGHT>(       \
-            arr1, arr2, out_arr, s1, s2, out_scale, out_overflow, i);    \
+#define DECIMAL_ARRAY_ADD(FAST_ADD, RESCALE_LEFT, RESCALE_RIGHT)              \
+    for (size_t i = 0; i < out_length; i++) {                                 \
+        add_or_subtract_decimal_arrays_loop_body<is_scalar_1, is_scalar_2,    \
+                                                 FAST_ADD, RESCALE_LEFT,      \
+                                                 RESCALE_RIGHT, do_addition>( \
+            arr1, arr2, out_arr, s1, s2, out_scale, out_overflow, i);         \
     }
 #endif
         if (fast_add) {
@@ -485,31 +533,44 @@ std::unique_ptr<array_info> add_decimal_arrays(
 #undef DECIMAL_ARRAY_ADD
 
 /**
- * @brief Wrapper for add_decimal_arrays that handles the templating
+ * @brief Wrapper for add_or_subtract_decimal_arrays that handles the templating
  * of the is_scalar arguments.
  */
-std::unique_ptr<array_info> add_decimal_arrays_wrapper(
+std::unique_ptr<array_info> add_or_subtract_decimal_arrays_wrapper(
 
     const std::unique_ptr<array_info>& arr1,
     const std::unique_ptr<array_info>& arr2, bool is_scalar_1, bool is_scalar_2,
-    int64_t out_precision, int64_t out_scale, bool* const overflow) {
-    if (is_scalar_1) {
-        return add_decimal_arrays<true, false>(arr1, arr2, out_precision,
-                                               out_scale, overflow);
-    } else if (is_scalar_2) {
-        return add_decimal_arrays<false, true>(arr1, arr2, out_precision,
-                                               out_scale, overflow);
+    int64_t out_precision, int64_t out_scale, bool do_addition,
+    bool* const overflow) {
+    if (do_addition) {
+        if (is_scalar_1) {
+            return add_or_subtract_decimal_arrays<true, false, true>(
+                arr1, arr2, out_precision, out_scale, overflow);
+        } else if (is_scalar_2) {
+            return add_or_subtract_decimal_arrays<false, true, true>(
+                arr1, arr2, out_precision, out_scale, overflow);
+        } else {
+            return add_or_subtract_decimal_arrays<false, false, true>(
+                arr1, arr2, out_precision, out_scale, overflow);
+        }
     } else {
-        return add_decimal_arrays<false, false>(arr1, arr2, out_precision,
-                                                out_scale, overflow);
+        if (is_scalar_1) {
+            return add_or_subtract_decimal_arrays<true, false, false>(
+                arr1, arr2, out_precision, out_scale, overflow);
+        } else if (is_scalar_2) {
+            return add_or_subtract_decimal_arrays<false, true, false>(
+                arr1, arr2, out_precision, out_scale, overflow);
+        } else {
+            return add_or_subtract_decimal_arrays<false, false, false>(
+                arr1, arr2, out_precision, out_scale, overflow);
+        }
     }
 }
 
-array_info* add_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
-                                        bool is_scalar_1, bool is_scalar_2,
-                                        int64_t out_precision,
-                                        int64_t out_scale,
-                                        bool* overflow) noexcept {
+array_info* add_or_subtract_decimal_arrays_py_entry(
+    array_info* arr1_, array_info* arr2_, bool is_scalar_1, bool is_scalar_2,
+    int64_t out_precision, int64_t out_scale, bool do_addition,
+    bool* overflow) noexcept {
     try {
         std::unique_ptr<array_info> arr1 = std::unique_ptr<array_info>(arr1_);
         std::unique_ptr<array_info> arr2 = std::unique_ptr<array_info>(arr2_);
@@ -519,8 +580,9 @@ array_info* add_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
                arr2->dtype == Bodo_CTypes::DECIMAL &&
                arr1->length == arr2->length);
         std::unique_ptr<array_info> out_arr =
-            add_decimal_arrays_wrapper(arr1, arr2, is_scalar_1, is_scalar_2,
-                                       out_precision, out_scale, overflow);
+            add_or_subtract_decimal_arrays_wrapper(
+                arr1, arr2, is_scalar_1, is_scalar_2, out_precision, out_scale,
+                do_addition, overflow);
         return new array_info(*out_arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -1514,8 +1576,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_scalar_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
-    SetAttrStringFromVoidPtr(m, add_decimal_scalars_py_entry);
-    SetAttrStringFromVoidPtr(m, add_decimal_arrays_py_entry);
+    SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_scalars_py_entry);
+    SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_scalars_py_entry);
