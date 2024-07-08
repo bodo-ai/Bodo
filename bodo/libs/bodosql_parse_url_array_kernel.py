@@ -135,8 +135,8 @@ def parse_query_into_map_overload(data):
     SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1&&&&&ElectricBogalooHello=2ElectricBogalooHello=2')
     SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?????12345&&&&&??ElectricBogalooHello')
     SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1=1=1&&&&&??Electric=======BogalooHello')
-    SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1=\\\\\1=1&&&\\&&??Electric=====\\\==BogalooHello')
-    SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?123///45=1=\\\\\1=1&&&\\&&?//?Ele///ctric=====\\\==Bo///////gal//ooHello')
+    SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?12345=1=\\\\\1=1&&&\\&&??Electric=====\\\\==BogalooHello')
+    SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?123///45=1=\\\\\1=1&&&\\&&?//?Ele///ctric=====\\\\==Bo///////gal//ooHello')
     SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?&=2')
     SELECT PARSE_URL('HTTPS://USER:PASS@EXAMPLE.INT:4345/HELLO.PHP?hello=1&hello=2')
     """

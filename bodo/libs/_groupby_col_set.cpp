@@ -905,8 +905,8 @@ std::shared_ptr<array_info> get_traversal_order(
 
     sort_table->columns.push_back(idx_arr);
 
-    int64_t window_ascending_real[n_sort_keys];
-    int64_t window_na_position_real[n_sort_keys];
+    std::vector<int64_t> window_ascending_real(n_sort_keys);
+    std::vector<int64_t> window_na_position_real(n_sort_keys);
 
     // Initialize the group ordering
     // Ignore the value for the separator argument and data argument
@@ -929,8 +929,8 @@ std::shared_ptr<array_info> get_traversal_order(
     // just the final column. We could do a partial sort to avoid
     // the overhead of sorting the orderby columns in the future.
     std::shared_ptr<table_info> iter_table = sort_values_table_local(
-        sort_table, n_sort_keys, window_ascending_real, window_na_position_real,
-        dead_keys.data(),
+        sort_table, n_sort_keys, window_ascending_real.data(),
+        window_na_position_real.data(), dead_keys.data(),
         // TODO: set this correctly
         false /* This is just used for tracing */, pool, std::move(mm));
     // All keys are dead so the sorted_idx is column 0.
@@ -1948,7 +1948,8 @@ std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {
                 Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
                 std::tie(arr_type, dtype) =
                     get_groupby_output_dtype(window_func, arr_type, dtype);
-                output_types.push_back(std::make_unique<bodo::DataType>(arr_type, dtype));
+                output_types.push_back(
+                    std::make_unique<bodo::DataType>(arr_type, dtype));
                 break;
             }
             default:

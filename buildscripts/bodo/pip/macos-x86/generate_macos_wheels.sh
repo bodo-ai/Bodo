@@ -38,16 +38,16 @@ mkdir -p wheelhouse
 # build Bodo wheels
 for PYTHON_VER in "3.10" "3.11" "3.12"
 do
-    conda create -n BUILDPIP python=$PYTHON_VER boost-cpp=1.84 -c conda-forge -y
+    conda create -n BUILDPIP python=$PYTHON_VER boost-cpp=1.85 -c conda-forge -y
     source activate BUILDPIP
     # For Python 3.10, the earliest numpy binaries available are 1.21, and source
     # packages prior to 1.21 do not build.
     if python -c 'import sys; sys.exit(sys.version_info[:2] >= (3, 10))'; then
         # exit code 0 when version < 3.10
-        python -m pip install Cython "numpy==1.18.*" wheel pyarrow==16.0.0 mpi4py_mpich==3.1.2
+        python -m pip install Cython "numpy==1.18.*" wheel pyarrow==16.1.0 mpi4py_mpich==3.1.2
     else
         # exit code 1 when version >= 3.10
-        python -m pip install Cython "numpy==1.21.*" wheel pyarrow==16.0.0 mpi4py_mpich==3.1.2
+        python -m pip install Cython "numpy==1.21.*" wheel pyarrow==16.1.0 mpi4py_mpich==3.1.2
     fi
     PYARROW_PATH=`python -c "import pyarrow; print('/'.join(pyarrow.__file__.split('/')[:-1]))"`
     ln -s $PYARROW_PATH/libarrow.1500.dylib        $PYARROW_PATH/libarrow.so
