@@ -84,7 +84,7 @@ def hash_join_common_impl(df1, df2, op_pool_size_bytes, build_outer, probe_outer
                 T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
             ### Uncomment for debugging purposes ###
             # bytes_pinned = get_op_pool_bytes_pinned(join_state)
             # bytes_allocated = get_op_pool_bytes_allocated(join_state)

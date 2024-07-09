@@ -1533,10 +1533,12 @@ struct mpi_comm_info {
      *
      * @param parent_arr The parent ARRAY_ITEM array
      * @param parent_comm_info The mpi_comm_info of parent_arr
+     * @param send_only only initialize send counts and not recv counts. This
+     avoids alltoall collectives which is necessary for async shuffle.
      */
     explicit mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
                            const mpi_comm_info& parent_comm_info,
-                           bool _has_nulls);
+                           bool _has_nulls, bool send_only = false);
 
    private:
     /**
@@ -1690,6 +1692,17 @@ void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
  * @param table Shared Pointer to the table, passed by reference.
  */
 void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
+
+/**
+ * @brief Calculate the toal memory of local array
+ *
+ * @param earr input array
+ * @param include_dict_size Should the size of dictionaries be included?
+ * @param include_children Should the size of children be included?
+ * @return int64_t total size of input array in memory
+ */
+int64_t array_memory_size(std::shared_ptr<array_info> earr,
+                          bool include_dict_size, bool include_children = true);
 
 /**
  * Compute the total memory of local chunk of the table on current rank

@@ -510,6 +510,65 @@ void _dist_transpose_comm(char *output, char *input, int typ_enum,
                    recv_disp, mpi_typ, MPI_COMM_WORLD);
 }
 
+/**
+ * @brief State for non-blocking is_last synchronization using IBarrier.
+ Used in streaming Iceberg and Parquet writes currently.
+ *
+ */
+class IsLastState {
+   public:
+    // The IBarrier request used for is_last synchronization
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+    bool is_last_barrier_started = false;
+    bool global_is_last = false;
+    MPI_Comm is_last_comm;
+
+    IsLastState() { MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm); }
+    ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }
+};
+
+/**
+ * @brief Create a new IsLastState and return to Python
+ *
+ */
+IsLastState *init_is_last_state() { return new IsLastState(); }
+
+/**
+ * @brief Delete IsLastState object (called from Python)
+ *
+ */
+void delete_is_last_state(IsLastState *state) { delete state; }
+
+/**
+ * @brief Performs non-blocking synchronization of is_last flag
+ *
+ * @param state non-blocking synchronization state
+ * @param local_is_last local is_last flag that needs synchronized
+ * @return 1 if is_last is true on all ranks else 0
+ */
+int32_t sync_is_last_non_blocking(IsLastState *state, int32_t local_is_last) {
+    if (state->global_is_last) {
+        return 1;
+    }
+
+    if (local_is_last) {
+        if (!state->is_last_barrier_started) {
+            MPI_Ibarrier(state->is_last_comm, &state->is_last_request);
+            state->is_last_barrier_started = true;
+            return 0;
+        } else {
+            int flag = 0;
+            MPI_Test(&state->is_last_request, &flag, MPI_STATUS_IGNORE);
+            if (flag) {
+                state->global_is_last = true;
+            }
+            return flag;
+        }
+    } else {
+        return 0;
+    }
+}
+
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
     MOD_DEF(m, "hdist", "No docs", NULL);
@@ -661,6 +720,9 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, permutation_array_index);
     SetAttrStringFromVoidPtr(m, timestamptz_reduce);
     SetAttrStringFromVoidPtr(m, _dist_transpose_comm);
+    SetAttrStringFromVoidPtr(m, init_is_last_state);
+    SetAttrStringFromVoidPtr(m, delete_is_last_state);
+    SetAttrStringFromVoidPtr(m, sync_is_last_non_blocking);
 
     // add actual int value to module
     PyObject_SetAttrString(m, "mpi_req_num_bytes",

@@ -1173,9 +1173,10 @@ std::shared_ptr<table_info> recv_dense_rank_data(
                     schema->column_types[i]->copy(), false));
             }
             TableBuildBuffer result_table(std::move(schema), dict_builders);
+            IncrementalShuffleMetrics metrics;
             while (recv_states.size() != 0) {
                 std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
-                    return s.recvDone(result_table);
+                    return s.recvDone(result_table, dict_builders, metrics);
                 });
             }
             return result_table.data_table;
@@ -1301,7 +1302,8 @@ MPI_Request send_dense_rank_data(
             std::shared_ptr<uint32_t[]> hashes =
                 std::make_shared<uint32_t[]>(1);
             hashes[0] = dest_hash;
-            shuffle_issend(send_data, hashes, send_states, MPI_COMM_WORLD);
+            shuffle_issend(send_data, hashes, nullptr, send_states,
+                           MPI_COMM_WORLD);
         }
         return final_send;
     } else {

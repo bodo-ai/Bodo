@@ -1751,6 +1751,27 @@ GroupbyOutputState::GroupbyOutputState(
     // The threshold should be at least 1.
     this->work_stealing_num_ranks_done_threshold = std::max(
         static_cast<uint64_t>(1), this->work_stealing_num_ranks_done_threshold);
+
+    if (this->enable_work_stealing) {
+        MPI_Comm_dup(MPI_COMM_WORLD, &this->mpi_comm);
+    }
+}
+
+GroupbyOutputState::~GroupbyOutputState() {
+    if (this->enable_work_stealing) {
+        // Make sure "done" message is sent to avoid MPI state issues
+        MPI_Wait(&this->done_request, MPI_STATUS_IGNORE);
+        if (this->myrank == 0) {
+            // Make sure all "done" messages are received on rank 0 to avoid MPI
+            // state issues
+            for (int i = 0; i < this->n_pes; i++) {
+                if (!this->done_received[i]) {
+                    MPI_Wait(&this->done_recv_requests[i], MPI_STATUS_IGNORE);
+                }
+            }
+        }
+        MPI_Comm_free(&this->mpi_comm);
+    }
 }
 
 void GroupbyOutputState::Finalize() {
@@ -1765,7 +1786,6 @@ void GroupbyOutputState::Finalize() {
 
 std::tuple<std::shared_ptr<table_info>, bool> GroupbyOutputState::PopBatch(
     const bool produce_output) {
-    this->StealWorkIfNeeded();
     std::shared_ptr<table_info> out_batch;
     if (!produce_output) {
         out_batch = this->buffer.dummy_output_chunk;
@@ -1776,44 +1796,147 @@ std::tuple<std::shared_ptr<table_info>, bool> GroupbyOutputState::PopBatch(
         // need to finalize here.
         std::tie(out_batch, chunk_size) = this->buffer.PopChunk();
     }
+
+    // NOTE: work stealing is called after buffer.PopChunk() to know updated
+    // total_remaining value for "done" message before returning with
+    // out_is_last=true
+    this->StealWorkIfNeeded();
+
     // If work stealing is disabled or is done (was done this iter), then we
     // just need to check if our local output buffer is empty). If work stealing
     // is not done yet, then we will only output is_last when all ranks are done
     // (since work-stealing may happen in the future).
     bool out_is_last =
-        (!this->enable_work_stealing || this->work_stealing_done)
-            ? (this->buffer.total_remaining == 0)
-            : (this->num_ranks_done == static_cast<uint64_t>(this->n_pes));
+        (!this->enable_work_stealing || this->work_stealing_done) &&
+        (this->buffer.total_remaining == 0);
     return std::tuple(out_batch, out_is_last);
 }
 
 void GroupbyOutputState::StealWorkIfNeeded() {
     // If work-stealing not allowed, or if it has already happened, simply
     // return.
-    if (!this->enable_work_stealing || this->work_stealing_done) {
+    if (!this->enable_work_stealing) {
         return;
     }
 
-    // Check how many ranks are done outputting.
-    if ((this->iter + 1) % this->work_stealing_sync_iter == 0) {
-        bool local_is_done = this->buffer.total_remaining == 0;
-        uint64_t send = local_is_done ? 1 : 0;
-        MPI_Allreduce(&send, &(this->num_ranks_done), 1, MPI_UINT64_T, MPI_SUM,
-                      MPI_COMM_WORLD);
-        if (this->num_ranks_done == static_cast<uint64_t>(this->n_pes)) {
-            // Exit if all ranks are done.
-            return;
+    // Parallel work stealing decision approach:
+    // Rank 0 broadcasts a work stealing "command" to all ranks eventually,
+    // once and only once.
+    // It decides whether to perform work redistribution by tracking how many
+    // ranks are done and using timers. All ranks send a "done" message to rank
+    // 0 when their buffers are empty. The actual work redistribution is
+    // synchronous and uses blocking collectives for simplicity since it happens
+    // once on all ranks.
+
+    // Start work stealing "command" bcast on non-zero ranks in the first
+    // iteration
+    if (this->myrank != 0 && !this->steal_work_bcast_started) {
+        MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0, this->mpi_comm,
+                   &this->steal_work_bcast_request);
+        this->steal_work_bcast_started = true;
+    }
+
+    // Send "done" signal to rank 0 (all ranks send irrespective of work
+    // stealing status to simplify the code)
+    if (this->buffer.total_remaining == 0 && !this->done_sent) {
+        this->done_sent = true;
+        MPI_Isend(&this->done_sent, 1, MPI_C_BOOL, 0, 0, this->mpi_comm,
+                  &this->done_request);
+    }
+
+    // Return if work stealing command bcast already received from rank 0
+    if (this->work_stealing_done) {
+        return;
+    }
+
+    if (this->myrank == 0) {
+        this->manage_work_stealing_rank_0();
+    }
+    // Test every 10 iterations to reduce MPI call overheads
+    else if ((this->iter + 1) % 10 == 0) {
+        int flag = 0;
+        MPI_Test(&this->steal_work_bcast_request, &flag, MPI_STATUS_IGNORE);
+        if (flag) {
+            this->steal_work_bcast_done = true;
         }
+    }
+
+    // Process received work stealing command (perform work redistribution if
+    // rank 0 decided)
+    if (this->steal_work_bcast_done) {
+        if (this->should_steal_work) {
+            if (this->myrank == 0 && this->debug_work_stealing) {
+                std::cerr
+                    << "[DEBUG][GroupbyOutputState] Starting work stealing."
+                    << std::endl;
+            }
+            this->RedistributeWork();
+            this->performed_work_redistribution = true;
+            // Finalize output buffer now that all work-stealing is done.
+            this->buffer.Finalize();
+            if (this->myrank == 0 && this->debug_work_stealing) {
+                std::cerr
+                    << "[DEBUG][GroupbyOutputState] Done with work stealing."
+                    << std::endl;
+            }
+        }
+        this->work_stealing_done = true;
+    }
+}
+
+void GroupbyOutputState::manage_work_stealing_rank_0() {
+    // Post Irecv for done messages from all ranks in first iteration
+    if (!this->recvs_posted) {
+        this->done_recv_buff = std::make_unique<bool[]>(this->n_pes);
+        for (int i = 0; i < this->n_pes; i++) {
+            MPI_Request recv_req;
+            MPI_Irecv(&this->done_recv_buff[i], 1, MPI_C_BOOL, i, 0,
+                      this->mpi_comm, &recv_req);
+            this->done_recv_requests.push_back(recv_req);
+        }
+        done_received.resize(n_pes, false);
+        this->recvs_posted = true;
+    }
+
+    if (this->command_sent) {
+        return;
+    }
+
+    // Avoid MPI_Test call overheads in every iteration
+    if ((this->iter + 1) % this->work_stealing_sync_iter != 0) {
+        return;
+    }
+
+    // Check for new done messages
+    for (int i = 0; i < this->n_pes; i++) {
+        if (!this->done_received[i]) {
+            int flag = 0;
+            MPI_Test(&this->done_recv_requests[i], &flag, MPI_STATUS_IGNORE);
+            if (flag) {
+                this->done_received[i] = true;
+                this->num_ranks_done++;
+            }
+        }
+    }
+
+    // All ranks done, broadcast "no work redistribution command"
+    if (this->num_ranks_done == this->n_pes) {
+        assert(this->should_steal_work == false);
+        MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0, this->mpi_comm,
+                   &this->steal_work_bcast_request);
+        this->steal_work_bcast_done = true;
+        this->command_sent = true;
+        return;
     }
 
     // If timer hasn't started and if the threshold fraction of ranks are done,
     // start the timer. Store the timer on rank0.
     if (!this->work_steal_timer_started &&
-        (this->num_ranks_done >=
+        (static_cast<uint64_t>(this->num_ranks_done) >=
          this->work_stealing_num_ranks_done_threshold)) {
         this->work_steal_timer_started = true;
         this->work_steal_start_time = start_timer();
-        if (this->myrank == 0 && this->debug_work_stealing) {
+        if (this->debug_work_stealing) {
             std::cerr << "[DEBUG][GroupbyOutputState] Started work-stealing "
                          "timer since "
                       << this->num_ranks_done << " of " << this->n_pes
@@ -1824,35 +1947,16 @@ void GroupbyOutputState::StealWorkIfNeeded() {
 
     // If timer has already started, and rank 0 determines it's above some
     // threshold, then we will move work around.
-    bool should_steal_work = false;
     if (this->work_steal_timer_started &&
-        ((this->iter + 1) % this->work_stealing_sync_iter == 0)) {
-        // This is in microseconds
-        uint64_t time_since_timer_start =
-            end_timer(this->work_steal_start_time);
-        should_steal_work =
-            time_since_timer_start > this->work_stealing_timer_threshold_us;
-        // Use rank 0 as the source of truth to avoid issues due to differences
-        // in exact clock time on different ranks.
-        MPI_Bcast(&should_steal_work, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
-    }
-
-    if (should_steal_work) {
-        if (this->myrank == 0 && this->debug_work_stealing) {
-            std::cerr << "[DEBUG][GroupbyOutputState] Starting work stealing."
-                      << std::endl;
-        }
+        end_timer(this->work_steal_start_time) >
+            this->work_stealing_timer_threshold_us) {
+        this->should_steal_work = true;
         this->metrics.n_ranks_done_before_work_redistribution =
             this->num_ranks_done;
-        this->RedistributeWork();
-        // Finalize output buffer now that all work-stealing is done.
-        this->buffer.Finalize();
-        // Set work-stealing to done.
-        this->work_stealing_done = true;
-        if (this->myrank == 0 && this->debug_work_stealing) {
-            std::cerr << "[DEBUG][GroupbyOutputState] Done with work stealing."
-                      << std::endl;
-        }
+        MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0, this->mpi_comm,
+                   &this->steal_work_bcast_request);
+        this->steal_work_bcast_done = true;
+        this->command_sent = true;
     }
 }
 
@@ -2198,11 +2302,11 @@ void GroupbyOutputState::ExportMetrics(std::vector<MetricBase>& metrics) {
                                     this->metrics.n_ranks_done_at_timer_start,
                                     true));
     MetricBase::StatValue performed_work_redistribution =
-        (this->work_stealing_done ? 1 : 0);
+        (this->performed_work_redistribution ? 1 : 0);
     metrics.emplace_back(StatMetric("performed_work_redistribution",
                                     performed_work_redistribution, true));
 
-    if (!this->work_stealing_done) {
+    if (!this->performed_work_redistribution) {
         return;
     }
 
@@ -2627,6 +2731,8 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
             std::move(metrics));
     }
     this->curr_stage_id++;
+
+    MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm);
 }
 
 std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
@@ -3349,6 +3455,31 @@ void GroupbyState::ClearBuildState() {
     this->append_row_to_build_table.shrink_to_fit();
 }
 
+bool GroupbyState::GetGlobalIsLast(bool local_is_last) {
+    if (this->global_is_last) {
+        return true;
+    }
+
+    if (this->parallel && local_is_last) {
+        if (!this->is_last_barrier_started) {
+            MPI_Ibarrier(this->shuffle_comm, &this->is_last_request);
+            this->is_last_barrier_started = true;
+            return false;
+        } else {
+            int flag = 0;
+            MPI_Test(&this->is_last_request, &flag, MPI_STATUS_IGNORE);
+            if (flag) {
+                this->global_is_last = true;
+            }
+            return flag;
+        }
+    } else {
+        // If we have a replicated input we don't need to be
+        // synchronized because there is no shuffle.
+        return local_is_last;
+    }
+}
+
 void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
     std::vector<MetricBase> metrics;
     metrics.reserve(128);
@@ -3896,7 +4027,7 @@ uint64_t GroupbyState::op_pool_bytes_allocated() const {
  */
 bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
-                                     bool is_last,
+                                     bool local_is_last,
                                      const bool is_final_pipeline) {
     // High level workflow (reusing as much of existing groupby
     // infrastructure as possible):
@@ -3933,13 +4064,9 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
     groupby_state->metrics.pre_agg_output_nrows += in_table->nrows();
 
     if (groupby_state->build_iter == 0) {
-        groupby_state->shuffle_state->Initialize(in_table,
-                                                 groupby_state->parallel);
+        groupby_state->shuffle_state->Initialize(
+            in_table, groupby_state->parallel, groupby_state->shuffle_comm);
     }
-
-    // Make is_last global
-    is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
-                                  groupby_state->sync_iter);
 
     // Dictionary hashes for the key columns which will be used for
     // the partitioning hashes:
@@ -3986,7 +4113,7 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
 
     if (groupby_state->parallel) {
         std::optional<std::shared_ptr<table_info>> new_data_ =
-            groupby_state->shuffle_state->ShuffleIfRequired(is_last);
+            groupby_state->shuffle_state->ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
             dict_hashes = groupby_state->GetDictionaryHashesForKeys();
@@ -4009,6 +4136,10 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                 new_data, batch_hashes_partition, batch_hashes_groupby);
         }
     }
+
+    // Make is_last global
+    bool is_last = groupby_state->GetGlobalIsLast(
+        local_is_last && groupby_state->shuffle_state->SendRecvEmpty());
 
     if (is_last && is_final_pipeline) {
         groupby_state->FinalizeBuild();
@@ -4043,7 +4174,7 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
  */
 bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
                                      std::shared_ptr<table_info> in_table,
-                                     bool is_last,
+                                     bool local_is_last,
                                      const bool is_final_pipeline) {
     assert(is_final_pipeline);
     int n_pes, myrank;
@@ -4051,12 +4182,9 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     if (groupby_state->build_iter == 0) {
-        groupby_state->shuffle_state->Initialize(in_table,
-                                                 groupby_state->parallel);
+        groupby_state->shuffle_state->Initialize(
+            in_table, groupby_state->parallel, groupby_state->shuffle_comm);
     }
-
-    is_last = stream_sync_is_last(is_last, groupby_state->build_iter,
-                                  groupby_state->sync_iter);
 
     // We require that all dictionary keys/values are unified before update
     in_table = groupby_state->UnifyBuildTableDictionaryArrays(in_table, false);
@@ -4094,7 +4222,7 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
     // Shuffle data of other ranks and append received data to local buffer
     if (groupby_state->parallel) {
         std::optional<std::shared_ptr<table_info>> new_data_ =
-            groupby_state->shuffle_state->ShuffleIfRequired(is_last);
+            groupby_state->shuffle_state->ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
             // Dictionary hashes for the key columns which will be used for
@@ -4116,6 +4244,10 @@ bool groupby_acc_build_consume_batch(GroupbyState* groupby_state,
             batch_hashes_partition.reset();
         }
     }
+
+    // Make is_last global
+    bool is_last = groupby_state->GetGlobalIsLast(
+        local_is_last && groupby_state->shuffle_state->SendRecvEmpty());
 
     // Compute output when all input batches are accumulated
     if (is_last && is_final_pipeline) {
@@ -4167,7 +4299,11 @@ std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
  */
 bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                                           table_info* in_table, bool is_last,
-                                          const bool is_final_pipeline) {
+                                          const bool is_final_pipeline,
+                                          bool* request_input) {
+    // Request input rows from preceding operators by default
+    *request_input = true;
+
     try {
         std::unique_ptr<table_info> input_table(in_table);
         groupby_state->metrics.build_input_row_count += input_table->nrows();
@@ -4180,6 +4316,7 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                 groupby_state, std::move(input_table), is_last,
                 is_final_pipeline);
         }
+        *request_input = !groupby_state->shuffle_state->BuffersFull();
 
         if (is_last) {
             // Report and reset metrics
@@ -4203,6 +4340,18 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
     return false;
+}
+
+/**
+ * @brief Resets non-blocking is_last sync state after each union pipeline when
+ * using groupby
+ *
+ * @param groupby_state streaming groupby state
+ */
+void end_union_consume_pipeline_py_entry(GroupbyState* groupby_state) {
+    groupby_state->is_last_request = MPI_REQUEST_NULL;
+    groupby_state->is_last_barrier_started = false;
+    groupby_state->global_is_last = false;
 }
 
 /**
@@ -4388,6 +4537,7 @@ PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     SetAttrStringFromVoidPtr(m, groupby_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, groupby_produce_output_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_groupby_state);
+    SetAttrStringFromVoidPtr(m, end_union_consume_pipeline_py_entry);
     SetAttrStringFromVoidPtr(m, get_op_pool_bytes_pinned);
     SetAttrStringFromVoidPtr(m, get_op_pool_bytes_allocated);
     SetAttrStringFromVoidPtr(m, get_num_partitions);

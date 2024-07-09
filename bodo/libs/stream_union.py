@@ -7,13 +7,14 @@ from typing import Optional, Tuple
 
 import numba
 import numpy as np
-from numba.core import types
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.core.typing.templates import (
     AbstractTemplate,
     infer_global,
     signature,
 )
-from numba.extending import lower_builtin, models, register_model
+from numba.extending import intrinsic, lower_builtin, models, register_model
 
 import bodo
 from bodo.hiframes.table import TableType
@@ -320,7 +321,7 @@ def gen_union_consume_batch_impl(union_state, table, is_last, is_final_pipeline)
             bodo.libs.table_builder._chunked_table_builder_append(
                 union_state, cpp_table
             )
-            return is_last
+            return is_last, True
 
     else:
 
@@ -341,7 +342,8 @@ class UnionConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(union_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+        output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
+        return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
 UnionConsumeBatchInfer._no_unliteral = True
@@ -352,6 +354,33 @@ def lower_union_consume_batch(context, builder, sig, args):
     """lower union_consume_batch() using gen_union_consume_batch_impl above"""
     impl = gen_union_consume_batch_impl(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
+
+
+@intrinsic
+def end_union_consume_pipeline(
+    typingctx,
+    union_state,
+):
+    """
+    Resets non-blocking is_last sync state after each pipeline when using groupby
+    """
+    assert not union_state.all, "end_union_consume_pipeline: unexpected union all"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="end_union_consume_pipeline_py_entry"
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    sig = types.none(union_state)
+    return sig, codegen
 
 
 def union_produce_batch(union_state, produce_output=True):

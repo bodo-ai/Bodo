@@ -1467,6 +1467,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
     inputPipeline.endSection(newExitCond);
+    Variable inputRequest = genInputRequestVar();
     // is_final_pipeline is always True in the regular Groupby case.
     Expr.Call batchCall =
         new Expr.Call(
@@ -1478,7 +1479,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
                 /*is_final_pipeline*/
                 new Expr.BooleanLiteral(true)));
     timerInfo.insertLoopOperationStartTimer(1);
-    generatedCode.add(new Op.Assign(newExitCond, batchCall));
+    generatedCode.add(new Op.TupleAssign(List.of(newExitCond, inputRequest), batchCall));
+    inputPipeline.addInputRequest(inputRequest);
     timerInfo.insertLoopOperationEndTimer(1);
     // Finalize and add the batch pipeline.
     StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
@@ -1685,6 +1687,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Variable batchExitCond = inputPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
     inputPipeline.endSection(newExitCond);
+    Variable inputRequest = genInputRequestVar();
 
     // is_final_pipeline is always True in the regular MinRowNumberFilter case.
     Expr.Call batchCall =
@@ -1697,7 +1700,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
                 /*is_final_pipeline*/
                 new Expr.BooleanLiteral(true)));
     timerInfo.insertLoopOperationStartTimer(1);
-    generatedCode.add(new Op.Assign(newExitCond, batchCall));
+    generatedCode.add(new Op.TupleAssign(List.of(newExitCond, inputRequest), batchCall));
+    inputPipeline.addInputRequest(inputRequest);
     timerInfo.insertLoopOperationEndTimer(1);
 
     // Finalize and add the batch pipeline.
@@ -2001,12 +2005,14 @@ public class BodoCodeGenVisitor extends RelVisitor {
     StreamingPipelineFrame batchPipeline = generatedCode.getCurrentStreamingPipeline();
     Variable batchExitCond = batchPipeline.getExitCond();
     Variable newExitCond = genGenericTempVar();
+    Variable inputRequest = genInputRequestVar();
     batchPipeline.endSection(newExitCond);
     Expr.Call batchCall =
         new Expr.Call(
             "bodo.libs.stream_join.join_build_consume_batch",
             List.of(joinStateVar, buildTable, batchExitCond));
-    generatedCode.add(new Op.Assign(newExitCond, batchCall));
+    generatedCode.add(new Op.TupleAssign(List.of(newExitCond, inputRequest), batchCall));
+    batchPipeline.addInputRequest(inputRequest);
     timerInfo.insertLoopOperationEndTimer(1);
     // Finalize and add the batch pipeline.
     generatedCode.add(new Op.StreamingPipeline(generatedCode.endCurrentStreamingPipeline()));

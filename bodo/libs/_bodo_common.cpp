@@ -1086,7 +1086,7 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
 }
 
 int64_t array_memory_size(std::shared_ptr<array_info> earr,
-                          bool include_dict_size) {
+                          bool include_dict_size, bool include_children) {
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
@@ -1095,10 +1095,12 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
         // Not all functions want to consider the size of the dictionary.
         int64_t dict_size =
             include_dict_size
-                ? array_memory_size(earr->child_arrays[0], include_dict_size)
+                ? array_memory_size(earr->child_arrays[0], include_dict_size,
+                                    include_children)
                 : 0;
-        return dict_size +
-               array_memory_size(earr->child_arrays[1], include_dict_size);
+        return dict_size + array_memory_size(earr->child_arrays[1],
+                                             include_dict_size,
+                                             include_children);
     } else if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         if (earr->dtype == Bodo_CTypes::_BOOL) {
@@ -1122,17 +1124,25 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
     } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return n_bytes + sizeof(offset_t) * (earr->length + 1) +
-               array_memory_size(earr->child_arrays.front(), include_dict_size);
+               (include_children
+                    ? array_memory_size(earr->child_arrays.front(),
+                                        include_dict_size, include_children)
+                    : 0);
     } else if (earr->arr_type == bodo_array_type::STRUCT) {
         int64_t n_bytes = ((earr->length + 7) >> 3), child_array_size = 0;
-        for (const std::shared_ptr<array_info>& child_array :
-             earr->child_arrays) {
-            child_array_size +=
-                array_memory_size(child_array, include_dict_size);
+        if (include_children) {
+            for (const std::shared_ptr<array_info>& child_array :
+                 earr->child_arrays) {
+                child_array_size += array_memory_size(
+                    child_array, include_dict_size, include_children);
+            }
         }
         return n_bytes + child_array_size;
     } else if (earr->arr_type == bodo_array_type::MAP) {
-        return array_memory_size(earr->child_arrays.front(), include_dict_size);
+        return include_children
+                   ? array_memory_size(earr->child_arrays.front(),
+                                       include_dict_size, include_children)
+                   : 0;
     }
     throw std::runtime_error(
         "Array Type: " + GetArrType_as_string(earr->arr_type) +
@@ -1143,7 +1153,7 @@ int64_t table_local_memory_size(const std::shared_ptr<table_info>& table,
                                 bool include_dict_size) {
     int64_t local_size = 0;
     for (auto& arr : table->columns) {
-        local_size += array_memory_size(arr, include_dict_size);
+        local_size += array_memory_size(arr, include_dict_size, true);
     }
     return local_size;
 }

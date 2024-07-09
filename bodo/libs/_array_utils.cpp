@@ -36,68 +36,68 @@ void append_to_primitive(
     arrow::Type::type typ = builder->type()->id();
     const uint8_t* values = primitive_array->values()->data();
     if (typ == arrow::Type::BOOL) {
-        auto typed_builder = dynamic_cast<arrow::BooleanBuilder*>(builder);
+        auto typed_builder = static_cast<arrow::BooleanBuilder*>(builder);
         // Boolean arrays reuse the null bitmap data
         (void)typed_builder->AppendValues((uint8_t*)values, length,
                                           primitive_array->null_bitmap_data(),
                                           offset);
     } else if (typ == arrow::Type::INT8) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::Int8Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::Int8Type>*>(builder);
         (void)typed_builder->AppendValues((int8_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::UINT8) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::UInt8Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::UInt8Type>*>(builder);
         (void)typed_builder->AppendValues((uint8_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::INT16) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::Int16Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::Int16Type>*>(builder);
         (void)typed_builder->AppendValues((int16_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::UINT16) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::UInt16Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::UInt16Type>*>(builder);
         (void)typed_builder->AppendValues((uint16_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::INT32) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::Int32Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::Int32Type>*>(builder);
         (void)typed_builder->AppendValues((int32_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::UINT32) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::UInt32Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::UInt32Type>*>(builder);
         (void)typed_builder->AppendValues((uint32_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::INT64) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::Int64Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::Int64Type>*>(builder);
         (void)typed_builder->AppendValues((int64_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::UINT64) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::UInt64Type>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::UInt64Type>*>(builder);
         (void)typed_builder->AppendValues((uint64_t*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::FLOAT) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::FloatType>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::FloatType>*>(builder);
         (void)typed_builder->AppendValues((float*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::DOUBLE) {
         auto typed_builder =
-            dynamic_cast<arrow::NumericBuilder<arrow::DoubleType>*>(builder);
+            static_cast<arrow::NumericBuilder<arrow::DoubleType>*>(builder);
         (void)typed_builder->AppendValues((double*)values + offset, length,
                                           valid_elems.data());
     } else if (typ == arrow::Type::DECIMAL) {
-        auto typed_builder = dynamic_cast<arrow::Decimal128Builder*>(builder);
+        auto typed_builder = static_cast<arrow::Decimal128Builder*>(builder);
         (void)typed_builder->AppendValues(
             (uint8_t*)values + BYTES_PER_DECIMAL * offset, length,
             valid_elems.data());
     } else if (typ == arrow::Type::DATE32) {
-        auto typed_builder = dynamic_cast<arrow::Date32Builder*>(builder);
+        auto typed_builder = static_cast<arrow::Date32Builder*>(builder);
         (void)typed_builder->AppendValues((int32_t*)values + offset, length,
                                           valid_elems.data());
     } else {
@@ -136,13 +136,13 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         // TODO: assert builder.type() == LIST
         std::shared_ptr<arrow::ListArray> list_array =
             std::dynamic_pointer_cast<arrow::ListArray>(input_array);
-        auto list_builder = dynamic_cast<arrow::ListBuilder*>(builder);
+        auto list_builder = static_cast<arrow::ListBuilder*>(builder);
 #else
     if (input_array->type_id() == arrow::Type::LARGE_LIST) {
         // TODO: assert builder.type() == LARGE_LIST
         std::shared_ptr<arrow::LargeListArray> list_array =
             std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
-        auto list_builder = dynamic_cast<arrow::LargeListBuilder*>(builder);
+        auto list_builder = static_cast<arrow::LargeListBuilder*>(builder);
 #endif
         arrow::ArrayBuilder* child_builder = list_builder->value_builder();
 
@@ -164,7 +164,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
             std::dynamic_pointer_cast<arrow::StructArray>(input_array);
         auto struct_type =
             std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
-        auto struct_builder = dynamic_cast<arrow::StructBuilder*>(builder);
+        auto struct_builder = static_cast<arrow::StructBuilder*>(builder);
         for (int64_t idx = start_offset; idx < end_offset; idx++) {
             if (struct_array->IsNull(idx)) {
                 (void)struct_builder->AppendNull();
@@ -184,12 +184,12 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     } else if (input_array->type_id() == arrow::Type::STRING) {
         auto str_array =
             std::dynamic_pointer_cast<arrow::StringArray>(input_array);
-        auto str_builder = dynamic_cast<arrow::StringBuilder*>(builder);
+        auto str_builder = static_cast<arrow::StringBuilder*>(builder);
 #else
     } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
         auto str_array =
             std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
-        auto str_builder = dynamic_cast<arrow::LargeStringBuilder*>(builder);
+        auto str_builder = static_cast<arrow::LargeStringBuilder*>(builder);
 #endif
         int64_t num_elems = end_offset - start_offset;
         // TODO: optimize
@@ -203,7 +203,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     } else if (input_array->type_id() == arrow::Type::MAP) {
         std::shared_ptr<arrow::MapArray> map_array =
             std::dynamic_pointer_cast<arrow::MapArray>(input_array);
-        auto map_builder = dynamic_cast<arrow::MapBuilder*>(builder);
+        auto map_builder = static_cast<arrow::MapBuilder*>(builder);
 
         arrow::ArrayBuilder* key_builder = map_builder->key_builder();
         arrow::ArrayBuilder* item_builder = map_builder->item_builder();
@@ -235,7 +235,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
         // Dictionary32Builder, which requires int64 index inputs instead of
         // int32 (seems like a bug).
         auto dict_builder =
-            dynamic_cast<arrow::DictionaryBuilder<arrow::LargeStringType>*>(
+            static_cast<arrow::DictionaryBuilder<arrow::LargeStringType>*>(
                 builder);
 
         int64_t num_elems = end_offset - start_offset;

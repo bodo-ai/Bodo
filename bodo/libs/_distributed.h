@@ -99,8 +99,6 @@ static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                      int64_t count) __UNUSED__;
 static void allgather(void* out_data, int size, void* in_data,
                       int type_enum) __UNUSED__;
-static bool stream_sync_is_last(bool local_is_last, const uint64_t iter,
-                                const uint64_t sync_freq) __UNUSED__;
 
 /**
  * This is a wrapper around MPI_Alltoallv that supports int64 counts and
@@ -512,17 +510,6 @@ static void allgather(void* out_data, int size, void* in_data, int type_enum) {
     MPI_Allgather(in_data, size, mpi_typ, out_data, size, mpi_typ,
                   MPI_COMM_WORLD);
     return;
-}
-
-static bool stream_sync_is_last(bool local_is_last, const uint64_t iter,
-                                const uint64_t sync_freq) {
-    bool global_is_last = false;
-    if ((iter + 1) % sync_freq ==
-        0) {  // Use iter + 1 to avoid a sync on the first iteration
-        MPI_Allreduce(&local_is_last, &global_is_last, 1, MPI_UNSIGNED_CHAR,
-                      MPI_LAND, MPI_COMM_WORLD);
-    }
-    return global_is_last;
 }
 
 template <int typ_enum>
