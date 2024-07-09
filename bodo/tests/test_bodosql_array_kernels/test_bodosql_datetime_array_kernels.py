@@ -352,6 +352,114 @@ def test_add_interval_time_units(unit, args, answers, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "date_data, delta_data, func, answer",
+    [
+        pytest.param(
+            pd.Series(
+                [datetime.date(2000, 2, 29)] * 17 + [datetime.date(2000, 2, 28)] * 17
+            ),
+            pd.Series((list(range(-8, 9))) * 2, dtype=pd.Int32Dtype()),
+            lambda dt, delta: pd.Series(
+                bodo.libs.bodosql_array_kernels.add_interval_years(delta, dt)
+            ),
+            pd.Series(
+                [
+                    datetime.date(1992, 2, 29),
+                    datetime.date(1993, 2, 28),
+                    datetime.date(1994, 2, 28),
+                    datetime.date(1995, 2, 28),
+                    datetime.date(1996, 2, 29),
+                    datetime.date(1997, 2, 28),
+                    datetime.date(1998, 2, 28),
+                    datetime.date(1999, 2, 28),
+                    datetime.date(2000, 2, 29),
+                    datetime.date(2001, 2, 28),
+                    datetime.date(2002, 2, 28),
+                    datetime.date(2003, 2, 28),
+                    datetime.date(2004, 2, 29),
+                    datetime.date(2005, 2, 28),
+                    datetime.date(2006, 2, 28),
+                    datetime.date(2007, 2, 28),
+                    datetime.date(2008, 2, 29),
+                    datetime.date(1992, 2, 28),
+                    datetime.date(1993, 2, 28),
+                    datetime.date(1994, 2, 28),
+                    datetime.date(1995, 2, 28),
+                    datetime.date(1996, 2, 28),
+                    datetime.date(1997, 2, 28),
+                    datetime.date(1998, 2, 28),
+                    datetime.date(1999, 2, 28),
+                    datetime.date(2000, 2, 28),
+                    datetime.date(2001, 2, 28),
+                    datetime.date(2002, 2, 28),
+                    datetime.date(2003, 2, 28),
+                    datetime.date(2004, 2, 28),
+                    datetime.date(2005, 2, 28),
+                    datetime.date(2006, 2, 28),
+                    datetime.date(2007, 2, 28),
+                    datetime.date(2008, 2, 28),
+                ]
+            ),
+            id="year",
+        ),
+        pytest.param(
+            pd.Series(
+                [datetime.date(2000, 2, 29)] * 13 + [datetime.date(2000, 2, 28)] * 13
+            ),
+            pd.Series(list(range(-48, 49, 8)) * 2, dtype=pd.Int32Dtype()),
+            lambda dt, delta: pd.Series(
+                bodo.libs.bodosql_array_kernels.add_interval_months(delta, dt)
+            ),
+            pd.Series(
+                [
+                    datetime.date(1996, 2, 29),
+                    datetime.date(1996, 10, 29),
+                    datetime.date(1997, 6, 29),
+                    datetime.date(1998, 2, 28),
+                    datetime.date(1998, 10, 29),
+                    datetime.date(1999, 6, 29),
+                    datetime.date(2000, 2, 29),
+                    datetime.date(2000, 10, 29),
+                    datetime.date(2001, 6, 29),
+                    datetime.date(2002, 2, 28),
+                    datetime.date(2002, 10, 29),
+                    datetime.date(2003, 6, 29),
+                    datetime.date(2004, 2, 29),
+                    datetime.date(1996, 2, 28),
+                    datetime.date(1996, 10, 28),
+                    datetime.date(1997, 6, 28),
+                    datetime.date(1998, 2, 28),
+                    datetime.date(1998, 10, 28),
+                    datetime.date(1999, 6, 28),
+                    datetime.date(2000, 2, 28),
+                    datetime.date(2000, 10, 28),
+                    datetime.date(2001, 6, 28),
+                    datetime.date(2002, 2, 28),
+                    datetime.date(2002, 10, 28),
+                    datetime.date(2003, 6, 28),
+                    datetime.date(2004, 2, 28),
+                ]
+            ),
+            id="month",
+        ),
+    ],
+)
+def test_add_interval_to_date_leapyear_edgecases(
+    date_data, delta_data, func, answer, memory_leak_check
+):
+    """
+    Tests edgecases of add_interval_xxx functions with year/quarter/month on date values
+    when the date is a leap-day.
+    """
+    check_func(
+        func,
+        (date_data, delta_data),
+        py_output=answer,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
     "interval_input",
     [
         pytest.param(pd.Timedelta(seconds=90), id="timedelta-scalar"),
