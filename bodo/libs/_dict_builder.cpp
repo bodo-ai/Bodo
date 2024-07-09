@@ -408,7 +408,7 @@ DictionaryBuilder::DictionaryBuilder(
 
 // TODO: Template this based on the type of the array
 std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
-    const std::shared_ptr<array_info>& in_arr) {
+    const std::shared_ptr<array_info>& in_arr, bool use_cache) {
     // Unify child arrays for nested arrays
     if (this->child_dict_builders.size() > 0) {
         assert(in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
@@ -502,6 +502,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     time_pt start = start_timer();
     std::shared_ptr<array_info> batch_dict = in_arr->child_arrays[0];
     bool valid_arr_id = batch_dict->array_id >= 0;
+    use_cache &= valid_arr_id;
     bool empty_arr = batch_dict->array_id == 0;
     // An empty array is automatically unified with all arrays
     if (empty_arr) {
@@ -542,7 +543,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     const std::vector<int>* active_transpose_map = nullptr;
 
     // Compute the cached_transpose_map if it is not already cached.
-    if (!valid_arr_id || (cache_entry == this->cached_array_transposes.end())) {
+    if (!use_cache || (cache_entry == this->cached_array_transposes.end())) {
         this->metrics.unify_cache_id_misses++;
         // Create new transpose map
         do_unify(new_transpose_map);
