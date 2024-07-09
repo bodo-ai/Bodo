@@ -2218,6 +2218,10 @@ public class RexSimplify {
                 // Expand "SEARCH(x, Sarg([point])" to "x = point"
                 // and "SEARCH(x, Sarg([])" to "false"
                 return RexUtil.expandSearch(rexBuilder, null, call);
+            } else if (a instanceof RexLiteral) {
+                // Bodo Change:
+                // Expand to a disjunction, so we can simplify based on AND/OR.
+                return simplify(RexUtil.expandSearch(rexBuilder, null, call), unknownAs);
             }
         }
         return call;
