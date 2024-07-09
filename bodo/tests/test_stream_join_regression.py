@@ -170,7 +170,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         _temp3 = time.time()
         # Codegen change: Track build time
         t_build = time.time()
-        _temp22 = bodo.libs.stream_join.join_build_consume_batch(
+        _temp22, _ = bodo.libs.stream_join.join_build_consume_batch(
             state_3, T2, __bodo_is_last_streaming_output_1
         )
         build_time += time.time() - t_build

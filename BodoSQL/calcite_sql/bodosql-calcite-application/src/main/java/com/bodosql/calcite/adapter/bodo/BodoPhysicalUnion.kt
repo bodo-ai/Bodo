@@ -77,9 +77,17 @@ class BodoPhysicalUnion(
                                 ),
                             )
                         val newExitCond: Variable = builder.symbolTable.genFinishedStreamingFlag()
-                        val exitAssign = Assign(newExitCond, consumeCall)
+                        val inputRequest: Variable = builder.symbolTable.genInputRequestVar()
+                        val exitAssign = Op.TupleAssign(listOf(newExitCond, inputRequest), consumeCall)
                         builder.add(exitAssign)
                         pipeline.endSection(newExitCond)
+                        pipeline.addInputRequest(inputRequest)
+                        // We need to reset non-blocking is_last sync state after each pipeline when using groupby
+                        if (!all) {
+                            val endBuild =
+                                Op.Stmt(Expr.Call("bodo.libs.stream_union.end_union_consume_pipeline", listOf(stateVar)))
+                            pipeline.addTermination(endBuild)
+                        }
                         // For budget purposes we mark the end of the operator after the last stage.
                         // We only need to do this
                         if (forceEndOperator) {

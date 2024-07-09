@@ -1,4 +1,3 @@
-import math
 import random
 import string
 import sys
@@ -304,7 +303,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1, True)
-            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -588,7 +587,7 @@ def test_nested_loop_join(
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1, True)
-            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -724,7 +723,7 @@ def test_broadcast_nested_loop_join(
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1, True)
-            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -847,7 +846,7 @@ def test_hash_join_reorder(memory_leak_check):
         )
         while True:
             table1, is_last1 = read_arrow_next(reader1, True)
-            is_last1 = join_build_consume_batch(join_state, table1, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, table1, is_last1)
             if is_last1:
                 break
 
@@ -974,7 +973,7 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -1117,7 +1116,7 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -1177,6 +1176,107 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
         reset_index=True,
         sort_output=True,
     )
+
+
+@pytest.mark.skipif(bodo.get_size() != 2, reason="requires 2 ranks")
+def test_hash_join_input_request(memory_leak_check):
+    """Make sure input_request back pressure flag is set properly in join build"""
+    df1 = pd.DataFrame(
+        {
+            "A": np.array(list(range(4)) * 5),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": pd.array([2, -1] * 5),
+        }
+    )
+    build_keys_inds = bodo.utils.typing.MetaType((0,))
+    probe_keys_inds = bodo.utils.typing.MetaType((0,))
+    kept_cols = bodo.utils.typing.MetaType((0,))
+    build_col_meta = bodo.utils.typing.ColNamesMetaType(("A",))
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(("C",))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "C",
+            "A",
+        )
+    )
+
+    def test_hash_join(df1, df2):
+        join_state = init_join_state(
+            -1,
+            build_keys_inds,
+            probe_keys_inds,
+            build_col_meta,
+            probe_col_meta,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        saved_input_request1 = True
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1), (), kept_cols, 2
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            _temp1 = _temp1 + 1
+            is_last1 = (_temp1 * 4000) >= len(df1)
+            is_last1, input_request1 = join_build_consume_batch(
+                join_state, T2, is_last1
+            )
+            # Save input_request1 flag after the first iteration, which should be set to
+            # False since shuffle send buffer is full (is_last1=True triggers shuffle)
+            if _temp1 == 1:
+                saved_input_request1 = input_request1
+
+        _temp2 = 0
+        is_last2 = False
+        is_last3 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2), (), kept_cols, 2
+        )
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        while not is_last3:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(df2)
+            _temp2 = _temp2 + 1
+            out_table, is_last3, _ = join_probe_consume_batch(
+                join_state, T4, is_last2, True
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, out_table)
+        delete_join_state(join_state)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return df, saved_input_request1
+
+    expected_df = pd.DataFrame(
+        {
+            "C": pd.array([2] * 25),
+            "A": pd.array([2] * 25),
+        }
+    )
+
+    # Lower shuffle size threshold to trigger shuffle in first iteration
+    with temp_env_override({"BODO_SHUFFLE_THRESHOLD": "1"}):
+        check_func(
+            test_hash_join,
+            (df1, df2),
+            py_output=(expected_df, False),
+            reset_index=True,
+            sort_output=True,
+            only_1D=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1250,7 +1350,7 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -1390,7 +1490,7 @@ def test_join_key_prune(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -1494,7 +1594,7 @@ def test_key_multicast(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -1630,7 +1730,7 @@ def test_only_one_distributed(
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -1784,7 +1884,7 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             is_last1 = (_temp1 * batch_size) >= len(df1)
             _temp1 = _temp1 + 1
 
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         out_dfs = []
@@ -1871,14 +1971,10 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == bodo.stream_loop_sync_iters
-        assert len(out_dfs[bodo.stream_loop_sync_iters - 1]) == batch_size
-        for i in range(bodo.stream_loop_sync_iters - 1):
+        assert len(out_dfs[-1]) == batch_size
+        for i in range(len(out_dfs) - 1):
             assert len(out_dfs[i]) == 0
-        assert (
-            out_dfs[bodo.stream_loop_sync_iters - 1]["D"].str.len()
-            == pd.Series([str_len] * batch_size)
-        ).all()
+        assert (out_dfs[-1]["D"].str.len() == pd.Series([str_len] * batch_size)).all()
 
     # Test 2: Check that if each string is > ((string_prealloc) * 2**(max_resize_count))
     # bytes, we get expected number of batches and the size of the batches is as expected.
@@ -1888,13 +1984,6 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
         max_buffer_size = max(
             smallest_alloc_size,
             (batch_size * string_prealloc * (2**max_resize_count)),
-        )
-        exp_out_chunks = math.ceil(str_len * batch_size / max_buffer_size)
-        # Round to nearest bodo.stream_loop_sync_iters to account for the fact that is_last
-        # can only be true every bodo.stream_loop_sync_iters batches.
-        exp_out_chunks_rounded = (
-            math.ceil(exp_out_chunks / bodo.stream_loop_sync_iters)
-            * bodo.stream_loop_sync_iters
         )
         build_df = pd.DataFrame(
             {
@@ -1909,13 +1998,12 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == exp_out_chunks_rounded
         assert len(out_dfs[0]) == (max_buffer_size // str_len)
         assert (
             out_dfs[0]["D"].str.len()
             == pd.Series([str_len] * (max_buffer_size // str_len))
         ).all()
-        for i in range(1, exp_out_chunks_rounded - 1):
+        for i in range(1, len(out_dfs) - 1):
             assert len(out_dfs[i]) == 0
         assert sum([len(df) for df in out_dfs]) == batch_size
 
@@ -1941,11 +2029,10 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == bodo.stream_loop_sync_iters
         assert len(out_dfs[0]) == 1
         assert len(out_dfs[-1]) == (batch_size - 1)
         assert len(out_dfs[0]["D"][0]) == max_buffer_size + 10
-        for i in range(1, bodo.stream_loop_sync_iters - 2):
+        for i in range(1, len(out_dfs) - 2):
             assert len(out_dfs[i]) == 0
 
     # Test 4: Fill up buffer so that it has resized one fewer than max allowed times.
@@ -1987,10 +2074,9 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == bodo.stream_loop_sync_iters
         assert len(out_dfs[-1]) == batch_size
         assert len(out_dfs[-1]["D"][batch_size - 1]) == str_len_p2
-        for i in range(bodo.stream_loop_sync_iters - 2):
+        for i in range(len(out_dfs) - 2):
             assert len(out_dfs[i]) == 0
 
     # Test 5: Fill up the buffer so that it has resized max number of times.
@@ -2032,25 +2118,15 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             }
         )
         out_dfs = test_helper(build_df, probe_df, batch_size)
-        assert len(out_dfs) == bodo.stream_loop_sync_iters
         assert len(out_dfs[0]) == (batch_size - 1)
         assert len(out_dfs[-1]) == 1
         assert len(out_dfs[-1]["D"][0]) == str_len_p2
-        for i in range(1, 98):
-            assert len(out_dfs[i]) == 0
 
-    # Run all tests:
-    # Set sync iterations explicitly since used in tests
-    saved_sync_iters = bodo.stream_loop_sync_iters
-    try:
-        bodo.stream_loop_sync_iters = bodo.default_stream_loop_sync_iters
-        test1()
-        test2()
-        test3()
-        test4()
-        test5()
-    finally:
-        bodo.stream_loop_sync_iters = saved_sync_iters
+    test1()
+    test2()
+    test3()
+    test4()
+    test5()
 
 
 @pytest.mark.slow
@@ -2124,7 +2200,7 @@ def test_prune_na(build_outer, memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -2266,7 +2342,7 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -2412,7 +2488,7 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
 
             build_idx += 1
 
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -2564,7 +2640,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
 
             build_idx += 1
 
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -2695,7 +2771,7 @@ def test_request_input(df_size, memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 += 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -2799,7 +2875,7 @@ def test_produce_output(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 += 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -2921,7 +2997,7 @@ def test_hash_join_nested_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -3044,7 +3120,7 @@ def test_nested_loop_join_nested_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -3233,7 +3309,7 @@ def test_hash_join_struct_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -3450,7 +3526,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -3618,7 +3694,7 @@ def test_hash_join_map_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -3763,7 +3839,7 @@ def test_nested_loop_join_map_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -3904,7 +3980,7 @@ def test_hash_join_tuple_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -4045,7 +4121,7 @@ def test_nested_loop_join_tuple_array(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -4514,7 +4590,7 @@ def test_hash_join_semistructured_keys(
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -4624,7 +4700,7 @@ def test_join_semistructured_cond_func(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -4724,7 +4800,7 @@ def test_shuffle_batching(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -4843,7 +4919,7 @@ def test_runtime_join_filter(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter = 0
         _temp2 = 0
@@ -4985,7 +5061,7 @@ def test_runtime_join_filter_dict_encoding(merge_join_filters, memory_leak_check
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter1 = 0
         len_after_filter2 = 0
@@ -5121,7 +5197,7 @@ def test_runtime_join_filter_err_checking():
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         _temp2 = 0
         is_last2 = False
@@ -5233,7 +5309,7 @@ def test_runtime_join_filter_simple_casts(merge_join_filters, memory_leak_check)
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter1 = 0
         len_after_filter2 = 0
@@ -5410,7 +5486,7 @@ def test_runtime_join_filter_str_input_dict_key(merge_join_filters, memory_leak_
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter1 = 0
         len_after_filter2 = 0
@@ -5599,7 +5675,7 @@ def test_runtime_join_filter_dict_to_str_cast(merge_join_filters, memory_leak_ch
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter1 = 0
         len_after_filter2 = 0
@@ -5843,7 +5919,7 @@ def test_merging_runtime_join_filters(materialization_threshold, memory_leak_che
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter = 0
 
@@ -5980,7 +6056,7 @@ def test_runtime_join_no_materialization(memory_leak_check):
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
             _temp1 = _temp1 + 1
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
 
         len_after_filter = 0
 

@@ -912,6 +912,16 @@ def define_stream_writer_dtor(
 
     # Decref each payload field
     for attr, fe_type in writer_payload_members:
+        if fe_type == bodo.libs.distributed_api.is_last_state_type:
+            # Delete is_last sync state if writer has it (Parquet and Iceberg)
+            c_fnty = lir.FunctionType(
+                lir.VoidType(),
+                [lir.IntType(8).as_pointer()],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, c_fnty, name="delete_is_last_state"
+            )
+            builder.call(fn_tp, [payload.is_last_state])
         context.nrt.decref(builder, fe_type, getattr(payload, attr))
 
     # Delete table builder state

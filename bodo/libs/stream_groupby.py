@@ -50,6 +50,11 @@ ll.add_symbol(
 )
 ll.add_symbol("delete_groupby_state", stream_groupby_cpp.delete_groupby_state)
 
+ll.add_symbol(
+    "end_union_consume_pipeline_py_entry",
+    stream_groupby_cpp.end_union_consume_pipeline_py_entry,
+)
+
 # The following are used for debugging and testing purposes only:
 ll.add_symbol(
     "groupby_get_op_pool_bytes_pinned", stream_groupby_cpp.get_op_pool_bytes_pinned
@@ -837,6 +842,7 @@ def _groupby_build_consume_batch(
     is_final_pipeline,
 ):
     def codegen(context, builder, sig, args):
+        request_input = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(1),
             [
@@ -844,16 +850,20 @@ def _groupby_build_consume_batch(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(1).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="groupby_build_consume_batch_py_entry"
         )
-        ret = builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, tuple(args) + (request_input,))
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        return context.make_tuple(
+            builder, sig.return_type, [ret, builder.load(request_input)]
+        )
 
-    sig = types.bool_(groupby_state, cpp_table, is_last, is_final_pipeline)
+    ret_type = types.Tuple([types.bool_, types.bool_])
+    sig = ret_type(groupby_state, cpp_table, is_last, is_final_pipeline)
     return sig, codegen
 
 
@@ -875,7 +885,9 @@ def gen_groupby_build_consume_batch_impl(
          Union-Distinct case where this is called in multiple pipelines. For regular
          groupby, this should always be true.
     Returns:
-        bool: is last batch globally with possibility of false negatives due to iterations between syncs
+        tuple(bool, bool): is last batch globally with possibility of false negatives
+        due to iterations between syncs, whether to request input rows from preceding
+         operators
     """
     in_col_inds = MetaType(groupby_state.build_indices)
     n_table_cols = len(in_col_inds)
@@ -898,7 +910,8 @@ class GroupbyBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(groupby_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+        output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
+        return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
 @lower_builtin(groupby_build_consume_batch, types.VarArg(types.Any))

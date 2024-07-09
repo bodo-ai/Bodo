@@ -68,7 +68,7 @@ def _test_mrnf_helper(
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, input_table_kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -724,7 +724,7 @@ def test_mrnf_err_handling(memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, input_table_kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:

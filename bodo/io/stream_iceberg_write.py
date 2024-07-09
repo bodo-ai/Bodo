@@ -514,6 +514,8 @@ iceberg_writer_payload_members = (
     ("iceberg_files_info", python_list_of_heterogeneous_tuples_type),
     # Whether write is occurring in parallel
     ("parallel", types.boolean),
+    # Non-blocking is_last sync state (communicator, request, flags, ...)
+    ("is_last_state", bodo.libs.distributed_api.is_last_state_type),
     # Whether this rank has finished appending data to the table
     ("finished", types.boolean),
     # Batches collected to write
@@ -998,6 +1000,7 @@ def gen_iceberg_writer_init_impl(
         writer["iceberg_files_info"] = get_empty_pylist()
         writer["parallel"] = _is_parallel
         writer["finished"] = False
+        writer["is_last_state"] = bodo.libs.distributed_api.init_is_last_state()
         writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
             operator_id,
             table_builder_state_type,
@@ -1182,7 +1185,7 @@ def overload_append_py_list(pylist, to_append):
 
 
 def iceberg_writer_append_table_inner(
-    writer, table, col_names_meta, is_last, iter
+    writer, table, col_names_meta, local_is_last, iter
 ):  # pragma: no cover
     pass
 
@@ -1192,7 +1195,7 @@ def gen_iceberg_writer_append_table_impl_inner(
     writer,
     table,
     col_names_meta,
-    is_last,
+    local_is_last,
     iter,
 ):  # pragma: no cover
     if not isinstance(writer, IcebergWriterType):  # pragma: no cover
@@ -1205,10 +1208,10 @@ def gen_iceberg_writer_append_table_impl_inner(
             f"iceberg_writer_append_table: Expected type TableType "
             f"for `table`, found {table}"
         )
-    if not is_overload_bool(is_last):  # pragma: no cover
+    if not is_overload_bool(local_is_last):  # pragma: no cover
         raise BodoError(
             f"iceberg_writer_append_table: Expected type boolean "
-            f"for `is_last`, found {is_last}"
+            f"for `local_is_last`, found {local_is_last}"
         )
 
     col_names_meta = unwrap_typeref(col_names_meta)
@@ -1227,14 +1230,13 @@ def gen_iceberg_writer_append_table_impl_inner(
     col_names_arr = pd.array(col_names_meta.meta)
 
     def impl_iceberg_writer_append_table(
-        writer, table, col_names_meta, is_last, iter
+        writer, table, col_names_meta, local_is_last, iter
     ):  # pragma: no cover
         if writer["finished"]:
             return True
         ev = tracing.Event(
             "iceberg_writer_append_table", is_parallel=writer["parallel"]
         )
-        is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)
 
         # ===== Part 1: Accumulate batch in writer and compute total size
         ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
@@ -1244,6 +1246,10 @@ def gen_iceberg_writer_append_table_impl_inner(
         ev_append_batch.add_attribute("table_bytes", table_bytes)
         ev_append_batch.finalize()
         bucket_region = writer["bucket_region"]
+
+        is_last = bodo.libs.distributed_api.sync_is_last_non_blocking(
+            writer["is_last_state"], local_is_last
+        )
 
         # ===== Part 2: Write Parquet file if file size threshold is exceeded
         if is_last or table_bytes >= writer["max_pq_chunksize"]:
@@ -1354,9 +1360,6 @@ def gen_iceberg_writer_append_table_impl_inner(
                 remove_transaction(txn_id, conn, db_schema, table_name)
 
             arrow_filesystem_del(writer["arrow_fs"])
-            # Now that puffin files are finished we no longer need the transaction
-            with bodo.no_warning_objmode():
-                remove_transaction(txn_id, conn, db_schema, table_name)
 
             if not success:
                 # TODO [BE-3249] If it fails due to schema changing, then delete the files.
@@ -1375,7 +1378,7 @@ def gen_iceberg_writer_append_table_impl_inner(
 
 
 def iceberg_writer_append_table(
-    writer, table, col_names_meta, is_last, iter
+    writer, table, col_names_meta, local_is_last, iter
 ):  # pragma: no cover
     pass
 
@@ -1395,9 +1398,11 @@ IcebergWriterAppendInfer._no_unliteral = True
 
 # Using a wrapper to keep iceberg_writer_append_table_inner as overload and avoid
 # Numba objmode bugs (e.g. leftover ir.Del in IR leading to errors)
-def impl_wrapper(writer, table, col_names_meta, is_last, iter):  # pragma: no cover
+def impl_wrapper(
+    writer, table, col_names_meta, local_is_last, iter
+):  # pragma: no cover
     return iceberg_writer_append_table_inner(
-        writer, table, col_names_meta, is_last, iter
+        writer, table, col_names_meta, local_is_last, iter
     )
 
 

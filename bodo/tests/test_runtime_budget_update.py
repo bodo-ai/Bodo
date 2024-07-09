@@ -84,7 +84,7 @@ def hash_join_impl(df1, df2):
                 T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
             _temp1 = _temp1 + 1
 
         op_pool_budget_after_build = join_get_op_pool_budget_bytes(join_state)
@@ -266,7 +266,7 @@ def groupby_impl(df, key_inds_list, func_names, f_in_offsets, f_in_cols):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             _iter_1 = _iter_1 + 1
 
         is_last2 = False

@@ -293,7 +293,8 @@ struct ArrayBuildBuffer {
             (uint8_t*)this->data_array->null_bitmask<arr_type>();
         const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<arr_type>();
 
-        std::vector<bool> inner_array_append_rows;
+        std::vector<bool> inner_array_append_rows(
+            in_arr->child_arrays[0]->length, false);
         uint64_t inner_array_append_rows_sum = 0;
 
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
@@ -308,7 +309,7 @@ struct ArrayBuildBuffer {
             }
             for (offset_t i = in_offsets[row_ind]; i < in_offsets[row_ind + 1];
                  i++) {
-                inner_array_append_rows.push_back(append_rows[row_ind]);
+                inner_array_append_rows[i] = append_rows[row_ind];
             }
         }
 

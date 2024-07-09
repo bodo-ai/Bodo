@@ -244,7 +244,7 @@ mpi_comm_info::mpi_comm_info(
 
 mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
                              const mpi_comm_info& parent_comm_info,
-                             bool _has_nulls)
+                             bool _has_nulls, bool send_only)
     : myrank(parent_comm_info.myrank),
       n_pes(parent_comm_info.n_pes),
       has_nulls(_has_nulls),
@@ -263,9 +263,12 @@ mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
             send_count[i]++;
         }
     }
-    // get recv count
-    MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
+    // NOTE: avoiding alltoall collective for async shuffle cases
+    if (!send_only) {
+        // get recv count
+        MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
+                     MPI_INT64_T, MPI_COMM_WORLD);
+    }
     // get displacements
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
