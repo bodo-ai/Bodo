@@ -152,7 +152,7 @@ struct DictionaryBuilder {
      * replaced and indices transposed
      */
     std::shared_ptr<array_info> UnifyDictionaryArray(
-        const std::shared_ptr<array_info>& in_arr);
+        const std::shared_ptr<array_info>& in_arr, bool use_cache = true);
 
     /**
      * @brief Transform the input array by replacing its dictionary with the
