@@ -115,9 +115,11 @@ class BodoPhysicalWindow(
                         ),
                     )
                 val newExitCond: Variable = builder.symbolTable.genFinishedStreamingFlag()
-                val exitAssign = Op.Assign(newExitCond, consumeCall)
+                val inputRequest: Variable = builder.symbolTable.genInputRequestVar()
+                val exitAssign = Op.TupleAssign(listOf(newExitCond, inputRequest), consumeCall)
                 builder.add(exitAssign)
                 pipeline.endSection(newExitCond)
+                pipeline.addInputRequest(inputRequest)
                 builder.forceEndOperatorAtCurPipeline(ctx.operatorID(), pipeline)
                 null
             }

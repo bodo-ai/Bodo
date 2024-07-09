@@ -704,7 +704,7 @@ class JoinState {
     bool probe_input_finalized = false;
     const int64_t output_batch_size;
     // The number of iterations between syncs
-    int64_t sync_iter;
+    int64_t sync_iter = DEFAULT_SYNC_ITERS;
     // Current iteration of the build and probe steps
     uint64_t build_iter = 0;
     uint64_t probe_iter = 0;
@@ -735,6 +735,17 @@ class JoinState {
 
     // Metrics for join execution.
     JoinMetrics metrics;
+
+    // The IBarrier request used for is_last synchronization
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+    bool is_last_barrier_started = false;
+    bool global_is_last = false;
+    MPI_Comm shuffle_comm;
+
+    // Non-blocking join probe reduce for outer build bitmap communication state
+    MPI_Request probe_reduce_request = MPI_REQUEST_NULL;
+    bool global_probe_reduce_done = false;
+    bool probe_reduce_started = false;
 
     JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
               const std::shared_ptr<bodo::Schema> probe_table_schema_,
@@ -889,6 +900,8 @@ class HashJoinState : public JoinState {
                   // pool size. Else we'll use the provided size.
                   int64_t op_pool_size_bytes = -1,
                   size_t max_partition_depth_ = JOIN_MAX_PARTITION_DEPTH);
+
+    ~HashJoinState() { MPI_Comm_free(&this->shuffle_comm); }
 
     /**
      * @brief Create a global bloom filter for this Hash Join
@@ -1371,30 +1384,4 @@ bool nested_loop_join_probe_consume_batch(
     const std::vector<uint64_t> build_kept_cols,
     const std::vector<uint64_t> probe_kept_cols, bool is_last);
 
-/* ----------------------------- Helper Functions --------------------------- */
-
-/**
- * @brief Wrapper around stream_sync_is_last to avoid synchronization
- * if we have a broadcast join or a replicated input.
- *
- * @param local_is_last Whether we're done on this rank.
- * @param iter Current iteration counter.
- * @param[in] join_state Join state used to get the distributed information
- * and the sync_iter.
- * @return true We don't need to have any more iterations on this rank.
- * @return false We may need to have more iterations on this rank.
- */
-static inline bool join_stream_sync_is_last(bool local_is_last,
-                                            const uint64_t iter,
-                                            JoinState* join_state) {
-    // We must synchronize if either we have a distributed build or an
-    // LEFT/FULL OUTER JOIN where probe is distributed.
-    if (join_state->build_parallel ||
-        (join_state->build_table_outer && join_state->probe_parallel)) {
-        return stream_sync_is_last(local_is_last, iter, join_state->sync_iter);
-    } else {
-        // If we have a broadcast join or a replicated input we don't need to be
-        // synchronized because there is no shuffle.
-        return local_is_last;
-    }
-}
+bool stream_join_sync_is_last(bool local_is_last, JoinState* join_state);

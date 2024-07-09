@@ -1115,22 +1115,27 @@ def _join_build_consume_batch(
     is_last,
 ):
     def codegen(context, builder, sig, args):
+        request_input = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(1),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
+                lir.IntType(1).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="join_build_consume_batch_py_entry"
         )
-        ret = builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, tuple(args) + (request_input,))
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
+        return context.make_tuple(
+            builder, sig.return_type, [ret, builder.load(request_input)]
+        )
 
-    sig = types.bool_(join_state, cpp_table, is_last)
+    ret_type = types.Tuple([types.bool_, types.bool_])
+    sig = ret_type(join_state, cpp_table, is_last)
     return sig, codegen
 
 
@@ -1146,7 +1151,9 @@ def gen_join_build_consume_batch_impl(join_state, table, is_last):
         table (table_type): build table batch
         is_last (bool): is last batch locally
     Returns:
-        bool: is last batch globally with possiblity of false negatives due to iterations between syncs
+        tuple(bool, bool): is last batch globally with possiblity of false negatives
+         due to iterations between syncs, whether to request input rows from preceding
+         operators
     """
     in_col_inds = MetaType(join_state.build_indices)
     n_table_cols = join_state.num_build_input_arrs
@@ -1171,7 +1178,8 @@ class JoinBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(join_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+        output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
+        return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
 JoinBuildConsumeBatchInfer._no_unliteral = True

@@ -18,7 +18,13 @@ from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import intrinsic, overload, register_jitable
+from numba.extending import (
+    intrinsic,
+    models,
+    overload,
+    register_jitable,
+    register_model,
+)
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
@@ -97,6 +103,10 @@ ll.add_symbol("c_recv", hdist.dist_recv)
 ll.add_symbol("c_send", hdist.dist_send)
 ll.add_symbol("timestamptz_reduce", hdist.timestamptz_reduce)
 ll.add_symbol("_dist_transpose_comm", hdist._dist_transpose_comm)
+ll.add_symbol("init_is_last_state", hdist.init_is_last_state)
+ll.add_symbol("delete_is_last_state", hdist.delete_is_last_state)
+ll.add_symbol("sync_is_last_non_blocking", hdist.sync_is_last_non_blocking)
+
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
 mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
@@ -4484,3 +4494,23 @@ def sync_is_last(condition, iter):  # pragma: no cover
         )
     else:
         return False
+
+
+class IsLastStateType(types.Type):
+    """Type for C++ IsLastState pointer"""
+
+    def __init__(self):
+        super().__init__("IsLastStateType()")
+
+
+register_model(IsLastStateType)(models.OpaqueModel)
+is_last_state_type = IsLastStateType()
+
+init_is_last_state = types.ExternalFunction("init_is_last_state", is_last_state_type())
+delete_is_last_state = types.ExternalFunction(
+    "delete_is_last_state", types.none(is_last_state_type)
+)
+# NOTE: using int32 types to avoid i1 vs i8 boolean errors in lowering
+sync_is_last_non_blocking = types.ExternalFunction(
+    "sync_is_last_non_blocking", types.int32(is_last_state_type, types.int32)
+)

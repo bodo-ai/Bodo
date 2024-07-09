@@ -1038,7 +1038,7 @@ JoinState::JoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
       build_parallel(build_parallel_),
       probe_parallel(probe_parallel_),
       output_batch_size(output_batch_size_),
-      sync_iter(sync_iter_),
+      sync_iter(DEFAULT_SYNC_ITERS),
       dummy_probe_table(alloc_table(probe_table_schema_)),
       op_id(op_id_) {
     this->key_dict_builders.resize(this->n_keys);
@@ -1312,6 +1312,8 @@ HashJoinState::HashJoinState(
         this->op_scratch_pool.get(), this->op_scratch_mm));
 
     this->global_bloom_filter = create_bloom_filter();
+
+    MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm);
 
     if (char* unique_vals_limit_env_ =
             std::getenv("BODO_JOIN_UNIQUE_VALUES_LIMIT")) {
@@ -2093,7 +2095,7 @@ bool HashJoinState::RuntimeFilter(
                         this->build_table_schema->column_types[i]->array_type);
                     if (apply_bloom_filter) {
                         unified_arr = this->build_table_dict_builders[i]
-                                          ->TransposeExisting(in_arr);
+                                          ->UnifyDictionaryArray(in_arr);
                     } else {
                         unified_arr = in_arr;
                     }
@@ -3024,6 +3026,45 @@ void HashJoinState::FinalizeKeysUniqueValues() {
 }
 
 /**
+ * @brief Get global is_last flag given local is_last using ibarrier
+ *
+ * @param local_is_last Whether we're done on this rank.
+ * @param[in] join_state Join state used to get the distributed information
+ * and the sync_iter.
+ * @return true We don't need to have any more iterations on this rank.
+ * @return false We may need to have more iterations on this rank.
+ */
+bool stream_join_sync_is_last(bool local_is_last, JoinState* join_state) {
+    if (join_state->global_is_last) {
+        return true;
+    }
+
+    // We must synchronize if either we have a distributed build or an
+    // LEFT/FULL OUTER JOIN where probe is distributed.
+    if ((join_state->build_parallel ||
+         (join_state->build_table_outer && join_state->probe_parallel)) &&
+        local_is_last) {
+        if (!join_state->is_last_barrier_started) {
+            MPI_Ibarrier(join_state->shuffle_comm,
+                         &join_state->is_last_request);
+            join_state->is_last_barrier_started = true;
+            return false;
+        } else {
+            int flag = 0;
+            MPI_Test(&join_state->is_last_request, &flag, MPI_STATUS_IGNORE);
+            if (flag) {
+                join_state->global_is_last = true;
+            }
+            return flag;
+        }
+    } else {
+        // If we have a broadcast join or a replicated input we don't need to be
+        // synchronized because there is no shuffle.
+        return local_is_last;
+    }
+}
+
+/**
  * @brief consume build table batch in streaming join (insert into hash
  * table)
  *
@@ -3034,7 +3075,7 @@ void HashJoinState::FinalizeKeysUniqueValues() {
  */
 bool join_build_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
-                              bool use_bloom_filter, bool is_last) {
+                              bool use_bloom_filter, bool local_is_last) {
     if (join_state->build_input_finalized) {
         if (in_table->nrows() != 0) {
             throw std::runtime_error(
@@ -3051,14 +3092,11 @@ bool join_build_consume_batch(HashJoinState* join_state,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+    // TODO: remove
     if (join_state->build_iter == 0) {
-        join_state->build_shuffle_state.Initialize(in_table,
-                                                   join_state->build_parallel);
+        join_state->build_shuffle_state.Initialize(
+            in_table, join_state->build_parallel, join_state->shuffle_comm);
     }
-
-    // Make is_last global
-    is_last =
-        join_stream_sync_is_last(is_last, join_state->build_iter, join_state);
 
     // Unify dictionaries to allow consistent hashing and fast key
     // comparison using indices NOTE: key columns in build_table_buffer (of
@@ -3164,6 +3202,40 @@ bool join_build_consume_batch(HashJoinState* join_state,
     batch_hashes_partition.reset();
     in_table.reset();
 
+    if (join_state->build_parallel) {
+        std::optional<std::shared_ptr<table_info>> new_data_ =
+            join_state->build_shuffle_state.ShuffleIfRequired(local_is_last);
+        if (new_data_.has_value()) {
+            std::shared_ptr<table_info> new_data = new_data_.value();
+            // NOTE: Partition hashes need to be consistent across ranks, so
+            // need to use dictionary hashes. Since we are using dictionary
+            // hashes, we don't need dictionaries to be global. In fact,
+            // hash_keys_table will ignore the dictionaries entirely when
+            // dict_hashes are provided.
+            dict_hashes = join_state->GetDictionaryHashesForKeys();
+            start_part_hash = start_timer();
+            std::shared_ptr<uint32_t[]> batch_hashes_partition =
+                hash_keys_table(new_data, join_state->n_keys,
+                                SEED_HASH_PARTITION, /*is_parallel*/ true,
+                                /*global_dict_needed*/ false, dict_hashes);
+            join_state->metrics.build_input_part_hashing_time +=
+                end_timer(start_part_hash);
+            // Add new batch of data to partitions (bulk insert)
+            join_state->AppendBuildBatch(new_data, batch_hashes_partition);
+            batch_hashes_partition.reset();
+        }
+    }
+
+    // Make is_last global
+    bool is_last = stream_join_sync_is_last(
+        local_is_last && join_state->build_shuffle_state.SendRecvEmpty(),
+        join_state);
+
+    // If this is not an outer probe, finalize the min/max
+    // values for each key by shuffling across multiple ranks.
+    // This is done before the broadcast handling since
+    // the accumulated min/max state may be parallel but
+    // broadcast handling may change the join_state->build_parallel flag.
     if (is_last && !join_state->probe_table_outer) {
         // If this is not an outer probe, finalize the min/max
         // values for each key by shuffling across multiple ranks.
@@ -3220,40 +3292,15 @@ bool join_build_consume_batch(HashJoinState* join_state,
 
                 // We have decided to do a broadcast join. To do this we
                 // will execute the following steps:
-                // 1. Combine the shuffle buffer into the existing
-                // partition. This is necessary so we can shuffle a single
-                // table.
-                // 2. Broadcast the table across all ranks with allgatherv.
-                // 3. Clear the existing JoinPartition state. This is
+                // 1. Broadcast the table across all ranks with allgatherv.
+                // 2. Clear the existing JoinPartition state. This is
                 // necessary because the allgatherv includes rows that we
                 // have already processed and we need to avoid processing
                 // them twice.
-                // 4. Insert the entire table into the new partition.
+                // 3. Insert the entire table into the new partition.
                 join_state->metrics.is_build_bcast_join = 1;
 
-                // Step 1: Combine the shuffle buffer into the existing
-                // partition
-
-                // Append all the shuffle data to the partition. This allows
-                // us to just shuffle 1 table.
-                // Dictionary hashes for the key columns which will be used
-                // for the partitioning hashes:
-                dict_hashes = join_state->GetDictionaryHashesForKeys();
-
-                batch_hashes_partition = hash_keys_table(
-                    join_state->build_shuffle_state.table_buffer->data_table,
-                    join_state->n_keys, SEED_HASH_PARTITION, false, false,
-                    dict_hashes);
-                join_state->AppendBuildBatch(
-                    join_state->build_shuffle_state.table_buffer->data_table,
-                    batch_hashes_partition);
-
-                // Free the hashes
-                batch_hashes_partition.reset();
-                // Free the shuffle buffer, etc.
-                join_state->build_shuffle_state.Finalize();
-
-                // Step 2: Broadcast the table.
+                // Step 1: Broadcast the table.
 
                 // Gather the partition data.
                 std::shared_ptr<table_info> gathered_table = gather_table(
@@ -3263,10 +3310,10 @@ bool join_build_consume_batch(HashJoinState* join_state,
                 gathered_table =
                     join_state->UnifyBuildTableDictionaryArrays(gathered_table);
 
-                // Step 3: Clear the existing JoinPartition state
+                // Step 2: Clear the existing JoinPartition state
                 join_state->ResetPartitions();
 
-                // Step 4: Insert the broadcast table.
+                // Step 3: Insert the broadcast table.
 
                 // Dictionary hashes for the key columns which will be used
                 // for the partitioning hashes:
@@ -3296,30 +3343,6 @@ bool join_build_consume_batch(HashJoinState* join_state,
         }
     }
 
-    if (join_state->build_parallel) {
-        std::optional<std::shared_ptr<table_info>> new_data_ =
-            join_state->build_shuffle_state.ShuffleIfRequired(is_last);
-        if (new_data_.has_value()) {
-            std::shared_ptr<table_info> new_data = new_data_.value();
-            // NOTE: Partition hashes need to be consistent across ranks, so
-            // need to use dictionary hashes. Since we are using dictionary
-            // hashes, we don't need dictionaries to be global. In fact,
-            // hash_keys_table will ignore the dictionaries entirely when
-            // dict_hashes are provided.
-            dict_hashes = join_state->GetDictionaryHashesForKeys();
-            start_part_hash = start_timer();
-            std::shared_ptr<uint32_t[]> batch_hashes_partition =
-                hash_keys_table(new_data, join_state->n_keys,
-                                SEED_HASH_PARTITION, /*is_parallel*/ true,
-                                /*global_dict_needed*/ false, dict_hashes);
-            join_state->metrics.build_input_part_hashing_time +=
-                end_timer(start_part_hash);
-            // Add new batch of data to partitions (bulk insert)
-            join_state->AppendBuildBatch(new_data, batch_hashes_partition);
-            batch_hashes_partition.reset();
-        }
-    }
-
     // Finalize build on all partitions if it's the last input batch.
     if (is_last) {
         if (use_bloom_filter && join_state->build_parallel) {
@@ -3329,6 +3352,28 @@ bool join_build_consume_batch(HashJoinState* join_state,
             join_state->metrics.bloom_filter_union_reduction_time +=
                 end_timer(start_bloom);
         }
+
+        if (join_state->build_parallel && !join_state->probe_table_outer) {
+            // Ensure key dict builders have all global dictionary values
+            // so we can filter the probe input based on the dictionaries
+            // We don't need to worry about nested dict builders
+            // since they aren't used for filtering
+            for (size_t i = 0; i < join_state->n_keys; ++i) {
+                std::shared_ptr<DictionaryBuilder>& key_dict_builder =
+                    join_state->key_dict_builders[i];
+                if (join_state->build_table_schema->column_types[i]
+                        ->array_type != bodo_array_type::DICT) {
+                    continue;
+                }
+                std::shared_ptr<array_info> empty_dict_array =
+                    create_dict_string_array(
+                        key_dict_builder->dict_buff->data_array,
+                        alloc_nullable_array(0, Bodo_CTypes::INT32));
+                make_dictionary_global_and_unique(empty_dict_array, true);
+                key_dict_builder->UnifyDictionaryArray(empty_dict_array);
+            }
+        }
+
         join_state->FinalizeBuild();
     }
     join_state->build_iter++;
@@ -3355,7 +3400,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                               std::shared_ptr<table_info> in_table,
                               const std::vector<uint64_t> build_kept_cols,
                               const std::vector<uint64_t> probe_kept_cols,
-                              bool is_last) {
+                              bool local_is_last) {
     assert(join_state->build_input_finalized);
     if (join_state->probe_input_finalized) {
         if (in_table->nrows() != 0) {
@@ -3373,16 +3418,15 @@ bool join_probe_consume_batch(HashJoinState* join_state,
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     if (join_state->probe_iter == 0) {
-        join_state->probe_shuffle_state.Initialize(in_table,
-                                                   join_state->probe_parallel);
+        join_state->is_last_request = MPI_REQUEST_NULL;
+        join_state->is_last_barrier_started = false;
+        join_state->global_is_last = false;
+        join_state->probe_shuffle_state.Initialize(
+            in_table, join_state->probe_parallel, join_state->shuffle_comm);
         // Initialize the probe_table_buffer_chunked of partitions
         // 1 and onwards.
         join_state->InitProbeInputBuffers();
     }
-
-    // Make is_last global
-    is_last =
-        join_stream_sync_is_last(is_last, join_state->probe_iter, join_state);
 
     // Update active partition state (temporarily) for hashing and
     // comparison functions.
@@ -3576,7 +3620,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
 
     if (shuffle_possible) {
         std::optional<std::shared_ptr<table_info>> new_data_ =
-            join_state->probe_shuffle_state.ShuffleIfRequired(is_last);
+            join_state->probe_shuffle_state.ShuffleIfRequired(local_is_last);
         if (new_data_.has_value()) {
             std::shared_ptr<table_info> new_data = new_data_.value();
             active_partition->probe_table = new_data;
@@ -3736,35 +3780,72 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         }
     }
 
-    if (is_last && build_table_outer) {
+    // Make is_last global
+    bool is_last = stream_join_sync_is_last(
+        local_is_last && join_state->probe_shuffle_state.SendRecvEmpty(),
+        join_state);
+
+    if (!build_table_outer) {
+        join_state->global_probe_reduce_done = true;
+    }
+
+    if (is_last && build_table_outer && !join_state->global_probe_reduce_done) {
         // We need a reduction of build misses if the probe table is
         // distributed and the build table is not.
         bool build_needs_reduction =
             join_state->probe_parallel && !join_state->build_parallel;
-        // Add unmatched rows from build table to output table
-        time_pt start_build_outer = start_timer();
-        if (build_needs_reduction) {
-            generate_build_table_outer_rows_for_partition<true>(
-                active_partition.get(), build_idxs, probe_idxs);
-        } else {
-            generate_build_table_outer_rows_for_partition<false>(
-                active_partition.get(), build_idxs, probe_idxs);
-        }
-        join_state->metrics.build_outer_output_idx_time +=
-            end_timer(start_build_outer);
 
-        // Use the dummy probe table since all indices are -1
-        join_state->output_buffer->AppendJoinOutput(
-            active_partition->build_table_buffer->data_table,
-            join_state->dummy_probe_table, build_idxs, probe_idxs,
-            build_kept_cols, probe_kept_cols);
-        build_idxs.clear();
-        probe_idxs.clear();
+        if (build_needs_reduction) {
+            // start reduction
+            if (!join_state->probe_reduce_started) {
+                auto& build_table_matched_ =
+                    active_partition.get()->build_table_matched_guard.value();
+                MPI_Datatype mpi_type = get_MPI_typ(Bodo_CTypes::UINT8);
+                MPI_Iallreduce(MPI_IN_PLACE, build_table_matched_->data(),
+                               build_table_matched_->size(), mpi_type, MPI_BOR,
+                               MPI_COMM_WORLD,
+                               &join_state->probe_reduce_request);
+                join_state->probe_reduce_started = true;
+            } else {
+                int flag = 0;
+                MPI_Test(&join_state->probe_reduce_request, &flag,
+                         MPI_STATUS_IGNORE);
+                if (flag) {
+                    join_state->global_probe_reduce_done = true;
+                }
+            }
+        } else {
+            join_state->global_probe_reduce_done = true;
+        }
+
+        if (join_state->global_probe_reduce_done) {
+            // Add unmatched rows from build table to output table
+            time_pt start_build_outer = start_timer();
+            if (build_needs_reduction) {
+                generate_build_table_outer_rows_for_partition<true>(
+                    active_partition.get(), build_idxs, probe_idxs);
+            } else {
+                generate_build_table_outer_rows_for_partition<false>(
+                    active_partition.get(), build_idxs, probe_idxs);
+            }
+            join_state->metrics.build_outer_output_idx_time +=
+                end_timer(start_build_outer);
+
+            // Use the dummy probe table since all indices are -1
+            join_state->output_buffer->AppendJoinOutput(
+                active_partition->build_table_buffer->data_table,
+                join_state->dummy_probe_table, build_idxs, probe_idxs,
+                build_kept_cols, probe_kept_cols);
+            build_idxs.clear();
+            probe_idxs.clear();
+        }
     }
 
     join_state->probe_iter++;
 
-    if (is_last) {
+    bool fully_done = is_last && join_state->global_probe_reduce_done;
+
+    if (fully_done) {
         // TODO Free the shuffle state here to free the memory early.
         // TODO Finalize the input probe buffers of inactive partitions before
         // finalizing any other partition.
@@ -3781,7 +3862,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
         // Finalize the probe step:
         join_state->FinalizeProbe();
     }
-    return is_last;
+    return fully_done;
 }
 
 /**
@@ -3859,11 +3940,17 @@ JoinState* join_state_init_py_entry(
  * @param join_state_ join state pointer
  * @param in_table build table batch
  * @param is_last is last batch locally
+ * @param[out] request_input whether to request input rows from preceding
+ * operators
  * @return updated global is_last with possibility of false negatives due to
  * iterations between syncs
  */
 bool join_build_consume_batch_py_entry(JoinState* join_state_,
-                                       table_info* in_table, bool is_last) {
+                                       table_info* in_table, bool is_last,
+                                       bool* request_input) {
+    // Request input rows from preceding operators by default
+    *request_input = true;
+
     join_state_->metrics.build_input_row_count += in_table->nrows();
     // nested loop join is required if there are no equality keys
     if (join_state_->n_keys == 0) {
@@ -3880,6 +3967,7 @@ bool join_build_consume_batch_py_entry(JoinState* join_state_,
             PyErr_SetString(PyExc_RuntimeError, e.what());
             return false;
         }
+        *request_input = !join_state->build_shuffle_state.BuffersFull();
     }
     if (is_last && (join_state_->op_id != -1)) {
         try {
@@ -4027,6 +4115,9 @@ table_info* join_probe_consume_batch_py_entry(
                                 contain_non_equi_cond, has_bloom_filter, false,
                                 false, false, false)
 #undef CONSUME_PROBE_BATCH
+            if (join_state->probe_shuffle_state.BuffersFull()) {
+                *request_input = false;
+            }
         }
 
         // If after emitting the next batch we'll have more than a full
@@ -4237,7 +4328,7 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
         HashJoinState* join_state = (HashJoinState*)join_state_;
         std::unique_ptr<bodo::DataType>& col_type =
             join_state->build_table_schema->column_types[key_idx];
-        assert(key_idx < join_state->n_keys);
+        assert(static_cast<uint64_t>(key_idx) < join_state->n_keys);
         assert(join_state->build_input_finalized);
 #define RTJF_MIN_MAX_NUMERIC_CASE(dtype, ctype, py_func)                       \
     case dtype: {                                                              \

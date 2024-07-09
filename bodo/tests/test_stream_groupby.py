@@ -64,7 +64,7 @@ def test_groupby_basic(func_name, use_np_data, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -143,7 +143,7 @@ def test_groupby_drop_duplicates(memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -211,7 +211,7 @@ def test_groupby_key_reorder(memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -279,7 +279,7 @@ def test_groupby_dict_str(func_name, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -345,7 +345,7 @@ def test_produce_output(memory_leak_check):
             )
             is_last1 = (_temp1 * batch_size) >= len(df)
             _temp1 = _temp1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T2, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T2, is_last1, True)
 
         out_dfs = []
         is_last2 = False
@@ -372,6 +372,74 @@ def test_produce_output(memory_leak_check):
 
     # Ensure that the output is empty if produce_output is False
     assert not test_groupby(pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}))[1]
+
+
+@pytest.mark.skipif(bodo.get_size() != 2, reason="requires 2 ranks")
+def test_groupby_input_request(memory_leak_check):
+    """Make sure input_request back pressure flag is set properly in groupby build"""
+
+    keys_inds = bodo.utils.typing.MetaType((1,))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+        )
+    )
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    batch_size = 4000
+    fnames = bodo.utils.typing.MetaType(("sum",))
+    f_in_offsets = bodo.utils.typing.MetaType((0, 1))
+    f_in_cols = bodo.utils.typing.MetaType((0,))
+
+    @bodo.jit(distributed=["df"])
+    def test_groupby(df):
+        groupby_state = init_groupby_state(
+            -1, keys_inds, fnames, f_in_offsets, f_in_cols
+        )
+        is_last1 = False
+        _iter_1 = 0
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), kept_cols, 2
+        )
+        _temp1 = bodo.hiframes.table.local_len(T1)
+        saved_input_request1 = True
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter_1 * batch_size), ((_iter_1 + 1) * batch_size))
+            )
+            _iter_1 = _iter_1 + 1
+            is_last1 = (_iter_1 * batch_size) >= _temp1
+            T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
+            is_last1, input_request1 = groupby_build_consume_batch(
+                groupby_state, T3, is_last1, True
+            )
+            # Save input_request1 flag after the first iteration, which should be set to
+            # False since shuffle send buffer is full (is_last1=True triggers shuffle)
+            if _iter_1 == 1:
+                saved_input_request1 = input_request1
+        out_dfs = []
+        is_last2 = False
+        while not is_last2:
+            out_table, is_last2 = groupby_produce_output_batch(groupby_state, True)
+            index_var = bodo.hiframes.pd_index_ext.init_range_index(
+                0, len(out_table), 1, None
+            )
+            df_final = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                (out_table,), index_var, col_meta
+            )
+            out_dfs.append(df_final)
+        delete_groupby_state(groupby_state)
+        return pd.concat(out_dfs), saved_input_request1
+
+    df = pd.DataFrame(
+        {
+            "B": [1, 3, 5, 11, 1, 3, 5, 3],
+            "A": [1, 2, 1, 1, 2, 0, 1, 2],
+        }
+    )
+    # Lower shuffle size threshold to trigger shuffle in first iteration
+    with temp_env_override({"BODO_SHUFFLE_THRESHOLD": "1"}):
+        assert not test_groupby(df)[1]
 
 
 def test_groupby_acc_path_fallback(memory_leak_check):
@@ -434,7 +502,7 @@ def test_groupby_acc_path_fallback(memory_leak_check):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             _iter_1 = _iter_1 + 1
 
         is_last2 = False
@@ -552,7 +620,7 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -827,7 +895,7 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -1010,7 +1078,7 @@ def test_groupby_nested_array_key(df, expected_df, memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -1090,7 +1158,7 @@ def test_groupby_timestamptz_key(memory_leak_check):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
         out_dfs = []
         is_last2 = False
         while not is_last2:
@@ -1203,10 +1271,11 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
                 T2, slice((_iter_1 * 4096), ((_iter_1 + 1) * 4096))
             )
             __bodo_is_last_streaming_output_1 = (_iter_1 * 4096) >= _temp1
-            __bodo_is_last_streaming_output_2 = (
-                bodo.libs.stream_window.window_build_consume_batch(
-                    state_1, T3, __bodo_is_last_streaming_output_1
-                )
+            (
+                __bodo_is_last_streaming_output_2,
+                _,
+            ) = bodo.libs.stream_window.window_build_consume_batch(
+                state_1, T3, __bodo_is_last_streaming_output_1
             )
             _iter_1 = _iter_1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
@@ -1335,18 +1404,20 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
 
     assert "work_stealing_enabled" in output_metrics_dict
     assert output_metrics_dict["work_stealing_enabled"] == 1
-    assert "started_work_stealing_timer" in output_metrics_dict
-    assert output_metrics_dict["started_work_stealing_timer"] == 1
-    assert "n_ranks_done_at_timer_start" in output_metrics_dict
-    assert output_metrics_dict["n_ranks_done_at_timer_start"] == 1
+    if bodo.get_rank() == 0:
+        assert "started_work_stealing_timer" in output_metrics_dict
+        assert output_metrics_dict["started_work_stealing_timer"] == 1
+        assert "n_ranks_done_at_timer_start" in output_metrics_dict
+        assert output_metrics_dict["n_ranks_done_at_timer_start"] == 1
     assert "performed_work_redistribution" in output_metrics_dict
     assert output_metrics_dict["performed_work_redistribution"] == 1
     assert "max_batches_send_recv_per_rank" in output_metrics_dict
     assert output_metrics_dict["max_batches_send_recv_per_rank"] == 2
-    assert "n_ranks_done_before_work_redistribution" in output_metrics_dict
-    assert output_metrics_dict["n_ranks_done_before_work_redistribution"] == 1
+    if bodo.get_rank() == 0:
+        assert "n_ranks_done_before_work_redistribution" in output_metrics_dict
+        assert output_metrics_dict["n_ranks_done_before_work_redistribution"] == 1
     assert "num_shuffles" in output_metrics_dict
-    assert output_metrics_dict["num_shuffles"] == 37
+    assert output_metrics_dict["num_shuffles"] == 32
     assert "redistribute_work_total_time" in output_metrics_dict
     assert output_metrics_dict["redistribute_work_total_time"] > 0
     assert "determine_redistribution_time" in output_metrics_dict
@@ -1356,11 +1427,11 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     assert "shuffle_time" in output_metrics_dict
     assert "num_recv_rows" in output_metrics_dict
     if rank == 0:
-        assert output_metrics_dict["num_recv_rows"] == 299008
+        assert output_metrics_dict["num_recv_rows"] == 262144
     else:
         assert output_metrics_dict["num_recv_rows"] == 0
     assert "num_sent_rows" in output_metrics_dict
     if rank == 0:
         assert output_metrics_dict["num_sent_rows"] == 0
     else:
-        assert output_metrics_dict["num_sent_rows"] == 299008
+        assert output_metrics_dict["num_sent_rows"] == 262144

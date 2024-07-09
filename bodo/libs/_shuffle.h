@@ -270,16 +270,16 @@ table_info* shuffle_renormalization_group_py_entrypt(
 /**
  * @brief Fill buffers of send array to be ready for shuffle (make data of
  target ranks contiguous, add padding to null bits, convert offsets to lengths,
-...)
+ ...)
  *
  * @param send_arr send array with buffers to fill for shuffle
  * @param in_arr original input array
  * @param comm_info communication info (send counts, displacements, ...)
  * @param str_comm_info communication info for string data (send counts,
- * displacements, ...)
+ displacements, ...)
  * @param is_parallel: Used to indicate whether tracing should be parallel or
- * not.
-*/
+ not
+ */
 void fill_send_array(std::shared_ptr<array_info> send_arr,
                      std::shared_ptr<array_info> in_arr,
                      const mpi_comm_info& comm_info,
@@ -329,7 +329,6 @@ void copy_gathered_null_bytes(uint8_t* null_bitmask,
  */
 void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
                                size_t num_strs);
-
 /**
  * @brief Update dictionary encoded array to drop any duplicates in its
  * local copy of the dictionary. If the dictionary is already global then

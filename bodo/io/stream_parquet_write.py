@@ -79,6 +79,8 @@ parquet_writer_payload_members = (
     ("bucket_region", types.unicode_type),
     # Whether write is occurring in parallel
     ("parallel", types.boolean),
+    # Non-blocking is_last sync state (communicator, request, flags, ...)
+    ("is_last_state", bodo.libs.distributed_api.is_last_state_type),
     # Whether this rank has finished appending data to the table
     ("finished", types.boolean),
     # Batches collected to write
@@ -289,6 +291,7 @@ def gen_parquet_writer_init_impl(
         writer["bucket_region"] = bucket_region
         writer["parallel"] = _is_parallel
         writer["finished"] = False
+        writer["is_last_state"] = bodo.libs.distributed_api.init_is_last_state()
         writer["batches"] = bodo.libs.table_builder.init_table_builder_state(
             operator_id,
             table_builder_state_type,
@@ -385,7 +388,7 @@ def overload_get_fname_prefix(base_prefix, iter):
 
 
 def parquet_writer_append_table_inner(
-    writer, table, col_names_meta, is_last, iter
+    writer, table, col_names_meta, local_is_last, iter
 ):  # pragma: no cover
     pass
 
@@ -395,7 +398,7 @@ def gen_parquet_writer_append_table_impl_inner(
     writer,
     table,
     col_names_meta,
-    is_last,
+    local_is_last,
     iter,
 ):  # pragma: no cover
     if not isinstance(writer, ParquetWriterType):  # pragma: no cover
@@ -408,10 +411,10 @@ def gen_parquet_writer_append_table_impl_inner(
             f"parquet_writer_append_table: Expected type TableType "
             f"for `table`, found {table}"
         )
-    if not is_overload_bool(is_last):  # pragma: no cover
+    if not is_overload_bool(local_is_last):  # pragma: no cover
         raise BodoError(
             f"parquet_writer_append_table: Expected type boolean "
-            f"for `is_last`, found {is_last}"
+            f"for `local_is_last`, found {local_is_last}"
         )
 
     col_names_meta = unwrap_typeref(col_names_meta)
@@ -430,14 +433,13 @@ def gen_parquet_writer_append_table_impl_inner(
     col_names_arr = pd.array(col_names_meta.meta)
 
     def impl_parquet_writer_append_table(
-        writer, table, col_names_meta, is_last, iter
+        writer, table, col_names_meta, local_is_last, iter
     ):  # pragma: no cover
         if writer["finished"]:
             return True
         ev = tracing.Event(
             "parquet_writer_append_table", is_parallel=writer["parallel"]
         )
-        is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)
 
         # ===== Part 1: Accumulate batch in writer and compute total size
         ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
@@ -446,6 +448,10 @@ def gen_parquet_writer_append_table_impl_inner(
         table_bytes = bodo.libs.table_builder.table_builder_nbytes(table_builder_state)
         ev_append_batch.add_attribute("table_bytes", table_bytes)
         ev_append_batch.finalize()
+
+        is_last = bodo.libs.distributed_api.sync_is_last_non_blocking(
+            writer["is_last_state"], local_is_last
+        )
 
         # ===== Part 2: Write Parquet file if file size threshold is exceeded
         if is_last or table_bytes >= PARQUET_WRITE_CHUNK_SIZE:
@@ -509,7 +515,7 @@ def gen_parquet_writer_append_table_impl_inner(
 
 
 def parquet_writer_append_table(
-    writer, table, col_names_meta, is_last, iter
+    writer, table, col_names_meta, local_is_last, iter
 ):  # pragma: no cover
     """Append data batch to Parquet write buffer and write to output if necessary.
 
@@ -517,7 +523,7 @@ def parquet_writer_append_table(
         writer (ParquetWriterType): streaming Parquet writer object
         table (TableType): input data batch
         col_names_meta (ColNamesMetaType): table column names
-        is_last (bool): is last batch flag
+        local_is_last (bool): is last batch flag
         iter (int): iteration number
     """
     pass
@@ -538,9 +544,11 @@ ParquetWriterAppendInfer._no_unliteral = True
 
 # Using a wrapper to keep parquet_writer_append_table_inner as overload and avoid
 # Numba objmode bugs (e.g. leftover ir.Del in IR leading to errors)
-def impl_wrapper(writer, table, col_names_meta, is_last, iter):  # pragma: no cover
+def impl_wrapper(
+    writer, table, col_names_meta, local_is_last, iter
+):  # pragma: no cover
     return parquet_writer_append_table_inner(
-        writer, table, col_names_meta, is_last, iter
+        writer, table, col_names_meta, local_is_last, iter
     )
 
 

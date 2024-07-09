@@ -701,7 +701,8 @@ def gen_window_build_consume_batch_impl(window_state: WindowStateType, table, is
         table (table_type): build table batch
         is_last (bool): is last batch (in this pipeline) locally
     Returns:
-        bool: is last batch globally with possibility of false negatives due to iterations between syncs
+        tuple(bool, bool): is last batch globally with possibility of false negatives
+        due to iterations between syncs, request new input flag (always true)
     """
     in_col_inds = MetaType(window_state.build_indices)
     n_table_cols = len(in_col_inds)
@@ -713,9 +714,12 @@ def gen_window_build_consume_batch_impl(window_state: WindowStateType, table, is
         ):  # pragma: no cover
             cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
             # Currently the window state C++ object is just a group by state.
-            return bodo.libs.stream_window._window_build_consume_batch(
+            is_last = bodo.libs.stream_window._window_build_consume_batch(
                 window_state, cpp_table, is_last
             )
+            # Returning True for input request flag since there are no shuffle buffers
+            # and we just accumulate input in this case.
+            return is_last, True
 
         return impl_window_build_consume_batch
 
@@ -767,7 +771,8 @@ class WindowBuildConsumeBatchInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(window_build_consume_batch)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        return signature(types.bool_, *folded_args).replace(pysig=pysig)
+        output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
+        return signature(output_type, *folded_args).replace(pysig=pysig)
 
 
 @lower_builtin(window_build_consume_batch, types.VarArg(types.Any))

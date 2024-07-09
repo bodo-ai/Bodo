@@ -378,7 +378,7 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
                 T1, slice((iter_build * 3), ((iter_build + 1) * 3))
             )
             is_last_build = (iter_build * 3) >= length_build
-            done_build = bodo.libs.stream_join.join_build_consume_batch(
+            done_build, _ = bodo.libs.stream_join.join_build_consume_batch(
                 join_state, T3, is_last_build
             )
             iter_build = iter_build + 1
@@ -579,7 +579,7 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
                 T1, slice((iter_build * 3), ((iter_build + 1) * 3))
             )
             is_last_build = (iter_build * 3) >= length_build
-            done_build = bodo.libs.stream_join.join_build_consume_batch(
+            done_build, _ = bodo.libs.stream_join.join_build_consume_batch(
                 join_state, T3, is_last_build
             )
             iter_build = iter_build + 1

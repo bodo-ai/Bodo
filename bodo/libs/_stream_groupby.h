@@ -768,6 +768,8 @@ class GroupbyOutputState {
             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
         bool enable_work_stealing_ = false);
 
+    ~GroupbyOutputState();
+
     /**
      * @brief Finalize the output appends during the normal Groupby Build stage.
      * If work-stealing is enabled, this will only finalize the active chunk
@@ -801,9 +803,6 @@ class GroupbyOutputState {
     const bool enable_work_stealing = false;
     // Debug mode for work-stealing.
     bool debug_work_stealing = false;
-    // How many ranks are done outputting all of their output batches. Only
-    // updated when work-stealing is enabled.
-    uint64_t num_ranks_done = 0;
     // Whether we've started the timer for work-stealing. This is started when a
     // threshold fraction of ranks are done.
     bool work_steal_timer_started = false;
@@ -831,6 +830,36 @@ class GroupbyOutputState {
     // shuffle during redistribution. This is to protect against OOM errors.
     int64_t work_stealing_max_batched_send_recv_per_rank = -1;
 
+    // Parallel work stealing decision state
+
+    // Whether work stealing code decided to perform work redistribution
+    bool performed_work_redistribution = false;
+
+    // Work stealing "command" output from rank 0
+    bool should_steal_work = false;
+
+    // A separate communicator for work stealing decision messages to avoid
+    // message conflicts with other operators
+    MPI_Comm mpi_comm;
+
+    // Work stealing "command" broadcast communication state
+    MPI_Request steal_work_bcast_request = MPI_REQUEST_NULL;
+    bool steal_work_bcast_started = false;
+    bool steal_work_bcast_done = false;
+
+    // Work stealing "done" message state
+    MPI_Request done_request = MPI_REQUEST_NULL;
+    bool done_sent = false;
+
+    // Work stealing management state on rank 0
+    bool recvs_posted = false;
+    bool command_sent = false;
+    std::vector<MPI_Request> done_recv_requests;
+    // Dummy buffer for posting done receives
+    std::unique_ptr<bool[]> done_recv_buff;
+    std::vector<bool> done_received;
+    int num_ranks_done = 0;
+
     ///
 
     // MPI number of processes and this process' rank.
@@ -845,6 +874,13 @@ class GroupbyOutputState {
      *
      */
     void StealWorkIfNeeded();
+
+    /**
+     * @brief Helper function that manages work stealing state on rank 0 and
+     broadcasts work stealing "command" to all ranks (do work stealing or not).
+     *
+     */
+    void manage_work_stealing_rank_0();
 
     /**
      * @brief Helper to redistribute the remaining batches between ranks if
@@ -1055,6 +1091,12 @@ class GroupbyState {
     uint64_t num_histogram_bits = 0;
     bool compute_histogram = false;
 
+    // The IBarrier request used for is_last synchronization
+    MPI_Request is_last_request = MPI_REQUEST_NULL;
+    bool is_last_barrier_started = false;
+    bool global_is_last = false;
+    MPI_Comm shuffle_comm;
+
     GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                  std::vector<int32_t> ftypes_,
                  std::vector<int32_t> window_ftypes_,
@@ -1066,6 +1108,8 @@ class GroupbyState {
                  std::vector<bool> mrnf_sort_cols_to_keep_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
                  int64_t op_id_, int64_t op_pool_size_bytes_);
+
+    ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
     /**
      * @brief Unify dictionaries of input table with build table
@@ -1242,6 +1286,15 @@ class GroupbyState {
      */
     std::shared_ptr<table_info> UnifyOutputDictionaryArrays(
         const std::shared_ptr<table_info>& out_table);
+
+    /**
+     * @brief Get global is_last flag given local is_last using ibarrier
+     *
+     * @param local_is_last local is_last flag (all input is consumed). This
+     * assumes that local_is_last will always be true after the first iteration
+     * it is set to true.
+     */
+    bool GetGlobalIsLast(bool local_is_last);
 
     /**
      * @brief Report the current set of build stage metrics and reset them in

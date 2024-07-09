@@ -137,7 +137,7 @@ def test_join_row_count_collection(memory_leak_check):
                 T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
             _temp1 = _temp1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _temp1)
 
@@ -274,7 +274,7 @@ def test_groupby_row_count_collection(memory_leak_check):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             _iter_1 = _iter_1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
         is_last2 = False
@@ -467,6 +467,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    n_pes = comm.Get_size()
     tmp_path_rank0 = comm.bcast(str(tmp_path))
     build_keys_inds = bodo.utils.typing.MetaType((0, 1))
     probe_keys_inds = bodo.utils.typing.MetaType((0, 1))
@@ -502,7 +503,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
                 T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
             _temp1 = _temp1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _temp1)
 
@@ -603,7 +604,8 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
         assert "n_key_dict_builders" in build_metrics_dict
         assert "n_non_key_dict_builders" in build_metrics_dict
         assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= 1
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
     assert "shuffle_buffer_append_time" in build_metrics_dict
     assert "ht_hashing_time" in build_metrics_dict
     assert "repartitioning_time_total" in build_metrics_dict
@@ -616,7 +618,8 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
         assert "n_key_dict_builders" in probe_metrics_dict
         assert "n_non_key_dict_builders" in probe_metrics_dict
         assert "n_shuffles" in probe_metrics_dict
-        assert probe_metrics_dict["n_shuffles"] >= 1
+        # Async shuffle code avoids any shuffle when not necessary
+        assert probe_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
     assert "output_append_time" in probe_metrics_dict
     assert "output_total_nrows" in probe_metrics_dict
     assert "output_total_nrows_rem_at_finalize" in probe_metrics_dict
@@ -669,7 +672,7 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
                 T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
             )
             is_last1 = (_temp1 * 4000) >= len(df1)
-            is_last1 = join_build_consume_batch(join_state, T2, is_last1)
+            is_last1, _ = join_build_consume_batch(join_state, T2, is_last1)
             _temp1 = _temp1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _temp1)
 
@@ -778,6 +781,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    n_pes = comm.Get_size()
     tmp_path_rank0 = comm.bcast(str(tmp_path))
 
     keys_inds = bodo.utils.typing.MetaType((0,))
@@ -810,7 +814,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             _iter_1 = _iter_1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
 
@@ -874,7 +878,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
             == "AGG"
         )
         assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= 1
+        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
 
     assert "pre_agg_total_time" in build_metrics_dict
     assert "n_repartitions_in_append" in build_metrics_dict
@@ -900,6 +904,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    n_pes = comm.Get_size()
     tmp_path_rank0 = comm.bcast(str(tmp_path))
 
     keys_inds = bodo.utils.typing.MetaType((0,))
@@ -932,7 +937,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(groupby_state, T3, is_last1, True)
             _iter_1 = _iter_1 + 1
         bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
 
@@ -994,7 +999,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
             == "ACC"
         )
         assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= 1
+        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
 
     assert "pre_agg_total_time" not in build_metrics_dict
     assert "n_repartitions_in_append" in build_metrics_dict
@@ -1018,6 +1023,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    n_pes = comm.Get_size()
     tmp_path_rank0 = comm.bcast(str(tmp_path))
     keys_inds = bodo.utils.typing.MetaType((0,))
     fnames = bodo.utils.typing.MetaType(("min_row_number_filter",))
@@ -1064,7 +1070,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, input_table_kept_cols, False)
             _iter_1 = _iter_1 + 1
-            is_last1 = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
+            is_last1, _ = groupby_build_consume_batch(mrnf_state, T3, is_last1, True)
         bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
         out_dfs = []
         is_last2 = False
@@ -1136,7 +1142,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
             == "MIN ROW NUMBER FILTER"
         )
         assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= 1
+        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
 
     assert "pre_agg_total_time" not in build_metrics_dict
     assert "n_repartitions_in_append" in build_metrics_dict
@@ -1187,7 +1193,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
                 union_state, T3, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -1209,7 +1215,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
                 union_state, T3, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -1231,7 +1237,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1 = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
                 union_state, T3, is_last1, True
             )
             _iter_1 = _iter_1 + 1

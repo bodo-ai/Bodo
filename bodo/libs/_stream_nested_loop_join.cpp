@@ -399,6 +399,44 @@ void NestedLoopJoinState::ReportProbeStageMetrics() {
     JoinState::ReportProbeStageMetrics();
 }
 
+/**
+ * @brief Synchronize is_last flag for nested loop join's probe. Regular hash
+ * join is async now so this is only needed for nested loop join.
+ *
+ * @param local_is_last Whether we're done on this rank.
+ * @param iter Current iteration counter.
+ * @param[in] join_state Join state used to get the distributed information
+ * and the sync_iter.
+ * @return true We don't need to have any more iterations on this rank.
+ * @return false We may need to have more iterations on this rank.
+ */
+static inline bool nested_loop_join_stream_sync_is_last(bool local_is_last,
+                                                        const uint64_t iter,
+                                                        JoinState* join_state) {
+    // We must synchronize if either we have a distributed build or an
+    // LEFT/FULL OUTER JOIN where probe is distributed.
+    // When build is parallel, every iteration has blocking collectives (bcast
+    // and allreduce for outer case) so is_last sync has to be blocking as well
+    // to make sure the same number of blocking collectives are called on every
+    // rank. When build is not parallel, is_last sync has to be non-blocking
+    // since the number of iterations per rank can be variable.
+    if (join_state->build_parallel) {
+        bool global_is_last = false;
+        if (((iter + 1) % join_state->sync_iter) ==
+            0) {  // Use iter + 1 to avoid a sync on the first iteration
+            MPI_Allreduce(&local_is_last, &global_is_last, 1, MPI_UNSIGNED_CHAR,
+                          MPI_LAND, MPI_COMM_WORLD);
+        }
+        return global_is_last;
+    } else if (join_state->build_table_outer && join_state->probe_parallel) {
+        return stream_join_sync_is_last(local_is_last, join_state);
+    } else {
+        // If we have a broadcast join or a replicated input we don't need to be
+        // synchronized because there is no shuffle.
+        return local_is_last;
+    }
+}
+
 bool nested_loop_join_probe_consume_batch(
     NestedLoopJoinState* join_state, std::shared_ptr<table_info> in_table,
     const std::vector<uint64_t> build_kept_cols,
@@ -415,10 +453,6 @@ bool nested_loop_join_probe_consume_batch(
         // additional synchronization
         return true;
     }
-
-    // Make is_last global
-    is_last =
-        join_stream_sync_is_last(is_last, join_state->probe_iter, join_state);
 
     // We only need to take the parallel path if both tables are parallel
     // and the build table wasn't broadcast.
@@ -461,6 +495,11 @@ bool nested_loop_join_probe_consume_batch(
         join_state->ProcessProbeChunk(std::move(in_table), build_kept_cols,
                                       probe_kept_cols);
     }
+
+    // Make is_last global
+    is_last = nested_loop_join_stream_sync_is_last(
+        is_last, join_state->probe_iter, join_state);
+
     if (join_state->build_table_outer && is_last) {
         // Add unmatched rows from build table
         // for outer join
