@@ -307,7 +307,9 @@ _DI4Y = _days_before_year(5)  #    "    "   "   "   4   "
 @register_jitable
 def _ymd2ord(year, month, day):  # pragma: no cover
     "year, month, day -> ordinal, considering 01-Jan-0001 as day 1."
-    dim = _days_in_month(year, month)
+    # If we pass in 2/29 on a non-leap-year, decrement to 2/28
+    if month == 2 and (not _is_leap(year)) and day == 29:
+        day -= 1
     return _days_before_year(year) + _days_before_month(year, month) + day
 
 
