@@ -39,7 +39,10 @@ import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.PartialJoinConditionIntoChildrenRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
+import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules.PruneLeftSingleRowJoinRuleConfig
+import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules.PruneRightSingleRowJoinRuleConfig
 import com.bodosql.calcite.application.logicalRules.SingleValuePruneRule
+import com.bodosql.calcite.application.logicalRules.ValuesReduceRule
 import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
@@ -391,6 +394,52 @@ object BodoRules {
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
+    @JvmField
+    val PRUNE_EMPTY_PROJECT_RULE: RelOptRule =
+        PruneEmptyRules.RemoveEmptySingleRule.RemoveEmptySingleRuleConfig.PROJECT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val PRUNE_EMPTY_FILTER_RULE: RelOptRule =
+        PruneEmptyRules.RemoveEmptySingleRule.RemoveEmptySingleRuleConfig.FILTER
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val PRUNE_EMPTY_AGGREGATE_RULE: RelOptRule =
+        PruneEmptyRules.RemoveEmptySingleRule.RemoveEmptySingleRuleConfig.AGGREGATE
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val PRUNE_EMPTY_SORT_RULE: RelOptRule =
+        PruneEmptyRules.RemoveEmptySingleRule.RemoveEmptySingleRuleConfig.SORT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val PRUNE_EMPTY_UNION_RULE: RelOptRule =
+        PruneEmptyRules.UnionEmptyPruneRuleConfig.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val LEFT_PRUNE_SINGLE_ROW_JOIN_RULE: RelOptRule =
+        PruneLeftSingleRowJoinRuleConfig.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val RIGHT_PRUNE_SINGLE_ROW_JOIN_RULE: RelOptRule =
+        PruneRightSingleRowJoinRuleConfig.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val PROJECT_VALUES_REDUCE_RULE: RelOptRule =
+        ValuesReduceRule.Config.PROJECT.withRelBuilderFactory(BODO_LOGICAL_BUILDER).toRule()
+
     // Rewrite filters in either Filter or Join to convert OR with shared subexpression
     // into
     // an AND and then OR. For example
@@ -494,7 +543,7 @@ object BodoRules {
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
-    // Remove any SINGLE_VALUE calls that are unnecssary.
+    // Remove any SINGLE_VALUE calls that are unnecessary.
     @JvmField
     val SINGLE_VALUE_REMOVE_RULE: RelOptRule =
         SingleValuePruneRule.Config.DEFAULT.toRule()
@@ -1119,8 +1168,6 @@ object BodoRules {
             // finalized. Ideally this should only run after every join is pushed
             // as far as possible since this should be a correctness constraint.
             JOIN_CONDITION_TO_FILTER_RULE,
-            LEFT_JOIN_REMOVE_RULE,
-            RIGHT_JOIN_REMOVE_RULE,
         )
 
     /**
@@ -1181,6 +1228,14 @@ object BodoRules {
             FILTER_PROJECT_TRANSPOSE_RULE,
             LEFT_JOIN_REMOVE_RULE,
             RIGHT_JOIN_REMOVE_RULE,
+            PRUNE_EMPTY_PROJECT_RULE,
+            PRUNE_EMPTY_FILTER_RULE,
+            PRUNE_EMPTY_AGGREGATE_RULE,
+            PRUNE_EMPTY_SORT_RULE,
+            PRUNE_EMPTY_UNION_RULE,
+            LEFT_PRUNE_SINGLE_ROW_JOIN_RULE,
+            RIGHT_PRUNE_SINGLE_ROW_JOIN_RULE,
+            PROJECT_VALUES_REDUCE_RULE,
             JOIN_REORDER_CONDITION_RULE,
             FILTER_REORDER_CONDITION_RULE,
             LIMIT_PROJECT_TRANSPOSE_RULE,
