@@ -741,7 +741,12 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
         nullable_bool_count++;
     } else if (arr->arr_type == bodo_array_type::DICT) {
         time_pt start = start_timer();
-        auto out_arr = dict_builder->UnifyDictionaryArray(arr);
+        // Unify the dictionary but don't use the cache
+        // because the dictionary is not shared across ranks so we're unlikely
+        // to get a cache hit and will just evict entries that may actually be
+        // useful.
+        auto out_arr =
+            dict_builder->UnifyDictionaryArray(arr, /*use_cache=*/false);
         metrics.dict_unification_time += end_timer(start);
         return out_arr;
     } else if (arr->arr_type == bodo_array_type::ARRAY_ITEM) {
