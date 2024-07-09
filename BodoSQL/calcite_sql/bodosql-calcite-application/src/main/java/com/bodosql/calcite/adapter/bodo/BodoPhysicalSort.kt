@@ -208,7 +208,7 @@ class BodoPhysicalSort(
             )
         val sortInit = Assign(sortStateVar, stateCall)
         // TODO(aneesh) provide a better memory estimate
-        batchPipeline.initializeStreamingState(ctx.operatorID(), sortInit, OperatorType.SORT, -1)
+        batchPipeline.initializeStreamingState(ctx.operatorID(), sortInit, OperatorType.SORT, SORT_MEMORY_ESTIMATE)
 
         return sortStateVar
     }
@@ -244,5 +244,8 @@ class BodoPhysicalSort(
             val traitSet = cluster.traitSet().replace(collation)
             return BodoPhysicalSort(cluster, traitSet, child, collation, offset, fetch)
         }
+
+        // Start with a static budget. Sort then expands its budget dynamically during the Finalize step.
+        const val SORT_MEMORY_ESTIMATE = 256 * 1024 * 1024
     }
 }
