@@ -141,8 +141,12 @@ bool StreamSortState::consume_batch(std::shared_ptr<table_info> table,
     }
     builder.AppendChunk(table);
     if (is_last) {
+        // Instead of finalizing here we could finalize after we determine the
+        // bounds and then instead of building a completely sorted list locally,
+        // we can partition the list to build the list of chunks that need to be
+        // sent to each rank.
         local_chunks = builder.Finalize();
-        phase = StreamSortPhase::PRODUCE_OUTPUT;
+        phase = StreamSortPhase::GLOBAL_SORT;
     }
     return is_last;
 }
@@ -200,7 +204,9 @@ std::shared_ptr<table_info> StreamSortState::get_parallel_sort_bounds() {
         local_chunks[i].table->unpin();
     }
 
-    auto local_samples = concat_tables(local_sample_chunks);
+    auto local_samples = local_sample_chunks.empty()
+                             ? dummy_output_chunk
+                             : concat_tables(local_sample_chunks);
     local_sample_chunks.clear();
 
     // Collecting all samples globally
@@ -217,20 +223,275 @@ std::shared_ptr<table_info> StreamSortState::get_parallel_sort_bounds() {
     return bounds;
 }
 
+std::vector<std::vector<std::shared_ptr<table_info>>>
+StreamSortState::partition_chunks_by_rank(int n_pes,
+                                          std::shared_ptr<table_info> bounds) {
+    assert(n_pes == bounds->nrows() + 1);
+
+    std::vector<std::vector<std::shared_ptr<table_info>>> rankToChunks(n_pes);
+
+    // some chunks might need to be split across multiple ranks. For those
+    // chunks we know that a prefix of the chunk will be the "largest" elements
+    // for one rank, and the suffix will be the "smallest" elements for one or
+    // more ranks.
+    std::vector<TableBuildBuffer> smallestPartialChunks;
+    std::vector<TableBuildBuffer> largestPartialChunks;
+    const std::shared_ptr<table_info>& reftable = local_chunks[0].table;
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    for (auto& col : reftable->columns) {
+        dict_builders.push_back(create_dict_builder_for_array(col, false));
+    }
+    for (int i = 0; i < n_pes; i++) {
+        smallestPartialChunks.emplace_back(reftable->schema(), dict_builders);
+        largestPartialChunks.emplace_back(reftable->schema(), dict_builders);
+    }
+
+    uint32_t rank_id = 0;
+    for (size_t chunk_id = 0; chunk_id < local_chunks.size(); chunk_id++) {
+        const auto& tableAndRange = local_chunks[chunk_id];
+        // Compare the bounds with the ranges to determine which rank a
+        // chunk will start at
+        while (rank_id < uint32_t(n_pes - 1) &&
+               KeyComparisonAsPython(
+                   n_key_t, vect_ascending.data(), bounds->columns, 0, rank_id,
+                   tableAndRange.range->columns, 0, 0, na_position.data())) {
+            rank_id++;
+        }
+
+        // if max(table) < bounds[rank_id] we can send all of table
+        if (KeyComparisonAsPython(
+                n_key_t, vect_ascending.data(), tableAndRange.range->columns, 0,
+                1, bounds->columns, 0, rank_id, na_position.data())) {
+            rankToChunks[rank_id].push_back(tableAndRange.table);
+        } else {
+            // We need to split this chunk up
+            tableAndRange.table->pin();
+            uint32_t start_rank_id = rank_id;
+            for (size_t row = 0; row < tableAndRange.table->nrows(); row++) {
+                while ((rank_id < uint32_t(n_pes - 1)) &&
+                       KeyComparisonAsPython(n_key_t, vect_ascending.data(),
+                                             bounds->columns, 0, rank_id,
+                                             tableAndRange.table->columns, 0,
+                                             row, na_position.data())) {
+                    rank_id++;
+                }
+                TableBuildBuffer& builder =
+                    (rank_id == start_rank_id) ? largestPartialChunks[rank_id]
+                                               : smallestPartialChunks[rank_id];
+                builder.ReserveTable(tableAndRange.table);
+                builder.AppendRowKeys(tableAndRange.table, row,
+                                      tableAndRange.table->columns.size());
+            }
+            tableAndRange.table->unpin();
+        }
+    }
+
+    for (int i = 0; i < n_pes; i++) {
+        if (smallestPartialChunks[i].data_table->nrows()) {
+            rankToChunks[i].insert(
+                rankToChunks[i].begin(),
+                std::move(smallestPartialChunks[i].data_table));
+        }
+        if (largestPartialChunks[i].data_table->nrows()) {
+            rankToChunks[i].emplace_back(
+                std::move(largestPartialChunks[i].data_table));
+        }
+    }
+
+    return rankToChunks;
+}
+
+/**
+ * @brief Construct inputs to shuffle_table_kernel by combining at most one
+ * chunk per rank into a single table
+ *
+ * @param n_pes number of rank
+ * @param myrank local rank
+ * @param rankToChunks vector of length n_pes with one vector of chunks per
+ * rank. Note that all chunks are unpinned.
+ * @param rankToCurrentChunk for each rank, index into rankToChunks[rank] to
+ * determine which chunk to send.
+ * @param dummy_output_chunk empty table to use if no chunks are avalible to
+ * send
+ *
+ * @return pair of table and hashes mapping rows to rank to input into
+ * shuffle_table_kernel
+ */
+std::pair<std::shared_ptr<table_info>, std::shared_ptr<uint32_t[]>>
+construct_table_to_send(
+    int n_pes, int myrank,
+    std::vector<std::vector<std::shared_ptr<table_info>>>& rankToChunks,
+    std::vector<size_t>& rankToCurrentChunk,
+    std::shared_ptr<table_info> dummy_output_chunk) {
+    // Tables that are being sent in this round
+    std::vector<std::shared_ptr<table_info>> tables_to_send;
+    // Once we concat the list above, we need to know which range of rows
+    // will be sent to which ranks. We maintain a list of row offsets into
+    // the final table for this.
+    // offsets[i] stores the index of the first row to send to rank i, and
+    // the length of the list will be appended to the end, so the number of
+    // rows to send to rank i will always be offsets[i + 1] - offsets[i].
+    std::vector<int64_t> offsets;
+
+    // Track how many rows will be the table after concat
+    int64_t cursor = 0;
+    for (int i = 0; i < n_pes; i++) {
+        std::shared_ptr<table_info> table_to_send;
+
+        if (i != myrank) {
+            if (rankToCurrentChunk[i] < rankToChunks[i].size()) {
+                std::swap(table_to_send,
+                          rankToChunks[i][rankToCurrentChunk[i]]);
+                rankToCurrentChunk[i]++;
+                table_to_send->pin();
+            }
+        }
+
+        offsets.push_back(cursor);
+        if (table_to_send) {
+            tables_to_send.push_back(table_to_send);
+            cursor += table_to_send->nrows();
+        }
+    }
+    offsets.push_back(cursor);
+
+    auto table_to_send = tables_to_send.empty() ? dummy_output_chunk
+                                                : concat_tables(tables_to_send);
+
+    for (const auto& table : tables_to_send) {
+        table->unpin();
+    }
+    tables_to_send.clear();
+
+    // TODO(aneesh) Ideally we'd use point-to-point communication and just
+    // sent tables directly to the rank they're destined for without setting
+    // up the hashes/using shuffle_table_kernel
+    std::shared_ptr<uint32_t[]> hashes =
+        std::make_unique<uint32_t[]>(offsets.back());
+    cursor = 0;
+    for (int i = 0; i < n_pes; i++) {
+        int64_t num_elems = offsets[i + 1] - offsets[i];
+        for (int j = 0; j < num_elems; j++) {
+            hashes[cursor] = i;
+            cursor++;
+        }
+    }
+
+    return std::make_pair(std::move(table_to_send), std::move(hashes));
+}
+
+/**
+ * We need to know how many rounds of communication we need - this is determined
+ * by the largest count of chunks that need to be sent between two hosts.
+ *
+ * @param n_pes number of rank
+ * @param myrank local rank
+ * @param rankToChunks vector of length n_pes with one vector of chunks per
+ * rank. Note that all chunks are unpinned.
+ *
+ * @return the number of communication rounds required
+ */
+int64_t get_required_num_rounds_for_sort(
+    int n_pes, int myrank,
+    std::vector<std::vector<std::shared_ptr<table_info>>>& rankToChunks) {
+    int64_t local_num_rounds = 0;
+    std::vector<int64_t> send_counts(n_pes, 0);
+    for (int i = 0; i < n_pes; i++) {
+        if (i == myrank) {
+            continue;
+        }
+        send_counts[i] = rankToChunks[i].size();
+        local_num_rounds = std::max(local_num_rounds, send_counts[i]);
+    }
+    int64_t num_rounds = 0;
+    MPI_Allreduce(&local_num_rounds, &num_rounds, 1, MPI_INT64_T, MPI_MAX,
+                  MPI_COMM_WORLD);
+
+    return num_rounds;
+}
+
+void StreamSortState::global_sort() {
+    if (!parallel) {
+        // Move the tables from the sorted local chunks to the output
+        for (const auto& chunk : local_chunks) {
+            output_chunks.push_back(chunk.table);
+        }
+        local_chunks.clear();
+        return;
+    }
+
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    auto bounds = get_parallel_sort_bounds();
+    auto rankToChunks = partition_chunks_by_rank(n_pes, bounds);
+
+    auto num_rounds =
+        get_required_num_rounds_for_sort(n_pes, myrank, rankToChunks);
+
+    SortedChunkedTableBuilder global_builder(
+        n_key_t, vect_ascending, na_position, dead_keys, builder.chunk_size);
+
+    for (auto& chunk : rankToChunks[myrank]) {
+        global_builder.AppendChunk(std::move(chunk));
+    }
+
+    std::vector<size_t> rankToCurrentChunk(n_pes);
+
+    for (int64_t round = 0; round < num_rounds; round++) {
+        auto [table_to_send, hashes] =
+            construct_table_to_send(n_pes, myrank, rankToChunks,
+                                    rankToCurrentChunk, dummy_output_chunk);
+
+        // Shuffle all the data
+        mpi_comm_info comm_info(table_to_send->columns, hashes, parallel);
+        auto collected_table = shuffle_table_kernel(
+            std::move(table_to_send), hashes, comm_info, parallel);
+        auto sorted_chunk = sort_values_table_local(
+            std::move(collected_table), n_key_t, vect_ascending.data(),
+            na_position.data(), dead_keys.data(), false);
+        global_builder.AppendChunk(std::move(sorted_chunk));
+    }
+
+    auto out_chunks = global_builder.Finalize();
+    for (const auto& chunk : out_chunks) {
+        output_chunks.push_back(std::move(chunk.table));
+    }
+}
+
+std::pair<std::shared_ptr<table_info>, bool> StreamSortState::get_output() {
+    std::shared_ptr<table_info> output = nullptr;
+    bool out_is_last = false;
+    if (output_idx < output_chunks.size()) {
+        std::swap(output, output_chunks[output_idx]);
+        output_idx++;
+    } else {
+        out_is_last = true;
+        output = dummy_output_chunk;
+    }
+    return std::make_pair(output, out_is_last);
+}
+
 StreamSortState* stream_sort_state_init_py_entry(int64_t n_key_t,
                                                  int64_t* vect_ascending,
                                                  int64_t* na_position) {
-    // Copy the per-column configuration into owned vectors
-    std::vector<int64_t> vect_ascending_(n_key_t);
-    std::vector<int64_t> na_position_(n_key_t);
-    for (int64_t i = 0; i < n_key_t; i++) {
-        vect_ascending_[i] = vect_ascending[i];
-        na_position_[i] = na_position[i];
+    try {
+        // Copy the per-column configuration into owned vectors
+        std::vector<int64_t> vect_ascending_(n_key_t);
+        std::vector<int64_t> na_position_(n_key_t);
+        for (int64_t i = 0; i < n_key_t; i++) {
+            vect_ascending_[i] = vect_ascending[i];
+            na_position_[i] = na_position[i];
+        }
+        auto* state = new StreamSortState(n_key_t, std::move(vect_ascending_),
+                                          std::move(na_position_));
+        state->phase = StreamSortPhase::PRE_BUILD;
+        return state;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-    auto* state = new StreamSortState(n_key_t, std::move(vect_ascending_),
-                                      std::move(na_position_));
-    state->phase = StreamSortPhase::PRE_BUILD;
-    return state;
 }
 
 bool stream_sort_build_consume_batch_py_entry(StreamSortState* state,
@@ -249,48 +510,21 @@ table_info* stream_sort_product_output_batch_py_entry(StreamSortState* state,
                                                       bool produce_output,
                                                       bool parallel,
                                                       bool* out_is_last) {
-    if (!parallel) {
-        std::shared_ptr<table_info> output = nullptr;
-        if (state->output_idx < state->output_chunks.size()) {
-            std::swap(output, state->output_chunks[state->output_idx]);
-            state->output_idx++;
-        } else {
-            *out_is_last = true;
-            output = state->dummy_output_chunk;
-        }
-    } else {
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        // most of this needs to be moved to state
-        auto bounds = state->get_parallel_sort_bounds();
-        std::vector<uint32_t> chunkToStartRank;
-        std::vector<size_t> rankToFirstChunk(n_pes);
-        for (uint32_t rank_id = 0; rank_id < static_cast<uint32_t>(n_pes);
-             rank_id++) {
-            rankToFirstChunk[rank_id] = std::numeric_limits<uint32_t>::max();
-        }
-        uint32_t rank_id = 0;
-        for (size_t chunk_id = 0; chunk_id < state->local_chunks.size();
-             chunk_id++) {
-            const auto& tableAndRange = state->local_chunks[chunk_id];
-            // Compare the bounds with the ranges to determine which rank a
-            // chunk will start at
-            while (KeyComparisonAsPython(
-                state->n_key_t, state->vect_ascending.data(), bounds->columns,
-                0, rank_id, tableAndRange.range->columns, 0, 0,
-                state->na_position.data())) {
-                rank_id++;
-            }
-            rankToFirstChunk[rank_id] =
-                std::min(rankToFirstChunk[rank_id], chunk_id);
-            chunkToStartRank.push_back(rank_id);
+    try {
+        // TODO(aneesh) this can be made async - not all communication needs to
+        // be done upfront
+        if (state->phase == StreamSortPhase::GLOBAL_SORT) {
+            state->global_sort();
+            state->phase = StreamSortPhase::PRODUCE_OUTPUT;
         }
 
-        std::vector<size_t> rankToidx = rankToFirstChunk;
-        // send `n_pes` chunks to every host and return
+        auto [output, is_last] = state->get_output();
+        *out_is_last = is_last;
+        return new table_info(*output);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-    return nullptr;
 }
 
 void delete_stream_sort_state(StreamSortState* state) { delete state; }
