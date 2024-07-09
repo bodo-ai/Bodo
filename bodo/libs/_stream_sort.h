@@ -74,24 +74,37 @@ struct SortedChunkedTableBuilder {
     std::vector<TableAndRange> Finalize();
 };
 
-enum class StreamSortPhase { INIT, PRE_BUILD, BUILD, PRODUCE_OUTPUT, INVALID };
+enum class StreamSortPhase {
+    INIT,
+    PRE_BUILD,
+    BUILD,
+    GLOBAL_SORT,
+    PRODUCE_OUTPUT,
+    INVALID
+};
 
 struct StreamSortState {
     int64_t n_key_t;
     std::vector<int64_t> vect_ascending;
     std::vector<int64_t> na_position;
     std::vector<int64_t> dead_keys;
-
-    SortedChunkedTableBuilder builder;
-    std::vector<TableAndRange> local_chunks;
-
-    size_t output_idx = 0;
-    std::vector<std::shared_ptr<table_info>> output_chunks;
-
-    StreamSortPhase phase = StreamSortPhase::INIT;
-
     bool parallel = true;
 
+    // builder will create a sorted list from the chunks passed to consume batch
+    SortedChunkedTableBuilder builder;
+    // output from the sorted builder
+    std::vector<TableAndRange> local_chunks;
+
+    // Index of chunk to yield
+    size_t output_idx = 0;
+    // List of chunks ready to yield
+    std::vector<std::shared_ptr<table_info>> output_chunks;
+
+    // We need to track the phase of the algorithm to know which objects we need
+    // to initialize
+    StreamSortPhase phase = StreamSortPhase::INIT;
+
+    // This will be initialized the first time consume_batch is called
     std::shared_ptr<table_info> dummy_output_chunk;
 
     StreamSortState(int64_t n_key_t_, std::vector<int64_t>&& vect_ascending_,
@@ -124,4 +137,12 @@ struct StreamSortState {
      * These bounds determine which elements are assigned to which ranks.
      */
     std::shared_ptr<table_info> get_parallel_sort_bounds();
+
+    void global_sort();
+
+    std::pair<std::shared_ptr<table_info>, bool> get_output();
+
+    // Helper methods
+    std::vector<std::vector<std::shared_ptr<table_info>>>
+    partition_chunks_by_rank(int n_pes, std::shared_ptr<table_info> bounds);
 };
