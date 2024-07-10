@@ -11,6 +11,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 import bodosql
@@ -736,8 +737,15 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
             only_jit_1DVar=True,
         )
         stdout, stderr = capfd.readouterr()
-        expected_log_messages = ["Converting to a broadcast hash join"]
+        if bodo.get_rank() == 0:
+            expected_log_messages = ["Converting to a broadcast hash join"]
+        else:
+            expected_log_messages = [None]
+
+        comm = MPI.COMM_WORLD
         for expected_log_message in expected_log_messages:
-            assert (
-                expected_log_message in stderr
-            ), f"Expected log message ('{expected_log_message}') not in logs!"
+            assert_success = True
+            if expected_log_message is not None:
+                assert_success = expected_log_message in stderr
+            assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+            assert assert_success
