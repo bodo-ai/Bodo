@@ -16,6 +16,7 @@ from bodo.utils.aggregate_query_profiles import aggregate
 def main(argv: list[str]):  # pragma: no cover
     parser = argparse.ArgumentParser()
     parser.add_argument("dir", type=Path)
+    parser.add_argument("--print", dest="print", default=False, action="store_true")
     args = parser.parse_args(argv[1:])
     assert args.dir.is_dir(), f"'{args.dir}' is not a directory."
 
@@ -28,7 +29,8 @@ def main(argv: list[str]):  # pragma: no cover
         logs.append(data)
 
     aggregated = json.dumps(aggregate(logs), indent=4)
-    print(aggregated)
+    if args.print:
+        print(aggregated)
     with open(args.dir / "aggregated.json", "w") as f:
         f.write(aggregated)
         print(
