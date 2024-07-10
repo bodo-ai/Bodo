@@ -13,7 +13,7 @@ import com.bodosql.calcite.rex.RexNamedParam;
 import com.bodosql.calcite.schema.FunctionExpander;
 import com.bodosql.calcite.sql.BodoSqlUtil;
 import com.bodosql.calcite.sql.SqlTableSampleRowLimitSpec;
-import com.bodosql.calcite.sql.ddl.SqlSnowflakeCreateTableBase;
+import com.bodosql.calcite.sql.ddl.BodoSqlCreateTableBase;
 import com.bodosql.calcite.sql.func.SqlNamedParam;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -193,12 +193,12 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
   @Override
   protected RelRoot convertQueryRecursive(
       SqlNode query, boolean top, @Nullable RelDataType targetRowType) {
-    if (query instanceof SqlSnowflakeCreateTableBase) {
+    if (query instanceof BodoSqlCreateTableBase) {
       // Create table has to be the topmost relnode
       assert top;
       // Bodo change: intercept logic for CREATE TABLE and call our own method
       return RelRoot.of(
-          bodoConvertCreateTable((SqlSnowflakeCreateTableBase) query), SqlKind.CREATE_TABLE);
+          bodoConvertCreateTable((BodoSqlCreateTableBase) query), SqlKind.CREATE_TABLE);
     }
     return super.convertQueryRecursive(query, top, targetRowType);
   }
@@ -208,7 +208,7 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
    *
    * @param createCall The CREATE TABLE call being converted
    */
-  private RelNode bodoConvertCreateTable(SqlSnowflakeCreateTableBase createCall) {
+  private RelNode bodoConvertCreateTable(BodoSqlCreateTableBase createCall) {
     final SqlNode createTableDef = requireNonNull(createCall.getQuery());
     final RelNode inputRel =
         convertCreateTableDefinition(

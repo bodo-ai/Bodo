@@ -1370,6 +1370,16 @@ def test_basic_write_replace(
     passed = None
     if comm.Get_rank() == 0:
         passed = _test_equal_guard(df, py_out, sort_output=False, check_dtype=False)
+        table_cmt = (
+            get_spark()
+            .sql(f"DESCRIBE TABLE EXTENDED hadoop_prod.{db_schema}.{table_name}")
+            .filter("col_name = 'Comment'")
+            .select("data_type")
+            .head()
+        )
+        assert (
+            table_cmt is None
+        ), f"Expected table comment to be None, but actual comment is not None"
     passed = comm.bcast(passed)
     assert passed == 1
 
@@ -1437,7 +1447,12 @@ def test_basic_write_new_append(
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
 
     def create_impl(df, table_name, conn, db_schema):
-        df.to_sql(table_name, conn, db_schema, if_exists="append")
+        df.to_sql(
+            table_name,
+            conn,
+            db_schema,
+            if_exists="append",
+        )
 
     orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
     if base_name == "DICT_ENCODED_STRING_TABLE":
@@ -1498,6 +1513,17 @@ def test_basic_write_new_append(
 
         if not_hashable:
             bodo_out = convert_non_pandas_columns(bodo_out)
+
+        table_cmt = (
+            get_spark()
+            .sql(f"DESCRIBE TABLE EXTENDED hadoop_prod.{db_schema}.{table_name}")
+            .filter("col_name = 'Comment'")
+            .select("data_type")
+            .head()
+        )
+        assert (
+            table_cmt is None
+        ), f"Expected table comment to be None, but actual comment is not None"
 
         passed = _test_equal_guard(
             bodo_out,

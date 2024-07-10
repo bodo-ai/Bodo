@@ -1,12 +1,17 @@
 import os
 import tempfile
 from io import StringIO
+from typing import Optional
 
 import numba
 import pandas as pd
+import pytest
 
 import bodo
 import bodosql
+from bodo.tests.iceberg_database_helpers.utils import (
+    get_spark_tabular,
+)
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -162,8 +167,110 @@ def test_filter_pushdown_col_not_read(memory_leak_check, tabular_catalog):
         )
 
 
+def parse_table_property(s):
+    """Given property column from "DESCRIBE TABLE EXTENDED", parse it into dict
+        There might be builtin functions to extract proerties, but currently
+        we implement our own version.
+
+        Input string is in format of "['Foo'='A','Bar'='B, C, D']".
+        Since "," can appear in values or keys, we can't simply use s.split(",") and
+        then s.split('=').
+        But a pattern we observe is when serving as key-value separators there are no
+        spaces around ",". So we customize this split(",") to only split on "," with
+        no subsequent space.
+
+    Args:
+        s (string): Input table property string
+
+    Returns:
+        dict: A dictionary with key-value pairs of table properties in string
+    """
+
+    i = 1
+    properties = {}
+    while i < len(s) - 1:
+        j = i + 1
+        while j < len(s) - 1 and (s[j] != "," or s[j + 1] == " "):
+            j += 1
+        properties[s[i:j].split("=")[0]] = s[i:j].split("=")[1]
+        i = j + 1
+    return properties
+
+
+def check_table_comment(
+    tabular_connection,
+    schema,
+    table_name,
+    number_columns,
+    table_comments: Optional[str] = None,
+    column_comments=False,
+    table_properties: Optional[dict] = None,
+):
+    """Helper function to test table comments are correctly added
+
+    Args:
+        tabular_connection:
+        schema (_type_): Databse schema
+        table_name (_type_): Table name
+        number_columns (int): Number of columns of the table
+        table_comments (bool, optional): Whether the test case will test table comments. Defaults to False.
+        column_comments (bool, optional): Whether the test case will test column comments. Defaults to False.
+    """
+
+    spark = get_spark_tabular(tabular_connection)
+    table_cmt = (
+        spark.sql(f"DESCRIBE TABLE EXTENDED {schema}.{table_name}")
+        .filter("col_name = 'Comment'")
+        .select("data_type")
+        .head()
+    )
+    if table_comments is not None:
+        assert (
+            table_cmt[0] == table_comments
+        ), f'Expected table comment to be "{table_comments}", got "{table_cmt}"'
+
+    df = spark.sql(f"DESCRIBE TABLE {schema}.{table_name}").toPandas()
+    for i in range(number_columns):
+        if not column_comments or i % 2 == 1:
+            assert (
+                df.iloc[i]["comment"] is None
+            ), f"Expected column {i} comment to be None, but actual comment is not None"
+        else:
+            assert (
+                df.iloc[i]["comment"] == f"{table_name}_test_colcmt_{i}"
+            ), f'Expected column {i} comment to be "{table_name}_test_colcmt_{i}", got a different one'
+
+    if table_properties is not None:
+        str = (
+            spark.sql(f"DESCRIBE TABLE EXTENDED {schema}.{table_name}")
+            .filter("col_name = 'Table Properties'")
+            .select("data_type")
+            .head()[0]
+        )
+        parsed_properties = parse_table_property(str)
+
+        for keys in table_properties:
+            assert (
+                keys in parsed_properties
+            ), f"Expected table properties {keys}, find nothing"
+            assert (
+                parsed_properties[keys] == table_properties[keys]
+            ), f"Expected key {keys} with value {table_properties[keys]}, got {parsed_properties[keys]}"
+
+
+@pytest.mark.parametrize("column_comments", [True, False])
+@pytest.mark.parametrize("table_properties", [True, False])
+@pytest.mark.parametrize("table_comments", ["test_tbl_comments", "", None])
+@pytest.mark.parametrize("construct", ["CREATE", "CREATE OR REPLACE"])
 def test_tabular_catalog_iceberg_write(
-    tabular_catalog, tabular_connection, memory_leak_check
+    tabular_catalog,
+    tabular_connection,
+    table_comments,
+    # Here we are testing different combinations of column comments, so the comments are generated later
+    column_comments,
+    table_properties,
+    construct,
+    memory_leak_check,
 ):
     """tests that writing tables works"""
     import bodo_iceberg_connector as bic
@@ -196,7 +303,36 @@ def test_tabular_catalog_iceberg_write(
         lambda: gen_unique_table_id("bodosql_catalog_write_iceberg_table").upper()
     )()
 
-    ctas_query = f"CREATE OR REPLACE TABLE {schema}.{table_name} AS SELECT * from __bodolocal__.table1"
+    column_comment = [
+        f"{table_name}_test_colcmt_{i}" if i % 2 == 0 else None
+        for i in range(len(in_df.columns))
+    ]
+    if not column_comments:
+        column_comment_str = ""
+    else:
+        column_comment_str = "("
+        for i in range(len(column_comment)):
+            column_comment_str += f"c{i + 1} "
+            column_comment_str += chr(65 + i)
+            column_comment_str += (
+                "" if column_comment[i] is None else f" comment '{column_comment[i]}'"
+            )
+            if i < len(column_comment) - 1:
+                column_comment_str += f", "
+        column_comment_str += ")"
+    table_property = (
+        f"TBLPROPERTIES ('TBLPROPERTIES' = 'A', 'TEST_TBL' = 'T', 'TEST_TBL' = 'TRUE')"
+        if table_properties
+        else ""
+    )
+    ref_table_properties = (
+        None if not table_properties else {"TBLPROPERTIES": "A", "TEST_TBL": "TRUE"}
+    )
+    table_comment = (
+        f"COMMENT = '{table_comments}'" if table_comments is not None else f""
+    )
+
+    ctas_query = f"{construct} TABLE {schema}.{table_name} {column_comment_str} {table_comment} {table_property} AS SELECT * from __bodolocal__.table1"
     exception_occurred_in_test_body = False
     try:
         # Only test with only_1D=True so we only insert into the table once.
@@ -214,6 +350,15 @@ def test_tabular_catalog_iceberg_write(
             return bodo.allgatherv(output_df)
 
         output_df = read_results(con_str, schema, table_name)
+        check_table_comment(
+            tabular_connection,
+            schema,
+            table_name,
+            len(output_df.columns),
+            table_comments=table_comments,
+            column_comments=column_comments,
+            table_properties=ref_table_properties,
+        )
         assert_tables_equal(output_df, in_df, check_dtype=False)
 
     except Exception as e:

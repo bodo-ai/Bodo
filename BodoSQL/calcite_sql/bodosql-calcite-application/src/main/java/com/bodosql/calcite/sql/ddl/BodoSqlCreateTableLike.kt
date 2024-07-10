@@ -9,7 +9,7 @@ import org.apache.calcite.sql.parser.SqlParserPos
 /**
  * Object to describe a `CREATE TABLE` statement using `LIKE`
  */
-class SqlSnowflakeCreateTableLike(
+class BodoSqlCreateTableLike(
     pos: SqlParserPos?,
     replace: Boolean,
     tableType: CreateTableType?,
@@ -19,7 +19,7 @@ class SqlSnowflakeCreateTableLike(
     val clusterExprs: SqlNodeList?,
     val copyGrants: Boolean,
     comment: SqlNode?,
-) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, likeSource, comment) {
+) : BodoSqlCreateTableBase(pos, replace, tableType, ifNotExists, name, null, likeSource, comment) {
     override fun unparseSuffix(
         writer: SqlWriter,
         leftPrec: Int,

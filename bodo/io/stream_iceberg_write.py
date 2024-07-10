@@ -676,6 +676,7 @@ def start_write_wrapper(
     table_name,
     table_loc,
     iceberg_schema_id,
+    create_table_info,
     mode,
     output_pyarrow_schema,
     partition_spec,
@@ -691,6 +692,7 @@ def overload_start_write_wrapper(
     table_name,
     table_loc,
     iceberg_schema_id,
+    create_table_info,
     mode,
     output_pyarrow_schema,
     partition_spec,
@@ -705,6 +707,7 @@ def overload_start_write_wrapper(
         table_name,
         table_loc,
         iceberg_schema_id,
+        create_table_info,
         mode,
         output_pyarrow_schema,
         partition_spec,
@@ -717,6 +720,7 @@ def overload_start_write_wrapper(
                 table_name,
                 table_loc,
                 iceberg_schema_id,
+                create_table_info,
                 output_pyarrow_schema,
                 partition_spec,
                 sort_order,
@@ -890,6 +894,7 @@ def iceberg_writer_init(
     schema,
     col_names_meta,
     if_exists,
+    create_table_meta=None,
     expected_state_type=None,
     allow_theta_sketches=False,
     input_dicts_unified=False,
@@ -905,6 +910,7 @@ def gen_iceberg_writer_init_impl(
     schema,
     col_names_meta,
     if_exists,
+    create_table_meta=None,
     expected_state_type=None,
     allow_theta_sketches=False,
     input_dicts_unified=False,
@@ -915,6 +921,17 @@ def gen_iceberg_writer_init_impl(
 
     col_names_meta = unwrap_typeref(col_names_meta)
     col_names = col_names_meta.meta
+
+    create_table_info = None
+    if not is_overload_none(create_table_meta):
+        create_table_info = unwrap_typeref(create_table_meta)
+        if not isinstance(
+            create_table_info, bodo.utils.typing.CreateTableMetaType
+        ):  # pragma: no cover
+            raise BodoError(
+                f"iceberg_writer_init: Expected type CreateTableMetaType "
+                f"for `create_table_meta`, found {create_table_info}"
+            )
 
     expected_state_type = unwrap_typeref(expected_state_type)
     if is_overload_none(expected_state_type):
@@ -941,6 +958,7 @@ def gen_iceberg_writer_init_impl(
         schema,
         col_names_meta,
         if_exists,
+        create_table_meta=None,
         expected_state_type=None,
         allow_theta_sketches=False,
         input_dicts_unified=False,
@@ -978,6 +996,7 @@ def gen_iceberg_writer_init_impl(
             table_name,
             table_loc,
             iceberg_schema_id,
+            create_table_info,
             mode,
             output_pyarrow_schema,
             partition_spec,
@@ -1144,7 +1163,7 @@ class IcebergWriterInitInfer(AbstractTemplate):
             "iceberg_writer_init",
             args,
             kws,
-            6,
+            7,
             "expected_state_type",
             default=types.none,
         )

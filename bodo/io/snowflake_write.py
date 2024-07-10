@@ -575,10 +575,10 @@ def gen_snowflake_writer_append_table_impl_inner(
 
     create_table_info = unwrap_typeref(create_table_meta)
     if not isinstance(
-        create_table_info, bodo.utils.typing.SnowflakeCreateTableMetaType
+        create_table_info, bodo.utils.typing.CreateTableMetaType
     ):  # pragma: no cover
         raise BodoError(
-            f"snowflake_writer_append_table: Expected type SnowflakeCreateTableMetaType "
+            f"snowflake_writer_append_table: Expected type CreateTableMetaType "
             f"for `create_table_meta`, found {create_table_info}"
         )
 

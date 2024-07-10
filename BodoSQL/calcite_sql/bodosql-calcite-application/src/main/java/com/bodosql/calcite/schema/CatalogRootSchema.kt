@@ -5,7 +5,7 @@ import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.jdbc.CalciteSchema
 import org.apache.calcite.schema.SchemaPlus
@@ -35,7 +35,7 @@ class CatalogRootSchema(catalog: BodoSQLCatalog?) : CatalogSchema(rootName, 0, I
         tableName: String?,
         ifExists: WriteTarget.IfExistsBehavior,
         createTableType: CreateTableType?,
-        meta: SnowflakeCreateTableMetadata,
+        meta: CreateTableMetadata,
     ): Expr? {
         throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
     }
