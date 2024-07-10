@@ -5,7 +5,7 @@ import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
 import com.bodosql.calcite.catalog.BodoSQLCatalog
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import com.google.common.collect.ImmutableList
@@ -58,7 +58,7 @@ class RootSchema {
             tableName: String,
             ifExists: IfExistsBehavior,
             createTableType: CreateTableType,
-            meta: SnowflakeCreateTableMetadata,
+            meta: CreateTableMetadata,
         ): Expr? {
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
         }

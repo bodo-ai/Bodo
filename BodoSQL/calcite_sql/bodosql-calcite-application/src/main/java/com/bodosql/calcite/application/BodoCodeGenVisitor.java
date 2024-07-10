@@ -64,7 +64,7 @@ import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTable;
 import com.bodosql.calcite.traits.BatchingProperty;
@@ -820,7 +820,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer(0);
-    Expr writeState = writeTarget.streamingCreateTableInit(operatorID, createTableType);
+    Expr writeState =
+        writeTarget.streamingCreateTableInit(this, operatorID, createTableType, node.getMeta());
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1063,7 +1064,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     // First, create the writer state before the loop
     timerInfo.insertStateStartTimer(0);
-    Expr writeInitCode = writeTarget.streamingInsertIntoInit(operatorID);
+    Expr writeInitCode = writeTarget.streamingInsertIntoInit(this, operatorID);
     Variable writerVar = this.genWriterVar();
     currentPipeline.initializeStreamingState(
         operatorID,
@@ -1084,7 +1085,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
             currentPipeline.getExitCond(),
             currentPipeline.getIterVar(),
             Expr.None.INSTANCE,
-            new SnowflakeCreateTableMetadata());
+            new CreateTableMetadata());
     this.generatedCode.add(new Op.Assign(globalIsLast, writerAppendCall));
     currentPipeline.endSection(globalIsLast);
     timerInfo.insertLoopOperationEndTimer(1);

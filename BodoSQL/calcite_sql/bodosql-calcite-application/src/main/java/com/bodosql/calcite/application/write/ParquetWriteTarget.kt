@@ -4,7 +4,7 @@ import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
@@ -23,8 +23,10 @@ class ParquetWriteTarget(
      * @return A code generation expression for initializing the table.
      */
     override fun streamingCreateTableInit(
+        visitor: BodoCodeGenVisitor,
         operatorID: OperatorID,
         createTableType: CreateTableType,
+        meta: CreateTableMetadata,
     ): Expr {
         return Expr.Call(
             "bodo.io.stream_parquet_write.parquet_writer_init",
@@ -45,8 +47,11 @@ class ParquetWriteTarget(
      * @param operatorID The operatorID used for tracking memory allocation.
      * @return A code generation expression for initializing the insert into.
      */
-    override fun streamingInsertIntoInit(operatorID: OperatorID): Expr {
-        return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
+    override fun streamingInsertIntoInit(
+        visitor: BodoCodeGenVisitor,
+        operatorID: OperatorID,
+    ): Expr {
+        return streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
     }
 
     /**
@@ -70,7 +75,7 @@ class ParquetWriteTarget(
         isLastVar: Variable,
         iterVar: Variable,
         columnPrecisions: Expr,
-        meta: SnowflakeCreateTableMetadata,
+        meta: CreateTableMetadata,
     ): Expr {
         val args = listOf(stateVar, tableVar, columnNamesGlobal, isLastVar, iterVar)
         return Expr.Call("bodo.io.stream_parquet_write.parquet_writer_append_table", args)

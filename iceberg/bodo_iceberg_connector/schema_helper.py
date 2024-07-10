@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pyarrow as pa
 import pyarrow.jvm
 
@@ -197,32 +199,54 @@ def convert_arrow_schema_to_large_types(schema: pa.Schema) -> pa.Schema:
     return pa.schema(new_fields)
 
 
-def arrow_to_iceberg_schema(schema: pa.Schema):
+def arrow_to_iceberg_schema(
+    schema: pa.Schema, column_comments: Optional[list[Optional[str]]] = None
+):
     """
     Construct an Iceberg Java Schema object from a PyArrow Schema instance.
     Unlike reading where we convert from Iceberg to Java Arrow to PyArrow,
     we will directory convert from PyArrow to Iceberg.
 
     :param schema: PyArrow schema to convert
+    :column_comments: Column comments to include. None means no comments are provided.
+    If not None, column_comments[i] = None means no comments for i-th column.
+    If len(column_comments) < # columns, column_comments[i] are treated as None for i >= len(column_comments)
     :return: Equivalent org.apache.iceberg.Schema object
     """
     nested_fields = []
     for id in range(len(schema)):
         field = schema.field(id)
-        nested_fields.append(arrow_to_iceberg_field(field))
+        nested_fields.append(
+            arrow_to_iceberg_field(
+                field,
+                None
+                if (column_comments is None or len(column_comments) <= id)
+                else column_comments[id],
+            )
+        )
 
     IcebergSchema = get_iceberg_schema_class()
     return IcebergSchema(convert_list_to_java(nested_fields))
 
 
-def arrow_to_iceberg_field(field: pa.Field):
+def arrow_to_iceberg_field(field: pa.Field, column_comment=None):
     IcebergTypes = get_iceberg_type_class()
     iceberg_field_id = int(field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
-    return IcebergTypes.NestedField.of(
-        iceberg_field_id,
-        field.nullable,
-        field.name,
-        arrow_to_iceberg_type(field.type),
+    return (
+        IcebergTypes.NestedField.of(
+            iceberg_field_id,
+            field.nullable,
+            field.name,
+            arrow_to_iceberg_type(field.type),
+        )
+        if column_comment is None
+        else IcebergTypes.NestedField.of(
+            iceberg_field_id,
+            field.nullable,
+            field.name,
+            arrow_to_iceberg_type(field.type),
+            column_comment,
+        )
     )
 
 

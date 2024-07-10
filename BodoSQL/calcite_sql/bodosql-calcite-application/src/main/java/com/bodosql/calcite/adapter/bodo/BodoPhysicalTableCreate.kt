@@ -6,7 +6,7 @@ import com.bodosql.calcite.ir.BodoEngineTable
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.rel.core.TableCreateBase
 import com.bodosql.calcite.schema.CatalogSchema
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty.Companion.tableCreateProperty
 import org.apache.calcite.plan.RelOptCluster
@@ -24,7 +24,7 @@ class BodoPhysicalTableCreate private constructor(
     isReplace: Boolean,
     createTableType: SqlCreateTable.CreateTableType,
     path: List<String>,
-    meta: SnowflakeCreateTableMetadata,
+    meta: CreateTableMetadata,
 ) : TableCreateBase(
         cluster,
         traitSet.replace(
@@ -95,7 +95,7 @@ class BodoPhysicalTableCreate private constructor(
             isReplace: Boolean,
             createTableType: SqlCreateTable.CreateTableType,
             path: List<String>,
-            meta: SnowflakeCreateTableMetadata,
+            meta: CreateTableMetadata,
         ): BodoPhysicalTableCreate {
             if (schema !is CatalogSchema) {
                 throw BodoSQLCodegenException("BodoSQL only supports create table with Catalog Schemas.")

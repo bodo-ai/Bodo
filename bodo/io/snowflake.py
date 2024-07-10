@@ -2419,6 +2419,11 @@ def create_table_handle_exists(
         table_comment = create_table_info.table_comment
         column_comments = create_table_info.column_comments
 
+        if create_table_info.table_properties is not None:
+            warnings.warn(
+                f"\nTable properties is not supported in Snowflake. Ignored.\n"
+            )
+
     # Infer schema can return the columns out of order depending on the
     # chunking we do when we upload, so we have to iterate through the
     # dataframe columns to make sure we create the table with its columns

@@ -11,7 +11,8 @@ Currently, BodoSQL only supports the `CREATE TABLE ... AS SELECT` (CTAS) form, a
 ```sql
 CREATE [ OR REPLACE ] TABLE [ IF NOT EXISTS ] <name>
 [ ( <col_name> [ <col_type> ] , <col_name> [ <col_type> ] , ... ) ]
-[ COMMENT = <string> ]
+[ COMMENT = <string> ] 
+[ TAG | TAGS | PROPERTY | PROPERTIES | TBLPROPERTY | TBLPROPERTIES (<key1> = <value1>, <key2> = <value2>, ...) ]
 AS <query>
 ```
 

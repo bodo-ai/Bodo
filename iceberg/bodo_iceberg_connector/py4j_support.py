@@ -9,7 +9,7 @@ import warnings
 from typing import Any, List
 
 from mpi4py import MPI
-from py4j.java_collections import ListConverter
+from py4j.java_collections import ListConverter, MapConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
 if pt.TYPE_CHECKING:
@@ -144,6 +144,14 @@ def get_class_wrapper(
         return CLASSES[class_name]
 
     return impl
+
+
+def convert_dict_to_java(python_dict: dict):
+    """
+    Converts a Python dictionary to a Java Map
+    """
+    gateway = launch_jvm()
+    return MapConverter().convert(python_dict, gateway._gateway_client)
 
 
 def convert_list_to_java(vals: List[Any]):

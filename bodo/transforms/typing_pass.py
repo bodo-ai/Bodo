@@ -4893,7 +4893,7 @@ class TypingTransforms:
                 "iceberg_writer_init",
                 rhs.args,
                 dict(rhs.kws),
-                6,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4933,7 +4933,7 @@ class TypingTransforms:
                 "iceberg_writer_init",
                 writer_init_def.args,
                 dict(writer_init_def.kws),
-                6,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -4954,10 +4954,23 @@ class TypingTransforms:
                 dict(writer_init_def.kws),
                 self.func_ir,
                 self.arg_types,
-                7,
+                8,
                 "allow_theta_sketches",
                 rhs.loc,
                 default=False,
+            )
+
+            create_table_meta_val = get_const_arg(
+                "iceberg_writer_init",
+                writer_init_def.args,
+                dict(writer_init_def.kws),
+                self.func_ir,
+                self.arg_types,
+                6,
+                "create_table_meta",
+                rhs.loc,
+                default=None,
+                use_default=True,
             )
 
             if input_table_type != output_type.input_table_type:
@@ -4969,6 +4982,7 @@ class TypingTransforms:
                     "def impl(operator_id, conn, table_name, schema, col_names_meta, if_exists):\n"
                     "  return bodo.io.stream_iceberg_write.iceberg_writer_init(\n"
                     "    operator_id, conn, table_name, schema, col_names_meta, if_exists, \n"
+                    "    create_table_meta=_create_table_meta,\n"
                     "    expected_state_type=_expected_state_type,\n"
                     "    allow_theta_sketches=_allow_theta_sketches\n"
                     "  )\n"
@@ -4977,6 +4991,7 @@ class TypingTransforms:
                     func_text,
                     "impl",
                     {
+                        "_create_table_meta": create_table_meta_val,
                         "_expected_state_type": new_type,
                         "_allow_theta_sketches": allow_theta_sketch_val,
                     },

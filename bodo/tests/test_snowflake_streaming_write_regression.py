@@ -169,7 +169,7 @@ def test_streaming_write(
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = sf_write_chunk_size
         bodo.io.snowflake.SF_WRITE_STREAMING_COPY_INTO_FILES = sf_write_num_files
-        ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
+        ctas_meta = bodo.utils.typing.CreateTableMetaType()
 
         @bodo.jit(cache=False, distributed=["table", "reader0", "writer"])
         def impl_write(conn_r, conn_w):
