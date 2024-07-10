@@ -4,7 +4,7 @@ import com.bodosql.calcite.application.BodoCodeGenVisitor
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
@@ -21,13 +21,17 @@ class SnowflakeNativeWriteTarget(
 ) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     /**
      * Initialize the streaming create table state information for a Snowflake Native Table.
+     * @param visitor The PandasCodeGenVisitor used to lower globals.
      * @param operatorID The operatorID used for tracking memory allocation.
      * @param createTableType The type of the create table operation. This is unused by parquet.
+     * @param meta Expression containing the metadata information for init table information.
      * @return A code generation expression for initializing the table.
      */
     override fun streamingCreateTableInit(
+        visitor: BodoCodeGenVisitor,
         operatorID: OperatorID,
         createTableType: CreateTableType,
+        meta: CreateTableMetadata,
     ): Expr {
         return Expr.Call(
             "bodo.io.snowflake_write.snowflake_writer_init",
@@ -43,11 +47,15 @@ class SnowflakeNativeWriteTarget(
 
     /**
      * Initialize the streaming insert into state information for a given write target.
+     * @param visitor The PandasCodeGenVisitor used to lower globals.
      * @param operatorID The operatorID used for tracking memory allocation.
      * @return A code generation expression for initializing the insert into.
      */
-    override fun streamingInsertIntoInit(operatorID: OperatorID): Expr {
-        return streamingCreateTableInit(operatorID, CreateTableType.DEFAULT)
+    override fun streamingInsertIntoInit(
+        visitor: BodoCodeGenVisitor,
+        operatorID: OperatorID,
+    ): Expr {
+        return streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
     }
 
     /**
@@ -71,7 +79,7 @@ class SnowflakeNativeWriteTarget(
         isLastVar: Variable,
         iterVar: Variable,
         columnPrecisions: Expr,
-        meta: SnowflakeCreateTableMetadata,
+        meta: CreateTableMetadata,
     ): Expr {
         val ctasMetaCall = meta.emitCtasExpr()
         val ctasMetaGlobal: Expr = visitor.lowerAsGlobal(ctasMetaCall)

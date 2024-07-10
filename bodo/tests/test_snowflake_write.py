@@ -1644,7 +1644,7 @@ def test_batched_write_agg(
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
         bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE = int(256e3)
         bodo.io.snowflake.SF_WRITE_STREAMING_NUM_FILES = sf_write_streaming_num_files
-        ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
+        ctas_meta = bodo.utils.typing.CreateTableMetaType()
 
         def impl_write(conn_r, conn_w):
             reader0 = pd.read_sql(
@@ -1905,7 +1905,7 @@ def test_batched_write_nested_array(
                 bcast_result=False,
             )(cursor, table_name, column_type, df)
         cursor.close()
-        ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
+        ctas_meta = bodo.utils.typing.CreateTableMetaType()
 
         def write_impl(conn, df):
             writer = snowflake_writer_init(
@@ -1993,7 +1993,7 @@ def test_write_with_string_precision(memory_leak_check):
     try:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
         with ensure_clean_snowflake_table(conn, bodo_tablename) as table_name:
-            ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
+            ctas_meta = bodo.utils.typing.CreateTableMetaType()
 
             def impl(conn):
                 A1 = bodo.utils.conversion.make_replicated_array("ALPHABET", 50)
@@ -2063,7 +2063,7 @@ def test_write_with_timestamp_time_precision(memory_leak_check):
     try:
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
         with ensure_clean_snowflake_table(conn, bodo_tablename) as table_name:
-            ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
+            ctas_meta = bodo.utils.typing.CreateTableMetaType()
 
             def impl(conn):
                 A1 = bodo.utils.conversion.make_replicated_array(
@@ -2153,7 +2153,7 @@ def test_decimal_sub_38_precision_write(memory_leak_check):
             select_query, bodo_read_tablename, db, schema
         ) as read_table_name:
             global_1 = bodo.utils.typing.ColNamesMetaType(("A",))
-            ctas_meta = bodo.utils.typing.SnowflakeCreateTableMetaType()
+            ctas_meta = bodo.utils.typing.CreateTableMetaType()
 
             def impl(conn):
                 reader = pd.read_sql(
@@ -2273,7 +2273,7 @@ def test_create_table_with_comments(memory_leak_check):
         name_global = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
         keep_global = bodo.utils.typing.MetaType((0, 1, 2))
         precisions_global = bodo.utils.typing.MetaType((38, 1, -1))
-        ctas_global = bodo.utils.typing.SnowflakeCreateTableMetaType(
+        ctas_global = bodo.utils.typing.CreateTableMetaType(
             table_comment="Records of notable events",
             column_comments=("Index of events", None, "Date of notable event"),
         )

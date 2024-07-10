@@ -10,7 +10,7 @@ import com.bodosql.calcite.ddl.DDLExecutor;
 import com.bodosql.calcite.ddl.IcebergDDLExecutor;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.util.Collection;
@@ -207,7 +207,7 @@ public class CatalogSchema extends BodoSqlSchema {
       String tableName,
       IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
-      SnowflakeCreateTableMetadata meta) {
+      CreateTableMetadata meta) {
     return this.catalog.generateWriteCode(
         visitor, varName, createTablePath(tableName), ifExists, createTableType, meta);
   }

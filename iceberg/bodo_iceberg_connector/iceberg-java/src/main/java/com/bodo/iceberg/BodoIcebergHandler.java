@@ -35,6 +35,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -432,6 +433,23 @@ public class BodoIcebergHandler {
   }
 
   /**
+   * Update properties of a transaction and remove (existing) table comments. Currently using a map
+   * for possible generalization of other properties.
+   *
+   * @param txn Transaction ID
+   * @param prop Map of key-value pairs of properties to insert into transaction
+   */
+  public void UpdateTxnProperties(Transaction txn, Map<String, String> prop) {
+    UpdateProperties txnupd = txn.updateProperties();
+    for (Map.Entry<String, String> entry : prop.entrySet()) {
+      String key = entry.getKey();
+      String value = entry.getValue();
+      txnupd = txnupd.set(key, value);
+    }
+    txnupd.commit();
+  }
+
+  /**
    * Create a transaction to create a new table in the DB.
    *
    * <p>Note: This API is exposed to Python.
@@ -440,10 +458,10 @@ public class BodoIcebergHandler {
    * @param replace Whether to replace the table if it already exists
    * @return Transaction ID
    */
-  public Integer startCreateOrReplaceTable(Schema schema, boolean replace) {
+  public Integer startCreateOrReplaceTable(
+      Schema schema, boolean replace, Map<String, String> prop) {
     Map<String, String> properties = new HashMap<>();
     properties.put(TableProperties.FORMAT_VERSION, "2");
-
     // TODO: Support passing in new partition spec and sort order as well
     final Transaction txn;
     if (replace) {
@@ -461,10 +479,13 @@ public class BodoIcebergHandler {
       // this is so we can fetch credentials for the table in python, otherwise we get a table not
       // found error
       catalog.createTable(id, schema, PartitionSpec.unpartitioned(), properties);
+
       txn =
           catalog.newReplaceTableTransaction(
               id, schema, PartitionSpec.unpartitioned(), properties, false);
     }
+    // Same as directly adding prop into properties dictionary above.
+    UpdateTxnProperties(txn, prop);
     this.transactions.put(txn.hashCode(), txn);
     return txn.hashCode();
   }
@@ -487,8 +508,9 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public Integer startAppendTable() {
+  public Integer startAppendTable(Map<String, String> prop) {
     Transaction txn = catalog.loadTable(id).newTransaction();
+    UpdateTxnProperties(txn, prop);
     this.transactions.put(txn.hashCode(), txn);
     return txn.hashCode();
   }

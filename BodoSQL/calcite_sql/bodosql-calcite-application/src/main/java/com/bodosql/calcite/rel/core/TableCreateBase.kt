@@ -1,7 +1,7 @@
 package com.bodosql.calcite.rel.core
 
 import com.bodosql.calcite.application.write.WriteTarget.IfExistsBehavior
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
@@ -19,7 +19,7 @@ open class TableCreateBase(
     val isReplace: Boolean,
     val createTableType: CreateTableType,
     val path: List<String>,
-    val meta: SnowflakeCreateTableMetadata,
+    val meta: CreateTableMetadata,
 ) : TableCreate(cluster, traitSet, input) {
     override fun explainTerms(pw: RelWriter): RelWriter {
         var result =
@@ -41,6 +41,12 @@ open class TableCreateBase(
                         ->
                         value?.let { Pair(this.getRowType().fieldNames[idx], value) }
                     }.filterNotNull(),
+                )
+        }
+        if (meta.tableProperties != null) {
+            result =
+                result.item(
+                    "Table Properties", meta.tableProperties!!,
                 )
         }
         return result

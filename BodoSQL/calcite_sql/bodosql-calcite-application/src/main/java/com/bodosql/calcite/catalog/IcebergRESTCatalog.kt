@@ -7,7 +7,7 @@ import com.bodosql.calcite.application.write.IcebergWriteTarget
 import com.bodosql.calcite.application.write.WriteTarget
 import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.bodosql.calcite.table.CatalogTable
 import com.bodosql.calcite.table.IcebergCatalogTable
 import com.google.common.collect.ImmutableList
@@ -93,6 +93,7 @@ open class IcebergRESTCatalog(
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.
      *
+     * @param visitor The PandasCodeGenVisitor used to lower globals.
      * @param varName Name of the variable to write.
      * @param tableName The path of schema used to reach the table from the root that includes the
      * table.
@@ -109,11 +110,13 @@ open class IcebergRESTCatalog(
     /**
      * Generates the code necessary to produce a write expression from the given catalog.
      *
+     * @param visitor The PandasCodeGenVisitor used to lower globals.
      * @param varName Name of the variable to write.
      * @param tableName The path of schema used to reach the table from the root that includes the
      * table.
      * @param ifExists Behavior to perform if the table already exists
      * @param createTableType Type of table to create if it doesn't exist
+     * @param meta Expression containing the metadata information for init table information.
      * @return The generated code to produce a write.
      */
     override fun generateWriteCode(
@@ -122,7 +125,7 @@ open class IcebergRESTCatalog(
         tableName: ImmutableList<String>,
         ifExists: WriteTarget.IfExistsBehavior,
         createTableType: SqlCreateTable.CreateTableType,
-        meta: SnowflakeCreateTableMetadata,
+        meta: CreateTableMetadata,
     ): Expr {
         TODO("Not yet implemented")
     }

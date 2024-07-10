@@ -47,7 +47,7 @@ def test_filter_pushdown_time_direct(iceberg_database, iceberg_table_conn):
     # This also causes issues because we can't do partitioning with the bodo write, so we can't
     # do any sort of correctness testing. Snowflake also can't write the partition spec at this time,
     # so we can't do the workaround that way either.
-    _write_iceberg_table(input_df, table_name, conn, db_schema, "replace")
+    _write_iceberg_table(input_df, table_name, conn, db_schema, None, "replace")
 
     from bodo_iceberg_connector.filter_to_java import ColumnRef, FilterExpr, Scalar
 
@@ -76,7 +76,7 @@ def test_filter_pushdown_time(iceberg_database, iceberg_table_conn):
 
     # Based on the documentation here: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
     # Spark SQL does not support time data type, so for now, we just handle the write with Bodo itself.
-    _write_iceberg_table(input_df, table_name, conn, db_schema, "replace")
+    _write_iceberg_table(input_df, table_name, conn, db_schema, None, "replace")
 
     def impl(table_name, conn, db_schema):
         df = pd.read_sql_table(table_name, conn, db_schema)

@@ -30,7 +30,7 @@ import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.schema.InlineViewMetadata;
 import com.bodosql.calcite.sql.BodoSqlUtil;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
@@ -1210,6 +1210,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
   /**
    * Generates the code necessary to produce a write expression from Snowflake.
    *
+   * @param visitor The PandasCodeGenVisitor used to lower globals.
    * @param varName Name of the variable to write.
    * @param tableName The path of schema used to reach the table from the root that includes the
    *     table. This should be of the form SCHEMA_NAME, TABLE_NAME.
@@ -1224,15 +1225,19 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         tableName,
         IfExistsBehavior.APPEND,
         SqlCreateTable.CreateTableType.DEFAULT,
-        new SnowflakeCreateTableMetadata());
+        new CreateTableMetadata());
   }
 
   /**
    * Generates the code necessary to produce a write expression from Snowflake.
    *
+   * @param visitor The PandasCodeGenVisitor used to lower globals.
    * @param varName Name of the variable to write.
    * @param tableName The path of schema used to reach the table from the root that includes the
    *     table. This should be of the form SCHEMA_NAME, TABLE_NAME.
+   * @param ifExists Behavior to perform if the table already exists
+   * @param tableType Type of table to create if it doesn't exist
+   * @param meta Expression containing the metadata information for init table information.
    * @return The generated code to produce a write.
    */
   @Override
@@ -1242,7 +1247,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       ImmutableList<String> tableName,
       IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType tableType,
-      SnowflakeCreateTableMetadata meta) {
+      CreateTableMetadata meta) {
     List<Expr> args = new ArrayList<>();
     List<kotlin.Pair<String, Expr>> kwargs = new ArrayList<>();
     args.add(new Expr.StringLiteral(tableName.get(2)));

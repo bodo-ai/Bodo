@@ -9,7 +9,7 @@ import org.apache.calcite.sql.parser.SqlParserPos
 /**
  * Object to describe a regular `CREATE TABLE` statement
  */
-class SqlSnowflakeCreateTable(
+class BodoSqlCreateTable(
     pos: SqlParserPos?,
     replace: Boolean,
     tableType: CreateTableType?,
@@ -19,7 +19,9 @@ class SqlSnowflakeCreateTable(
     val clusterExprs: SqlNodeList?,
     val copyGrants: Boolean,
     comment: SqlNode?,
-) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, columnList, null, comment) {
+    keyList: SqlNodeList?,
+    valuesList: SqlNodeList?,
+) : BodoSqlCreateTableBase(pos, replace, tableType, ifNotExists, name, columnList, null, comment, keyList, valuesList) {
     val columnComments: List<SqlNode?>?
 
     init {

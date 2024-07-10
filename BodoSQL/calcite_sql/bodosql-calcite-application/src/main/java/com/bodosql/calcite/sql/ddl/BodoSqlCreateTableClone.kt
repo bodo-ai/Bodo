@@ -8,7 +8,7 @@ import org.apache.calcite.sql.parser.SqlParserPos
 /**
  * Object to describe a `CREATE TABLE` statement using `CLONE`
  */
-class SqlSnowflakeCreateTableClone(
+class BodoSqlCreateTableClone(
     pos: SqlParserPos?,
     replace: Boolean,
     tableType: CreateTableType?,
@@ -17,7 +17,7 @@ class SqlSnowflakeCreateTableClone(
     val cloneSource: SqlNode,
     val copyGrants: Boolean,
     comment: SqlNode?,
-) : SqlSnowflakeCreateTableBase(pos, replace, tableType, ifNotExists, name, null, cloneSource, comment) {
+) : BodoSqlCreateTableBase(pos, replace, tableType, ifNotExists, name, null, cloneSource, comment) {
     override fun unparseSuffix(
         writer: SqlWriter,
         leftPrec: Int,

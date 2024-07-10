@@ -6,11 +6,12 @@ import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.calcite.sql.parser.SqlParserPos
+import org.apache.calcite.util.Pair
 
 /**
  * Abstract base class to describe any `CREATE TABLE` statement
  */
-abstract class SqlSnowflakeCreateTableBase(
+abstract class BodoSqlCreateTableBase(
     pos: SqlParserPos?,
     replace: Boolean,
     tableType: CreateTableType?,
@@ -19,13 +20,20 @@ abstract class SqlSnowflakeCreateTableBase(
     columnList: SqlNodeList?,
     query: SqlNode?,
     private val tableCommentNode: SqlNode?,
+    private val keyList: SqlNodeList? = null,
+    private val valueList: SqlNodeList? = null,
 ) : SqlCreateTable(pos, replace, ifNotExists, name, columnList, query) {
-    val meta = SnowflakeCreateTableMetadata()
+    val meta = CreateTableMetadata()
 
     init {
         createType = tableType
         tableCommentNode?.let { meta.setTableComment(it) }
         columnList?.let { meta.setColumnComments(it) }
+        keyList?.let { keys ->
+            valueList?.let { values ->
+                meta.setTableProperties(keys, values)
+            }
+        }
     }
 
     override fun unparse(
@@ -57,6 +65,19 @@ abstract class SqlSnowflakeCreateTableBase(
             writer.keyword("COMMENT")
             writer.keyword("=")
             it.unparse(writer, leftPrec, rightPrec)
+        }
+        keyList?.let { keys ->
+            valueList?.let { values ->
+                writer.keyword("TBLPROPERTIES")
+                val frame = writer.startList("(", ")")
+                for (c in Pair.zip(keys, values)) {
+                    writer.sep(",")
+                    c.left.unparse(writer, 0, 0)
+                    writer.keyword("=")
+                    c.right.unparse(writer, 0, 0)
+                }
+                writer.endList(frame)
+            }
         }
         unparseSuffix(writer, leftPrec, rightPrec)
     }

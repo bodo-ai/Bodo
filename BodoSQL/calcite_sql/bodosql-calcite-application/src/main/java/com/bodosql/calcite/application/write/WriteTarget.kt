@@ -5,7 +5,7 @@ import com.bodosql.calcite.ir.Expr
 import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.Variable
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable.CreateTableType
 
@@ -29,21 +29,29 @@ abstract class WriteTarget(
 ) {
     /**
      * Initialize the streaming create table state information for a given write target.
+     * @param visitor The PandasCodeGenVisitor used to lower globals.
      * @param operatorID The operatorID used for tracking memory allocation.
      * @param createTableType The type of the create table operation.
+     * @param meta Expression containing the metadata information for init table information.
      * @return A code generation expression for initializing the table.
      */
     abstract fun streamingCreateTableInit(
+        visitor: BodoCodeGenVisitor,
         operatorID: OperatorID,
         createTableType: CreateTableType,
+        meta: CreateTableMetadata,
     ): Expr
 
     /**
      * Initialize the streaming insert into state information for a given write target.
+     * @param visitor The PandasCodeGenVisitor used to lower globals.
      * @param operatorID The operatorID used for tracking memory allocation.
      * @return A code generation expression for initializing the insert into.
      */
-    abstract fun streamingInsertIntoInit(operatorID: OperatorID): Expr
+    abstract fun streamingInsertIntoInit(
+        visitor: BodoCodeGenVisitor,
+        operatorID: OperatorID,
+    ): Expr
 
     /**
      * Implement append to a table for a given write target.
@@ -66,7 +74,7 @@ abstract class WriteTarget(
         isLastVar: Variable,
         iterVar: Variable,
         columnPrecisions: Expr,
-        meta: SnowflakeCreateTableMetadata,
+        meta: CreateTableMetadata,
     ): Expr
 
     /**

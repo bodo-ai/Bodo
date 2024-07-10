@@ -9,7 +9,7 @@ import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Variable;
 import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.schema.InlineViewMetadata;
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata;
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.CatalogTable;
 import com.google.common.collect.ImmutableList;
 import java.util.Collection;
@@ -101,6 +101,7 @@ public interface BodoSQLCatalog {
   /**
    * Generates the code necessary to produce an append write expression from the given catalog.
    *
+   * @param visitor The PandasCodeGenVisitor used to lower globals.
    * @param varName Name of the variable to write.
    * @param tableName The path of schema used to reach the table from the root that includes the
    *     table.
@@ -112,11 +113,13 @@ public interface BodoSQLCatalog {
   /**
    * Generates the code necessary to produce a write expression from the given catalog.
    *
+   * @param visitor The PandasCodeGenVisitor used to lower globals.
    * @param varName Name of the variable to write.
    * @param tableName The path of schema used to reach the table from the root that includes the
    *     table.
    * @param ifExists Behavior to perform if the table already exists
    * @param createTableType Type of table to create if it doesn't exist
+   * @param meta Expression containing the metadata information for init table information.
    * @return The generated code to produce a write.
    */
   Expr generateWriteCode(
@@ -125,7 +128,7 @@ public interface BodoSQLCatalog {
       ImmutableList<String> tableName,
       IfExistsBehavior ifExists,
       SqlCreateTable.CreateTableType createTableType,
-      SnowflakeCreateTableMetadata meta);
+      CreateTableMetadata meta);
 
   /**
    * Generates the code necessary to produce a read expression from the given catalog.

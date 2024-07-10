@@ -1,7 +1,7 @@
 package com.bodosql.calcite.rel.logical
 
 import com.bodosql.calcite.rel.core.TableCreateBase
-import com.bodosql.calcite.sql.ddl.SnowflakeCreateTableMetadata
+import com.bodosql.calcite.sql.ddl.CreateTableMetadata
 import org.apache.calcite.plan.Convention
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelTraitSet
@@ -18,7 +18,7 @@ open class BodoLogicalTableCreate private constructor(
     isReplace: Boolean,
     createTableType: CreateTableType,
     path: List<String>,
-    meta: SnowflakeCreateTableMetadata,
+    meta: CreateTableMetadata,
 ) : TableCreateBase(cluster, traits, input, schema, tableName, isReplace, createTableType, path, meta) {
     override fun copy(
         traitSet: RelTraitSet,
@@ -41,7 +41,7 @@ open class BodoLogicalTableCreate private constructor(
             isReplace: Boolean,
             createTableType: CreateTableType,
             path: List<String>,
-            meta: SnowflakeCreateTableMetadata,
+            meta: CreateTableMetadata,
         ): BodoLogicalTableCreate {
             val cluster = input.cluster
             val traitSet = cluster.traitSetOf(Convention.NONE)

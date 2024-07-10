@@ -14,6 +14,7 @@ from bodo_iceberg_connector.catalog_conn import (
 )
 from bodo_iceberg_connector.puffin import StatisticsFile
 from bodo_iceberg_connector.py4j_support import (
+    convert_dict_to_java,
     convert_list_to_java,
     get_bodo_arrow_schema_utils_class,
     get_bodo_iceberg_handler_class,
@@ -115,6 +116,7 @@ def start_write(
     table_name: str,
     table_loc: str,
     iceberg_schema_id: int,
+    create_table_info,
     pa_schema: pa.Schema,
     partition_spec: Optional[str],
     sort_order: Optional[str],
@@ -127,7 +129,7 @@ def start_write(
         table_name: Name of table written to
         table_loc: Warehouse location of data/ path (and files)
         iceberg_schema_id: Known Schema ID when files were written
-        already_exists: Whether the table already exists in the catalog
+        create_table_info: meta information about table and column comments
         pa_schema: Arrow Schema of written data. In the create/replace
             case, make sure to use 'get_schema_with_init_field_ids'
             to generate the correct field IDs for the fields before
@@ -142,14 +144,31 @@ def start_write(
     catalog_type, _ = parse_conn_str(conn_str)
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
 
+    table_comment = None
+    column_comments = None
+    table_properties = None
+
+    if create_table_info is not None:
+        table_comment = create_table_info.table_comment
+        column_comments = create_table_info.column_comments
+        table_properties = create_table_info.table_properties
+
+    additional_properties = {}
+    if table_comment is not None:
+        additional_properties["comment"] = table_comment
+    if table_properties is not None:
+        for key_value in table_properties:
+            additional_properties[key_value[0]] = key_value[1]
+
     if mode == "create":
         assert (
             iceberg_schema_id == -1
         ), "bodo_iceberg_connector Internal Error: Should never create existing table"
         try:
             txn_id = handler.startCreateOrReplaceTable(
-                arrow_to_iceberg_schema(pa_schema),
+                arrow_to_iceberg_schema(pa_schema, column_comments),
                 False,
+                convert_dict_to_java(additional_properties),
             )
         except Py4JError as e:
             print("Error during Iceberg table creation: ", e)
@@ -158,8 +177,9 @@ def start_write(
     elif mode == "replace":
         try:
             txn_id = handler.startCreateOrReplaceTable(
-                arrow_to_iceberg_schema(pa_schema),
+                arrow_to_iceberg_schema(pa_schema, column_comments),
                 True,
+                convert_dict_to_java(additional_properties),
             )
         except Py4JError as e:
             print("Error during Iceberg table replace: ", e)
@@ -171,7 +191,9 @@ def start_write(
         assert iceberg_schema_id is not None
 
         try:
-            txn_id = handler.startAppendTable()
+            txn_id = handler.startAppendTable(
+                convert_dict_to_java(additional_properties)
+            )
         except Py4JError as e:
             print("Error during Iceberg table append: ", e)
             return None

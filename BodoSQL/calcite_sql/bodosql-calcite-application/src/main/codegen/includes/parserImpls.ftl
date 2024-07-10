@@ -85,7 +85,7 @@ boolean IfNotExistsOpt() :
 }
 
 
-SqlSnowflakeCreateTable.CreateTableType TableTypeOpt() :
+BodoSqlCreateTable.CreateTableType TableTypeOpt() :
 {
 }
 {
@@ -96,10 +96,10 @@ SqlSnowflakeCreateTable.CreateTableType TableTypeOpt() :
 // using TEMPORARY.
 // Default: No value. If a table is not declared as TRANSIENT or TEMPORARY, the table is permanent.
 
-    <TRANSIENT> { return SqlSnowflakeCreateTable.CreateTableType.TRANSIENT; }
+    <TRANSIENT> { return BodoSqlCreateTable.CreateTableType.TRANSIENT; }
         |
-    (<VOLATILE> | [<GLOBAL> | <LOCAL>] (<TEMP> | <TEMPORARY>)) { return SqlSnowflakeCreateTable.CreateTableType.TEMPORARY; }
-         | { return SqlSnowflakeCreateTable.CreateTableType.DEFAULT; }
+    (<VOLATILE> | [<GLOBAL> | <LOCAL>] (<TEMP> | <TEMPORARY>)) { return BodoSqlCreateTable.CreateTableType.TEMPORARY; }
+         | { return BodoSqlCreateTable.CreateTableType.DEFAULT; }
 }
 
 SqlNodeList ExtendColumnList() :
@@ -271,7 +271,7 @@ final List<SqlNode> clusterExprsList = new ArrayList<SqlNode>();
 
 SqlCreate SqlCreateTable(Span s, boolean replace) :
 {
-    final SqlSnowflakeCreateTable.CreateTableType tableType;
+    final BodoSqlCreateTable.CreateTableType tableType;
     final SqlIdentifier id;
     final boolean ifNotExists;
     SqlNode query = null;
@@ -279,6 +279,10 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
     SqlNodeList clusterExprs = null;
     boolean copyGrants = false;
     SqlNode comment = null;
+    SqlNode key;
+    SqlNode value;
+    SqlNodeList KeyList = null;
+    SqlNodeList ValueList = null;
 }
 {
     tableType = TableTypeOpt()
@@ -300,7 +304,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             | ( <COMMENT> <EQ> comment = StringLiteral() )
             )*
             {
-                return new SqlSnowflakeCreateTableLike(s.end(this), replace, tableType,
+                return new BodoSqlCreateTableLike(s.end(this), replace, tableType,
                     ifNotExists, id, query, clusterExprs, copyGrants, comment);
             }
         )
@@ -316,7 +320,7 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
             | ( <COMMENT> <EQ> comment = StringLiteral() )
             )*
             {
-                return new SqlSnowflakeCreateTableClone(s.end(this), replace, tableType,
+                return new BodoSqlCreateTableClone(s.end(this), replace, tableType,
                     ifNotExists, id, query, copyGrants, comment);
             }
         )
@@ -338,18 +342,31 @@ SqlCreate SqlCreateTable(Span s, boolean replace) :
               clusterExprs = ClusterBy()
             | ( <COPY> <GRANTS> { copyGrants = true; } )
             | ( <COMMENT> <EQ> comment = StringLiteral() )
+            | ((<TAG> | <TAGS> | <PROPERTY> | <PROPERTIES> | <TBLPROPERTY> | <TBLPROPERTIES>) {KeyList = new SqlNodeList(s.pos()); ValueList = new SqlNodeList(s.pos());}
+                  <LPAREN>
+                  key = StringLiteral() { KeyList.add(key); }
+                  <EQ>
+                  value = StringLiteral() { ValueList.add(value); }
+                  (
+                      <COMMA>
+                      key = StringLiteral() { KeyList.add(key); }
+                      <EQ>
+                      value = StringLiteral() { ValueList.add(value); }
+                  )*
+                  <RPAREN>
+              )
             ) *
             [ <AS> query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY) ]
             {
                 // The query is only provided for CTAS statements
                 if (query != null) {
-                    return new SqlSnowflakeCreateTableAs(s.end(this), replace, tableType,
-                        ifNotExists, id, columnList, query, clusterExprs, copyGrants, comment);
+                    return new BodoSqlCreateTableAs(s.end(this), replace, tableType,
+                        ifNotExists, id, columnList, query, clusterExprs, copyGrants, comment, KeyList, ValueList);
                 } else {
                     // Non-CTAS statements require the column names/types to be provided
                     assert columnList != null;
-                    return new SqlSnowflakeCreateTable(s.end(this), replace, tableType,
-                        ifNotExists, id, columnList, clusterExprs, copyGrants, comment);
+                    return new BodoSqlCreateTable(s.end(this), replace, tableType,
+                        ifNotExists, id, columnList, clusterExprs, copyGrants, comment, KeyList, ValueList);
                 }
             }
         )

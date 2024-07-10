@@ -3363,6 +3363,7 @@ def iceberg_write(
     table_name,
     bodo_table,
     col_names,
+    create_table_info,
     # Same semantics as pandas to_sql for now
     if_exists,
     is_parallel,
@@ -3433,6 +3434,7 @@ def iceberg_write(
             table_name,
             table_loc,
             iceberg_schema_id,
+            create_table_info,
             output_pyarrow_schema,
             partition_spec,
             sort_order,
@@ -3793,6 +3795,7 @@ def wrap_start_write(
     table_name: str,
     table_loc: str,
     iceberg_schema_id: int,
+    create_table_info,
     output_pyarrow_schema: pa.Schema,
     partition_spec: list,
     sort_order: list,
@@ -3808,6 +3811,7 @@ def wrap_start_write(
     table_name (str): name of iceberg table
     table_loc (str): location of the data/ folder in the warehouse
     iceberg_schema_id (int): iceberg schema id
+    create_table_info: meta information about table and column comments
     output_pyarrow_schema (pyarrow.Schema): PyArrow schema of the dataframe being written
     partition_spec (list): partition spec
     sort_order (list): sort order
@@ -3822,6 +3826,7 @@ def wrap_start_write(
         table_name,
         table_loc,
         iceberg_schema_id,
+        create_table_info,
         output_pyarrow_schema,
         partition_spec,
         sort_order,
