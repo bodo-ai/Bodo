@@ -427,7 +427,7 @@ set(allow_implicit_fallthrough_list
 )
 
 # TODO: Replace with ctest when integrating Catch2
-if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release"))
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_TESTS})
   set(test_list
     "bodo/tests/test_framework.cpp"
     "bodo/tests/test_example.cpp"
