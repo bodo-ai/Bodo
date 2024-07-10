@@ -3,8 +3,8 @@
 ## Set up DEV environment on platform, single-node cluster
 
 >[!NOTE]
-> If the node is too small, it may run out of memory during the build process. 
-> In that case, you can try to build on a larger node or use environment variable `CMAKE_BUILD_PARALLEL_LEVEL` 
+> If the node is too small, it may run out of memory during the build process.
+> In that case, you can try to build on a larger node or use environment variable `CMAKE_BUILD_PARALLEL_LEVEL`
 > to manually control the number of processes used.
 > Try setting it to a single process using `export CMAKE_BUILD_PARALLEL_LEVEL=1`
 
@@ -27,7 +27,7 @@
 1. Activate the environment: `conda activate DEV`
 1. Remove `mpi` and `mpich` on all nodes for the DEV environment. `psh conda remove mpi mpich --force --yes`
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
-1. Build Bodo: `psh pip install --no-deps --no-build-isolation -ve .`
+1. Build Bodo: `BODO_SKIP_CPP_TESTS=1 psh pip install --no-deps --no-build-isolation -ve .`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
 1. Install bodo-platform-utils for bodosqlwrapper use: `cd bodo-platform-image/bodo-platform-utils/ && psh python setup.py develop && cd ../..`
 1. Set same modify time for bodosqlwrapper.py on all nodes: `psh python -c "import os; os.utime(r'/home/bodo/Bodo/bodo-platform-image/bodo-platform-utils/bodo_platform_utils/bodosqlwrapper.py', (1602179630, 1602179630))"`
@@ -45,7 +45,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 
 1. Checkout the branch (only required once): `psh git checkout working-branch`.
 1. Pull latest changes (do this after every push): `psh git pull`.
-1. Re-build: `psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python setup.py develop && cd ..`.
+1. Re-build: `BODO_SKIP_CPP_TESTS=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python setup.py develop && cd ..`.
 
 ## Using Bodo/BodoSQL
 
@@ -80,3 +80,4 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 - Put your test files in `/shared` (or `/bodofs` based on workspace version).
 - Sometimes error messages aren't helpful because they're treated as internal errors. In that case set `export NUMBA_DEVELOPER_MODE=1`.
 - To get numba caching information, set `export NUMBA_DEBUG_CACHE=1`.
+- If you set `export BODO_SKIP_CPP_TESTS=1` you can skip compiling the C++ tests, which can take a long time to build.
