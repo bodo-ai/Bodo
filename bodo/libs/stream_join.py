@@ -1413,6 +1413,7 @@ def impl_runtime_join_filter(
 ):
     row_bitmask = bodo.libs.bool_arr_ext.alloc_true_bool_array(len(table))
     applied_any_filter = False\n
+    cast_table = table\n
 """
 
     # the index of the last table created
@@ -1422,7 +1423,7 @@ def impl_runtime_join_filter(
         if can_apply_bloom_filters[i] or can_apply_col_filters[i]:
             # doing repeated casting could potentially become expensive
             func_text += f"    cast_table = bodo.utils.table_utils.table_astype(\n"
-            func_text += f"        table, cast_table_types[{i}], False, False\n"
+            func_text += f"        cast_table, cast_table_types[{i}], False, False\n"
             func_text += f"    )\n"
             func_text += f"    cpp_table = bodo.libs.array.py_data_to_cpp_table(cast_table, (), col_inds_t, {n_cols})\n"
             func_text += (
@@ -1453,7 +1454,7 @@ def impl_runtime_join_filter(
                 func_text += f"        )\n"
                 func_text += f"        bodo.libs.array.delete_table(cpp_table)\n"
                 # reallocate the bitmask for the new table, reset applied_any_filter flag
-                func_text += f"        row_bitmask = bodo.libs.bool_arr_ext.alloc_true_bool_array(len(table))\n"
+                func_text += f"        row_bitmask = bodo.libs.bool_arr_ext.alloc_true_bool_array(len(cast_table))\n"
                 func_text += f"        applied_any_filter = False\n"
             curr_table_idx = i
 
