@@ -4983,6 +4983,331 @@ def test_runtime_join_filter(memory_leak_check):
     ), f"Expected len_after_filter to be between 400 and {df_to_filter.shape[0]}, but it was {len_after_filter} instead."
 
 
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="bloom filters may not be enabled on macs by default",
+)
+def test_multiple_runtime_join_filter_materialize(memory_leak_check):
+    """
+    Test that multiple runtime join filters work when operating on
+    numeric columns, which take a special code path for materializing
+    after each filter.
+
+    Here we have 3 tables with keys:
+
+    T1: [1, 2, 3, 4, 5]
+    T2: [1, 2, 3, 4]
+    T3: [2, 3, 4, 5]
+
+    so applying the RTJFs from T2 and T3 should shrink the data from 5 rows
+    to 3 rows if both filters are applied.
+    """
+
+    probe_df = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+    # Add two joins that each remove 1 key. This enables us to verify that
+    # both bloom filters were applied correctly.
+    build_df1 = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 3, 4], dtype="Int64"),
+        }
+    )
+    build_df2 = pd.DataFrame(
+        {
+            "A": pd.Series([2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+
+    # Keep all columns after each join.
+    key_inds = bodo.utils.typing.MetaType((0,))
+    col_meta1 = bodo.utils.typing.ColNamesMetaType(("A",))
+    col_meta2 = bodo.utils.typing.ColNamesMetaType(("A", "B"))
+    col_meta3 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
+    kept_all_cols = bodo.utils.typing.MetaType((0,))
+    filter_key_indices = bodo.utils.typing.MetaType((0,))
+    process_bitmask = bodo.utils.typing.MetaType((True,))
+
+    def impl(df1, df2, df3):
+        # Build 1
+        join_state1 = init_join_state(
+            -1,
+            key_inds,
+            key_inds,
+            col_meta1,
+            col_meta2,
+            False,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (),
+            kept_all_cols,
+            1,
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(T1)
+            _temp1 = _temp1 + 1
+            is_last1, _ = join_build_consume_batch(join_state1, T2, is_last1)
+
+        # Build 2
+        join_state2 = init_join_state(
+            -1,
+            key_inds,
+            key_inds,
+            col_meta1,
+            col_meta1,
+            False,
+            False,
+            False,
+        )
+        _temp2 = 0
+        is_last2 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2),
+            (),
+            kept_all_cols,
+            1,
+        )
+        while not is_last2:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(T3)
+            _temp2 = _temp2 + 1
+            is_last2, _ = join_build_consume_batch(join_state2, T4, is_last2)
+
+        # Probe pipeline
+
+        len_after_filter = 0
+        _temp3 = 0
+        is_last5 = False
+        T5 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df3),
+            (),
+            kept_all_cols,
+            1,
+        )
+
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        while not is_last5:
+            T6 = bodo.hiframes.table.table_local_filter(
+                T5, slice((_temp3 * 50), ((_temp3 + 1) * 50))
+            )
+            is_last3 = (_temp3 * 50) >= len(T5)
+            _temp3 = _temp3 + 1
+            T7 = runtime_join_filter(
+                (join_state1, join_state2),
+                T6,
+                (filter_key_indices, filter_key_indices),
+                (process_bitmask, process_bitmask),
+            )
+            len_after_filter += bodo.hiframes.table.local_len(T7)
+            T8, is_last4, _ = join_probe_consume_batch(
+                join_state2,
+                T7,
+                is_last3,
+                True,
+            )
+            T9, is_last5, _ = join_probe_consume_batch(
+                join_state1,
+                T8,
+                is_last4,
+                True,
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, T9)
+        delete_join_state(join_state1)
+        delete_join_state(join_state2)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta3
+        )
+        return df, len_after_filter
+
+    _, len_after_filter = bodo.jit(distributed=["df1", "df2", "df3"])(impl)(
+        _get_dist_arg(build_df1), _get_dist_arg(build_df2), _get_dist_arg(probe_df)
+    )
+    len_after_filter = reduce_sum(len_after_filter)
+    assert (
+        len_after_filter == 3
+    ), f"Expected len_after_filter to be exactly 3, but found {len_after_filter}."
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="bloom filters may not be enabled on macs by default",
+)
+def test_multiple_runtime_join_filter_no_materialize(memory_leak_check):
+    """
+    Test that multiple runtime join filters work when operating on
+    numeric columns with a string data column, which avoid materializing
+    the data after each filter.
+
+    Here we have 3 tables with keys:
+
+    T1: [1, 2, 3, 4, 5]
+    T2: [1, 2, 3, 4]
+    T3: [2, 3, 4, 5]
+
+    so applying the RTJFs from T2 and T3 should shrink the data from 5 rows
+    to 3 rows if both filters are applied.
+    """
+
+    probe_df = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+            "B": pd.Series(["A", "bc", "De", "FGh", "Ij"]),
+        }
+    )
+    # Add two joins that each remove 1 key. This enables us to verify that
+    # both bloom filters were applied correctly.
+    build_df1 = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 3, 4], dtype="Int64"),
+        }
+    )
+    build_df2 = pd.DataFrame(
+        {
+            "A": pd.Series([2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+
+    # Keep all columns after each join.
+    key_inds = bodo.utils.typing.MetaType((0,))
+    col_meta1 = bodo.utils.typing.ColNamesMetaType(("A",))
+    col_meta2 = bodo.utils.typing.ColNamesMetaType(("A", "B"))
+    col_meta3 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C"))
+    col_meta4 = bodo.utils.typing.ColNamesMetaType(("A", "B", "C", "D"))
+    kept_build_cols = bodo.utils.typing.MetaType((0,))
+    kept_probe_cols = bodo.utils.typing.MetaType((0, 1))
+    filter_key_indices = bodo.utils.typing.MetaType((0,))
+    process_bitmask = bodo.utils.typing.MetaType((True,))
+
+    def impl(df1, df2, df3):
+        # Build 1
+        join_state1 = init_join_state(
+            -1,
+            key_inds,
+            key_inds,
+            col_meta1,
+            col_meta3,
+            False,
+            False,
+            False,
+        )
+        _temp1 = 0
+        is_last1 = False
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
+            (),
+            kept_build_cols,
+            1,
+        )
+        while not is_last1:
+            T2 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_temp1 * 4000), ((_temp1 + 1) * 4000))
+            )
+            is_last1 = (_temp1 * 4000) >= len(T1)
+            _temp1 = _temp1 + 1
+            is_last1, _ = join_build_consume_batch(join_state1, T2, is_last1)
+
+        # Build 2
+        join_state2 = init_join_state(
+            -1,
+            key_inds,
+            key_inds,
+            col_meta1,
+            col_meta2,
+            False,
+            False,
+            False,
+        )
+        _temp2 = 0
+        is_last2 = False
+        T3 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df2),
+            (),
+            kept_build_cols,
+            1,
+        )
+        while not is_last2:
+            T4 = bodo.hiframes.table.table_local_filter(
+                T3, slice((_temp2 * 4000), ((_temp2 + 1) * 4000))
+            )
+            is_last2 = (_temp2 * 4000) >= len(T3)
+            _temp2 = _temp2 + 1
+            is_last2, _ = join_build_consume_batch(join_state2, T4, is_last2)
+
+        # Probe pipeline
+
+        len_after_filter = 0
+        _temp3 = 0
+        is_last5 = False
+        T5 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df3),
+            (),
+            kept_probe_cols,
+            2,
+        )
+
+        _table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
+        while not is_last5:
+            T6 = bodo.hiframes.table.table_local_filter(
+                T5, slice((_temp3 * 50), ((_temp3 + 1) * 50))
+            )
+            is_last3 = (_temp3 * 50) >= len(T5)
+            _temp3 = _temp3 + 1
+            T7 = runtime_join_filter(
+                (join_state1, join_state2),
+                T6,
+                (filter_key_indices, filter_key_indices),
+                (process_bitmask, process_bitmask),
+            )
+            len_after_filter += bodo.hiframes.table.local_len(T7)
+            T8, is_last4, _ = join_probe_consume_batch(
+                join_state2,
+                T7,
+                is_last3,
+                True,
+            )
+            T9, is_last5, _ = join_probe_consume_batch(
+                join_state1,
+                T8,
+                is_last4,
+                True,
+            )
+            bodo.libs.table_builder.table_builder_append(_table_builder, T9)
+        delete_join_state(join_state1)
+        delete_join_state(join_state2)
+        out_table = bodo.libs.table_builder.table_builder_finalize(_table_builder)
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta4
+        )
+        return df, len_after_filter
+
+    _, len_after_filter = bodo.jit(distributed=["df1", "df2", "df3"])(impl)(
+        _get_dist_arg(build_df1), _get_dist_arg(build_df2), _get_dist_arg(probe_df)
+    )
+    len_after_filter = reduce_sum(len_after_filter)
+    assert (
+        len_after_filter == 3
+    ), f"Expected len_after_filter to be exactly 3, but found {len_after_filter}."
+
+
 @pytest.mark.parametrize("merge_join_filters", [True, False])
 def test_runtime_join_filter_dict_encoding(merge_join_filters, memory_leak_check):
     """
