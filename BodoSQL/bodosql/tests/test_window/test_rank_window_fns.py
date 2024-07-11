@@ -706,3 +706,70 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
         check_dtype=False,
         check_names=False,
     )
+
+
+@pytest.mark.parametrize(
+    "window_func, expected_df, expected_log_message",
+    [
+        pytest.param(
+            "ROW_NUMBER()",
+            pd.DataFrame(
+                {
+                    "window_out": np.arange(1, 2_001),
+                }
+            ),
+            "[DEBUG] WindowState::FinalizeBuild: Finished",
+            id="row_number",
+        ),
+    ],
+)
+def test_rank_fns_sort_path_taken(
+    capfd, window_func, expected_df, expected_log_message, memory_leak_check
+):
+    """verifies sort path is taken in row_number()"""
+
+    from mpi4py import MPI
+
+    import bodosql
+    from bodo.tests.utils import temp_env_override
+
+    comm = MPI.COMM_WORLD
+
+    test_df = pd.DataFrame(
+        {
+            "A": np.arange(2_000),
+            "B": np.ones(2_000),
+        }
+    )
+
+    ctx = {"TABLE1": test_df}
+    bc = bodosql.BodoSQLContext(ctx)
+    query = f"""
+SELECT {window_func} OVER (PARTITION BY B ORDER BY A) FROM TABLE1
+"""
+
+    @bodo.jit()
+    def impl(bc, query):
+        bc.sql(query)
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        out_table = impl(bc, query)
+
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_df,
+        check_dtype=False,
+        check_names=False,
+    )
+
+    assert assert_success

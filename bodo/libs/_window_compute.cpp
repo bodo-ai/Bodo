@@ -7,6 +7,7 @@
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
 #include "_stream_shuffle.h"
+#include "_table_builder.h"
 #include "_table_builder_utils.h"
 #include "_window_aggfuncs.h"
 #include "mpi.h"
@@ -1022,117 +1023,33 @@ void local_sorted_dense_rank(
 }
 
 /**
- * @brief Wrapper around dense rank computation to template the comparisons
- * on the order by and partition by columns.
- *
+ * @brief Implement a local implementation of row_number
+ * on an already sorted table. The partition by and order
+ * by arrays are used to determine equality.
+ * @tparam PartitionByArrType A single array type for the partition
+ * by columns or bodo_array_type::UNKNOWN if mixed types.
+ * @tparam OrderByArrType A single array type for the order
+ * by columns or bodo_array_type::UNKNOWN if mixed types.
  * @param[in] partition_by_arrs The arrays used in partition by.
  * @param[in] order_by_arrs The arrays used in order by.
  * @param[out] out_arr The pre-allocated output array to update.
  */
-void local_sorted_dense_rank_computation(
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType>
+void local_sorted_row_number(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& out_arr) {
-    bool single_part_arr_type = partition_by_arrs.size() > 0;
-    for (size_t i = 1; i < partition_by_arrs.size(); i++) {
-        if (partition_by_arrs[i]->arr_type != partition_by_arrs[0]->arr_type) {
-            single_part_arr_type = false;
-            break;
+    uint64_t rank_val = 1;
+    int64_t n = out_arr->length;
+    for (int64_t i = 0; i < n; i++) {
+        if (distinct_from_previous_row<PartitionByArrType>(partition_by_arrs,
+                                                           i)) {
+            rank_val = 1;
+        } else {
+            rank_val++;
         }
-    }
-    bool single_order_arr_type = order_by_arrs.size() > 0;
-    for (size_t i = 1; i < order_by_arrs.size(); i++) {
-        if (order_by_arrs[i]->arr_type != order_by_arrs[0]->arr_type) {
-            single_order_arr_type = false;
-            break;
-        }
-    }
-    if (!single_part_arr_type && !single_order_arr_type) {
-        local_sorted_dense_rank<bodo_array_type::UNKNOWN,
-                                bodo_array_type::UNKNOWN>(
-            partition_by_arrs, order_by_arrs, out_arr);
-    } else if (!single_order_arr_type) {
-#define DENSE_RANK_PART_ATYPE_CASE(PartitionByArrType)                         \
-    case PartitionByArrType: {                                                 \
-        local_sorted_dense_rank<PartitionByArrType, bodo_array_type::UNKNOWN>( \
-            partition_by_arrs, order_by_arrs, out_arr);                        \
-        break;                                                                 \
-    }
-
-        switch (partition_by_arrs[0]->arr_type) {
-            DENSE_RANK_PART_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
-            DENSE_RANK_PART_ATYPE_CASE(bodo_array_type::NUMPY);
-            DENSE_RANK_PART_ATYPE_CASE(bodo_array_type::STRING);
-            default: {
-                throw std::runtime_error(
-                    "Unsupported partition by array type for dense rank "
-                    "computation: " +
-                    GetArrType_as_string(partition_by_arrs[0]->arr_type));
-            }
-        }
-#undef DENSE_RANK_PART_ATYPE_CASE
-
-    } else if (!single_part_arr_type) {
-#define DENSE_RANK_ORDER_ATYPE_CASE(OrderByArrType)                        \
-    case OrderByArrType: {                                                 \
-        local_sorted_dense_rank<bodo_array_type::UNKNOWN, OrderByArrType>( \
-            partition_by_arrs, order_by_arrs, out_arr);                    \
-        break;                                                             \
-    }
-        switch (order_by_arrs[0]->arr_type) {
-            DENSE_RANK_ORDER_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
-            DENSE_RANK_ORDER_ATYPE_CASE(bodo_array_type::NUMPY);
-            DENSE_RANK_ORDER_ATYPE_CASE(bodo_array_type::STRING);
-            default: {
-                throw std::runtime_error(
-                    "Unsupported order by array type for dense rank "
-                    "computation: " +
-                    GetArrType_as_string(order_by_arrs[0]->arr_type));
-            }
-        }
-#undef DENSE_RANK_ORDER_ATYPE_CASE
-    } else {
-#define DENSE_RANK_NESTED_ORDER_ATYPE_CASE(PartitionByArrType, OrderByArrType) \
-    case OrderByArrType: {                                                     \
-        local_sorted_dense_rank<PartitionByArrType, OrderByArrType>(           \
-            partition_by_arrs, order_by_arrs, out_arr);                        \
-        break;                                                                 \
-    }
-
-#define DENSE_RANK_NESTED_PART_ATYPE_CASE(PartitionByArrType)            \
-    case PartitionByArrType: {                                           \
-        switch (order_by_arrs[0]->arr_type) {                            \
-            DENSE_RANK_NESTED_ORDER_ATYPE_CASE(                          \
-                PartitionByArrType, bodo_array_type::NULLABLE_INT_BOOL); \
-            DENSE_RANK_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
-                                               bodo_array_type::NUMPY);  \
-            DENSE_RANK_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
-                                               bodo_array_type::STRING); \
-            default: {                                                   \
-                throw std::runtime_error(                                \
-                    "Unsupported order by array type for dense rank "    \
-                    "computation: " +                                    \
-                    GetArrType_as_string(order_by_arrs[0]->arr_type));   \
-            }                                                            \
-        }                                                                \
-        break;                                                           \
-    }
-
-        switch (partition_by_arrs[0]->arr_type) {
-            DENSE_RANK_NESTED_PART_ATYPE_CASE(
-                bodo_array_type::NULLABLE_INT_BOOL);
-            DENSE_RANK_NESTED_PART_ATYPE_CASE(bodo_array_type::NUMPY);
-            DENSE_RANK_NESTED_PART_ATYPE_CASE(bodo_array_type::STRING);
-            default: {
-                throw std::runtime_error(
-                    "Unsupported partition by array type for dense rank "
-                    "computation: " +
-                    GetArrType_as_string(partition_by_arrs[0]->arr_type));
-            }
-        }
-
-#undef DENSE_RANK_NESTED_ORDER_ATYPE_CASE
-#undef DENSE_RANK_NESTED_PART_ATYPE_CASE
+        getv<uint64_t, bodo_array_type::NUMPY>(out_arr, i) = rank_val;
     }
 }
 
@@ -1145,7 +1062,7 @@ void local_sorted_dense_rank_computation(
  * @return std::shared_ptr<table_info> The received table info
  * or an empty table if there is no data to receive.
  */
-std::shared_ptr<table_info> recv_dense_rank_data(
+std::shared_ptr<table_info> recv_sorted_window_data(
     const std::shared_ptr<table_info>& empty_table) {
     int my_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -1201,7 +1118,8 @@ std::shared_ptr<table_info> recv_dense_rank_data(
  * @return std::shared_ptr<table_info> A table with either 1 row or 0 rows to
  * send to our neighboring rank.
  */
-std::shared_ptr<table_info> compute_dense_rank_send_data(
+template <int32_t window_func>
+std::shared_ptr<table_info> compute_sorted_window_send_data(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr,
@@ -1246,18 +1164,31 @@ std::shared_ptr<table_info> compute_dense_rank_send_data(
                         recv_boundary_data
                             ->columns[i + partition_by_arrs.size()];
                 }
+
+                assert(window_func == Bodo_FTypes::dense_rank ||
+                       window_func == Bodo_FTypes::row_number);
                 bool dist_order_by =
                     distinct_from_other_row<bodo_array_type::UNKNOWN>(
                         order_by_arrs, 0, other_order_by_arrs, 0);
-                // If the order by values are the same then we don't subtract
-                // 1 from the increment value because all ranks have the
-                // same value in case of ties for dense rank.
-                uint64_t rank_offset =
-                    getv<uint64_t, bodo_array_type::NUMPY>(
-                        recv_boundary_data
-                            ->columns[recv_boundary_data->ncols() - 1],
-                        0) -
-                    (dist_order_by ? 0 : 1);
+                uint64_t rank_offset = getv<uint64_t, bodo_array_type::NUMPY>(
+                    recv_boundary_data
+                        ->columns[recv_boundary_data->ncols() - 1],
+                    0);
+                switch (window_func) {
+                    case Bodo_FTypes::dense_rank: {
+                        // If the order by values are the same then we
+                        // subtract 1 from the increment value because all ranks
+                        // have the same value in case of ties for dense rank.
+                        rank_offset -= (dist_order_by ? 0 : 1);
+                        break;
+                    }
+                    case Bodo_FTypes::row_number: {
+                        break;
+                    }
+                    default:
+                        break;
+                }
+
                 getv<uint64_t, bodo_array_type::NUMPY>(
                     output_table->columns[output_table->ncols() - 1], 0) +=
                     rank_offset;
@@ -1280,7 +1211,7 @@ std::shared_ptr<table_info> compute_dense_rank_send_data(
  * required to be kept alive until the send is received.
  * @return MPI_Request The MPI request used to communicate the length.
  */
-MPI_Request send_dense_rank_data(
+MPI_Request send_sorted_window_data(
     const std::shared_ptr<table_info>& send_data,
     std::vector<AsyncShuffleSendState>& send_states,
     const std::unique_ptr<int>& length_ptr) {
@@ -1335,11 +1266,12 @@ MPI_Request send_dense_rank_data(
  * empty table if there is no data) and the MPI_Request send to communicate the
  * length.
  */
+template <int32_t window_func>
 std::tuple<std::shared_ptr<table_info>, MPI_Request>
 sorted_window_boundary_communication(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
-    int32_t window_func, const std::shared_ptr<array_info>& window_out_arr,
+    const std::shared_ptr<array_info>& window_out_arr,
     std::vector<AsyncShuffleSendState>& send_states,
     const std::unique_ptr<int>& length_ptr) {
     std::vector<std::shared_ptr<array_info>> arrs;
@@ -1353,8 +1285,9 @@ sorted_window_boundary_communication(
     std::unique_ptr<table_info> table = make_unique<table_info>(arrs);
     std::shared_ptr<table_info> empty_table =
         alloc_table_like(std::move(table));
-    // We only support dense rank right now.
-    assert(window_func == Bodo_FTypes::dense_rank);
+    // Supports dense_rank and row_number.
+    assert(window_func == Bodo_FTypes::dense_rank ||
+           window_func == Bodo_FTypes::row_number);
     bool empty_group = window_out_arr->length == 0;
     bool single_group = !distinct_from_other_row<bodo_array_type::UNKNOWN>(
         partition_by_arrs, 0, partition_by_arrs, window_out_arr->length - 1);
@@ -1364,26 +1297,29 @@ sorted_window_boundary_communication(
         // If the current rank doesn't have any data or is a single group we
         // need to receive data from our neighbor first to send to the next
         // neighbor.
-        recv_boundary = recv_dense_rank_data(empty_table);
+        recv_boundary = recv_sorted_window_data(empty_table);
+        // send data looks slightly different in this case (do not need to check
+        // if rows the same, just the groups)
         std::shared_ptr<table_info> send_boundary =
-            compute_dense_rank_send_data(partition_by_arrs, order_by_arrs,
-                                         window_out_arr, recv_boundary,
-                                         single_group);
+            compute_sorted_window_send_data<window_func>(
+                partition_by_arrs, order_by_arrs, window_out_arr, recv_boundary,
+                single_group);
         send_request =
-            send_dense_rank_data(send_boundary, send_states, length_ptr);
+            send_sorted_window_data(send_boundary, send_states, length_ptr);
     } else {
         std::shared_ptr<table_info> send_boundary =
-            compute_dense_rank_send_data(partition_by_arrs, order_by_arrs,
-                                         window_out_arr, empty_table, false);
+            compute_sorted_window_send_data<window_func>(
+                partition_by_arrs, order_by_arrs, window_out_arr, empty_table,
+                false);
         send_request =
-            send_dense_rank_data(send_boundary, send_states, length_ptr);
-        recv_boundary = recv_dense_rank_data(empty_table);
+            send_sorted_window_data(send_boundary, send_states, length_ptr);
+        recv_boundary = recv_sorted_window_data(empty_table);
     }
     return std::tuple(recv_boundary, send_request);
 }
 
 /**
- * @brief Update all dense_rank value in the first partition group with the
+ * @brief Update all window output values in the first partition group with the
  * provided offset. The caller should have already checked that
  * boundary_partition_by_arrs has a single row and that the offset is non-zero.
  *
@@ -1398,12 +1334,12 @@ sorted_window_boundary_communication(
  * group.
  */
 template <bodo_array_type::arr_type_enum PartitionByArrType>
-void dense_rank_update_offset(
+void sorted_window_update_offset(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& boundary_partition_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr, uint64_t offset) {
     for (size_t i = 0; i < window_out_arr->length &&
-                       !distinct_from_other_row<bodo_array_type::UNKNOWN>(
+                       !distinct_from_other_row<PartitionByArrType>(
                            partition_by_arrs, i, boundary_partition_by_arrs, 0);
          i++) {
         getv<uint64_t, bodo_array_type::NUMPY>(window_out_arr, i) += offset;
@@ -1411,8 +1347,8 @@ void dense_rank_update_offset(
 }
 
 /**
- * @brief Updates the dense rank output based on the value of
- * the dense rank column in the recv_boundary_data. If or how
+ * @brief Updates the window function output based on the value of
+ * the output column(s) in the recv_boundary_data. If or how
  * much we update the window_out_arr by depends on where the
  * partition_by arrays match and if the order_by arrays match
  * on the boundary.
@@ -1424,11 +1360,11 @@ void dense_rank_update_offset(
  * @param[in, out] window_out_arr The output array for computing the
  * rank result.
  * @param[in] recv_boundary_data The table received from the neighbor
- * for updating dense rank values. This include partition by keys, order
- * by keys, and the last dense rank value (which can be used to update
- * the next set of rows).
+ * array)
  */
-void update_dense_rank_output(
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+void update_sorted_window_output(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr,
@@ -1446,50 +1382,85 @@ void update_dense_rank_output(
         other_order_by_arrs[i] =
             recv_boundary_data->columns[i + partition_by_arrs.size()];
     }
-    bool dist_order_by = distinct_from_other_row<bodo_array_type::UNKNOWN>(
-        order_by_arrs, 0, other_order_by_arrs, 0);
-    offset -= dist_order_by ? 0 : 1;
+
+    assert(window_func == Bodo_FTypes::dense_rank ||
+           window_func == Bodo_FTypes::row_number);
+    switch (window_func) {
+        case Bodo_FTypes::dense_rank: {
+            // If the order by values are the same then we
+            // subtract 1 from the increment value because all ranks have
+            // the same value in case of ties for dense rank.
+            bool dist_order_by = distinct_from_other_row<OrderByArrType>(
+                order_by_arrs, 0, other_order_by_arrs, 0);
+            offset -= (dist_order_by ? 0 : 1);
+            break;
+        }
+        case Bodo_FTypes::row_number: {
+            break;
+        }
+        default:
+            break;
+    }
+
     if (offset <= 0) {
         return;
     }
     std::vector<std::shared_ptr<array_info>> other_partition_by_arrs(
         partition_by_arrs.size());
-    bool single_part_arr_type = partition_by_arrs.size() > 0;
     for (size_t i = 0; i < partition_by_arrs.size(); i++) {
         other_partition_by_arrs[i] = recv_boundary_data->columns[i];
-        if (recv_boundary_data->columns[i]->arr_type !=
-            recv_boundary_data->columns[0]->arr_type) {
-            single_part_arr_type = false;
-        }
     }
-    if (single_part_arr_type) {
-#define DENSE_RANK_UPDATE_OFFSET_ATYPE(PartitionByArrType)                    \
-    case PartitionByArrType: {                                                \
-        dense_rank_update_offset<PartitionByArrType>(partition_by_arrs,       \
-                                                     other_partition_by_arrs, \
-                                                     window_out_arr, offset); \
-        break;                                                                \
-    }
-
-        switch (partition_by_arrs[0]->arr_type) {
-            DENSE_RANK_UPDATE_OFFSET_ATYPE(bodo_array_type::NULLABLE_INT_BOOL);
-            DENSE_RANK_UPDATE_OFFSET_ATYPE(bodo_array_type::NUMPY);
-            DENSE_RANK_UPDATE_OFFSET_ATYPE(bodo_array_type::STRING);
-            default: {
-                throw std::runtime_error(
-                    "Unsupported partition by array type for dense rank "
-                    "computation: " +
-                    GetArrType_as_string(partition_by_arrs[0]->arr_type));
-            }
-        }
-#undef DENSE_RANK_UPDATE_OFFSET_ATYPE
-    } else {
-        dense_rank_update_offset<bodo_array_type::UNKNOWN>(
-            partition_by_arrs, other_partition_by_arrs, window_out_arr, offset);
-    }
+    // will need OrderByArrType for rank
+    sorted_window_update_offset<PartitionByArrType>(
+        partition_by_arrs, other_partition_by_arrs, window_out_arr, offset);
 }
 
-void sorted_window_computation(
+/**
+ * @brief Performs the parallel step of sorted window computation
+ * which involves communication with neighboring ranks to propogate
+ * information that might be on the boundary and updating the output array.
+ *
+ * @param[in] partition_by_arrs The partition by arrays on the local
+ * output data.
+ * @param[in] order_by_arrs The order by arrays on the local output
+ * data.
+ * @param[in, out] out_arr The output array for computing the
+ * rank result.
+ */
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+void sorted_window_parallel_step(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::shared_ptr<array_info> out_arr) {
+    std::vector<AsyncShuffleSendState> send_states;
+    std::unique_ptr<int> length_ptr = std::make_unique<int>(0);
+    auto [boundary_info, send_request] =
+        sorted_window_boundary_communication<window_func>(
+            partition_by_arrs, order_by_arrs, out_arr, send_states, length_ptr);
+    update_sorted_window_output<PartitionByArrType, OrderByArrType,
+                                window_func>(partition_by_arrs, order_by_arrs,
+                                             out_arr, boundary_info);
+    bool sent_data = send_request != MPI_REQUEST_NULL;
+    if (sent_data) {
+        MPI_Wait(&send_request, MPI_STATUSES_IGNORE);
+        while (send_states.size() > 0) {
+            std::erase_if(send_states, [&](AsyncShuffleSendState& s) {
+                return s.sendDone();
+            });
+        }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    // resets added here so they do not get garage collected before loop
+    // finishes
+    boundary_info.reset();
+    length_ptr.reset();
+}
+
+// templated version of sorted_window computation
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType>
+void _sorted_window_computation(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::vector<int32_t>& window_funcs,
@@ -1497,8 +1468,13 @@ void sorted_window_computation(
     for (size_t i = 0; i < window_funcs.size(); i++) {
         switch (window_funcs[i]) {
             case Bodo_FTypes::dense_rank: {
-                local_sorted_dense_rank_computation(partition_by_arrs,
-                                                    order_by_arrs, out_arrs[i]);
+                local_sorted_dense_rank<PartitionByArrType, OrderByArrType>(
+                    partition_by_arrs, order_by_arrs, out_arrs[i]);
+                break;
+            }
+            case Bodo_FTypes::row_number: {
+                local_sorted_row_number<PartitionByArrType, OrderByArrType>(
+                    partition_by_arrs, order_by_arrs, out_arrs[i]);
                 break;
             }
             default:
@@ -1511,30 +1487,17 @@ void sorted_window_computation(
         for (size_t i = 0; i < window_funcs.size(); i++) {
             switch (window_funcs[i]) {
                 case Bodo_FTypes::dense_rank: {
-                    std::vector<AsyncShuffleSendState> send_states;
-                    // TODO: Do all communication up front. Requires a generic
-                    // data structure.
-                    std::unique_ptr<int> length_ptr = std::make_unique<int>(0);
-                    auto [boundary_info, send_request] =
-                        sorted_window_boundary_communication(
-                            partition_by_arrs, order_by_arrs, window_funcs[i],
-                            out_arrs[i], send_states, length_ptr);
-                    update_dense_rank_output(partition_by_arrs, order_by_arrs,
-                                             out_arrs[i], boundary_info);
-                    bool sent_data = send_request != MPI_REQUEST_NULL;
-                    if (sent_data) {
-                        MPI_Wait(&send_request, MPI_STATUSES_IGNORE);
-                        while (send_states.size() > 0) {
-                            std::erase_if(send_states,
-                                          [&](AsyncShuffleSendState& s) {
-                                              return s.sendDone();
-                                          });
-                        }
-                    }
-                    MPI_Barrier(MPI_COMM_WORLD);
-                    // Clear the allocated buffer
-                    boundary_info.reset();
-                    length_ptr.reset();
+                    sorted_window_parallel_step<PartitionByArrType,
+                                                OrderByArrType,
+                                                Bodo_FTypes::dense_rank>(
+                        partition_by_arrs, order_by_arrs, out_arrs[i]);
+                    break;
+                }
+                case Bodo_FTypes::row_number: {
+                    sorted_window_parallel_step<PartitionByArrType,
+                                                OrderByArrType,
+                                                Bodo_FTypes::row_number>(
+                        partition_by_arrs, order_by_arrs, out_arrs[i]);
                     break;
                 }
                 default:
@@ -1543,5 +1506,127 @@ void sorted_window_computation(
                         "implementation parallel path");
             }
         }
+    }
+}
+
+/**
+ * @brief Wrapper around sorted window computation to template the comparisons
+ * on the order by and partition by columns.
+ *
+ * @param[in] partition_by_arrs The arrays used in partition by.
+ * @param[in] order_by_arrs The arrays used in order by.
+ * @param[out] out_arr The pre-allocated output array to update.
+ */
+void sorted_window_computation(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::vector<int32_t>& window_funcs,
+    std::vector<std::shared_ptr<array_info>> out_arrs, bool is_parallel) {
+    bool single_part_arr_type = partition_by_arrs.size() > 0;
+    for (size_t i = 1; i < partition_by_arrs.size(); i++) {
+        if (partition_by_arrs[i]->arr_type != partition_by_arrs[0]->arr_type) {
+            single_part_arr_type = false;
+            break;
+        }
+    }
+    bool single_order_arr_type = order_by_arrs.size() > 0;
+    for (size_t i = 1; i < order_by_arrs.size(); i++) {
+        if (order_by_arrs[i]->arr_type != order_by_arrs[0]->arr_type) {
+            single_order_arr_type = false;
+            break;
+        }
+    }
+    if (!single_part_arr_type && !single_order_arr_type) {
+        _sorted_window_computation<bodo_array_type::UNKNOWN,
+                                   bodo_array_type::UNKNOWN>(
+            partition_by_arrs, order_by_arrs, window_funcs, out_arrs,
+            is_parallel);
+    } else if (!single_order_arr_type) {
+#define SORTED_WINDOW_PART_ATYPE_CASE(PartitionByArrType)             \
+    case PartitionByArrType: {                                        \
+        _sorted_window_computation<PartitionByArrType,                \
+                                   bodo_array_type::UNKNOWN>(         \
+            partition_by_arrs, order_by_arrs, window_funcs, out_arrs, \
+            is_parallel);                                             \
+        break;                                                        \
+    }
+
+        switch (partition_by_arrs[0]->arr_type) {
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::NUMPY);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::STRING);
+            default: {
+                throw std::runtime_error(
+                    "Unsupported partition by array type for the sorted "
+                    "implementation of window function" +
+                    GetArrType_as_string(partition_by_arrs[0]->arr_type));
+            }
+        }
+#undef SORTED_WINDOW_PART_ATYPE_CASE
+
+    } else if (!single_part_arr_type) {
+#define SORTED_WINDOW_ORDER_ATYPE_CASE(OrderByArrType)                        \
+    case OrderByArrType: {                                                    \
+        _sorted_window_computation<bodo_array_type::UNKNOWN, OrderByArrType>( \
+            partition_by_arrs, order_by_arrs, window_funcs, out_arrs,         \
+            is_parallel);                                                     \
+        break;                                                                \
+    }
+        switch (order_by_arrs[0]->arr_type) {
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::NUMPY);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::STRING);
+            default: {
+                throw std::runtime_error(
+                    "Unsupported partition by array type for the sorted "
+                    "implementation of window function" +
+                    GetArrType_as_string(partition_by_arrs[0]->arr_type));
+            }
+        }
+#undef SORTED_WINDOW_ORDER_ATYPE_CASE
+    } else {
+#define SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
+                                              OrderByArrType)           \
+    case OrderByArrType: {                                              \
+        _sorted_window_computation<PartitionByArrType, OrderByArrType>( \
+            partition_by_arrs, order_by_arrs, window_funcs, out_arrs,   \
+            is_parallel);                                               \
+        break;                                                          \
+    }
+
+#define SORTED_WINDOW_NESTED_PART_ATYPE_CASE(PartitionByArrType)            \
+    case PartitionByArrType: {                                              \
+        switch (order_by_arrs[0]->arr_type) {                               \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(                          \
+                PartitionByArrType, bodo_array_type::NULLABLE_INT_BOOL);    \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
+                                                  bodo_array_type::NUMPY);  \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
+                                                  bodo_array_type::STRING); \
+            default: {                                                      \
+                throw std::runtime_error(                                   \
+                    "Unsupported partition by array type for the sorted "   \
+                    "implementation of window function" +                   \
+                    GetArrType_as_string(partition_by_arrs[0]->arr_type));  \
+            }                                                               \
+        }                                                                   \
+        break;                                                              \
+    }
+
+        switch (partition_by_arrs[0]->arr_type) {
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(
+                bodo_array_type::NULLABLE_INT_BOOL);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::NUMPY);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::STRING);
+            default: {
+                throw std::runtime_error(
+                    "Unsupported partition by array type for the sorted "
+                    "implementation of window function" +
+                    GetArrType_as_string(partition_by_arrs[0]->arr_type));
+            }
+        }
+
+#undef SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE
+#undef SORTED_WINDOW_NESTED_PART_ATYPE_CASE
     }
 }
