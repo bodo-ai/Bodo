@@ -450,6 +450,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_theta_sketches.cpp"
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
+    "bodo/tests/test_sorted_window_computation.cpp"
   )
   if (DEFINED ENV{BUILD_WITH_V8})
       set(test_list "${test_list}"

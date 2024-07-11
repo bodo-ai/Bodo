@@ -60,6 +60,9 @@ class WindowState {
     // updated after the last input to avoid repeating the final steps.
     bool build_input_finalized = false;
 
+    // Whether we should print debug information to verify sort path is taken
+    bool debug_window;
+
     // TODO: Replace with window metrics.
     GroupbyMetrics metrics;
     const int64_t op_id;

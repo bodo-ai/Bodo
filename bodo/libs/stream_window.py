@@ -155,7 +155,7 @@ class WindowStateType(StreamingStateType):
         Returns:
             Set[str]: Set of function names that can support sort.
         """
-        return {"dense_rank"}
+        return {"dense_rank", "row_number"}
 
     @staticmethod
     def _derive_input_type(

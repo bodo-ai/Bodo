@@ -150,6 +150,11 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
             std::move(metrics));
     }
     this->curr_stage_id++;
+
+    if (char* debug_window_env_ =
+            std::getenv("BODO_DEBUG_STREAM_GROUPBY_PARTITIONING")) {
+        this->debug_window = !std::strcmp(debug_window_env_, "1");
+    }
 }
 
 std::shared_ptr<table_info> WindowState::UnifyDictionaryArrays(
@@ -400,6 +405,11 @@ void WindowState::FinalizeBuild() {
     this->output_state->Finalize();
     this->build_input_finalized = true;
     this->metrics.finalize_time += end_timer(start_finalize);
+
+    if (this->debug_window) {
+        std::cerr << "[DEBUG] WindowState::FinalizeBuild: Finished"
+                  << std::endl;
+    }
 }
 
 /**
