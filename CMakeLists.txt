@@ -478,7 +478,14 @@ target_include_directories(
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
   target_compile_options(ext PRIVATE "-Wno-unknown-pragmas")
-
+elseif (DEFINED ENV{BODO_SKIP_CPP_TESTS})
+  # Remove the IS_TESTING flag.
+  target_compile_definitions(
+    ext
+    PRIVATE
+      # Required when using boost::stacktrace for debugging
+      "BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED=1"
+  )
 else()
   target_compile_definitions(
     ext
