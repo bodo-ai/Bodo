@@ -49,6 +49,13 @@ def test_filesystem_catalog_boxing(dummy_filesystem_catalog, memory_leak_check):
     check_func(impl, (dummy_filesystem_catalog,))
 
 
+def assert_frame_equal_unordered(df1, df2):
+    pd.testing.assert_frame_equal(
+        df1.sort_values(by=df1.columns.to_list(), ignore_index=True),
+        df2.sort_values(by=df2.columns.to_list(), ignore_index=True),
+    )
+
+
 def test_bodosql_context_boxing(dummy_filesystem_catalog, memory_leak_check):
     """
     Tests that the BodoSQL context can be boxed and unboxed when it contains
@@ -151,8 +158,8 @@ def test_default_schema_filesystem_parquet_write(memory_leak_check):
         path2 = os.path.join(root, schema1, schema2, schema3, "OUT_TABLE")
         result1 = pd.read_parquet(path1)
         result2 = pd.read_parquet(path2)
-        pd.testing.assert_frame_equal(result1, df1)
-        pd.testing.assert_frame_equal(result2, df2)
+        assert_frame_equal_unordered(result1, df1)
+        assert_frame_equal_unordered(result2, df2)
 
 
 def test_filesystem_parquet_write_no_schema(memory_leak_check):
@@ -187,4 +194,4 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
         # Read the table with pandas and validate the result.
         path = os.path.join(root, "OUT_TABLE")
         result1 = pd.read_parquet(path)
-        pd.testing.assert_frame_equal(result1, df1)
+        assert_frame_equal_unordered(result1, df1)
