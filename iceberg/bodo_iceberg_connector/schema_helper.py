@@ -262,9 +262,15 @@ def arrow_to_iceberg_type(field_type: pa.DataType):
 
     if pa.types.is_null(field_type):
         raise IcebergError("Currently Cant Handle Purely Null Fields")
-    elif pa.types.is_int32(field_type):
+    elif (
+        pa.types.is_int32(field_type)
+        or pa.types.is_int16(field_type)
+        or pa.types.is_int8(field_type)
+        or pa.types.is_uint16(field_type)
+        or pa.types.is_uint8(field_type)
+    ):
         return IcebergTypes.IntegerType.get()
-    elif pa.types.is_int64(field_type):
+    elif pa.types.is_int64(field_type) or pa.types.is_uint32(field_type):
         return IcebergTypes.LongType.get()
     elif pa.types.is_float32(field_type):
         return IcebergTypes.FloatType.get()
