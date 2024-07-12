@@ -40,10 +40,15 @@ bodo::tests::suite external_sort_tests([] {
 
         builder.AppendChunk(table);
         auto res = builder.Finalize();
-        bodo::tests::check(res.size() == 1);
+        bodo::tests::check(res.size() == 2);
 
-        res[0].table->pin();
-        auto arrow_arr = to_arrow(res[0].table->columns[0]);
+        std::vector<std::shared_ptr<array_info>> arrays;
+        for (const auto& chunk : res) {
+            chunk.table->pin();
+            arrays.push_back(chunk.table->columns[0]);
+        }
+        auto bodo_arr = concat_arrays(arrays);
+        auto arrow_arr = to_arrow(bodo_arr);
         arrow::Int64Array* int_arr =
             static_cast<arrow::Int64Array*>(arrow_arr.get());
         bodo::tests::check(int_arr->Value(0) == 5);
@@ -92,12 +97,20 @@ bodo::tests::suite external_sort_tests([] {
     });
 
     bodo::tests::test("test_external_sort_three_chunks_asc", [] {
+        std::vector<std::string> col_names = {"A", "B", "C"};
+        std::vector<bool> nullable = {false, true, true};
         std::shared_ptr<table_info> table_0 = bodo::tests::cppToBodo(
-            {"A"}, {false}, {}, std::vector<int64_t>{1, 4, 7, 10});
+            col_names, nullable, {}, std::vector<int64_t>{1, 4, 7, 10},
+            std::vector<std::int64_t>{1, 2, 3, 4},
+            std::vector<std::string>{"a", "b", "c", "d"});
         std::shared_ptr<table_info> table_1 = bodo::tests::cppToBodo(
-            {"A"}, {false}, {}, std::vector<int64_t>{2, 5, 8, 11});
+            col_names, nullable, {}, std::vector<int64_t>{2, 5, 8, 11},
+            std::vector<std::int64_t>{1, 2, 3, 4},
+            std::vector<std::string>{"a", "b", "c", "d"});
         std::shared_ptr<table_info> table_2 = bodo::tests::cppToBodo(
-            {"A"}, {false}, {}, std::vector<int64_t>{3, 6, 9});
+            col_names, nullable, {}, std::vector<int64_t>{3, 6, 9},
+            std::vector<std::int64_t>{1, 2, 3},
+            std::vector<std::string>{"a", "b", "c"});
 
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
@@ -112,36 +125,139 @@ bodo::tests::suite external_sort_tests([] {
         auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 4);
 
-        std::vector<std::shared_ptr<array_info>> arrays;
+        std::vector<std::shared_ptr<table_info>> tables;
         for (const auto& chunk : res) {
             chunk.table->pin();
-            arrays.push_back(chunk.table->columns[0]);
+            tables.push_back(chunk.table);
         }
-        auto bodo_arr = concat_arrays(arrays);
-        auto arrow_arr = to_arrow(bodo_arr);
-        arrow::Int64Array* int_arr =
-            static_cast<arrow::Int64Array*>(arrow_arr.get());
-        bodo::tests::check(int_arr->length() == 11);
+        auto bodo_table = concat_tables(tables);
 
-        bodo::tests::check(int_arr->Value(0) == 1);
-        bodo::tests::check(int_arr->Value(1) == 2);
-        bodo::tests::check(int_arr->Value(2) == 3);
-        bodo::tests::check(int_arr->Value(3) == 4);
-        bodo::tests::check(int_arr->Value(4) == 5);
-        bodo::tests::check(int_arr->Value(5) == 6);
-        bodo::tests::check(int_arr->Value(6) == 7);
-        bodo::tests::check(int_arr->Value(7) == 8);
-        bodo::tests::check(int_arr->Value(8) == 9);
-        bodo::tests::check(int_arr->Value(9) == 10);
-        bodo::tests::check(int_arr->Value(10) == 11);
+        auto a_arrow_arr = to_arrow(bodo_table->columns[0]);
+        auto* a_arr = static_cast<arrow::Int64Array*>(a_arrow_arr.get());
+        auto b_arrow_arr = to_arrow(bodo_table->columns[1]);
+        auto* b_arr = static_cast<arrow::Int64Array*>(b_arrow_arr.get());
+        auto c_arrow_arr = to_arrow(bodo_table->columns[2]);
+        auto* c_arr = static_cast<arrow::LargeStringArray*>(c_arrow_arr.get());
+
+        bodo::tests::check(a_arr->length() == 11);
+        bodo::tests::check(b_arr->length() == 11);
+        bodo::tests::check(c_arr->length() == 11);
+
+        // Extract the idx'th element from each of the column arrays and pack
+        // them into a tuple
+        auto getRow = [&](int64_t idx) {
+            return std::make_tuple(a_arr->Value(idx), b_arr->Value(idx),
+                                   c_arr->Value(idx));
+        };
+
+        bodo::tests::check(getRow(0) == std::make_tuple(1, 1, "a"));
+        bodo::tests::check(getRow(1) == std::make_tuple(2, 1, "a"));
+        bodo::tests::check(getRow(2) == std::make_tuple(3, 1, "a"));
+        bodo::tests::check(getRow(3) == std::make_tuple(4, 2, "b"));
+        bodo::tests::check(getRow(4) == std::make_tuple(5, 2, "b"));
+        bodo::tests::check(getRow(5) == std::make_tuple(6, 2, "b"));
+        bodo::tests::check(getRow(6) == std::make_tuple(7, 3, "c"));
+        bodo::tests::check(getRow(7) == std::make_tuple(8, 3, "c"));
+        bodo::tests::check(getRow(8) == std::make_tuple(9, 3, "c"));
+        bodo::tests::check(getRow(9) == std::make_tuple(10, 4, "d"));
+        bodo::tests::check(getRow(10) == std::make_tuple(11, 4, "d"));
+    });
+
+    bodo::tests::test("test_sort_nulls", [] {
+        std::vector<std::string> col_names = {"A", "B", "C"};
+        std::vector<bool> nullable = {false, true, true};
+        std::shared_ptr<table_info> table_0 = bodo::tests::cppToBodo(
+            {"A"}, {true}, {}, std::vector<int64_t>{1, -1, 7, 10});
+        std::shared_ptr<table_info> table_1 = bodo::tests::cppToBodo(
+            {"A"}, {true}, {}, std::vector<int64_t>{2, 5, -1, 11});
+        std::shared_ptr<table_info> table_2 = bodo::tests::cppToBodo(
+            {"A"}, {true}, {}, std::vector<int64_t>{3, 6, 9});
+
+        // Replace all -1's with NA
+        for (const auto& table : {table_0, table_1, table_2}) {
+            auto& col = table->columns[0];
+            for (size_t i = 0; i < table->nrows(); i++) {
+                if (((int64_t*)col->data1())[i] == -1) {
+                    col->set_null_bit(i, false);
+                }
+            }
+        }
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> dead_keys;
+        // Test with nulls at the front
+        {
+            std::vector<int64_t> na_position{0};
+            SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+                                              dead_keys, 3);
+
+            builder.AppendChunk(table_2);
+            builder.AppendChunk(table_1);
+            builder.AppendChunk(table_0);
+
+            auto res = builder.Finalize();
+            bodo::tests::check(res.size() >= 4);
+
+            std::vector<std::shared_ptr<array_info>> arrays;
+            for (const auto& chunk : res) {
+                chunk.table->pin();
+                arrays.push_back(chunk.table->columns[0]);
+            }
+            auto bodo_arr = concat_arrays(arrays);
+            auto arrow_arr = to_arrow(bodo_arr);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+            bodo::tests::check(int_arr->length() == 11);
+
+            std::vector<std::optional<int64_t>> expected{
+                std::nullopt, std::nullopt, 1, 2, 3, 5, 6, 7, 9, 10, 11};
+
+            for (size_t i = 0; i < 11; i++) {
+                std::optional<int64_t> actual = std::nullopt;
+                if (int_arr->IsValid(i)) {
+                    actual = int_arr->Value(i);
+                }
+                bodo::tests::check(actual == expected[i]);
+            }
+        }
+        // Test with nulls at the back
+        {
+            std::vector<int64_t> na_position{1};
+            SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+                                              dead_keys, 3);
+
+            builder.AppendChunk(table_2);
+            builder.AppendChunk(table_1);
+            builder.AppendChunk(table_0);
+
+            auto res = builder.Finalize();
+            bodo::tests::check(res.size() >= 4);
+
+            std::vector<std::shared_ptr<array_info>> arrays;
+            for (const auto& chunk : res) {
+                chunk.table->pin();
+                arrays.push_back(chunk.table->columns[0]);
+            }
+            auto bodo_arr = concat_arrays(arrays);
+            auto arrow_arr = to_arrow(bodo_arr);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+            bodo::tests::check(int_arr->length() == 11);
+
+            std::vector<std::optional<int64_t>> expected{
+                1, 2, 3, 5, 6, 7, 9, 10, 11, std::nullopt, std::nullopt};
+
+            for (size_t i = 0; i < 11; i++) {
+                std::optional<int64_t> actual = std::nullopt;
+                if (int_arr->IsValid(i)) {
+                    actual = int_arr->Value(i);
+                }
+                bodo::tests::check(actual == expected[i]);
+            }
+        }
     });
 
     bodo::tests::test("test_sampling", [] {
-        std::vector<int64_t> vect_ascending{1};
-        std::vector<int64_t> na_position{0};
-        StreamSortState state(1, std::move(vect_ascending),
-                              std::move(na_position), 10);
-
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -155,10 +271,18 @@ bodo::tests::suite external_sort_tests([] {
 
         std::shared_ptr<table_info> table =
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
-        state.phase = StreamSortPhase::PRE_BUILD;
-        state.consume_batch(table, true, true);
 
-        auto res = state.get_parallel_sort_bounds();
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true,
+                              10);
+        state.phase = StreamSortPhase::BUILD;
+        state.ConsumeBatch(table, true, true);
+        state.GlobalSort();
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+
+        auto res = state.GetParallelSortBounds();
         if (myrank == 0) {
             bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
 
@@ -176,11 +300,7 @@ bodo::tests::suite external_sort_tests([] {
     bodo::tests::test("test_parallel_all_local", [] {
         // This test doesn't actually require any communication because all the
         // data for a given rank is already present
-        std::vector<int64_t> vect_ascending{1};
-        std::vector<int64_t> na_position{0};
         const size_t chunk_size = 10;
-        StreamSortState state(1, std::move(vect_ascending),
-                              std::move(na_position), chunk_size);
 
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -190,40 +310,51 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> data(n_elems_per_host);
         int64_t start_elem = myrank * n_elems_per_host;
         // Create a table with numbers from start_elem to (start_elem + 1000)
+
         std::iota(data.begin(), data.end(), start_elem);
         unsort_vector(data);
 
         std::shared_ptr<table_info> table =
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
-        state.phase = StreamSortPhase::PRE_BUILD;
-        state.consume_batch(table, true, true);
-        state.global_sort();
 
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true,
+                              chunk_size);
+        state.phase = StreamSortPhase::BUILD;
+        state.ConsumeBatch(table, true, true);
+
+        std::shared_ptr<table_info> bounds = state.GetParallelSortBounds();
+        auto bounds_arrow_arr = to_arrow(bounds->columns[0]);
+        arrow::Int64Array* bounds_int_arr =
+            static_cast<arrow::Int64Array*>(bounds_arrow_arr.get());
+        int64_t actual_start_elem =
+            (myrank == 0) ? 0 : (bounds_int_arr->Value(myrank - 1) + 1);
+
+        state.GlobalSort();
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+
+        std::vector<std::shared_ptr<table_info>> tables;
         bool done = false;
-        int64_t chunk_id = 0;
-        while (!done) {
-            auto res = state.get_output();
-            done = res.second;
+        std::shared_ptr<table_info> out_table;
+        do {
+            std::tie(out_table, done) = state.GetOutput();
+            tables.push_back(out_table);
+        } while (!done);
+        auto local_sorted_table = concat_tables(std::move(tables));
+        auto arrow_arr = to_arrow(local_sorted_table->columns[0]);
+        arrow::Int64Array* int_arr =
+            static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            auto output = res.first;
-            auto arrow_arr = to_arrow(output->columns[0]);
-            arrow::Int64Array* int_arr =
-                static_cast<arrow::Int64Array*>(arrow_arr.get());
-
-            for (int64_t i = 0; i < (n_pes - 1); i++) {
-                bodo::tests::check(int_arr->Value(i) ==
-                                   static_cast<int64_t>(
-                                       start_elem + chunk_id * chunk_size + i));
-            }
+        for (int64_t i = 0; i < int_arr->length(); i++) {
+            bodo::tests::check(int_arr->Value(i) ==
+                               static_cast<int64_t>(actual_start_elem + i));
         }
     });
 
     bodo::tests::test("test_parallel", [] {
-        std::vector<int64_t> vect_ascending{1};
-        std::vector<int64_t> na_position{0};
         const size_t chunk_size = 10;
-        StreamSortState state(1, std::move(vect_ascending),
-                              std::move(na_position), chunk_size);
 
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -249,15 +380,22 @@ bodo::tests::suite external_sort_tests([] {
 
         std::shared_ptr<table_info> table =
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(local_data));
-        state.phase = StreamSortPhase::PRE_BUILD;
-        state.consume_batch(table, true, true);
-        state.global_sort();
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true,
+                              chunk_size);
+        state.phase = StreamSortPhase::BUILD;
+        state.ConsumeBatch(table, true, true);
+        state.GlobalSort();
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
 
         // Collect all output tables
         bool done = false;
         std::vector<std::shared_ptr<table_info>> tables;
         while (!done) {
-            auto res = state.get_output();
+            auto res = state.GetOutput();
             done = res.second;
             tables.push_back(res.first);
         }
