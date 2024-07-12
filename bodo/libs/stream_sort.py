@@ -64,11 +64,21 @@ class SortStateType(StreamingStateType):
     @cached_property
     def arr_dtypes(self) -> List[types.ArrayCompatible]:
         """Returns the list of types for each array in the build table."""
+        if self.build_table_type == types.unknown:
+            return []
         return self.build_table_type.arr_types
 
     @cached_property
+    def mapped_arr_dtypes(self) -> List[types.ArrayCompatible]:
+        """Returns the list of C++ types for each array in the build table."""
+        if self.build_table_type == types.unknown:
+            return []
+        dtypes = self.arr_dtypes
+        return [dtypes[i] for i in self.column_mapping]
+
+    @cached_property
     def arr_ctypes(self) -> np.ndarray:
-        return self._derive_c_types(self.arr_dtypes)
+        return self._derive_c_types(self.mapped_arr_dtypes)
 
     @property
     def arr_array_types(self) -> np.ndarray:
@@ -80,7 +90,7 @@ class SortStateType(StreamingStateType):
                 that C++ wants the actual integer but these are the values derived from
                 CArrayTypeEnum.
         """
-        return self._derive_c_array_types(self.arr_dtypes)
+        return self._derive_c_array_types(self.mapped_arr_dtypes)
 
     @property
     def num_input_arrs(self) -> int:
@@ -114,35 +124,91 @@ register_model(SortStateType)(models.OpaqueModel)
 
 @intrinsic(prefer_literal=True)
 def _init_stream_sort_state(
-    typingctx, output_state_type, n_table_cols, vect_ascending, na_position
+    typingctx,
+    output_state_type,
+    operator_id,
+    n_table_cols,
+    vect_ascending,
+    na_position,
+    arr_ctypes,
+    arr_array_types,
+    n_arrs,
+    parallel,
 ):
     output_type = unwrap_typeref(output_state_type)
 
     def codegen(context, builder, sig, args):
-        _, n_table_cols, vect_ascending, na_position = args
+        (
+            _,
+            operator_id,
+            n_table_cols,
+            vect_ascending,
+            na_position,
+            arr_ctypes,
+            arr_array_types,
+            n_arrs,
+            parallel,
+        ) = args
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
-            [lir.IntType(64), lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="stream_sort_state_init_py_entry"
         )
-        ret = builder.call(fn_tp, (n_table_cols, vect_ascending, na_position))
+        ret = builder.call(
+            fn_tp,
+            (
+                operator_id,
+                n_table_cols,
+                vect_ascending,
+                na_position,
+                arr_ctypes,
+                arr_array_types,
+                n_arrs,
+                parallel,
+            ),
+        )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = output_type(output_state_type, types.int64, types.voidptr, types.voidptr)
+    sig = output_type(
+        output_state_type,
+        types.int64,
+        types.int64,
+        types.voidptr,
+        types.voidptr,
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.bool_,
+    )
     return sig, codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_stream_sort_state(
-    operator_id, by, asc_cols, na_position, col_names, expected_state_type=None
+    operator_id,
+    by,
+    asc_cols,
+    na_position,
+    col_names,
+    expected_state_type=None,
+    parallel=False,
 ):
     """Initialize the C++ TableBuilderState pointer"""
     if expected_state_type:
-        output_type = expected_state_type
-        n_table_cols = len(unwrap_typeref(output_type).build_table_type.arr_types)
+        output_type = unwrap_typeref(expected_state_type)
+        n_table_cols = output_type.num_input_arrs
     else:
         output_type = SortStateType()
         n_table_cols = 0
@@ -152,13 +218,30 @@ def init_stream_sort_state(
     na_position_ = get_overload_const_list(na_position)
     na_position_ = [int(pos == "first") for pos in na_position_]
 
+    arr_ctypes = output_type.arr_ctypes
+    arr_array_types = output_type.arr_array_types
+
     def impl(
-        operator_id, by, asc_cols, na_position, col_names, expected_state_type=None
+        operator_id,
+        by,
+        asc_cols,
+        na_position,
+        col_names,
+        expected_state_type=None,
+        parallel=False,
     ):  # pragma: no cover
         vect_asc = np.array(asc_cols_, np.int64)
         na_pos = np.array(na_position_, np.int64)
         return _init_stream_sort_state(
-            output_type, n_table_cols, vect_asc.ctypes, na_pos.ctypes
+            output_type,
+            operator_id,
+            n_table_cols,
+            vect_asc.ctypes,
+            na_pos.ctypes,
+            arr_ctypes.ctypes,
+            arr_array_types.ctypes,
+            n_table_cols,
+            parallel,
         )
 
     return impl
@@ -198,14 +281,13 @@ def delete_stream_sort_state(sort_state):
 
 
 @intrinsic(prefer_literal=True)
-def _sort_build_consume_batch(typingctx, sort_state, cpp_table, parallel, is_last):
+def _sort_build_consume_batch(typingctx, sort_state, cpp_table, is_last):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
             lir.IntType(1),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(1),
                 lir.IntType(1),
             ],
         )
@@ -216,18 +298,15 @@ def _sort_build_consume_batch(typingctx, sort_state, cpp_table, parallel, is_las
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return ret
 
-    sig = types.bool_(sort_state, cpp_table, parallel, is_last)
+    sig = types.bool_(sort_state, cpp_table, is_last)
     return sig, codegen
 
 
-# TODO(aneesh) this probably needs an update to distributed_pass.py
-def sort_build_consume_batch(
-    sort_state, table, is_last, parallel=True
-):  # pragma: no cover
+def sort_build_consume_batch(sort_state, table, is_last):  # pragma: no cover
     pass
 
 
-def gen_sort_build_consume_batch_impl(sort_state, table, is_last, parallel=True):
+def gen_sort_build_consume_batch_impl(sort_state, table, is_last):
     """Consume a table batch in streaming sort
 
     Args:
@@ -240,12 +319,10 @@ def gen_sort_build_consume_batch_impl(sort_state, table, is_last, parallel=True)
     n_table_cols = len(sort_state.build_table_type.arr_types)
     in_col_inds = MetaType(tuple(sort_state.column_mapping))
 
-    def impl_sort_build_consume_batch(
-        sort_state, table, is_last, parallel=True
-    ):  # pragma: no cover
+    def impl_sort_build_consume_batch(sort_state, table, is_last):  # pragma: no cover
         cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
         # TODO(aneesh) don't hardcode parallel as true
-        return _sort_build_consume_batch(sort_state, cpp_table, parallel, is_last)
+        return _sort_build_consume_batch(sort_state, cpp_table, is_last)
 
     return impl_sort_build_consume_batch
 
@@ -270,6 +347,7 @@ def lower_sort_build_consume_batch(context, builder, sig, args):
 @intrinsic(prefer_literal=True)
 def _produce_output_batch(typingctx, sort_state, produce_output):
     def codegen(context, builder, sig, args):
+        sort_state, produce_output = args
         out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
@@ -282,7 +360,7 @@ def _produce_output_batch(typingctx, sort_state, produce_output):
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="stream_sort_product_output_batch_py_entry"
         )
-        table_ret = builder.call(fn_tp, (args[0], args[1], out_is_last))
+        table_ret = builder.call(fn_tp, (sort_state, produce_output, out_is_last))
         items = [table_ret, builder.load(out_is_last)]
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
         return context.make_tuple(builder, sig.return_type, items)
