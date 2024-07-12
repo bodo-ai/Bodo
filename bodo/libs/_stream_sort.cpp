@@ -23,7 +23,8 @@ void TableAndRange::UpdateOffset(int64_t n_key_t, int64_t offset) {
     range = RetrieveTable(table, row_indices, n_key_t);
 }
 
-void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk) {
+void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk,
+                                            bool sorted) {
     if (chunk->nrows() == 0) {
         return;
     }
@@ -40,118 +41,288 @@ void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk) {
     }
 
     auto sorted_chunk =
-        sort_values_table_local(chunk, n_key_t, vect_ascending.data(),
-                                na_position.data(), dead_keys.data(), false);
+        sorted ? std::move(chunk)
+               : sort_values_table_local(
+                     std::move(chunk), n_key_t, vect_ascending.data(),
+                     na_position.data(), dead_keys.data(), false);
     table_heap.push_back({sorted_chunk, n_key_t});
     std::push_heap(table_heap.begin(), table_heap.end(), comp);
 
     sorted_chunk->unpin();
 }
 
+/**
+ * Comparator for vectors of sorted elements. Each chunk must be sorted, but the
+ * vector as a whole must be sorted in reverse. See MergeChunks for details.
+ */
+struct VHeapComparator {
+    HeapComparator& comp;
+    bool operator()(const std::vector<TableAndRange>& a,
+                    const std::vector<TableAndRange>& b) {
+        return comp(a.back(), b.back());
+    }
+};
+
+std::vector<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
+    std::vector<std::vector<TableAndRange>>&& sorted_chunks) {
+    // Reverse the vectors of sorted chunks - this is so that popping chunks off
+    // of the list will be efficient. We will iterate over this list in reverse
+    // order.
+    for (auto& chunks : sorted_chunks) {
+        std::reverse(chunks.begin(), chunks.end());
+    }
+
+    VHeapComparator vcomp(comp);
+    std::make_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
+
+    std::vector<TableAndRange> out_chunks;
+
+    // Move all completed chunks from the CTB into the output. This currently
+    // requires pinning the chunks because we need to maintain the range for
+    // each table.
+    // TODO(aneesh) We should extend ChunkedTableBuilder to do the conversion to
+    // TableAndRange internally
+    auto FlushChunkedTableBuilder = [&]() {
+        while (!sorted_table_builder->chunks.empty()) {
+            auto [table, nrows] = sorted_table_builder->PopChunk();
+            if (nrows) {
+                table->pin();
+                out_chunks.push_back({table, n_key_t});
+                table->unpin();
+            }
+        }
+    };
+
+    while (sorted_chunks.size() > 1) {
+        // find the minimum row
+        std::pop_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
+        auto& min_vec = sorted_chunks.back();
+        auto& min = min_vec.back();
+        // This table will be unpinned once all rows have been appended to the
+        // final output. This does mean that we might be pinning this table more
+        // than once, but pinning a pinned object is a noop.
+        min.table->pin();
+
+        // Consume chunks from min_vec until the smallest row in min_vec (which
+        // is the first row of the last chunk since we reversed the input above)
+        // is larger than the smallest row from the top of the heap.
+        do {
+            std::vector<int64_t> row_idx;
+            // Loop through rows in the current chunk, selecting them to append
+            // while they are smaller than the first row of the next smallest
+            // chunk in the heap.
+            int64_t offset = min.offset;
+            int64_t nrows = static_cast<int64_t>(min.table->nrows());
+            do {
+                // TODO(aneesh) this could be replaced by a binary search to
+                // find the first element that is largest than the next smallest
+                // chunk.
+                row_idx.push_back(offset);
+                offset++;
+                if (offset < nrows) {
+                    min.UpdateOffset(n_key_t, offset);
+                }
+            } while (offset < nrows && comp(sorted_chunks[0].back(), min));
+
+            // TODO(aneesh) If row_idx contains all rows in the chunk, we might
+            // want to directly append to the output without copying instead.
+            // We'd need to first finalize the active chunk and then flush all
+            // chunks to the output.
+            sorted_table_builder->AppendBatch(min.table, row_idx);
+
+            // If we have completely consumed all rows from the current chunk,
+            // get the next chunk from the same sorted list.
+            if (offset >= nrows) {
+                min.table->unpin();
+                min_vec.pop_back();
+                if (!min_vec.empty()) {
+                    min = min_vec.back();
+                }
+            }
+        } while (!min_vec.empty() && comp(sorted_chunks[0].back(), min));
+
+        if (min_vec.empty()) {
+            // This vector of chunks is completely consumed, so we can remove it
+            // from the heap
+            sorted_chunks.pop_back();
+        } else {
+            // We've updated the minimum row of the vector of chunks, so we need
+            // to push it back onto the heap to find the next smallest row.
+            std::push_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
+        }
+
+        // If we have a chunk we can pop from the sorted_table_builder, we
+        // should pop it while it's still fresh in memory so that we don't
+        // need to pay a high cost for pinning/unpinning chunks later just
+        // to get the min/max value.
+        FlushChunkedTableBuilder();
+    }
+
+    // Append all unconsumed rows in a chunk to the builder
+    auto AppendChunkToBuilder = [&](TableAndRange& chunk) {
+        chunk.table->pin();
+        std::vector<int64_t> row_idx(chunk.table->nrows() - chunk.offset);
+        std::iota(row_idx.begin(), row_idx.end(), chunk.offset);
+        sorted_table_builder->AppendBatch(chunk.table, row_idx);
+        chunk.table->unpin();
+    };
+
+    if (sorted_chunks.size() == 1) {
+        auto& chunks = sorted_chunks[0];
+
+        // If every chunk fits into the chunk size, append without copying
+        if (std::all_of(chunks.begin(), chunks.end(),
+                        [&](TableAndRange& chunk) {
+                            return chunk.table->nrows() <= chunk_size;
+                        })) {
+            // The first chunk might have a non-zero offset, so we might not be
+            // able to avoid a copy. However, we know that all other chunks must
+            // have a 0 offset.
+            if (chunks.back().offset > 0) {
+                AppendChunkToBuilder(chunks.back());
+                chunks.pop_back();
+            }
+            // flush all chunks from the CTB so we can directly append all
+            // remaining tables to the output.
+            sorted_table_builder->FinalizeActiveChunk();
+            FlushChunkedTableBuilder();
+
+            // Move chunks into the output
+            while (!chunks.empty()) {
+                auto& chunk = chunks.back();
+                out_chunks.push_back(chunk);
+                chunks.pop_back();
+            }
+        }
+
+        // Copy all remaining chunks into the output
+        while (!chunks.empty()) {
+            AppendChunkToBuilder(chunks.back());
+            chunks.pop_back();
+        }
+    }
+
+    if (sorted_chunks.size() == 1) {
+        for (auto& chunk : sorted_chunks[0]) {
+            chunk.table->pin();
+            sorted_table_builder->AppendBatch(chunk.table);
+            chunk.table->unpin();
+        }
+    }
+
+    // If we have any leftover chunks, push them into the output
+    sorted_table_builder->FinalizeActiveChunk();
+    FlushChunkedTableBuilder();
+
+    return out_chunks;
+}
+
 std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
-    std::vector<TableAndRange> output;
     if (table_heap.size() == 0) {
+        std::vector<TableAndRange> output;
         return output;
     }
 
-    if (table_heap.size() == 1) {
-        return std::move(table_heap);
-    }
+    std::vector<std::vector<TableAndRange>> sorted_chunks;
 
-    // TODO(aneesh) this might cause too many pins/unpins, so we might actually
-    // want to unpin some number of tables, sort them using
-    // timsort (see sort_values_table_local), then merge those lists of tables
-    // together - this may reduce the number of pins/unpins needed in the final
-    // merge
-    while (table_heap.size() > 1) {
-        std::pop_heap(table_heap.begin(), table_heap.end(), comp);
-        auto& min = table_heap.back();
-        min.table->pin();
-
-        std::vector<int64_t> row_idx = {min.offset};
-        sorted_table_builder->AppendBatch(min.table, row_idx);
-
-        auto size = min.table->nrows();
-        int64_t next = min.offset + 1;
-        if (next >= static_cast<int64_t>(size)) {
-            // shrink heap
-            min.table->unpin();
+    constexpr size_t NUM_CHUNKS = 5;
+    while (!table_heap.empty()) {
+        std::vector<std::vector<TableAndRange>> chunks;
+        // Take NUM_CHUNKS chunks at a time and put them each into a vector so
+        // that we can call MergeChunks, which expects a vector of vector of
+        // chunks. Each inner vector of chunks is expected to be sorted - a
+        // vector of a single sorted chunk is by definition, sorted.
+        for (size_t i = 0; i < NUM_CHUNKS && !table_heap.empty(); i++) {
+            // Get the element off the top of the heap and shrink the heap
+            std::pop_heap(table_heap.begin(), table_heap.end(), comp);
+            chunks.push_back({table_heap.back()});
             table_heap.pop_back();
-            continue;
         }
-        min.UpdateOffset(n_key_t, next);
 
-        // Push the table back into the heap
-        min.table->unpin();
-        std::push_heap(table_heap.begin(), table_heap.end(), comp);
+        sorted_chunks.emplace_back(MergeChunks(std::move(chunks)));
+    }
 
-        if (!sorted_table_builder->chunks.empty()) {
-            // Try to pop immediately because the active chunk should still be
-            // in memory.
-            auto [chunk, _] = sorted_table_builder->PopChunk();
-            if (chunk->nrows() > 0) {
-                output.push_back({chunk, n_key_t});
+    while (sorted_chunks.size() > 1) {
+        std::vector<std::vector<TableAndRange>> next_sorted_chunks;
+        // This loop takes NUM_CHUNKS vectors and merges them into 1 on every
+        // iteration.
+        for (size_t i = 0; i < sorted_chunks.size(); i += NUM_CHUNKS) {
+            std::vector<std::vector<TableAndRange>> merge_input;
+            // Collect the next NUM_CHUNKS vectors
+            size_t start = i;
+            size_t end = std::min(i + NUM_CHUNKS, sorted_chunks.size());
+            for (size_t j = start; j < end; j++) {
+                merge_input.emplace_back(std::move(sorted_chunks[j]));
             }
+
+            next_sorted_chunks.emplace_back(
+                MergeChunks(std::move(merge_input)));
         }
+
+        std::swap(sorted_chunks, next_sorted_chunks);
     }
 
-    // For the remaining portion of the last table, append the whole table at
-    // once
-    table_heap[0].table->pin();
-    std::vector<bool> append_rows(
-        table_heap[0].table->nrows() - table_heap[0].offset, true);
-    sorted_table_builder->AppendBatch(table_heap[0].table, append_rows,
-                                      table_heap[0].offset);
-
-    sorted_table_builder->Finalize();
-    table_heap.clear();
-
-    while (!sorted_table_builder->empty()) {
-        auto [chunk, _] = sorted_table_builder->PopChunk();
-        output.push_back({chunk, n_key_t});
-    }
-    return output;
+    return sorted_chunks[0];
 }
 
-bool StreamSortState::consume_batch(std::shared_ptr<table_info> table,
-                                    bool parallel, bool is_last) {
-    if (phase == StreamSortPhase::PRE_BUILD) {
-        // TODO(aneesh) fix arrow_buffer_to_bodo - currently the pool isn't
-        // stored in the dtor_info, so pinning/unpinning semi-structured data
-        // after calling sort_values_table_local will crash. Remove this code
-        // after fixing that.
-        for (auto& col : table->columns) {
-            switch (col->arr_type) {
-                case bodo_array_type::STRUCT:
-                case bodo_array_type::MAP:
-                case bodo_array_type::ARRAY_ITEM: {
-                    throw std::runtime_error("Not implemented");
-                }
-                default: {
-                    // allow all other types
-                }
+StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
+                                 std::vector<int64_t>&& vect_ascending_,
+                                 std::vector<int64_t>&& na_position_,
+                                 std::shared_ptr<bodo::Schema> schema_,
+                                 bool parallel, size_t chunk_size)
+    : op_id(op_id),
+      n_key_t(n_key_t),
+      vect_ascending(vect_ascending_),
+      na_position(na_position_),
+      parallel(parallel),
+      // Note that builder only stores references to the vectors owned by
+      // this object, so we must refer to the instances on this class, not
+      // the arguments.
+      builder(n_key_t, vect_ascending, na_position, dead_keys, chunk_size),
+      schema(std::move(schema_)),
+      dummy_output_chunk(alloc_table(schema)) {
+    // TODO(aneesh) fix arrow_buffer_to_bodo - currently the pool isn't
+    // stored in the dtor_info, so pinning/unpinning semi-structured
+    // data after calling sort_values_table_local will crash. Remove
+    // this code after fixing that.
+    for (auto& col : schema->column_types) {
+        switch (col->array_type) {
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
+            case bodo_array_type::ARRAY_ITEM: {
+                throw std::runtime_error("Not implemented");
+            }
+            default: {
+                // allow all other types
             }
         }
-
-        // Populate the dummy output with the correct types
-        dummy_output_chunk =
-            alloc_table_like(table, /*reuse_dictionaries*/ false);
-
-        phase = StreamSortPhase::BUILD;
     }
+}
+
+void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
+                                   bool parallel, bool is_last) {
+    if (phase != StreamSortPhase::BUILD) {
+        throw std::runtime_error(
+            "Cannot call ConsumeBatch after is_last is set to true");
+    }
+    // TODO(aneesh) unify dictionaries?
+    time_pt start_append = start_timer();
     builder.AppendChunk(table);
+    metrics.local_sort_chunk_time += end_timer(start_append);
+
     if (is_last) {
+        time_pt start_finalize = start_timer();
         // Instead of finalizing here we could finalize after we determine the
         // bounds and then instead of building a completely sorted list locally,
         // we can partition the list to build the list of chunks that need to be
         // sent to each rank.
         local_chunks = builder.Finalize();
-        phase = StreamSortPhase::GLOBAL_SORT;
+        metrics.local_sort_time += end_timer(start_finalize);
     }
-    return is_last;
 }
 
-std::shared_ptr<table_info> StreamSortState::get_parallel_sort_bounds() {
+std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds() {
+    time_pt start_sampling = start_timer();
     int64_t n_local = std::accumulate(
         local_chunks.begin(), local_chunks.end(), 0,
         [](int64_t acc, const TableAndRange& tableAndRange) {
@@ -220,12 +391,13 @@ std::shared_ptr<table_info> StreamSortState::get_parallel_sort_bounds() {
         std::move(all_samples), dummy_output_chunk, n_key_t,
         vect_ascending.data(), na_position.data(), myrank, n_pes, parallel);
 
+    metrics.sampling_time += end_timer(start_sampling);
     return bounds;
 }
 
 std::vector<std::vector<std::shared_ptr<table_info>>>
-StreamSortState::partition_chunks_by_rank(int n_pes,
-                                          std::shared_ptr<table_info> bounds) {
+StreamSortState::PartitionChunksByRank(int n_pes,
+                                       std::shared_ptr<table_info> bounds) {
     assert(n_pes == bounds->nrows() + 1);
 
     std::vector<std::vector<std::shared_ptr<table_info>>> rankToChunks(n_pes);
@@ -236,14 +408,14 @@ StreamSortState::partition_chunks_by_rank(int n_pes,
     // more ranks.
     std::vector<TableBuildBuffer> smallestPartialChunks;
     std::vector<TableBuildBuffer> largestPartialChunks;
-    const std::shared_ptr<table_info>& reftable = local_chunks[0].table;
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    for (auto& col : reftable->columns) {
-        dict_builders.push_back(create_dict_builder_for_array(col, false));
+    for (auto& col : schema->column_types) {
+        dict_builders.push_back(
+            create_dict_builder_for_array(col->copy(), false));
     }
     for (int i = 0; i < n_pes; i++) {
-        smallestPartialChunks.emplace_back(reftable->schema(), dict_builders);
-        largestPartialChunks.emplace_back(reftable->schema(), dict_builders);
+        smallestPartialChunks.emplace_back(schema, dict_builders);
+        largestPartialChunks.emplace_back(schema, dict_builders);
     }
 
     uint32_t rank_id = 0;
@@ -410,7 +582,7 @@ int64_t get_required_num_rounds_for_sort(
     return num_rounds;
 }
 
-void StreamSortState::global_sort() {
+void StreamSortState::GlobalSort() {
     if (!parallel) {
         // Move the tables from the sorted local chunks to the output
         for (const auto& chunk : local_chunks) {
@@ -424,21 +596,25 @@ void StreamSortState::global_sort() {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    auto bounds = get_parallel_sort_bounds();
-    auto rankToChunks = partition_chunks_by_rank(n_pes, bounds);
+    std::shared_ptr<table_info> bounds = GetParallelSortBounds();
+    time_pt start_partition = start_timer();
+    std::vector<std::vector<std::shared_ptr<table_info>>> rankToChunks =
+        PartitionChunksByRank(n_pes, bounds);
+    metrics.partition_chunks_time += end_timer(start_partition);
 
-    auto num_rounds =
+    int64_t num_rounds =
         get_required_num_rounds_for_sort(n_pes, myrank, rankToChunks);
 
     SortedChunkedTableBuilder global_builder(
         n_key_t, vect_ascending, na_position, dead_keys, builder.chunk_size);
 
     for (auto& chunk : rankToChunks[myrank]) {
-        global_builder.AppendChunk(std::move(chunk));
+        global_builder.AppendChunk(std::move(chunk), true);
     }
 
     std::vector<size_t> rankToCurrentChunk(n_pes);
 
+    time_pt start_communication = start_timer();
     for (int64_t round = 0; round < num_rounds; round++) {
         auto [table_to_send, hashes] =
             construct_table_to_send(n_pes, myrank, rankToChunks,
@@ -448,19 +624,28 @@ void StreamSortState::global_sort() {
         mpi_comm_info comm_info(table_to_send->columns, hashes, parallel);
         auto collected_table = shuffle_table_kernel(
             std::move(table_to_send), hashes, comm_info, parallel);
-        auto sorted_chunk = sort_values_table_local(
-            std::move(collected_table), n_key_t, vect_ascending.data(),
-            na_position.data(), dead_keys.data(), false);
-        global_builder.AppendChunk(std::move(sorted_chunk));
-    }
 
+        time_pt start_append = start_timer();
+        global_builder.AppendChunk(std::move(collected_table));
+        metrics.global_append_chunk_time += end_timer(start_append);
+    }
+    metrics.communication_phase += end_timer(start_communication);
+
+    time_pt start_finalize = start_timer();
     auto out_chunks = global_builder.Finalize();
+    metrics.global_sort_time += end_timer(start_finalize);
+
     for (const auto& chunk : out_chunks) {
         output_chunks.push_back(std::move(chunk.table));
     }
 }
 
-std::pair<std::shared_ptr<table_info>, bool> StreamSortState::get_output() {
+std::pair<std::shared_ptr<table_info>, bool> StreamSortState::GetOutput() {
+    if (phase != StreamSortPhase::PRODUCE_OUTPUT) {
+        throw std::runtime_error(
+            "Cannot call GetOutput after all chunks are consumed");
+    }
+
     std::shared_ptr<table_info> output = nullptr;
     bool out_is_last = false;
     if (output_idx < output_chunks.size()) {
@@ -473,9 +658,41 @@ std::pair<std::shared_ptr<table_info>, bool> StreamSortState::get_output() {
     return std::make_pair(output, out_is_last);
 }
 
-StreamSortState* stream_sort_state_init_py_entry(int64_t n_key_t,
+void StreamSortState::ReportMetrics() {
+    if (this->op_id == -1) {
+        return;
+    }
+
+    std::vector<MetricBase> metrics;
+    metrics.reserve(7);
+
+    metrics.emplace_back(TimerMetric("local_sort_chunk_time",
+                                     this->metrics.local_sort_chunk_time));
+    metrics.emplace_back(
+        TimerMetric("local_sort_time", this->metrics.local_sort_time));
+
+    metrics.emplace_back(
+        TimerMetric("sampling_time", this->metrics.sampling_time));
+    metrics.emplace_back(TimerMetric("partition_chunks_time",
+                                     this->metrics.partition_chunks_time));
+    metrics.emplace_back(
+        TimerMetric("communication_phase", this->metrics.communication_phase));
+    metrics.emplace_back(TimerMetric("global_append_chunk_time",
+                                     this->metrics.global_append_chunk_time));
+    metrics.emplace_back(
+        TimerMetric("global_sort_time", this->metrics.global_sort_time));
+
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(op_id, 0),
+        std::move(metrics));
+}
+
+StreamSortState* stream_sort_state_init_py_entry(int64_t op_id, int64_t n_key_t,
                                                  int64_t* vect_ascending,
-                                                 int64_t* na_position) {
+                                                 int64_t* na_position,
+                                                 int8_t* arr_c_types,
+                                                 int8_t* arr_array_types,
+                                                 int n_arrs, bool parallel) {
     try {
         // Copy the per-column configuration into owned vectors
         std::vector<int64_t> vect_ascending_(n_key_t);
@@ -484,9 +701,13 @@ StreamSortState* stream_sort_state_init_py_entry(int64_t n_key_t,
             vect_ascending_[i] = vect_ascending[i];
             na_position_[i] = na_position[i];
         }
-        auto* state = new StreamSortState(n_key_t, std::move(vect_ascending_),
-                                          std::move(na_position_));
-        state->phase = StreamSortPhase::PRE_BUILD;
+        std::shared_ptr<bodo::Schema> schema = bodo::Schema::Deserialize(
+            std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs),
+            std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
+        auto* state = new StreamSortState(
+            op_id, n_key_t, std::move(vect_ascending_), std::move(na_position_),
+            std::move(schema), parallel);
+        state->phase = StreamSortPhase::BUILD;
         return state;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -496,10 +717,17 @@ StreamSortState* stream_sort_state_init_py_entry(int64_t n_key_t,
 
 bool stream_sort_build_consume_batch_py_entry(StreamSortState* state,
                                               table_info* in_table,
-                                              bool parallel, bool is_last) {
+                                              bool is_last) {
     try {
         std::shared_ptr<table_info> table(in_table);
-        return state->consume_batch(table, parallel, is_last);
+        state->ConsumeBatch(table, state->parallel, is_last);
+        if (is_last) {
+            // TODO(aneesh) this can be made async - not all communication needs
+            // to be done upfront
+            state->GlobalSort();
+            state->phase = StreamSortPhase::PRODUCE_OUTPUT;
+        }
+        return is_last;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return true;
@@ -508,18 +736,19 @@ bool stream_sort_build_consume_batch_py_entry(StreamSortState* state,
 
 table_info* stream_sort_product_output_batch_py_entry(StreamSortState* state,
                                                       bool produce_output,
-                                                      bool parallel,
                                                       bool* out_is_last) {
     try {
-        // TODO(aneesh) this can be made async - not all communication needs to
-        // be done upfront
-        if (state->phase == StreamSortPhase::GLOBAL_SORT) {
-            state->global_sort();
-            state->phase = StreamSortPhase::PRODUCE_OUTPUT;
-        }
+        auto [output, is_last] = state->GetOutput();
+        state->metrics.output_row_count += output->nrows();
 
-        auto [output, is_last] = state->get_output();
         *out_is_last = is_last;
+        if (is_last) {
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(state->op_id, 0),
+                state->metrics.output_row_count);
+            state->ReportMetrics();
+            state->phase = StreamSortPhase::INVALID;
+        }
         return new table_info(*output);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

@@ -26,7 +26,7 @@ struct TableAndRange {
     void UpdateOffset(int64_t n_key_t, int64_t offset);
 };
 
-struct HeapComprator {
+struct HeapComparator {
     int64_t n_key_t;
     // TODO(aneesh) can these be vectors instead?
     const std::vector<int64_t>& vect_ascending;
@@ -50,7 +50,7 @@ struct SortedChunkedTableBuilder {
 
     const size_t chunk_size;
 
-    HeapComprator comp;
+    HeapComparator comp;
 
     std::vector<TableAndRange> table_heap;
 
@@ -69,14 +69,61 @@ struct SortedChunkedTableBuilder {
           chunk_size(chunk_size),
           comp({n_key_t, vect_ascending, na_position, dead_keys}) {}
 
-    void AppendChunk(std::shared_ptr<table_info> chunk);
+    /**
+     * Append an table to the builder, sorting it if required.
+     *
+     * @param chunk Table to append. Must be pinned.
+     * @param sorted should be true if the input chunk is already sorted and can
+     * be appended directly.
+     */
+    void AppendChunk(std::shared_ptr<table_info> chunk, bool sorted = false);
 
+    /**
+     * Sort all chunks into a list of sorted chunks. E.g. if we were do
+     * the following with a chunksize of 3:
+     *   AppendChunk([0, 5, 3])
+     *   AppendChunk([4, 2, 1])
+     *   Finalize()
+     *     = [[0, 1, 2], [3, 4, 5]]
+     * Note that in the example above the inputs appear to be vectors, but
+     * inputs/output are all actually tables. The output chunks will be wrapped
+     * in a TableAndRange and every table will be unpinned.
+     */
     std::vector<TableAndRange> Finalize();
+
+    /**
+     * Merge a list of sorted lists to produce a single sorted list. E.g.
+     *   chunk_list_a = [[1, 3, 5], [7, 9, 11]]
+     *   chunk_list_b = [[2, 4, 6], [8, 10, 12]]
+     *   MergeChunks([chunk_list_a, chunk_list_b])
+     *     = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
+     * All tables in the output will be unpinned.
+     */
+    std::vector<TableAndRange> MergeChunks(
+        std::vector<std::vector<TableAndRange>>&& sorted_chunks);
+};
+
+struct StreamSortMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+
+    // consume metrics
+    time_t local_sort_chunk_time;
+    time_t local_sort_time;
+
+    // produce metrics
+    time_t sampling_time;
+    time_t partition_chunks_time;
+    time_t communication_phase;
+    time_t global_append_chunk_time;
+    time_t global_sort_time;
+
+    int64_t output_row_count;
 };
 
 enum class StreamSortPhase {
     INIT,
-    PRE_BUILD,
     BUILD,
     GLOBAL_SORT,
     PRODUCE_OUTPUT,
@@ -84,6 +131,7 @@ enum class StreamSortPhase {
 };
 
 struct StreamSortState {
+    int64_t op_id;
     int64_t n_key_t;
     std::vector<int64_t> vect_ascending;
     std::vector<int64_t> na_position;
@@ -104,21 +152,19 @@ struct StreamSortState {
     // to initialize
     StreamSortPhase phase = StreamSortPhase::INIT;
 
-    // This will be initialized the first time consume_batch is called
+    // Type of input table
+    std::shared_ptr<bodo::Schema> schema;
+    // Empty table created with the same schema as the input
     std::shared_ptr<table_info> dummy_output_chunk;
 
-    StreamSortState(int64_t n_key_t_, std::vector<int64_t>&& vect_ascending_,
-                    std::vector<int64_t>&& na_position_,
-                    size_t chunk_size = 4096)
-        : n_key_t(n_key_t_),
-          vect_ascending(vect_ascending_),
-          na_position(na_position_),
-          // Note that builder only stores references to the vectors owned by
-          // this object, so we must refer to the instances on this class, not
-          // the arguments.
-          builder(n_key_t, vect_ascending, na_position, dead_keys, chunk_size) {
-    }
+    // Metrics for sorting
+    StreamSortMetrics metrics;
 
+    StreamSortState(int64_t op_id, int64_t n_key_t,
+                    std::vector<int64_t>&& vect_ascending_,
+                    std::vector<int64_t>&& na_position_,
+                    std::shared_ptr<bodo::Schema> schema, bool parallel = true,
+                    size_t chunk_size = 4096);
     /**
      * @brief Consume an unsorted table and use it for global sorting
      *
@@ -129,20 +175,33 @@ struct StreamSortState {
      * state will see.
      * @return boolean indicating if the consume phase is complete
      */
-    bool consume_batch(std::shared_ptr<table_info> table, bool parallel,
-                       bool is_last);
+    void ConsumeBatch(std::shared_ptr<table_info> table, bool parallel,
+                      bool is_last);
 
     /**
      * Get bounds for parallel sorting based on the chunks consumed so far.
      * These bounds determine which elements are assigned to which ranks.
      */
-    std::shared_ptr<table_info> get_parallel_sort_bounds();
+    std::shared_ptr<table_info> GetParallelSortBounds();
 
-    void global_sort();
+    /**
+     * Sort all chunks passed to ConsumeBatch across all ranks
+     */
+    void GlobalSort();
 
-    std::pair<std::shared_ptr<table_info>, bool> get_output();
+    /**
+     * Get the next sorted output chunk. Returns a pair of table and a boolean
+     * indicating if the last chunk has been reached
+     */
+    std::pair<std::shared_ptr<table_info>, bool> GetOutput();
 
     // Helper methods
-    std::vector<std::vector<std::shared_ptr<table_info>>>
-    partition_chunks_by_rank(int n_pes, std::shared_ptr<table_info> bounds);
+
+    // Partition all sorted input chunks a list of chunks per rank
+    // All of the returned data needs to be communicated.
+    std::vector<std::vector<std::shared_ptr<table_info>>> PartitionChunksByRank(
+        int n_pes, std::shared_ptr<table_info> bounds);
+
+    // Report all metrics
+    void ReportMetrics();
 };
