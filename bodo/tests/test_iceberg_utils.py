@@ -376,3 +376,89 @@ def test_add_iceberg_field_id_md_to_pa_schema_without_ref(schema, expected_out):
     """
     out = add_iceberg_field_id_md_to_pa_schema(schema)
     assert expected_out.equals(out, check_metadata=True)
+
+
+@pytest_mark_one_rank
+@pytest.mark.parametrize(
+    "schema,expected_out",
+    [
+        pytest.param(
+            pa.schema(
+                [
+                    pa.field(
+                        "A",
+                        pa.uint8(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "1"},
+                    ),
+                    pa.field(
+                        "B",
+                        pa.uint16(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "2"},
+                    ),
+                    pa.field(
+                        "C",
+                        pa.int8(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "3"},
+                    ),
+                    pa.field(
+                        "D",
+                        pa.int16(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "4"},
+                    ),
+                    pa.field(
+                        "E",
+                        pa.uint32(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "5"},
+                    ),
+                ]
+            ),
+            '{"type":"struct","schema-id":0,"fields":[{"id":1,"name":"A","required":false,"type":"int"},{"id":2,"name":"B","required":false,"type":"int"},{"id":3,"name":"C","required":false,"type":"int"},{"id":4,"name":"D","required":false,"type":"int"},{"id":5,"name":"E","required":false,"type":"long"}]}',
+            id="int_upcast",
+        )
+    ],
+)
+def test_pyarrow_to_iceberg_schema(schema, expected_out):
+    from bodo_iceberg_connector.schema_helper import pyarrow_to_iceberg_schema_str
+
+    out_schema = pyarrow_to_iceberg_schema_str(schema)
+    assert out_schema == expected_out
+
+
+@pytest_mark_one_rank
+@pytest.mark.parametrize(
+    "schema, expected_err",
+    [
+        pytest.param(
+            pa.schema(
+                [
+                    pa.field(
+                        "A",
+                        pa.null(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "1"},
+                    ),
+                ]
+            ),
+            "Currently Cant Handle Purely Null Fields",
+            id="null",
+        ),
+        pytest.param(
+            pa.schema(
+                [
+                    pa.field(
+                        "A",
+                        pa.uint64(),
+                        metadata={ICEBERG_FIELD_ID_MD_KEY: "1"},
+                    ),
+                ]
+            ),
+            "Unsupported PyArrow DataType: uint64",
+            id="uint64",
+        ),
+    ],
+)
+def test_pyarrow_to_iceberg_schema_unsupported(schema, expected_err):
+    from bodo_iceberg_connector.errors import IcebergError
+    from bodo_iceberg_connector.schema_helper import pyarrow_to_iceberg_schema_str
+
+    with pytest.raises(IcebergError, match=expected_err):
+        out_schema = pyarrow_to_iceberg_schema_str(schema)
