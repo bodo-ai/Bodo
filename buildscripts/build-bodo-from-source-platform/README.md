@@ -37,6 +37,10 @@
 > Therefore, the last command has to run after any source code changes to `bodosqlwrapper.py`.
 > See https://bodo.atlassian.net/browse/BSE-3582
 
+> [!NOTE]
+> Do not run programs in a `/bodofs` working directory since some Bodo internals may be using current working directory and `/bodofs` is slow.
+> We have seen significant Snowflake write and compilation slow down when current working directory is on `/bodofs`.
+> Both local working directory and nfs seem fine to use. For example, `cd ~; px python ...` works.
 
 ## Workflow
 
@@ -64,7 +68,6 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
    For example, if you are generating trace data it will always get dumped to the node that's first in the `hostfile`
 
 1. Run jobs, but be aware that anything you're doing on the node does not count as activity, so auto-shutdown might be invoked if you don't have a notebook connected.
-   On AWS workspaces, running `update_hostfile` from the terminal should update the activity timer.
 
 1. Ensure that you are using efa. This can be done by executing: `I_MPI_DEBUG=4 px python -u -c "import bodo; print(bodo.__version__)"` and checking that `libfabric provider: efa` appears at the start of the logs.
 
@@ -77,7 +80,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 ## Useful notes
 
 - To get print statements to show up immediately, set `export PYTHONUNBUFFERED=1`
-- Put your test files in `/shared` (or `/bodofs` based on workspace version).
+- Put your test files in `/bodofs`, but do not run programs in a `/bodofs` working directory (some Bodo internals may be using current working directory).
 - Sometimes error messages aren't helpful because they're treated as internal errors. In that case set `export NUMBA_DEVELOPER_MODE=1`.
 - To get numba caching information, set `export NUMBA_DEBUG_CACHE=1`.
 - If you set `export BODO_SKIP_CPP_TESTS=1` you can skip compiling the C++ tests, which can take a long time to build.
