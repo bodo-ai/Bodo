@@ -603,9 +603,12 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
         assert "bloom_filter_enabled" in build_metrics_dict
         assert "n_key_dict_builders" in build_metrics_dict
         assert "n_non_key_dict_builders" in build_metrics_dict
-        assert "n_shuffles" in build_metrics_dict
+        assert "n_shuffle_send" in build_metrics_dict
         # Async shuffle code avoids any shuffle when not necessary
-        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
+        assert build_metrics_dict["n_shuffle_send"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_recv" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_recv"] >= (0 if n_pes == 1 else 1)
     assert "shuffle_buffer_append_time" in build_metrics_dict
     assert "ht_hashing_time" in build_metrics_dict
     assert "repartitioning_time_total" in build_metrics_dict
@@ -617,9 +620,12 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     if rank == 0:
         assert "n_key_dict_builders" in probe_metrics_dict
         assert "n_non_key_dict_builders" in probe_metrics_dict
-        assert "n_shuffles" in probe_metrics_dict
+        assert "n_shuffle_send" in build_metrics_dict
         # Async shuffle code avoids any shuffle when not necessary
-        assert probe_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
+        assert build_metrics_dict["n_shuffle_send"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_recv" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_recv"] >= (0 if n_pes == 1 else 1)
     assert "output_append_time" in probe_metrics_dict
     assert "output_total_nrows" in probe_metrics_dict
     assert "output_total_nrows_rem_at_finalize" in probe_metrics_dict
@@ -877,8 +883,12 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "AGG"
         )
-        assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_send" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_send"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_recv" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_recv"] >= (0 if n_pes == 1 else 1)
 
     assert "pre_agg_total_time" in build_metrics_dict
     assert "n_repartitions_in_append" in build_metrics_dict
@@ -887,7 +897,8 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
     assert "combine_input_time" in build_metrics_dict
     assert "shuffle_update_logical_ht_time" in build_metrics_dict
     assert "finalize_time_total" in build_metrics_dict
-    assert "shuffle_time" in build_metrics_dict
+    assert "shuffle_send_time" in build_metrics_dict
+    assert "shuffle_recv_time" in build_metrics_dict
     assert "shuffle_n_local_reductions" in build_metrics_dict
     assert "key_dict_builders_unify_cache_id_misses" in build_metrics_dict
     assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_dict
@@ -998,15 +1009,20 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
             ]
             == "ACC"
         )
-        assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_send" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_send"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_recv" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_recv"] >= (0 if n_pes == 1 else 1)
 
     assert "pre_agg_total_time" not in build_metrics_dict
     assert "n_repartitions_in_append" in build_metrics_dict
     assert "input_groupby_hashing_time" not in build_metrics_dict
     assert "input_part_hashing_time" in build_metrics_dict
     assert "finalize_time_total" in build_metrics_dict
-    assert "shuffle_time" in build_metrics_dict
+    assert "shuffle_send_time" in build_metrics_dict
+    assert "shuffle_recv_time" in build_metrics_dict
     assert "shuffle_n_local_reductions" in build_metrics_dict
     assert "key_dict_builders_unify_cache_id_misses" in build_metrics_dict
     assert "non_key_build_dict_builders_unify_cache_id_misses" in build_metrics_dict
@@ -1141,8 +1157,12 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
             ]["stat"]
             == "MIN ROW NUMBER FILTER"
         )
-        assert "n_shuffles" in build_metrics_dict
-        assert build_metrics_dict["n_shuffles"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_send" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_send"] >= (0 if n_pes == 1 else 1)
+        assert "n_shuffle_recv" in build_metrics_dict
+        # Async shuffle code avoids any shuffle when not necessary
+        assert build_metrics_dict["n_shuffle_recv"] >= (0 if n_pes == 1 else 1)
 
     assert "pre_agg_total_time" not in build_metrics_dict
     assert "n_repartitions_in_append" in build_metrics_dict
@@ -1151,7 +1171,8 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
     assert "finalize_time_total" in build_metrics_dict
     assert "finalize_compute_mrnf_time" in build_metrics_dict
     assert "finalize_colset_update_time" in build_metrics_dict
-    assert "shuffle_time" in build_metrics_dict
+    assert "shuffle_send_time" in build_metrics_dict
+    assert "shuffle_recv_time" in build_metrics_dict
     assert "shuffle_local_reduction_mrnf_colset_update_time" in build_metrics_dict
     assert "dict_builders_unify_cache_id_misses" in build_metrics_dict
     assert "output_append_time" in build_metrics_dict

@@ -1149,11 +1149,37 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
         " not covered in array_memory_size()");
 }
 
+int64_t array_dictionary_memory_size(std::shared_ptr<array_info> earr) {
+    if (earr->arr_type == bodo_array_type::DICT) {
+        return array_memory_size(earr->child_arrays[0], true, true);
+    } else if (earr->arr_type == bodo_array_type::MAP) {
+        return array_dictionary_memory_size(earr->child_arrays.front());
+    } else if (earr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        return array_dictionary_memory_size(earr->child_arrays.front());
+    } else if (earr->arr_type == bodo_array_type::STRUCT) {
+        int64_t dict_size = 0;
+        for (auto& child_arr : earr->child_arrays) {
+            dict_size += array_dictionary_memory_size(child_arr);
+        }
+        return dict_size;
+    }
+    return 0;
+}
+
 int64_t table_local_memory_size(const std::shared_ptr<table_info>& table,
                                 bool include_dict_size) {
     int64_t local_size = 0;
     for (auto& arr : table->columns) {
         local_size += array_memory_size(arr, include_dict_size, true);
+    }
+    return local_size;
+}
+
+int64_t table_local_dictionary_memory_size(
+    const std::shared_ptr<table_info>& table) {
+    int64_t local_size = 0;
+    for (auto& arr : table->columns) {
+        local_size += array_dictionary_memory_size(arr);
     }
     return local_size;
 }

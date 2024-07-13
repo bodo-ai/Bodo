@@ -1705,6 +1705,12 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
                           bool include_dict_size, bool include_children = true);
 
 /**
+ * @brief Calculate the total memory of the dictionaries of the array
+ * @param earr input array
+ * @return int64_t total size of the dictionaries of the array
+ */
+int64_t array_dictionary_memory_size(std::shared_ptr<array_info> earr);
+/**
  * Compute the total memory of local chunk of the table on current rank
  *
  * @param table : The input table
@@ -1713,6 +1719,14 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
  */
 int64_t table_local_memory_size(const std::shared_ptr<table_info>& table,
                                 bool include_dict_size);
+/**
+ * Compute the total memory of the dictionaries of the table on current rank
+ *
+ * @param table : The input table
+ * @return the total size of the dictionaries of the table
+ */
+int64_t table_local_dictionary_memory_size(
+    const std::shared_ptr<table_info>& table);
 
 /* Compute the total memory of the table across all processors.
  *

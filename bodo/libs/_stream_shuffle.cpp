@@ -19,8 +19,18 @@ void IncrementalShuffleMetrics::add_to_metrics(
     std::vector<MetricBase>& metrics) {
     metrics.emplace_back(
         TimerMetric("shuffle_buffer_append_time", this->append_time));
-    metrics.emplace_back(TimerMetric("shuffle_time", this->shuffle_time));
-    metrics.emplace_back(StatMetric("n_shuffles", this->n_shuffles, true));
+    metrics.emplace_back(
+        TimerMetric("shuffle_send_time", this->shuffle_send_time));
+    metrics.emplace_back(
+        TimerMetric("shuffle_recv_time", this->shuffle_recv_time));
+    metrics.emplace_back(TimerMetric("shuffle_send_finalization_time",
+                                     this->shuffle_send_finalization_time));
+    metrics.emplace_back(TimerMetric("shuffle_recv_finalization_time",
+                                     this->shuffle_recv_finalization_time));
+    metrics.emplace_back(
+        StatMetric("n_shuffle_send", this->n_shuffle_send, true));
+    metrics.emplace_back(
+        StatMetric("n_shuffle_recv", this->n_shuffle_recv, true));
     metrics.emplace_back(TimerMetric("shuffle_hash_time", this->hash_time));
     metrics.emplace_back(TimerMetric("shuffle_dict_unification_time",
                                      this->dict_unification_time));
@@ -32,8 +42,12 @@ void IncrementalShuffleMetrics::add_to_metrics(
         StatMetric("shuffle_total_recv_nrows", this->total_recv_nrows));
     metrics.emplace_back(StatMetric("shuffle_total_approx_sent_size_bytes",
                                     this->total_approx_sent_size_bytes));
+    metrics.emplace_back(StatMetric("shuffle_approx_sent_size_bytes_dicts",
+                                    this->approx_sent_size_bytes_dicts));
     metrics.emplace_back(StatMetric("shuffle_total_recv_size_bytes",
                                     this->total_recv_size_bytes));
+    metrics.emplace_back(StatMetric("shuffle_approx_recv_size_bytes_dicts",
+                                    this->approx_recv_size_bytes_dicts));
     metrics.emplace_back(StatMetric("shuffle_buffer_peak_capacity_bytes",
                                     this->peak_capacity_bytes));
     metrics.emplace_back(StatMetric("shuffle_buffer_peak_utilization_bytes",
@@ -600,25 +614,39 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
 
     // recv data first, but avoid receiving too much data at once
     if ((this->recv_states.size() == 0) || !this->BuffersFull()) {
+        time_pt start = start_timer();
+        size_t prev_recv_states_size = this->recv_states.size();
         shuffle_irecv(this->table_buffer->data_table, this->shuffle_comm,
                       this->recv_states);
+        this->metrics.n_shuffle_recv +=
+            this->recv_states.size() - prev_recv_states_size;
+        this->metrics.shuffle_recv_time += end_timer(start);
     }
 
     TableBuildBuffer out_builder(this->schema, this->dict_builders);
 
+    time_pt start = start_timer();
     // Check for finished recvs
     std::erase_if(this->recv_states, [&](AsyncShuffleRecvState& s) {
         return s.recvDone(out_builder, this->dict_builders, this->metrics);
     });
+    this->metrics.shuffle_recv_finalization_time += end_timer(start);
 
     std::optional<std::shared_ptr<table_info>> new_data =
         out_builder.data_table->nrows() != 0
             ? std::make_optional(out_builder.data_table)
             : std::nullopt;
+    this->metrics.total_recv_nrows +=
+        new_data.has_value() ? new_data.value()->nrows() : 0;
+    this->metrics.total_recv_size_bytes +=
+        new_data.has_value() ? table_local_memory_size(new_data.value(), false)
+                             : 0;
 
+    start = start_timer();
     // Remove send state if recv done
     std::erase_if(this->send_states,
                   [](AsyncShuffleSendState& s) { return s.sendDone(); });
+    this->metrics.shuffle_send_finalization_time += end_timer(start);
 
     bool shuffle_now =
         (is_last && (this->table_buffer->data_table->nrows() > 0)) ||
@@ -660,10 +688,8 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         this->GetShuffleTableAndHashes();
     dict_hashes.reset();
 
-    // Make dictionaries global for shuffle
-
     // Shuffle the data
-    time_pt start = start_timer();
+    start = start_timer();
 
     this->metrics.total_sent_nrows += shuffle_table->nrows();
     // TODO Make this exact by getting the size of the send_arr from the
@@ -671,21 +697,19 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     int64_t shuffle_table_size = table_local_memory_size(shuffle_table, false);
     if ((shuffle_table_size > 0) && (shuffle_table->nrows() > 0)) {
         this->metrics.total_approx_sent_size_bytes += shuffle_table_size;
+        // We need to multiply by n_pes because the dictionary is sent to each
+        // rank in full
+        this->metrics.approx_sent_size_bytes_dicts +=
+            table_local_dictionary_memory_size(shuffle_table) * this->n_pes;
     }
 
     shuffle_issend(std::move(shuffle_table), shuffle_hashes,
                    keep_row_bitmask.get(), this->send_states,
                    this->shuffle_comm);
 
-    this->metrics.shuffle_time += end_timer(start);
-    this->metrics.n_shuffles++;
+    this->metrics.shuffle_send_time += end_timer(start);
+    this->metrics.n_shuffle_send++;
     shuffle_hashes.reset();
-
-    this->metrics.total_recv_nrows +=
-        new_data.has_value() ? new_data.value()->nrows() : 0;
-    this->metrics.total_recv_size_bytes +=
-        new_data.has_value() ? table_local_memory_size(new_data.value(), false)
-                             : 0;
 
     this->ResetAfterShuffle();
     this->prev_shuffle_iter = this->curr_iter;
@@ -745,6 +769,8 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
         // because the dictionary is not shared across ranks so we're unlikely
         // to get a cache hit and will just evict entries that may actually be
         // useful.
+        metrics.approx_recv_size_bytes_dicts +=
+            array_dictionary_memory_size(arr);
         auto out_arr =
             dict_builder->UnifyDictionaryArray(arr, /*use_cache=*/false);
         metrics.dict_unification_time += end_timer(start);
