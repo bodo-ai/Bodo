@@ -56,13 +56,21 @@ class IncrementalShuffleMetrics {
 
     // Time spent appending to the shuffle buffer.
     time_t append_time = 0;
-    // Time spent in shuffling data.
-    time_t shuffle_time = 0;
-    // Total number of shuffles
-    stat_t n_shuffles = 0;
+    // Time spent sending shuffle data.
+    time_t shuffle_send_time = 0;
+    // Time spent receiving shuffle data.
+    time_t shuffle_recv_time = 0;
+    // Time spent finalizing the shuffle send.
+    time_t shuffle_send_finalization_time = 0;
+    // Time spent finalizing the shuffle receive.
+    time_t shuffle_recv_finalization_time = 0;
+    // Total number of shuffles sent
+    stat_t n_shuffle_send = 0;
+    // Total number of shuffles received
+    stat_t n_shuffle_recv = 0;
     // Time spent hashing rows for shuffle.
     time_t hash_time = 0;
-    // Time spent unifying the dictionaries globally before the shuffle.
+    // Time spent unifying the dictionaries locally after the shuffle.
     time_t dict_unification_time = 0;
     // Total number of rows appended to the shuffle buffer.
     stat_t total_appended_nrows = 0;
@@ -72,8 +80,14 @@ class IncrementalShuffleMetrics {
     stat_t total_recv_nrows = 0;
     // Approximate number of bytes sent to other ranks across all shuffles.
     stat_t total_approx_sent_size_bytes = 0;
+    // Approximate number of bytes sent to other ranks across all shuffles for
+    // dictionaries.
+    stat_t approx_sent_size_bytes_dicts = 0;
     // Total number of bytes received from other ranks across all shuffles.
     stat_t total_recv_size_bytes = 0;
+    // Total number of bytes received from other ranks across all shuffles for
+    // dictionaries.
+    stat_t approx_recv_size_bytes_dicts = 0;
     // Peak allocated size of the shuffle buffer.
     stat_t peak_capacity_bytes = 0;
     // Peak utilized size of the shuffle buffer.
