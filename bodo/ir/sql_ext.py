@@ -86,6 +86,10 @@ ll.add_symbol(
     stream_join_cpp.get_runtime_join_filter_min_max_py_entrypt,
 )
 ll.add_symbol(
+    "is_empty_build_table_py_entrypt",
+    stream_join_cpp.is_empty_build_table_py_entrypt,
+)
+ll.add_symbol(
     "has_runtime_join_filter_unique_values_py_entrypt",
     stream_join_cpp.has_runtime_join_filter_unique_values_py_entrypt,
 )
@@ -505,6 +509,34 @@ def get_runtime_join_filter_min_max(
 
 
 @intrinsic
+def is_empty_build_table(typingctx, state_var_t):
+    """
+    Returns if a join state has a completely empty build table, which can
+    be used to prune the entire probe table.
+    """
+    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(8).as_pointer(),  # join state
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module,
+            fnty,
+            name="is_empty_build_table_py_entrypt",
+        )
+        ret = builder.call(fn_tp, args)
+        inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = types.bool_(state_var_t)
+    return sig, codegen
+
+
+@intrinsic
 def has_runtime_join_filter_unique_values(typingctx, state_var_t, key_index_t):
     """
     Returns whether a join state has a list of unique values for a specific
@@ -611,63 +643,70 @@ def overload_gen_runtime_join_filter_cond(
     state_var, col_indices, precisions, time_zones
 ):
     """
-    Takes in a join state and tuple of column indices and uses them to construct a string
-    representing a conjunction of bounds checks based on the minimum/maximum values inferred
-    from the runtime join filter. This is used for Snowflake reads.
+    Takes in a join state and tuple of column indices and uses them to construct new entries
+    to conditions based on runtime join filter state (e.g. build table size, min/max, magic sets).
+    The output adds new strings to the conditions list in snowflake format.
     """
 
     def impl(state_var, col_indices, precisions, time_zones):  # pragma: no cover
-        cond_terms = ["TRUE"]
-        n_cols = len(col_indices)
-        for i in range(n_cols):
-            col_idx = col_indices[i]
-            if col_idx == -1:
-                continue
+        is_empty = is_empty_build_table(state_var)
+        if is_empty:
+            # If the build table is empty in an inner hash join, then
+            # we can't match any rows, so return a FALSE condition
+            # to tell Snowflake to skip every row.
+            return ["FALSE /* Empty Build Table in a Join */"]
+        else:
+            local_conds = []
+            n_cols = len(col_indices)
+            for i in range(n_cols):
+                col_idx = col_indices[i]
+                if col_idx == -1:
+                    continue
 
-            included_low_ndv_filter = False
-            # If it exists, get the list of unique values from the join state
-            if has_runtime_join_filter_unique_values(state_var, np.int64(i)):
-                unique_values = get_runtime_join_filter_unique_values(
-                    state_var, np.int64(i)
-                )
-                # Use object mode to convert to a string representation of the containment check
-                with bodo.no_warning_objmode(unique_as_strings="list_str_type"):
-                    unique_as_strings = []
-                    for elem in unique_values:
-                        unique_as_strings.append(
-                            convert_pyobj_to_snowflake_str(elem, time_zones[i])
-                        )
-
-                if len(unique_as_strings) > 0:
-                    cond_terms.append(
-                        f"(${col_idx+1} IN ({', '.join(sorted(unique_as_strings))}))"
+                included_low_ndv_filter = False
+                # If it exists, get the list of unique values from the join state
+                if has_runtime_join_filter_unique_values(state_var, np.int64(i)):
+                    unique_values = get_runtime_join_filter_unique_values(
+                        state_var, np.int64(i)
                     )
-                    included_low_ndv_filter = True
+                    # Use object mode to convert to a string representation of the containment check
+                    with bodo.no_warning_objmode(unique_as_strings="list_str_type"):
+                        unique_as_strings = []
+                        for elem in unique_values:
+                            unique_as_strings.append(
+                                convert_pyobj_to_snowflake_str(elem, time_zones[i])
+                            )
 
-            if not included_low_ndv_filter:
-                # Otherwise, get the min/max value bounds for the current key column
-                # from the join state
-                min_val = get_runtime_join_filter_min_max(
-                    state_var, np.int64(i), True, precisions[i]
-                )
-                max_val = get_runtime_join_filter_min_max(
-                    state_var, np.int64(i), False, precisions[i]
-                )
-                # Use object mode to convert to a string representation of the bounds check
-                with bodo.no_warning_objmode(
-                    min_result="unicode_type", max_result="unicode_type"
-                ):
-                    min_result = max_result = ""
-                    if min_val is not None:
-                        min_result = f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
-                    if max_val is not None:
-                        max_result = f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
-                # If the results were successful, add to the conjunction list
-                if min_result != "":
-                    cond_terms.append(min_result)
-                if max_result != "":
-                    cond_terms.append(max_result)
-        return " AND ".join(cond_terms)
+                    if len(unique_as_strings) > 0:
+                        local_conds.append(
+                            f"(${col_idx+1} IN ({', '.join(sorted(unique_as_strings))}))"
+                        )
+                        included_low_ndv_filter = True
+
+                if not included_low_ndv_filter:
+                    # Otherwise, get the min/max value bounds for the current key column
+                    # from the join state
+                    min_val = get_runtime_join_filter_min_max(
+                        state_var, np.int64(i), True, precisions[i]
+                    )
+                    max_val = get_runtime_join_filter_min_max(
+                        state_var, np.int64(i), False, precisions[i]
+                    )
+                    # Use object mode to convert to a string representation of the bounds check
+                    with bodo.no_warning_objmode(
+                        min_result="unicode_type", max_result="unicode_type"
+                    ):
+                        min_result = max_result = ""
+                        if min_val is not None:
+                            min_result = f"(${col_idx+1} >= {convert_pyobj_to_snowflake_str(min_val, time_zones[i])})"
+                        if max_val is not None:
+                            max_result = f"(${col_idx+1} <= {convert_pyobj_to_snowflake_str(max_val, time_zones[i])})"
+                    # If the results were successful, add to the conjunction list
+                    if min_result != "":
+                        local_conds.append(min_result)
+                    if max_result != "":
+                        local_conds.append(max_result)
+        return local_conds
 
     return impl
 
@@ -858,13 +897,17 @@ def sql_distributed_run(
         rtjf_state_cols, rtjf_state_args, rtjf_state_names = extract_rtjf_terms(
             sql_node.rtjf_terms
         )
+        rtjf_suffix += f'    runtime_join_filter_conds = ["TRUE"]\n'
         for state_var, col_indices in zip(rtjf_state_names, rtjf_state_cols):
             # Fetch the precision and time zone for each of the used columns
             precisions, time_zones = get_rtjf_cols_extra_info(
                 sql_node.out_table_col_types, col_indices
             )
-            rtjf_suffix += f"    runtime_join_filter_cond = gen_runtime_join_filter_cond({state_var}, {col_indices}, {precisions}, {time_zones})\n"
-            rtjf_suffix += '    sql_request = f"SELECT * FROM ({sql_request}) WHERE {runtime_join_filter_cond}"\n'
+            rtjf_suffix += f"    runtime_join_filter_conds.extend(gen_runtime_join_filter_cond({state_var}, {col_indices}, {precisions}, {time_zones}))\n"
+        rtjf_suffix += (
+            '    runtime_join_filter_cond = " AND ".join(runtime_join_filter_conds)\n'
+        )
+        rtjf_suffix += '    sql_request = f"SELECT * FROM ({sql_request}) WHERE {runtime_join_filter_cond}"\n'
 
         if bodo.user_logging.get_verbose_level() >= 2:
             rtjf_suffix += "    log_message('SQL I/O', f'Runtime join filter query: {sql_request}')\n"

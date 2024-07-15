@@ -1944,6 +1944,12 @@ void HashJoinState::FinalizeBuild() {
                 this->SplitPartition(i_part);
             }
         }
+        // Globally determine if all ranks are empty.
+        bool local_empty_build =
+            this->partitions.empty() ||
+            this->partitions[0]->build_table_buffer->data_table->nrows() == 0;
+        MPI_Allreduce(&this->global_build_empty, &local_empty_build, 1,
+                      MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD);
     }
 
     // The estimated required size of the pool is at least the size of the
@@ -4395,6 +4401,16 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
 }
 
 /**
+ * @brief Determine if the finalized build table is empty.
+ * @param[in] join_state: the state object containing build table information.
+ * @return bool whether the build table is empty.
+ */
+bool is_empty_build_table_py_entrypt(JoinState* join_state_) {
+    HashJoinState* join_state = (HashJoinState*)join_state_;
+    return join_state->global_build_empty;
+}
+
+/**
  * Function to be called before get_runtime_join_filter_unique_values_py_entrypt
  * to determine if the list of unique values even exists.
  *
@@ -4515,6 +4531,7 @@ PyMODINIT_FUNC PyInit_stream_join_cpp(void) {
     SetAttrStringFromVoidPtr(m, get_partition_num_top_bits_by_idx);
     SetAttrStringFromVoidPtr(m, get_partition_top_bitmask_by_idx);
     SetAttrStringFromVoidPtr(m, get_runtime_join_filter_min_max_py_entrypt);
+    SetAttrStringFromVoidPtr(m, is_empty_build_table_py_entrypt);
     SetAttrStringFromVoidPtr(m,
                              has_runtime_join_filter_unique_values_py_entrypt);
     SetAttrStringFromVoidPtr(m,

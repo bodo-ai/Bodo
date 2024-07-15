@@ -1,9 +1,9 @@
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
 """
-Tests reading data from a SnowflakeCatalog in a manner that will cause a runtime join filter 
+Tests reading data from a SnowflakeCatalog in a manner that will cause a runtime join filter
 to be pushed down to I/O.
 
-Note, the following sequence of Snowflake commands were used to set up several of the tables 
+Note, the following sequence of Snowflake commands were used to set up several of the tables
 referenced in this file:
 
 ----------------------------------
@@ -25,10 +25,10 @@ CREATE OR REPLACE ICEBERG TABLE rtjf_test_table_a(
 GRANT OWNERSHIP ON rtjf_test_table_a TO SYSADMIN;
 
 INSERT INTO rtjf_test_table_a (
-SELECT 
-    SEQ8(), 
-    SEQ8() / 2500, 
-    TO_BINARY(BASE64_ENCODE(SEQ8()::VARCHAR), 'base64'), 
+SELECT
+    SEQ8(),
+    SEQ8() / 2500,
+    TO_BINARY(BASE64_ENCODE(SEQ8()::VARCHAR), 'base64'),
     TIME_FROM_PARTS(SEQ1(), SEQ1(), SEQ1(), SEQ8()*1000),
     TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8(), 0, 0),
     TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ8(), SEQ1(), 0, 0),
@@ -54,10 +54,10 @@ CREATE OR REPLACE ICEBERG TABLE rtjf_test_table_b(
 GRANT OWNERSHIP ON rtjf_test_table_b TO SYSADMIN;
 
 INSERT INTO rtjf_test_table_b (
-SELECT 
-    SEQ8()+4000, 
-    (SEQ8() * SEQ8()) / 2500, 
-    TO_BINARY(BASE64_ENCODE((SEQ8()-123)::VARCHAR), 'base64'), 
+SELECT
+    SEQ8()+4000,
+    (SEQ8() * SEQ8()) / 2500,
+    TO_BINARY(BASE64_ENCODE((SEQ8()-123)::VARCHAR), 'base64'),
     TIME_FROM_PARTS(SEQ1(), 0, SEQ1(), SEQ8()*1000),
     TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8()+1234, 0, 0),
     TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ1(), SEQ8(), 0, 0),
@@ -75,10 +75,10 @@ CREATE OR REPLACE TABLE rtjf_test_table_c(
     time_of_day time(6),
     neutral_time timestamp_ntz(6),
     utc_time timestamp_ltz(6)
-) AS SELECT 
-    SEQ8(), 
-    SEQ8() / 2500, 
-    TO_BINARY(BASE64_ENCODE(SEQ8()::VARCHAR), 'base64'), 
+) AS SELECT
+    SEQ8(),
+    SEQ8() / 2500,
+    TO_BINARY(BASE64_ENCODE(SEQ8()::VARCHAR), 'base64'),
     TIME_FROM_PARTS(SEQ1(), SEQ1(), SEQ1(), SEQ8()*1000),
     TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8(), 0, 0),
     TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ8(), SEQ1(), 0, 0),
@@ -99,10 +99,10 @@ CREATE OR REPLACE TABLE rtjf_test_table_d(
     time_of_day time(6),
     neutral_time timestamp_ntz(6),
     utc_time timestamp_ltz(6)
-) AS SELECT 
-    SEQ8()+4000, 
-    (SEQ8() * SEQ8()) / 2500, 
-    TO_BINARY(BASE64_ENCODE((SEQ8()-123)::VARCHAR), 'base64'), 
+) AS SELECT
+    SEQ8()+4000,
+    (SEQ8() * SEQ8()) / 2500,
+    TO_BINARY(BASE64_ENCODE((SEQ8()-123)::VARCHAR), 'base64'),
     TIME_FROM_PARTS(SEQ1(), 0, SEQ1(), SEQ8()*1000),
     TIMESTAMP_FROM_PARTS(2024, 1, 1, SEQ8()+1234, 0, 0),
     TIMESTAMP_LTZ_FROM_PARTS(2024, 1, SEQ1(), SEQ8(), 0, 0),
@@ -869,7 +869,7 @@ def test_multiple_filter_join(
         # from Snowflake.
         check_logger_msg(
             stream,
-            'SELECT * FROM (SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP") as TEMP) WHERE TRUE AND ($1 >= 449) AND ($1 <= 199589)) WHERE TRUE AND ($2 >= 33) AND ($2 <= 9990)',
+            'Runtime join filter query: SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP") as TEMP) WHERE TRUE AND ($1 >= 449) AND ($1 <= 199589) AND ($2 >= 33) AND ($2 <= 9990)',
         )
 
 
@@ -1048,7 +1048,7 @@ def test_sf_small_subset(
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
 
     query = """
-    WITH 
+    WITH
         golden_rules_exclusions_31701_SMALL as (
             select ss_sold_date_sk, ss_customer_sk, ss_ticket_number
             from SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.STORE_SALES
