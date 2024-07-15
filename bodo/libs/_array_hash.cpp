@@ -26,6 +26,36 @@ static void hash_na_val(const uint32_t seed, uint32_t* hash_value) {
         hash_inner_32<int64_t>(&val, seed, hash_value);
     }
 }
+
+// ------- boost hash combine function for 32-bit hashes -------
+
+// https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L60
+#if defined(_MSC_VER)
+#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) _rotl(x, r)
+#else
+#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) (x << r) | (x >> (32 - r))
+#endif
+
+// https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L316
+static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
+    // This is a single 32-bit murmur iteration.
+    // See this comment and its discussion for more information:
+    // https://stackoverflow.com/a/50978188
+
+    const uint32_t c1 = 0xcc9e2d51;
+    const uint32_t c2 = 0x1b873593;
+
+    k1 *= c1;
+    k1 = BOOST_FUNCTIONAL_HASH_ROTL32(k1, 15);
+    k1 *= c2;
+
+    h1 ^= k1;
+    h1 = BOOST_FUNCTIONAL_HASH_ROTL32(h1, 13);
+    h1 = h1 * 5 + 0xe6546b64;
+}
+
+// -------------------------------------------------------------
+
 /**
  * Computation of the inner hash of the functions. This covers the NUMPY case.
  *
@@ -519,13 +549,20 @@ void hash_arrow_array(const hashes_t& out_hashes,
         hash_string_32(&val_c, 1, 0, &null_hash);
 
         auto indices = dict_array->indices();
-        for (size_t i = 0; i < n_rows; i++) {
-            if (indices->IsNull(i)) {
-                out_hashes[i] = null_hash;
-            } else {
-                // Note that GetValueIndex is not reccomended for performant
-                // code, but this codepath should be removed in general
-                out_hashes[i] = dict_hashes[dict_array->GetValueIndex(i)];
+        for (size_t i_row = 0; i_row < n_rows; i_row++) {
+            for (offset_t idx = list_offsets[i_row];
+                 idx < list_offsets[i_row + 1]; idx++) {
+                // TODO: make hash combine consistent with the string case
+                // (hash_string_32)
+                if (indices->IsNull(idx)) {
+                    hash_combine_boost(out_hashes[i_row], null_hash);
+                } else {
+                    // Note that GetValueIndex is not recommended for performant
+                    // code, but this codepath should be removed in general
+                    hash_combine_boost(
+                        out_hashes[i_row],
+                        dict_hashes[dict_array->GetValueIndex(idx)]);
+                }
             }
         }
     } else if (arrow::is_primitive(*input_array->type()) ||
@@ -770,35 +807,6 @@ template void hash_array<std::shared_ptr<uint32_t[]>, false>(
     bool is_parallel, bool global_dict_needed,
     std::shared_ptr<bodo::vector<uint32_t>> dict_hashes,
     size_t start_row_offset);
-
-// ------- boost hash combine function for 32-bit hashes -------
-
-// https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L60
-#if defined(_MSC_VER)
-#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) _rotl(x, r)
-#else
-#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) (x << r) | (x >> (32 - r))
-#endif
-
-// https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L316
-static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
-    // This is a single 32-bit murmur iteration.
-    // See this comment and its discussion for more information:
-    // https://stackoverflow.com/a/50978188
-
-    const uint32_t c1 = 0xcc9e2d51;
-    const uint32_t c2 = 0x1b873593;
-
-    k1 *= c1;
-    k1 = BOOST_FUNCTIONAL_HASH_ROTL32(k1, 15);
-    k1 *= c2;
-
-    h1 ^= k1;
-    h1 = BOOST_FUNCTIONAL_HASH_ROTL32(h1, 13);
-    h1 = h1 * 5 + 0xe6546b64;
-}
-
-// -------------------------------------------------------------
 
 template <class T, typename hashes_t>
     requires(hashes_arr_type<hashes_t> && !std::floating_point<T>)
