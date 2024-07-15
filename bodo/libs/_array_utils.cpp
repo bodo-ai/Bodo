@@ -1326,6 +1326,53 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             }
         }
         return process_length(len1, len2);
+    } else if (arr1->type_id() == arrow::Type::DICTIONARY) {
+        auto dict_arr1 =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(arr1);
+        auto dict_indices1 =
+            std::static_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
+                dict_arr1->indices());
+        auto str_array1 = std::static_pointer_cast<arrow::LargeStringArray>(
+            dict_arr1->dictionary());
+
+        auto dict_arr2 =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(arr2);
+        auto dict_indices2 =
+            std::static_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
+                dict_arr2->indices());
+        auto str_array2 = std::static_pointer_cast<arrow::LargeStringArray>(
+            dict_arr2->dictionary());
+
+        int64_t len1 = pos1_e - pos1_s;
+        int64_t len2 = pos2_e - pos2_s;
+        int64_t min_len = std::min(len1, len2);
+        for (int64_t idx = 0; idx < min_len; idx++) {
+            int n_pos1_s = pos1_s + idx;
+            int n_pos2_s = pos2_s + idx;
+            std::pair<int, bool> epair =
+                process_arrow_bitmap(na_position_bis, dict_arr1, n_pos1_s,
+                                     dict_arr2, n_pos2_s, is_na_equal);
+            if (epair.first != 0)
+                return epair.first;
+            if (epair.second) {
+                std::string_view str1 = str_array1->GetView(
+                    *(dict_indices1->raw_values() + pos1_s + idx));
+                std::string_view str2 = str_array2->GetView(
+                    *(dict_indices2->raw_values() + pos2_s + idx));
+                size_t len1 = str1.size();
+                size_t len2 = str2.size();
+                size_t minlen = std::min(len1, len2);
+                int test = std::memcmp(str2.data(), str1.data(), minlen);
+                if (test)
+                    return test;
+                // If not, we may be able to conclude via the string length.
+                if (len1 > len2)
+                    return -1;
+                if (len1 < len2)
+                    return 1;
+            }
+        }
+        return process_length(len1, len2);
     } else {
         auto primitive_array1 =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr1);
@@ -2093,6 +2140,24 @@ void DEBUG_append_to_out_array(std::shared_ptr<arrow::Array> input_array,
                 string_builder += "None";
             else
                 string_builder += "\"" + str_array->GetString(i) + "\"";
+        }
+        string_builder += "]";
+    } else if (input_array->type_id() == arrow::Type::DICTIONARY) {
+        auto str_array =
+            std::dynamic_pointer_cast<arrow::DictionaryArray>(input_array);
+        auto dict_arr = std::static_pointer_cast<arrow::LargeStringArray>(
+            str_array->dictionary());
+
+        string_builder += "[";
+        for (int64_t i = start_offset; i < end_offset; i++) {
+            if (i > 0)
+                string_builder += ", ";
+            if (str_array->IsNull(i))
+                string_builder += "None";
+            else
+                string_builder +=
+                    "\"" + dict_arr->GetString(str_array->GetValueIndex(i)) +
+                    "\"";
         }
         string_builder += "]";
     } else {

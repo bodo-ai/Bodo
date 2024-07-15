@@ -1043,6 +1043,29 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
             ),
             id="list_of_map",
         ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [["A12", None, "A12", "ABC"], ["A12", "ABC", "C"]] * 2,
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.dictionary(pa.int32(), pa.string()))
+                        ),
+                    )
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "a": pd.Series(
+                        [["A12", None, "A12", "ABC"], ["A12", "ABC", "C"]],
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(pa.dictionary(pa.int32(), pa.string()))
+                        ),
+                    )
+                }
+            ),
+            id="list_of_str",
+        ),
     ],
 )
 def test_groupby_nested_array_key(df, expected_df, memory_leak_check):
