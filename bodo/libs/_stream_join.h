@@ -702,6 +702,9 @@ class JoinState {
     // join output.
     bool build_input_finalized = false;
     bool probe_input_finalized = false;
+    // Is the build table empty on all ranks. Should only be
+    // computed in FinalizeBuild() for each supported join type.
+    bool global_build_empty = false;
     const int64_t output_batch_size;
     // The number of iterations between syncs
     int64_t sync_iter = DEFAULT_SYNC_ITERS;
