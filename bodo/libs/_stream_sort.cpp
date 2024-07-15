@@ -97,11 +97,11 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
         // find the minimum row
         std::pop_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
         auto& min_vec = sorted_chunks.back();
-        auto& min = min_vec.back();
+        std::reference_wrapper<TableAndRange> min = min_vec.back();
         // This table will be unpinned once all rows have been appended to the
         // final output. This does mean that we might be pinning this table more
         // than once, but pinning a pinned object is a noop.
-        min.table->pin();
+        min.get().table->pin();
 
         // Consume chunks from min_vec until the smallest row in min_vec (which
         // is the first row of the last chunk since we reversed the input above)
@@ -111,8 +111,8 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
             // Loop through rows in the current chunk, selecting them to append
             // while they are smaller than the first row of the next smallest
             // chunk in the heap.
-            int64_t offset = min.offset;
-            int64_t nrows = static_cast<int64_t>(min.table->nrows());
+            int64_t offset = min.get().offset;
+            int64_t nrows = static_cast<int64_t>(min.get().table->nrows());
             do {
                 // TODO(aneesh) this could be replaced by a binary search to
                 // find the first element that is largest than the next smallest
@@ -120,7 +120,7 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
                 row_idx.push_back(offset);
                 offset++;
                 if (offset < nrows) {
-                    min.UpdateOffset(n_key_t, offset);
+                    min.get().UpdateOffset(n_key_t, offset);
                 }
             } while (offset < nrows && comp(sorted_chunks[0].back(), min));
 
@@ -128,15 +128,18 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
             // want to directly append to the output without copying instead.
             // We'd need to first finalize the active chunk and then flush all
             // chunks to the output.
-            sorted_table_builder->AppendBatch(min.table, row_idx);
+            sorted_table_builder->AppendBatch(min.get().table, row_idx);
 
             // If we have completely consumed all rows from the current chunk,
             // get the next chunk from the same sorted list.
             if (offset >= nrows) {
-                min.table->unpin();
+                min.get().table->unpin();
                 min_vec.pop_back();
                 if (!min_vec.empty()) {
-                    min = min_vec.back();
+                    // we need std::ref because we want to update what min is
+                    // referring to, not the contents of min (which is now a
+                    // reference to invalid memory)
+                    min = std::ref(min_vec.back());
                 }
             }
         } while (!min_vec.empty() && comp(sorted_chunks[0].back(), min));
