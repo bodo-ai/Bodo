@@ -715,11 +715,25 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
             "ROW_NUMBER()",
             pd.DataFrame(
                 {
-                    "window_out": np.arange(1, 2_001),
+                    "window_out": np.concatenate(
+                        (np.arange(1, 101), np.arange(1, 101), np.array([1]))
+                    )
                 }
             ),
             "[DEBUG] WindowState::FinalizeBuild: Finished",
             id="row_number",
+        ),
+        pytest.param(
+            "RANK()",
+            pd.DataFrame(
+                {
+                    "window_out": np.concatenate(
+                        (np.ones(100), np.arange(1, 101), np.array([1]))
+                    )
+                }
+            ),
+            "[DEBUG] WindowState::FinalizeBuild: Finished",
+            id="rank",
         ),
     ],
 )
@@ -737,10 +751,26 @@ def test_rank_fns_sort_path_taken(
 
     test_df = pd.DataFrame(
         {
-            "A": np.arange(2_000),
-            "B": np.ones(2_000),
+            "ID": np.arange(201),
+            "A": np.concatenate(
+                (
+                    np.ones(100),
+                    np.arange(100),
+                    np.array(
+                        [
+                            1,
+                        ]
+                    ),
+                )
+            ),
+            "B": [1] * 100 + [2] * 100 + [3],
         }
     )
+
+    seed = 42
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(np.arange(len(test_df)))
+    test_df = test_df.iloc[perm]
 
     ctx = {"TABLE1": test_df}
     bc = bodosql.BodoSQLContext(ctx)
@@ -757,7 +787,7 @@ SELECT {window_func} OVER (PARTITION BY B ORDER BY A) FROM TABLE1
             "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
         }
     ):
-        out_table = impl(bc, query)
+        impl(bc, query)
 
     _, err = capfd.readouterr()
     assert_success = expected_log_message in err

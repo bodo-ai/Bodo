@@ -1003,8 +1003,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
  * @param[out] out_arr The pre-allocated output array to update.
  */
 template <bodo_array_type::arr_type_enum PartitionByArrType,
-          bodo_array_type::arr_type_enum OrderByArrType>
-void local_sorted_dense_rank(
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(dense_rank<window_func>)
+void local_sorted_window_fn(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& out_arr) {
@@ -1022,21 +1023,10 @@ void local_sorted_dense_rank(
     }
 }
 
-/**
- * @brief Implement a local implementation of row_number
- * on an already sorted table. The partition by and order
- * by arrays are used to determine equality.
- * @tparam PartitionByArrType A single array type for the partition
- * by columns or bodo_array_type::UNKNOWN if mixed types.
- * @tparam OrderByArrType A single array type for the order
- * by columns or bodo_array_type::UNKNOWN if mixed types.
- * @param[in] partition_by_arrs The arrays used in partition by.
- * @param[in] order_by_arrs The arrays used in order by.
- * @param[out] out_arr The pre-allocated output array to update.
- */
 template <bodo_array_type::arr_type_enum PartitionByArrType,
-          bodo_array_type::arr_type_enum OrderByArrType>
-void local_sorted_row_number(
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(row_number<window_func>)
+void local_sorted_window_fn(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& out_arr) {
@@ -1053,9 +1043,34 @@ void local_sorted_row_number(
     }
 }
 
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(rank<window_func>)
+uint64_t local_sorted_window_fn(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::shared_ptr<array_info>& out_arr) {
+    uint64_t rank_val = 1;
+    uint64_t row_number = 1;
+    int64_t n = out_arr->length;
+    for (int64_t i = 0; i < n; i++) {
+        row_number++;
+        if (distinct_from_previous_row<PartitionByArrType>(partition_by_arrs,
+                                                           i)) {
+            rank_val = 1;
+            row_number = 1;
+        } else if (distinct_from_previous_row<OrderByArrType>(order_by_arrs,
+                                                              i)) {
+            rank_val = row_number;
+        }
+        getv<uint64_t, bodo_array_type::NUMPY>(out_arr, i) = rank_val;
+    }
+    return row_number;
+}
+
 /**
  * @brief Receive data from a neighboring rank if it exists
- * using dense_rank.
+ * using sorted window functions.
  *
  * @param[in] empty_table An empty table with the same schema as
  * the one that should be received.
@@ -1102,6 +1117,110 @@ std::shared_ptr<table_info> recv_sorted_window_data(
 }
 
 /**
+ * @brief Combines local data with boundary data in the case where we have a
+ * single group that matches with it's neighbor(s)
+ *
+ * @param[in] partition_by_arrs The partition by columns.
+ * @param[in] order_by_arrs The order by columns.
+ * @param[in,out] output_table The combined result of recv_boundary_data and
+ * local data has the form (partition_by_cols, orderby_cols, max_rank, num_rows)
+ * @param last_group_size_arr The array containing the locally computed
+ * size of the last group
+ * @param recv_boundary_data A table of data we received from our neighboring
+ * rank. has the same columns as output_table
+ */
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(dense_rank<window_func>)
+void combine_boundary_info(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::shared_ptr<table_info>& recv_boundary_data,
+    std::shared_ptr<table_info> output_table) {
+    // offset to increment our local rank being sent by
+    uint64_t rank_offset = getv<uint64_t, bodo_array_type::NUMPY>(
+        recv_boundary_data->columns[recv_boundary_data->ncols() - 2], 0);
+
+    // compare order by with neighbor, if they match we want to subtract
+    // 1 from the offset
+    std::vector<std::shared_ptr<array_info>> other_order_by_arrs(
+        order_by_arrs.size());
+    for (size_t i = 0; i < order_by_arrs.size(); i++) {
+        other_order_by_arrs[i] =
+            recv_boundary_data->columns[i + partition_by_arrs.size()];
+    }
+
+    if (!distinct_from_other_row<OrderByArrType>(order_by_arrs, 0,
+                                                 other_order_by_arrs, 0)) {
+        rank_offset -= 1;
+    }
+
+    // update rank
+    getv<uint64_t, bodo_array_type::NUMPY>(
+        output_table->columns[output_table->ncols() - 2], 0) += rank_offset;
+}
+
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(row_number<window_func>)
+void combine_boundary_info(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::shared_ptr<table_info>& recv_boundary_data,
+    std::shared_ptr<table_info> output_table) {
+    // the max row number from our neighbor
+    uint64_t row_offset = getv<uint64_t, bodo_array_type::NUMPY>(
+        recv_boundary_data->columns[recv_boundary_data->ncols() - 2], 0);
+    // update row number
+    getv<uint64_t, bodo_array_type::NUMPY>(
+        output_table->columns[output_table->ncols() - 2], 0) += row_offset;
+}
+
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(rank<window_func>)
+void combine_boundary_info(
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::shared_ptr<table_info>& recv_boundary_data,
+    std::shared_ptr<table_info> output_table) {
+    // offset to increment our local rank being sent by
+    uint64_t max_rank_neighbor = getv<uint64_t, bodo_array_type::NUMPY>(
+        recv_boundary_data->columns[recv_boundary_data->ncols() - 2], 0);
+    // group size from neighbor
+    uint64_t row_offset = getv<uint64_t, bodo_array_type::NUMPY>(
+        recv_boundary_data->columns[recv_boundary_data->ncols() - 1], 0);
+
+    std::vector<std::shared_ptr<array_info>> other_order_by_arrs(
+        order_by_arrs.size());
+    for (size_t i = 0; i < order_by_arrs.size(); i++) {
+        other_order_by_arrs[i] =
+            recv_boundary_data->columns[i + partition_by_arrs.size()];
+    }
+
+    bool dist_order_by_from_neighbor = distinct_from_other_row<OrderByArrType>(
+        order_by_arrs, 0, other_order_by_arrs, 0);
+    bool single_order = !distinct_from_other_row<OrderByArrType>(
+        order_by_arrs, 0, order_by_arrs, order_by_arrs[0]->length - 1);
+
+    // update rank, if we match on the orderby with our neighbor and
+    // only contain a single orderby val, then we forward the neighbor's max
+    // rank otherwise we update our own
+    if (single_order && !dist_order_by_from_neighbor) {
+        getv<uint64_t, bodo_array_type::NUMPY>(
+            output_table->columns[output_table->ncols() - 2], 0) =
+            max_rank_neighbor;
+    } else {
+        getv<uint64_t, bodo_array_type::NUMPY>(
+            output_table->columns[output_table->ncols() - 2], 0) += row_offset;
+    }
+
+    // update group size
+    getv<uint64_t, bodo_array_type::NUMPY>(
+        output_table->columns[output_table->ncols() - 1], 0) += row_offset;
+}
+
+/**
  * @brief Compute the table to send to the nearest neighbor. If the data on the
  * rank is a single group then we may need to "update" the data we already
  * received from our neighbor to get an updated dense_rank value for the last
@@ -1109,8 +1228,10 @@ std::shared_ptr<table_info> recv_sorted_window_data(
  *
  * @param partition_by_arrs The partition by columns.
  * @param order_by_arrs The order by columns.
- * @param window_out_arr The output intermediate result for computing dense
- * rank.
+ * @param window_out_arr The output intermediate result for computing sorted
+ * window fn.
+ * @param last_group_size_arr The array containing the locally computed
+ * size of the last group
  * @param recv_boundary_data A table of data we received from our neighboring
  * rank. This is only needed if is_single_group=True or we don't have any data.
  * If any other case exists it may just be an empty table.
@@ -1118,11 +1239,13 @@ std::shared_ptr<table_info> recv_sorted_window_data(
  * @return std::shared_ptr<table_info> A table with either 1 row or 0 rows to
  * send to our neighboring rank.
  */
-template <int32_t window_func>
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
 std::shared_ptr<table_info> compute_sorted_window_send_data(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr,
+    std::shared_ptr<array_info>& last_group_size_arr,
     const std::shared_ptr<table_info>& recv_boundary_data,
     bool is_single_group) {
     if (window_out_arr->length == 0) {
@@ -1130,68 +1253,43 @@ std::shared_ptr<table_info> compute_sorted_window_send_data(
         // in case there are holes.
         return recv_boundary_data;
     } else {
+        // create output table from partition/order by columns, window data
         std::vector<std::shared_ptr<array_info>> data_arrs;
-        for (auto arr : partition_by_arrs) {
+        for (auto& arr : partition_by_arrs) {
             data_arrs.push_back(arr);
         }
-        for (auto arr : order_by_arrs) {
+        for (auto& arr : order_by_arrs) {
             data_arrs.push_back(arr);
         }
         data_arrs.push_back(window_out_arr);
         std::unique_ptr<table_info> data_table =
             std::make_unique<table_info>(data_arrs);
-
         std::vector<int64_t> indices = {
             static_cast<int64_t>(window_out_arr->length - 1)};
         std::shared_ptr<table_info> output_table =
             RetrieveTable(std::move(data_table), indices);
-        // Update the rank value.
+
+        // append the group size info for rank()
+        output_table->columns.push_back(last_group_size_arr);
+
+        // Check if we need to combine with recv_boundary_data
         if (is_single_group && recv_boundary_data->nrows() > 0) {
             std::vector<std::shared_ptr<array_info>> other_partition_by_arrs(
                 partition_by_arrs.size());
             for (size_t i = 0; i < partition_by_arrs.size(); i++) {
                 other_partition_by_arrs[i] = recv_boundary_data->columns[i];
             }
-            bool matching_group =
-                !distinct_from_other_row<bodo_array_type::UNKNOWN>(
-                    partition_by_arrs, window_out_arr->length - 1,
-                    other_partition_by_arrs, 0);
+            bool matching_group = !distinct_from_other_row<PartitionByArrType>(
+                partition_by_arrs, window_out_arr->length - 1,
+                other_partition_by_arrs, 0);
             if (matching_group) {
-                std::vector<std::shared_ptr<array_info>> other_order_by_arrs(
-                    order_by_arrs.size());
-                for (size_t i = 0; i < order_by_arrs.size(); i++) {
-                    other_order_by_arrs[i] =
-                        recv_boundary_data
-                            ->columns[i + partition_by_arrs.size()];
-                }
-
                 assert(window_func == Bodo_FTypes::dense_rank ||
-                       window_func == Bodo_FTypes::row_number);
-                bool dist_order_by =
-                    distinct_from_other_row<bodo_array_type::UNKNOWN>(
-                        order_by_arrs, 0, other_order_by_arrs, 0);
-                uint64_t rank_offset = getv<uint64_t, bodo_array_type::NUMPY>(
-                    recv_boundary_data
-                        ->columns[recv_boundary_data->ncols() - 1],
-                    0);
-                switch (window_func) {
-                    case Bodo_FTypes::dense_rank: {
-                        // If the order by values are the same then we
-                        // subtract 1 from the increment value because all ranks
-                        // have the same value in case of ties for dense rank.
-                        rank_offset -= (dist_order_by ? 0 : 1);
-                        break;
-                    }
-                    case Bodo_FTypes::row_number: {
-                        break;
-                    }
-                    default:
-                        break;
-                }
-
-                getv<uint64_t, bodo_array_type::NUMPY>(
-                    output_table->columns[output_table->ncols() - 1], 0) +=
-                    rank_offset;
+                       window_func == Bodo_FTypes::row_number ||
+                       window_func == Bodo_FTypes::rank);
+                combine_boundary_info<PartitionByArrType, OrderByArrType,
+                                      window_func>(
+                    partition_by_arrs, order_by_arrs, recv_boundary_data,
+                    output_table);
             }
         }
         return output_table;
@@ -1266,15 +1364,18 @@ MPI_Request send_sorted_window_data(
  * empty table if there is no data) and the MPI_Request send to communicate the
  * length.
  */
-template <int32_t window_func>
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
 std::tuple<std::shared_ptr<table_info>, MPI_Request>
 sorted_window_boundary_communication(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr,
     std::vector<AsyncShuffleSendState>& send_states,
-    const std::unique_ptr<int>& length_ptr) {
+    const std::unique_ptr<int>& length_ptr, uint64_t last_group_size) {
+    // TODO refactor to make this interface more generic
     std::vector<std::shared_ptr<array_info>> arrs;
+
     for (auto& arr : partition_by_arrs) {
         arrs.push_back(arr);
     }
@@ -1282,14 +1383,24 @@ sorted_window_boundary_communication(
         arrs.push_back(arr);
     }
     arrs.push_back(window_out_arr);
+
+    // make column for extra row number data for computing rank
+    std::shared_ptr<array_info> last_group_size_arr =
+        alloc_numpy(1, Bodo_CTypes::UINT64);
+    getv<uint64_t, bodo_array_type::NUMPY>(last_group_size_arr, 0) =
+        last_group_size;
+    // group size column for rank
+    arrs.push_back(last_group_size_arr);
+
     std::unique_ptr<table_info> table = make_unique<table_info>(arrs);
     std::shared_ptr<table_info> empty_table =
         alloc_table_like(std::move(table));
-    // Supports dense_rank and row_number.
+    // Supports dense_rank, row_number and rank.
     assert(window_func == Bodo_FTypes::dense_rank ||
-           window_func == Bodo_FTypes::row_number);
+           window_func == Bodo_FTypes::row_number ||
+           window_func == Bodo_FTypes::rank);
     bool empty_group = window_out_arr->length == 0;
-    bool single_group = !distinct_from_other_row<bodo_array_type::UNKNOWN>(
+    bool single_group = !distinct_from_other_row<PartitionByArrType>(
         partition_by_arrs, 0, partition_by_arrs, window_out_arr->length - 1);
     std::shared_ptr<table_info> recv_boundary;
     MPI_Request send_request;
@@ -1301,16 +1412,18 @@ sorted_window_boundary_communication(
         // send data looks slightly different in this case (do not need to check
         // if rows the same, just the groups)
         std::shared_ptr<table_info> send_boundary =
-            compute_sorted_window_send_data<window_func>(
-                partition_by_arrs, order_by_arrs, window_out_arr, recv_boundary,
-                single_group);
+            compute_sorted_window_send_data<PartitionByArrType, OrderByArrType,
+                                            window_func>(
+                partition_by_arrs, order_by_arrs, window_out_arr,
+                last_group_size_arr, recv_boundary, single_group);
         send_request =
             send_sorted_window_data(send_boundary, send_states, length_ptr);
     } else {
         std::shared_ptr<table_info> send_boundary =
-            compute_sorted_window_send_data<window_func>(
-                partition_by_arrs, order_by_arrs, window_out_arr, empty_table,
-                false);
+            compute_sorted_window_send_data<PartitionByArrType, OrderByArrType,
+                                            window_func>(
+                partition_by_arrs, order_by_arrs, window_out_arr,
+                last_group_size_arr, empty_table, false);
         send_request =
             send_sorted_window_data(send_boundary, send_states, length_ptr);
         recv_boundary = recv_sorted_window_data(empty_table);
@@ -1333,7 +1446,9 @@ sorted_window_boundary_communication(
  * @param offset The offset for how much to increment each value in the first
  * group.
  */
-template <bodo_array_type::arr_type_enum PartitionByArrType>
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          int32_t window_func>
+    requires(row_number<window_func> || dense_rank<window_func>)
 void sorted_window_update_offset(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& boundary_partition_by_arrs,
@@ -1343,6 +1458,54 @@ void sorted_window_update_offset(
                            partition_by_arrs, i, boundary_partition_by_arrs, 0);
          i++) {
         getv<uint64_t, bodo_array_type::NUMPY>(window_out_arr, i) += offset;
+    }
+}
+
+/**
+ * @brief Update all window output values that match with the boundary
+ * order by data by the max rank_offset and update values in the first partition
+ * with the row_offset.
+ *
+ * @tparam PartitionByArrType The shared type of all partition by columns for
+ * faster comparisons or bodo_array_type::UNKNOWN if the types differ.
+ * @param[in] partition_by_arrs The partition by columns to check for the first
+ * group.
+ * @param[in] boundary_partition_by_arrs The partition by columns of the
+ * boundary data.
+ * @param[out] window_out_arr The output array that needs to be updated.
+ * @param rank_offset The offset for how much to increment values that match
+ * the recv'd boundary data order by columns
+ * @param row_offset The offset for how much to increment each value in the
+ * first group.
+ */
+template <bodo_array_type::arr_type_enum PartitionByArrType,
+          bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
+    requires(rank<window_func>)
+void sorted_window_update_offset(
+    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& boundary_order_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& boundary_partition_by_arrs,
+    const std::shared_ptr<array_info>& window_out_arr, uint64_t rank_offset,
+    uint64_t row_offset) {
+    size_t same_order_offset = -1;
+    // update all elements with the same rank
+    for (size_t i = 0; i < window_out_arr->length &&
+                       !distinct_from_other_row<OrderByArrType>(
+                           order_by_arrs, i, boundary_order_by_arrs, 0);
+         i++) {
+        getv<uint64_t, bodo_array_type::NUMPY>(window_out_arr, i) +=
+            rank_offset;
+        same_order_offset = i;
+    }
+    // rest of the elements in the partition update with row_offset i.e.
+    // max_rank + num_ties - 1
+    for (size_t i = same_order_offset + 1;
+         i < window_out_arr->length &&
+         !distinct_from_other_row<PartitionByArrType>(
+             partition_by_arrs, i, boundary_partition_by_arrs, 0);
+         i++) {
+        getv<uint64_t, bodo_array_type::NUMPY>(window_out_arr, i) += row_offset;
     }
 }
 
@@ -1372,8 +1535,11 @@ void update_sorted_window_output(
     if (recv_boundary_data->nrows() == 0) {
         return;
     }
-    int64_t offset = getv<uint64_t, bodo_array_type::NUMPY>(
+    int64_t rank_offset = getv<uint64_t, bodo_array_type::NUMPY>(
+        recv_boundary_data->columns[recv_boundary_data->ncols() - 2], 0);
+    int64_t last_group_size = getv<uint64_t, bodo_array_type::NUMPY>(
         recv_boundary_data->columns[recv_boundary_data->ncols() - 1], 0);
+
     // Determine if the order by values might be tied. We don't need to check
     // partition by because this is checked in the loop.
     std::vector<std::shared_ptr<array_info>> other_order_by_arrs(
@@ -1383,36 +1549,54 @@ void update_sorted_window_output(
             recv_boundary_data->columns[i + partition_by_arrs.size()];
     }
 
-    assert(window_func == Bodo_FTypes::dense_rank ||
-           window_func == Bodo_FTypes::row_number);
-    switch (window_func) {
-        case Bodo_FTypes::dense_rank: {
-            // If the order by values are the same then we
-            // subtract 1 from the increment value because all ranks have
-            // the same value in case of ties for dense rank.
-            bool dist_order_by = distinct_from_other_row<OrderByArrType>(
-                order_by_arrs, 0, other_order_by_arrs, 0);
-            offset -= (dist_order_by ? 0 : 1);
-            break;
-        }
-        case Bodo_FTypes::row_number: {
-            break;
-        }
-        default:
-            break;
-    }
-
-    if (offset <= 0) {
-        return;
-    }
     std::vector<std::shared_ptr<array_info>> other_partition_by_arrs(
         partition_by_arrs.size());
     for (size_t i = 0; i < partition_by_arrs.size(); i++) {
         other_partition_by_arrs[i] = recv_boundary_data->columns[i];
     }
-    // will need OrderByArrType for rank
-    sorted_window_update_offset<PartitionByArrType>(
-        partition_by_arrs, other_partition_by_arrs, window_out_arr, offset);
+
+    assert(window_func == Bodo_FTypes::dense_rank ||
+           window_func == Bodo_FTypes::row_number ||
+           window_func == Bodo_FTypes::rank);
+    bool dist_order_by = distinct_from_other_row<OrderByArrType>(
+        order_by_arrs, 0, other_order_by_arrs, 0);
+    switch (window_func) {
+        case Bodo_FTypes::dense_rank: {
+            // If the order by values are the same then we
+            // subtract 1 from the increment value because all ranks have
+            // the same value in case of ties for dense rank.
+            rank_offset -= (dist_order_by ? 0 : 1);
+            if (rank_offset <= 0) {
+                return;
+            }
+            sorted_window_update_offset<PartitionByArrType,
+                                        Bodo_FTypes::dense_rank>(
+                partition_by_arrs, other_partition_by_arrs, window_out_arr,
+                rank_offset);
+            break;
+        }
+        case Bodo_FTypes::rank: {
+            // If the order by values are the same then we
+            // subtract 1 from the increment value because all ranks
+            // have the same value in case of ties for rank.
+            rank_offset -= (dist_order_by ? 0 : 1);
+            sorted_window_update_offset<PartitionByArrType, OrderByArrType,
+                                        Bodo_FTypes::rank>(
+                order_by_arrs, other_order_by_arrs, partition_by_arrs,
+                other_partition_by_arrs, window_out_arr, rank_offset,
+                last_group_size);
+            break;
+        }
+        case Bodo_FTypes::row_number: {
+            sorted_window_update_offset<PartitionByArrType,
+                                        Bodo_FTypes::row_number>(
+                partition_by_arrs, other_partition_by_arrs, window_out_arr,
+                rank_offset);
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 /**
@@ -1425,6 +1609,7 @@ void update_sorted_window_output(
  * @param[in] order_by_arrs The order by arrays on the local output
  * data.
  * @param[in, out] out_arr The output array for computing the
+ * @param last_group_size the locally computed size of the last group
  * rank result.
  */
 template <bodo_array_type::arr_type_enum PartitionByArrType,
@@ -1432,12 +1617,14 @@ template <bodo_array_type::arr_type_enum PartitionByArrType,
 void sorted_window_parallel_step(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
-    std::shared_ptr<array_info> out_arr) {
+    std::shared_ptr<array_info> out_arr, int64_t last_group_size) {
     std::vector<AsyncShuffleSendState> send_states;
     std::unique_ptr<int> length_ptr = std::make_unique<int>(0);
     auto [boundary_info, send_request] =
-        sorted_window_boundary_communication<window_func>(
-            partition_by_arrs, order_by_arrs, out_arr, send_states, length_ptr);
+        sorted_window_boundary_communication<PartitionByArrType, OrderByArrType,
+                                             window_func>(
+            partition_by_arrs, order_by_arrs, out_arr, send_states, length_ptr,
+            last_group_size);
     update_sorted_window_output<PartitionByArrType, OrderByArrType,
                                 window_func>(partition_by_arrs, order_by_arrs,
                                              out_arr, boundary_info);
@@ -1465,16 +1652,27 @@ void _sorted_window_computation(
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::vector<int32_t>& window_funcs,
     std::vector<std::shared_ptr<array_info>> out_arrs, bool is_parallel) {
+    // rank
+    uint64_t last_group_size = 0;
     for (size_t i = 0; i < window_funcs.size(); i++) {
         switch (window_funcs[i]) {
             case Bodo_FTypes::dense_rank: {
-                local_sorted_dense_rank<PartitionByArrType, OrderByArrType>(
+                local_sorted_window_fn<PartitionByArrType, OrderByArrType,
+                                       Bodo_FTypes::dense_rank>(
                     partition_by_arrs, order_by_arrs, out_arrs[i]);
                 break;
             }
             case Bodo_FTypes::row_number: {
-                local_sorted_row_number<PartitionByArrType, OrderByArrType>(
+                local_sorted_window_fn<PartitionByArrType, OrderByArrType,
+                                       Bodo_FTypes::row_number>(
                     partition_by_arrs, order_by_arrs, out_arrs[i]);
+                break;
+            }
+            case Bodo_FTypes::rank: {
+                last_group_size =
+                    local_sorted_window_fn<PartitionByArrType, OrderByArrType,
+                                           Bodo_FTypes::rank>(
+                        partition_by_arrs, order_by_arrs, out_arrs[i]);
                 break;
             }
             default:
@@ -1490,14 +1688,23 @@ void _sorted_window_computation(
                     sorted_window_parallel_step<PartitionByArrType,
                                                 OrderByArrType,
                                                 Bodo_FTypes::dense_rank>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i]);
+                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        last_group_size);
                     break;
                 }
                 case Bodo_FTypes::row_number: {
                     sorted_window_parallel_step<PartitionByArrType,
                                                 OrderByArrType,
                                                 Bodo_FTypes::row_number>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i]);
+                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        last_group_size);
+                    break;
+                }
+                case Bodo_FTypes::rank: {
+                    sorted_window_parallel_step<
+                        PartitionByArrType, OrderByArrType, Bodo_FTypes::rank>(
+                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        last_group_size);
                     break;
                 }
                 default:

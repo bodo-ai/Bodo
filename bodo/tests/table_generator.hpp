@@ -214,5 +214,22 @@ std::unique_ptr<table_info> cppToBodo(
                        "Incorrect final number of rows");
     return std::unique_ptr<table_info>(table);
 }
+
+/**
+ * @brief Construct a Bodo Array from a cpp vector using cppToBodo.
+ * @tparam T inner type of the input vector, should be automatically inferred in
+ * most cases.
+ * @param vec the cpp vector to turn into an array info
+ * @param is_nullable see TableBuilder::TableBuilder
+ * @return
+ **/
+template <typename T = int64_t>
+std::shared_ptr<array_info> cppToBodoArr(std::vector<T> vec,
+                                         bool is_nullable = false) {
+    std::shared_ptr<table_info> vec_as_table =
+        cppToBodo({"A"}, {is_nullable}, {}, std::move(vec));
+    return vec_as_table->columns[0];
+}
+
 }  // namespace tests
 }  // namespace bodo

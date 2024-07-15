@@ -45,6 +45,15 @@ concept ratio_to_report = ftype == Bodo_FTypes::ratio_to_report;
 template <int ftype>
 concept any_value = ftype == Bodo_FTypes::any_value;
 
+template <int ftype>
+concept dense_rank = ftype == Bodo_FTypes::dense_rank;
+
+template <int ftype>
+concept rank = ftype == Bodo_FTypes::rank;
+
+template <int ftype>
+concept row_number = ftype == Bodo_FTypes::row_number;
+
 // Enums to specify which type of window frame is being computer, in case
 // a window function should have different implementaitons for some of
 // the formats (e.g. min/max can accumulate a running min/max for

@@ -1463,6 +1463,9 @@ def window_skew_impl(df):
     return df2
 
 
+@pytest.mark.skip(
+    reason="[BSE-3610] We need a new way to test reparitioning that doesn't involve rank (which now takes a sort path)"
+)
 @pytest_mark_one_rank
 def test_rank_skew_repartition(capfd):
     """
@@ -1539,6 +1542,7 @@ def test_rank_skew_repartition(capfd):
     #             print(f"stdout:\n{output}")
     #             print(f"stderr:\n{err}")
     #         bodo.barrier()
+
     expected_log_msgs = [
         "[DEBUG] WARNING: Disabling partitioning and threshold enforcement temporarily to finalize partition 1 which is determined based on the histogram to retain at least 90% of its data after repartitioning. This may invoke the OOM killer.",
         "[DEBUG] GroupbyState::FinalizeBuild: Total number of partitions: 2.",
