@@ -1344,9 +1344,15 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
             "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0,
         }
     ):
-        output = window_impl(_get_dist_arg(df))
-        global_output = bodo.allgatherv(output)
-        stdout, stderr = capfd.readouterr()
+        # Explicitly prohibit taking the sort-based implementation
+        old_disable_value = bodo.bodo_disable_streaming_window_sort
+        try:
+            bodo.bodo_disable_streaming_window_sort = True
+            output = window_impl(_get_dist_arg(df))
+            global_output = bodo.allgatherv(output)
+            stdout, stderr = capfd.readouterr()
+        finally:
+            bodo.bodo_disable_streaming_window_sort = old_disable_value
 
     ### Uncomment for debugging purposes ###
     # with capfd.disabled():
