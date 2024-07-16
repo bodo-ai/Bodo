@@ -1936,7 +1936,7 @@ open class RexToBodoTranslator(
                         operands,
                     )
 
-                    "TRUNC", "TRUNCATE", "ROUND" -> {
+                    "TRUNC", "TRUNCATE" -> {
                         val args: MutableList<Expr> = ArrayList()
                         args.addAll(operands)
                         if (operands.size == 1) {
@@ -1945,6 +1945,17 @@ open class RexToBodoTranslator(
                         }
                         assert(args.size == 2)
                         return NumericCodeGen.getNumericFnCode(fnName, args)
+                    }
+
+                    "ROUND" -> {
+                        val args: MutableList<Expr> = ArrayList()
+                        args.addAll(operands)
+                        if (operands.size == 1) {
+                            // If no value is specified by, default to 0
+                            args.add(Expr.IntegerLiteral(0))
+                        }
+                        assert(args.size == 2)
+                        return NumericCodeGen.generateRoundCode(args)
                     }
 
                     "LOG" -> return NumericCodeGen.generateLogFnInfo(operands)

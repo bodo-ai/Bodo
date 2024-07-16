@@ -223,6 +223,7 @@ broadcasted_fixed_arg_functions = {
     "replace",
     "reverse",
     "right",
+    "round_decimal",
     "round",
     "rpad",
     "rtrim",

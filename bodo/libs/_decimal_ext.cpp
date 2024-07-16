@@ -1,6 +1,7 @@
 // Copyright (C) 2020 Bodo Inc. All rights reserved.
 // C/C++ code for DecimalArray handling
 #include <Python.h>
+#include <arrow/util/basic_decimal.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 #include <iostream>
@@ -870,6 +871,178 @@ array_info* divide_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
 }
 
 /**
+ * @brief Rounds a given Decimal128 value to a specified scale and updates the
+ * result.
+ *
+ * This function rounds the input Decimal128 value to a specified scale. The
+ * rounding process involves shifting the decimal point of the input value by
+ * the difference between its scale and the target scale,
+ * multiplying the result by a power of 10 if the target scale is negative. The
+ * function ensures that the result fits within the Decimal128 range, setting an
+ * overflow flag if it does not.
+ *
+ * @param value The Decimal128 value to be rounded.
+ * @param round_scale The target scale to round the value to. A negative scale
+ * will multiply the value by 10^(-round_scale).
+ * @param input_s The scale of the input value.
+ * @param overflow Pointer to a boolean that will be set to true if the result
+ * exceeds the Decimal128 range.
+ * @param result Pointer to a Decimal128 where the rounded result will be
+ * stored.
+ */
+template <bool negative_round_scale, bool fast_round>
+inline void round_decimal_scalar(const arrow::Decimal128& value,
+                                 int64_t round_scale, int64_t input_s,
+                                 bool* overflow, arrow::Decimal128* result) {
+    int64_t shift_amount = input_s - round_scale;
+    arrow::Decimal128 rounded_value =
+        shift_decimal_scalar(value, -shift_amount);
+    if constexpr (negative_round_scale) {
+        // For negative rounding scales, we need to multiply the shifted value
+        // by 10^(-round_scale) to get the final value.
+
+        // In the case we are certain there is no overflow, we can fast round.
+        if constexpr (fast_round) {
+            rounded_value = rounded_value.IncreaseScaleBy(-round_scale);
+        } else {
+            boost::multiprecision::int256_t rounded_value_int256 =
+                decimalops::ConvertToInt256(rounded_value);
+            rounded_value_int256 =
+                decimalops::IncreaseScaleBy(rounded_value_int256, -round_scale);
+            rounded_value =
+                decimalops::ConvertToDecimal128(rounded_value_int256, overflow);
+        }
+    }
+    *result = rounded_value;
+}
+
+/**
+ * @brief Python entry point for rounding decimal scalars.
+ *
+ * This function is a Python entry point to round a Decimal128 value to a
+ * specified scale by calling the `round_decimal_scalar` C++ function.
+ *
+ * @param value The Decimal128 value to be rounded.
+ * @param round_scale The scale to which the value should be rounded.
+ * @param input_s The scale of the input value.
+ * @param overflow Pointer to a boolean that indicates if an overflow occurred.
+ * @return The rounded Decimal128 value.
+ */
+arrow::Decimal128 round_decimal_scalar_py_entry(arrow::Decimal128 value,
+                                                int64_t round_scale,
+                                                int64_t input_p,
+                                                int64_t input_s,
+                                                bool* overflow) noexcept {
+    arrow::Decimal128 result;
+    try {
+        if (round_scale < 0) {
+            if (input_p != 38) {
+                round_decimal_scalar<true, true>(value, round_scale, input_s,
+                                                 overflow, &result);
+            } else {
+                round_decimal_scalar<true, false>(value, round_scale, input_s,
+                                                  overflow, &result);
+            }
+        } else {
+            // fast_round only matters if the scale is negative
+            round_decimal_scalar<false, false>(value, round_scale, input_s,
+                                               overflow, &result);
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return result;
+}
+
+/**
+ * @brief Rounds each element in a Decimal128 array to a specified scale.
+ *
+ * This function takes an array of Decimal128 values and rounds each element to
+ * the specified scale, creating a new array with the rounded values. It handles
+ * null values appropriately, preserving their positions in the output array. If
+ * any rounding operation causes an overflow, the overflow flag is set to true.
+ *
+ * @param arr A pointer to the input array of Decimal128 values.
+ * @param round_scale The scale to which each decimal value should be rounded.
+ * @param output_p The precision of the output array.
+ * @param output_s The scale of the output array.
+ * @param overflow Pointer to a boolean that indicates overflow.
+ * @return A pointer to a new array containing the rounded Decimal128 values.
+ */
+template <bool negative_round_scale, bool fast_round>
+std::unique_ptr<array_info> round_decimal_array(
+    const std::unique_ptr<array_info>& arr, int64_t round_scale,
+    int64_t output_p, int64_t output_s, bool* const overflow) {
+    size_t len = arr->length;
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
+    try {
+        out_arr->precision = output_p;
+        out_arr->scale = output_s;
+        for (size_t i = 0; i < len; i++) {
+            if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            } else {
+                arrow::Decimal128* out_ptr =
+                    out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                   arrow::Decimal128>() +
+                    i;
+                const arrow::Decimal128& in_val =
+                    *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                 arrow::Decimal128>() +
+                      i);
+                bool overflow_i = false;
+                round_decimal_scalar<negative_round_scale, fast_round>(
+                    in_val, round_scale, arr->scale, &overflow_i, out_ptr);
+                *overflow |= overflow_i;
+            }
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return out_arr;
+}
+/**
+ * @brief Entry point for Python to round elements in a Decimal128 array to a
+ * specified scale, by calling the `round_decimal_array` C++ function.
+ *
+ * @param arr_ Pointer to the input `array_info` structure.
+ * @param round_scale The scale to which each decimal value should be rounded.
+ * @param output_p The precision of the output array
+ * @param output_s The scale of the output array.
+ * @param overflow Pointer to a boolean that indicates overflow.
+ * @return Pointer to a new `array_info` structure containing the rounded
+ * Decimal128 values, or nullptr if an exception occurs.
+ */
+array_info* round_decimal_array_py_entry(array_info* arr_, int64_t round_scale,
+                                         int64_t output_p, int64_t output_s,
+                                         bool* overflow) noexcept {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        std::unique_ptr<array_info> out_arr;
+        if (round_scale < 0) {
+            if (arr->precision != 38) {
+                out_arr = round_decimal_array<true, true>(
+                    arr, round_scale, output_p, output_s, overflow);
+            } else {
+                out_arr = round_decimal_array<true, false>(
+                    arr, round_scale, output_p, output_s, overflow);
+            }
+        } else {
+            // fast_round only matters if the scale is negative
+            out_arr = round_decimal_array<false, false>(
+                arr, round_scale, output_p, output_s, overflow);
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
  * @param val input decimal value
@@ -1582,6 +1755,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, multiply_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_arrays_py_entry);
+    SetAttrStringFromVoidPtr(m, round_decimal_array_py_entry);
+    SetAttrStringFromVoidPtr(m, round_decimal_scalar_py_entry);
 
     return m;
 }

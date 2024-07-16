@@ -874,3 +874,360 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
         )
     finally:
         bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.2345"),
+                            Decimal("5.6789"),
+                            Decimal("2.9999"),
+                            Decimal("313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "ROUND(D1, 3)",
+            pd.array(
+                [
+                    Decimal("1.235"),
+                    Decimal("5.679"),
+                    Decimal("3"),
+                    Decimal("313.212"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(14, 3)),
+            ),
+            id="array-round",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("-1.2345"),
+                            Decimal("-5.6789"),
+                            Decimal("-2.9999"),
+                            Decimal("-313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "ROUND(D1, 3)",
+            pd.array(
+                [
+                    Decimal("-1.235"),
+                    Decimal("-5.679"),
+                    Decimal("-3"),
+                    Decimal("-313.212"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(14, 3)),
+            ),
+            id="array-negative-round",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1521.2345"),
+                            Decimal("63455.6789"),
+                            Decimal("17542.9999"),
+                            Decimal("99313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "ROUND(D1, -1)",
+            pd.array(
+                [
+                    Decimal("1520"),
+                    Decimal("63460"),
+                    Decimal("17540"),
+                    Decimal("99310"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(14, 0)),
+            ),
+            id="array-round-negative_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("-1521.2345"),
+                            Decimal("-63455.6789"),
+                            Decimal("-17542.9999"),
+                            Decimal("-99313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "ROUND(D1, -1)",
+            pd.array(
+                [
+                    Decimal("-1520"),
+                    Decimal("-63460"),
+                    Decimal("-17540"),
+                    Decimal("-99310"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(14, 0)),
+            ),
+            id="array-negative-round-negative_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("-1521.2345"),
+                            Decimal("-63455.6789"),
+                            Decimal("-17542.9999"),
+                            Decimal("-99313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "ROUND(D1, 7)",
+            pd.array(
+                [
+                    Decimal("-1521.2345"),
+                    Decimal("-63455.6789"),
+                    Decimal("-17542.9999"),
+                    Decimal("-99313.2121561"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+            ),
+            id="array-no_change",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("999.9999"),
+                            Decimal("-999.9999"),
+                            Decimal("99999.9999"),
+                            Decimal("-99999.999"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 4)),
+                    )
+                }
+            ),
+            "ROUND(D1, 2)",
+            pd.array(
+                [
+                    Decimal("1000"),
+                    Decimal("-1000"),
+                    Decimal("100000"),
+                    Decimal("-100000"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(14, 2)),
+            ),
+            id="array-round-propagate",
+        ),
+        # Case statements
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.2345"),
+                            Decimal("5.6789"),
+                            Decimal("2.9999"),
+                            Decimal("313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 3)::VARCHAR  END",
+            pd.array(
+                [
+                    "1.235",
+                    "5.679",
+                    "3",
+                    "313.212",
+                    "",
+                ],
+            ),
+            id="array-round-case",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("-1.2345"),
+                            Decimal("-5.6789"),
+                            Decimal("-2.9999"),
+                            Decimal("-313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 3)::VARCHAR END",
+            pd.array(
+                [
+                    "-1.235",
+                    "-5.679",
+                    "-3",
+                    "-313.212",
+                    "",
+                ],
+            ),
+            id="array-negative-round-case",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1521.2345"),
+                            Decimal("63455.6789"),
+                            Decimal("17542.9999"),
+                            Decimal("99313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, -1)::VARCHAR END",
+            pd.array(
+                [
+                    "1520",
+                    "63460",
+                    "17540",
+                    "99310",
+                    "",
+                ],
+            ),
+            id="array-round-negative_scale-case",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("-1521.2345"),
+                            Decimal("-63455.6789"),
+                            Decimal("-17542.9999"),
+                            Decimal("-99313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, -1)::VARCHAR END",
+            pd.array(
+                [
+                    "-1520",
+                    "-63460",
+                    "-17540",
+                    "-99310",
+                    "",
+                ],
+            ),
+            id="array-negative-round-negative_scale-case",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            (-1521.2345),
+                            (-63455.6789),
+                            (-17542.9999),
+                            (-99313.2121561),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 7)::VARCHAR END",
+            pd.array(
+                [
+                    "-1521.2345",
+                    "-63455.6789",
+                    "-17542.9999",
+                    "-99313.2121561",
+                    "",
+                ],
+            ),
+            id="array-no_change-case",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            (999.9999),
+                            (-999.9999),
+                            (99999.9999),
+                            (-99999.999),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 4)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE ROUND(D1, 2)::VARCHAR END",
+            pd.array(
+                [
+                    "1000",
+                    "-1000",
+                    "100000",
+                    "-100000",
+                    "",
+                ],
+            ),
+            id="array-round-propagate-case",
+        ),
+    ],
+)
+def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
+    """
+    Tests the correctness of decimal rounding with different scales.
+    """
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
