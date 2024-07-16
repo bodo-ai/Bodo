@@ -136,6 +136,11 @@ bodo_use_decimal = os.environ.get("BODO_USE_DECIMAL", "0") != "0"
 bodo_sql_style = os.environ.get("BODO_SQL_STYLE", "SNOWFLAKE").upper()
 # Should we enable full covering set caching.
 bodosql_full_caching = os.environ.get("BODO_USE_PARTIAL_CACHING", "0") != "0"
+# If enabled, always uses the hash-based implementation instead of the
+# sorting-based implementation for streaming window function execution.
+bodo_disable_streaming_window_sort = (
+    os.environ.get("BODO_DISABLE_STREAMING_WINDOW_SORT", "0") != "0"
+)
 
 # --------------------------- End Streaming Config ---------------------------
 
