@@ -145,7 +145,7 @@ You can access the logs of a batch job run from the UI as well.
 ### Running a SQL Query as a Batch Job {#sql-batch-job}
 
 Bodo supports running SQL queries as batch jobs without explicitly writing a batch job definition. 
-See [Bodo Platform SDK][submit-sql-job-run] for usage details.
+See [Bodo Platform SDK][execute-sql-query] for usage details.
 
 ### Queuing Batch Job Runs
 

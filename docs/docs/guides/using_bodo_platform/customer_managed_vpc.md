@@ -117,7 +117,7 @@ To create a workspace, go to the "Workspaces" section in the sidebar and click "
 !!! info "Important"
 
     Make sure you have a cloud configuration created before creating a workspace.
-    Refer to the [Setting AWS Credentials](bodo_platform_aws.md/#setting_aws_credentials).
+    Refer to the [Setting AWS Credentials][setting_aws_credentials].
 
 In the creation form: 
 
