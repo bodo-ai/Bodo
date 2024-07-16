@@ -22,8 +22,6 @@
 *.o
 *.so
 
-# platform sdk doc symlink
-docs/docs/integrating_bodo/platform_sdk.md
 
 build/
 docs/_build/
