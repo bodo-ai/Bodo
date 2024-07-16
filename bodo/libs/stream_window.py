@@ -135,6 +135,8 @@ class WindowStateType(StreamingStateType):
 
     @cached_property
     def is_sort_impl(self) -> bool:
+        if bodo.bodo_disable_streaming_window_sort:
+            return False
         sort_supporting_funcs = all(
             [name in self.sort_supporting_func_names() for name in self.func_names]
         )
