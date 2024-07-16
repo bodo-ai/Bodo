@@ -716,7 +716,12 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "window_out": np.concatenate(
-                        (np.arange(1, 101), np.arange(1, 101), np.array([1]))
+                        (
+                            np.arange(1, 5),
+                            np.arange(1, 101),
+                            np.arange(1, 101),
+                            np.array([1]),
+                        )
                     )
                 }
             ),
@@ -728,7 +733,29 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
             pd.DataFrame(
                 {
                     "window_out": np.concatenate(
-                        (np.ones(100), np.arange(1, 101), np.array([1]))
+                        (
+                            np.array([1, 2, 2, 4]),
+                            np.ones(100),
+                            np.arange(1, 101),
+                            np.array([1]),
+                        )
+                    )
+                }
+            ),
+            "[DEBUG] WindowState::FinalizeBuild: Finished",
+            id="rank",
+        ),
+        pytest.param(
+            "DENSE_RANK()",
+            pd.DataFrame(
+                {
+                    "window_out": np.concatenate(
+                        (
+                            np.array([1, 2, 2, 3]),
+                            np.ones(100),
+                            np.arange(1, 101),
+                            np.array([1]),
+                        )
                     )
                 }
             ),
@@ -751,9 +778,10 @@ def test_rank_fns_sort_path_taken(
 
     test_df = pd.DataFrame(
         {
-            "ID": np.arange(201),
+            "ID": np.arange(205),
             "A": np.concatenate(
                 (
+                    np.array([1, 2, 2, 3]),
                     np.ones(100),
                     np.arange(100),
                     np.array(
@@ -763,7 +791,7 @@ def test_rank_fns_sort_path_taken(
                     ),
                 )
             ),
-            "B": [1] * 100 + [2] * 100 + [3],
+            "B": [0] * 4 + [1] * 100 + [2] * 100 + [3],
         }
     )
 
