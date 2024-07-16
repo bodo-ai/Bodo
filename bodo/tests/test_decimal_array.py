@@ -1824,6 +1824,766 @@ def test_decimal_array_division_error_handling():
 
 
 @pytest.mark.parametrize(
+    "arg, round_scale, answer",
+    [
+        # Scalar tests
+        pytest.param(
+            pa.scalar(
+                Decimal("12345.1224567"),
+                pa.decimal128(25, 7),
+            ),
+            2,
+            pa.scalar(
+                Decimal("12345.12"),
+                pa.decimal128(26, 2),
+            ),
+            id="scalar-round_down",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("12345.1254567"),
+                pa.decimal128(25, 7),
+            ),
+            2,
+            pa.scalar(
+                Decimal("12345.13"),
+                pa.decimal128(26, 2),
+            ),
+            id="scalar-round_up",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("12345.12545"),
+                pa.decimal128(25, 5),
+            ),
+            5,
+            pa.scalar(
+                Decimal("12345.12545"),
+                pa.decimal128(25, 5),
+            ),
+            id="scalar-same_scale",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("12345.12545"),
+                pa.decimal128(25, 5),
+            ),
+            8,
+            pa.scalar(
+                Decimal("12345.12545"),
+                pa.decimal128(25, 5),
+            ),
+            id="scalar-larger_scale",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("12345.12545"),
+                pa.decimal128(25, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("12345"),
+                pa.decimal128(25, 5),
+            ),
+            id="scalar-scale_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("987654321.123456789"),
+                pa.decimal128(25, 9),
+            ),
+            -1,
+            pa.scalar(
+                Decimal("987654320"),
+                pa.decimal128(25, 0),
+            ),
+            id="scalar-negative_scale-round_down",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("987654321.123456789"),
+                pa.decimal128(25, 9),
+            ),
+            -5,
+            pa.scalar(
+                Decimal("987700000"),
+                pa.decimal128(25, 0),
+            ),
+            id="scalar-negative_scale-round_up",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(25, 5),
+            ),
+            3,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(25, 3),
+            ),
+            id="scalar-zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(25, 5),
+            ),
+            8,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(25, 5),
+            ),
+            id="scalar-zero-larger_scale",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(25, 5),
+            ),
+            -5,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(25, 0),
+            ),
+            id="scalar-zero-negative_scale",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("1"),
+                pa.decimal128(1, 0),
+            ),
+            -5,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(1, 0),
+            ),
+            id="scalar-scale_larger_than_precision-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("9999999999"),
+                pa.decimal128(10, 0),
+            ),
+            -1,
+            pa.scalar(
+                Decimal("10000000000"),
+                pa.decimal128(11, 0),
+            ),
+            id="scalar-negative_round-propagate",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("9999999999.99999"),
+                pa.decimal128(15, 5),
+            ),
+            4,
+            pa.scalar(
+                Decimal("10000000000.0000"),
+                pa.decimal128(16, 4),
+            ),
+            id="scalar-round-propagate",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("0.00999"),
+                pa.decimal128(5, 5),
+            ),
+            4,
+            pa.scalar(
+                Decimal("0.01"),
+                pa.decimal128(6, 4),
+            ),
+            id="scalar-round-propagate-small",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal(
+                    "99999 99999 99999 99999. 99999 99999 99999 999".replace(" ", "")
+                ),
+                pa.decimal128(38, 18),
+            ),
+            17,
+            pa.scalar(
+                Decimal(
+                    "1 00000 00000 00000 00000. 00000 00000 00000 00".replace(" ", "")
+                ),
+                pa.decimal128(38, 17),
+            ),
+            id="scalar-barely_fits",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-12345.1224567"),
+                pa.decimal128(25, 7),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-12345.12"),
+                pa.decimal128(26, 2),
+            ),
+            id="scalar-round_down-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-12345.1254567"),
+                pa.decimal128(25, 7),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-12345.13"),
+                pa.decimal128(26, 2),
+            ),
+            id="scalar-round_up-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-987654321.123456789"),
+                pa.decimal128(25, 9),
+            ),
+            -1,
+            pa.scalar(
+                Decimal("-987654320"),
+                pa.decimal128(25, 0),
+            ),
+            id="scalar-negative_scale-round_down-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-987654321.123456789"),
+                pa.decimal128(25, 9),
+            ),
+            -5,
+            pa.scalar(
+                Decimal("-987700000"),
+                pa.decimal128(25, 0),
+            ),
+            id="scalar-negative_scale-round_up-negative",
+        ),
+        # Array tests
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12345.1225"),
+                    Decimal("12345.1224567"),
+                    Decimal("12345.1225"),
+                    Decimal("12345.1224567"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 7)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("12345.12"),
+                    Decimal("12345.12"),
+                    Decimal("12345.12"),
+                    Decimal("12345.12"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 2)),
+            ),
+            id="array-round_down",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12345.1254"),
+                    None,
+                    Decimal("12345.1264567"),
+                    Decimal("12345.1254"),
+                    None,
+                    Decimal("12345.1264567"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 7)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("12345.13"),
+                    None,
+                    Decimal("12345.13"),
+                    Decimal("12345.13"),
+                    None,
+                    Decimal("12345.13"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 2)),
+            ),
+            id="array-round_up",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12345.12245"),
+                    Decimal("67891.122"),
+                    Decimal("12345.12245"),
+                    Decimal("67891.122"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 5)),
+            ),
+            5,
+            pd.array(
+                [
+                    Decimal("12345.12245"),
+                    Decimal("67891.122"),
+                    Decimal("12345.12245"),
+                    Decimal("67891.122"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 5)),
+            ),
+            id="array-round_same_scale",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12345.12245"),
+                    Decimal("67891.125"),
+                    Decimal("12345.12245"),
+                    Decimal("67891.125"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 5)),
+            ),
+            10,
+            pd.array(
+                [
+                    Decimal("12345.12245"),
+                    Decimal("67891.125"),
+                    Decimal("12345.12245"),
+                    Decimal("67891.125"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 5)),
+            ),
+            id="array-larger_scale",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12345.12245123"),
+                    Decimal("67891.122"),
+                    Decimal("12345.12245123"),
+                    Decimal("67891.122"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 8)),
+            ),
+            0,
+            pd.array(
+                [
+                    Decimal("12345"),
+                    Decimal("67891"),
+                    Decimal("12345"),
+                    Decimal("67891"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-scale_to_zero",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12344.12245123"),
+                    Decimal("987654321.123456789"),
+                    Decimal("12344.12245123"),
+                    Decimal("987654321.123456789"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 9)),
+            ),
+            -1,
+            pd.array(
+                [
+                    Decimal("12340"),
+                    Decimal("987654320"),
+                    Decimal("12340"),
+                    Decimal("987654320"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-negative_scale-round_down",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12346.12245123"),
+                    Decimal("987654329.123456789"),
+                    Decimal("12346.12245123"),
+                    Decimal("987654329.123456789"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 9)),
+            ),
+            -1,
+            pd.array(
+                [
+                    Decimal("12350"),
+                    Decimal("987654330"),
+                    Decimal("12350"),
+                    Decimal("987654330"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-negative_scale-round_up",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 5)),
+            ),
+            3,
+            pd.array(
+                [
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 3)),
+            ),
+            id="array-zero",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 5)),
+            ),
+            -3,
+            pd.array(
+                [
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-zero-negative_scale",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("9999999999"),
+                    Decimal("99999"),
+                    Decimal("99"),
+                    Decimal("9"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 0)),
+            ),
+            -1,
+            pd.array(
+                [
+                    Decimal("10000000000"),
+                    Decimal("100000"),
+                    Decimal("100"),
+                    Decimal("10"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(11, 0)),
+            ),
+            id="array-negative_round-propagate",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("9999999999.99999999"),
+                    Decimal("99999.99999"),
+                    Decimal("9999999999.99999999"),
+                    Decimal("99999.99999"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(20, 8)),
+            ),
+            4,
+            pd.array(
+                [
+                    Decimal("10000000000.0000"),
+                    Decimal("100000.0000"),
+                    Decimal("10000000000.0000"),
+                    Decimal("100000.0000"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 4)),
+            ),
+            id="array-positive_round-propagate",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("0.00999"),
+                    Decimal("0.00999"),
+                    Decimal("0.00999"),
+                    Decimal("0.00999"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 5)),
+            ),
+            4,
+            pd.array(
+                [
+                    Decimal("0.01"),
+                    Decimal("0.01"),
+                    Decimal("0.01"),
+                    Decimal("0.01"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(6, 4)),
+            ),
+            id="array-round-propagate-small",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("-12345.1225"),
+                    Decimal("-12345.1224567"),
+                    Decimal("-12345.1225"),
+                    Decimal("-12345.1224567"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 7)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("-12345.12"),
+                    Decimal("-12345.12"),
+                    Decimal("-12345.12"),
+                    Decimal("-12345.12"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 2)),
+            ),
+            id="array-round_down-negative",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("-12345.1254"),
+                    None,
+                    Decimal("-12345.1264567"),
+                    Decimal("-12345.1254"),
+                    None,
+                    Decimal("-12345.1264567"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 7)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("-12345.13"),
+                    None,
+                    Decimal("-12345.13"),
+                    Decimal("-12345.13"),
+                    None,
+                    Decimal("-12345.13"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 2)),
+            ),
+            id="array-round_up-negative",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("-12344.12245123"),
+                    Decimal("-987654321.123456789"),
+                    Decimal("-12344.12245123"),
+                    Decimal("-987654321.123456789"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 9)),
+            ),
+            -1,
+            pd.array(
+                [
+                    Decimal("-12340"),
+                    Decimal("-987654320"),
+                    Decimal("-12340"),
+                    Decimal("-987654320"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-negative_scale-round_down-negative",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("-12346.12245123"),
+                    Decimal("-987654329.123456789"),
+                    Decimal("-12346.12245123"),
+                    Decimal("-987654329.123456789"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 9)),
+            ),
+            -1,
+            pd.array(
+                [
+                    Decimal("-12350"),
+                    Decimal("-987654330"),
+                    Decimal("-12350"),
+                    Decimal("-987654330"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-negative_scale-round_up-negative",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("-2.5"),
+                    Decimal("-3.5"),
+                    Decimal("2.5"),
+                    Decimal("3.5"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(25, 9)),
+            ),
+            0,
+            pd.array(
+                [
+                    Decimal("-3"),
+                    Decimal("-4"),
+                    Decimal("3"),
+                    Decimal("4"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(26, 0)),
+            ),
+            id="array-mixed_sign",
+        ),
+    ],
+)
+def test_round_decimal(arg, round_scale, answer, memory_leak_check):
+    """
+    Test rounding decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.round_decimal(
+            arr,
+            round_scale,
+        )
+
+    check_func(impl, (arg,), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "arg, round_scale",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    Decimal(
+                        "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                    ),
+                    Decimal(
+                        "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                    ),
+                    Decimal(
+                        "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                    ),
+                    Decimal(
+                        "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                    ),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            -1,
+            id="array-all_overflow",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    None,
+                    Decimal(
+                        "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                    ),
+                    Decimal("12345"),
+                    Decimal("12345"),
+                    Decimal("12345"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            -1,
+            id="array-one_overflow",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    None,
+                    Decimal(
+                        "-99999 99999 99999 99999 99999 99999 99999 999".replace(
+                            " ", ""
+                        )
+                    ),
+                    Decimal("12345"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            -1,
+            id="array-one_overflow-negative",
+        ),
+        # Scalar tests
+        pytest.param(
+            pa.scalar(
+                Decimal(
+                    "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                ),
+                pa.decimal128(38, 0),
+            ),
+            -1,
+            id="scalar-overflow-negative_scale",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal(
+                    "-99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                ),
+                pa.decimal128(38, 0),
+            ),
+            -1,
+            id="scalar-overflow-negative_scale-negative",
+        ),
+    ],
+)
+def test_round_decimal_overflow(arg, round_scale):
+    """
+    Test overflow in rounding decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.round_decimal(
+            arr,
+            round_scale,
+        )
+
+    with pytest.raises(ValueError, match="Number out of representable range"):
+        check_func(impl, (arg,))
+
+
+@pytest.mark.parametrize(
     "arg1, arg2, expected",
     [
         pytest.param(
