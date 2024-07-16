@@ -116,6 +116,14 @@ ll.add_symbol(
     "divide_decimal_arrays",
     decimal_ext.divide_decimal_arrays_py_entry,
 )
+ll.add_symbol(
+    "round_decimal_array",
+    decimal_ext.round_decimal_array_py_entry,
+)
+ll.add_symbol(
+    "round_decimal_scalar",
+    decimal_ext.round_decimal_scalar_py_entry,
+)
 
 
 from bodo.utils.indexing import (
@@ -1807,6 +1815,171 @@ def _divide_decimal_arrays(
         ret_type(
             d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
         ),
+        codegen,
+    )
+
+
+def round_decimal_array(arr, round_scale, output_p, output_s):  # pragma: no cover
+    pass
+
+
+@overload(round_decimal_array, inline="always", prefer_literal=True)
+def overload_round_decimal_array(arr, round_scale, output_p, output_s):
+    """
+    Rounds a decimal array to a given scale.
+    Negative round_scale rounds to the left of the decimal point,
+    truncating -round_scale digits and multiplying by 10^round_scale.
+    If overflow occurs, this raises an exception.
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "round_decimal_array: decimal arr expected"
+    assert isinstance(
+        round_scale, types.Integer
+    ), "round_decimal_array: integer round_scale expected"
+    assert isinstance(
+        output_p, types.Integer
+    ), "round_decimal_array: integer output_p expected"
+
+    assert isinstance(
+        output_s, types.Integer
+    ), "round_decimal_array: integer output_s expected"
+
+    output_p_val = get_overload_const_int(output_p)
+    output_s_val = get_overload_const_int(output_s)
+    output_decimal_arr_type = DecimalArrayType(output_p_val, output_s_val)
+
+    def impl(arr, round_scale, output_p, output_s):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_arr_info, overflow = _round_decimal_array(
+            arr_info, round_scale, output_p, output_s
+        )
+        out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
+        delete_info(out_arr_info)
+        if overflow:
+            raise ValueError("Number out of representable range")
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _round_decimal_array(typingctx, arr_t, round_scale_t, output_p_t, output_s_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        arr, round_scale, output_p, output_s = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="round_decimal_array"
+        )
+        overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        ret = builder.call(
+            fn,
+            [
+                arr,
+                round_scale,
+                output_p,
+                output_s,
+                overflow_pointer,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        overflow = builder.load(overflow_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+
+    ret_type = types.Tuple([array_info_type, types.bool_])
+    return (
+        ret_type(arr_t, round_scale_t, output_p_t, output_s_t),
+        codegen,
+    )
+
+
+def round_decimal_scalar(
+    val, round_scale, input_p, input_s, output_p, output_s
+):  # pragma: no cover
+    pass
+
+
+@overload(round_decimal_scalar, inline="always", prefer_literal=True)
+def overload_round_decimal_scalar(
+    val, round_scale, input_p, input_s, output_p, output_s
+):
+    """
+    Rounds a decimal scalar to a given scale.
+    Negative round_scale rounds to the left of the decimal point,
+    truncating -round_scale digits and multiplying by 10^round_scale.
+    If overflow occurs, this raises an exception.
+    """
+
+    def impl(
+        val, round_scale, input_p, input_s, output_p, output_s
+    ):  # pragma: no cover
+        result, overflow = _round_decimal_scalar(
+            val, round_scale, input_p, input_s, output_p, output_s
+        )
+        if overflow:
+            raise ValueError("Number out of representable range")
+        else:
+            return result
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _round_decimal_scalar(
+    typingctx, val_t, round_scale_t, input_p_t, input_s_t, output_p_t, output_s_t
+):
+    assert isinstance(val_t, Decimal128Type), "_round_decimal_scalar: decimal expected"
+    assert isinstance(
+        round_scale_t, types.Integer
+    ), "_round_decimal_scalar: integer expected"
+    assert is_overload_constant_int(output_p_t)
+    assert is_overload_constant_int(output_s_t)
+    assert is_overload_constant_int(input_p_t)
+    assert is_overload_constant_int(input_s_t)
+
+    def codegen(context, builder, signature, args):
+        val, round_scale, input_p, input_s, output_p, output_s = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="round_decimal_scalar"
+        )
+        overflow_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        ret = builder.call(
+            fn,
+            [val, round_scale, input_p, input_s, overflow_pointer],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        overflow = builder.load(overflow_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, overflow])
+
+    output_precision = get_overload_const_int(output_p_t)
+    output_scale = get_overload_const_int(output_s_t)
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    ret_type = types.Tuple([output_decimal_type, types.bool_])
+    return (
+        ret_type(val_t, round_scale_t, input_p_t, input_s_t, output_p_t, output_s_t),
         codegen,
     )
 

@@ -10,7 +10,12 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import is_overload_none, raise_bodo_error
+from bodo.utils.typing import (
+    get_overload_const_int,
+    is_overload_constant_int,
+    is_overload_none,
+    raise_bodo_error,
+)
 from bodo.utils.utils import is_array_typ
 
 
@@ -341,8 +346,24 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
     else:
 
         def overload_numeric_util(arr0, arr1):
-            verify_int_float_arg(arr0, func_name, "arr0")
-            verify_int_float_arg(arr1, func_name, "arr1")
+            # Only certain functions support decimals, e.g. ROUND
+            if func_name == "ROUND":
+                verify_numeric_arg(arr0, func_name, "arr0")
+                verify_int_arg(arr1, func_name, "arr1")
+            else:
+                verify_int_float_arg(arr0, func_name, "arr0")
+                verify_int_float_arg(arr1, func_name, "arr1")
+
+            # Check upfront if first arg is a decimal, in which case
+            # we redirect to the decimal implementation.
+            if isinstance(arr0, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+                if func_name != "ROUND":
+                    raise_bodo_error(f"Function {func_name} unsupported for decimals")
+
+                def impl(arr0, arr1):  # pragma: no cover
+                    return bodo.libs.bodosql_array_kernels.round_decimal(arr0, arr1)
+
+                return impl
 
             arg_names = [
                 "arr0",
@@ -459,6 +480,80 @@ def round_half_always_up(x, places):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def round_decimal(arr, round_scale):  # pragma: no cover
+    pass
+
+
+@overload(round_decimal, prefer_literal=True)
+def overload_round_decimal(arr, round_scale):
+    if not (
+        is_overload_none(arr)
+        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("round_decimal: arr must be a decimal array or scalar")
+    if not (
+        # We will enforce round_scale to be a compile-time constant integer.
+        is_overload_none(round_scale)
+        or is_overload_constant_int(round_scale)
+    ):  # pragma: no cover
+        raise_bodo_error("round_decimal: round_scale must be an integer literal")
+
+    if is_overload_none(arr):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        input_p, input_s = 38, 0
+    else:
+        input_p, input_s = arr.precision, arr.scale
+
+    if is_overload_none(round_scale):  # pragma: no cover
+        round_scale_val = 0  # Round to 0 decimal places by default
+    else:
+        round_scale_val = get_overload_const_int(round_scale)
+
+    # Calculate output precision and scale from round scale. Refer to
+    # https://docs.snowflake.com/en/sql-reference/functions/round#usage-notes
+    # for more detailed information.
+    if round_scale_val >= input_s:
+        # If the round scale is greater or equal to than the original scale,
+        # the function should have no effect and effectively be a no-op
+        def impl(arr, round_scale):  # pragma: no cover
+            return arr
+
+        return impl
+
+    else:
+        output_s = max(0, round_scale_val)
+        output_p = (input_p + 1) if input_p != 38 else 38  # For overflow
+
+    # Case on whether we are operating on an array or scalar.
+
+    if isinstance(arr, bodo.DecimalArrayType):
+        # Array case
+        def impl(arr, round_scale):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.round_decimal_array(
+                arr, round_scale, output_p, output_s
+            )
+
+        return impl
+    else:
+        # Scalar case
+        # If just operating on scalars, use gen_vectorized.
+
+        out_dtype = bodo.DecimalArrayType(output_p, output_s)
+
+        arg_names = ["arr", "round_scale"]
+        arg_types = [arr, round_scale]
+        propagate_null = [True, True]
+        scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.round_decimal_scalar(arg0, arg1, {input_p}, {input_s}, {output_p}, {output_s})"
+
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
 
 
 @numba.generated_jit(nopython=True)

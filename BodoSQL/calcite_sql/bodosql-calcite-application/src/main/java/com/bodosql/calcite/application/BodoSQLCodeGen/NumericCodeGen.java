@@ -96,6 +96,24 @@ public class NumericCodeGen {
   }
 
   /**
+   * Helper function that handles codegen for the ROUND function. This will coerce the second
+   * argument (round_scale) to an int literal if it is a call to np.int32.
+   *
+   * @param args The input expressions
+   * @return The Expr corresponding to the function call (round)
+   */
+  public static Expr generateRoundCode(List<Expr> args) {
+    assert args.size() == 2;
+    String roundScaleStr = args.get(1).emit();
+    // Convert the second argument to an int literal instead of a call with np.int32
+    if (roundScaleStr.startsWith("np.int")) {
+      Expr constRoundScale = new Expr.Raw(roundScaleStr.split("\\(|\\)")[1]);
+      args.set(1, constRoundScale);
+    }
+    return bodoSQLKernel("round", args, List.of());
+  }
+
+  /**
    * Function that returns the RexVisitorInfo for a LOG Function Call.
    *
    * @param args A list of the exprs for the arguments.
