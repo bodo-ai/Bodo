@@ -2398,8 +2398,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnValues.get(3).add(output.getString("kind"));
           columnValues.get(4).add(output.getString("comment"));
           columnValues.get(5).add(output.getString("cluster_by"));
-          columnValues.get(6).add(output.getInt("rows"));
-          columnValues.get(7).add(output.getInt("bytes"));
+          columnValues.get(6).add(output.getBigDecimal("rows"));
+          columnValues.get(7).add(output.getBigDecimal("bytes"));
           for (int i = 8; i < columnNames.size(); i++) {
             columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
           }
@@ -2504,8 +2504,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnValues.get(3).add(output.getString("kind"));
           columnValues.get(4).add(output.getString("comment"));
           columnValues.get(5).add(output.getString("cluster_by"));
-          columnValues.get(6).add(output.getInt("rows"));
-          columnValues.get(7).add(output.getInt("bytes"));
+          columnValues.get(6).add(output.getBigDecimal("rows"));
+          columnValues.get(7).add(output.getBigDecimal("bytes"));
           for (int i = 8; i < columnNames.size(); i++) {
             columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
           }
