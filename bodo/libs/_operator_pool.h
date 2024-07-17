@@ -193,6 +193,12 @@ class OperatorBufferPool final : public IBufferPool {
     /// @brief The number of bytes currently pinned.
     uint64_t bytes_pinned() const override;
 
+    /// @brief Get the SizeClass and frame index for a given memory allocation,
+    /// if it was allocated by the BufferPool.
+    std::optional<std::tuple<uint64_t, uint64_t>> alloc_loc(
+        uint8_t* ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) const override;
+
     /// @brief The number of bytes currently pinned in the
     /// main mem portion.
     uint64_t main_mem_bytes_pinned() const;
@@ -502,6 +508,10 @@ class OperatorScratchPool final : public IBufferPool {
     int64_t bytes_allocated() const override;
 
     uint64_t bytes_pinned() const override;
+
+    std::optional<std::tuple<uint64_t, uint64_t>> alloc_loc(
+        uint8_t* ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) const override;
 
     int64_t total_bytes_allocated() const override;
 

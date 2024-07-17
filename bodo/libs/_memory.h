@@ -57,6 +57,23 @@ class IBufferPool : public ::arrow::MemoryPool {
     virtual uint64_t bytes_pinned() const = 0;
 
     /**
+     * @brief Get the SizeClass and frame index for a given
+     * memory allocation, if it was allocated by the BufferPool.
+     *
+     * This is essentially a safe wrapper over
+     * BufferPool::get_alloc_details_unsafe
+     *
+     * @param ptr Pointer to allocated buffer
+     * @param size Optional size of allocation if known
+     * @param alignment Optional Alignment of allocation if known
+     * @return SizeClass and frame index if allocated by the buffer pool
+     *   and none otherwise.
+     */
+    virtual std::optional<std::tuple<uint64_t, uint64_t>> alloc_loc(
+        uint8_t* ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) const = 0;
+
+    /**
      * @brief Pin an allocation to memory.
      * This will ensure that the allocation will never be
      * evicted to storage
@@ -699,6 +716,12 @@ class BufferPool final : public IBufferPool {
 
     /// @brief Get peak memory allocation in this memory pool
     int64_t max_memory() const override;
+
+    /// @brief Get the SizeClass and frame index for a given memory allocation,
+    /// if it was allocated by the BufferPool.
+    std::optional<std::tuple<uint64_t, uint64_t>> alloc_loc(
+        uint8_t* ptr, int64_t size = -1,
+        int64_t alignment = arrow::kDefaultBufferAlignment) const override;
 
     /// @brief The name of the backend used by this memory pool.
     /// Always returns 'bodo'.

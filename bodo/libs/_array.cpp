@@ -535,7 +535,7 @@ std::shared_ptr<array_info> string_array_from_pyarrow(PyObject* pyarrow_arr) {
     std::shared_ptr<arrow::LargeStringArray> arrow_str_arr =
         std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
 
-    return arrow_array_to_bodo(arrow_str_arr);
+    return arrow_array_to_bodo(arrow_str_arr, nullptr);
 
 #undef CHECK
 }
@@ -718,7 +718,7 @@ array_info* bodo_array_from_pyarrow_py_entry(PyObject* pyarrow_arr) {
         CHECK(arrow_arr->offset() == 0,
               "only Arrow arrays with zero offset supported");
 
-        return new array_info(*arrow_array_to_bodo(arrow_arr));
+        return new array_info(*arrow_array_to_bodo(arrow_arr, nullptr));
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;

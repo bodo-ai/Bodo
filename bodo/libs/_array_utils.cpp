@@ -694,8 +694,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
             // sizes are not known in advance)
             std::unique_ptr<arrow::ArrayBuilder> builder;
             std::shared_ptr<arrow::Array> in_arrow_array = to_arrow(in_arr);
-            (void)arrow::MakeBuilder(bodo::BufferPool::DefaultPtr(),
-                                     in_arrow_array->type(), &builder);
+            (void)arrow::MakeBuilder(pool, in_arrow_array->type(), &builder);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {
                 int64_t idx = in_arr_idxs[iRow];
                 // append value in position 'row' of input array to builder's
@@ -717,7 +716,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
 
             // Pass input array to reuse its dictionaries since builder
             // doesn't set dictionaries.
-            out_arr = arrow_array_to_bodo(out_arrow_array, -1, in_arr);
+            out_arr = arrow_array_to_bodo(out_arrow_array, pool, -1, in_arr);
             break;
         }
         default:
@@ -758,7 +757,8 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     std::shared_ptr<array_info> const& arr1,
     std::shared_ptr<array_info> const& arr2,
     const std::span<const int64_t> short_write_idxs,
-    const std::span<const int64_t> long_write_idxs) {
+    const std::span<const int64_t> long_write_idxs,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
@@ -985,8 +985,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
         std::shared_ptr<arrow::Array> in_arr_typ = to_arrow(arr1);
-        (void)arrow::MakeBuilder(bodo::BufferPool::DefaultPtr(),
-                                 in_arr_typ->type(), &builder);
+        (void)arrow::MakeBuilder(pool, in_arr_typ->type(), &builder);
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
                 get_iRow(iRow);
@@ -1009,7 +1008,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         // TODO: assert builder is not null (at least one row added)
         (void)builder->Finish(&out_arrow_array);
 
-        out_arr = arrow_array_to_bodo(out_arrow_array);
+        out_arr = arrow_array_to_bodo(out_arrow_array, pool);
     }
     if (arr_type == bodo_array_type::TIMESTAMPTZ) {
         throw std::runtime_error(
