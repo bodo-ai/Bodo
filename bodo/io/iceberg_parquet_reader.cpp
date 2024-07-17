@@ -317,6 +317,39 @@ std::shared_ptr<::arrow::RecordBatch> EvolveRecordBatch(
                                       out_batch_columns);
 }
 
+struct IcebergParquetReaderMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+    using blob_t = MetricBase::BlobValue;
+
+    // Time to get the file list.
+    time_t file_list_time = 0;
+    // Time to get the filesystem.
+    time_t get_filesystem_time = 0;
+    // Time to scan the files and get the schema groups.
+    time_t scan_time = 0;
+    // Time to validate the schema
+    time_t schema_validation_time = 0;
+    // Time to get dataset scanners
+    time_t get_dataset_scanners_time = 0;
+    // Number of row groups to read on this rank.
+    stat_t n_row_groups = 0;
+    // Total bytes to read on this rank.
+    stat_t total_bytes = 0;
+
+    // Time to get the next batches.
+    time_t get_batch_time = 0;
+    // Time to evolve the schema of the record batch.
+    time_t evolve_time = 0;
+    // Time to unify dictionaries full batches.
+    time_t unify_time = 0;
+    // Time to unify and append small batches.
+    time_t unify_append_small_time = 0;
+    // Number of batches read
+    stat_t n_batches = 0;
+    // Number of small batches read.
+    stat_t n_small_batches = 0;
+};
 // -------- IcebergParquetReader --------
 
 class IcebergParquetReader : public ArrowReader {
@@ -415,6 +448,7 @@ class IcebergParquetReader : public ArrowReader {
             this->out_batches = std::make_shared<ChunkedTableBuilder>(
                 empty_table->schema(), this->dict_builders, (size_t)batch_size);
         }
+        this->ReportInitStageMetrics();
     }
 
     // Return and incref the file list.
@@ -426,6 +460,8 @@ class IcebergParquetReader : public ArrowReader {
     int64_t get_snapshot_id() { return this->snapshot_id; }
 
     size_t get_num_pieces() const override { return this->file_paths.size(); }
+
+    IcebergParquetReaderMetrics iceberg_reader_metrics;
 
    protected:
     PyObject* get_dataset() override {
@@ -481,6 +517,35 @@ class IcebergParquetReader : public ArrowReader {
         Py_DECREF(py_snapshot_id);
         // Returns a new reference.
         this->schema_groups_py = PyObject_GetAttrString(ds, "schema_groups");
+        // Copy over metrics
+        PyObject* file_list_time_py =
+            PyObject_GetAttrString(ds, "file_list_time");
+        this->iceberg_reader_metrics.file_list_time =
+            PyLong_AsUnsignedLongLong(file_list_time_py);
+        Py_DECREF(file_list_time_py);
+        PyObject* get_filesystem_time_py =
+            PyObject_GetAttrString(ds, "get_fs_time");
+        this->iceberg_reader_metrics.get_filesystem_time =
+            PyLong_AsUnsignedLongLong(get_filesystem_time_py);
+        Py_DECREF(get_filesystem_time_py);
+        PyObject* scan_time_py = PyObject_GetAttrString(ds, "scan_time");
+        this->iceberg_reader_metrics.scan_time =
+            PyLong_AsUnsignedLongLong(scan_time_py);
+        Py_DECREF(scan_time_py);
+        PyObject* schema_validation_time_py =
+            PyObject_GetAttrString(ds, "schema_validation_time");
+        this->iceberg_reader_metrics.schema_validation_time =
+            PyLong_AsUnsignedLongLong(schema_validation_time_py);
+        Py_DECREF(schema_validation_time_py);
+        PyObject* n_row_groups_py =
+            PyObject_GetAttrString(ds, "num_row_groups");
+        this->iceberg_reader_metrics.n_row_groups =
+            PyLong_AsUnsignedLongLong(n_row_groups_py);
+        Py_DECREF(n_row_groups_py);
+        PyObject* total_bytes_py = PyObject_GetAttrString(ds, "total_bytes");
+        this->iceberg_reader_metrics.total_bytes =
+            PyLong_AsUnsignedLongLong(total_bytes_py);
+        Py_DECREF(total_bytes_py);
 
         return ds;
     }
@@ -544,6 +609,8 @@ class IcebergParquetReader : public ArrowReader {
             while (this->rows_left_to_read > 0 &&
                    this->out_batches->total_remaining <
                        static_cast<size_t>(this->batch_size)) {
+                this->iceberg_reader_metrics.n_batches++;
+                time_pt get_batch_start = start_timer();
                 // Get the next batch.
                 PyObject* batch_py = NULL;
                 do {
@@ -566,11 +633,16 @@ class IcebergParquetReader : public ArrowReader {
                         "null");
                 }
                 Py_DECREF(batch_py);
+                this->iceberg_reader_metrics.get_batch_time +=
+                    end_timer(get_batch_start);
 
                 // Transform the batch to the required target schema.
+                time_pt evolve_start = start_timer();
                 batch =
                     EvolveRecordBatch(std::move(batch), this->curr_read_schema,
                                       this->schema, this->selected_fields);
+                this->iceberg_reader_metrics.evolve_time +=
+                    end_timer(evolve_start);
 
                 int64_t batch_offset =
                     std::min(this->rows_to_skip, batch->num_rows());
@@ -586,9 +658,12 @@ class IcebergParquetReader : public ArrowReader {
                 if (length == this->batch_size) {
                     // We have read a batch of the exact size. Just reuse this
                     // batch for the next read and unify the dictionaries.
+                    time_pt unify_start = start_timer();
                     table_info* out_table =
                         this->unify_table_with_dictionary_builders(
                             std::move(bodo_table));
+                    this->iceberg_reader_metrics.unify_time +=
+                        end_timer(unify_start);
                     this->rows_left_to_emit -= length;
                     bool is_last = (this->rows_left_to_emit <= 0) &&
                                    (this->out_batches->total_remaining <= 0);
@@ -599,8 +674,12 @@ class IcebergParquetReader : public ArrowReader {
                     // then its likely more efficient to read the next full
                     // batch then to output a partial batch that could be
                     // extremely small.
+                    this->iceberg_reader_metrics.n_small_batches++;
+                    time_pt unify_start = start_timer();
                     this->out_batches->UnifyDictionariesAndAppend(
                         bodo_table, dict_builders);
+                    this->iceberg_reader_metrics.unify_append_small_time +=
+                        end_timer(unify_start);
                 }
             }
             // Emit from the chunked table builder.
@@ -718,12 +797,14 @@ class IcebergParquetReader : public ArrowReader {
         // get_dataset_scanners returns a tuple with the a list of PyArrow
         // Scanners, a list of the corresponding read_schemas and the updated
         // offset for the first batch.
+        time_pt start = start_timer();
         PyObject* scanners_updated_offset_tup = PyObject_CallMethod(
             iceberg_mod, "get_dataset_scanners", "OOOOOdiOOlOO", fpaths_py,
             file_nrows_to_read_py, file_schema_group_idxs_py,
             this->schema_groups_py, selected_fields_py, this->avg_num_pieces,
             int(this->parallel), this->filesystem, str_as_dict_cols_py,
             this->start_row_first_piece, this->pyarrow_schema, batch_size_py);
+        iceberg_reader_metrics.get_dataset_scanners_time += end_timer(start);
         if (scanners_updated_offset_tup == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
@@ -774,6 +855,79 @@ class IcebergParquetReader : public ArrowReader {
         Py_XDECREF(this->filesystem);
         Py_XDECREF(this->pyarrow_schema);
         Py_XDECREF(this->schema_groups_py);
+    }
+
+    /**
+     * @brief Report Init Stage metrics if they haven't already been reported.
+     * Note that this will only report the metrics to the QueryProfileCollector
+     * the first time it's called.
+     *
+     */
+    void ReportInitStageMetrics() override {
+        if ((this->op_id == -1) || this->reported_init_stage_metrics) {
+            return;
+        }
+        std::vector<MetricBase> metrics;
+        metrics.reserve(8);
+        metrics.push_back(TimerMetric(
+            "file_list_time", iceberg_reader_metrics.file_list_time, true));
+        metrics.push_back(
+            TimerMetric("get_filesystem_time",
+                        iceberg_reader_metrics.get_filesystem_time, false));
+        metrics.push_back(
+            TimerMetric("scan_time", iceberg_reader_metrics.scan_time, false));
+        metrics.push_back(
+            TimerMetric("schema_validation_time",
+                        iceberg_reader_metrics.schema_validation_time, false));
+        metrics.push_back(StatMetric(
+            "num_row_groups", iceberg_reader_metrics.n_row_groups, false));
+        metrics.push_back(StatMetric(
+            "total_bytes", iceberg_reader_metrics.total_bytes, false));
+        metrics.push_back(TimerMetric(
+            "get_dataset_scanners_time",
+            iceberg_reader_metrics.get_dataset_scanners_time, false));
+
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(
+                this->op_id, QUERY_PROFILE_INIT_STAGE_ID),
+            std::move(metrics));
+
+        // Report the ArrowReader Init Stage metrics.
+        ArrowReader::ReportInitStageMetrics();
+    }
+
+    /**
+     * @brief Report Read Stage metrics if they haven't already been reported.
+     * Note that this will only report the metrics to the QueryProfileCollector
+     * the first time it's called.
+     *
+     */
+    void ReportReadStageMetrics() override {
+        if ((this->op_id == -1) || this->reported_read_stage_metrics) {
+            return;
+        }
+        std::vector<MetricBase> metrics;
+        metrics.reserve(8);
+        metrics.push_back(TimerMetric(
+            "get_batch_time", iceberg_reader_metrics.get_batch_time, false));
+        metrics.push_back(TimerMetric(
+            "evolve_time", iceberg_reader_metrics.evolve_time, false));
+        metrics.push_back(TimerMetric(
+            "unify_time", iceberg_reader_metrics.unify_time, false));
+        metrics.push_back(
+            TimerMetric("unify_append_small_time",
+                        iceberg_reader_metrics.unify_append_small_time, false));
+        metrics.push_back(
+            StatMetric("n_batches", iceberg_reader_metrics.n_batches, false));
+        metrics.push_back(StatMetric(
+            "n_small_batches", iceberg_reader_metrics.n_small_batches, false));
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(
+                this->op_id, QUERY_PROFILE_READ_STAGE_ID),
+            std::move(metrics));
+
+        // Report the ArrowReader Read Stage metrics.
+        ArrowReader::ReportReadStageMetrics();
     }
 
    private:

@@ -1495,3 +1495,86 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     assert "output_peak_nrows" in read_metrics_dict
     assert "dict_builders_unify_cache_id_misses" in read_metrics_dict
     assert "read_batch_total_time" in read_metrics_dict
+
+
+def test_iceberg_metrics_collection(
+    memory_leak_check, tmp_path, iceberg_database, iceberg_table_conn
+):
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    table_name = "SIMPLE_NUMERIC_TABLE"
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    @bodo.jit()
+    def impl(conn):
+        bodo.libs.query_profile_collector.init()
+        reader = pd.read_sql_table(
+            table_name,
+            conn,
+            db_schema,
+            _bodo_chunksize=4000,
+            _bodo_read_as_table=True,
+            _bodo_sql_op_id=0,
+        )
+        is_last_global = False
+        _iter_1 = 0
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not is_last_global:
+            table, is_last = read_arrow_next(reader, True)
+            is_last_global = bodo.libs.distributed_api.dist_reduce(
+                is_last,
+                np.int32(bodo.libs.distributed_api.Reduce_Type.Logical_And.value),
+            )
+            _iter_1 = _iter_1 + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter_1)
+
+        arrow_reader_del(reader)
+        bodo.libs.query_profile_collector.finalize()
+
+    bodo.set_verbose_level(2)
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = impl(conn)
+
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
+    with open(profile_path, "r") as f:
+        profile_json = json.load(f)
+
+    assert "operator_reports" in profile_json
+    assert "0" in profile_json["operator_reports"]
+    operator_report = profile_json["operator_reports"]["0"]
+    assert "stage_0" in operator_report
+    assert "stage_1" in operator_report
+    init_metrics = operator_report["stage_0"]["metrics"]
+    init_metrics_dict = {x["name"]: x["stat"] for x in init_metrics}
+    read_metrics = operator_report["stage_1"]["metrics"]
+    read_metrics_dict = {x["name"]: x["stat"] for x in read_metrics}
+
+    assert "limit_nrows" in init_metrics_dict
+    assert "get_ds_time" in init_metrics_dict and init_metrics_dict["get_ds_time"] > 0
+    assert "global_nrows_to_read" in init_metrics_dict
+    assert "global_n_pieces" in init_metrics_dict
+    assert "create_dict_encoding_from_strings" in init_metrics_dict
+    assert "n_str_as_dict_cols" in init_metrics_dict
+    assert "local_rows_to_read" in init_metrics_dict
+    assert "local_n_pieces_to_read_from" in init_metrics_dict
+    assert "file_list_time" in init_metrics_dict
+    assert "get_filesystem_time" in init_metrics_dict
+    assert "scan_time" in init_metrics_dict
+    assert "schema_validation_time" in init_metrics_dict
+    assert "num_row_groups" in init_metrics_dict
+    assert "total_bytes" in init_metrics_dict
+    assert "get_dataset_scanners_time" in init_metrics_dict
+
+    assert "read_batch_total_time" in read_metrics_dict
+    assert "get_batch_time" in read_metrics_dict
+    assert "evolve_time" in read_metrics_dict
+    assert "unify_time" in read_metrics_dict
+    # There aren't always small batches
+    # assert "unify_append_small_time" in read_metrics
+    assert "n_batches" in read_metrics_dict
+    assert "n_small_batches" in read_metrics_dict
