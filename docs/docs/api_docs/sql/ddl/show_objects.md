@@ -20,8 +20,8 @@ SHOW [ TERSE ] OBJECTS IN [<database_name>.]<schema_name>
 - `KIND`
 - `COMMENT`
 - `CLUSTER_BY`
-- `ROWS` - _type_ `int`
-- `BYTES` - _type_ `int`
+- `ROWS` - _type_ `Decimal(38, 0)`
+- `BYTES` - _type_ `Decimal(38, 0)`
 - `OWNER`
 - `RETENTION_TIME`
 - `OWNER_ROLE_TYPE`
