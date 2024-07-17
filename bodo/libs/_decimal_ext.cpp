@@ -1411,7 +1411,7 @@ array_info* arrow_compute_cmp_py_entry(int32_t op_enum, array_info* arg0,
 
         // convert Arrow output to Bodo array
         std::shared_ptr<array_info> out_arr =
-            arrow_array_to_bodo(out_arrow_arr);
+            arrow_array_to_bodo(out_arrow_arr, nullptr);
         return new array_info(*out_arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

@@ -1777,6 +1777,18 @@ uint64_t BufferPool::GetSmallestSizeClassSize() const {
     return 0;
 }
 
+std::optional<std::tuple<uint64_t, uint64_t>> BufferPool::alloc_loc(
+    uint8_t* ptr, int64_t size, int64_t alignment) const {
+    auto [is_pool_alloc, size_class_idx, frame_idx, _] =
+        get_alloc_details(ptr, size, alignment);
+    if (is_pool_alloc && (this->size_classes_[size_class_idx]->getFrameAddress(
+                              frame_idx) == ptr)) {
+        return std::make_tuple(size_class_idx, frame_idx);
+    } else {
+        return std::nullopt;
+    }
+}
+
 void BufferPool::Cleanup() {
     for (auto& manager : this->storage_managers_) {
         manager->Cleanup();

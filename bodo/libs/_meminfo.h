@@ -65,13 +65,38 @@ inline size_t NRT_MemSys_get_stats_mi_free() {
     return NRT_MemSys::instance()->stats_mi_free;
 }
 
+/**
+ * @brief Stores metadata needed to destroy an allocation. See MemInfo
+ */
+struct DtorInfo {
+    void *other;             // Any additional info needed for destructor
+    bodo::IBufferPool *pool; /* Store a pointer to the to the BufferPool
+                             that was used for allocating the data */
+};
+
+/**
+ * @brief Stores allocation metadata used by the NRT.
+ *
+ * WARNING: DO NOT MODIFY STRUCT DEFINITION
+ *
+ * This is a 1-to-1 recreation of the MemInfo struct in Numba.
+ * We currently don't replace all usages for NRT in Numba, so
+ * it is possible for a Bodo MemInfo to be deallocated in Numba. If you
+ * need to store more data, do so in `dtor_info`.
+ *
+ */
 struct MemInfo {
     int64_t refct;
     NRT_dtor_function dtor;
-    void *dtor_info; /* Used for storing pointer to the BufferPool that was used
-                        for allocating the data */
+    // This is a DtorInfo struct under the hood. We use a void* here
+    // for Numba compatibility
+    void *dtor_info;
     void *data;
-    size_t size; /* only used for memory allocated through the buffer pool */
+    // Numba uses for NRT allocated memory
+    // Bodo only uses for memory allocated through the buffer pool
+    size_t size;
+    // Numba types this as NRT_ExternalAllocator*. We never use so it should be
+    // fine
     void *external_allocator;
 };
 
@@ -90,15 +115,31 @@ inline NRT_MemInfo *NRT_MemInfo_allocate() {
     if (!ptr) {
         throw std::runtime_error("bad mi alloc: possible Out of Memory error");
     }
+
+    // Custom to Bodo: Allocate the DtorInfo struct
+    void *dtor_info_ptr =
+        NRT_MemSys::instance()->mi_allocator.malloc(sizeof(DtorInfo));
+    if (!dtor_info_ptr) {
+        throw std::runtime_error("bad mi alloc: possible Out of Memory error");
+    }
+
+    NRT_MemInfo *mi = (NRT_MemInfo *)ptr;
+    mi->dtor_info = dtor_info_ptr;
+
     /* Update stats */
     NRT_MemSys::instance()->stats_alloc++;
     NRT_MemSys::instance()->stats_mi_alloc++;
-    return (NRT_MemInfo *)ptr;
+    return mi;
 }
 
 /**
  * @brief Destroy a MemInfo struct. This only frees the MemInfo struct, and not
  * the underlying data (since they are allocated separately).
+ *
+ * This is only called from C++ deallocation code. Python allocations go through
+ * Numba's version. Thus, we can't deallocate DtorInfo in this function.
+ * The destructors are responsible for cleaning up the info.
+ *
  *
  * @param mi MemInfo struct to free.
  */
@@ -127,8 +168,9 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
     assert(mi->refct == 0);  // The reference count should be exactly 0
     if (mi->dtor) {
         // If we have a custom destructor (which we always should, and it should
-        // always be nrt_internal_custom_dtor), first call that. This dtor will
-        // free the underlying data.
+        // always be nrt_internal_custom_dtor), first call
+        // that. This dtor will free the underlying data. Should always be
+        // either nrt_internal_custom_dtor or arrow_buffer_dtor.
         mi->dtor(mi->data, mi->size, mi->dtor_info);
     }
     // Clear and release MemInfo struct.
@@ -141,14 +183,18 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
  *
  */
 inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
-                             NRT_dtor_function dtor, void *dtor_info,
-                             void *external_allocator) {
+                             NRT_dtor_function dtor, bodo::IBufferPool *pool,
+                             void *dtor_other) {
     mi->refct = 1; /* starts with 1 refcount */
     mi->dtor = dtor;
-    mi->dtor_info = dtor_info;
+
+    auto dtor_info = static_cast<DtorInfo *>(mi->dtor_info);
+    dtor_info->other = dtor_other;
+    dtor_info->pool = pool;
+
     mi->data = data;
     mi->size = size;
-    mi->external_allocator = external_allocator;
+    mi->external_allocator = nullptr;
 }
 
 /* ----------- Buffer Pool Data Allocation / Deallocation Helpers ----------- */
@@ -202,6 +248,9 @@ inline void buffer_pool_aligned_data_alloc(size_t size, unsigned align,
  */
 inline void buffer_pool_aligned_data_free(void *ptr, size_t size,
                                           bodo::IBufferPool *const pool) {
+    if (pool == nullptr) {
+        return;
+    }
     pool->Free(static_cast<uint8_t *>(ptr), size);
     NRT_MemSys::instance()->stats_free++;
 }
@@ -210,9 +259,15 @@ inline void buffer_pool_aligned_data_free(void *ptr, size_t size,
 
 /// @brief Destructor for Meminfo (and underlying data) allocated
 /// through NRT_MemInfo_alloc_common.
-inline void nrt_internal_custom_dtor(void *ptr, size_t size, void *pool) {
+inline void nrt_internal_custom_dtor(void *ptr, size_t size,
+                                     void *dtor_info_raw) {
+    DtorInfo *dtor_info = (DtorInfo *)dtor_info_raw;
+
     // Free the data buffer
-    buffer_pool_aligned_data_free(ptr, size, (bodo::IBufferPool *)pool);
+    buffer_pool_aligned_data_free(ptr, size, dtor_info->pool);
+
+    // Free the DtorInfo struct
+    NRT_MemSys::instance()->mi_allocator.free(dtor_info_raw);
 }
 
 /**
@@ -232,9 +287,9 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_common(size_t size, unsigned align,
     // Allocate the MemInfo object using standard allocator.
     NRT_MemInfo *mi = NRT_MemInfo_allocate();
 
-    // Allocate the data buffer using the bodo::BufferPool and assign it to
+    // Allocate the data buffer using the bodo::IBufferPool and assign it to
     // mi->data. This will also store a pointer to mi->data in the
-    // bodo::BufferPool for eviction purposes later.
+    // bodo::IBufferPool for eviction purposes later.
     buffer_pool_aligned_data_alloc(size, align, mi, pool);
 
     // Initialize the MemInfo object. We assign our custom
@@ -243,8 +298,8 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_common(size_t size, unsigned align,
     // (e.g. see NRT_MemInfo_call_dtor). We store a pointer to the
     // pool in 'dtor_info', which nrt_internal_custom_dtor will then
     // use during deallocation.
-    NRT_MemInfo_init(mi, mi->data, size, nrt_internal_custom_dtor, (void *)pool,
-                     NULL);
+    NRT_MemInfo_init(mi, mi->data, size, nrt_internal_custom_dtor, pool,
+                     nullptr);
     return mi;
 }
 
@@ -274,13 +329,22 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned_pool(
 /* ---------------------------------------------------------- */
 
 inline void NRT_MemInfo_Pin(NRT_MemInfo *mi) {
-    auto pool = reinterpret_cast<bodo::IBufferPool *>(mi->dtor_info);
-    auto status = pool->Pin(reinterpret_cast<uint8_t **>(&(mi->data)), mi->size,
-                            ALIGNMENT);
+    auto dtor_info = static_cast<DtorInfo *>(mi->dtor_info);
+    if (dtor_info->pool == nullptr) {
+        return;
+    }
+
+    auto status = dtor_info->pool->Pin(
+        reinterpret_cast<uint8_t **>(&(mi->data)), mi->size, ALIGNMENT);
     CHECK_ARROW_MEM(status, "Failed to Pin MemInfo Object");
 }
 
 inline void NRT_MemInfo_Unpin(NRT_MemInfo *mi) {
-    auto pool = reinterpret_cast<bodo::IBufferPool *>(mi->dtor_info);
-    pool->Unpin(reinterpret_cast<uint8_t *>(mi->data), mi->size, ALIGNMENT);
+    auto dtor_info = static_cast<DtorInfo *>(mi->dtor_info);
+    if (dtor_info->pool == nullptr) {
+        return;
+    }
+
+    dtor_info->pool->Unpin(reinterpret_cast<uint8_t *>(mi->data), mi->size,
+                           ALIGNMENT);
 }

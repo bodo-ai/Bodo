@@ -446,11 +446,12 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
                                         : alloc_numpy(0, dtype);
                 return out_array;
             }
+            auto* pool = bodo::BufferPool::DefaultPtr();
             arrow::Result<std::shared_ptr<arrow::Array>> res =
-                arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
+                arrow::Concatenate(arrays, pool);
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
-            out_array = arrow_array_to_bodo(concat_res);
+            out_array = arrow_array_to_bodo(concat_res, pool);
         }
         return out_array;
     }
@@ -515,11 +516,12 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                 out_array = alloc_string_array(dtype, 0, 0);
                 return out_array;
             }
+            auto* pool = bodo::BufferPool::DefaultPtr();
             arrow::Result<std::shared_ptr<arrow::Array>> res =
-                arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr());
+                arrow::Concatenate(arrays, pool);
             std::shared_ptr<arrow::Array> concat_res;
             CHECK_ARROW_AND_ASSIGN(res, "Concatenate", concat_res);
-            out_array = arrow_array_to_bodo(concat_res, array_id);
+            out_array = arrow_array_to_bodo(concat_res, pool, array_id);
         }
         return out_array;
     }
@@ -791,15 +793,15 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
     }
 
     virtual std::shared_ptr<array_info> get_output() {
+        auto* pool = bodo::BufferPool::DefaultPtr();
         if (out_array != nullptr) {
             return out_array;
         }
 
         if (arrays.empty()) {
             auto out_arrow_array =
-                arrow::MakeEmptyArray(dtype, bodo::BufferPool::DefaultPtr())
-                    .ValueOrDie();
-            out_array = arrow_array_to_bodo(out_arrow_array);
+                arrow::MakeEmptyArray(dtype, pool).ValueOrDie();
+            out_array = arrow_array_to_bodo(out_arrow_array, pool);
             return out_array;
         }
 
@@ -808,12 +810,10 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         // This copies to new buffers managed by Arrow, and then we copy
         // again to our own buffers in
         // info_to_array https://bodo.atlassian.net/browse/BE-1426
-        out_arrow_array =
-            arrow::Concatenate(arrays, bodo::BufferPool::DefaultPtr())
-                .ValueOrDie();
+        out_arrow_array = arrow::Concatenate(arrays, pool).ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
 
-        out_array = arrow_array_to_bodo(out_arrow_array);
+        out_array = arrow_array_to_bodo(out_arrow_array, pool);
         return out_array;
     }
 

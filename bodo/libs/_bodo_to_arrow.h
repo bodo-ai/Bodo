@@ -87,6 +87,8 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  * the Snowflake connector and can lead to undefined behavior in other kernels.
  *
  * @param arrow_arr Input Arrow array
+ * @param src_pool Pointer to BufferPool used to allocate `buf` if allocation
+ * came from Bodo or known Arrow source
  * @param array_id Identifier for an array to say two arrays are equivalent.
  * Currently only used for string arrays that function as dictionaries.
  * @param dicts_ref_arr Array with same type as output used for replacing output
@@ -95,8 +97,8 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(
  * @return std::shared_ptr<array_info> Output Bodo array
  */
 std::shared_ptr<array_info> arrow_array_to_bodo(
-    std::shared_ptr<arrow::Array> arrow_arr, int64_t array_id = -1,
-    std::shared_ptr<array_info> dicts_ref_arr = nullptr);
+    std::shared_ptr<arrow::Array> arrow_arr, bodo::IBufferPool *src_pool,
+    int64_t array_id = -1, std::shared_ptr<array_info> dicts_ref_arr = nullptr);
 
 /**
  * @brief Convert Arrow DataType to Bodo DataType, including nested types

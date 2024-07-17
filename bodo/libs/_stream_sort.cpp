@@ -284,24 +284,7 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
       // the arguments.
       builder(n_key_t, vect_ascending, na_position, dead_keys, chunk_size),
       schema(std::move(schema_)),
-      dummy_output_chunk(alloc_table(schema)) {
-    // TODO(aneesh) fix arrow_buffer_to_bodo - currently the pool isn't
-    // stored in the dtor_info, so pinning/unpinning semi-structured
-    // data after calling sort_values_table_local will crash. Remove
-    // this code after fixing that.
-    for (auto& col : schema->column_types) {
-        switch (col->array_type) {
-            case bodo_array_type::STRUCT:
-            case bodo_array_type::MAP:
-            case bodo_array_type::ARRAY_ITEM: {
-                throw std::runtime_error("Not implemented");
-            }
-            default: {
-                // allow all other types
-            }
-        }
-    }
-}
+      dummy_output_chunk(alloc_table(schema)) {}
 
 void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
                                    bool parallel, bool is_last) {

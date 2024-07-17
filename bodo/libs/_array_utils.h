@@ -289,7 +289,10 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     std::shared_ptr<array_info> const& arr1,
     std::shared_ptr<array_info> const& arr2,
     const std::span<const int64_t> short_write_idxs,
-    const std::span<const int64_t> long_write_idxs);
+    const std::span<const int64_t> long_write_idxs,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /** This function returns the column with the rows with the rows given in
  * "ListIdx"
