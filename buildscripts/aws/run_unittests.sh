@@ -15,7 +15,7 @@ wget https://download.oracle.com/otn_software/linux/instantclient/215000/instant
 unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
 export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
 
-ruff check . --show-source --diff
+ruff check . --output-format=full --diff
 
 # if running on one core, collect coverage, otherwise run without
 if [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$NP" = "1" ]; then

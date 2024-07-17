@@ -136,11 +136,6 @@ detail""",
         default=cpu.InlineOptions("never"),
         doc="TODO",
     )
-    # Defines a new target option for tracking the "target backend".
-    # This will be the XYZ in @jit(_target=XYZ).
-    target_backend = Option(
-        type=str, default="cpu", doc="backend"  # if not set, default to CPU
-    )
 
     dbg_extend_lifetimes = Option(
         type=bool,
@@ -241,7 +236,7 @@ if bodo.numba_compat._check_numba_change:
     lines = inspect.getsource(numba.core.compiler.Flags)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "abbea523772f28f6d0b2f2d10bf0d666428fbbb6f06527a08ea252118c2f8bf9"
+        != "c55571413d2aa723a2c5eb18f1dccf3acfd3b900ab25f751302773a8e5bf48d3"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler.Flags has changed")
 

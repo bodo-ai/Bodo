@@ -702,7 +702,7 @@ def make_overload_attribute_template(
     typ,
     attr,
     overload_func,
-    inline,
+    inline="never",
     prefer_literal=False,
     base=_OverloadAttributeTemplate,
     **kwargs,
@@ -739,7 +739,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "f066c38c482d6cf8bf5735a529c3264118ba9b52264b24e58aad12a6b1960f5d"
+        != "78ad426c95e0d9f2181018a3895e65f76917f6e7936dd3f9504a95c92229a6c1"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.templates.make_overload_attribute_template has changed"
@@ -1409,10 +1409,6 @@ def compile(self, sig):
 
     import bodo
 
-    disp = self._get_dispatcher_for_current_target()
-    if disp is not self:
-        return disp.compile(sig)
-
     with ExitStack() as scope:
         cres = None
 
@@ -1488,7 +1484,7 @@ if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "934ec993577ea3b1c7dd2181ac02728abf8559fd42c17062cc821541b092ff8f"
+        != "0ab4aee15e79bb1d17c7d87c3b6e61f3ef1f72e820f46d98315460a9f8e28293"
     ):  # pragma: no cover
         warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 
@@ -3628,11 +3624,6 @@ def _Numpy_Rules_ufunc_handle_inputs(cls, ufunc, args, kws):
     # explicit outputs must be arrays (no explicit scalar return values supported)
     explicit_outputs = args[nin:]
 
-    # all the explicit outputs must match the number max number of dimensions
-    if not all(d == ndims for d in arg_ndims[nin:]):
-        msg = "ufunc '{0}' called with unsuitable explicit output arrays."
-        raise TypingError(msg=msg.format(ufunc.__name__))
-
     # Hack: Bodo change to not match on Bytes
     if not all(
         (
@@ -3684,7 +3675,7 @@ if _check_numba_change:  # pragma: no cover
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "4b97c64ad9c3d50e082538795054f35cf6d2fe962c3ca40e8377a4601b344d5c"
+        != "efba8aec18b474cedb93955eb3c8579df70e5afc0c7a9676c46f5a37f84d3d72"
     ):  # pragma: no cover
         warnings.warn("Numpy_rules_ufunc._handle_inputs has changed")
 

@@ -56,11 +56,11 @@ def drop_sf_table(table_name, sf_conn):
     Returns:
         list: list of results from the drop command
     """
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     engine = create_engine(sf_conn)
     connection = engine.connect()
-    result = connection.execute(f"drop table {table_name}")
+    result = connection.execute(text(f"drop table {table_name}"))
     result = result.fetchall()
     return result
 
