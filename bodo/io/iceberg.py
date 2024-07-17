@@ -872,6 +872,18 @@ class IcebergParquetDataset:
     schema_groups: list[IcebergSchemaGroup]
     # Total number of rows that we will read (globally).
     _bodo_total_rows: int
+    # Time to get the file list in microseconds.
+    file_list_time: int
+    # Time to get the file system in microseconds.
+    get_fs_time: int
+    # Number of row groups to read in the dataset
+    num_row_groups: int
+    # How many bytes will we read
+    total_bytes: int
+    # How long it took to scan the dataset in microseconds
+    scan_time: int
+    # Schema validation time in microseconds
+    schema_validation_time: int
 
 
 def validate_file_schema_field_compatible_with_read_schema_field(
@@ -1840,6 +1852,7 @@ def get_iceberg_pq_dataset(
 
     # Get list of files. This is the list after
     # applying the iceberg_filter (metadata-level).
+    start_time = time.time()
     (
         pq_abs_path_file_list,
         snapshot_id,
@@ -1850,6 +1863,7 @@ def get_iceberg_pq_dataset(
         table_name,
         iceberg_filter,
     )
+    file_list_time_us = (time.time() - start_time) * 1_000_000
 
     # If no files exist/match, return an empty dataset.
     if len(pq_abs_path_file_list) == 0:
@@ -1864,9 +1878,16 @@ def get_iceberg_pq_dataset(
             pieces=[],
             schema_groups=[],
             _bodo_total_rows=0,
+            file_list_time=int(file_list_time_us),
+            get_fs_time=0,
+            num_row_groups=0,
+            total_bytes=0,
+            scan_time=0,
+            schema_validation_time=0,
         )
 
     # Construct a filesystem.
+    start_time = time.time()
     pq_abs_path_file_list, parse_result, protocol = parse_fpath(pq_abs_path_file_list)
     fs: "PyFileSystem" | pa.fs.FileSystem
     if protocol in {"gcs", "gs"}:
@@ -1884,6 +1905,8 @@ def get_iceberg_pq_dataset(
             storage_options=None,
             parallel=True,
         )
+    get_fs_time_us = (time.time() - start_time) * 1_000_000
+
     pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
         pq_abs_path_file_list, protocol, parse_result
     )
@@ -1910,16 +1933,16 @@ def get_iceberg_pq_dataset(
     #           This is also where we will perform schema validation for all the
     #           files, i.e. the schema should be compatible with the read-schema.
     err = None
+    local_pieces: list[tuple[str, int, tuple[tuple[int], tuple[str]]]] = []
+    total_rows: int = 0
+    total_rgs: int = 0
+    total_size_bytes: int = 0
+    total_scan_time: float = 0.0
+    total_file_schema_validation_time: float = 0.0
     try:
         schema_group_identifier_to_fpaths: dict[
             tuple[tuple[int], tuple[str]], list[str]
         ] = group_files_by_schema_group_identifier(pq_files_local_slice, fs)
-        local_pieces: list[tuple[str, int, tuple[tuple[int], tuple[str]]]] = []
-        total_rows: int = 0
-        total_rgs: int = 0
-        total_size_bytes: int = 0
-        total_scan_time: float = 0.0
-        total_file_schema_validation_time: float = 0.0
         for (
             schema_group_identifier,
             fpaths,
@@ -2026,6 +2049,12 @@ def get_iceberg_pq_dataset(
         iceberg_pieces,
         schema_groups,
         _bodo_total_rows=g_total_rows,
+        file_list_time=int(file_list_time_us),
+        get_fs_time=int(get_fs_time_us),
+        num_row_groups=total_rgs,
+        total_bytes=total_size_bytes,
+        scan_time=int(total_scan_time * 1_000_000),
+        schema_validation_time=int(total_file_schema_validation_time * 1_000_000),
     )
 
     if tracing.is_tracing():
