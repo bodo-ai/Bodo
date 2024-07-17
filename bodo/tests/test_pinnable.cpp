@@ -4,6 +4,8 @@
 #include <set>
 #include <sstream>
 
+#include "../libs/_bodo_common.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_memory.h"
 #include "../libs/_pinnable.h"
 #include "./test.hpp"
@@ -312,4 +314,36 @@ static bodo::tests::suite tests([] {
     // construct_and_move_map<bodo::unord_map_container<uint32_t, uint32_t>>(0,
     // 1000000); construct_and_move_map<bodo::unord_map_container<uint32_t,
     // uint32_t>>(0, 10000000);
+
+    bodo::tests::test("test_to_arrow_roundtrip_pinnable", [] {
+        auto do_roundtrip_test = [](std::shared_ptr<array_info> arr) {
+            auto arrow_arr = to_arrow(arr);
+            auto out_arr =
+                arrow_array_to_bodo(arrow_arr, bodo::BufferPool::DefaultPtr());
+            // Check that we don't crash when we attempt to pin/unpin
+            out_arr->unpin();
+            out_arr->pin();
+        };
+
+        const size_t n_elem = 100;
+        std::shared_ptr<array_info> int_arr =
+            alloc_numpy(n_elem, Bodo_CTypes::CTypeEnum::INT32);
+        auto *data = reinterpret_cast<int32_t *>(
+            int_arr->data1<bodo_array_type::NUMPY>());
+        for (size_t i = 0; i < n_elem; i++) {
+            data[i] = i;
+        }
+
+        std::shared_ptr<array_info> array_item_arr =
+            alloc_array_item(10, int_arr);
+        auto *offsets = reinterpret_cast<uint64_t *>(
+            array_item_arr->data1<bodo_array_type::ARRAY_ITEM>());
+        offsets[0] = 0;
+        for (size_t idx = 1; idx <= 10; idx++) {
+            offsets[idx] = 10 * idx;
+        }
+
+        do_roundtrip_test(int_arr);
+        do_roundtrip_test(array_item_arr);
+    });
 });
