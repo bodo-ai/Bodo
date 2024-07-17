@@ -1,4 +1,5 @@
 #include "_stream_sort.h"
+#include <cstdint>
 #include <numeric>
 #include "_array_operations.h"
 #include "_bodo_common.h"
@@ -401,7 +402,7 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds() {
 std::vector<std::vector<std::shared_ptr<table_info>>>
 StreamSortState::PartitionChunksByRank(int n_pes,
                                        std::shared_ptr<table_info> bounds) {
-    assert(n_pes == bounds->nrows() + 1);
+    assert(static_cast<uint64_t>(n_pes) == bounds->nrows() + 1);
 
     std::vector<std::vector<std::shared_ptr<table_info>>> rankToChunks(n_pes);
 
