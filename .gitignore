@@ -63,6 +63,9 @@ bodo/io/arrow_ext.cpp
 bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
 bodo/libs/memory.cpp
+bodo/io/pyarrow_wrappers.cpp
+bodo/io/pyarrow_wrappers.h
+bodo/io/pyarrow_wrappers_api.h
 
 # Iceberg Connector
 iceberg_db
