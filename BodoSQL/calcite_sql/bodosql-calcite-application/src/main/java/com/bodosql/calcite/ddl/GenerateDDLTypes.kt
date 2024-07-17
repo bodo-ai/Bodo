@@ -18,7 +18,7 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
     fun generateType(ddlNode: SqlNode): RelDataType {
         // All DDL types likely use a string type.
         val stringType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true)
-        val intType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.INTEGER), true)
+        val decimalType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.DECIMAL), true)
         val (fieldsNames, columnTypes) =
             when (ddlNode.kind) {
                 // DDL queries that only return a status message
@@ -98,9 +98,9 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                                 stringType,
                                 stringType,
                                 stringType,
-                                // ROWS and BYTES are of type int
-                                intType,
-                                intType,
+                                // ROWS and BYTES are of type decimal(38, 0)
+                                decimalType,
+                                decimalType,
                                 stringType,
                                 stringType,
                                 stringType,
@@ -211,9 +211,9 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                                 stringType,
                                 stringType,
                                 stringType,
-                                // ROWS and BYTES are of type int
-                                intType,
-                                intType,
+                                // ROWS and BYTES are of type decimal(38, 0)
+                                decimalType,
+                                decimalType,
                                 stringType,
                                 stringType,
                                 stringType,
