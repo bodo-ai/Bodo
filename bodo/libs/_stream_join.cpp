@@ -5,6 +5,7 @@
 #include <bitset>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 
 #include <arrow/array.h>
@@ -4442,7 +4443,7 @@ PyObject* get_runtime_join_filter_unique_values_py_entrypt(
         HashJoinState* join_state = (HashJoinState*)join_state_;
         std::unique_ptr<bodo::DataType>& col_type =
             join_state->build_table_schema->column_types[key_idx];
-        assert(key_idx < join_state->n_keys);
+        assert(static_cast<uint64_t>(key_idx) < join_state->n_keys);
         assert(join_state->build_input_finalized);
         assert(join_state->unique_values[key_idx].has_value());
         std::unordered_set<int64_t>& unique_vals_set =
