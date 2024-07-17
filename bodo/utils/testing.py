@@ -89,7 +89,7 @@ def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
     import uuid
 
     from mpi4py import MPI
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     comm = MPI.COMM_WORLD
 
@@ -112,7 +112,7 @@ def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
             try:
                 engine = create_engine(conn)
                 connection = engine.connect()
-                connection.execute(f"drop table if exists {table_name}")
+                connection.execute(text(f"drop table if exists {table_name}"))
             except Exception as e:
                 drop_err = e
         drop_err = comm.bcast(drop_err)
