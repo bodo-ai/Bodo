@@ -1232,6 +1232,10 @@ struct ChunkedTableBuilder {
     // Total append time
     MetricBase::TimerValue append_time = 0;
 
+    /* Memory buffer pool */
+    bodo::IBufferPool* const pool;
+    std::shared_ptr<::arrow::MemoryManager> mm;
+
     // XXX In the future, we could keep track of the
     // allocated memory as well. This might be useful
     // for the build table buffers of inactive partitions
@@ -1248,13 +1252,19 @@ struct ChunkedTableBuilder {
      * we allowed to resize (grow by 2x) buffers for variable size
      * data types like strings. 0 means resizing is not allowed. 2 means
      * that the final size could be 4x of the original.
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
      */
     ChunkedTableBuilder(
         const std::shared_ptr<bodo::Schema>& schema,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
         size_t chunk_size,
         size_t max_resize_count_for_variable_size_dtypes =
-            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     /**
      * @brief Finalize the active chunk and create a new active chunk.

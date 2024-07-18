@@ -1,6 +1,10 @@
 #include "_bodo_common.h"
 #include "_table_builder.h"
 
+#define SORT_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL 1.0
+
+#define SORT_OPERATOR_MAX_CHUNK_NUMBER 100
+
 /**
  * @brief A wrapper around a sorted table_info that stores the min and max rows.
  * It is assumed that range is always pinned, and that table is usually
@@ -24,6 +28,11 @@ struct TableAndRange {
      * Update the offset into the table and adjust the range accordingly
      */
     void UpdateOffset(int64_t n_key_t, int64_t offset);
+
+    /**
+     * @brief For debugging purpose
+     */
+    friend std::ostream& operator<<(std::ostream& os, const TableAndRange& obj);
 };
 
 struct HeapComparator {
@@ -48,7 +57,8 @@ struct SortedChunkedTableBuilder {
     const std::vector<int64_t>& na_position;
     const std::vector<int64_t>& dead_keys;
 
-    const size_t chunk_size;
+    size_t chunk_size;
+    const size_t num_chunks;
 
     HeapComparator comp;
 
@@ -57,17 +67,40 @@ struct SortedChunkedTableBuilder {
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::unique_ptr<ChunkedTableBuilder> sorted_table_builder;
 
-    SortedChunkedTableBuilder(int64_t n_key_t,
-                              const std::vector<int64_t>& vect_ascending,
-                              const std::vector<int64_t>& na_position,
-                              const std::vector<int64_t>& dead_keys,
-                              size_t chunk_size = 4096)
+    bodo::IBufferPool* pool;
+    std::shared_ptr<::arrow::MemoryManager> mm;
+
+    SortedChunkedTableBuilder(
+        int64_t n_key_t, const std::vector<int64_t>& vect_ascending,
+        const std::vector<int64_t>& na_position,
+        const std::vector<int64_t>& dead_keys, size_t num_chunks_,
+        size_t chunk_size = 4096,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager())
         : n_key_t(n_key_t),
           vect_ascending(vect_ascending),
           na_position(na_position),
           dead_keys(dead_keys),
           chunk_size(chunk_size),
-          comp({n_key_t, vect_ascending, na_position, dead_keys}) {}
+          num_chunks(num_chunks_),
+          comp({n_key_t, vect_ascending, na_position, dead_keys}),
+          pool(pool),
+          mm(mm) {}
+
+    /**
+     * @brief Update chunk_size with ChunkSize
+     *
+     * @param ChunkSize New chunk size
+     */
+    void UpdateChunkSize(size_t ChunkSize) { chunk_size = ChunkSize; }
+
+    /**
+     * @brief Initialize sorted_table_builder
+     *
+     * @param schema Table schema
+     */
+    void InitCTB(std::shared_ptr<bodo::Schema> schema);
 
     /**
      * Append an table to the builder, sorting it if required.
@@ -138,6 +171,13 @@ struct StreamSortState {
     std::vector<int64_t> dead_keys;
     bool parallel = true;
 
+    uint64_t mem_budget_bytes;
+    size_t num_chunks;
+    std::pair<int64_t, int64_t> row_info;
+    bodo::IBufferPool* op_pool;
+    // Memory manager instance for op_pool.
+    const std::shared_ptr<::arrow::MemoryManager> op_mm;
+
     // builder will create a sorted list from the chunks passed to consume batch
     SortedChunkedTableBuilder builder;
     // output from the sorted builder
@@ -156,6 +196,15 @@ struct StreamSortState {
     std::shared_ptr<bodo::Schema> schema;
     // Empty table created with the same schema as the input
     std::shared_ptr<table_info> dummy_output_chunk;
+
+    /**
+     * @brief Helper function to get operator budget from op_id
+     *
+     * @param op_id operator ID
+     * @return Operator budget. If unset (value of -1) will get all available
+     * budgets
+     */
+    uint64_t GetBudget(int64_t op_id) const;
 
     // Metrics for sorting
     StreamSortMetrics metrics;
