@@ -7,6 +7,7 @@ import traceback
 import numpy as np
 import pandas as pd
 import pytest
+import sqlalchemy as sa
 from mpi4py import MPI
 
 import bodo
@@ -385,7 +386,9 @@ def test_oracle_read_sql_count(memory_leak_check):
     conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
 
     def write_sql(df, table_name, conn):
-        df.to_sql(table_name, conn, if_exists="replace")
+        # Explicitly set column datatype to be Float
+        # See https://github.com/pandas-dev/pandas/issues/52715
+        df.to_sql(table_name, conn, if_exists="replace", dtype={"A": sa.FLOAT})
 
     table_name = "test_small_table"
 
