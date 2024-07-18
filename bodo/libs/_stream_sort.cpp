@@ -1,11 +1,50 @@
 #include "_stream_sort.h"
 #include <cstdint>
+#include <iostream>
 #include <numeric>
 #include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_chunked_table_builder.h"
 #include "_dict_builder.h"
+#include "_memory_budget.h"
 #include "_shuffle.h"
+
+/**
+ * @brief Helper function to get num_chunks for simpler initialization.
+ * It is the maximum number of chunks we will pin simultaneously during sort.
+ * TODO : revisit after async is done as then in AppendChunk not every rank will
+ * send a chunk.
+ *
+ * @return Chunk number = min(# ranks, 100)
+ */
+size_t GetOptimalChunkNumber() {
+    int npes{0};
+    MPI_Comm_size(MPI_COMM_WORLD, &npes);
+    return static_cast<size_t>(
+        std::max(2, std::min(SORT_OPERATOR_MAX_CHUNK_NUMBER, npes)));
+}
+
+/**
+ * @brief Helper function to get chunk_size.
+ * Chunk size is number of rows per chunk stored in our state
+ *
+ * @param bytes_per_row Number of bytes required for each row
+ * @param mem_budget_bytes Budget from operator comptroller
+ * @param num_chunks Upper bound of number of chunks pinned simultaneously
+ * @param default_chunk_size If bytes_per_row is not set (value
+ * of -1) we use default chunk size of 4096. Otherwise we set it with
+ * min of 4096 and max chunk size we can afford under Operator budget
+ * (Operator budget >= chunk_size (# rows) * number_chunks * bytes_per_row)
+ * @return new chunk size
+ */
+size_t GetChunkSize(int64_t bytes_per_row, uint64_t mem_budget_bytes,
+                    size_t num_chunks, size_t default_chunk_size) {
+    if (bytes_per_row >= 0)
+        return std::min(static_cast<size_t>(mem_budget_bytes) /
+                            (num_chunks * static_cast<size_t>(bytes_per_row)),
+                        static_cast<size_t>(4096));
+    return default_chunk_size;
+}
 
 TableAndRange::TableAndRange(std::shared_ptr<table_info> table, int64_t n_key_t,
                              int64_t offset)
@@ -24,21 +63,32 @@ void TableAndRange::UpdateOffset(int64_t n_key_t, int64_t offset) {
     range = RetrieveTable(table, row_indices, n_key_t);
 }
 
-void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk,
-                                            bool sorted) {
-    if (chunk->nrows() == 0) {
-        return;
-    }
+std::ostream& operator<<(std::ostream& os, const TableAndRange& obj) {
+    obj.table->pin();
+    os << "# row: " << obj.table->columns[0]->length << std::endl;
+    return os;
+}
 
+void SortedChunkedTableBuilder::InitCTB(std::shared_ptr<bodo::Schema> schema) {
+    if (table_heap.empty())
+        return;
     if (sorted_table_builder == nullptr) {
-        for (auto& col : chunk->columns) {
+        for (auto& col : table_heap[0].table->columns) {
             // we're passing is_key as false here even for key columns because
             // we don't need the hashes.
             dict_builders.push_back(create_dict_builder_for_array(col, false));
         }
 
         sorted_table_builder = std::make_unique<ChunkedTableBuilder>(
-            chunk->schema(), dict_builders, chunk_size);
+            schema, dict_builders, chunk_size,
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, pool, mm);
+    }
+}
+
+void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk,
+                                            bool sorted) {
+    if (chunk->nrows() == 0) {
+        return;
     }
 
     auto sorted_chunk =
@@ -229,14 +279,15 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
 
     std::vector<std::vector<TableAndRange>> sorted_chunks;
 
-    constexpr size_t NUM_CHUNKS = 5;
+    // TODO Currently num_chunks is set to min(rank, 100) during initialization.
+    // Should revisit this after benchmark tests
     while (!table_heap.empty()) {
         std::vector<std::vector<TableAndRange>> chunks;
-        // Take NUM_CHUNKS chunks at a time and put them each into a vector so
+        // Take num_chunks chunks at a time and put them each into a vector so
         // that we can call MergeChunks, which expects a vector of vector of
         // chunks. Each inner vector of chunks is expected to be sorted - a
         // vector of a single sorted chunk is by definition, sorted.
-        for (size_t i = 0; i < NUM_CHUNKS && !table_heap.empty(); i++) {
+        for (size_t i = 0; i < num_chunks && !table_heap.empty(); i++) {
             // Get the element off the top of the heap and shrink the heap
             std::pop_heap(table_heap.begin(), table_heap.end(), comp);
             chunks.push_back({table_heap.back()});
@@ -248,13 +299,13 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
 
     while (sorted_chunks.size() > 1) {
         std::vector<std::vector<TableAndRange>> next_sorted_chunks;
-        // This loop takes NUM_CHUNKS vectors and merges them into 1 on every
+        // This loop takes num_chunks vectors and merges them into 1 on every
         // iteration.
-        for (size_t i = 0; i < sorted_chunks.size(); i += NUM_CHUNKS) {
+        for (size_t i = 0; i < sorted_chunks.size(); i += num_chunks) {
             std::vector<std::vector<TableAndRange>> merge_input;
-            // Collect the next NUM_CHUNKS vectors
+            // Collect the next num_chunks vectors
             size_t start = i;
-            size_t end = std::min(i + NUM_CHUNKS, sorted_chunks.size());
+            size_t end = std::min(i + num_chunks, sorted_chunks.size());
             for (size_t j = start; j < end; j++) {
                 merge_input.emplace_back(std::move(sorted_chunks[j]));
             }
@@ -269,22 +320,60 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
     return sorted_chunks[0];
 }
 
+uint64_t StreamSortState::GetBudget(int64_t op_id) const {
+    int64_t budget = OperatorComptroller::Default()->GetOperatorBudget(op_id);
+    if (budget == -1)
+        return static_cast<uint64_t>(
+            bodo::BufferPool::Default()->get_memory_size_bytes() *
+            SORT_OPERATOR_DEFAULT_MEMORY_FRACTION_OP_POOL);
+    return static_cast<uint64_t>(budget);
+}
+
 StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
                                  std::vector<int64_t>&& vect_ascending_,
                                  std::vector<int64_t>&& na_position_,
                                  std::shared_ptr<bodo::Schema> schema_,
-                                 bool parallel, size_t chunk_size)
+                                 bool parallel, size_t default_chunk_size)
     : op_id(op_id),
       n_key_t(n_key_t),
       vect_ascending(vect_ascending_),
       na_position(na_position_),
       parallel(parallel),
+      mem_budget_bytes(StreamSortState::GetBudget(op_id)),
+      num_chunks(GetOptimalChunkNumber()),
+      // Currently Operator pool and Memory manager are set to default because
+      // not fully implemented. Can turn on during testing for checking memory
+      // usage adding:
+      // op_pool(std::make_shared<bodo::OperatorBufferPool>(op_id,
+      // mem_budget_bytes, bodo::BufferPool::Default()))
+      // op_mm(bodo::buffer_memory_manager(op_pool.get()))
+      // op_pool->DisableThresholdEnforcement();
+      op_pool(bodo::BufferPool::DefaultPtr()),
+      op_mm(bodo::default_buffer_memory_manager()),
       // Note that builder only stores references to the vectors owned by
       // this object, so we must refer to the instances on this class, not
       // the arguments.
-      builder(n_key_t, vect_ascending, na_position, dead_keys, chunk_size),
+      builder(n_key_t, vect_ascending, na_position, dead_keys, num_chunks,
+              default_chunk_size, op_pool, op_mm),
       schema(std::move(schema_)),
-      dummy_output_chunk(alloc_table(schema)) {}
+      dummy_output_chunk(alloc_table(schema, op_pool, op_mm)) {
+    // TODO(aneesh) fix arrow_buffer_to_bodo - currently the pool isn't
+    // stored in the dtor_info, so pinning/unpinning semi-structured
+    // data after calling sort_values_table_local will crash. Remove
+    // this code after fixing that.
+    for (auto& col : schema->column_types) {
+        switch (col->array_type) {
+            case bodo_array_type::STRUCT:
+            case bodo_array_type::MAP:
+            case bodo_array_type::ARRAY_ITEM: {
+                throw std::runtime_error("Not implemented");
+            }
+            default: {
+                // allow all other types
+            }
+        }
+    }
+}
 
 void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
                                    bool parallel, bool is_last) {
@@ -292,12 +381,24 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
         throw std::runtime_error(
             "Cannot call ConsumeBatch after is_last is set to true");
     }
+    row_info.first += table_local_memory_size(table, false);
+    row_info.second += table->nrows();
+
     // TODO(aneesh) unify dictionaries?
     time_pt start_append = start_timer();
     builder.AppendChunk(table);
     metrics.local_sort_chunk_time += end_timer(start_append);
 
     if (is_last) {
+        std::pair<int64_t, int64_t> sum_row_info{};
+        MPI_Allreduce(&row_info, &sum_row_info, 2, MPI_LONG_LONG_INT, MPI_SUM,
+                      MPI_COMM_WORLD);
+        int64_t bytes_per_row =
+            (row_info.first + row_info.second - 1) / row_info.second;
+        builder.UpdateChunkSize(GetChunkSize(bytes_per_row, mem_budget_bytes,
+                                             num_chunks, builder.chunk_size));
+        builder.InitCTB(schema);
+
         time_pt start_finalize = start_timer();
         // Instead of finalizing here we could finalize after we determine the
         // bounds and then instead of building a completely sorted list locally,
@@ -401,8 +502,10 @@ StreamSortState::PartitionChunksByRank(int n_pes,
             create_dict_builder_for_array(col->copy(), false));
     }
     for (int i = 0; i < n_pes; i++) {
-        smallestPartialChunks.emplace_back(schema, dict_builders);
-        largestPartialChunks.emplace_back(schema, dict_builders);
+        smallestPartialChunks.emplace_back(schema, dict_builders, op_pool,
+                                           op_mm);
+        largestPartialChunks.emplace_back(schema, dict_builders, op_pool,
+                                          op_mm);
     }
 
     uint32_t rank_id = 0;
@@ -593,7 +696,8 @@ void StreamSortState::GlobalSort() {
         get_required_num_rounds_for_sort(n_pes, myrank, rankToChunks);
 
     SortedChunkedTableBuilder global_builder(
-        n_key_t, vect_ascending, na_position, dead_keys, builder.chunk_size);
+        n_key_t, vect_ascending, na_position, dead_keys, num_chunks,
+        builder.chunk_size, op_pool, op_mm);
 
     for (auto& chunk : rankToChunks[myrank]) {
         global_builder.AppendChunk(std::move(chunk), true);
@@ -614,8 +718,10 @@ void StreamSortState::GlobalSort() {
 
         time_pt start_append = start_timer();
         global_builder.AppendChunk(std::move(collected_table));
+
         metrics.global_append_chunk_time += end_timer(start_append);
     }
+    global_builder.InitCTB(schema);
     metrics.communication_phase += end_timer(start_communication);
 
     time_pt start_finalize = start_timer();

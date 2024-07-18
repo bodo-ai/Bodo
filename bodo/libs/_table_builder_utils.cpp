@@ -51,11 +51,12 @@ std::shared_ptr<table_info> alloc_table(
 }
 
 std::shared_ptr<table_info> alloc_table_like(
-    const std::shared_ptr<table_info>& table, const bool reuse_dictionaries) {
+    const std::shared_ptr<table_info>& table, const bool reuse_dictionaries,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> arrays;
     arrays.reserve(table->ncols());
     for (auto& in_arr : table->columns) {
-        arrays.push_back(alloc_array_like(in_arr));
+        arrays.push_back(alloc_array_like(in_arr, true, pool, mm));
     }
     return std::make_shared<table_info>(arrays);
 }

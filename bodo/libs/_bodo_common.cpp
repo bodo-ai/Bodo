@@ -979,32 +979,37 @@ void decref_numpy_payload(numpy_arr_payload arr) {
     }
 }
 
-std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
-                                             bool reuse_dictionaries) {
+std::unique_ptr<array_info> alloc_array_like(
+    std::shared_ptr<array_info> in_arr, bool reuse_dictionaries,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     if (arr_type == bodo_array_type::ARRAY_ITEM) {
-        return alloc_array_item(0,
-                                alloc_array_like(in_arr->child_arrays.front()));
+        return alloc_array_item(
+            0, alloc_array_like(in_arr->child_arrays.front(), true, pool, mm),
+            0, pool, mm);
     } else if (arr_type == bodo_array_type::STRUCT) {
         std::vector<std::shared_ptr<array_info>> child_arrays;
         child_arrays.reserve(in_arr->child_arrays.size());
         for (std::shared_ptr<array_info> child_array : in_arr->child_arrays) {
-            child_arrays.push_back(alloc_array_like(child_array));
+            child_arrays.push_back(
+                alloc_array_like(child_array, true, pool, mm));
         }
         return alloc_struct(0, std::move(child_arrays));
     } else if (arr_type == bodo_array_type::MAP) {
         std::unique_ptr<array_info> array_item_arr = alloc_array_item(
-            0, alloc_array_like(
-                   in_arr->child_arrays.front()->child_arrays.front()));
+            0,
+            alloc_array_like(in_arr->child_arrays.front()->child_arrays.front(),
+                             true, pool, mm),
+            0, pool, mm);
         return std::make_unique<array_info>(
             bodo_array_type::MAP, Bodo_CTypes::MAP, 0,
             std::vector<std::shared_ptr<BodoBuffer>>({}),
             std::vector<std::shared_ptr<array_info>>(
                 {std::move(array_item_arr)}));
     } else {
-        std::unique_ptr<array_info> out_arr =
-            alloc_array_top_level(0, 0, 0, arr_type, dtype);
+        std::unique_ptr<array_info> out_arr = alloc_array_top_level(
+            0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
         // For dict encoded columns, re-use the same dictionary if
         // reuse_dictionaries = true
         if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {

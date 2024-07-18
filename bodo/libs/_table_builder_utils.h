@@ -30,4 +30,7 @@ std::shared_ptr<table_info> alloc_table(
  */
 std::shared_ptr<table_info> alloc_table_like(
     const std::shared_ptr<table_info>& table,
-    const bool reuse_dictionaries = true);
+    const bool reuse_dictionaries = true,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());

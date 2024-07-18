@@ -1446,8 +1446,11 @@ std::unique_ptr<array_info> alloc_array_top_level(
  * @param in_arr Reference array
  * @return std::unique_ptr<array_info> Pointer to the allocated array
  */
-std::unique_ptr<array_info> alloc_array_like(std::shared_ptr<array_info> in_arr,
-                                             bool reuse_dictionaries = true);
+std::unique_ptr<array_info> alloc_array_like(
+    std::shared_ptr<array_info> in_arr, bool reuse_dictionaries = true,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
