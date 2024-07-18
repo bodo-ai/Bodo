@@ -1,3 +1,4 @@
+#include <iostream>
 #include <random>
 #include "../libs/_distributed.h"
 #include "../libs/_stream_sort.h"
@@ -22,8 +23,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
+        // uint64_t pool_size = 0;
         SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                          dead_keys, 1);
+                                          dead_keys, 2, 1);
 
         auto res = builder.Finalize();
         bodo::tests::check(res.size() == 0);
@@ -36,9 +38,10 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
         SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                          dead_keys, 3);
-
+                                          dead_keys, 2, 3);
+        builder.UpdateChunkSize(3);
         builder.AppendChunk(table);
+        builder.InitCTB(table->schema());
         auto res = builder.Finalize();
         bodo::tests::check(res.size() == 2);
 
@@ -67,10 +70,12 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
         SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                          dead_keys, 5);
+                                          dead_keys, 2, 5);
 
         builder.AppendChunk(table_0);
+        builder.UpdateChunkSize(5);
         builder.AppendChunk(table_1);
+        builder.InitCTB(table_1->schema());
         auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 2);
 
@@ -116,11 +121,13 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
         SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                          dead_keys, 3);
+                                          dead_keys, 2, 3);
 
         builder.AppendChunk(table_2);
         builder.AppendChunk(table_1);
+        builder.UpdateChunkSize(3);
         builder.AppendChunk(table_0);
+        builder.InitCTB(table_0->schema());
 
         auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 4);
@@ -138,7 +145,6 @@ bodo::tests::suite external_sort_tests([] {
         auto* b_arr = static_cast<arrow::Int64Array*>(b_arrow_arr.get());
         auto c_arrow_arr = to_arrow(bodo_table->columns[2]);
         auto* c_arr = static_cast<arrow::LargeStringArray*>(c_arrow_arr.get());
-
         bodo::tests::check(a_arr->length() == 11);
         bodo::tests::check(b_arr->length() == 11);
         bodo::tests::check(c_arr->length() == 11);
@@ -189,11 +195,13 @@ bodo::tests::suite external_sort_tests([] {
         {
             std::vector<int64_t> na_position{0};
             SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                              dead_keys, 3);
+                                              dead_keys, 2, 3);
 
             builder.AppendChunk(table_2);
             builder.AppendChunk(table_1);
+            builder.UpdateChunkSize(3);
             builder.AppendChunk(table_0);
+            builder.InitCTB(table_0->schema());
 
             auto res = builder.Finalize();
             bodo::tests::check(res.size() >= 4);
@@ -224,11 +232,13 @@ bodo::tests::suite external_sort_tests([] {
         {
             std::vector<int64_t> na_position{1};
             SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                              dead_keys, 3);
+                                              dead_keys, 2, 3);
 
             builder.AppendChunk(table_2);
             builder.AppendChunk(table_1);
+            builder.UpdateChunkSize(3);
             builder.AppendChunk(table_0);
+            builder.InitCTB(table_0->schema());
 
             auto res = builder.Finalize();
             bodo::tests::check(res.size() >= 4);
@@ -388,6 +398,8 @@ bodo::tests::suite external_sort_tests([] {
                               chunk_size);
         state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
+        state.builder.chunk_size = chunk_size;
+
         state.GlobalSort();
         state.phase = StreamSortPhase::PRODUCE_OUTPUT;
 

@@ -598,11 +598,14 @@ void ChunkedTableArrayBuilder::Reset() {
 ChunkedTableBuilder::ChunkedTableBuilder(
     const std::shared_ptr<bodo::Schema>& schema,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_)
-    : active_chunk(alloc_table(schema)),
+    size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
+    : active_chunk(alloc_table(schema, pool, mm)),
       active_chunk_capacity(chunk_size),
       max_resize_count_for_variable_size_dtypes(
-          max_resize_count_for_variable_size_dtypes_) {
+          max_resize_count_for_variable_size_dtypes_),
+      pool(pool),
+      mm(mm) {
     this->active_chunk_array_builders.reserve(active_chunk->ncols());
     for (size_t i = 0; i < active_chunk->ncols(); i++) {
         // Set the dictionary to the one from the dict builder
@@ -612,8 +615,8 @@ ChunkedTableBuilder::ChunkedTableBuilder(
             this->active_chunk_capacity,
             max_resize_count_for_variable_size_dtypes);
     }
-    this->dummy_output_chunk =
-        alloc_table_like(this->active_chunk, /*reuse_dictionaries*/ true);
+    this->dummy_output_chunk = alloc_table_like(
+        this->active_chunk, /*reuse_dictionaries*/ true, pool, mm);
 }
 
 /**
@@ -647,8 +650,8 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     }
 
     // New active chunk
-    std::shared_ptr<table_info> new_active_chunk =
-        alloc_table_like(this->active_chunk, /*reuse_dictionaries*/ true);
+    std::shared_ptr<table_info> new_active_chunk = alloc_table_like(
+        this->active_chunk, /*reuse_dictionaries*/ true, pool, mm);
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders =
         get_dict_builders_from_chunked_table_array_builders(
             this->active_chunk_array_builders);
