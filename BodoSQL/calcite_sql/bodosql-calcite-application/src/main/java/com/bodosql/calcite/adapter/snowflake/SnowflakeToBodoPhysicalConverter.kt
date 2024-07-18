@@ -153,7 +153,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor.build { ctx -> generateNonStreamingTable(ctx) }
+            (implementor::build)(listOf()) { ctx, _ -> generateNonStreamingTable(ctx) }
         }
 
     /**

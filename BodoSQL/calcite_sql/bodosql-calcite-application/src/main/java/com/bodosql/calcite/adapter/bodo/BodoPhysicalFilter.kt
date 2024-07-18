@@ -72,9 +72,9 @@ class BodoPhysicalFilter(
     }
 
     private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return implementor::build {
-                ctx ->
-            val inputVar = ctx.visitChild(input, 0)
+        return (implementor::build)(listOf(this.input)) {
+                ctx, inputs ->
+            val inputVar = inputs[0]
             // Extract window aggregates and update the nodes.
             val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
             val translator = ctx.rexTranslator(inputVar, inputRefs)

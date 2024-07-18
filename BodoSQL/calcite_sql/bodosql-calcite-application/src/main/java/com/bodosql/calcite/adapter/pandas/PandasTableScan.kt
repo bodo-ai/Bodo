@@ -57,7 +57,7 @@ class PandasTableScan(
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor.build { ctx -> ctx.returns(generateNonStreamingTable(ctx)) }
+            (implementor::build)(listOf()) { ctx, _ -> ctx.returns(generateNonStreamingTable(ctx)) }
         }
 
     fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {

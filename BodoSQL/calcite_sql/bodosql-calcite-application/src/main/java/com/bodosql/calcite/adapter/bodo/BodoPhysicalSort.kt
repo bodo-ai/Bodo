@@ -161,8 +161,8 @@ class BodoPhysicalSort(
 
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor.build { ctx ->
-                val inTable = ctx.visitChild(input, 0)
+            (implementor::build)(listOf(this.input)) { ctx, inputs ->
+                val inTable = inputs[0]
                 val colNames = input.rowType.fieldNames
 
                 // handle case for queries with "ORDER BY" clause

@@ -133,10 +133,10 @@ class BodoPhysicalUnion(
 
     private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         val columnNames = getRowType().fieldNames
-        return implementor.build {
-                ctx ->
+        return (implementor::build)(inputs) {
+                ctx, inputs ->
             val builder = ctx.builder()
-            val dfs = inputs.withIndex().map { inputInfo -> ctx.convertTableToDf(ctx.visitChild(inputInfo.value, inputInfo.index)) }
+            val dfs = inputs.map { input -> ctx.convertTableToDf(input) }
             val outVar = builder.symbolTable.genDfVar()
             val unionExpr = SetOpCodeGen.generateUnionCode(columnNames, dfs, all, ctx)
             builder.add(Assign(outVar, unionExpr))

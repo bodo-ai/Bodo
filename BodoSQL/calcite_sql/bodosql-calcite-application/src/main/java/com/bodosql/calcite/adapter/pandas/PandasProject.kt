@@ -76,8 +76,8 @@ class PandasProject(
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor.build { ctx ->
-                val inputVar = ctx.visitChild(input, 0)
+            (implementor::build)(listOf(this.input)) { ctx, inputs ->
+                val inputVar = inputs[0]
                 val localRefs = mutableListOf<Variable>()
                 val translator = ctx.rexTranslator(inputVar, localRefs)
                 generateDataFrame(ctx, inputVar, translator, projects, localRefs, projects, input)

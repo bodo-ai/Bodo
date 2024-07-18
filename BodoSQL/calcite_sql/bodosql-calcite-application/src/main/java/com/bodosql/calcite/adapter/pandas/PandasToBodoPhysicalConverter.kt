@@ -65,7 +65,7 @@ class PandasToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet,
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor.build { ctx -> ctx.visitChild(input, 0) }
+            (implementor::build)(listOf()) { ctx, _ -> ctx.visitChild(input, 0) }
         }
     }
 
