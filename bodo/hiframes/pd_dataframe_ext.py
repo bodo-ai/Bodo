@@ -4249,6 +4249,11 @@ def to_sql_exception_guard(
                         bodo.dict_str_arr_type,
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
+                # workaround to avoid issue with Oracle and Float values
+                # See discussion https://github.com/sqlalchemy/sqlalchemy/discussions/9667
+                # Ticket in Pandas https://github.com/pandas-dev/pandas/issues/52715
+                elif df[c].dtype in ["float", "float64"]:
+                    dtyp[c] = sa.FLOAT
             dtype = dtyp
 
         try:

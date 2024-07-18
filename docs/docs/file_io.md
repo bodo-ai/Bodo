@@ -1267,7 +1267,7 @@ pip install cx-Oracle
 ```
 
 - Then, Download "Basic" or "Basic light" package matching your operating system from [here](https://www.oracle.com/database/technologies/instant-client/downloads.html){target=blank}.
-- Unzip package and add it to ``LD_LIBRARY_PATH`` environment variable.
+- Unzip package and add it to ``LD_LIBRARY_PATH`` environment variable on Linux. For MacOS, use `init_oracle_client()` in your application to pass the Oracle Client directory name. See [Using cx_Oracle.init_oracle_client()](https://cx-oracle.readthedocs.io/en/latest/user_guide/initialization.html#usinginitoracleclient) to set the Oracle Client directory.
 
 !!! note
     For linux ``libaio`` package is required as well.
