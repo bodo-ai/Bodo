@@ -36,7 +36,7 @@ requirements:
     - cython <3.0                           # [build_platform != target_platform]
     - cmake                                 # [build_platform != target_platform]
     - ninja                                 # [build_platform != target_platform]
-    - numpy >=1.24                          # [build_platform != target_platform]
+    - numpy >=1.24,<1.27                    # [build_platform != target_platform]
     - libarrow =16.1.0                      # [build_platform != target_platform]
     - pyarrow =16.1.0                       # [build_platform != target_platform]
     - numba 0.60.0
