@@ -13,6 +13,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
+import com.bodosql.calcite.application.logicalRules.AggregateMergeRule
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinDeriveIsNotNullFilterRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
@@ -70,7 +71,6 @@ import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.SetOp
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
-import org.apache.calcite.rel.rules.AggregateMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule
 import org.apache.calcite.rel.rules.CoreRules
