@@ -120,11 +120,17 @@ class BodoPhysicalCachedSubPlan private constructor(
                     )
                 implementor.buildStreaming(operatorEmission)!!
             } else {
-                implementor.build { ctx ->
+                val inputs =
+                    if (isCached) {
+                        listOf()
+                    } else {
+                        listOf(cachedPlan.plan)
+                    }
+                implementor.build(inputs) { ctx, inputs ->
                     if (isCached) {
                         relationalOperatorCache.getCachedTable(cacheID)
                     } else {
-                        val table = ctx.visitChild(cachedPlan.plan, 0)
+                        val table = inputs[0]
                         relationalOperatorCache.cacheTable(cacheID, table)
                         table
                     }

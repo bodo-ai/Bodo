@@ -78,7 +78,10 @@ interface BodoPhysicalRel : TimerSupportedRel {
     }
 
     interface Implementor {
-        fun build(fn: (BuildContext) -> BodoEngineTable): BodoEngineTable
+        fun build(
+            children: List<RelNode>,
+            fn: (BuildContext, List<BodoEngineTable>) -> BodoEngineTable,
+        ): BodoEngineTable
 
         fun buildStreaming(operatorEmission: OperatorEmission): BodoEngineTable?
 

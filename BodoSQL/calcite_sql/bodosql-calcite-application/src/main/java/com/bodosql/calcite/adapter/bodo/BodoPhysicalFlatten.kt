@@ -85,9 +85,9 @@ class BodoPhysicalFlatten(
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor::build {
-                    ctx ->
-                val inputVar = ctx.visitChild(input, 0)
+            (implementor::build)(listOf(this.input)) {
+                    ctx, inputs ->
+                val inputVar = inputs[0]
                 emitFlatten(ctx, call, inputVar)
             }
         }

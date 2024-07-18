@@ -46,8 +46,8 @@ class BodoPhysicalTableFunctionScan(
      * @return the variable that represents this relational expression.
      */
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return implementor::build {
-                ctx ->
+        return (implementor::build)(listOf()) {
+                ctx, _ ->
             if ((call as RexCall).operator.name == TableFunctionOperatorTable.GENERATOR.name) {
                 emitGenerator(ctx, call as RexCall)
             } else if ((call as RexCall).operator.name == EXTERNAL_TABLE_FILES_NAME) {
