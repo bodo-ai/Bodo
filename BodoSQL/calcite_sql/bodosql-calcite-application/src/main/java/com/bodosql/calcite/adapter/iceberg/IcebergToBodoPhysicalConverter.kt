@@ -130,7 +130,7 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            implementor.build { ctx -> generateNonStreamingTable(ctx) }
+            (implementor::build)(listOf()) { ctx, _ -> generateNonStreamingTable(ctx) }
         }
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {

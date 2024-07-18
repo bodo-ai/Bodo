@@ -79,7 +79,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.function.Supplier;
-import kotlin.jvm.functions.Function1;
+import kotlin.jvm.functions.Function2;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
@@ -2237,11 +2237,22 @@ public class BodoCodeGenVisitor extends RelVisitor {
     @NotNull
     @Override
     public BodoEngineTable build(
-        @NotNull final Function1<? super BodoPhysicalRel.BuildContext, BodoEngineTable> fn) {
-      return singleBatchTimer(
-          node,
-          () ->
-              fn.invoke(new BodoCodeGenVisitor.BuildContext(node, genDefaultTZ(), parentMappings)));
+        List<? extends RelNode> children,
+        @NotNull
+            final Function2<
+                    ? super BodoPhysicalRel.BuildContext,
+                    ? super List<BodoEngineTable>,
+                    BodoEngineTable>
+                fn) {
+      BuildContext ctx = new BodoCodeGenVisitor.BuildContext(node, genDefaultTZ(), parentMappings);
+      // Visit all the children before wrapping the timer around the current node.
+      List<BodoEngineTable> inputs = new ArrayList<>();
+      int inputIdx = 0;
+      for (RelNode input : children) {
+        inputs.add(ctx.visitChild(input, inputIdx));
+        inputIdx++;
+      }
+      return singleBatchTimer(node, () -> fn.invoke(ctx, inputs));
     }
 
     @Nullable
