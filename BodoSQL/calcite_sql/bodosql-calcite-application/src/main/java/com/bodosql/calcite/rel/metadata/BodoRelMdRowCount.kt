@@ -10,6 +10,7 @@ import com.bodosql.calcite.rel.core.RowSample
 import com.bodosql.calcite.rel.core.TableFunctionScanBase
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.rel.RelNode
+import org.apache.calcite.rel.core.Aggregate
 import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.JoinRelType
@@ -433,5 +434,21 @@ class BodoRelMdRowCount : RelMdRowCount() {
         mq: RelMetadataQuery,
     ): Double? {
         return mq.getRowCount(rel.cachedPlan.plan)
+    }
+
+    override fun getRowCount(
+        rel: Aggregate,
+        mq: RelMetadataQuery,
+    ): Double? {
+        val groupKey = rel.groupSet
+        if (groupKey.isEmpty) {
+            // Aggregate with no GROUP BY always returns 1 row (even on empty table).
+            return 1.0
+        }
+        if (mq.areColumnsUnique(rel.input, groupKey) == true) {
+            // If the group by columns are unique, then the number of rows is the same as the input
+            return mq.getRowCount(rel.input)
+        }
+        return super.getRowCount(rel, mq)
     }
 }
