@@ -3,8 +3,11 @@
 Smoke tests for BodoSQL covering each major query feature
 """
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
@@ -47,7 +50,89 @@ def smoke_ctx():
     )
     seasons = ["winter"] * 3 + ["spring"] * 3 + ["summer"] * 3 + ["fall"] * 3
     t3["S"] = t3["M"].apply(lambda m: seasons[m % 12])
-    return {"TABLE1": t1, "TABLE2": t2, "TABLE3": t3}
+    return {
+        "TABLE1": t1,
+        "TABLE2": t2,
+        "TABLE3": t3,
+    }
+
+
+@pytest.fixture
+def smoke_shipping_ctx():
+    shipping_log = pd.DataFrame(
+        {
+            "LOG_TS": pd.Series(
+                [
+                    pd.Timestamp(
+                        1.5 * 10**18
+                        + (10**5)
+                        * (
+                            10
+                            + i * np.sin(i) * np.sin(i)
+                            + (i**2) * np.cos(i) * np.cos(i)
+                        )
+                    )
+                    for i in range(10**6)
+                ]
+            ),
+            "STORE_ID": pd.Series(
+                [1234 + (i % np.round(np.sqrt(i + 1))) for i in range(10**6)],
+                dtype=pd.Int32Dtype(),
+            ),
+            "LOC_ID": pd.Series(
+                [np.round(101 + int(0.5 + np.tan(i))) % 100 for i in range(10**6)]
+            ),
+            "PRODUCT_ID": pd.Series(
+                [
+                    100 + (i % np.round(np.sqrt(np.sqrt((i + 1) * i * i))))
+                    for i in range(10**6)
+                ],
+                dtype=pd.Int32Dtype(),
+            ),
+            "COST": pd.Series(
+                [(np.tan(2 * i + 0.3) % 100000) for i in range(10**6)],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+        }
+    )
+    producers = pd.DataFrame(
+        {
+            "ID": pd.Series(list(range(1234, 2234))),
+            "STORE_NAME": pd.Series([hex(i**2)[2:] for i in range(1234, 2234)]),
+            "STORE_TYPE": pd.Series(
+                [
+                    ["GROCERY", "MANUFACTURING", "SOFTWARE", "TEXTILE", "HEALTH"][
+                        min(i % 5, i % 7)
+                    ]
+                    for i in range(1234, 2234)
+                ]
+            ),
+        }
+    )
+    destinations = pd.DataFrame(
+        {
+            "ID": pd.Series(list(range(100))),
+            "LOC_NAME": pd.Series([hex((i + 101) ** 2)[2:] for i in range(100)]),
+            "STATE": pd.Series(
+                [
+                    ["CA", "GA", "MI", "TX", "NJ", "WA", "OR", "NY", "PA", "IL"][i % 10]
+                    for i in range(100)
+                ]
+            ),
+        }
+    )
+    products = pd.DataFrame(
+        {
+            "ID": pd.Series(list(range(100, 29891))),
+            "PRODUCT_NAME": pd.Series([hex(i**2 - i)[5:] for i in range(100, 29891)]),
+        }
+    )
+    return {
+        "SHIPPING_LOG": shipping_log,
+        "DESTINATIONS": destinations,
+        "PRODUCERS": producers,
+        "PRODUCTS": products,
+    }
 
 
 @pytest.mark.smoke
@@ -465,6 +550,231 @@ def test_smoke_subquery_ops(smoke_ctx, spark_info, memory_leak_check):
         smoke_ctx,
         spark_info,
         equivalent_spark_query=spark_query,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.smoke
+def test_smoke_shipping_workload(smoke_shipping_ctx, memory_leak_check):
+    """
+    Tests joining the shipping table on the destinations, product, and producers
+    tables to calculate the following for each industry in each state:
+    - The total cost of shipments to each state relating to each industry
+    - The number of unique stores shipping products to each state per industry
+    - The number of unique products being shipped to each state per industry
+    """
+    query = """
+    SELECT 
+        STATE,
+        STORE_TYPE,
+        SUM(COST) as total_shipping,
+        COUNT(DISTINCT(STORE_ID)) AS n_stores,
+        COUNT(DISTINCT(PRODUCT_NAME)) AS n_products,
+    FROM SHIPPING_LOG, DESTINATIONS, PRODUCERS, PRODUCTS
+    WHERE SHIPPING_LOG.LOC_ID = DESTINATIONS.ID
+    AND SHIPPING_LOG.STORE_ID = PRODUCERS.ID
+    AND SHIPPING_LOG.PRODUCT_ID = PRODUCTS.ID
+    AND STATE NOT IN ('OR', 'WA', 'CA')
+    GROUP BY STATE, STORE_TYPE
+    """
+    answer = pd.DataFrame(
+        {
+            "STATE": [
+                "GA",
+                "GA",
+                "GA",
+                "GA",
+                "GA",
+                "IL",
+                "IL",
+                "IL",
+                "IL",
+                "IL",
+                "MI",
+                "MI",
+                "MI",
+                "MI",
+                "MI",
+                "NJ",
+                "NJ",
+                "NJ",
+                "NJ",
+                "NJ",
+                "NY",
+                "NY",
+                "NY",
+                "NY",
+                "NY",
+                "PA",
+                "PA",
+                "PA",
+                "PA",
+                "PA",
+                "TX",
+                "TX",
+                "TX",
+                "TX",
+                "TX",
+            ],
+            "STORE_TYPE": [
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+                "GROCERY",
+                "HEALTH",
+                "MANUFACTURING",
+                "SOFTWARE",
+                "TEXTILE",
+            ],
+            "TOTAL_SHIPPING": pd.Series(
+                [
+                    Decimal("7862256249.22"),
+                    Decimal("2115206460.08"),
+                    Decimal("6397246671.76"),
+                    Decimal("5044534824.56"),
+                    Decimal("3577084792.20"),
+                    Decimal("15484.72"),
+                    Decimal("4147.24"),
+                    Decimal("12593.94"),
+                    Decimal("10129.59"),
+                    Decimal("6951.75"),
+                    Decimal("3478345192.58"),
+                    Decimal("939270608.80"),
+                    Decimal("2830856662.50"),
+                    Decimal("2220187767.58"),
+                    Decimal("1586176358.19"),
+                    Decimal("1017297617.27"),
+                    Decimal("276399370.63"),
+                    Decimal("842198000.42"),
+                    Decimal("645098471.39"),
+                    Decimal("466698931.61"),
+                    Decimal("266503771.62"),
+                    Decimal("74201019.76"),
+                    Decimal("222603065.62"),
+                    Decimal("179602373.10"),
+                    Decimal("123701703.76"),
+                    Decimal("27806732.46"),
+                    Decimal("7701849.28"),
+                    Decimal("22005496.56"),
+                    Decimal("18904358.85"),
+                    Decimal("11503049.28"),
+                    Decimal("2086584328.56"),
+                    Decimal("558195808.56"),
+                    Decimal("1685087385.71"),
+                    Decimal("1333389961.65"),
+                    Decimal("946992900.22"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 2)),
+            ),
+            "N_STORES": [
+                314,
+                85,
+                256,
+                200,
+                143,
+                313,
+                84,
+                255,
+                198,
+                142,
+                314,
+                85,
+                256,
+                201,
+                143,
+                312,
+                84,
+                253,
+                199,
+                141,
+                309,
+                84,
+                250,
+                197,
+                140,
+                308,
+                84,
+                254,
+                199,
+                141,
+                313,
+                85,
+                255,
+                200,
+                142,
+            ],
+            "N_PRODUCTS": [
+                24759,
+                17272,
+                23923,
+                22739,
+                20820,
+                9034,
+                3160,
+                7743,
+                6570,
+                4877,
+                19412,
+                9680,
+                17947,
+                16055,
+                13391,
+                9030,
+                3176,
+                7874,
+                6408,
+                4975,
+                6216,
+                2062,
+                5329,
+                4370,
+                3256,
+                7092,
+                2366,
+                6019,
+                4941,
+                3687,
+                13172,
+                5094,
+                11578,
+                9854,
+                7689,
+            ],
+        }
+    )
+    check_query(
+        query,
+        smoke_shipping_ctx,
+        None,
+        expected_output=answer,
         check_names=False,
         check_dtype=False,
     )
