@@ -1211,6 +1211,19 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
         raise raise_bodo_error(
             f"Internal error: Format string not supported for TO_DOUBLE / TRY_TO_DOUBLE"
         )
+    elif is_decimal:
+        if is_array_typ(val):
+            # We can use a dedicated array kernel for decimal arrays.
+            def impl(
+                val, optional_format_string, _try, dict_encoding_state, func_id
+            ):  # pragma: no cover
+                return bodo.libs.decimal_arr_ext.decimal_arr_to_float64(val)
+
+            return impl
+        else:
+            scalar_text = (
+                f"res[i] = bodo.libs.decimal_arr_ext.decimal_to_float64(arg0)\n"
+            )
     elif is_string:
         scalar_text = "arg0 = arg0.strip()\n"
         scalar_text += "if is_string_numeric(arg0):\n"
@@ -1221,8 +1234,6 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
         scalar_text = f"res[i] = arg0\n"
     elif is_int or is_bool:  # pragma: no cover
         scalar_text = f"res[i] = np.float64(arg0)\n"
-    elif is_decimal:
-        scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.decimal_to_float64(arg0)\n"
     else:  # pragma: no cover
         raise raise_bodo_error(
             f"Internal error: unsupported type passed to to_double_util for argument val: {val}"

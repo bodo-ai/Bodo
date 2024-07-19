@@ -279,6 +279,61 @@ double decimal_to_double_py_entry(decimal_value val, uint8_t scale) {
     return decimal_to_double((static_cast<__int128>(high) << 64) | low, scale);
 }
 
+/**
+ * @brief Kernel for converting a decimal array to a double (FLOAT64) array.
+ *
+ * @param arr The input decimal array
+ * @param scale Scale of the input decimal array
+ * @return array_info pointer of type FLOAT64
+ */
+std::unique_ptr<array_info> decimal_arr_to_double(
+    const std::unique_ptr<array_info>& arr, uint8_t scale) {
+    size_t len = arr->length;
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(len, Bodo_CTypes::FLOAT64);
+    try {
+        for (size_t i = 0; i < len; i++) {
+            if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            } else {
+                double* out_ptr =
+                    out_arr
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, double>() +
+                    i;
+                const arrow::Decimal128& in_val =
+                    *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                 arrow::Decimal128>() +
+                      i);
+                *out_ptr = in_val.ToDouble(scale);
+            }
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return out_arr;
+}
+
+/**
+ * @brief Python entry point for converting a decimal array to a double array.
+ *
+ * @param arr_ The input decimal array as an array_info struct.
+ * @return array_info* of type FLOAT64.
+ */
+array_info* decimal_arr_to_double_py_entry(array_info* arr_) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        uint8_t scale = arr->scale;
+        std::unique_ptr<array_info> out_arr;
+        out_arr = decimal_arr_to_double(arr, scale);
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 template <bool fast_add, bool rescale_left, bool rescale_right,
           bool do_addition>
 inline void add_or_subtract_decimal_scalars(const arrow::Decimal128& d1,
@@ -1736,6 +1791,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, str_to_decimal_scalar_py_entry);
     SetAttrStringFromVoidPtr(m, str_to_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_to_double_py_entry);
+    SetAttrStringFromVoidPtr(m, decimal_arr_to_double_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_to_int64_py_entry);
     SetAttrStringFromVoidPtr(m, int_to_decimal_array);
 
