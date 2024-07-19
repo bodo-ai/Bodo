@@ -4059,3 +4059,226 @@ def test_str_to_decimal_error():
         match="String value is out of range for decimal or doesn't parse properly",
     ):
         impl(pd.array(["1 0"] * 5))
+
+
+@pytest.mark.parametrize(
+    "arr, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    None,
+                    "1000.5",
+                    "10004.1",
+                    "1100004.12345",
+                    "11.41",
+                    "0",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 5)),
+            ),
+            pd.array(
+                [
+                    "1.00000",
+                    "1.55000",
+                    "1.56000",
+                    "10.56000",
+                    None,
+                    "1000.50000",
+                    "10004.10000",
+                    "1100004.12345",
+                    "11.41000",
+                    "0.00000",
+                ]
+            ),
+            id="scale-5",
+        ),
+        pytest.param(
+            pd.array(
+                ["0", None, "0.00", "-0.0", "0.00000"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 5)),
+            ),
+            pd.array(["0.00000", None, "0.00000", "0.00000", "0.00000"]),
+            id="all-zeroes-scale-5",
+        ),
+        pytest.param(
+            pd.array(
+                ["32.4", "-123.987", None, "0.123", "-0.001"],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 3)),
+            ),
+            pd.array(["32.400", "-123.987", None, "0.123", "-0.001"]),
+            id="mixed-signs-scale-3",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1234567890.12",
+                    "-9876543210.99",
+                    None,
+                    "1234567890.12",
+                    "-9876543210.99",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    "1234567890.12",
+                    "-9876543210.99",
+                    None,
+                    "1234567890.12",
+                    "-9876543210.99",
+                ]
+            ),
+            id="large-values-scale-2",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1234567890.123456789012345678",
+                    "-9876543210.99",
+                    None,
+                    "1234567890.12",
+                    "-9876543210.99",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            pd.array(
+                [
+                    "1234567890.123456789012345678",
+                    "-9876543210.990000000000000000",
+                    None,
+                    "1234567890.120000000000000000",
+                    "-9876543210.990000000000000000",
+                ]
+            ),
+            id="large-scale-1",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "0.12345678901234567890123456789012345678",
+                    "0.99",
+                    None,
+                    "0.12",
+                    "0.99",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 38)),
+            ),
+            pd.array(
+                [
+                    "0.12345678901234567890123456789012345678",
+                    "0.99000000000000000000000000000000000000",
+                    None,
+                    "0.12000000000000000000000000000000000000",
+                    "0.99000000000000000000000000000000000000",
+                ]
+            ),
+            id="large-scale-2",
+        ),
+        pytest.param(
+            pd.array(
+                ["1234567890", "-9876543210", "1234567890", "-9876543210", None],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 0)),
+            ),
+            pd.array(["1234567890", "-9876543210", "1234567890", "-9876543210", None]),
+            id="scale-0-integers",
+        ),
+    ],
+)
+def test_decimal_array_to_str_array(arr, expected, memory_leak_check):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.to_char(arr)
+
+    check_func(impl, (arr,), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "scalar, expected",
+    [
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(15, 5)),
+            "1.00000",
+            id="basic-positive",
+        ),
+        # Zeroes
+        pytest.param(
+            pa.scalar(Decimal("0"), pa.decimal128(10, 3)),
+            "0.000",
+            id="zero-with-scale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("0"), pa.decimal128(38, 37)),
+            "0.0000000000000000000000000000000000000",
+            id="zero-with-large-scale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-0.00"), pa.decimal128(10, 3)),
+            "0.000",
+            id="negative-zero-with-scale",
+        ),
+        # Negative Numbers
+        pytest.param(
+            pa.scalar(Decimal("-12.345"), pa.decimal128(12, 3)),
+            "-12.345",
+            id="negative-number",
+        ),
+        # Large Values (Precision and Scale Variation)
+        pytest.param(
+            pa.scalar(Decimal("123456789012.34567"), pa.decimal128(20, 7)),
+            "123456789012.3456700",
+            id="large-value-high-precision",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1234567890.12"), pa.decimal128(15, 2)),
+            "1234567890.12",
+            id="large-value-low-precision",
+        ),
+        # Large Scale
+        pytest.param(
+            pa.scalar(
+                Decimal("0.12345678901234567890123456789012345678"),
+                pa.decimal128(38, 38),
+            ),
+            "0.12345678901234567890123456789012345678",
+            id="large-scale-1",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("1234567890.123456789012345678"), pa.decimal128(38, 18)),
+            "1234567890.123456789012345678",
+            id="large-scale-2",
+        ),
+        # Scientific Notation (Precision and Scale Variation)
+        pytest.param(
+            pa.scalar(Decimal("1.23E5"), pa.decimal128(10, 2)),
+            "123000.00",
+            id="scientific-positive-scale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-4.56E-3"), pa.decimal128(10, 5)),
+            "-0.00456",
+            id="scientific-negative-scale",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("0.00000000000000000000000000000000000001"),
+                pa.decimal128(38, 38),
+            ),
+            "0.00000000000000000000000000000000000001",
+            id="suppress-scientific-notation",
+        ),
+        # Scale 0 (Integers)
+        pytest.param(
+            pa.scalar(Decimal("9876543210"), pa.decimal128(15, 0)),
+            "9876543210",
+            id="scale-zero-integer",
+        ),
+    ],
+)
+def test_decimal_to_str_scalar(scalar, expected, memory_leak_check):
+    def impl(scalar):
+        return bodo.libs.bodosql_array_kernels.to_char(scalar, is_scalar=True)
+
+    check_func(impl, (scalar,), py_output=expected)

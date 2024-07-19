@@ -1928,3 +1928,53 @@ def overload_divide_decimals(arr1, arr2):
         scalar_text,
         out_dtype,
     )
+
+
+def decimal_scalar_to_str(arr):  # pragma: no cover
+    pass
+
+
+@overload(decimal_scalar_to_str)
+def overload_decimal_scalar_to_str(arr):
+    """
+    Implementation to convert a decimal scalar to a string.
+    Note that this will exhibit different behavior than simply str(arr) --
+    this converts into a Snowflake-style string,
+    which maintains the trailing zeroes to fit to the scale.
+    """
+    if not isinstance(arr, bodo.Decimal128Type):  # pragma: no cover
+        raise_bodo_error("decimal_scalar_to_str: arr must be a decimal scalar")
+
+    def impl(arr):  # pragma: no cover
+        return bodo.libs.decimal_arr_ext.decimal_scalar_to_str(arr)
+
+    return impl
+
+
+def decimal_array_to_str_array(arr):  # pragma: no cover
+    pass
+
+
+@overload(decimal_array_to_str_array)
+def overload_decimal_array_to_str_array(arr):
+    """
+    Implementation to convert a decimal array to a string array.
+    """
+    if not isinstance(arr, bodo.DecimalArrayType):  # pragma: no cover
+        raise_bodo_error("decimal_array_to_str_array: arr must be a decimal array")
+
+    def impl(arr):  # pragma: no cover
+        return bodo.libs.decimal_arr_ext.decimal_array_to_str_array(arr)
+
+    return impl
+
+
+def _install_numeric_casting_func_overload():
+    """Creates and installs the overloads for numeric casting
+    functions."""
+
+    overload(decimal_array_to_str_array)(decimal_array_to_str_array)
+    overload(decimal_scalar_to_str)(decimal_scalar_to_str)
+
+
+_install_numeric_casting_func_overload()
