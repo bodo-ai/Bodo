@@ -136,7 +136,9 @@ if (LINUX)
     # -march=haswell is used to enable AVX2 support (required by SIMD bloom filter implementation)
     "-march=haswell"
     # Avoid GCC errors for using int64 in allocations
-    "-Wno-alloc-size-larger-than")
+    "-Wno-alloc-size-larger-than"
+    # Avoid GCC errors for unknown pragmas like "region"
+    "-Wno-error=unknown-pragmas")
 endif()
 
 # Debug Compiler Args
@@ -415,6 +417,7 @@ set(sources_list
   "bodo/libs/_pymemory.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
+  "bodo/libs/_io_cpu_thread_pool.cpp"
   "bodo/io/arrow_compat.cpp"
 )
 
@@ -469,6 +472,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_puffin.cpp"
     "bodo/tests/test_iceberg_rest_aws_credentials_provider.cpp"
     "bodo/tests/test_sorted_window_computation.cpp"
+    "bodo/tests/test_thread_pool.cpp"
   )
   if (DEFINED ENV{BUILD_WITH_V8})
       set(test_list "${test_list}"
