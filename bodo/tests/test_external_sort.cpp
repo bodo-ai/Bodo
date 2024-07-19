@@ -5,7 +5,7 @@
 #include "./test.hpp"
 #include "table_generator.hpp"
 
-static void unsort_vector(std::vector<int64_t> data) {
+static void unsort_vector(std::vector<int64_t>& data) {
     // Randomly shuffle the input
     const int seed = 1234;
     std::mt19937 gen(seed);
@@ -54,6 +54,7 @@ bodo::tests::suite external_sort_tests([] {
         auto arrow_arr = to_arrow(bodo_arr);
         arrow::Int64Array* int_arr =
             static_cast<arrow::Int64Array*>(arrow_arr.get());
+
         bodo::tests::check(int_arr->Value(0) == 5);
         bodo::tests::check(int_arr->Value(1) == 4);
         bodo::tests::check(int_arr->Value(2) == 3);
@@ -289,10 +290,9 @@ bodo::tests::suite external_sort_tests([] {
                               10);
         state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
-        state.GlobalSort();
         state.phase = StreamSortPhase::PRODUCE_OUTPUT;
 
-        auto res = state.GetParallelSortBounds();
+        auto res = state.GetParallelSortBounds(state.builder.input_chunks);
         if (myrank == 0) {
             bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
 
@@ -300,9 +300,218 @@ bodo::tests::suite external_sort_tests([] {
             arrow::Int64Array* int_arr =
                 static_cast<arrow::Int64Array*>(arrow_arr.get());
 
+            // Allow inbalance of 1%
+            int64_t error = std::max((per_host_size + 99) / 100, (int64_t)5);
+            auto in_bound = [&](int64_t diff) -> bool {
+                return std::abs(diff - per_host_size) <= error;
+            };
+
             for (int64_t i = 0; i < (n_pes - 1); i++) {
-                bodo::tests::check(int_arr->Value(i) ==
-                                   ((i + 1) * per_host_size));
+                if (i == 0)
+                    bodo::tests::check(in_bound(int_arr->Value(i)));
+                else
+                    bodo::tests::check(
+                        in_bound(int_arr->Value(i) - int_arr->Value(i - 1)));
+                if (i == n_pes - 2)
+                    bodo::tests::check(
+                        in_bound(per_host_size * n_pes - int_arr->Value(i)));
+            }
+        }
+    });
+
+    bodo::tests::test("test_sampling_hard", [] {
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        const int64_t n_elem = 100000;
+        int64_t per_host_size = n_elem / n_pes;
+        // Create a table with numbers from 1 to 1000
+        std::vector<int64_t> all_data(n_elem);
+        std::iota(all_data.begin(), all_data.end(), 0);
+        unsort_vector(all_data);
+        std::vector<int64_t> data{};
+        for (int i = 0; i < per_host_size; i++)
+            data.push_back(all_data[i + myrank * per_host_size]);
+
+        std::shared_ptr<table_info> table =
+            bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true,
+                              10);
+        state.phase = StreamSortPhase::BUILD;
+        state.ConsumeBatch(table, true, true);
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+
+        auto res = state.GetParallelSortBounds(state.builder.input_chunks);
+        if (myrank == 0) {
+            bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
+
+            auto arrow_arr = to_arrow(res->columns[0]);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+            // Allow inbalance of 1%
+            int64_t error = std::max((per_host_size + 99) / 100, (int64_t)5);
+            auto in_bound = [&](int64_t diff) -> bool {
+                return std::abs(diff - per_host_size) <= error;
+            };
+
+            for (int64_t i = 0; i < (n_pes - 1); i++) {
+                if (i == 0)
+                    bodo::tests::check(in_bound(int_arr->Value(i)));
+                else
+                    bodo::tests::check(
+                        in_bound(int_arr->Value(i) - int_arr->Value(i - 1)));
+                if (i == n_pes - 2)
+                    bodo::tests::check(
+                        in_bound(per_host_size * n_pes - int_arr->Value(i)));
+            }
+        }
+    });
+
+    // Test when parallel flag is set to false
+    bodo::tests::test("test_unparallel", [] {
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        if (n_pes > 1)
+            return;
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        const size_t chunk_size = 10;
+
+        const size_t n_elems_per_host = 47;
+        std::vector<int64_t> data(n_elems_per_host), all_data;
+        for (int i = 0; i < (int)n_elems_per_host; i++) {
+            data[i] = i * (i - 40) + 200;
+            all_data.push_back(i * (i - 40) + 200);
+        }
+        unsort_vector(data);
+        std::shared_ptr<table_info> table =
+            bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
+        sort(all_data.begin(), all_data.end());
+
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(),
+                              chunk_size);
+        state.phase = StreamSortPhase::BUILD;
+        state.ConsumeBatch(table, false, true);
+        state.GlobalSort();
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+
+        int index = 0;
+
+        bool done = false;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+
+            auto output = res.first;
+            auto arrow_arr = to_arrow(output->columns[0]);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+            if (!done) {
+                bodo::tests::check(int_arr->length() > 0);
+                for (int i = 0; i < int_arr->length(); i++) {
+                    bodo::tests::check(index < (int)all_data.size() &&
+                                       all_data[index] == int_arr->Value(i));
+                    index++;
+                }
+            } else {
+                bodo::tests::check(int_arr->length() == 0);
+            }
+        }
+    });
+
+    bodo::tests::test("test_unbalanced_data", [] {
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        const size_t chunk_size = 10;
+
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        // Each rank has different number of almost-evenly distributed data to
+        // every other rank
+        const size_t n_elems_per_host = n_pes * (myrank + 1) * chunk_size;
+        std::vector<int64_t> data(n_elems_per_host), all_data;
+        for (int64_t i = 0; i < (int64_t)n_elems_per_host; i++)
+            data[i] = myrank + i * n_pes;
+        unsort_vector(data);
+        std::shared_ptr<table_info> table =
+            bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
+        for (int i = 0; i < n_pes; i++) {
+            const size_t n_elems_per_host = n_pes * (i + 1) * chunk_size;
+            for (int j = 0; j < (int)n_elems_per_host; j++)
+                all_data.push_back(i + j * n_pes);
+        }
+        sort(all_data.begin(), all_data.end());
+
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(),
+                              chunk_size);
+        state.phase = StreamSortPhase::BUILD;
+        state.ConsumeBatch(table, true, true);
+        state.GlobalSort();
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+
+        std::pair<int, int> range{};
+        std::vector<std::pair<int, int>> gather(n_pes);
+        int index = -1;
+
+        bool done = false;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+
+            auto output = res.first;
+            auto arrow_arr = to_arrow(output->columns[0]);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+            // Now the bounds don't evenly separate all data, so we can't use
+            // static pre-computed bounds Each rank: 2 consecutive chunks have
+            // consecutive data Across rank: 2 consecutive ranks have
+            // consecutive data
+            if (!done) {
+                bodo::tests::check(int_arr->length() > 0);
+                if (index == -1) {
+                    index = 0;
+                    while (index < (int)all_data.size() &&
+                           all_data[index] < int_arr->Value(0))
+                        index++;
+                    bodo::tests::check(index < (int)all_data.size() &&
+                                       all_data[index] == int_arr->Value(0));
+                    range.first = index;
+                }
+                for (int i = 0; i < int_arr->length(); i++) {
+                    bodo::tests::check(index < (int)all_data.size() &&
+                                       all_data[index] == int_arr->Value(i));
+                    range.second = index;
+                    index++;
+                }
+            } else {
+                bodo::tests::check(int_arr->length() == 0);
+                MPI_Gather(&range, 1, MPI_2INT, gather.data(), 1, MPI_2INT, 0,
+                           MPI_COMM_WORLD);
+                if (myrank == 0) {
+                    for (int i = 0; i < n_pes; i++) {
+                        if (i == 0)
+                            bodo::tests::check(gather[i].first == all_data[0]);
+                        else
+                            bodo::tests::check(gather[i].first ==
+                                               gather[i - 1].second + 1);
+                        if (i == n_pes - 1)
+                            bodo::tests::check(gather[i].second ==
+                                               (int)all_data.size() - 1);
+                    }
+                }
             }
         }
     });
@@ -335,31 +544,58 @@ bodo::tests::suite external_sort_tests([] {
         state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
 
-        std::shared_ptr<table_info> bounds = state.GetParallelSortBounds();
-        auto bounds_arrow_arr = to_arrow(bounds->columns[0]);
-        arrow::Int64Array* bounds_int_arr =
-            static_cast<arrow::Int64Array*>(bounds_arrow_arr.get());
-        int64_t actual_start_elem =
-            (myrank == 0) ? 0 : (bounds_int_arr->Value(myrank - 1) + 1);
-
         state.GlobalSort();
         state.phase = StreamSortPhase::PRODUCE_OUTPUT;
 
         std::vector<std::shared_ptr<table_info>> tables;
         bool done = false;
-        std::shared_ptr<table_info> out_table;
-        do {
-            std::tie(out_table, done) = state.GetOutput();
-            tables.push_back(out_table);
-        } while (!done);
-        auto local_sorted_table = concat_tables(std::move(tables));
-        auto arrow_arr = to_arrow(local_sorted_table->columns[0]);
-        arrow::Int64Array* int_arr =
-            static_cast<arrow::Int64Array*>(arrow_arr.get());
+        std::pair<int, int> range{};
+        std::vector<std::pair<int, int>> gather(n_pes);
+        int index = -1;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
 
-        for (int64_t i = 0; i < int_arr->length(); i++) {
-            bodo::tests::check(int_arr->Value(i) ==
-                               static_cast<int64_t>(actual_start_elem + i));
+            auto output = res.first;
+            auto arrow_arr = to_arrow(output->columns[0]);
+            arrow::Int64Array* int_arr =
+                static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+            const size_t total_elems = 100 * chunk_size * n_pes;
+            if (!done) {
+                bodo::tests::check(int_arr->length() > 0);
+                if (index == -1) {
+                    index = 0;
+                    while (index < (int)total_elems &&
+                           index < int_arr->Value(0))
+                        index++;
+                    bodo::tests::check(index < (int)total_elems &&
+                                       index == int_arr->Value(0));
+                    range.first = index;
+                }
+                for (int i = 0; i < int_arr->length(); i++) {
+                    bodo::tests::check(index < (int)total_elems &&
+                                       index == int_arr->Value(i));
+                    range.second = index;
+                    index++;
+                }
+            } else {
+                bodo::tests::check(int_arr->length() == 0);
+                MPI_Gather(&range, 1, MPI_2INT, gather.data(), 1, MPI_2INT, 0,
+                           MPI_COMM_WORLD);
+                if (myrank == 0) {
+                    for (int i = 0; i < n_pes; i++) {
+                        if (i == 0)
+                            bodo::tests::check(gather[i].first == 0);
+                        else
+                            bodo::tests::check(gather[i].first ==
+                                               gather[i - 1].second + 1);
+                        if (i == n_pes - 1)
+                            bodo::tests::check(gather[i].second ==
+                                               (int)total_elems - 1);
+                    }
+                }
+            }
         }
     });
 
@@ -400,6 +636,92 @@ bodo::tests::suite external_sort_tests([] {
         state.ConsumeBatch(table, true, true);
         state.builder.chunk_size = chunk_size;
 
+        state.GlobalSort();
+        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+
+        // Collect all output tables
+        bool done = false;
+        std::vector<std::shared_ptr<table_info>> tables;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+            tables.push_back(res.first);
+        }
+
+        // Merge tables and get a single output array
+        auto local_sorted_table = concat_tables(std::move(tables));
+        auto arrow_arr = to_arrow(local_sorted_table->columns[0]);
+        arrow::Int64Array* int_arr =
+            static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+        int64_t max = int_arr->Value(int_arr->length() - 1);
+        // Get the maximum element from every rank
+        std::vector<int64_t> maximums(n_pes);
+        MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                      maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                      MPI_COMM_WORLD);
+
+        // Check that element 0 is the max value on the previous rank + 1
+        if (myrank == 0) {
+            // no previous rank - the first element should be 0
+            bodo::tests::check(int_arr->Value(0) == 0);
+        } else {
+            bodo::tests::check(int_arr->Value(0) == (maximums[myrank - 1] + 1));
+        }
+
+        // Check that all values are increasing by 1
+        for (int64_t i = 1; i < int_arr->length(); i++) {
+            bodo::tests::check(int_arr->Value(i) ==
+                               (int_arr->Value(i - 1) + 1));
+        }
+    });
+
+    // 1e5 elements in total. Each rank, each call to ConsumeBatch will take the
+    // next array of length [500, 1000]
+    bodo::tests::test("test_parallel_edgecase", [] {
+        const size_t chunk_size = 61;
+
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        const int64_t n_elem = 100;
+        std::vector<int64_t> global_data(n_elem);
+
+        // Create an array with numbers from 0 to n_elem
+        std::iota(global_data.begin(), global_data.end(), 0);
+        unsort_vector(global_data);
+
+        const int seed = 5678;
+        std::mt19937 gen(seed);
+        std::uniform_int_distribution<> dis(5, 10);
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+
+        std::vector<int64_t> schema_data{};
+        std::shared_ptr<table_info> schema_table =
+            bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(schema_data));
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), schema_table->schema(),
+                              true, chunk_size);
+        state.phase = StreamSortPhase::BUILD;
+        int index = 0;
+        while (index < n_elem) {
+            std::vector<int64_t> local_data;
+            for (int i = 0; i < n_pes; i++) {
+                int batch_elem = dis(gen);
+                batch_elem = std::min(batch_elem, (int)n_elem - index);
+                if (i == myrank)
+                    for (int j = index; j < index + batch_elem; j++)
+                        local_data.push_back(global_data[j]);
+                index += batch_elem;
+            }
+
+            std::shared_ptr<table_info> table = bodo::tests::cppToBodo(
+                {"A"}, {false}, {}, std::move(local_data));
+            state.ConsumeBatch(table, true, index >= n_elem);
+        }
         state.GlobalSort();
         state.phase = StreamSortPhase::PRODUCE_OUTPUT;
 
