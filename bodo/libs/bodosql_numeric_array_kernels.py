@@ -27,10 +27,6 @@ def factorial(arr):  # pragma: no cover
     return
 
 
-def mod(arr0, arr1):  # pragma: no cover
-    return
-
-
 def sign(arr):  # pragma: no cover
     return
 
@@ -87,10 +83,6 @@ def factorial_util(arr):  # pragma: no cover
     return
 
 
-def mod_util(arr0, arr1):  # pragma: no cover
-    return
-
-
 def sign_util(arr):  # pragma: no cover
     return
 
@@ -138,7 +130,6 @@ funcs_utils_names = (
     (ln, ln_util, "LN"),
     (log2, log2_util, "LOG2"),
     (log10, log10_util, "LOG10"),
-    (mod, mod_util, "MOD"),
     (sign, sign_util, "SIGN"),
     (round, round_util, "ROUND"),
     (trunc, trunc_util, "TRUNC"),
@@ -148,7 +139,6 @@ funcs_utils_names = (
     (square, square_util, "SQUARE"),
 )
 double_arg_funcs = (
-    "MOD",
     "TRUNC",
     "POWER",
     "ROUND",
@@ -203,25 +193,6 @@ def _get_numeric_output_dtype(func_name, arr0, arr1=None):
         # (matching float bitwidth is handled above)
         if isinstance(arr0_dtype, types.Integer):
             out_dtype = arr0_dtype
-    elif func_name == "MOD":
-        if isinstance(arr0_dtype, types.Integer) and isinstance(
-            arr1_dtype, types.Integer
-        ):
-            if arr0_dtype.signed:
-                if arr1_dtype.signed:
-                    out_dtype = arr1_dtype
-                else:
-                    # If arr0 is signed and arr1 is unsigned, our output may be signed
-                    # and may must support a bitwidth of double arr1.
-                    # e.g. say arr0_dtype = bodo.int64, arr1_dtype = bodo.uint16,
-                    # we know 0 <= arr1 <= 2^(15) - 1, however the output is based off
-                    # the  sign of arr0 and thus we need to support signed ints
-                    # of _double_ the bitwidth, -2^(15) <= arr <= 2^(15) - 1, so
-                    # we use out_dtype = bodo.int32.
-                    out_dtype = _int[min(64, arr1_dtype.bitwidth * 2)]
-            else:
-                # if arr0 is unsigned, we will use the dtype of arr1
-                out_dtype = arr1_dtype
     elif func_name == "ABS":
         # if arr0 is a signed integer, we will use and unsigned integer of double the bitwidth,
         # following the same reasoning as noted in the above comment for MOD.
@@ -376,18 +347,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             out_dtype = _get_numeric_output_dtype(func_name, arr0, arr1)
             scalar_text = ""
             # we select the appropriate scalar text based on the function name
-            if func_name == "MOD":
-                # There is a discrepancy between numpy and SQL mod, whereby SQL mod returns the sign
-                # of the divisor, whereas numpy mod and Python's returns the sign of the dividend,
-                # so we need to use the equivalent of np.fmod / C equivalent to match SQL's behavior.
-                # np.fmod is currently broken in numba [BE-3184] so we use an equivalent implementation.
-                scalar_text += "if arg1 == 0:\n"
-                scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
-                scalar_text += "else:\n"
-                scalar_text += (
-                    "  res[i] = np.sign(arg0) * np.mod(np.abs(arg0), np.abs(arg1))"
-                )
-            elif func_name == "POWER":
+            if func_name == "POWER":
                 scalar_text += "res[i] = np.power(np.float64(arg0), arg1)"
             elif func_name == "ROUND":
                 scalar_text += "res[i] = round_half_always_up(arg0, arg1)"
@@ -1336,6 +1296,10 @@ def multiply_numeric(arr0, arr1):  # pragma: no cover
     pass
 
 
+def modulo_numeric(arr0, arr1):  # pragma: no cover
+    pass
+
+
 def divide_numeric(arr0, arr1):  # pragma: no cover
     pass
 
@@ -1349,6 +1313,10 @@ def subtract_numeric_util(arr0, arr1):  # pragma: no cover
 
 
 def multiply_numeric_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def modulo_numeric_util(arr0, arr1):  # pragma: no cover
     pass
 
 
@@ -1462,6 +1430,25 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                 types.Type: The Array type to return. Note we always.
 
             """
+            if func_name == "MOD":
+                if isinstance(dtype1, types.Integer) and isinstance(
+                    dtype2, types.Integer
+                ):
+                    if dtype1.signed:
+                        if dtype2.signed:
+                            out_dtype = dtype2
+                        else:
+                            # If arr0 is signed and arr1 is unsigned, our output may be signed
+                            # and may must support a bitwidth of double arr1.
+                            # e.g. say dtype1 = bodo.int64, dtype2 = bodo.uint16,
+                            # we know 0 <= arr1 <= 2^(15) - 1, however the output is based off
+                            # the  sign of arr0 and thus we need to support signed ints
+                            # of _double_ the bitwidth, -2^(15) <= arr <= 2^(15) - 1, so
+                            # we use out_dtype = bodo.int32.
+                            out_dtype = _int[min(64, dtype2.bitwidth * 2)]
+                    else:
+                        # if arr0 is unsigned, we will use the dtype of arr1
+                        out_dtype = dtype2
             if func_name == "divide_numeric":
                 # TODO: Fix the expected output type inside calcite.
                 out_dtype = types.float64
@@ -1525,16 +1512,22 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                     return bodo.libs.bodosql_array_kernels.multiply_decimals(arr0, arr1)
 
                 return impl
-            elif func_name == "divide_numeric":
+
+            if func_name == "divide_numeric":
 
                 def impl(arr0, arr1):  # pragma: no cover
                     return bodo.libs.bodosql_array_kernels.divide_decimals(arr0, arr1)
 
                 return impl
-            else:
-                raise_bodo_error(
-                    f"{func_name}: Decimal arithmetic is not yet supported"
-                )
+
+            if func_name == "modulo_numeric":
+
+                def impl(arr0, arr1):  # pragma: no cover
+                    return bodo.libs.bodosql_array_kernels.modulo_decimals(arr0, arr1)
+
+                return impl
+
+            raise_bodo_error(f"{func_name}: Decimal arithmetic is not yet supported")
         elif (
             (
                 isinstance(arr0, (bodo.DecimalArrayType, bodo.Decimal128Type))
@@ -1549,6 +1542,7 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
                 "subtract_numeric",
                 "multiply_numeric",
                 "divide_numeric",
+                "modulo_numeric",
             ]
             for f_name in func_names:
                 if func_name == f_name:
@@ -1619,7 +1613,19 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             else:
                 arg1_str = f"arg1"
             # cast the output in case the operation causes type promotion.
-            scalar_text = f"res[i] = {cast_name}({arg0_str} {operator_str} {arg1_str})"
+            if func_name != "modulo_numeric":
+                scalar_text = (
+                    f"res[i] = {cast_name}({arg0_str} {operator_str} {arg1_str})"
+                )
+            else:
+                # There is a discrepancy between numpy and SQL mod, whereby SQL mod returns the sign
+                # of the divisor, whereas numpy mod and Python's returns the sign of the dividend,
+                # so we need to use the equivalent of np.fmod / C equivalent to match SQL's behavior.
+                # np.fmod is currently broken in numba [BE-3184] so we use an equivalent implementation.
+                scalar_text = "if arg1 == 0:\n"
+                scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+                scalar_text += "else:\n"
+                scalar_text += f"  res[i] =  {cast_name}(np.sign({arg0_str}) * np.mod(np.abs({arg0_str}), np.abs({arg1_str})))"
             return gen_vectorized(
                 arg_names, arg_types, propagate_null, scalar_text, out_dtype
             )
@@ -1635,6 +1641,7 @@ def _install_numeric_operators_overload():
         (subtract_numeric, subtract_numeric_util, "subtract_numeric"),
         (multiply_numeric, multiply_numeric_util, "multiply_numeric"),
         (divide_numeric, divide_numeric_util, "divide_numeric"),
+        (modulo_numeric, modulo_numeric_util, "modulo_numeric"),
     ):
         func_overload_impl = create_numeric_operators_func_overload(func_name)
         overload(func)(func_overload_impl)
@@ -1686,7 +1693,7 @@ def overload_add_decimals(arr1, arr2):
         isinstance(arr1, bodo.DecimalArrayType)
         or isinstance(arr2, bodo.DecimalArrayType)
     ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
-        # If either argument is an arrays, call the specialized function to reduce function
+        # If either argument is an array, call the specialized function to reduce function
         # call overhead on every element.
 
         def impl(arr1, arr2):  # pragma no cover
@@ -1760,7 +1767,7 @@ def overload_subtract_decimals(arr1, arr2):
         isinstance(arr1, bodo.DecimalArrayType)
         or isinstance(arr2, bodo.DecimalArrayType)
     ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
-        # If either argument is an arrays, call the specialized function to reduce function
+        # If either argument is an array, call the specialized function to reduce function
         # call overhead on every element.
 
         def impl(arr1, arr2):  # pragma no cover
@@ -1928,6 +1935,77 @@ def overload_divide_decimals(arr1, arr2):
         scalar_text,
         out_dtype,
     )
+
+
+def modulo_decimals(arr1, arr2):  # pragma: no cover
+    pass
+
+
+@overload(modulo_decimals)
+def overload_modulo_decimals(arr1, arr2):
+    """
+    Implementation to modulo two decimal arrays or scalars. This does
+    not handle optional type support and so it should not be called directly
+    from BodoSQL. This is meant as a convenience function to simplify the
+    addition logic.
+    """
+    if not (
+        is_overload_none(arr1)
+        or isinstance(arr1, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("modulo_decimals: arr1 must be a decimal array or scalar")
+    if not (
+        is_overload_none(arr2)
+        or isinstance(arr2, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("modulo_decimals: arr2 must be a decimal array or scalar")
+
+    if is_overload_none(arr1):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        p1, s1 = 38, 0
+    else:
+        p1, s1 = arr1.precision, arr1.scale
+    if is_overload_none(arr2):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        p2, s2 = 38, 0
+    else:
+        p2, s2 = arr2.precision, arr2.scale
+
+    if (
+        isinstance(arr1, bodo.DecimalArrayType)
+        or isinstance(arr2, bodo.DecimalArrayType)
+    ) and not (is_overload_none(arr1) or is_overload_none(arr2)):
+        # If either argument is an array, call the specialized function to reduce function
+        # call overhead on every element.
+
+        def impl(arr1, arr2):  # pragma no cover
+            return bodo.libs.decimal_arr_ext.modulo_decimal_arrays(arr1, arr2)
+
+        return impl
+
+    else:
+        # If just operating on scalars, use gen_vectorized.
+        (
+            p,
+            s,
+        ) = bodo.libs.decimal_arr_ext.decimal_misc_nary_output_precision_scale(
+            [p1, p2], [s1, s2]
+        )
+        out_dtype = bodo.DecimalArrayType(p, s)
+        arg_names = ["arr1", "arr2"]
+        arg_types = [arr1, arr2]
+        propagate_null = [True, True]
+        scalar_text = (
+            "res[i] = bodo.libs.decimal_arr_ext.modulo_decimal_scalars(arg0, arg1)"
+        )
+
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
 
 
 def decimal_scalar_to_str(arr):  # pragma: no cover

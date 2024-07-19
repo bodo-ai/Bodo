@@ -110,6 +110,14 @@ ll.add_symbol(
     decimal_ext.multiply_decimal_arrays_py_entry,
 )
 ll.add_symbol(
+    "modulo_decimal_scalars",
+    decimal_ext.modulo_decimal_scalars_py_entry,
+)
+ll.add_symbol(
+    "modulo_decimal_arrays",
+    decimal_ext.modulo_decimal_arrays_py_entry,
+)
+ll.add_symbol(
     "divide_decimal_scalars",
     decimal_ext.divide_decimal_scalars_py_entry,
 )
@@ -1774,6 +1782,188 @@ def _multiply_decimal_arrays(
     ret_type = types.Tuple([array_info_type, types.bool_])
     return (
         ret_type(
+            d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+        ),
+        codegen,
+    )
+
+
+def decimal_misc_nary_output_precision_scale(precisions, scales):
+    """
+    Calculate the output precision and scale for a miscellaneous n-ary operator.
+    See: https://docs.snowflake.com/en/sql-reference/operators-arithmetic#other-n-ary-operations
+    """
+    leading_digits = [p - s for p, s in zip(precisions, scales)]
+    l = max(leading_digits)
+    s = max(scales)
+    p = min(l + s, 38)
+    return p, s
+
+
+def modulo_decimal_scalars(d1, d2):  # pragma: no cover
+    pass
+
+
+@overload(modulo_decimal_scalars)
+def overload_modulo_decimal_scalars(d1, d2):
+    """
+    Perform the modulo operation on two decimal scalars.
+    """
+    if not isinstance(d1, Decimal128Type) or not isinstance(
+        d2, Decimal128Type
+    ):  # pragma: no cover
+        raise BodoError(
+            "modulo_decimal_scalars: Decimal128Type expected for both inputs"
+        )
+
+    p, s = decimal_misc_nary_output_precision_scale(
+        [d1.precision, d2.precision], [d1.scale, d2.scale]
+    )
+
+    def impl(d1, d2):  # pragma: no cover
+        return _modulo_decimal_scalars(d1, d2, p, s)
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _modulo_decimal_scalars(typingctx, d1_t, d2_t, out_precision_t, out_scale_t):
+    assert isinstance(d1_t, Decimal128Type), "_modulo_decimal_scalars: decimal expected"
+    assert isinstance(d2_t, Decimal128Type), "_modulo_decimal_scalars: decimal expected"
+    assert is_overload_constant_int(
+        out_precision_t
+    ), "_modulo_decimal_scalars: constant precision expected"
+    assert is_overload_constant_int(
+        out_scale_t
+    ), "_modulo_decimal_scalars: constant scale expected"
+    output_precision = get_overload_const_int(out_precision_t)
+    output_scale = get_overload_const_int(out_scale_t)
+    d1_precision = d1_t.precision
+    d1_scale = d1_t.scale
+    d2_precision = d2_t.precision
+    d2_scale = d2_t.scale
+
+    def codegen(context, builder, signature, args):
+        d1, d2, output_precision, output_scale = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        d1_precision_const = context.get_constant(types.int64, d1_precision)
+        d1_scale_const = context.get_constant(types.int64, d1_scale)
+        d2_precision_const = context.get_constant(types.int64, d2_precision)
+        d2_scale_const = context.get_constant(types.int64, d2_scale)
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="modulo_decimal_scalars"
+        )
+        ret = builder.call(
+            fn,
+            [
+                d1,
+                d1_precision_const,
+                d1_scale_const,
+                d2,
+                d2_precision_const,
+                d2_scale_const,
+                output_precision,
+                output_scale,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    return output_decimal_type(d1_t, d2_t, out_precision_t, out_scale_t), codegen
+
+
+def modulo_decimal_arrays(d1, d2):  # pragma: no cover
+    pass
+
+
+@overload(modulo_decimal_arrays)
+def overload_modulo_decimal_arrays(d1, d2):
+    """
+    Mod two decimal arrays or a decimal array and a decimal scalar.
+    """
+    from bodo.libs.array import delete_info, info_to_array
+
+    assert isinstance(
+        d1, (DecimalArrayType, Decimal128Type)
+    ), "modulo_decimal_arrays: decimal input1 expected"
+    assert isinstance(
+        d2, (DecimalArrayType, Decimal128Type)
+    ), "modulo_decimal_arrays: decimal input2 expected"
+    assert isinstance(d1, DecimalArrayType) or isinstance(
+        d2, DecimalArrayType
+    ), "modulo_decimal_arrays: decimal array expected"
+
+    p, s = decimal_misc_nary_output_precision_scale(
+        [d1.precision, d2.precision], [d1.scale, d2.scale]
+    )
+    output_decimal_arr_type = DecimalArrayType(p, s)
+
+    def impl(d1, d2):  # pragma: no cover
+        # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
+        # convert back to scalars
+        d1_info, is_scalar_d1 = array_or_scalar_to_info(d1)
+        d2_info, is_scalar_d2 = array_or_scalar_to_info(d2)
+        out_arr_info = _modulo_decimal_arrays(
+            d1_info, d2_info, p, s, is_scalar_d1, is_scalar_d2
+        )
+        out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
+        delete_info(out_arr_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=False)
+def _modulo_decimal_arrays(
+    typingctx, d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        d1, d2, output_precision, output_scale, is_scalar_d1, is_scalar_d2 = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="modulo_decimal_arrays"
+        )
+        ret = builder.call(
+            fn,
+            [
+                d1,
+                d2,
+                is_scalar_d1,
+                is_scalar_d2,
+                output_precision,
+                output_scale,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        array_info_type(
             d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
         ),
         codegen,
