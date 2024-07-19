@@ -47,31 +47,69 @@ enum CmpOp {
     GE = 5,
 };
 
-std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
-                                  int const& scale) {
-    // TODO(srilman): I think Arrow Decimal128::ToString() had trailing zeros in
-    // past, but when I tested, it didn't. Maybe we can get rid of this
-    // function entirely
-    std::string str = arrow_decimal.ToString(scale);
-    if (str.find('.') == std::string::npos) {
+/**
+ * Converts a Decimal128 value to a non-scientific notation string.
+ * This implementation is needed as Arrow's Decimal128::ToString()
+ * forces scientific notation on certain scales.
+ * Implementation is based on Arrow's Decimal128::ToString() implementation:
+ * https://github.com/apache/arrow/blob/main/cpp/src/arrow/util/decimal.cc
+ */
+std::string decimal_to_string_no_scientific(
+    arrow::Decimal128 const& arrow_decimal, int32_t scale) {
+    std::string str = arrow_decimal.ToIntegerString();
+    if (scale == 0) {
         return str;
     }
+    const bool is_negative = str.front() == '-';
+    const auto is_negative_offset = static_cast<int32_t>(is_negative);
+    const auto len = static_cast<int32_t>(str.size());
+    const int32_t num_digits = len - is_negative_offset;
 
-    // str may be of the form 0.45000000000 or 4.000000000
-    size_t last_char = str.length();
-    while (true) {
-        if (str[last_char - 1] != '0')
-            break;
-        last_char--;
+    if (num_digits > scale) {
+        const auto n = static_cast<size_t>(len - scale);
+        str.insert(str.begin() + n, '.');
+        return str;
     }
-    // position reduce str to 0.45  or 4.
-    if (str[last_char - 1] == '.')
-        last_char--;
+    // Add leading zeroes if num_digits <= scale.
+    str.insert(is_negative_offset, scale - num_digits + 2, '0');
+    str.at(is_negative_offset + 1) = '.';
+    return str;
+}
 
-    // Slice String to New Range
-    str = str.substr(0, last_char);
-    if (str == "0.E-18")
-        return "0";
+/**
+ * @brief Convert a Decimal128 value to a string.
+ * Note this never returns scientific notation. Use arrow's built in
+ * Decimal128::ToString() for scientific notation.
+ *
+ * @param remove_trailing_zeroes If true, remove trailing zeroes.
+ * @param arrow_decimal The Decimal128 value to convert.
+ * @param scale The scale of the Decimal128 value.
+ * @return std::string The string representation of the Decimal128 value.
+ */
+template <bool remove_trailing_zeroes = true>
+std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
+                                  int const& scale) {
+    std::string str = decimal_to_string_no_scientific(arrow_decimal, scale);
+    if constexpr (remove_trailing_zeroes) {
+        if (str.find('.') == std::string::npos) {
+            return str;
+        }
+
+        // We want to remove trailing zeroes after the decimal point.
+        size_t last_char = str.length();
+        while (true) {
+            if (str[last_char - 1] != '0')
+                break;
+            last_char--;
+        }
+        // position reduce str to 0.45  or 4.
+        if (str[last_char - 1] == '.')
+            last_char--;
+
+        // Slice String to New Range
+        str = str.substr(0, last_char);
+    }
+
     return str;
 }
 
@@ -1374,7 +1412,7 @@ PyObject* box_decimal(decimal_value val, int8_t precision, int8_t scale) {
 }
 
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
-                    int64_t* len_ptr, int scale);
+                    int64_t* len_ptr, int scale, bool remove_trailing_zeroes);
 
 /**
  * @brief Get the Arrow function name for comparison operator
@@ -1767,6 +1805,76 @@ array_info* str_to_decimal_array_py_entry(array_info* arr, int64_t precision,
     }
 }
 
+/**
+ * @brief Converts a Decimal128 array to a string array, preserving null values.
+ *
+ * This function takes an array of Decimal128 values and converts each element
+ * to its string representation.
+ *
+ * @param arr A pointer to the input array of Decimal128 values.
+ * @param pool Buffer pool. Defaults to the default buffer pool.
+ * @param mm Memory manager. Defaults to the default memory manager.
+ * @return A pointer to a new array_info with arr_type and dtype STRING.
+ */
+std::unique_ptr<array_info> decimal_array_to_str_array(
+    const std::unique_ptr<array_info>& arr,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    size_t len = arr->length;
+    int64_t scale = arr->scale;
+    // We need a vector of strings and a null bitmask to create a new
+    // string array.
+    bodo::vector<std::string> strings(len, pool);
+    // (len + 7) >> 3 is the minimum number of bytes
+    // needed to store a bitmask for an array of length len.
+    // Equivalent to ceil(len / 8).
+    bodo::vector<uint8_t> nulls((len + 7) >> 3, 0, pool);
+    try {
+        for (size_t i = 0; i < len; i++) {
+            if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+                SetBitTo(nulls.data(), i, false);
+            } else {
+                SetBitTo(nulls.data(), i, true);
+                const arrow::Decimal128& in_val =
+                    *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                 arrow::Decimal128>() +
+                      i);
+                std::string out_str =
+                    decimal_to_std_string<false>(in_val, scale);
+                strings[i] = out_str;
+            }
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    std::unique_ptr<array_info> out_arr = create_string_array(
+        Bodo_CTypes::STRING, nulls, strings, -1, pool, std::move(mm));
+    return out_arr;
+}
+
+/**
+ * Python entrypoint for converting a Decimal128 array to a string array.
+ *
+ * @param arr_ The Decimal128 array to convert.
+ * @return A pointer to a new array_info with arr_type and dtype STRING.
+ */
+array_info* decimal_array_to_str_array_py_entry(array_info* arr_) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        std::unique_ptr<array_info> out_arr = decimal_array_to_str_array(arr);
+        assert(out_arr->arr_type == bodo_array_type::STRING &&
+               out_arr->dtype == Bodo_CTypes::STRING);
+        array_info* out_arr_info = new array_info(*out_arr);
+        return out_arr_info;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
     MOD_DEF(m, "decimal_ext", "No docs", NULL);
@@ -1811,6 +1919,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, multiply_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_arrays_py_entry);
+    SetAttrStringFromVoidPtr(m, decimal_array_to_str_array_py_entry);
     SetAttrStringFromVoidPtr(m, round_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, round_decimal_scalar_py_entry);
 
@@ -1861,11 +1970,17 @@ void unbox_decimal(PyObject* pa_decimal_obj, uint8_t* data_ptr) {
  * @param scale scale parameter of decimal128
  */
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
-                    int64_t* len_ptr, int scale) {
+                    int64_t* len_ptr, int scale,
+                    bool remove_trailing_zeroes = true) {
     // Creating the arrow_decimal value
     arrow::Decimal128 arrow_decimal(val.high, val.low);
     // Getting the string
-    std::string str = decimal_to_std_string(arrow_decimal, scale);
+    std::string str;
+    if (remove_trailing_zeroes) {
+        str = decimal_to_std_string<true>(arrow_decimal, scale);
+    } else {
+        str = decimal_to_std_string<false>(arrow_decimal, scale);
+    }
     // Now doing the boxing.
     int64_t l = (int64_t)str.length();
     NRT_MemInfo* meminfo = alloc_meminfo(l + 1);

@@ -946,7 +946,19 @@ def overload_to_char_util(arr, format_str, is_scalar):  # pragma: no cover
     inner_type = arr.dtype if are_arrays[0] else arr
     out_dtype = bodo.string_array_type
     convert_func_str = "bodo.libs.bodosql_snowflake_conversion_array_kernels.convert_snowflake_date_format_str_to_py_format"
-    if is_array_typ(inner_type):
+    # Check if we can use one of our array kernels to handle the conversion.
+    if is_array_typ(arr) and isinstance(arr, bodo.DecimalArrayType):
+
+        def impl(arr, format_str, is_scalar):  # pragma: no cover
+            return bodo.libs.bodosql_array_kernels.decimal_array_to_str_array(arr)
+
+        return impl
+
+    elif is_valid_decimal_arg(inner_type):
+        scalar_text = (
+            "res[i] = bodo.libs.bodosql_array_kernels.decimal_scalar_to_str(arg0)"
+        )
+    elif is_array_typ(inner_type):
         scalar_text = "arr_str = ''\n"
         scalar_text += "for idx0 in range(len(arg0)):\n"
         scalar_text += "  arr_str += ',' + ('undefined' if bodo.libs.array_kernels.isna(arg0, idx0) else bodo.libs.bodosql_array_kernels.to_char_helper(arg0[idx0], arg1))\n"
