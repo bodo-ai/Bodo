@@ -70,10 +70,10 @@ std::ostream& operator<<(std::ostream& os, const TableAndRange& obj) {
 }
 
 void SortedChunkedTableBuilder::InitCTB(std::shared_ptr<bodo::Schema> schema) {
-    if (table_heap.empty())
+    if (input_chunks.empty())
         return;
     if (sorted_table_builder == nullptr) {
-        for (auto& col : table_heap[0].table->columns) {
+        for (auto& col : input_chunks[0].table->columns) {
             // we're passing is_key as false here even for key columns because
             // we don't need the hashes.
             dict_builders.push_back(create_dict_builder_for_array(col, false));
@@ -96,9 +96,7 @@ void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk,
                : sort_values_table_local(
                      std::move(chunk), n_key_t, vect_ascending.data(),
                      na_position.data(), dead_keys.data(), false);
-    table_heap.push_back({sorted_chunk, n_key_t});
-    std::push_heap(table_heap.begin(), table_heap.end(), comp);
-
+    input_chunks.push_back({sorted_chunk, n_key_t});
     sorted_chunk->unpin();
 }
 
@@ -272,7 +270,7 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
 }
 
 std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
-    if (table_heap.size() == 0) {
+    if (input_chunks.size() == 0) {
         std::vector<TableAndRange> output;
         return output;
     }
@@ -281,17 +279,15 @@ std::vector<TableAndRange> SortedChunkedTableBuilder::Finalize() {
 
     // TODO Currently num_chunks is set to min(rank, 100) during initialization.
     // Should revisit this after benchmark tests
-    while (!table_heap.empty()) {
+    while (!input_chunks.empty()) {
         std::vector<std::vector<TableAndRange>> chunks;
         // Take num_chunks chunks at a time and put them each into a vector so
         // that we can call MergeChunks, which expects a vector of vector of
         // chunks. Each inner vector of chunks is expected to be sorted - a
         // vector of a single sorted chunk is by definition, sorted.
-        for (size_t i = 0; i < num_chunks && !table_heap.empty(); i++) {
-            // Get the element off the top of the heap and shrink the heap
-            std::pop_heap(table_heap.begin(), table_heap.end(), comp);
-            chunks.push_back({table_heap.back()});
-            table_heap.pop_back();
+        for (size_t i = 0; i < num_chunks && !input_chunks.empty(); i++) {
+            chunks.push_back({input_chunks.back()});
+            input_chunks.pop_back();
         }
 
         sorted_chunks.emplace_back(MergeChunks(std::move(chunks)));
@@ -398,18 +394,11 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
         builder.UpdateChunkSize(GetChunkSize(bytes_per_row, mem_budget_bytes,
                                              num_chunks, builder.chunk_size));
         builder.InitCTB(schema);
-
-        time_pt start_finalize = start_timer();
-        // Instead of finalizing here we could finalize after we determine the
-        // bounds and then instead of building a completely sorted list locally,
-        // we can partition the list to build the list of chunks that need to be
-        // sent to each rank.
-        local_chunks = builder.Finalize();
-        metrics.local_sort_time += end_timer(start_finalize);
     }
 }
 
-std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds() {
+std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
+    std::vector<TableAndRange>& local_chunks) {
     time_pt start_sampling = start_timer();
     int64_t n_local = std::accumulate(
         local_chunks.begin(), local_chunks.end(), 0,
@@ -484,82 +473,83 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds() {
 }
 
 std::vector<std::vector<std::shared_ptr<table_info>>>
-StreamSortState::PartitionChunksByRank(int n_pes,
-                                       std::shared_ptr<table_info> bounds) {
-    assert(static_cast<uint64_t>(n_pes) == bounds->nrows() + 1);
+StreamSortState::BuilderByRank(int n_pes, std::shared_ptr<table_info> bounds,
+                               std::vector<TableAndRange>&& local_chunks) {
+    std::vector<std::unique_ptr<ChunkedTableBuilder>> rankToChunkedBuilders;
+    assert(n_pes == bounds->nrows() + 1);
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builder_helper;
+
+    // For each rank, we build n_pes ChunkedTableBuilder to store tables to
+    // pass
+    for (auto& col : local_chunks[0].table->columns) {
+        dict_builder_helper.push_back(
+            create_dict_builder_for_array(col, false));
+    }
+    for (int rank_id = 0; rank_id < n_pes; rank_id++) {
+        // TO DO: fix chunk_size after merge
+        size_t chunk_size = 4096;
+        rankToChunkedBuilders.push_back(std::make_unique<ChunkedTableBuilder>(
+            schema, dict_builder_helper, chunk_size));
+    }
+
+    auto _greater = [&](int64_t mid, int rank_id,
+                        const TableAndRange& chunk) -> bool {
+        return KeyComparisonAsPython(
+            n_key_t, vect_ascending.data(), bounds->columns, 0, rank_id,
+            chunk.table->columns, 0, mid, na_position.data());
+    };
+
+    for (size_t i = 0; i < local_chunks.size(); i++) {
+        auto& chunk = local_chunks[i];
+        chunk.table->pin();
+
+        int64_t table_size = static_cast<int64_t>(chunk.table->nrows());
+        int64_t offset = chunk.offset;
+        for (int rank_id = 0; rank_id < n_pes; rank_id++) {
+            // r is the first index (or table_size if None) such that
+            // chunk.table[r] belongs to rank j > rank_id rows [offset, l] then
+            // belong to rank rank_id
+            int64_t l = offset - 1, r = table_size;
+            while (l + 1 < r) {
+                if (rank_id == n_pes - 1)
+                    break;
+                int64_t m = l + (r - l) / 2;
+                if (_greater(m, rank_id, chunk))
+                    r = m;
+                else
+                    l = m;
+            }
+            if (r == offset)
+                continue;
+            // Append row [offset, r) to ChunkedTableBuilder of rank_id
+            std::vector<int64_t> idx(r - offset);
+            iota(idx.begin(), idx.end(), offset);
+            rankToChunkedBuilders[rank_id]->AppendBatch(chunk.table, idx);
+            // TODO After async send rankToChunkedBuilders[rank_id].PopChunk()
+            // here Question: Also might benefit from directly sending the batch
+            // instead of waiting till there is a full batch of chunk_size rows.
+            // Sending directly ensures this chunk is sorted, so later when
+            // calling AppendChunk
+            // we don't need to sort individual chunks any more.
+            offset = r;
+        }
+        chunk.table.reset();
+    }
 
     std::vector<std::vector<std::shared_ptr<table_info>>> rankToChunks(n_pes);
-
-    // some chunks might need to be split across multiple ranks. For those
-    // chunks we know that a prefix of the chunk will be the "largest" elements
-    // for one rank, and the suffix will be the "smallest" elements for one or
-    // more ranks.
-    std::vector<TableBuildBuffer> smallestPartialChunks;
-    std::vector<TableBuildBuffer> largestPartialChunks;
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-    for (auto& col : schema->column_types) {
-        dict_builders.push_back(
-            create_dict_builder_for_array(col->copy(), false));
-    }
-    for (int i = 0; i < n_pes; i++) {
-        smallestPartialChunks.emplace_back(schema, dict_builders, op_pool,
-                                           op_mm);
-        largestPartialChunks.emplace_back(schema, dict_builders, op_pool,
-                                          op_mm);
-    }
-
-    uint32_t rank_id = 0;
-    for (size_t chunk_id = 0; chunk_id < local_chunks.size(); chunk_id++) {
-        const auto& tableAndRange = local_chunks[chunk_id];
-        // Compare the bounds with the ranges to determine which rank a
-        // chunk will start at
-        while (rank_id < uint32_t(n_pes - 1) &&
-               KeyComparisonAsPython(
-                   n_key_t, vect_ascending.data(), bounds->columns, 0, rank_id,
-                   tableAndRange.range->columns, 0, 0, na_position.data())) {
-            rank_id++;
-        }
-
-        // if max(table) < bounds[rank_id] we can send all of table
-        if (KeyComparisonAsPython(
-                n_key_t, vect_ascending.data(), tableAndRange.range->columns, 0,
-                1, bounds->columns, 0, rank_id, na_position.data())) {
-            rankToChunks[rank_id].push_back(tableAndRange.table);
-        } else {
-            // We need to split this chunk up
-            tableAndRange.table->pin();
-            uint32_t start_rank_id = rank_id;
-            for (size_t row = 0; row < tableAndRange.table->nrows(); row++) {
-                while ((rank_id < uint32_t(n_pes - 1)) &&
-                       KeyComparisonAsPython(n_key_t, vect_ascending.data(),
-                                             bounds->columns, 0, rank_id,
-                                             tableAndRange.table->columns, 0,
-                                             row, na_position.data())) {
-                    rank_id++;
-                }
-                TableBuildBuffer& builder =
-                    (rank_id == start_rank_id) ? largestPartialChunks[rank_id]
-                                               : smallestPartialChunks[rank_id];
-                builder.ReserveTable(tableAndRange.table);
-                builder.AppendRowKeys(tableAndRange.table, row,
-                                      tableAndRange.table->columns.size());
-            }
-            tableAndRange.table->unpin();
+    for (int rank_id = 0; rank_id < n_pes; rank_id++) {
+        rankToChunks[rank_id].reserve(
+            rankToChunkedBuilders[rank_id]->chunks.size() + 1);
+        while (true) {
+            auto [table, nrows] =
+                rankToChunkedBuilders[rank_id]->PopChunk(true);
+            if (nrows == 0)
+                break;
+            table->pin();
+            rankToChunks[rank_id].push_back(table);
+            table->unpin();
         }
     }
-
-    for (int i = 0; i < n_pes; i++) {
-        if (smallestPartialChunks[i].data_table->nrows()) {
-            rankToChunks[i].insert(
-                rankToChunks[i].begin(),
-                std::move(smallestPartialChunks[i].data_table));
-        }
-        if (largestPartialChunks[i].data_table->nrows()) {
-            rankToChunks[i].emplace_back(
-                std::move(largestPartialChunks[i].data_table));
-        }
-    }
-
     return rankToChunks;
 }
 
@@ -674,6 +664,7 @@ int64_t get_required_num_rounds_for_sort(
 
 void StreamSortState::GlobalSort() {
     if (!parallel) {
+        std::vector<TableAndRange> local_chunks = builder.Finalize();
         // Move the tables from the sorted local chunks to the output
         for (const auto& chunk : local_chunks) {
             output_chunks.push_back(chunk.table);
@@ -686,10 +677,12 @@ void StreamSortState::GlobalSort() {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    std::shared_ptr<table_info> bounds = GetParallelSortBounds();
+    std::shared_ptr<table_info> bounds =
+        GetParallelSortBounds(builder.input_chunks);
     time_pt start_partition = start_timer();
+
     std::vector<std::vector<std::shared_ptr<table_info>>> rankToChunks =
-        PartitionChunksByRank(n_pes, bounds);
+        BuilderByRank(n_pes, bounds, std::move(builder.input_chunks));
     metrics.partition_chunks_time += end_timer(start_partition);
 
     int64_t num_rounds =
@@ -700,7 +693,7 @@ void StreamSortState::GlobalSort() {
         builder.chunk_size, op_pool, op_mm);
 
     for (auto& chunk : rankToChunks[myrank]) {
-        global_builder.AppendChunk(std::move(chunk), true);
+        global_builder.AppendChunk(std::move(chunk));
     }
 
     std::vector<size_t> rankToCurrentChunk(n_pes);
@@ -757,12 +750,10 @@ void StreamSortState::ReportMetrics() {
     }
 
     std::vector<MetricBase> metrics;
-    metrics.reserve(7);
+    metrics.reserve(6);
 
     metrics.emplace_back(TimerMetric("local_sort_chunk_time",
                                      this->metrics.local_sort_chunk_time));
-    metrics.emplace_back(
-        TimerMetric("local_sort_time", this->metrics.local_sort_time));
 
     metrics.emplace_back(
         TimerMetric("sampling_time", this->metrics.sampling_time));

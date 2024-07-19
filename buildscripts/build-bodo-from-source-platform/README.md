@@ -8,9 +8,11 @@
 > to manually control the number of processes used.
 > Try setting it to a single process using `export CMAKE_BUILD_PARALLEL_LEVEL=1`
 
-1. SSH into the cluster node.
+> [!NOTE]
+> When running step 3 (or any other similar building and cloning instructions) below, please avoid building in `/bodofs`. Its usage has to be limited to storing basic files and nothing that requires high disk performance or full POSIX.
+1. SSH into the cluster node (`My Notebook` -> `BODO CLUSTERS` -> `Terminal` beside the running cluster).
 1. Copy single_node_install.sh to the node.
-1. Run the script: `bash single_node_install.sh`.
+1. Run the script: `bash single_node_install.sh` (recommended in directory `/home/bodo`).
 1. Enter your GitHub PAT and branch to checkout when prompted
 
 ## Set up DEV environment on platform, multi-node cluster
