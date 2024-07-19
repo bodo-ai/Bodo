@@ -54,6 +54,8 @@ public class NumericCodeGen {
         equivalentFnMap.put(fn, "power");
       } else if (fn.equals("TRUNCATE")) {
         equivalentFnMap.put(fn, "trunc");
+      } else if (fn.equals("MOD")) {
+        equivalentFnMap.put(fn, "modulo_numeric");
       } else {
         equivalentFnMap.put(fn, fn.toLowerCase());
       }

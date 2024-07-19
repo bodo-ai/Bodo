@@ -1320,7 +1320,7 @@ single_arg_np_list = list(single_arg_np_map.keys())
 # without hardcoding the output data to match Snowflake semantics, which is
 # already done for BodoSQL tests
 double_arg_np_map = {
-    "mod": "(lambda a, b: np.fmod(a, b) if b != 0 else np.nan)",
+    "modulo_numeric": "(lambda a, b: np.fmod(a, b) if b != 0 else np.nan)",
     "power": "(lambda a, b: np.power(np.float64(a), b))",
     "trunc": "(lambda a, b: np.trunc(a * (10 ** b)) * (10 ** -b) if int(b) == b else np.nan)",
 }
