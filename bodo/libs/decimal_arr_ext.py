@@ -54,6 +54,7 @@ ll.add_symbol(
     "str_to_decimal_array_py_entry", decimal_ext.str_to_decimal_array_py_entry
 )
 ll.add_symbol("decimal_to_double", decimal_ext.decimal_to_double_py_entry)
+ll.add_symbol("decimal_arr_to_double", decimal_ext.decimal_arr_to_double_py_entry)
 ll.add_symbol("decimal_to_int64", decimal_ext.decimal_to_int64_py_entry)
 ll.add_symbol("int_to_decimal_array", decimal_ext.int_to_decimal_array)
 ll.add_symbol(
@@ -672,6 +673,54 @@ def overload_float_ctor_from_dec(dec):
         return decimal_to_float64(dec)
 
     return impl
+
+
+def decimal_arr_to_float64(arr):
+    pass
+
+
+@overload(decimal_arr_to_float64, prefer_literal=True)
+def overload_decimal_arr_to_float64(arr):
+    """
+    Convert a decimal array to a float array
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "decimal_arr_to_float64: decimal array expected"
+
+    output_arr_type = bodo.FloatingArrayType(types.float64)
+
+    def impl(arr):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_info = _decimal_arr_to_float64(arr_info)
+        out_arr = info_to_array(out_info, output_arr_type)
+        delete_info(out_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic
+def _decimal_arr_to_float64(typingctx, val_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="decimal_arr_to_double"
+        )
+        ret = builder.call(fn, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return array_info_type(val_t), codegen
 
 
 @intrinsic
