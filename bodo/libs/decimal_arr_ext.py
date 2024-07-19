@@ -126,6 +126,11 @@ ll.add_symbol(
     decimal_ext.round_decimal_scalar_py_entry,
 )
 
+ll.add_symbol(
+    "decimal_array_to_str_array",
+    decimal_ext.decimal_array_to_str_array_py_entry,
+)
+
 
 from bodo.utils.indexing import (
     array_getitem_bool_index,
@@ -236,7 +241,7 @@ def decimal128type_to_int128(typingctx, val):
 def decimal_to_str_codegen(context, builder, signature, args, scale):
     (val,) = args
     scale = context.get_constant(types.int32, scale)
-
+    remove_trailing_zeros = context.get_constant(types.bool_, 1)
     uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
 
     fnty = lir.FunctionType(
@@ -246,6 +251,7 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
             lir.IntType(8).as_pointer().as_pointer(),
             lir.IntType(64).as_pointer(),
             lir.IntType(32),
+            lir.IntType(1),
         ],
     )
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_str")
@@ -256,6 +262,7 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
             uni_str._get_ptr_by_name("meminfo"),
             uni_str._get_ptr_by_name("length"),
             scale,
+            remove_trailing_zeros,
         ],
     )
 
@@ -413,6 +420,108 @@ def overload_str_to_decimal_array(arr, precision, scale, null_on_error):
         return out_arr
 
     return impl
+
+
+def decimal_array_to_str_array(arr):
+    pass
+
+
+@overload(decimal_array_to_str_array)
+def overload_decimal_array_to_str_array(arr):
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    def impl(arr):  # pragma: no cover
+        input_info = array_to_info(arr)
+        out_info = _decimal_array_to_str_array(input_info)
+        out_arr = info_to_array(out_info, bodo.string_array_type)
+        delete_info(out_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _decimal_array_to_str_array(typingctx, arr_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="decimal_array_to_str_array"
+        )
+        ret = builder.call(fn, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (array_info_type(arr_t), codegen)
+
+
+def decimal_scalar_to_str(arr):
+    """
+    Converts a decimal scalar to a SNOWFLAKE-style string,
+    preserving trailing zeros to fit the scale.
+    """
+    pass
+
+
+@overload(decimal_scalar_to_str)
+def overload_decimal_scalar_to_str(arr):
+    def impl(arr):  # pragma: no cover
+        out = _decimal_scalar_to_str(arr)
+        return out
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _decimal_scalar_to_str(typingctx, arr_t):
+    def codegen(context, builder, signature, args):
+        (val,) = args
+        scale = context.get_constant(types.int32, arr_t.scale)
+        remove_trailing_zeros = context.get_constant(types.bool_, 0)
+
+        uni_str = cgutils.create_struct_proxy(types.unicode_type)(context, builder)
+
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(128),
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(1),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_str")
+        builder.call(
+            fn,
+            [
+                val,
+                uni_str._get_ptr_by_name("meminfo"),
+                uni_str._get_ptr_by_name("length"),
+                scale,
+                remove_trailing_zeros,
+            ],
+        )
+
+        # output is always ASCII
+        uni_str.kind = context.get_constant(
+            types.int32, numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+        )
+        uni_str.is_ascii = context.get_constant(types.int32, 1)
+        # set hash value -1 to indicate "need to compute hash"
+        uni_str.hash = context.get_constant(numba.cpython.unicode._Py_hash_t, -1)
+        uni_str.data = context.nrt.meminfo_data(builder, uni_str.meminfo)
+        # Set parent to NULL
+        uni_str.parent = cgutils.get_null_value(uni_str.parent.type)
+        return uni_str._getvalue()
+
+    return bodo.string_type(arr_t), codegen
 
 
 # We cannot have exact matching between Python and Bodo
