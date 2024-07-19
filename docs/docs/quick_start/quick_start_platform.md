@@ -56,8 +56,6 @@ which will create the necessary resources to support the Cloud Configuration in 
     You need the following set of permissions to successfully create the resources defined in the CloudFormation stack:
 
     - [`AWSCloudFormationFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AWSCloudFormationFullAccess.html){target="blank"}
-    - [`AmazonS3FullAccess`](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-iam-awsmanpol.html#security-iam-awsmanpol-amazons3fullaccess){target="blank"}
-    - [`AmazonDynamoDBFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonDynamoDBFullAccess.html){target="blank"}
     - [`AWSIAMFullAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/IAMFullAccess.html){target="blank"}
 
 Once you have ensured that you have all permissions necessary to create the resources, follow the steps below to create a Cloud Configuration:
@@ -73,7 +71,7 @@ Once you have ensured that you have all permissions necessary to create the reso
 
 3. Fill in the following values :
     - **Cloud Configuration Name**: A name for your Cloud Configuration.
-    - **Metadata Storage Region**: Fill this with the region where you want to store the metadata.
+    - **CloudFormation Stack Region**: Fill this with the region where you want to deploy the stack.
    
 4. Click on **Launch CloudFormation Template**. This will open the AWS CloudFormation console in a new tab in the selected region.
 
