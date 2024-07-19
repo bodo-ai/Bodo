@@ -62,7 +62,7 @@ struct SortedChunkedTableBuilder {
 
     HeapComparator comp;
 
-    std::vector<TableAndRange> table_heap;
+    std::vector<TableAndRange> input_chunks;
 
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     std::unique_ptr<ChunkedTableBuilder> sorted_table_builder;
@@ -103,7 +103,8 @@ struct SortedChunkedTableBuilder {
     void InitCTB(std::shared_ptr<bodo::Schema> schema);
 
     /**
-     * Append an table to the builder, sorting it if required.
+     * Append a table to the builder. If it's sorted, we will append it as is.
+     * Else, we will sort it (create a copy) and then append it.
      *
      * @param chunk Table to append. Must be pinned.
      * @param sorted should be true if the input chunk is already sorted and can
@@ -143,7 +144,6 @@ struct StreamSortMetrics {
 
     // consume metrics
     time_t local_sort_chunk_time;
-    time_t local_sort_time;
 
     // produce metrics
     time_t sampling_time;
@@ -180,8 +180,6 @@ struct StreamSortState {
 
     // builder will create a sorted list from the chunks passed to consume batch
     SortedChunkedTableBuilder builder;
-    // output from the sorted builder
-    std::vector<TableAndRange> local_chunks;
 
     // Index of chunk to yield
     size_t output_idx = 0;
@@ -231,7 +229,8 @@ struct StreamSortState {
      * Get bounds for parallel sorting based on the chunks consumed so far.
      * These bounds determine which elements are assigned to which ranks.
      */
-    std::shared_ptr<table_info> GetParallelSortBounds();
+    std::shared_ptr<table_info> GetParallelSortBounds(
+        std::vector<TableAndRange>& local_chunks);
 
     /**
      * Sort all chunks passed to ConsumeBatch across all ranks
@@ -245,11 +244,12 @@ struct StreamSortState {
     std::pair<std::shared_ptr<table_info>, bool> GetOutput();
 
     // Helper methods
-
-    // Partition all sorted input chunks a list of chunks per rank
-    // All of the returned data needs to be communicated.
-    std::vector<std::vector<std::shared_ptr<table_info>>> PartitionChunksByRank(
-        int n_pes, std::shared_ptr<table_info> bounds);
+    // Based on bounds generate tables to send to each rank and store inside
+    // vector<CTB> where the i-th element are chunks to rank i.
+    // Then we pop all CTB to retrieve vector<table_info> for each rank
+    std::vector<std::vector<std::shared_ptr<table_info>>> BuilderByRank(
+        int n_pes, std::shared_ptr<table_info> bounds,
+        std::vector<TableAndRange>&& local_chunks);
 
     // Report all metrics
     void ReportMetrics();
