@@ -3775,6 +3775,172 @@ def test_decimal_int_subtraction(arg1, arg2, expected):
     check_func(impl, (arg1, arg2), py_output=expected)
 
 
+@pytest.mark.parametrize(
+    "arr, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    1,
+                    1.55,
+                    1.56,
+                    10.56,
+                    1000.5,
+                    None,
+                    None,
+                    10004.1,
+                    -11.41,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="basic",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "0.01",
+                    "0.02",
+                    "0.03",
+                    "0.04",
+                    "0.05",
+                    None,
+                    "0.07",
+                    "0.08",
+                    "0.09",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    0.01,
+                    0.02,
+                    0.03,
+                    0.04,
+                    0.05,
+                    None,
+                    0.07,
+                    0.08,
+                    0.09,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="small_values",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "12345678",
+                    "-12345678",
+                    "0",
+                    "999999999999",
+                    "-999999999999",
+                    None,
+                    None,
+                    "1123456789",
+                    "-1987654321",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 0)),
+            ),
+            pd.array(
+                [
+                    12345678,
+                    -12345678,
+                    0,
+                    999999999999,
+                    -999999999999,
+                    None,
+                    None,
+                    1123456789,
+                    -1987654321,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="integer_values",
+        ),
+        pytest.param(
+            pd.array(
+                ["0", "0", "0", "0", None],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 0)),
+            ),
+            pd.array(
+                [0, 0, 0, 0, None],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="zeroes",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "99999999999999999999999999999999999999",
+                    "-99999999999999999999999999999999999999",
+                    "99999999999999999999999999999999999999",
+                    "-99999999999999999999999999999999999999",
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            pd.array(
+                [
+                    99999999999999999999999999999999999999,
+                    -99999999999999999999999999999999999999,
+                    99999999999999999999999999999999999999,
+                    -99999999999999999999999999999999999999,
+                    None,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="max_values",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "9.9999999999999999999999999999999999999",
+                    "9.9999999999999999999999999999999999999",
+                    "9.9999999999999999999999999999999999999",
+                    "9.9999999999999999999999999999999999999",
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+            ),
+            pd.array(
+                [
+                    9.9999999999999999999999999999999999999,
+                    9.9999999999999999999999999999999999999,
+                    9.9999999999999999999999999999999999999,
+                    9.9999999999999999999999999999999999999,
+                    None,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            id="max_values",
+        ),
+    ],
+)
+def test_decimal_to_float_array(arr, expected, memory_leak_check):
+    """
+    Test converting a decimal array to float.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.to_double(arr, None)
+
+    check_func(impl, (arr,), py_output=expected)
+
+
 def test_str_to_decimal_scalar(memory_leak_check):
     """
     Test converting a string scalar to decimal.
