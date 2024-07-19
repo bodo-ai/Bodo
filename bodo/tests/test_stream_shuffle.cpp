@@ -1,6 +1,7 @@
 #include <arrow/util/bit_util.h>
 #include <fmt/core.h>
 #include <mpi.h>
+#include <sstream>
 #include "../libs/_dict_builder.h"
 #include "../libs/_stream_groupby.h"
 #include "../libs/_stream_shuffle.h"
@@ -674,6 +675,121 @@ static bodo::tests::suite tests([] {
 
         for (size_t i = 1; i < 1000; i++) {
             test_map_shuffle(i);
+        }
+    });
+    bodo::tests::test("test_send_dict_resize_works", []() {
+        // trying to reproduce seg fault where data buff gets reallocated before
+        // it can be sent.
+
+        int my_rank;
+        int n_pes;
+        MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+        // test is designed for 2 ranks
+        if (n_pes != 2) {
+            return;
+        }
+
+        size_t array_size = 100;
+        size_t num_new_rows = 100;
+
+        std::shared_ptr<table_info> empty_table = bodo::tests::cppToBodo(
+            {"A"}, {true}, {"A"}, std::vector<std::string>());
+
+        std::vector<std::string> expected_vec(array_size);
+        for (size_t i = 0; i < array_size; i++) {
+            expected_vec[i] = std::to_string(i);
+        }
+        std::shared_ptr<table_info> expected_table =
+            bodo::tests::cppToBodo({"A"}, {true}, {"A"}, expected_vec);
+
+        // send states for rank 0
+        std::vector<AsyncShuffleSendState> send_states;
+        if (my_rank == 0) {
+            std::vector<std::string> dict_data_vec =
+                std::vector<std::string>(array_size);
+            for (size_t i = 0; i < array_size; i++) {
+                dict_data_vec[i] = std::to_string(i);
+            }
+
+            std::shared_ptr<table_info> initial_table =
+                bodo::tests::cppToBodo({"A"}, {true}, {"A"}, dict_data_vec);
+
+            std::shared_ptr<uint32_t[]> hashes =
+                std::make_shared<uint32_t[]>(array_size, 1);
+
+            // create table buffer and append first set of values
+            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+            dict_builders.push_back(create_dict_builder_for_array(
+                initial_table->schema()->column_types[0]->copy(), false));
+            TableBuildBuffer table_buffer(initial_table->schema(),
+                                          dict_builders);
+
+            table_buffer.UnifyTablesAndAppend(initial_table, dict_builders);
+
+            // wait until after send to append new
+            std::vector<std::string> new_vals(num_new_rows);
+            for (size_t i = 0; i < num_new_rows; i++) {
+                new_vals[i] = std::to_string(i + array_size);
+            }
+            std::shared_ptr<table_info> new_vals_table =
+                bodo::tests::cppToBodo({"A"}, {true}, {"A"}, new_vals);
+
+            void* loc_before =
+                (void*)(dict_builders[0]->dict_buff->data_array->data1());
+
+            shuffle_issend(table_buffer.data_table, hashes, nullptr,
+                           send_states, MPI_COMM_WORLD);
+
+            table_buffer.UnifyTablesAndAppend(new_vals_table, dict_builders);
+            void* loc_after =
+                (void*)(dict_builders[0]->dict_buff->data_array->data1());
+
+            // make sure the raw pointer to the data buff is actually different
+            bodo::tests::check(loc_after != loc_before);
+        }
+        // ensure resizing happens before recv
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        // recv the resized dictionary encoded array column
+        bool tables_match;
+        if (my_rank == 1) {
+            std::vector<AsyncShuffleRecvState> recv_states;
+            shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states);
+            std::unique_ptr<bodo::Schema> schema = empty_table->schema();
+
+            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+            for (size_t i = 0; i < empty_table->ncols(); i++) {
+                dict_builders.push_back(create_dict_builder_for_array(
+                    schema->column_types[i]->copy(), false));
+            }
+            TableBuildBuffer result_table(std::move(schema), dict_builders);
+            IncrementalShuffleMetrics metrics;
+            while (recv_states.size() != 0) {
+                std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
+                    return s.recvDone(result_table, dict_builders, metrics);
+                });
+            }
+
+            // check that the recv'd table looks correct
+            std::stringstream ss1;
+            std::stringstream ss2;
+            DEBUG_PrintTable(ss1, result_table.data_table);
+            DEBUG_PrintTable(ss2, expected_table);
+            tables_match = ss1.str() == ss2.str();
+        }
+        MPI_Bcast(&tables_match, 1, MPI_UNSIGNED_CHAR, 1, MPI_COMM_WORLD);
+
+        bodo::tests::check(tables_match);
+
+        // cleanup
+        if (my_rank == 0) {
+            while (send_states.size() > 0) {
+                std::erase_if(send_states, [&](AsyncShuffleSendState& s) {
+                    return s.sendDone();
+                });
+            }
         }
     });
 });

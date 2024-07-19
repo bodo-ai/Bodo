@@ -933,8 +933,9 @@ AsyncShuffleSendState send_shuffle_data(
                           Bodo_CTypes::INT32>(shuffle_comm, comm_info,
                                               in_arr->child_arrays[1],
                                               curr_tags, must_shuffle_to_rank);
-
-    std::shared_ptr<array_info>& dict_arr = in_arr->child_arrays[0];
+    // Copy the dict array because the dictionary comes from a builder. Builders
+    // can be appended to which can cause resizes invalidating the pointer.
+    std::shared_ptr<array_info> dict_arr = copy_array(in_arr->child_arrays[0]);
     const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
     const MPI_Datatype offset_mpi_type = MPI_UINT64_T;
     // Send the whole dict to each rank
