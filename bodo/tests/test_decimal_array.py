@@ -695,6 +695,347 @@ def test_cast_decimal_to_decimal_array_error(
 
 
 @pytest.mark.parametrize(
+    "arg0, arg1, answers",
+    [
+        pytest.param(
+            pa.scalar(Decimal("132.00"), pa.decimal128(5, 2)),
+            pa.scalar(Decimal("2.45"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal("2.15"), pa.decimal128(5, 2)),
+            id="scalar-scalar-same_scale-fast",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-1234"), pa.decimal128(10, 0)),
+            pa.scalar(Decimal("2.9"), pa.decimal128(10, 2)),
+            pa.scalar(Decimal("-1.5"), pa.decimal128(12, 2)),
+            id="scalar-scalar-smaller_scale-fast",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("98765432.10"), pa.decimal128(10, 2)),
+            pa.scalar(Decimal("-9876543210"), pa.decimal128(10, 0)),
+            pa.scalar(Decimal("98765432.10"), pa.decimal128(12, 2)),
+            id="scalar-scalar-larger_scale-fast",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("9876543210987654321098765432"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal("1234567.89"), pa.decimal128(38, 2)),
+            pa.scalar(Decimal("7535.60"), pa.decimal128(38, 2)),
+            id="scalar-scalar-smaller_scale-unsafe",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-987654321.987654321"), pa.decimal128(38, 18)),
+            pa.scalar(Decimal("10000000000000000000.89"), pa.decimal128(38, 2)),
+            pa.scalar(Decimal("-987654321.987654321"), pa.decimal128(38, 18)),
+            id="scalar-scalar-larger_scale-unsafe",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("254.016"),
+                    None,
+                    Decimal("1234.5678"),
+                    None,
+                    Decimal("-56.9"),
+                    Decimal("-0.01"),
+                    Decimal("-0.09999"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            pd.array(
+                [
+                    Decimal("123.456"),
+                    None,
+                    Decimal("-98.0"),
+                    Decimal("1234"),
+                    Decimal("0.0101"),
+                    None,
+                    Decimal("-0.123456789"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            pd.array(
+                [
+                    Decimal("7.104"),
+                    None,
+                    Decimal("58.5678"),
+                    None,
+                    Decimal("-0.0067"),
+                    None,
+                    Decimal("-0.09999"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            id="array-array-same_scale-fast",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("625.00"),
+                    None,
+                    Decimal("65536.33"),
+                    None,
+                    Decimal("-99999999.99"),
+                    Decimal("0.0"),
+                    Decimal("-20.48"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+            ),
+            pd.array(
+                [
+                    Decimal("12.25"),
+                    None,
+                    Decimal("-12345.67"),
+                    Decimal("0.0"),
+                    Decimal("12345.6789"),
+                    None,
+                    Decimal("-1.2345"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(9, 4)),
+            ),
+            pd.array(
+                [
+                    Decimal("0.25"),
+                    None,
+                    Decimal("3807.98"),
+                    None,
+                    Decimal("-0.9"),
+                    None,
+                    Decimal("-0.728"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(12, 4)),
+            ),
+            id="array-array-smaller_scale-fast",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("0"),
+                    None,
+                    Decimal("12345670.89"),
+                    None,
+                    Decimal("-123456.78"),
+                    Decimal("13.5"),
+                    Decimal("0"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+            ),
+            pd.array(
+                [
+                    Decimal("12345"),
+                    None,
+                    Decimal("666"),
+                    Decimal("-1"),
+                    Decimal("99999"),
+                    None,
+                    Decimal("-98765"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(5, 0)),
+            ),
+            pd.array(
+                [
+                    Decimal("0"),
+                    None,
+                    Decimal("28.89"),
+                    None,
+                    Decimal("-23457.78"),
+                    None,
+                    Decimal("0"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+            ),
+            id="array-array-larger_scale-fast",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("9876543210"),
+                    None,
+                    Decimal("13"),
+                    None,
+                    Decimal("-99999999999999999"),
+                    Decimal("0"),
+                    Decimal("-1"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(24, 0)),
+            ),
+            pd.array(
+                [
+                    Decimal("6173.1234567789"),
+                    None,
+                    Decimal("-0.51206"),
+                    Decimal("0"),
+                    Decimal("1234.5678"),
+                    None,
+                    Decimal("-0.00000864200001300579"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(24, 20)),
+            ),
+            pd.array(
+                [
+                    Decimal("2490.28956163860000000000"),
+                    None,
+                    Decimal("0.19850000000000000000"),
+                    None,
+                    Decimal("-671.40000000000000000000"),
+                    None,
+                    Decimal("-0.00000825249506102173"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 20)),
+            ),
+            id="array-array-smaller_scale-unsafe",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("12345678901234.5678901234567890"),
+                    None,
+                    Decimal("12345678901234.5678901234567890"),
+                    None,
+                    Decimal("-12345678901234.5678901234567890"),
+                    Decimal("-12345678901234.5678901234567890"),
+                    Decimal("-12345678901234.5678901234567890"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(32, 16)),
+            ),
+            pd.array(
+                [
+                    Decimal("987654321"),
+                    None,
+                    Decimal("-987654321987654321"),
+                    Decimal("-987654321987654321"),
+                    Decimal("202020202020"),
+                    None,
+                    Decimal("-202020202020"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(28, 0)),
+            ),
+            pd.array(
+                [
+                    Decimal("987543055.5678901234567890"),
+                    None,
+                    Decimal("12345678901234.5678901234567890"),
+                    None,
+                    Decimal("-22446578014.5678901234567890"),
+                    None,
+                    Decimal("-22446578014.5678901234567890"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 16)),
+            ),
+            id="array-array-larger_scale-unsafe",
+        ),
+        pytest.param(
+            pd.array(
+                [Decimal("10987654320.423456789"), None] * 5,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            None,
+            pd.array(
+                [None] * 10,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            id="array-null",
+        ),
+        pytest.param(
+            None,
+            pd.array(
+                [Decimal("10987654320.423456789"), None] * 5,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            pd.array(
+                [None] * 10,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            id="null-array",
+        ),
+    ],
+)
+def test_decimal_modulo(arg0, arg1, answers, memory_leak_check):
+    """Test modulo on decimals"""
+
+    def impl(arg0, arg1):
+        return bodo.libs.bodosql_array_kernels.modulo_numeric(arg0, arg1)
+
+    check_func(impl, (arg0, arg1), py_output=answers, only_1DVar=True)
+
+    # If the arguments are also arrays, test arr-scalar and scalar-arr by
+    # selecting the first rows.
+    if isinstance(arg0, pd.core.arrays.base.ExtensionArray) and isinstance(
+        arg1, pd.core.arrays.base.ExtensionArray
+    ):
+        arg0_replicated = (
+            pd.concat([pd.Series(arg0[:1]), pd.Series([None])]).repeat(3).values
+        )
+        arg1_replicated = (
+            pd.concat([pd.Series(arg1[:1]), pd.Series([None])]).repeat(3).values
+        )
+        answer_replicated = (
+            pd.concat([pd.Series(answers[:1]), pd.Series([None])]).repeat(3).values
+        )
+        check_func(
+            impl,
+            (arg0[0], arg1_replicated),
+            py_output=answer_replicated,
+            only_1DVar=True,
+        )
+        check_func(
+            impl,
+            (arg0_replicated, arg1[0]),
+            py_output=answer_replicated,
+            only_1DVar=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "array_0, array_1",
+    [
+        pytest.param(True, True, id="array-array"),
+        pytest.param(True, False, id="array-scalar"),
+        pytest.param(False, True, id="scalar-array"),
+        pytest.param(False, False, id="scalar-scalar"),
+    ],
+)
+@pytest.mark.parametrize(
+    "arg0, arg1, exception_type, msg",
+    [
+        pytest.param(
+            pa.scalar(Decimal("98765432109876543210"), pa.decimal128(38, 0)),
+            pa.scalar(Decimal("187654.87654321"), pa.decimal128(38, 30)),
+            RuntimeError,
+            "Invalid rescale during decimal modulo",
+            id="smaller_scale-overflow_on_rescale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-187654.87654321"), pa.decimal128(38, 30)),
+            pa.scalar(Decimal("98765432109876543210"), pa.decimal128(38, 0)),
+            RuntimeError,
+            "Invalid rescale during decimal modulo",
+            id="larger_scale-overflow_on_rescale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("800000000000000001"), pa.decimal128(38, 18)),
+            pa.scalar(Decimal("0"), pa.decimal128(38, 18)),
+            RuntimeError,
+            "Invalid modulo by zero",
+            id="zero_divisor",
+        ),
+    ],
+)
+def test_decimal_modulo_error(arg0, arg1, exception_type, msg, array_0, array_1):
+    """Test modulo of decimals in ways that will cause error"""
+
+    def impl(arg0, arg1):
+        return bodo.libs.bodosql_array_kernels.modulo_numeric(arg0, arg1)
+
+    if array_0:
+        arg0 = pd.array([arg0.as_py(), None] * 3, dtype=pd.ArrowDtype(arg0.type))
+
+    if array_1:
+        arg1 = pd.array([arg1.as_py(), None] * 3, dtype=pd.ArrowDtype(arg1.type))
+
+    with pytest.raises(exception_type, match=msg):
+        check_func(impl, (arg0, arg1), py_output=arg0)
+
+
+@pytest.mark.parametrize(
     "arg0, arg1, answer",
     [
         pytest.param(

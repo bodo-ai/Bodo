@@ -190,7 +190,7 @@ broadcasted_fixed_arg_functions = {
     "ltrim",
     "makedate",
     "md5",
-    "mod",
+    "modulo_numeric",
     "monthname",
     "months_between",
     "multiply_decimals",

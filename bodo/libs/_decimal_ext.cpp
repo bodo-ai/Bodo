@@ -840,6 +840,279 @@ array_info* multiply_decimal_arrays_py_entry(
 }
 
 /**
+ * Performs the modulo operation on two decimal scalars. This is
+ * a valid operation because of the arrow implementation of the
+ * '%' operator on Decimal128 values, linked here (see BasicDecimal128
+ * operator%):
+ * https://github.com/apache/arrow/blob/main/cpp/src/arrow/util/basic_decimal.cc
+ *
+ * @tparam fast_mod: true if we can avoid safety checks because
+ * neither argument has to be rescaled to an unsafe extent.
+ * @tparam rescale_left: true if the lhs of the modulo operation
+ * must be rescaled to match the rhs.
+ * @tparam rescale_right: true if the rhs of the modulo operation
+ * must be rescaled to match the lhs.
+ * @param d1 a reference to the lhs of the modulo operation.
+ * @param d2 a reference to the rhs of the modulo operation.
+ * @param s1 the scale of decimal d1.
+ * @param s2 the scale of decimal d1.
+ * @param out_scale the intended scale of the output decimal.
+ * @param result the pointer where the result decimal is stored.
+ */
+template <bool fast_mod, bool rescale_left, bool rescale_right>
+inline void modulo_decimal_scalars(const arrow::Decimal128& d1,
+                                   const arrow::Decimal128& d2, int64_t s1,
+                                   int64_t s2, int64_t out_scale,
+                                   arrow::Decimal128* result) {
+    arrow::Decimal128 lhs = d1;
+    arrow::Decimal128 rhs = d2;
+    if constexpr (fast_mod) {
+        // Ensure the two decimals have the same scale
+        if constexpr (rescale_left) {
+            lhs = d1.Rescale(s1, out_scale).ValueOrDie();
+        }
+        if constexpr (rescale_right) {
+            rhs = d2.Rescale(s2, out_scale).ValueOrDie();
+        }
+        if (rhs == 0) {
+            throw std::runtime_error("Invalid modulo by zero");
+        }
+        *result = lhs % rhs;
+    } else {
+        // Ensure the two decimals have the same scale, but checking for invalid
+        // values
+        auto lhs = decimalops::ConvertToInt256(d1);
+        auto rhs = decimalops::ConvertToInt256(d2);
+        bool out_of_bounds = false;
+        if constexpr (rescale_left) {
+            lhs = decimalops::IncreaseScaleBy(lhs, out_scale - s1);
+            // Verify that the new Decimal256 is in the valid range for a
+            // Decimal128
+            decimalops::ConvertToDecimal128(lhs, &out_of_bounds);
+        }
+        if constexpr (rescale_right) {
+            rhs = decimalops::IncreaseScaleBy(rhs, out_scale - s2);
+            // Verify that the new Decimal256 is in the valid range for a
+            // Decimal128
+            decimalops::ConvertToDecimal128(rhs, &out_of_bounds);
+        }
+        if (rhs == 0) {
+            throw std::runtime_error("Invalid modulo by zero");
+        }
+        boost::multiprecision::int256_t combined_decimal = lhs % rhs;
+        *result =
+            decimalops::ConvertToDecimal128(combined_decimal, &out_of_bounds);
+        if (out_of_bounds) {
+            throw std::runtime_error("Invalid rescale during decimal modulo");
+        }
+    }
+}
+
+/**
+ * @brief Mod two decimal scalars with the given precision and scale
+ * and return the output. The output should have its scale truncated to
+ * the provided output scale. If overflow is detected, then the overflow
+ * need to be updated to true.
+ *
+ * @param v1 First decimal value
+ * @param p1 Precision of first decimal value
+ * @param s1 Scale of first decimal value
+ * @param v2 Second decimal value
+ * @param p2 Precision of second decimal value
+ * @param s2 Scale of second decimal value
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @return arrow::Decimal128
+ */
+arrow::Decimal128 modulo_decimal_scalars_py_entry(
+    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
+    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale) noexcept {
+    try {
+        // We only need to do safe checks if there is a chance that either side
+        // could be rescaled into an invalid value.
+        bool fast_mod = out_precision < decimalops::kMaxPrecision ||
+                        (s1 == out_scale && s2 == out_scale);
+        arrow::Decimal128 result;
+        if (fast_mod) {
+            if (s1 < s2) {
+                modulo_decimal_scalars<true, true, false>(v1, v2, s1, s2,
+                                                          out_scale, &result);
+            } else if (s2 < s1) {
+                modulo_decimal_scalars<true, false, true>(v1, v2, s1, s2,
+                                                          out_scale, &result);
+            } else {
+                modulo_decimal_scalars<true, false, false>(v1, v2, s1, s2,
+                                                           out_scale, &result);
+            }
+        } else {
+            if (s1 < s2) {
+                modulo_decimal_scalars<false, true, false>(v1, v2, s1, s2,
+                                                           out_scale, &result);
+            } else if (s2 < s1) {
+                modulo_decimal_scalars<false, false, true>(v1, v2, s1, s2,
+                                                           out_scale, &result);
+            } else {
+                modulo_decimal_scalars<false, false, false>(v1, v2, s1, s2,
+                                                            out_scale, &result);
+            }
+        }
+
+        return result;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Helper for modulo_decimal_arrays that deals with the
+ * templated loop body.
+ */
+template <bool is_scalar_1, bool is_scalar_2, bool fast_mod, bool rescale_left,
+          bool rescale_right>
+inline void modulo_decimal_arrays_loop_body(
+    const std::unique_ptr<array_info>& arr1,
+    const std::unique_ptr<array_info>& arr2,
+    std::unique_ptr<array_info>& out_arr, int64_t s1, int64_t s2,
+    int64_t out_scale, size_t i) {
+    bool is_null_1, is_null_2;
+    if constexpr (is_scalar_1) {
+        is_null_1 = false;
+    } else {
+        is_null_1 = !arr1->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i);
+    }
+    if constexpr (is_scalar_2) {
+        is_null_2 = false;
+    } else {
+        is_null_2 = !arr2->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i);
+    }
+    if (is_null_1 || is_null_2) {
+        out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
+    } else {
+        arrow::Decimal128* out_ptr =
+            out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                           arrow::Decimal128>() +
+            i;
+        size_t idx1, idx2;
+        if constexpr (is_scalar_1) {
+            idx1 = 0;
+        } else {
+            idx1 = i;
+        }
+        if constexpr (is_scalar_2) {
+            idx2 = 0;
+        } else {
+            idx2 = i;
+        }
+        const arrow::Decimal128& d1 =
+            *(arr1->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                          arrow::Decimal128>() +
+              idx1);
+        const arrow::Decimal128& d2 =
+            *(arr2->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                          arrow::Decimal128>() +
+              idx2);
+        modulo_decimal_scalars<fast_mod, rescale_left, rescale_right>(
+            d1, d2, s1, s2, out_scale, out_ptr);
+    }
+}
+
+/**
+ * @brief Mod two decimal arrays element-wise and return an output array
+ * with the specified precision and scale. If overflow is detected during any
+ * modulo, then the 'overflow' flag is updated to true.
+ *
+ * @param arr1 First nullable decimal array.
+ * @param arr2 Second nullable decimal array.
+ * @param out_precision Output precision
+ * @param out_scale Output scale
+ * @param[out] overflow Overflow flag.
+ * @return std::shared_ptr<array_info> Output nullable decimal array.
+ */
+template <bool is_scalar_1, bool is_scalar_2>
+std::unique_ptr<array_info> modulo_decimal_arrays(
+    const std::unique_ptr<array_info>& arr1,
+    const std::unique_ptr<array_info>& arr2, int64_t out_precision,
+    int64_t out_scale) noexcept {
+    int64_t s1 = arr1->scale;
+    int64_t s2 = arr2->scale;
+    // Allocate output array.
+    size_t out_length = is_scalar_1 ? arr2->length : arr1->length;
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(out_length, Bodo_CTypes::DECIMAL);
+    try {
+        out_arr->precision = out_precision;
+        out_arr->scale = out_scale;
+        // We only need to do safe checks if there is a chance that either side
+        // could be rescaled into an invalid value.
+        bool fast_mod = out_precision < decimalops::kMaxPrecision ||
+                        (s1 == out_scale && s2 == out_scale);
+        bool rescale_left = s1 < s2;
+        bool rescale_right = s2 < s1;
+#ifndef DECIMAL_ARRAY_MOD
+#define DECIMAL_ARRAY_MOD(FAST_MOD, RESCALE_LEFT, RESCALE_RIGHT)            \
+    for (size_t i = 0; i < out_length; i++) {                               \
+        modulo_decimal_arrays_loop_body<is_scalar_1, is_scalar_2, FAST_MOD, \
+                                        RESCALE_LEFT, RESCALE_RIGHT>(       \
+            arr1, arr2, out_arr, s1, s2, out_scale, i);                     \
+    }
+#endif
+        if (fast_mod) {
+            if (rescale_left) {
+                DECIMAL_ARRAY_MOD(true, true, false)
+            } else if (rescale_right) {
+                DECIMAL_ARRAY_MOD(true, false, true)
+            } else {
+                DECIMAL_ARRAY_MOD(true, false, false)
+            }
+        } else {
+            if (rescale_left) {
+                DECIMAL_ARRAY_MOD(false, true, false)
+            } else if (rescale_right) {
+                DECIMAL_ARRAY_MOD(false, false, true)
+            } else {
+                DECIMAL_ARRAY_MOD(false, false, false)
+            }
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return out_arr;
+}
+
+#undef DECIMAL_ARRAY_ADD
+
+array_info* modulo_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
+                                           bool is_scalar_1, bool is_scalar_2,
+                                           int64_t out_precision,
+                                           int64_t out_scale) noexcept {
+    try {
+        std::unique_ptr<array_info> arr1 = std::unique_ptr<array_info>(arr1_);
+        std::unique_ptr<array_info> arr2 = std::unique_ptr<array_info>(arr2_);
+        assert(arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr2->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr1->dtype == Bodo_CTypes::DECIMAL &&
+               arr2->dtype == Bodo_CTypes::DECIMAL &&
+               arr1->length == arr2->length);
+        std::unique_ptr<array_info> out_arr;
+        if (is_scalar_1) {
+            out_arr = modulo_decimal_arrays<true, false>(
+                arr1, arr2, out_precision, out_scale);
+        } else if (is_scalar_2) {
+            out_arr = modulo_decimal_arrays<false, true>(
+                arr1, arr2, out_precision, out_scale);
+        } else {
+            out_arr = modulo_decimal_arrays<false, false>(
+                arr1, arr2, out_precision, out_scale);
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief Divide two decimal scalars with the given precision and scale
  * and return the output. The output should have its scale truncated to
  * the provided output scale. If overflow is detected, then the overflow
@@ -1917,6 +2190,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_arrays_py_entry);
+    SetAttrStringFromVoidPtr(m, modulo_decimal_scalars_py_entry);
+    SetAttrStringFromVoidPtr(m, modulo_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, divide_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_array_to_str_array_py_entry);
