@@ -1945,12 +1945,16 @@ void HashJoinState::FinalizeBuild() {
                 this->SplitPartition(i_part);
             }
         }
-        // Globally determine if all ranks are empty.
-        bool local_empty_build =
-            this->partitions.empty() ||
-            this->partitions[0]->build_table_buffer->data_table->nrows() == 0;
+    }
+    // Globally determine if all ranks are empty.
+    bool local_empty_build =
+        this->partitions.empty() ||
+        this->partitions[0]->build_table_buffer->data_table->nrows() == 0;
+    if (this->build_parallel) {
         MPI_Allreduce(&this->global_build_empty, &local_empty_build, 1,
                       MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD);
+    } else {
+        this->global_build_empty = local_empty_build;
     }
 
     // The estimated required size of the pool is at least the size of the
