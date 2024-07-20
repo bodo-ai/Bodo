@@ -1266,6 +1266,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
     global_6 = MetaType((0, 1, 2, 3, 4))
     global_7 = ColNamesMetaType(("A", "B", "C", "D", "E", "RANK"))
     global_8 = MetaType((0, 1, 2, 3, 4, 5))
+    global_9 = MetaType(((),))
 
     @bodo.jit(distributed=["df"])
     def window_impl(df):
@@ -1284,8 +1285,10 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
             global_4,
             global_4,
             global_5,
+            global_9,
             global_6,
             True,
+            5,
         )
         __bodo_is_last_streaming_output_2 = False
         bodo.libs.query_profile_collector.start_pipeline(0)

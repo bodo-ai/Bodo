@@ -9,6 +9,9 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                          std::vector<bool> order_by_na_,
                          std::vector<bool> partition_by_cols_to_keep_,
                          std::vector<bool> order_by_cols_to_keep_,
+                         std::vector<bool> input_cols_to_keep_,
+                         std::vector<int32_t> func_input_indices_,
+                         std::vector<int32_t> func_input_offsets_,
                          int64_t output_batch_size_, bool parallel_,
                          int64_t sync_iter_, int64_t op_id_,
                          int64_t op_pool_size_bytes_,
@@ -37,6 +40,9 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
       order_by_na(std::move(order_by_na_)),
       partition_by_cols_to_keep(std::move(partition_by_cols_to_keep_)),
       order_by_cols_to_keep(std::move(order_by_cols_to_keep_)),
+      input_cols_to_keep(std::move(input_cols_to_keep_)),
+      func_input_indices(std::move(func_input_indices_)),
+      func_input_offsets(std::move(func_input_offsets_)),
       sync_iter(sync_iter_),
       op_id(op_id_) {
     // Enable/disable work stealing
@@ -50,35 +56,38 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
     this->enable_output_work_stealing = allow_work_stealing;
 
     // Build schema always matches the input schema.
-    std::shared_ptr<bodo::Schema> build_table_schema =
-        std::make_shared<bodo::Schema>(*in_schema_);
+    this->build_table_schema = std::make_shared<bodo::Schema>(*in_schema_);
 
     this->build_table_dict_builders.resize(
-        build_table_schema->column_types.size());
+        this->build_table_schema->column_types.size());
     size_t num_sort_keys = n_keys + order_by_asc.size();
-    for (size_t i = 0; i < build_table_schema->column_types.size(); i++) {
+    for (size_t i = 0; i < this->build_table_schema->column_types.size(); i++) {
         // Mark the partition by and order by columns as keys since it may
         // be needed or useful for sort.
         bool is_key = i < num_sort_keys;
         this->build_table_dict_builders[i] = create_dict_builder_for_array(
-            build_table_schema->column_types[i]->copy(), is_key);
+            this->build_table_schema->column_types[i]->copy(), is_key);
     }
     this->build_table_buffer = std::make_unique<TableBuildBuffer>(
-        build_table_schema, this->build_table_dict_builders);
+        this->build_table_schema, this->build_table_dict_builders);
 
     // Generate the output schema
     std::unique_ptr<bodo::Schema> output_schema =
         std::make_unique<bodo::Schema>();
     // Window outputs all the input columns - where partition_by_cols_to_keep or
-    // order_by_cols_to_keep are false + the number of function columns.
+    // order_by_cols_to_keep or input_cols_to_keep are false + the number of
+    // function columns.
     size_t dropped_partition_by_cols =
         std::count(partition_by_cols_to_keep.begin(),
                    partition_by_cols_to_keep.end(), false);
     size_t dropped_order_by_cols = std::count(
         order_by_cols_to_keep.begin(), order_by_cols_to_keep.end(), false);
-    size_t dropped_cols = dropped_partition_by_cols + dropped_order_by_cols;
-    size_t num_output_cols =
-        (build_table_schema->column_types.size() - dropped_cols);
+    size_t dropped_input_cols =
+        std::count(input_cols_to_keep.begin(), input_cols_to_keep.end(), false);
+    size_t dropped_cols =
+        dropped_partition_by_cols + dropped_order_by_cols + dropped_input_cols;
+    size_t num_output_cols = (this->build_table_schema->column_types.size() -
+                              dropped_cols + window_ftypes.size());
     // Create separate dictionary builders for the output because the sort step
     // creates a global dictionary right now which would require transposing.
     std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders(
@@ -87,27 +96,32 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
     for (size_t i = 0; i < n_keys; i++) {
         if (partition_by_cols_to_keep[i]) {
             output_schema->append_column(
-                build_table_schema->column_types[i]->copy());
+                this->build_table_schema->column_types[i]->copy());
             output_dict_builders[output_index++] =
                 create_dict_builder_for_array(
-                    build_table_schema->column_types[i]->copy(), true);
+                    this->build_table_schema->column_types[i]->copy(), true);
         }
     }
     for (size_t i = n_keys; i < num_sort_keys; i++) {
         if (order_by_cols_to_keep[i - n_keys]) {
             output_schema->append_column(
-                build_table_schema->column_types[i]->copy());
+                this->build_table_schema->column_types[i]->copy());
             output_dict_builders[output_index++] =
                 create_dict_builder_for_array(
-                    build_table_schema->column_types[i]->copy(), true);
+                    this->build_table_schema->column_types[i]->copy(), true);
         }
     }
-    for (size_t i = num_sort_keys; i < build_table_schema->column_types.size();
-         i++) {
-        output_schema->append_column(
-            build_table_schema->column_types[i]->copy());
-        output_dict_builders[output_index++] = create_dict_builder_for_array(
-            build_table_schema->column_types[i]->copy(), false);
+    size_t input_idx = 0;
+    for (size_t i = num_sort_keys;
+         i < this->build_table_schema->column_types.size(); i++) {
+        if (input_cols_to_keep[input_idx]) {
+            output_schema->append_column(
+                this->build_table_schema->column_types[i]->copy());
+            output_dict_builders[output_index++] =
+                create_dict_builder_for_array(
+                    this->build_table_schema->column_types[i]->copy(), false);
+        }
+        input_idx++;
     }
     // Append the window function output types.
     std::vector<std::shared_ptr<array_info>> input_cols(order_by_asc.size());
@@ -115,18 +129,11 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
         input_cols[i] =
             this->build_table_buffer->data_table->columns[i + n_keys];
     }
-    for (int32_t window_ftype : window_ftypes) {
-        // Create a colset to get the output type(s).
-        std::shared_ptr<BasicColSet> col_set = makeColSet(
-            input_cols, nullptr, Bodo_FTypes::window, false, false, 0,
-            {window_ftype}, 0, /*is_parallel*/ false, order_by_asc, order_by_na,
-            {nullptr}, 0, nullptr, nullptr, 0, nullptr, true);
-        const std::vector<std::unique_ptr<bodo::DataType>> window_output_types =
-            col_set->getOutputTypes();
-        for (size_t i = 0; i < window_output_types.size(); i++) {
-            output_schema->append_column(window_output_types[i]->copy());
-            output_dict_builders.push_back(nullptr);
-        }
+    for (size_t func_idx = 0; func_idx < window_ftypes.size(); func_idx++) {
+        InferWindowOutputDataType(func_idx, output_schema);
+        size_t out_idx = output_schema->column_types.size() - 1;
+        output_dict_builders[output_index++] = create_dict_builder_for_array(
+            output_schema->column_types[out_idx]->copy(), false);
     }
 
     this->output_state = std::make_shared<GroupbyOutputState>(
@@ -155,6 +162,70 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
             std::getenv("BODO_DEBUG_STREAM_GROUPBY_PARTITIONING")) {
         this->debug_window = !std::strcmp(debug_window_env_, "1");
     }
+}
+
+void WindowState::InferWindowOutputDataType(
+    int32_t func_idx, std::unique_ptr<bodo::Schema>& out_schema) {
+    int32_t window_ftype = window_ftypes[func_idx];
+    bodo_array_type::arr_type_enum arr_type =
+        bodo_array_type::NULLABLE_INT_BOOL;
+    Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
+    switch (window_ftype) {
+        case Bodo_FTypes::dense_rank:
+        case Bodo_FTypes::rank:
+        case Bodo_FTypes::row_number:
+        case Bodo_FTypes::cume_dist:
+        case Bodo_FTypes::percent_rank: {
+            break;
+        }
+        case Bodo_FTypes::max: {
+            int32_t in_col_offset = func_input_offsets[func_idx];
+            int32_t in_col_idx = func_input_indices[in_col_offset];
+            arr_type = build_table_schema->column_types[in_col_idx]->array_type;
+            dtype = build_table_schema->column_types[in_col_idx]->c_type;
+            break;
+        }
+        default: {
+            throw std::runtime_error("Unsupported streaming window ftype: " +
+                                     (get_name_for_Bodo_FTypes(window_ftype)));
+        }
+    }
+
+    std::tie(arr_type, dtype) =
+        get_groupby_output_dtype(window_ftype, arr_type, dtype);
+    out_schema->append_column(
+        std::make_unique<bodo::DataType>(arr_type, dtype));
+}
+
+void WindowState::AllocWindowOutputColumn(
+    int32_t func_idx, size_t output_rows,
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Use InferWindowOutputDataType to fetch the desired array/data type
+    std::unique_ptr<bodo::Schema> dummy_schema =
+        std::make_unique<bodo::Schema>();
+    InferWindowOutputDataType(func_idx, dummy_schema);
+    auto arr_type = dummy_schema->column_types[0]->array_type;
+    auto dtype = dummy_schema->column_types[0]->c_type;
+    // For string/dict arrays, allocate an empty array since the real array
+    // will be created at the end.
+    std::shared_ptr<array_info> out_arr;
+    if (arr_type == bodo_array_type::STRING ||
+        arr_type == bodo_array_type::DICT) {
+        out_arr = alloc_string_array(Bodo_CTypes::STRING, 0, 0, 0, 0, false,
+                                     false, false, pool, mm);
+    } else {
+        size_t alloc_rows = output_rows;
+        if ((this->n_keys + this->order_by_asc.size()) == 0) {
+            // If there is no partition or order, allocate just a single row
+            // to store the the local/global value.
+            alloc_rows = 1;
+        }
+        out_arr = alloc_array_top_level(alloc_rows, -1, -1, arr_type, dtype, -1,
+                                        0, 0, false, false, false, pool, mm);
+    }
+    aggfunc_output_initialize(out_arr, this->window_ftypes[func_idx], true);
+    out_arrs.push_back(out_arr);
 }
 
 std::shared_ptr<table_info> WindowState::UnifyDictionaryArrays(
@@ -337,6 +408,7 @@ void WindowState::FinalizeBuild() {
     // We first sort the entire table and then compute any functions.
     size_t num_order_by_keys = this->order_by_asc.size();
     size_t num_keys = this->n_keys + num_order_by_keys;
+    size_t num_argument_cols = func_input_indices.size();
     std::vector<int64_t> asc(num_keys);
     std::vector<int64_t> na_pos(num_keys);
     // Set arbitrary values for sort properties for partition by
@@ -354,36 +426,50 @@ void WindowState::FinalizeBuild() {
 
     // TODO: Separate sort from compute.
     ScopedTimer window_timer(this->metrics.finalize_window_compute_time);
-    std::shared_ptr<table_info> sorted_table = sort_values_table(
-        this->build_table_buffer->data_table, num_keys, asc.data(),
-        na_pos.data(), nullptr, nullptr, nullptr, this->parallel);
-    // Clear the build table to minimize memory.
-    this->build_table_buffer.reset();
+    // Skip sort if there are no partition/order columns.
+    std::shared_ptr<table_info> sorted_table;
+    bool skip_sorting = num_keys == 0;
+    if (skip_sorting) {
+        sorted_table = this->build_table_buffer->data_table;
+    } else {
+        sorted_table = sort_values_table(
+            this->build_table_buffer->data_table, num_keys, asc.data(),
+            na_pos.data(), nullptr, nullptr, nullptr, this->parallel);
+        // Clear the build table to minimize memory.
+        this->build_table_buffer.reset();
+    }
     // Compute the window function results.
     std::vector<std::shared_ptr<array_info>> partition_by_cols(this->n_keys);
     std::vector<std::shared_ptr<array_info>> order_by_cols(num_order_by_keys);
+    std::vector<std::shared_ptr<array_info>> argument_cols(num_argument_cols);
     for (size_t i = 0; i < this->n_keys; i++) {
         partition_by_cols[i] = sorted_table->columns[i];
     }
     for (size_t i = 0; i < num_order_by_keys; i++) {
         order_by_cols[i] = sorted_table->columns[i + this->n_keys];
     }
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    for (int32_t window_ftypes : this->window_ftypes) {
-        // Allocate the output array via a colSet.
-        std::shared_ptr<BasicColSet> col_set = makeColSet(
-            order_by_cols, nullptr, Bodo_FTypes::window, false, false, 0,
-            {window_ftypes}, 0, /*is_parallel*/ false, order_by_asc,
-            order_by_na, {nullptr}, 0, nullptr, nullptr, 0, nullptr, true);
-        col_set->alloc_update_columns(-1, out_arrs, true);
+    for (size_t i = 0; i < num_argument_cols; i++) {
+        argument_cols[i] = sorted_table->columns[func_input_indices[i]];
     }
-    sorted_window_computation(partition_by_cols, order_by_cols,
-                              this->window_ftypes, out_arrs, this->parallel);
+
+    // Allocate the output arrays, only allocating a single row if there are no
+    // partition/order terms (since the array is used to store the singleton
+    // unique answer).
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    size_t input_size = sorted_table->columns[0]->length;
+    size_t alloc_size = (skip_sorting) ? 1 : input_size;
+    for (size_t fn_idx = 0; fn_idx < this->window_ftypes.size(); fn_idx++) {
+        AllocWindowOutputColumn(fn_idx, alloc_size, out_arrs);
+    }
+
+    sorted_window_computation(partition_by_cols, order_by_cols, argument_cols,
+                              func_input_offsets, this->window_ftypes, out_arrs,
+                              input_size, this->parallel);
     window_timer.finalize();
     // Append the table to the output buffer.
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         this->partition_by_cols_to_keep, this->order_by_cols_to_keep,
-        sorted_table->ncols());
+        this->input_cols_to_keep, sorted_table->ncols());
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
     for (size_t i = 0; i < sorted_table->ncols(); i++) {
         if (cols_to_keep_bitmask[i]) {
@@ -433,6 +519,10 @@ void WindowState::FinalizeBuild() {
  * columns to keep. It must have n_keys elements.
  * @param order_by_cols_to_keep Bitmask specifying the order-by columns
  * to keep. It must have n_order_by_keys elements.
+ * @param input_cols_to_keep Bitmask specifying the order-by columns
+ * to keep. It must have the same number of elements as the total
+ * number of columns minus the partition/order columns.
+ * @param n_input_cols The intended length of input_cols_to_keep
  * @param output_batch_size Batch size for reading output.
  * @param parallel Is the output parallel?
  * @param sync_iter How frequently should we sync to check if all input has
@@ -444,8 +534,10 @@ WindowState* window_state_init_py_entry(
     int8_t* build_arr_array_types, int n_build_arrs, int32_t* window_ftypes,
     int32_t n_funcs, uint64_t n_keys, bool* order_by_asc, bool* order_by_na,
     uint64_t n_order_by_keys, bool* partition_by_cols_to_keep,
-    bool* order_by_cols_to_keep, int64_t output_batch_size, bool parallel,
-    int64_t sync_iter, bool allow_work_stealing) {
+    bool* order_by_cols_to_keep, bool* input_cols_to_keep, int32_t n_input_cols,
+    int32_t* func_input_indices, int32_t* func_input_offsets,
+    int64_t output_batch_size, bool parallel, int64_t sync_iter,
+    bool allow_work_stealing) {
     // TODO: Consider allowing op pool size bytes to be set
     int64_t op_pool_size_bytes =
         OperatorComptroller::Default()->GetOperatorBudget(operator_id);
@@ -458,6 +550,13 @@ WindowState* window_state_init_py_entry(
         partition_by_cols_to_keep, partition_by_cols_to_keep + n_keys);
     std::vector<bool> order_by_cols_to_keep_vec(
         order_by_cols_to_keep, order_by_cols_to_keep + n_order_by_keys);
+    std::vector<bool> input_cols_to_keep_vec(input_cols_to_keep,
+                                             input_cols_to_keep + n_input_cols);
+    std::vector<int32_t> func_input_offsets_vec(
+        func_input_offsets, func_input_offsets + n_funcs + 1);
+    int32_t n_inputs = func_input_offsets_vec[n_funcs];
+    std::vector<int32_t> func_input_indices_vec(func_input_indices,
+                                                func_input_indices + n_inputs);
     return new WindowState(
         bodo::Schema::Deserialize(
             std::vector<int8_t>(build_arr_array_types,
@@ -467,8 +566,10 @@ WindowState* window_state_init_py_entry(
 
         std::vector<int32_t>(window_ftypes, window_ftypes + n_funcs), n_keys,
         order_by_asc_vec, order_by_na_vec, partition_by_cols_to_keep_vec,
-        order_by_cols_to_keep_vec, output_batch_size, parallel, sync_iter,
-        operator_id, op_pool_size_bytes, allow_work_stealing);
+        order_by_cols_to_keep_vec, input_cols_to_keep_vec,
+        func_input_indices_vec, func_input_offsets_vec, output_batch_size,
+        parallel, sync_iter, operator_id, op_pool_size_bytes,
+        allow_work_stealing);
 }
 
 /**

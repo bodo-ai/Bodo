@@ -105,13 +105,20 @@ void window_computation(
  *
  * @param[in] partition_by_arrs The arrays that hold the partition by values.
  * @param[in] order_by_arrs The arrays that hold the order by values.
+ * @param[in] window_args The arrays that hold the window argument values.
+ * @param[in] window_offset_indices The vector used to associate elements of
+ * window_args with the corresponding function call.
  * @param[in] window_funcs The name(s) of the window function(s) being computed.
  * @param[out] out_arrs The output array(s) being populated.
+ * @param[in] out_rows the number of rows the output should have
  * @param is_parallel Is the data distributed? This is used for communicating
  * with a neighboring rank for boundary groups.
  */
 void sorted_window_computation(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& window_args,
+    const std::vector<int32_t>& window_offset_indices,
     const std::vector<int32_t>& window_funcs,
-    std::vector<std::shared_ptr<array_info>> out_arrs, bool is_parallel);
+    std::vector<std::shared_ptr<array_info>>& out_arrs, size_t out_rows,
+    bool is_parallel);
