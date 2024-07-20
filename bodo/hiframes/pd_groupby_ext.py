@@ -1579,6 +1579,7 @@ def get_window_func_types():
         "any_value": None,
         "first": None,
         "last": None,
+        "max": None,
     }
     return window_func_types
 

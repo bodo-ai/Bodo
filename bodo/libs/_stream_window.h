@@ -33,6 +33,9 @@ class WindowState {
     const std::vector<bool> order_by_na;
     const std::vector<bool> partition_by_cols_to_keep;
     const std::vector<bool> order_by_cols_to_keep;
+    const std::vector<bool> input_cols_to_keep;
+    const std::vector<int32_t> func_input_indices;
+    const std::vector<int32_t> func_input_offsets;
 
     // The number of iterations between syncs (used to check
     // when all input has been received).
@@ -67,14 +70,45 @@ class WindowState {
     GroupbyMetrics metrics;
     const int64_t op_id;
 
+    /// The schema of the inputs
+    std::shared_ptr<bodo::Schema> build_table_schema;
+
     WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                 std::vector<int32_t> window_ftypes_, uint64_t n_keys_,
                 std::vector<bool> order_by_asc_, std::vector<bool> order_by_na_,
                 std::vector<bool> partition_by_cols_to_keep_,
                 std::vector<bool> order_by_cols_to_keep_,
+                std::vector<bool> input_cols_to_keep_,
+                std::vector<int32_t> func_input_indices_,
+                std::vector<int32_t> func_input_offsets_,
                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
                 int64_t op_id_, int64_t op_pool_size_bytes_,
                 bool allow_work_stealing_);
+
+    /**
+     * @brief infers the output data type of one of the window function calls
+     * and appends to a schema.
+     *
+     * @param[in] func_idx: the index of the window function call.
+     * @param[in] out_schema: the schema to append the result to.
+     */
+    void InferWindowOutputDataType(int32_t func_idx,
+                                   std::unique_ptr<bodo::Schema>& out_schema);
+
+    /**
+     * @brief infers the output data type of one of the window function calls
+     * and allocates a corresponding array to store the output.
+     *
+     * @param[in] func_idx: the index of the window function call.
+     * @param[in] out_rows: the number of rows to allocate.
+     * @param[in] out_arrs: the vector of columns to append to.
+     */
+    void AllocWindowOutputColumn(
+        int32_t func_idx, size_t output_rows,
+        std::vector<std::shared_ptr<array_info>>& out_arrs,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager());
 
     /**
      * @brief Unify dictionaries of input table with the given dictionary

@@ -21,9 +21,11 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelFieldCollation
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelVisitor
+import org.apache.calcite.rel.core.Window
 import org.apache.calcite.rel.hint.RelHint
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.rel.type.RelDataType
+import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.ImmutableBitSet
@@ -74,20 +76,48 @@ class BodoPhysicalWindow(
         return traitSet.isEnabled(BatchingPropertyTraitDef.INSTANCE) && constants.isEmpty() && groups.size == 1 &&
             groups.all {
                     group ->
-                group.keys.cardinality() >= 1 &&
-                    group.aggCalls.size == 1 &&
-                    group.aggCalls.all {
-                            aggCall ->
-                        when (aggCall.operator.kind) {
-                            SqlKind.ROW_NUMBER,
-                            SqlKind.RANK,
-                            SqlKind.DENSE_RANK,
-                            SqlKind.PERCENT_RANK,
-                            SqlKind.CUME_DIST,
-                            -> true
-                            else -> false
-                        }
-                    }
+                isSupportedHashOrSortGroup(group) || isSupportedBlankWindowGroup(group)
+            }
+    }
+
+    /**
+     * Returns whether a window cohort is supported for the
+     * Bodo execution codepath that either hashes on the partition,
+     * or sorts on the partition+orderby columns.
+     */
+    fun isSupportedHashOrSortGroup(group: Window.Group): Boolean {
+        return group.keys.cardinality() >= 1 &&
+            group.aggCalls.size == 1 &&
+            group.aggCalls.all {
+                    aggCall ->
+                when (aggCall.operator.kind) {
+                    SqlKind.ROW_NUMBER,
+                    SqlKind.RANK,
+                    SqlKind.DENSE_RANK,
+                    SqlKind.PERCENT_RANK,
+                    SqlKind.CUME_DIST,
+                    -> true
+                    else -> false
+                }
+            }
+    }
+
+    /**
+     * Returns whether a window cohort is supported for the
+     * Bodo execution codepath without partition or order
+     * columns.
+     */
+    fun isSupportedBlankWindowGroup(group: Group): Boolean {
+        return group.keys.cardinality() == 0 &&
+            group.orderKeys.keys.size == 0 &&
+            group.aggCalls.size == 1 &&
+            group.aggCalls.all {
+                    aggCall ->
+                when (aggCall.operator.kind) {
+                    SqlKind.MAX,
+                    -> true
+                    else -> false
+                }
             }
     }
 
@@ -258,6 +288,7 @@ class BodoPhysicalWindow(
         val orderKeys: MutableList<Expr> = mutableListOf()
         val orderAsc: MutableList<Expr> = mutableListOf()
         val orderNullPos: MutableList<Expr> = mutableListOf()
+        val funcIndices: MutableList<Expr> = mutableListOf()
         val funcNames: MutableList<Expr> = mutableListOf()
         assert(this.groups.size == 1)
         val group = this.groups[0]
@@ -272,6 +303,17 @@ class BodoPhysicalWindow(
         group.aggCalls.forEach {
                 aggCall ->
             funcNames.add(Expr.StringLiteral(aggCall.operator.name.lowercase()))
+            val funcArgs =
+                aggCall.operands.map {
+                    // Defensive check since it should always be a RexInputRef by the
+                    // design of the Window node.
+                    if (it is RexInputRef) {
+                        Expr.IntegerLiteral(it.index)
+                    } else {
+                        throw Exception("BodoPhysicalWindowNode: unsupported input to window function '$it'")
+                    }
+                }
+            funcIndices.add(Expr.Tuple(funcArgs))
         }
         val keptInputsArray = inputsToKeep.toList().map { Expr.IntegerLiteral(it) }
         val partitionGlobal = ctx.lowerAsMetaType(Expr.Tuple(partitionKeys))
@@ -280,6 +322,7 @@ class BodoPhysicalWindow(
         val nullPosGlobal = ctx.lowerAsMetaType(Expr.Tuple(orderNullPos))
         val funcNamesGlobal = ctx.lowerAsMetaType(Expr.Tuple(funcNames))
         val keptInputsGlobal = ctx.lowerAsMetaType(Expr.Tuple(keptInputsArray))
+        val funcIndicesGlobal = ctx.lowerAsMetaType(Expr.Tuple(funcIndices))
         val allowWorkStealing =
             !(
                 pipelineAncestorNestedJoin(ctx.fetchParentMappings()) ||
@@ -295,8 +338,10 @@ class BodoPhysicalWindow(
                     ascGlobal,
                     nullPosGlobal,
                     funcNamesGlobal,
+                    funcIndicesGlobal,
                     keptInputsGlobal,
                     Expr.BooleanLiteral(allowWorkStealing),
+                    Expr.IntegerLiteral(input.rowType.fieldCount),
                 ),
             )
         val windowInit = Op.Assign(stateVar, stateCall)
