@@ -459,3 +459,41 @@ def test_window_pruning_single_layer(spark_info, memory_leak_check):
         check_names=False,
         only_jit_1DVar=True,
     )
+
+
+def test_window_max_over_empty(memory_leak_check):
+    """
+    Tests calling MAX as a window function without a partition or orderby.
+    """
+    query = """
+    SELECT IDX, MAX(DATA) OVER () as WIN
+    FROM TABLE1
+    """
+    n_rows = 1_000_000
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "IDX": range(n_rows),
+                "DATA": [
+                    str(i).replace("9", "").replace("6", "").replace("88", "4")
+                    for i in range(n_rows)
+                ],
+            }
+        )
+    }
+    max_val = ctx["TABLE1"]["DATA"].max()
+    answer = pd.DataFrame(
+        {
+            "IDX": range(n_rows),
+            "WIN": [max_val for _ in range(n_rows)],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=answer,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+    )

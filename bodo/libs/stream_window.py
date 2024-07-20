@@ -35,6 +35,7 @@ from bodo.utils.typing import (
     BodoError,
     MetaType,
     error_on_unsupported_streaming_arrays,
+    get_overload_const_int,
     is_overload_none,
     unwrap_typeref,
 )
@@ -65,6 +66,7 @@ class WindowStateType(StreamingStateType):
     func_names: pt.Tuple[str, ...]
     kept_input_indices: pt.Tuple[int, ...]
     kept_input_indices_set: pt.Set[int]
+    func_input_indices: pt.Tuple[pt.Tuple[int, ...], ...]
     build_table_type: pt.Union[bodo.hiframes.table.TableType, types.unknown]
 
     def __init__(
@@ -74,7 +76,9 @@ class WindowStateType(StreamingStateType):
         is_ascending,
         nulls_last,
         func_names,
+        func_input_indices,
         kept_input_indices,
+        n_inputs,
         build_table_type=types.unknown,
     ):
         error_on_unsupported_streaming_arrays(build_table_type)
@@ -88,10 +92,39 @@ class WindowStateType(StreamingStateType):
             raise BodoError("Streaming Window only supports a single function.")
         self.kept_input_indices = kept_input_indices
         self.kept_input_indices_set = set(kept_input_indices)
+        self.func_input_indices = func_input_indices
+        self.n_inputs = n_inputs
         self.build_table_type = build_table_type
         super().__init__(
-            name=f"WindowStateType({partition_indices=}, {order_by_indices=}, {is_ascending=}, {nulls_last=}, {func_names=}, {kept_input_indices=}, {build_table_type=})"
+            name=f"WindowStateType({partition_indices=}, {order_by_indices=}, {is_ascending=}, {nulls_last=}, {func_names=}, {func_input_indices=}, {kept_input_indices=}, {n_inputs=}, {build_table_type=})"
         )
+
+    def translate_indices(self, indices: pt.List[int]) -> pt.List[int]:
+        """
+        Maps the integers in indices to the new column that they
+        correspond to when the table is passed in to C++.
+        """
+        out = []
+        n_partition_cols = len(self.partition_indices)
+        n_order_cols = len(self.order_by_indices)
+        for col_idx in indices:
+            if col_idx in self.partition_indices:
+                new_idx = self.partition_indices.index(col_idx)
+            elif col_idx in self.order_by_indices:
+                new_idx = self.order_by_indices.index(col_idx) + n_partition_cols
+            else:
+                n_partition_before = len(
+                    [i for i in self.partition_indices if i < col_idx]
+                )
+                n_order_before = len([i for i in self.order_by_indices if i < col_idx])
+                new_idx = (
+                    (n_partition_cols + n_order_cols)
+                    + col_idx
+                    - (n_partition_before + n_order_before)
+                )
+            out.append(new_idx)
+
+        return out
 
     @property
     def key(self):
@@ -101,7 +134,10 @@ class WindowStateType(StreamingStateType):
             self.is_ascending,
             self.nulls_last,
             self.func_names,
+            self.func_input_indices,
+            self.kept_input_indices,
             self.build_table_type,
+            self.n_inputs,
         )
 
     @staticmethod
@@ -157,7 +193,7 @@ class WindowStateType(StreamingStateType):
         Returns:
             Set[str]: Set of function names that can support sort.
         """
-        return {"dense_rank", "row_number", "rank"}
+        return {"max", "dense_rank", "row_number", "rank"}
 
     @staticmethod
     def _derive_input_type(
@@ -199,9 +235,21 @@ class WindowStateType(StreamingStateType):
     @cached_property
     def kept_order_by_cols(self) -> pt.List[bool]:
         """
-        Get the indices of the partition by columns that are kept as input.
+        Get the indices of the order by columns that are kept as input.
         """
         return [i in self.kept_input_indices_set for i in self.order_by_indices]
+
+    @cached_property
+    def kept_input_cols(self) -> pt.List[bool]:
+        """
+        Get the indices of the input columns that are kept as input.
+        """
+        result = []
+        for i in range(self.n_inputs):
+            if i in self.partition_indices or i in self.order_by_indices:
+                continue
+            result.append(i in self.kept_input_indices_set)
+        return result
 
     @cached_property
     def partition_by_types(self) -> pt.List[types.ArrayCompatible]:
@@ -317,6 +365,12 @@ class WindowStateType(StreamingStateType):
             range(len(self.partition_indices), len(self.build_reordered_arr_types))
         )
 
+    def inputs_to_function(self, func_idx) -> pt.List[int]:
+        """
+        Get the indices of the input columns to the func_idx-th function call.
+        """
+        return list(self.func_input_indices[func_idx])
+
     @cached_property
     def out_table_type(self):
         if self.build_table_type == types.unknown:
@@ -328,14 +382,17 @@ class WindowStateType(StreamingStateType):
         ]
         # Now include the output types for any window functions
         window_func_types = get_window_func_types()
-        for func_name in self.func_names:
+        for func_idx, func_name in enumerate(self.func_names):
             if func_name in window_func_types:
                 output_type = window_func_types[func_name]
                 if output_type is None:
-                    raise BodoError(
-                        func_name
-                        + " does not have an output type. This function is not supported with streaming."
-                    )
+                    # None = same as input column
+                    indices = self.inputs_to_function(func_idx)
+                    assert (
+                        len(indices) == 1
+                    ), f"Expected 1 input column to function {func_name}, received {len(indices)}"
+                    input_index = indices[0]
+                    output_type = self.build_table_type.arr_types[input_index]
                 input_arr_types.append(output_type)
             else:
                 raise BodoError(func_name + " is not a supported window function.")
@@ -426,6 +483,10 @@ def _init_window_state(
     n_order_by_keys_t,
     partition_by_cols_to_keep_t,
     order_by_cols_to_keep_t,
+    input_cols_to_keep_t,
+    n_input_cols_t,
+    func_input_indices_t,
+    func_input_offsets_t,
     output_state_type,
     parallel_t,
     allow_work_stealing_t,
@@ -443,9 +504,14 @@ def _init_window_state(
         n_funcs (int): Number of window functions.
         order_by_asc_t (bool*): Bitmask for sort direction of order-by columns.
         order_by_na_t (bool*): Bitmask for null sort direction of order-by columns.
+        func_input_indices_t (int*): List of indices for window function input columns.
+        func_input_offsets_t (int*): List of offsets mapping each window function to the
+        subset of func_input_indices_t that it corresponds to.
         n_order_by_keys_t (int): Number of order-by columns.
         partition_by_cols_to_keep_t (bool*): Bitmask of partition/key columns to retain in output.
         order_by_cols_to_keep_t (bool*): Bitmask of order-by columns to retain in output.
+        input_cols_to_keep_t (bool*): Bitmask of input columns to retain in output.
+        n_input_cols_to_keep_t (bool*): Number if input columns.
         output_state_type (TypeRef[WindowStateType]): The output type for the state
                                                     that should be generated.
         parallel_t (bool): Is this executed in parallel.
@@ -466,6 +532,10 @@ def _init_window_state(
             n_order_by_keys,
             partition_by_cols_to_keep,
             order_by_cols_to_keep,
+            input_cols_to_keep,
+            n_input_cols,
+            func_input_indices,
+            func_input_offsets,
             _,  # output_state_type
             parallel,
             allow_work_stealing,
@@ -496,6 +566,10 @@ def _init_window_state(
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(32).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(64),
@@ -518,6 +592,10 @@ def _init_window_state(
             n_order_by_keys,
             partition_by_cols_to_keep,
             order_by_cols_to_keep,
+            input_cols_to_keep,
+            n_input_cols,
+            func_input_indices,
+            func_input_offsets,
             output_batch_size,
             parallel,
             sync_iter,
@@ -539,6 +617,10 @@ def _init_window_state(
         types.int64,
         types.CPointer(types.bool_),
         types.CPointer(types.bool_),
+        types.CPointer(types.bool_),
+        types.int32,
+        types.CPointer(types.int32),
+        types.CPointer(types.int32),
         output_state_type,
         parallel_t,
         allow_work_stealing_t,
@@ -553,8 +635,10 @@ def init_window_state(
     is_ascending,
     nulls_last,
     func_names,
+    func_input_indices,
     kept_input_indices,
     allow_work_stealing,
+    n_inputs,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
@@ -562,7 +646,7 @@ def init_window_state(
     pass
 
 
-@overload(init_window_state)
+@overload(init_window_state, no_unliteral=True)
 def overload_init_window_state(
     operator_id,
     partition_indices,
@@ -570,8 +654,10 @@ def overload_init_window_state(
     is_ascending,
     nulls_last,
     func_names,
+    func_input_indices,
     kept_input_indices,
     allow_work_stealing,
+    n_inputs,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
@@ -583,6 +669,7 @@ def overload_init_window_state(
         is_ascending_tuple = unwrap_typeref(is_ascending).meta
         nulls_last_tuple = unwrap_typeref(nulls_last).meta
         func_names_tuple = unwrap_typeref(func_names).meta
+        func_input_tuple = unwrap_typeref(func_input_indices).meta
         kept_input_indices_tuple = unwrap_typeref(kept_input_indices).meta
         output_type = WindowStateType(
             partition_indices_tuple,
@@ -590,7 +677,9 @@ def overload_init_window_state(
             is_ascending_tuple,
             nulls_last_tuple,
             func_names_tuple,
+            func_input_tuple,
             kept_input_indices_tuple,
+            get_overload_const_int(n_inputs),
         )
     else:
         output_type = expected_state_type
@@ -614,7 +703,16 @@ def overload_init_window_state(
     sort_nulls_last_arr = np.array(output_type.nulls_last, np.bool_)
     kept_partition_cols_arr = np.array(output_type.kept_partition_by_cols, np.bool_)
     kept_order_by_cols_arr = np.array(output_type.kept_order_by_cols, np.bool_)
+    kept_input_cols_arr = np.array(output_type.kept_input_cols, np.bool_)
+    n_input_cols = np.int32(len(output_type.kept_input_cols))
     n_orderby_cols = len(output_type.order_by_indices)
+    func_input_indices_list = []
+    func_input_offsets_list = [0]
+    for indices in output_type.func_input_indices:
+        func_input_indices_list += output_type.translate_indices(indices)
+        func_input_offsets_list.append(len(func_input_indices_list))
+    func_input_indices_arr = np.array(func_input_indices_list, np.int32)
+    func_input_offsets_arr = np.array(func_input_offsets_list, np.int32)
 
     if output_type.is_sort_impl:
         # The internal C++ window state object is just for sort implementations
@@ -626,8 +724,10 @@ def overload_init_window_state(
             is_ascending,
             nulls_last,
             func_names,
+            func_input_indices,
             kept_input_indices,
             allow_work_stealing,
+            n_inputs,
             op_pool_size_bytes=-1,
             expected_state_type=None,
             parallel=False,
@@ -644,6 +744,10 @@ def overload_init_window_state(
                 n_orderby_cols,
                 kept_partition_cols_arr.ctypes,
                 kept_order_by_cols_arr.ctypes,
+                kept_input_cols_arr.ctypes,
+                n_input_cols,
+                func_input_indices_arr.ctypes,
+                func_input_offsets_arr.ctypes,
                 output_type,
                 parallel,
                 allow_work_stealing,
@@ -660,8 +764,10 @@ def overload_init_window_state(
             is_ascending,
             nulls_last,
             func_names,
+            func_input_indices,
             kept_input_indices,
             allow_work_stealing,
+            n_inputs,
             op_pool_size_bytes=-1,
             expected_state_type=None,
             parallel=False,

@@ -6,6 +6,7 @@
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
+#include "_shuffle.h"
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
 #include "_table_builder_utils.h"
@@ -1676,7 +1677,7 @@ void _sorted_window_computation(
                 break;
             }
             default:
-                throw new std::runtime_error(
+                throw std::runtime_error(
                     "Unsupported window function for the sort implementation");
         }
     }
@@ -1708,7 +1709,7 @@ void _sorted_window_computation(
                     break;
                 }
                 default:
-                    throw new std::runtime_error(
+                    throw std::runtime_error(
                         "Unsupported window function for the sort "
                         "implementation parallel path");
             }
@@ -1716,19 +1717,100 @@ void _sorted_window_computation(
     }
 }
 
+void global_window_computation(
+    const std::vector<int32_t>& window_funcs,
+    const std::vector<std::shared_ptr<array_info>>& window_args,
+    const std::vector<int32_t>& window_offset_indices,
+    std::vector<std::shared_ptr<array_info>>& out_arrs, size_t output_rows,
+    bool is_parallel) {
+    grouping_info dummy_local_grp_info;
+    dummy_local_grp_info.num_groups = 1;
+    dummy_local_grp_info.row_to_group.resize(output_rows, 0);
+    for (size_t i = 0; i < window_funcs.size(); i++) {
+        switch (window_funcs[i]) {
+            case Bodo_FTypes::max: {
+                int32_t offset = window_offset_indices[i];
+                const std::shared_ptr<array_info>& in_col = window_args[offset];
+                std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+                // Invoke the groupby codepath for ::max, with every row mapping
+                // to "group 0"
+                do_apply_to_column(in_col, out_arrs[i], dummy_aux_cols,
+                                   dummy_local_grp_info, window_funcs[i]);
+                break;
+            }
+            default:
+                throw std::runtime_error(
+                    "Unsupported window function for the global "
+                    "implementation");
+        }
+    }
+    if (is_parallel) {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        grouping_info dummy_combine_grp_info;
+        dummy_combine_grp_info.num_groups = 1;
+        dummy_combine_grp_info.row_to_group.resize(num_ranks, 0);
+        for (size_t i = 0; i < window_funcs.size(); i++) {
+            std::shared_ptr<array_info> combined_arr =
+                gather_array(out_arrs[i], true, true, 0, num_ranks, myrank);
+            switch (window_funcs[i]) {
+                case Bodo_FTypes::max: {
+                    // Repeat the pre-parallel procedure on the combined
+                    // results.
+                    std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+                    do_apply_to_column(combined_arr, out_arrs[i],
+                                       dummy_aux_cols, dummy_combine_grp_info,
+                                       window_funcs[i]);
+                    break;
+                }
+                default:
+                    throw std::runtime_error(
+                        "Unsupported window function for the global "
+                        "implementation");
+            }
+        }
+    }
+
+    // For each output, explode the singleton output row into the
+    // complete answer.
+    std::vector<int64_t> idxs(output_rows, 0);
+    for (size_t i = 0; i < window_funcs.size(); i++) {
+        out_arrs[i] = RetrieveArray_SingleColumn(out_arrs[i], idxs);
+    }
+}
+
 /**
  * @brief Wrapper around sorted window computation to template the comparisons
  * on the order by and partition by columns.
  *
- * @param[in] partition_by_arrs The arrays used in partition by.
- * @param[in] order_by_arrs The arrays used in order by.
- * @param[out] out_arr The pre-allocated output array to update.
+ * @param[in] partition_by_arrs The arrays that hold the partition by values.
+ * @param[in] order_by_arrs The arrays that hold the order by values.
+ * @param[in] window_args The arrays that hold the window argument values.
+ * @param[in] window_offset_indices The vector used to associate elements of
+ * window_args with the corresponding function call.
+ * @param[in] window_funcs The name(s) of the window function(s) being computed.
+ * @param[out] out_arrs The output array(s) being populated.
+ * @param is_parallel Is the data distributed? This is used for communicating
+ * with a neighboring rank for boundary groups.
  */
 void sorted_window_computation(
     const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    const std::vector<std::shared_ptr<array_info>>& window_args,
+    const std::vector<int32_t>& window_offset_indices,
     const std::vector<int32_t>& window_funcs,
-    std::vector<std::shared_ptr<array_info>> out_arrs, bool is_parallel) {
+    std::vector<std::shared_ptr<array_info>>& out_arrs, size_t out_rows,
+    bool is_parallel) {
+    if (partition_by_arrs.size() == 0 && order_by_arrs.size() == 0) {
+        // If there is no partition/order column, re-route to the global
+        // computation.
+        global_window_computation(window_funcs, window_args,
+                                  window_offset_indices, out_arrs, out_rows,
+                                  is_parallel);
+        return;
+    }
+
     bool single_part_arr_type = partition_by_arrs.size() > 0;
     for (size_t i = 1; i < partition_by_arrs.size(); i++) {
         if (partition_by_arrs[i]->arr_type != partition_by_arrs[0]->arr_type) {

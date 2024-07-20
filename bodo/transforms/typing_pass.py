@@ -5465,7 +5465,7 @@ class TypingTransforms:
                 "init_window_state",
                 rhs.args,
                 dict(rhs.kws),
-                9,
+                11,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5507,7 +5507,7 @@ class TypingTransforms:
                 "init_window_state",
                 window_def.args,
                 dict(window_def.kws),
-                9,
+                11,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5529,7 +5529,9 @@ class TypingTransforms:
                     output_type.is_ascending,
                     output_type.nulls_last,
                     output_type.func_names,
+                    output_type.func_input_indices,
                     output_type.kept_input_indices,
+                    output_type.n_inputs,
                     build_table_type=input_table_type,
                 )
 
@@ -5538,7 +5540,7 @@ class TypingTransforms:
                     "init_window_state",
                     window_def.args,
                     dict(window_def.kws),
-                    8,
+                    10,
                     "op_pool_size_bytes",
                     default=None,
                     use_default=True,
@@ -5550,8 +5552,10 @@ class TypingTransforms:
                     "is_ascending",
                     "nulls_last",
                     "func_names",
+                    "func_input_indices",
                     "kept_input_indices",
                     "allow_work_stealing",
+                    "n_inputs",
                 ]
                 args = [x for x in window_def.args]
                 # If there is a op_pool_size_bytes we need to include it in
@@ -5572,8 +5576,10 @@ class TypingTransforms:
                         is_ascending,
                         nulls_last,
                         func_names,
+                        func_input_indices,
                         kept_input_indices,
                         allow_work_stealing,
+                        n_inputs,
                         op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,
                     )

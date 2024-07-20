@@ -522,7 +522,8 @@ void validate_mrnf_args(const std::vector<int32_t>& ftypes,
 
 std::vector<bool> get_window_cols_to_keep_bitmask(
     const std::vector<bool>& partition_by_cols_to_keep,
-    const std::vector<bool>& order_by_cols_to_keep, const size_t n_cols) {
+    const std::vector<bool>& order_by_cols_to_keep,
+    const std::vector<bool>& input_cols_to_keep, const size_t n_cols) {
     std::vector<bool> cols_to_keep(n_cols, false);
     // Set bitmask to true for partition columns to keep based on
     // partition_by_cols_to_keep.
@@ -538,11 +539,14 @@ std::vector<bool> get_window_cols_to_keep_bitmask(
             cols_to_keep[partition_by_cols_to_keep.size() + i] = true;
         }
     }
-    // Set bitmask to true for all the remaining columns.
+    // Set bitmask to true for all the remaining columns if they agree with
+    // input_cols_to_keep.
+    size_t input_col_idx = 0;
     for (size_t i =
              (partition_by_cols_to_keep.size() + order_by_cols_to_keep.size());
          i < n_cols; i++) {
-        cols_to_keep[i] = true;
+        cols_to_keep[i] = input_cols_to_keep[input_col_idx];
+        input_col_idx++;
     }
     return cols_to_keep;
 }
@@ -1377,8 +1381,10 @@ void GroupbyPartition::FinalizeMrnf(
     // Use mrnf_part_cols_to_keep and mrnf_sort_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
     size_t n_cols = this->build_table_buffer->data_table->columns.size();
+    std::vector<bool> input_cols_to_keep(n_cols, true);
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        mrnf_part_cols_to_keep, mrnf_sort_cols_to_keep, n_cols);
+        mrnf_part_cols_to_keep, mrnf_sort_cols_to_keep, input_cols_to_keep,
+        n_cols);
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
 
     for (size_t i = 0; i < n_cols; i++) {
@@ -1420,8 +1426,10 @@ void GroupbyPartition::FinalizeWindow(
     // Use partition_by_cols_to_keep and order_by_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
     size_t n_cols = this->build_table_buffer->data_table->columns.size();
+    std::vector<bool> input_cols_to_keep(n_cols, true);
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        partition_by_cols_to_keep, order_by_cols_to_keep, n_cols);
+        partition_by_cols_to_keep, order_by_cols_to_keep, input_cols_to_keep,
+        n_cols);
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
 
     for (size_t i = 0; i < n_cols; i++) {
@@ -3280,8 +3288,10 @@ void GroupbyState::InitOutputBufferMrnf(
     }
 
     size_t n_cols = dummy_build_table->columns.size();
+    std::vector<bool> input_cols_to_keep(n_cols, true);
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep, n_cols);
+        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep,
+        input_cols_to_keep, n_cols);
 
     // List of column types in the output.
     std::vector<std::unique_ptr<bodo::DataType>> output_column_types;
@@ -3319,8 +3329,10 @@ void GroupbyState::InitOutputBufferWindow(
     }
 
     size_t n_cols = dummy_build_table->columns.size();
+    std::vector<bool> input_cols_to_keep(n_cols, true);
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep, n_cols);
+        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep,
+        input_cols_to_keep, n_cols);
 
     // List of column types in the output.
     std::vector<std::unique_ptr<bodo::DataType>> output_column_types;

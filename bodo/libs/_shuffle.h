@@ -314,6 +314,11 @@ void copy_gathered_null_bytes(uint8_t* null_bitmask,
     for (size_t i = 0; i < recv_count.size(); i++) {
         size_t n_strs = recv_count[i];
         size_t n_bytes = recv_count_null[i];
+        if (n_strs == 0) {
+            // Prevents bugs caused when tmp_null_bytes happens
+            // to point to nullptr due to an empty vector.
+            continue;
+        }
         const uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
         // for each string in chunk
         for (size_t j = 0; j < n_strs; j++) {
