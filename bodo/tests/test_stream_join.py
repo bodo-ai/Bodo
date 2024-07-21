@@ -280,6 +280,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             "p_size",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     @bodo.jit
     def test_hash_join(conn):
@@ -291,6 +292,7 @@ def test_hash_join_basic(build_outer, probe_outer, expected_df, memory_leak_chec
             probe_col_meta,
             build_outer,
             probe_outer,
+            build_interval_cols,
             False,
             16 * 1024 * 1024,
         )
@@ -560,6 +562,7 @@ def test_nested_loop_join(
             "p_size",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
     non_equi_condition = "(right.p_partkey) > ((left.l_partkey) + 197800)"
 
     # select P_PARTKEY, P_COMMENT, P_NAME, P_SIZE, L_PARTKEY, L_COMMENT, L_ORDERKEY
@@ -575,6 +578,7 @@ def test_nested_loop_join(
             probe_col_meta,
             build_outer,
             probe_outer,
+            build_interval_cols,
             False,
             non_equi_condition=non_equi_condition,
         )
@@ -700,6 +704,7 @@ def test_broadcast_nested_loop_join(
             "p_size": [50, 50],
         }
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     @bodo.jit
     def test_nested_loop_join(conn):
@@ -711,6 +716,7 @@ def test_broadcast_nested_loop_join(
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition=non_equi_condition,
         )
@@ -824,6 +830,7 @@ def test_hash_join_reorder(memory_leak_check):
             "p_partkey",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     @bodo.jit
     def test_hash_join(conn):
@@ -835,6 +842,7 @@ def test_hash_join_reorder(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
 
@@ -950,6 +958,7 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -960,6 +969,7 @@ def test_hash_join_non_nullable_outer(build_outer, probe_outer, memory_leak_chec
             probe_col_meta,
             build_outer,
             probe_outer,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -1093,6 +1103,7 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -1103,6 +1114,7 @@ def test_hash_join_key_cast(probe_outer, memory_leak_check):
             probe_col_meta,
             False,
             probe_outer,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -1202,6 +1214,7 @@ def test_hash_join_input_request(memory_leak_check):
             "A",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -1212,6 +1225,7 @@ def test_hash_join_input_request(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -1326,6 +1340,7 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
     non_equi_cond = "(right.`A` < left.`D`)"
 
     def test_hash_join(df1, df2):
@@ -1337,6 +1352,7 @@ def test_non_equi_join_cond(build_outer, probe_outer, broadcast, memory_leak_che
             probe_col_meta,
             build_outer,
             probe_outer,
+            build_interval_cols,
             False,
             non_equi_condition=non_equi_cond,
         )
@@ -1468,6 +1484,7 @@ def test_join_key_prune(memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -1478,6 +1495,7 @@ def test_join_key_prune(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -1569,6 +1587,7 @@ def test_key_multicast(memory_leak_check):
             "A",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -1579,6 +1598,7 @@ def test_key_multicast(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -1705,6 +1725,7 @@ def test_only_one_distributed(
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     dist_df = "df1" if build_dist else "df2"
 
@@ -1718,6 +1739,7 @@ def test_only_one_distributed(
             probe_col_meta,
             build_outer,
             probe_outer,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -1857,6 +1879,7 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     @bodo.jit(distributed=["df1", "df2"])
     def test_hash_join_impl(df1, df2, batch_size):
@@ -1868,6 +1891,7 @@ def test_long_strings_chunked_table_builder(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -2178,6 +2202,7 @@ def test_prune_na(build_outer, memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -2188,6 +2213,7 @@ def test_prune_na(build_outer, memory_leak_check):
             probe_col_meta,
             build_outer,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -2317,6 +2343,7 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     dist_df = "df1" if build_dist else "df2"
 
@@ -2330,6 +2357,7 @@ def test_outer_join_na_one_dist(build_dist, broadcast, memory_leak_check):
             probe_col_meta,
             True,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -2445,6 +2473,7 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -2455,6 +2484,7 @@ def test_hash_join_empty_table(side, insert_loc, broadcast, memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -2595,6 +2625,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
     non_equi_condition = "right.A >= left.C"
 
     def test_nested_loop_join(df1, df2):
@@ -2606,6 +2637,7 @@ def test_nested_loop_join_empty_table(side, insert_loc, broadcast, memory_leak_c
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition=non_equi_condition,
         )
@@ -2748,6 +2780,7 @@ def test_request_input(df_size, memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     @bodo.jit
     def test_request_input(df1, df2):
@@ -2759,6 +2792,7 @@ def test_request_input(df_size, memory_leak_check):
             probe_col_meta,
             True,
             True,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -2852,6 +2886,7 @@ def test_produce_output(memory_leak_check):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     @bodo.jit
     def test_request_input(df1, df2):
@@ -2863,6 +2898,7 @@ def test_produce_output(memory_leak_check):
             probe_col_meta,
             True,
             True,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -2975,6 +3011,7 @@ def test_hash_join_nested_array(memory_leak_check):
             "H",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -2985,6 +3022,7 @@ def test_hash_join_nested_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -3097,6 +3135,7 @@ def test_nested_loop_join_nested_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_nested_loop_join(df1, df2):
         join_state = init_join_state(
@@ -3107,6 +3146,7 @@ def test_nested_loop_join_nested_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition="right.A <= left.C",
         )
@@ -3287,6 +3327,7 @@ def test_hash_join_struct_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -3297,6 +3338,7 @@ def test_hash_join_struct_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -3503,6 +3545,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_nested_loop_join(df1, df2):
         join_state = init_join_state(
@@ -3513,6 +3556,7 @@ def test_nested_loop_join_struct_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition="right.A > left.C",
         )
@@ -3672,6 +3716,7 @@ def test_hash_join_map_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -3682,6 +3727,7 @@ def test_hash_join_map_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -3816,6 +3862,7 @@ def test_nested_loop_join_map_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_nested_loop_join(df1, df2):
         join_state = init_join_state(
@@ -3826,6 +3873,7 @@ def test_nested_loop_join_map_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition="right.A > left.C",
         )
@@ -3958,6 +4006,7 @@ def test_hash_join_tuple_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -3968,6 +4017,7 @@ def test_hash_join_tuple_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -4099,6 +4149,7 @@ def test_nested_loop_join_tuple_array(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_nested_loop_join(df1, df2):
         join_state = init_join_state(
@@ -4109,6 +4160,7 @@ def test_nested_loop_join_tuple_array(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition="right.A > left.C",
         )
@@ -4568,6 +4620,7 @@ def test_hash_join_semistructured_keys(
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -4578,6 +4631,7 @@ def test_hash_join_semistructured_keys(
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -4677,6 +4731,7 @@ def test_join_semistructured_cond_func(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
         join_state = init_join_state(
@@ -4687,6 +4742,7 @@ def test_join_semistructured_cond_func(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
             non_equi_condition="right.A > left.C",
         )
@@ -4779,6 +4835,7 @@ def test_shuffle_batching(memory_leak_check):
             "D",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def shuffle_batching(df1, df2):
         join_state = init_join_state(
@@ -4789,6 +4846,7 @@ def test_shuffle_batching(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -4894,6 +4952,7 @@ def test_runtime_join_filter(memory_leak_check):
     # and index 0 corresponds to the second join key.
     filter_key_indices = bodo.utils.typing.MetaType((1, 0))
     process_bitmask = bodo.utils.typing.MetaType((True, True))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2, df3):
         join_state = init_join_state(
@@ -4904,6 +4963,7 @@ def test_runtime_join_filter(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5029,6 +5089,7 @@ def test_multiple_runtime_join_filter_materialize(memory_leak_check):
     kept_all_cols = bodo.utils.typing.MetaType((0,))
     filter_key_indices = bodo.utils.typing.MetaType((0,))
     process_bitmask = bodo.utils.typing.MetaType((True,))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2, df3):
         # Build 1
@@ -5040,6 +5101,7 @@ def test_multiple_runtime_join_filter_materialize(memory_leak_check):
             col_meta2,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5067,6 +5129,7 @@ def test_multiple_runtime_join_filter_materialize(memory_leak_check):
             col_meta1,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp2 = 0
@@ -5193,6 +5256,7 @@ def test_multiple_runtime_join_filter_no_materialize(memory_leak_check):
     kept_probe_cols = bodo.utils.typing.MetaType((0, 1))
     filter_key_indices = bodo.utils.typing.MetaType((0,))
     process_bitmask = bodo.utils.typing.MetaType((True,))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2, df3):
         # Build 1
@@ -5204,6 +5268,7 @@ def test_multiple_runtime_join_filter_no_materialize(memory_leak_check):
             col_meta3,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5231,6 +5296,7 @@ def test_multiple_runtime_join_filter_no_materialize(memory_leak_check):
             col_meta2,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp2 = 0
@@ -5361,6 +5427,7 @@ def test_runtime_join_filter_dict_encoding(merge_join_filters, memory_leak_check
     filter1_process_bitmask = bodo.utils.typing.MetaType((False, True))
     filter2_key_indices = bodo.utils.typing.MetaType((0, 1))
     filter2_process_bitmask = bodo.utils.typing.MetaType((True, False))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         join_state = init_join_state(
@@ -5371,6 +5438,7 @@ def test_runtime_join_filter_dict_encoding(merge_join_filters, memory_leak_check
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5497,6 +5565,7 @@ def test_runtime_join_filter_err_checking():
     col_meta = bodo.utils.typing.ColNamesMetaType(("D", "A"))
     filter_key_indices = bodo.utils.typing.MetaType((0,))
     filter_process_bitmask = bodo.utils.typing.MetaType((True,))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         join_state = init_join_state(
@@ -5507,6 +5576,7 @@ def test_runtime_join_filter_err_checking():
             probe_col_meta,
             False,
             True,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5609,6 +5679,7 @@ def test_runtime_join_filter_simple_casts(merge_join_filters, memory_leak_check)
     filter1_process_bitmask = bodo.utils.typing.MetaType((False, True, True))
     filter2_key_indices = bodo.utils.typing.MetaType((1, 2, 0))
     filter2_process_bitmask = bodo.utils.typing.MetaType((True, False, False))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         join_state = init_join_state(
@@ -5619,6 +5690,7 @@ def test_runtime_join_filter_simple_casts(merge_join_filters, memory_leak_check)
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5786,6 +5858,7 @@ def test_runtime_join_filter_str_input_dict_key(merge_join_filters, memory_leak_
     filter1_process_bitmask = bodo.utils.typing.MetaType((False, True))
     filter2_key_indices = bodo.utils.typing.MetaType((1, 0))
     filter2_process_bitmask = bodo.utils.typing.MetaType((True, False))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2, df3):
         join_state = init_join_state(
@@ -5796,6 +5869,7 @@ def test_runtime_join_filter_str_input_dict_key(merge_join_filters, memory_leak_
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -5975,6 +6049,7 @@ def test_runtime_join_filter_dict_to_str_cast(merge_join_filters, memory_leak_ch
     filter1_process_bitmask = bodo.utils.typing.MetaType((False, True))
     filter2_key_indices = bodo.utils.typing.MetaType((1, 0))
     filter2_process_bitmask = bodo.utils.typing.MetaType((True, False))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2, df3):
         join_state = init_join_state(
@@ -5985,6 +6060,7 @@ def test_runtime_join_filter_dict_to_str_cast(merge_join_filters, memory_leak_ch
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -6219,6 +6295,7 @@ def test_merging_runtime_join_filters(materialization_threshold, memory_leak_che
     filter4_process_bitmask = bodo.utils.typing.MetaType(
         (False, True, False, True, False)
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         join_state = init_join_state(
@@ -6229,6 +6306,7 @@ def test_merging_runtime_join_filters(materialization_threshold, memory_leak_che
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0
@@ -6356,6 +6434,7 @@ def test_runtime_join_no_materialization(memory_leak_check):
 
     filter1_key_indices = bodo.utils.typing.MetaType((0,))
     filter1_process_bitmask = bodo.utils.typing.MetaType((True,))
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         join_state = init_join_state(
@@ -6366,6 +6445,7 @@ def test_runtime_join_no_materialization(memory_leak_check):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0

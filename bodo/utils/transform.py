@@ -2121,7 +2121,7 @@ def _convert_const_key_dict(
 
 def get_runtime_join_filter_terms(
     func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: Optional[ir.Expr]
-) -> Optional[list[tuple[ir.Var, tuple[int]]]]:
+) -> Optional[list[tuple[ir.Var, tuple[int], tuple[int, int, str]]]]:
     """
     Takes a function IR and an expression for the runtime join filters argument to the function.
     Extracts the join state variables and column indices from the runtime join filters argument so
@@ -2150,7 +2150,7 @@ def get_runtime_join_filter_terms(
             for rtjf_tuple in _bodo_runtime_join_filters_defn.items:
                 tup_defn = numba.core.ir_utils.get_definition(func_ir, rtjf_tuple)
                 # Verify that the tuple is well formed
-                if len(tup_defn.items) != 2:
+                if len(tup_defn.items) != 3:
                     raise_bodo_error(
                         f"Invalid runtime join filter tuple. Expected 2 elements per tuple, instead had {len(tup_defn.items)}"
                     )
@@ -2171,5 +2171,15 @@ def get_runtime_join_filter_terms(
                         f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {col_indices_meta}."
                     )
                 col_indices_tup = col_indices_meta.value.meta
-                rtjf_terms.append((state_var, col_indices_tup))
+                non_equality_meta = numba.core.ir_utils.get_definition(
+                    func_ir, tup_defn.items[2]
+                )
+                if not isinstance(non_equality_meta, ir.Global) or not isinstance(
+                    non_equality_meta.value, bodo.utils.typing.MetaType
+                ):
+                    raise_bodo_error(
+                        f"Invalid runtime join filter tuple. Expected the second argument to be a global MetaType tuple, instead got {non_equality_meta}."
+                    )
+                non_equality_tup = non_equality_meta.value.meta
+                rtjf_terms.append((state_var, col_indices_tup, non_equality_tup))
     return rtjf_terms

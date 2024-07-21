@@ -1186,7 +1186,18 @@ std::shared_ptr<table_info> JoinState::UnifyProbeTableDictionaryArrays(
         only_transpose_existing_on_key_cols);
 }
 
-void JoinState::ReportBuildStageMetrics() {}
+void JoinState::ReportBuildStageMetrics() {
+    std::vector<MetricBase> metrics;
+    metrics.reserve(2);
+    metrics.emplace_back(TimerMetric("min_max_update_time",
+                                     this->metrics.build_min_max_update_time));
+    metrics.emplace_back(TimerMetric(
+        "min_max_finalize_time", this->metrics.build_min_max_finalize_time));
+    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+        QueryProfileCollector::MakeOperatorStageID(
+            this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
+        std::move(metrics));
+}
 
 void JoinState::ReportProbeStageMetrics() {
     assert(this->probe_input_finalized);
@@ -1321,11 +1332,11 @@ HashJoinState::HashJoinState(
         this->unique_values_limit = (size_t)(std::atol(unique_vals_limit_env_));
     }
 
-    // Allocate the min/max array values for each key columun
+    // Allocate the min/max array values for each key column
     for (size_t key_col = 0; key_col < n_keys; key_col++) {
         std::unique_ptr<bodo::DataType>& dtype =
             probe_table_schema_->column_types[key_col];
-        if (IsValidRuntimeJoinFilterMinMaxColumn(dtype)) {
+        if (this->IsValidRuntimeJoinFilterMinMaxColumn(dtype)) {
             if (dtype->array_type == bodo_array_type::NUMPY ||
                 dtype->array_type == bodo_array_type::NULLABLE_INT_BOOL) {
                 this->min_max_values.emplace_back(
@@ -1353,7 +1364,7 @@ HashJoinState::HashJoinState(
     build_dict_hit_bitmap.resize(n_keys);
 }
 
-bool HashJoinState::IsValidRuntimeJoinFilterMinMaxColumn(
+bool JoinState::IsValidRuntimeJoinFilterMinMaxColumn(
     std::unique_ptr<bodo::DataType>& dtype) {
     switch (dtype->array_type) {
         case bodo_array_type::NUMPY:
@@ -1808,10 +1819,6 @@ void HashJoinState::ReportBuildStageMetrics() {
     metrics.emplace_back(BlobMetric("final_partitioning_state",
                                     this->metrics.final_partitioning_state,
                                     !this->build_parallel));
-    metrics.emplace_back(TimerMetric("min_max_update_time",
-                                     this->metrics.build_min_max_update_time));
-    metrics.emplace_back(TimerMetric(
-        "min_max_finalize_time", this->metrics.build_min_max_finalize_time));
     metrics.emplace_back(
         TimerMetric("unique_values_update_time",
                     this->metrics.build_unique_values_update_time));
@@ -2657,8 +2664,8 @@ void update_build_min_max_state_numeric(
     }
 }
 
-void HashJoinState::UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
-                                     size_t col_idx) {
+void JoinState::UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
+                                 size_t col_idx) {
 #define MIN_MAX_NUMERIC_DTYPE_CASE(DType, ScalarType)          \
     case DType: {                                              \
         update_build_min_max_state_numeric<DType, ScalarType>( \
@@ -2727,7 +2734,7 @@ void HashJoinState::UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
 #undef MIN_MAX_NUMERIC_DTYPE_CASE
 }
 
-void HashJoinState::UpdateKeysMinMaxString(
+void JoinState::UpdateKeysMinMaxString(
     const std::shared_ptr<array_info>& in_arr, size_t col_idx) {
     assert(in_arr->arr_type == bodo_array_type::STRING);
     // Convert the bodo array to an arrow array
@@ -2818,15 +2825,15 @@ void HashJoinState::UpdateKeysMinMaxString(
     }
 }
 
-void HashJoinState::UpdateKeysMinMaxDict(
-    const std::shared_ptr<array_info>& in_arr, size_t col_idx) {
+void JoinState::UpdateKeysMinMaxDict(const std::shared_ptr<array_info>& in_arr,
+                                     size_t col_idx) {
     assert(in_arr->arr_type == bodo_array_type::DICT);
     assert(build_table_dict_builders[col_idx] != nullptr);
     if (!is_matching_dictionary(
             in_arr->child_arrays[0],
             build_table_dict_builders[col_idx]->dict_buff->data_array)) {
         throw std::runtime_error(
-            "HashJoinState::UpdateKeysMinMaxDict: Input dictionary not "
+            "JoinState::UpdateKeysMinMaxDict: Input dictionary not "
             "unified!");
     }
     std::shared_ptr<array_info>& dictionary = in_arr->child_arrays[0];
@@ -2849,7 +2856,7 @@ void HashJoinState::UpdateKeysMinMaxDict(
 // Does the parallel finalization of the min/max values for each key column to
 // ensure that ever rank has the global min/max of the key columns before any
 // runtime join filters.
-void HashJoinState::FinalizeKeysMinMax() {
+void JoinState::FinalizeKeysMinMax() {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -2857,7 +2864,7 @@ void HashJoinState::FinalizeKeysMinMax() {
     std::shared_ptr<table_info> dummy_table = std::make_shared<table_info>();
     for (size_t col_idx = 0; col_idx < min_max_values.size(); col_idx++) {
         if (min_max_values[col_idx].has_value()) {
-            if (probe_table_schema->column_types[col_idx]->array_type ==
+            if (this->build_table_schema->column_types[col_idx]->array_type ==
                 bodo_array_type::DICT) {
                 // If we are computing the result on a dictionary encoded array,
                 // we need to use the bitmasks and dictionary builders to
@@ -3883,6 +3890,10 @@ bool join_probe_consume_batch(HashJoinState* join_state,
  * @param arr_c_types array types of build table columns (Bodo_CTypes ints)
  * @param n_arrs number of build table columns
  * @param n_keys number of join keys
+ * @param interval_build_columns_arr array of column indices that are
+ * interval columns in the build table.
+ * @param num_interval_build_columns number of interval columns in the build
+ * side.
  * @param build_table_outer whether to produce left outer join
  * @param probe_table_outer whether to produce right outer join
  * @param cond_func pointer to function that evaluates non-equality
@@ -3902,6 +3913,7 @@ JoinState* join_state_init_py_entry(
     int64_t operator_id, int8_t* build_arr_c_types,
     int8_t* build_arr_array_types, int n_build_arrs, int8_t* probe_arr_c_types,
     int8_t* probe_arr_array_types, int n_probe_arrs, uint64_t n_keys,
+    int64_t* interval_build_columns_arr, int64_t num_interval_build_columns,
     bool build_table_outer, bool probe_table_outer, bool force_broadcast,
     cond_expr_fn_t cond_func, bool build_parallel, bool probe_parallel,
     int64_t output_batch_size, int64_t sync_iter, int64_t op_pool_size_bytes) {
@@ -3913,6 +3925,9 @@ JoinState* join_state_init_py_entry(
     }
     // nested loop join is required if there are no equality keys
     if (n_keys == 0) {
+        std::vector<int64_t> interval_build_columns(
+            interval_build_columns_arr,
+            interval_build_columns_arr + num_interval_build_columns);
         return new NestedLoopJoinState(
             bodo::Schema::Deserialize(
                 std::vector<int8_t>(build_arr_array_types,
@@ -3924,9 +3939,9 @@ JoinState* join_state_init_py_entry(
                                     probe_arr_array_types + n_probe_arrs),
                 std::vector<int8_t>(probe_arr_c_types,
                                     probe_arr_c_types + n_probe_arrs)),
-            build_table_outer, probe_table_outer, force_broadcast, cond_func,
-            build_parallel, probe_parallel, output_batch_size, sync_iter,
-            operator_id);
+            build_table_outer, probe_table_outer, interval_build_columns,
+            force_broadcast, cond_func, build_parallel, probe_parallel,
+            output_batch_size, sync_iter, operator_id);
     }
 
     return new HashJoinState(
@@ -4301,7 +4316,7 @@ uint32_t get_partition_top_bitmask_by_idx(JoinState* join_state, int64_t idx) {
  * Helper for get_runtime_join_filter_min_max_py_entrypt on string/dictionary
  * columns.
  */
-PyObject* get_runtime_join_filter_min_max_string(HashJoinState* join_state,
+PyObject* get_runtime_join_filter_min_max_string(JoinState* join_state,
                                                  int64_t key_idx, bool is_min) {
     size_t row = is_min ? 0 : 1;
     if (join_state->min_max_values[key_idx].has_value() &&
@@ -4331,15 +4346,13 @@ PyObject* get_runtime_join_filter_min_max_string(HashJoinState* join_state,
  * @param[in] is_min: if true, fetches the min. If false, fetches the max.
  * @param[in] precision: the precision to use for types like Time.
  */
-PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state_,
+PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state,
                                                      int64_t key_idx,
                                                      bool is_min,
                                                      int64_t precision) {
     try {
-        HashJoinState* join_state = (HashJoinState*)join_state_;
         std::unique_ptr<bodo::DataType>& col_type =
             join_state->build_table_schema->column_types[key_idx];
-        assert(static_cast<uint64_t>(key_idx) < join_state->n_keys);
         assert(join_state->build_input_finalized);
 #define RTJF_MIN_MAX_NUMERIC_CASE(dtype, ctype, py_func)                       \
     case dtype: {                                                              \

@@ -27,11 +27,12 @@ class BodoPhysicalJoin(
     val rebalanceOutput: Boolean,
     val joinFilterID: Int,
     val originalJoinFilterKeyLocations: List<Int>,
+    val buildColumnMapping: Map<Int, Int> = mapOf(),
     val broadcastBuildSide: Boolean,
 ) : JoinBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), hints, left, right, condition, joinType), BodoPhysicalRel {
     init {
         if (joinFilterID != -1) {
-            assert(originalJoinFilterKeyLocations.isNotEmpty())
+            assert(originalJoinFilterKeyLocations.isNotEmpty() || buildColumnMapping.isNotEmpty())
         }
     }
 
@@ -58,6 +59,7 @@ class BodoPhysicalJoin(
             rebalanceOutput,
             joinFilterID,
             originalJoinFilterKeyLocations,
+            buildColumnMapping,
             broadcastBuildSide,
         )
     }
@@ -74,6 +76,7 @@ class BodoPhysicalJoin(
             rebalanceOutput,
             joinFilterID,
             originalJoinFilterKeyLocations,
+            buildColumnMapping,
             broadcastBuildSide,
         )
     }
@@ -112,6 +115,7 @@ class BodoPhysicalJoin(
             rebalanceOutput,
             joinFilterID,
             originalJoinFilterKeyLocations,
+            buildColumnMapping,
             broadcastBuildSide,
         )
     }
@@ -128,6 +132,7 @@ class BodoPhysicalJoin(
             rebalanceOutput,
             joinFilterID,
             originalJoinFilterKeyLocations,
+            buildColumnMapping,
             broadcastBuildSide,
         )
     }
@@ -159,9 +164,10 @@ class BodoPhysicalJoin(
             rebalanceOutput: Boolean = false,
             joinFilterID: Int = -1,
             originalJoinFilterKeyLocations: List<Int> = listOf(),
+            buildColumnMapping: Map<Int, Int> = mapOf(),
             broadcastBuildSide: Boolean = false,
         ): BodoPhysicalJoin {
-            if (originalJoinFilterKeyLocations.isEmpty()) {
+            if (originalJoinFilterKeyLocations.isEmpty() && buildColumnMapping.isEmpty()) {
                 assert(joinFilterID == -1)
             }
             return BodoPhysicalJoin(
@@ -175,6 +181,7 @@ class BodoPhysicalJoin(
                 rebalanceOutput = rebalanceOutput,
                 joinFilterID = joinFilterID,
                 originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
+                buildColumnMapping = buildColumnMapping,
                 broadcastBuildSide = broadcastBuildSide,
             )
         }
@@ -188,6 +195,7 @@ class BodoPhysicalJoin(
             rebalanceOutput: Boolean = false,
             joinFilterID: Int = -1,
             originalJoinFilterKeyLocations: List<Int> = listOf(),
+            buildColumnMapping: Map<Int, Int> = mapOf(),
             broadcastBuildSide: Boolean = false,
         ): BodoPhysicalJoin {
             val cluster = left.cluster
@@ -202,6 +210,7 @@ class BodoPhysicalJoin(
                 rebalanceOutput = rebalanceOutput,
                 joinFilterID = joinFilterID,
                 originalJoinFilterKeyLocations = originalJoinFilterKeyLocations,
+                buildColumnMapping = buildColumnMapping,
                 broadcastBuildSide = broadcastBuildSide,
             )
         }

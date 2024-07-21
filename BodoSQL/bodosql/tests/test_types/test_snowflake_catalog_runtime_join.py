@@ -1120,3 +1120,51 @@ def test_sf_small_subset(
             stream,
             'Runtime join filter query: SELECT * FROM (SELECT "SS_SOLD_DATE_SK", "SS_CUSTOMER_SK", "SS_TICKET_NUMBER" FROM (SELECT "SS_SOLD_DATE_SK", "SS_CUSTOMER_SK", "SS_TICKET_NUMBER" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCDS_SF10TCL"."STORE_SALES" WHERE "SS_SOLD_DATE_SK" IS NOT NULL AND "SS_CUSTOMER_SK" >= 31618850 AND "SS_CUSTOMER_SK" <= 31628850) as TEMP) WHERE TRUE AND ($1 IN (2451176, 2451177, 2451178, 2451179, 2451180, 2451181, 2451182, 2451541, 2451542, 2451543, 2451544, 2451545, 2451546, 2451547))',
         )
+
+
+def test_interval_join_rtjf(
+    snowflake_sample_data_snowflake_catalog,
+    memory_leak_check,
+):
+    """
+    Adds a test for Runtime Join Filter support for joins created with
+    interval syntax.
+    """
+    df = pd.DataFrame(
+        {
+            "KEY1": [5, 35, 6, 7, 15],
+            "KEY2": [3, 4, 7, 9, 1],
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(
+        {"SMALL_TABLE": df}, catalog=snowflake_sample_data_snowflake_catalog
+    )
+
+    query = """SELECT L.L_ORDERKEY FROM SNOWFLAKE_SAMPLE_DATA.TPCH_SF100.LINEITEM L inner join SMALL_TABLE S on L.L_ORDERKEY > S.KEY1 AND L.L_ORDERKEY <= S.KEY2"""
+    answer = pd.DataFrame(
+        {
+            "L_ORDERKEY": [7] * 7,
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=answer,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Snowflake.
+        check_logger_msg(
+            stream,
+            'Runtime join filter query: SELECT * FROM (SELECT "L_ORDERKEY" FROM (SELECT "L_ORDERKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF100"."LINEITEM") as TEMP) WHERE TRUE AND ($1 <= 9) AND ($1 > 5)',
+        )
