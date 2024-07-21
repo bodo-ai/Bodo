@@ -810,6 +810,8 @@ def _init_join_state(
     probe_arr_dtypes,
     probe_arr_array_types,
     n_probe_arrs,
+    interval_build_columns_arr,
+    n_interval_build_columns,
     force_broadcast_t,
     op_pool_size_bytes_t,
     output_state_type,
@@ -831,6 +833,8 @@ def _init_join_state(
         probe_arr_array_types (int8*): pointer to array of ints representing array types
                                    (as provided by numba_to_c_array_type)
         n_probe_arrs (int32): number of probe columns
+        interval_build_columns_arr (int64*): pointer to array of ints representing the build indices for interval joins
+        n_interval_build_columns (int64): number of build columns for interval joins
         force_broadcast_t (bool): Should we broadcast the build side regardless of size.
         op_pool_size_bytes_t (int64): Number of pinned bytes that this operator is allowed
             to use. Set this to -1 to let the operator use a pre-determined portion of
@@ -853,6 +857,8 @@ def _init_join_state(
             probe_arr_dtypes,
             probe_arr_array_types,
             n_probe_arrs,
+            interval_build_columns_arr,
+            n_interval_build_columns,
             force_broadcast,
             op_pool_size_bytes,
             _,
@@ -878,6 +884,8 @@ def _init_join_state(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(32),
                 lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
@@ -901,6 +909,8 @@ def _init_join_state(
             probe_arr_array_types,
             n_probe_arrs,
             n_keys,
+            interval_build_columns_arr,
+            n_interval_build_columns,
             build_table_outer,
             probe_table_outer,
             force_broadcast,
@@ -923,6 +933,8 @@ def _init_join_state(
         types.voidptr,
         types.voidptr,
         types.int32,
+        types.CPointer(types.int64),
+        types.int64,
         types.bool_,
         types.int64,  # op_pool_size_bytes_t
         output_state_type,
@@ -942,6 +954,7 @@ def init_join_state(
     probe_colnames,
     build_outer,
     probe_outer,
+    interval_build_columns,
     force_broadcast,
     op_pool_size_bytes=-1,
     expected_state_type=None,
@@ -986,6 +999,17 @@ def init_join_state(
     probe_arr_dtypes = output_type.probe_arr_ctypes
     probe_arr_array_types = output_type.probe_arr_array_types
     n_probe_arrs = len(probe_arr_array_types)
+    interval_build_columns = unwrap_typeref(interval_build_columns).meta
+    build_indices = output_type.build_indices
+    updated_interval_build_columns = []
+    for build_idx in build_indices:
+        # Before we have the expected state type the mapping won't work.
+        if build_idx < len(interval_build_columns):
+            updated_interval_build_columns.append(build_indices[build_idx])
+    updated_interval_build_columns_arr = np.array(
+        updated_interval_build_columns, dtype=np.int64
+    )
+    num_interval_build_cols = len(updated_interval_build_columns_arr)
 
     # handle non-equi conditions (reuse existing join code as much as possible)
     # Note we must account for how keys will be cast here.
@@ -1044,6 +1068,7 @@ def init_join_state(
             probe_colnames,
             build_outer,
             probe_outer,
+            interval_build_columns,
             force_broadcast,
             op_pool_size_bytes=-1,
             expected_state_type=None,
@@ -1063,6 +1088,8 @@ def init_join_state(
                 probe_arr_dtypes.ctypes,
                 probe_arr_array_types.ctypes,
                 n_probe_arrs,
+                updated_interval_build_columns_arr.ctypes,
+                num_interval_build_cols,
                 force_broadcast,
                 op_pool_size_bytes,
                 output_type,
@@ -1081,6 +1108,7 @@ def init_join_state(
         probe_colnames,
         build_outer,
         probe_outer,
+        interval_build_columns,
         force_broadcast,
         op_pool_size_bytes=-1,
         expected_state_type=None,
@@ -1096,6 +1124,8 @@ def init_join_state(
             probe_arr_dtypes.ctypes,
             probe_arr_array_types.ctypes,
             n_probe_arrs,
+            updated_interval_build_columns_arr.ctypes,
+            num_interval_build_cols,
             force_broadcast,
             op_pool_size_bytes,
             output_type,
@@ -1307,7 +1337,7 @@ def overload_runtime_join_filter(
 
     # Bloom filter can only be applied when all key columns are present
     can_apply_bloom_filters = [
-        all([(idx != -1) for idx in join_key_idxs_list])
+        len(join_key_idxs_list) > 0 and all([(idx != -1) for idx in join_key_idxs_list])
         for join_key_idxs_list in join_key_idxs_lists
     ]
 
@@ -1500,7 +1530,6 @@ def impl_runtime_join_filter(
         "can_apply_column_filters": can_apply_col_filters,
         "_runtime_join_filter": _runtime_join_filter,
     }
-
     exec(func_text, global_vars, loc_vars)
 
     impl_runtime_join_filter = loc_vars["impl_runtime_join_filter"]

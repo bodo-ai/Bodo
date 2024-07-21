@@ -92,6 +92,11 @@ struct JoinMetrics {
     stat_t build_input_row_count = 0;
     stat_t probe_input_row_count = 0;
     stat_t probe_output_row_count = 0;
+
+    // Time spent dealing with min/max updates
+    time_t build_min_max_update_time = 0;
+    // Time spent dealing with the min/max parallel finalization
+    time_t build_min_max_finalize_time = 0;
 };
 
 /**
@@ -176,12 +181,6 @@ struct HashJoinMetrics : public JoinMetrics {
     // Time spent in filter_na_values
     time_t build_filter_na_time = 0;
     stat_t build_filter_na_output_nrows = 0;
-
-    // Time spent dealing with min/max updates
-    time_t build_min_max_update_time = 0;
-
-    // Time spent dealing with the min/max parallel finalization
-    time_t build_min_max_finalize_time = 0;
 
     // Time spent dealing with unique values updates
     time_t build_unique_values_update_time = 0;
@@ -736,6 +735,16 @@ class JoinState {
     // Dummy probe table. Useful for the build_table_outer case.
     std::shared_ptr<table_info> dummy_probe_table;
 
+    // Vector that stores an array for each possible build column that
+    // can generate a minimum or maximum value. Each array
+    // has 2 values: the minimum key, and the maximum key.
+    std::vector<std::optional<std::shared_ptr<array_info>>> min_max_values;
+
+    // Vector that stores the bitmask of each dictionary encoded build column
+    // indicating which indices were hit 1+ times on the build side. For
+    // non dictionary encoded columns, the vectors are empty.
+    std::vector<std::vector<bool>> build_dict_hit_bitmap;
+
     // Metrics for join execution.
     JoinMetrics metrics;
 
@@ -807,6 +816,49 @@ class JoinState {
     // Operator ID.
     const int64_t op_id;
 
+    /**
+     * Returns whether a key column of a hash join can have a runtime
+     * join filter based on its min/max values.
+     */
+    static bool IsValidRuntimeJoinFilterMinMaxColumn(
+        std::unique_ptr<bodo::DataType>& dtype);
+
+    /**
+     * Processes a batch of data to include it in the accumulated min/max values
+     * for a specific key column.
+     *
+     * @param[in] arr The batch of data that is being processed to update
+     * the min/max values of a column.
+     * @param[in] col_idx: which column to insert.
+     */
+    void UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
+                          size_t col_idx);
+
+    /**
+     * Helper for UpdateKeysMinMax on string arrays.
+     *
+     * @param[in] in_arr: the string array.
+     * @param[in] col_idx: the column index having its data inserted.
+     */
+    void UpdateKeysMinMaxString(const std::shared_ptr<array_info>& in_arr,
+                                size_t col_idx);
+
+    /**
+     * Helper for UpdateKeysMinMax on dictionary encoded arrays.
+     *
+     * @param[in] in_arr: the dictionary encoded array.
+     * @param[in] col_idx: the column index having its data inserted.
+     */
+    void UpdateKeysMinMaxDict(const std::shared_ptr<array_info>& in_arr,
+                              size_t col_idx);
+
+    /**
+     * Does the parallel finalization of the min/max values for each key column
+     * to ensure that ever rank has the global min/max of the key columns before
+     * any runtime join filters.
+     */
+    void FinalizeKeysMinMax();
+
    protected:
     /**
      * @brief Helper function to report metrics from the build stage to the
@@ -872,15 +924,6 @@ class HashJoinState : public JoinState {
     /// @brief Whether we should print debug information
     /// about partitioning such as when a partition is split.
     bool debug_partitioning = false;
-
-    // Vector that stores an array for each equi-join key. Each array
-    // has 2 values: the minimum key, and the maixmum key.
-    std::vector<std::optional<std::shared_ptr<array_info>>> min_max_values;
-
-    // Vector that stores the bitmask of each dictionary encoded key column
-    // indicating which indices were hit 1+ times on the build side. For
-    // non dictionary encoded columns, the vectors are empty.
-    std::vector<std::vector<bool>> build_dict_hit_bitmap;
 
     // Vector that stores an array for each equi-join key. Each set
     // stores the unique values encountered so far (as type int64_t). If
@@ -1126,53 +1169,10 @@ class HashJoinState : public JoinState {
 
     /**
      * Returns whether a key column of a hash join can have a runtime
-     * join filter based on its min/max values.
-     */
-    static bool IsValidRuntimeJoinFilterMinMaxColumn(
-        std::unique_ptr<bodo::DataType>& dtype);
-
-    /**
-     * Returns whether a key column of a hash join can have a runtime
      * join filter based on its unique values.
      */
     static bool IsValidRuntimeJoinFilterUniqueValuesColumn(
         std::unique_ptr<bodo::DataType>& dtype);
-
-    /**
-     * Processes a batch of data to include it in the accumulated min/max values
-     * for a specific key column.
-     *
-     * @param[in] arr The batch of data that is being processed to update
-     * the min/max values of a column.
-     * @param[in] col_idx: which column to insert.
-     */
-    void UpdateKeysMinMax(const std::shared_ptr<array_info>& arr,
-                          size_t col_idx);
-
-    /**
-     * Helper for UpdateKeysMinMax on string arrays.
-     *
-     * @param[in] in_arr: the string array.
-     * @param[in] col_idx: the column index having its data inserted.
-     */
-    void UpdateKeysMinMaxString(const std::shared_ptr<array_info>& in_arr,
-                                size_t col_idx);
-
-    /**
-     * Helper for UpdateKeysMinMax on dictionary encoded arrays.
-     *
-     * @param[in] in_arr: the dictionary encoded array.
-     * @param[in] col_idx: the column index having its data inserted.
-     */
-    void UpdateKeysMinMaxDict(const std::shared_ptr<array_info>& in_arr,
-                              size_t col_idx);
-
-    /**
-     * Does the parallel finalization of the min/max values for each key column
-     * to ensure that ever rank has the global min/max of the key columns before
-     * any runtime join filters.
-     */
-    void FinalizeKeysMinMax();
 
     /**
      * Processes a batch of data to include it in the accumulated unique
@@ -1283,6 +1283,7 @@ class NestedLoopJoinState : public JoinState {
     NestedLoopJoinState(const std::shared_ptr<bodo::Schema> build_table_schema_,
                         const std::shared_ptr<bodo::Schema> probe_table_schema_,
                         bool build_table_outer_, bool probe_table_outer_,
+                        std::vector<int64_t> interval_build_col_idxs,
                         bool force_broadcast_, cond_expr_fn_t cond_func_,
                         bool build_parallel_, bool probe_parallel_,
                         int64_t output_batch_size_, int64_t sync_iter_,
@@ -1323,6 +1324,36 @@ class NestedLoopJoinState : public JoinState {
         // Update metrics
         this->metrics.block_size_bytes = block_size_bytes;
         this->metrics.chunk_size_nrows = chunk_size;
+
+        // Set the min/max candidate columns.
+        for (size_t i = 0; i < this->build_table_schema->column_types.size();
+             i++) {
+            this->min_max_values.emplace_back(std::nullopt);
+        }
+        for (int64_t build_col_idx : interval_build_col_idxs) {
+            std::unique_ptr<bodo::DataType>& dtype =
+                this->build_table_schema->column_types[build_col_idx];
+            if (this->IsValidRuntimeJoinFilterMinMaxColumn(dtype)) {
+                if (dtype->array_type == bodo_array_type::NUMPY ||
+                    dtype->array_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                    this->min_max_values[build_col_idx] =
+                        alloc_nullable_array_all_nulls(
+                            2, this->build_table_schema
+                                   ->column_types[build_col_idx]
+                                   ->c_type);
+                } else {
+                    assert(dtype->array_type == bodo_array_type::STRING ||
+                           dtype->array_type == bodo_array_type::DICT);
+                    std::shared_ptr<array_info> str_arr =
+                        alloc_string_array(Bodo_CTypes::STRING, 2, 0);
+                    str_arr->set_null_bit<bodo_array_type::STRING>(0, 0);
+                    str_arr->set_null_bit<bodo_array_type::STRING>(1, 0);
+                    this->min_max_values[build_col_idx] = str_arr;
+                }
+            }
+        }
+        this->build_dict_hit_bitmap.resize(
+            this->build_table_schema->column_types.size());
     }
 
     // Metrics for the query profile.

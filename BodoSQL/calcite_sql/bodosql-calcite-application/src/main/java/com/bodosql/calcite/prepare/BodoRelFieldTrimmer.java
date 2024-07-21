@@ -20,9 +20,11 @@ import com.bodosql.calcite.rel.core.cachePlanContainers.CacheNodeSingleVisitHand
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelCollation;
@@ -466,6 +468,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
       // the join. As a result, we need to track this information for any RuntimeJoinFilters
       // to ensure the proper columns are updated.
       final List<Integer> keyLocationMapping;
+      final Map<Integer, Integer> buildMapping;
       if (oldFilterID != -1) {
         JoinInfo oldInfo = oldBodoJoin.analyzeCondition();
         // Normalize to ensure we get the accurate result. Our JoinBase does this.
@@ -479,8 +482,17 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
           int newLocation = calculatedInfo.leftKeys.indexOf(newKey);
           keyLocationMapping.add(newLocation);
         }
+        buildMapping = new HashMap();
+        Map<Integer, Integer> lastMapping = oldBodoJoin.getBuildColumnMapping();
+        for (int origKey : lastMapping.keySet()) {
+          // Simply update the key mapping.
+          int lastRemappedKey = lastMapping.get(origKey);
+          int newKey = mapping.getTarget(lastRemappedKey);
+          buildMapping.put(origKey, newKey);
+        }
       } else {
         keyLocationMapping = List.of();
+        buildMapping = Map.of();
       }
       return BodoPhysicalJoin.Companion.create(
           oldBodoJoin.getCluster(),
@@ -493,6 +505,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
           oldBodoJoin.getRebalanceOutput(),
           oldBodoJoin.getJoinFilterID(),
           keyLocationMapping,
+          buildMapping,
           oldBodoJoin.getBroadcastBuildSide());
     } else {
       relBuilder.push(newLeft);
@@ -524,22 +537,40 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     // Prune if there are still unused columns.
     TrimResult updateResult = insertPruningProjection(childResult, fieldsUsed, extraFields);
     // Remap the used columns.
-    List<List<Integer>> newColumnsList = new ArrayList();
-    for (List<Integer> columns : joinFilter.getFilterColumns()) {
-      List<Integer> newColumns = new ArrayList();
-      for (int column : columns) {
+    List<List<Integer>> newEqualityColumnsList = new ArrayList();
+    for (List<Integer> equalityColumns : joinFilter.getEqualityFilterColumns()) {
+      List<Integer> newEqualityColumns = new ArrayList();
+      for (int column : equalityColumns) {
         final int newColumn;
         if (column == -1) {
           newColumn = -1;
         } else {
           newColumn = updateResult.right.getTarget(column);
         }
-        newColumns.add(newColumn);
+        newEqualityColumns.add(newColumn);
       }
-      newColumnsList.add(newColumns);
+      newEqualityColumnsList.add(newEqualityColumns);
+    }
+    List<List<NonEqualityJoinFilterColumnInfo>> nonEqualityColumnsList = new ArrayList();
+    for (List<NonEqualityJoinFilterColumnInfo> nonEqualityColumns :
+        joinFilter.getNonEqualityFilterInfo()) {
+      List<NonEqualityJoinFilterColumnInfo> newNonEqualityColumns = new ArrayList();
+      for (NonEqualityJoinFilterColumnInfo columnInfo : nonEqualityColumns) {
+        final NonEqualityJoinFilterColumnInfo newColumnInfo =
+            new NonEqualityJoinFilterColumnInfo(
+                columnInfo.getType(),
+                updateResult.right.getTarget(columnInfo.getColumnIndex()),
+                columnInfo.getOriginalJoinBuildIndex());
+        newNonEqualityColumns.add(newColumnInfo);
+      }
+      nonEqualityColumnsList.add(newNonEqualityColumns);
     }
     RuntimeJoinFilterBase newFilter =
-        joinFilter.copy(joinFilter.getTraitSet(), updateResult.left, newColumnsList);
+        joinFilter.copy(
+            joinFilter.getTraitSet(),
+            updateResult.left,
+            newEqualityColumnsList,
+            nonEqualityColumnsList);
     return result(newFilter, updateResult.right, joinFilter);
   }
 

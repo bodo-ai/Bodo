@@ -86,6 +86,19 @@ void NestedLoopJoinState::FinalizeBuild() {
     // Finalize any active chunk
     this->build_table_buffer->Finalize();
 
+    // Finalize the min/max before broadcast because it may
+    // modify the value of build_parallel.
+    if (!this->probe_table_outer) {
+        // If this is not an outer probe, finalize the min/max
+        // values for each key by shuffling across multiple ranks.
+        // This is done before the broadcast handling since
+        // the finalization deals with the parallel handling
+        // of the accumulated min/max state.
+        time_pt start_min_max = start_timer();
+        this->FinalizeKeysMinMax();
+        this->metrics.build_min_max_finalize_time += end_timer(start_min_max);
+    }
+
     // If the build table is small enough, broadcast it to all ranks
     // so the probe table can be joined locally.
     // NOTE: broadcasting build table is incorrect if the probe table is
@@ -177,6 +190,21 @@ bool nested_loop_join_build_consume_batch(NestedLoopJoinState* join_state,
     in_table = join_state->UnifyBuildTableDictionaryArrays(in_table);
 
     join_state->build_table_buffer->AppendBatch(in_table);
+
+    if (!join_state->probe_table_outer) {
+        // If this is not an outer probe, use the latest batch
+        // to process the min/max values for each build column and
+        // update the min_max_values vector. If the column is not
+        // involved in an interval join it will be a no-op.
+        time_pt start_min_max = start_timer();
+        for (size_t col_idx = 0;
+             col_idx < join_state->build_table_schema->column_types.size();
+             col_idx++) {
+            join_state->UpdateKeysMinMax(in_table->columns[col_idx], col_idx);
+        }
+        join_state->metrics.build_min_max_update_time +=
+            end_timer(start_min_max);
+    }
 
     // is_last can be local here because build only shuffles once at the end
     if (is_last) {

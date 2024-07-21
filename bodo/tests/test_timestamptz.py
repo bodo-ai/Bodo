@@ -338,6 +338,7 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
     global_7 = MetaType((1, 2, 0))
     global_build_outer = False
     global_probe_outer = False
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         # Setup memory budgets and convert dataframes to tables
@@ -365,6 +366,7 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
             global_5,
             global_build_outer,
             global_probe_outer,
+            build_interval_cols,
             False,
         )
 
@@ -539,6 +541,7 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
     global_7 = MetaType((2, 3, 0, 1))
     global_build_outer = False
     global_probe_outer = False
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         # Setup memory budgets and convert dataframes to tables
@@ -566,6 +569,7 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
             global_5,
             global_build_outer,
             global_probe_outer,
+            build_interval_cols,
             False,
         )
 

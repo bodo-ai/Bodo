@@ -170,6 +170,7 @@ global_5_2 = ColNamesMetaType(
 # Codegen change: Global variables for setting build-outer and probe-outer flags.
 global_build_outer = False
 global_probe_outer = False
+build_interval_cols = bodo.utils.typing.MetaType(())
 
 
 def impl(conn_str):  # Codegen change: add conn_str
@@ -229,6 +230,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         global_5,
         global_build_outer,
         global_probe_outer,
+        build_interval_cols,
         False,
         non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )
@@ -474,6 +476,7 @@ def impl_wo_condition(conn_str):  # Codegen change: add conn_str
         global_5_2,
         global_build_outer,
         global_probe_outer,
+        build_interval_cols,
         False,
     )
     _temp23 = time.time()
@@ -715,6 +718,7 @@ def impl_unbalanced(conn_str):  # Codegen change: add conn_str
         global_5,
         global_build_outer,
         global_probe_outer,
+        build_interval_cols,
         False,
         non_equi_condition="(left.`L_SHIPDATE` < right.`O_ORDERDATE`)",
     )

@@ -7,7 +7,7 @@ import com.google.common.annotations.VisibleForTesting
  * This is split into its own file to allow more complex unit testing.
  */
 @VisibleForTesting
-internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoinInfo> {
+internal class JoinFilterProgramState : Iterable<Pair<Int, JoinFilterProgramState.JoinColumnInfo>> {
     /**
      * The column information need for each join. Each join maintains 1
      * entry in the list per leftKey in the join. If that key is no longer available,
@@ -17,24 +17,26 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
     data class JoinColumnInfo(
         val filterColumns: List<Int>,
         val filterIsFirstLocations: List<Boolean>,
+        val nonEqualityFilterColumns: List<NonEqualityJoinFilterColumnInfo>,
     )
 
-    /**
-     * External class information for accessing the join state as an object. This abstracts away the idea
-     * that the join state is a map of join IDs to join information.
-     */
-    data class LiveJoinInfo(val joinFilterKey: Int, val remainingColumns: List<Int>, val isFirstLocation: List<Boolean>)
+    data class JoinOutputLists(
+        val joinIDs: List<Int>,
+        val equalityFilterColumns: List<List<Int>>,
+        val equalityFilterIsFirstLocations: List<List<Boolean>>,
+        val nonEqualityFilterColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
+    )
 
-    class JoinFilterProgramStateIterator(joinStateMap: Map<Int, JoinColumnInfo>) : Iterator<LiveJoinInfo> {
+    class JoinFilterProgramStateIterator(joinStateMap: Map<Int, JoinColumnInfo>) : Iterator<Pair<Int, JoinColumnInfo>> {
         private val joinStateMapIterator = joinStateMap.iterator()
 
         override fun hasNext(): Boolean {
             return joinStateMapIterator.hasNext()
         }
 
-        override fun next(): LiveJoinInfo {
+        override fun next(): Pair<Int, JoinColumnInfo> {
             val (joinID, joinInfo) = joinStateMapIterator.next()
-            return LiveJoinInfo(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations)
+            return Pair(joinID, joinInfo)
         }
     }
 
@@ -50,31 +52,27 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
         joinID: Int,
         filterColumns: List<Int>,
         filterIsFirstLocations: List<Boolean>,
+        nonEqualityFilterInfo: List<NonEqualityJoinFilterColumnInfo>,
     ) {
-        joinStateMap[joinID] = JoinColumnInfo(filterColumns, filterIsFirstLocations)
-    }
-
-    /**
-     * Add a new join to the state.
-     */
-    fun add(joinInfo: LiveJoinInfo) {
-        joinStateMap[joinInfo.joinFilterKey] = JoinColumnInfo(joinInfo.remainingColumns, joinInfo.isFirstLocation)
+        joinStateMap[joinID] = JoinColumnInfo(filterColumns, filterIsFirstLocations, nonEqualityFilterInfo)
     }
 
     /**
      * Return the result as a triple of lists. This is a format more compatible with
      * the RuntimeJoinFilter RelNodes.
      */
-    fun flattenToLists(): Triple<List<Int>, List<List<Int>>, List<List<Boolean>>> {
+    fun flattenToLists(): JoinOutputLists {
         val joinIDs = mutableListOf<Int>()
-        val filterColumns = mutableListOf<List<Int>>()
-        val filterIsFirstLocations = mutableListOf<List<Boolean>>()
+        val equalityFilterColumns = mutableListOf<List<Int>>()
+        val equalityFilterIsFirstLocations = mutableListOf<List<Boolean>>()
+        val nonEqualityFilterColumns = mutableListOf<List<NonEqualityJoinFilterColumnInfo>>()
         for ((joinID, joinInfo) in joinStateMap) {
             joinIDs.add(joinID)
-            filterColumns.add(joinInfo.filterColumns)
-            filterIsFirstLocations.add(joinInfo.filterIsFirstLocations)
+            equalityFilterColumns.add(joinInfo.filterColumns)
+            equalityFilterIsFirstLocations.add(joinInfo.filterIsFirstLocations)
+            nonEqualityFilterColumns.add(joinInfo.nonEqualityFilterColumns)
         }
-        return Triple(joinIDs, filterColumns, filterIsFirstLocations)
+        return JoinOutputLists(joinIDs, equalityFilterColumns, equalityFilterIsFirstLocations, nonEqualityFilterColumns)
     }
 
     fun isEmpty(): Boolean {
@@ -88,7 +86,7 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
     /**
      * Returns an iterator over the elements of this object.
      */
-    override fun iterator(): Iterator<LiveJoinInfo> {
+    override fun iterator(): Iterator<Pair<Int, JoinColumnInfo>> {
         return JoinFilterProgramStateIterator(joinStateMap)
     }
 
@@ -144,7 +142,7 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
         for ((joinID, joinInfo) in joinStateMap) {
             val otherJoinInfo = other.joinStateMap[joinID]
             if (otherJoinInfo == null) {
-                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations)
+                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations, joinInfo.nonEqualityFilterColumns)
             } else {
                 // We need to actually compute the difference between the columns.
                 var hasDifference = false
@@ -163,8 +161,41 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
                     remainingColumns.add(column)
                     remainingIsFirstLocations.add(isFirstLocation)
                 }
-                if (hasDifference) {
-                    result.add(joinID, remainingColumns, remainingIsFirstLocations)
+                // Compute the intersection of non-equality filters.
+                val firstNonEqualityFilters: MutableMap<Int, MutableSet<Pair<NonEqualityType, Int>>> = mutableMapOf()
+                for (nonEqualityFilter in joinInfo.nonEqualityFilterColumns) {
+                    if (nonEqualityFilter.columnIndex !in firstNonEqualityFilters) {
+                        firstNonEqualityFilters[nonEqualityFilter.columnIndex] = mutableSetOf()
+                    }
+                    firstNonEqualityFilters[nonEqualityFilter.columnIndex]!!.add(
+                        Pair(nonEqualityFilter.type, nonEqualityFilter.originalJoinBuildIndex),
+                    )
+                }
+                val secondNonEqualityFilters: MutableMap<Int, MutableSet<Pair<NonEqualityType, Int>>> = mutableMapOf()
+                for (nonEqualityFilter in otherJoinInfo.nonEqualityFilterColumns) {
+                    if (nonEqualityFilter.columnIndex !in secondNonEqualityFilters) {
+                        secondNonEqualityFilters[nonEqualityFilter.columnIndex] = mutableSetOf()
+                    }
+                    secondNonEqualityFilters[nonEqualityFilter.columnIndex]!!.add(
+                        Pair(nonEqualityFilter.type, nonEqualityFilter.originalJoinBuildIndex),
+                    )
+                }
+                // Compute the actual set level intersection.
+                val newNonEqualityFilters: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                for ((columnIndex, columnInfo) in firstNonEqualityFilters) {
+                    if (columnIndex in secondNonEqualityFilters) {
+                        val difference = columnInfo.minus(secondNonEqualityFilters[columnIndex]!!)
+                        for ((type, origBuildIndex) in difference) {
+                            newNonEqualityFilters.add(NonEqualityJoinFilterColumnInfo(type, columnIndex, origBuildIndex))
+                        }
+                    } else {
+                        for ((type, origBuildIndex) in columnInfo) {
+                            newNonEqualityFilters.add(NonEqualityJoinFilterColumnInfo(type, columnIndex, origBuildIndex))
+                        }
+                    }
+                }
+                if (hasDifference || newNonEqualityFilters.isNotEmpty()) {
+                    result.add(joinID, remainingColumns, remainingIsFirstLocations, newNonEqualityFilters)
                 }
             }
         }
@@ -214,8 +245,37 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
                     remainingColumns.add(column)
                     remainingIsFirstLocations.add(isFirstLocation)
                 }
-                if (hasIntersection) {
-                    result.add(joinID, remainingColumns, remainingIsFirstLocations)
+                // Compute the intersection of non-equality filters.
+                val firstNonEqualityFilters: MutableMap<Int, MutableSet<Pair<NonEqualityType, Int>>> = mutableMapOf()
+                for (nonEqualityFilter in joinInfo.nonEqualityFilterColumns) {
+                    if (nonEqualityFilter.columnIndex !in firstNonEqualityFilters) {
+                        firstNonEqualityFilters[nonEqualityFilter.columnIndex] = mutableSetOf()
+                    }
+                    firstNonEqualityFilters[nonEqualityFilter.columnIndex]!!.add(
+                        Pair(nonEqualityFilter.type, nonEqualityFilter.originalJoinBuildIndex),
+                    )
+                }
+                val secondNonEqualityFilters: MutableMap<Int, MutableSet<Pair<NonEqualityType, Int>>> = mutableMapOf()
+                for (nonEqualityFilter in otherJoinInfo.nonEqualityFilterColumns) {
+                    if (nonEqualityFilter.columnIndex !in secondNonEqualityFilters) {
+                        secondNonEqualityFilters[nonEqualityFilter.columnIndex] = mutableSetOf()
+                    }
+                    secondNonEqualityFilters[nonEqualityFilter.columnIndex]!!.add(
+                        Pair(nonEqualityFilter.type, nonEqualityFilter.originalJoinBuildIndex),
+                    )
+                }
+                // Compute the actual set level intersection.
+                val newNonEqualityFilters: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                for ((columnIndex, types) in firstNonEqualityFilters) {
+                    if (columnIndex in secondNonEqualityFilters) {
+                        val intersection = types.intersect(secondNonEqualityFilters[columnIndex]!!)
+                        for ((type, origBuildIndex) in intersection) {
+                            newNonEqualityFilters.add(NonEqualityJoinFilterColumnInfo(type, columnIndex, origBuildIndex))
+                        }
+                    }
+                }
+                if (hasIntersection || newNonEqualityFilters.isNotEmpty()) {
+                    result.add(joinID, remainingColumns, remainingIsFirstLocations, newNonEqualityFilters)
                 }
             }
         }
@@ -246,7 +306,7 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
             seenJoinIDs.add(joinID)
             val otherJoinInfo = other.joinStateMap[joinID]
             if (otherJoinInfo == null) {
-                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations)
+                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations, joinInfo.nonEqualityFilterColumns)
             } else {
                 // We need to actually compute the union between the columns.
                 val remainingColumns: MutableList<Int> = mutableListOf()
@@ -272,13 +332,37 @@ internal class JoinFilterProgramState : Iterable<JoinFilterProgramState.LiveJoin
                     remainingColumns.add(finalColumn)
                     remainingIsFirstLocations.add(finalIsFirst)
                 }
-                result.add(joinID, remainingColumns, remainingIsFirstLocations)
+                // Compute a map of the non-equality filters based on the supported types.
+                val nonEqualityFilterColumns: MutableMap<Int, MutableSet<Pair<NonEqualityType, Int>>> = mutableMapOf()
+                for (nonEqualityFilter in joinInfo.nonEqualityFilterColumns) {
+                    if (nonEqualityFilter.columnIndex !in nonEqualityFilterColumns) {
+                        nonEqualityFilterColumns[nonEqualityFilter.columnIndex] = mutableSetOf()
+                    }
+                    nonEqualityFilterColumns[nonEqualityFilter.columnIndex]!!.add(
+                        Pair(nonEqualityFilter.type, nonEqualityFilter.originalJoinBuildIndex),
+                    )
+                }
+                for (nonEqualityFilter in otherJoinInfo.nonEqualityFilterColumns) {
+                    if (nonEqualityFilter.columnIndex !in nonEqualityFilterColumns) {
+                        nonEqualityFilterColumns[nonEqualityFilter.columnIndex] = mutableSetOf()
+                    }
+                    nonEqualityFilterColumns[nonEqualityFilter.columnIndex]!!.add(
+                        Pair(nonEqualityFilter.type, nonEqualityFilter.originalJoinBuildIndex),
+                    )
+                }
+                val newNonEqualityFilters: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                for ((columnIndex, columnInfos) in nonEqualityFilterColumns) {
+                    for ((type, origBuildIndex) in columnInfos) {
+                        newNonEqualityFilters.add(NonEqualityJoinFilterColumnInfo(type, columnIndex, origBuildIndex))
+                    }
+                }
+                result.add(joinID, remainingColumns, remainingIsFirstLocations, newNonEqualityFilters)
             }
         }
         // Check for any joins only in the other join state.
         for ((joinID, joinInfo) in other.joinStateMap) {
             if (joinID !in seenJoinIDs) {
-                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations)
+                result.add(joinID, joinInfo.filterColumns, joinInfo.filterIsFirstLocations, joinInfo.nonEqualityFilterColumns)
             }
         }
         return result

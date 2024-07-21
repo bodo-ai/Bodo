@@ -9,6 +9,7 @@ import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.UnusedStateVariable
 import com.bodosql.calcite.ir.Variable
+import com.bodosql.calcite.prepare.NonEqualityJoinFilterColumnInfo
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -24,22 +25,24 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
     traits: RelTraitSet,
     input: RelNode,
     joinFilterIDs: List<Int>,
-    filterColumns: List<List<Int>>,
-    filterIsFirstLocations: List<List<Boolean>>,
+    equalityFilterColumns: List<List<Int>>,
+    equalityIsFirstLocations: List<List<Boolean>>,
+    nonEqualityFilterInfo: List<List<NonEqualityJoinFilterColumnInfo>>,
 ) : RuntimeJoinFilterBase(
         cluster,
         traits.replace(BodoPhysicalRel.CONVENTION),
         input,
         joinFilterIDs,
-        filterColumns,
-        filterIsFirstLocations,
+        equalityFilterColumns,
+        equalityIsFirstLocations,
+        nonEqualityFilterInfo,
     ),
     BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
     ): BodoPhysicalRuntimeJoinFilter {
-        return copy(traitSet, sole(inputs), filterColumns)
+        return copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
     }
 
     /**
@@ -48,9 +51,18 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
-        newColumns: List<List<Int>>,
+        newEqualityColumns: List<List<Int>>,
+        newNonEqualityColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
     ): BodoPhysicalRuntimeJoinFilter {
-        return BodoPhysicalRuntimeJoinFilter(cluster, traitSet, input, joinFilterIDs, newColumns, filterIsFirstLocations)
+        return BodoPhysicalRuntimeJoinFilter(
+            cluster,
+            traitSet,
+            input,
+            joinFilterIDs,
+            newEqualityColumns,
+            equalityIsFirstLocations,
+            newNonEqualityColumns,
+        )
     }
 
     /**
@@ -80,7 +92,7 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
                     // zip lists of joinFilterID, filterColumns, isFirstLocation, sort by joinID
                     val joinFilters =
                         joinFilterIDs.indices.map {
-                            Triple(joinFilterIDs[it], filterColumns[it], filterIsFirstLocations[it])
+                            Triple(joinFilterIDs[it], equalityFilterColumns[it], equalityIsFirstLocations[it])
                         }
                     val sortedJoinFilters = joinFilters.sortedByDescending { it.first }
                     val joinFilterIDs = sortedJoinFilters.map { it.first }
@@ -138,12 +150,21 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
         fun create(
             input: RelNode,
             joinFilterIDs: List<Int>,
-            filterColumns: List<List<Int>>,
-            filterIsFirstLocations: List<List<Boolean>>,
+            equalityFilterColumns: List<List<Int>>,
+            equalityIsFirstLocations: List<List<Boolean>>,
+            nonEqualityFilterInfo: List<List<NonEqualityJoinFilterColumnInfo>>,
         ): BodoPhysicalRuntimeJoinFilter {
             val cluster = input.cluster
             val traitSet = cluster.traitSet()
-            return BodoPhysicalRuntimeJoinFilter(cluster, traitSet, input, joinFilterIDs, filterColumns, filterIsFirstLocations)
+            return BodoPhysicalRuntimeJoinFilter(
+                cluster,
+                traitSet,
+                input,
+                joinFilterIDs,
+                equalityFilterColumns,
+                equalityIsFirstLocations,
+                nonEqualityFilterInfo,
+            )
         }
 
         /**
@@ -160,8 +181,8 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
         fun generateRuntimeJoinFilterCode(
             ctx: BodoPhysicalRel.BuildContext,
             joinFilterIDs: List<Int>,
-            columnsLists: List<List<Int>>,
-            isFirstLocationLists: List<List<Boolean>>,
+            equalityFilterColumns: List<List<Int>>,
+            equalityIsFirstLocations: List<List<Boolean>>,
             input: Expr,
         ): Expr? {
             val joinStateCache = ctx.builder().getJoinStateCache()
@@ -172,14 +193,14 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
             val isFirstLocationVars = mutableListOf<Variable>()
             // If we don't have the state stored assume we have disabled
             // streaming entirely and this is a no-op.
-            joinStatesInfo.forEachIndexed { stateIdx, (stateVar, keyLocations) ->
-                stateVar?.let {
-                    val columnOrderedList = MutableList(columnsLists[stateIdx].size) { Expr.NegativeOne }
+            joinStatesInfo.forEachIndexed { stateIdx, (stateVar, keyLocations, _) ->
+                stateVar.let {
+                    val columnOrderedList = MutableList(equalityFilterColumns[stateIdx].size) { Expr.NegativeOne }
                     val isFirstList: MutableList<Expr.BooleanLiteral> =
-                        MutableList(isFirstLocationLists[stateIdx].size) { Expr.BooleanLiteral(false) }
+                        MutableList(equalityIsFirstLocations[stateIdx].size) { Expr.BooleanLiteral(false) }
                     keyLocations.forEachIndexed { locIdx, keyLocation ->
-                        columnOrderedList[keyLocation] = Expr.IntegerLiteral(columnsLists[stateIdx][locIdx])
-                        isFirstList[keyLocation] = Expr.BooleanLiteral(isFirstLocationLists[stateIdx][locIdx])
+                        columnOrderedList[keyLocation] = Expr.IntegerLiteral(equalityFilterColumns[stateIdx][locIdx])
+                        isFirstList[keyLocation] = Expr.BooleanLiteral(equalityIsFirstLocations[stateIdx][locIdx])
                     }
                     val columnsTuple = Expr.Tuple(columnOrderedList)
                     val isFirstLocationTuple = Expr.Tuple(isFirstList)

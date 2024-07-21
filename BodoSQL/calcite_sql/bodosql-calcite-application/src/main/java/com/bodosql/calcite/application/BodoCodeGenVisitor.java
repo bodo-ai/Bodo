@@ -63,6 +63,8 @@ import com.bodosql.calcite.ir.OperatorType;
 import com.bodosql.calcite.ir.StateVariable;
 import com.bodosql.calcite.ir.StreamingPipelineFrame;
 import com.bodosql.calcite.ir.Variable;
+import com.bodosql.calcite.prepare.NonEqualityJoinFilterColumnInfo;
+import com.bodosql.calcite.prepare.NonEqualityType;
 import com.bodosql.calcite.schema.CatalogSchema;
 import com.bodosql.calcite.sql.ddl.CreateTableMetadata;
 import com.bodosql.calcite.table.BodoSqlTable;
@@ -79,6 +81,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.function.Supplier;
+import kotlin.Triple;
 import kotlin.jvm.functions.Function2;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelNode;
@@ -1945,6 +1948,23 @@ public class BodoCodeGenVisitor extends RelVisitor {
     List<Expr.StringLiteral> buildColNames = stringsToStringLiterals(buildNodeNames);
     Variable probeNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(probeColNames));
     Variable buildNamesGlobal = lowerAsColNamesMetaType(new Expr.Tuple(buildColNames));
+    // Generate the information about the interval columns. Now we only use this if there
+    // aren't any equality conditions.
+    final List<Expr.IntegerLiteral> buildIntervalColumns = new ArrayList<>();
+    int numLeftCols = node.getLeft().getRowType().getFieldCount();
+    if (joinInfo.leftKeys.isEmpty()) {
+      for (RexNode nonEqualityInfo : joinInfo.nonEquiConditions) {
+        Triple<Integer, Integer, NonEqualityType> intervalInfo =
+            NonEqualityJoinFilterColumnInfo.Companion.splitRexNodeByType(
+                nonEqualityInfo, numLeftCols);
+        if (intervalInfo != null) {
+          buildIntervalColumns.add(
+              new Expr.IntegerLiteral(intervalInfo.component2() - numLeftCols));
+        }
+      }
+    }
+    Variable buildIntervalColumnsGlobal = lowerAsMetaType(new Expr.Tuple(buildIntervalColumns));
+
     // Get the non equi-join info
     Expr nonEquiCond =
         visitNonEquiConditions(joinInfo.nonEquiConditions, probeNodeNames, buildNodeNames);
@@ -1978,6 +1998,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
                 probeNamesGlobal,
                 isRightOuter,
                 isLeftOuter,
+                buildIntervalColumnsGlobal,
                 forceBroadcast),
             namedArgs);
     Op.Assign joinInit = new Op.Assign(joinStateVar, stateCall);
@@ -1991,7 +2012,11 @@ public class BodoCodeGenVisitor extends RelVisitor {
     generatedCode
         .getJoinStateCache()
         .setStreamingJoinStateInfo(
-            node.getJoinFilterID(), joinStateVar, node.getOriginalJoinFilterKeyLocations());
+            node.getJoinFilterID(),
+            joinStateVar,
+            node.getOriginalJoinFilterKeyLocations(),
+            node.getBuildColumnMapping(),
+            numLeftCols);
     return joinStateVar;
   }
 
