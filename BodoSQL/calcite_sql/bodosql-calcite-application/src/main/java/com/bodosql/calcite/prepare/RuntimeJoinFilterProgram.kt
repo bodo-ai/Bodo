@@ -22,6 +22,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRuntimeJoinFilter
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.logicalRules.WindowFilterTranspose
+import com.bodosql.calcite.prepare.NonEqualityJoinFilterColumnInfo.Companion.splitRexNodeByType
 import com.bodosql.calcite.rel.core.CachedPlanInfo
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
 import com.bodosql.calcite.rel.core.cachePlanContainers.CacheNodeTopologicalSortVisitor
@@ -281,36 +282,52 @@ object RuntimeJoinFilterProgram : Program {
         ): Pair<JoinFilterProgramState, JoinFilterProgramState> {
             val pushLiveJoins = JoinFilterProgramState()
             val outputLiveJoinInfo = JoinFilterProgramState()
-            for (joinInfo in liveJoins) {
-                val pushKeys: MutableList<Int> = mutableListOf()
+            for ((joinId, columnInfo) in liveJoins) {
+                val pushEqualityKeys: MutableList<Int> = mutableListOf()
                 val pushIsFirstLocation: MutableList<Boolean> = mutableListOf()
-                val outputKeys: MutableList<Int> = mutableListOf()
+                val outputEqualityKeys: MutableList<Int> = mutableListOf()
                 val outputIsFirstLocation: MutableList<Boolean> = mutableListOf()
-                for (column in joinInfo.remainingColumns) {
-                    outputKeys.add(column)
+                for (column in columnInfo.filterColumns) {
+                    outputEqualityKeys.add(column)
                     if (column == -1) {
                         // Any column with -1 must propagate -1. These represent
                         // columns that were evaluated higher in the plan.
-                        pushKeys.add(-1)
+                        pushEqualityKeys.add(-1)
                         pushIsFirstLocation.add(false)
                         outputIsFirstLocation.add(false)
                     } else if (canPushPredicate.test(column)) {
                         // This is a column that can be pushed into the input.
-                        pushKeys.add(columnTransformFunction(column))
+                        val newColumn = columnTransformFunction(column)
+                        pushEqualityKeys.add(newColumn)
                         pushIsFirstLocation.add(true)
                         outputIsFirstLocation.add(false)
                     } else {
                         // This is a column that must be evaluated here.
-                        pushKeys.add(-1)
+                        pushEqualityKeys.add(-1)
                         pushIsFirstLocation.add(false)
                         outputIsFirstLocation.add(true)
                     }
                 }
-                if (pushIsFirstLocation.any { it }) {
-                    pushLiveJoins.add(joinInfo.joinFilterKey, pushKeys, pushIsFirstLocation)
+                val pushNonEqualityKeys: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                val outputNonEqualityKeys: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                for (info in columnInfo.nonEqualityFilterColumns) {
+                    if (canPushPredicate.test(info.columnIndex)) {
+                        pushNonEqualityKeys.add(
+                            NonEqualityJoinFilterColumnInfo(
+                                info.type,
+                                columnTransformFunction(info.columnIndex),
+                                info.originalJoinBuildIndex,
+                            ),
+                        )
+                    } else {
+                        outputNonEqualityKeys.add(info)
+                    }
                 }
-                if (outputIsFirstLocation.any { it }) {
-                    outputLiveJoinInfo.add(joinInfo.joinFilterKey, outputKeys, outputIsFirstLocation)
+                if (pushIsFirstLocation.any { it } || pushNonEqualityKeys.isNotEmpty()) {
+                    pushLiveJoins.add(joinId, pushEqualityKeys, pushIsFirstLocation, pushNonEqualityKeys)
+                }
+                if (outputIsFirstLocation.any { it } || outputNonEqualityKeys.isNotEmpty()) {
+                    outputLiveJoinInfo.add(joinId, outputEqualityKeys, outputIsFirstLocation, outputNonEqualityKeys)
                 }
             }
 
@@ -354,13 +371,14 @@ object RuntimeJoinFilterProgram : Program {
             return if (liveJoins.isEmpty() || !emitFilters) {
                 converter
             } else {
-                val (filterKeys, filterColumns, areFirstLocations) = liveJoins.flattenToLists()
+                val filterInfo = liveJoins.flattenToLists()
                 val snowflakeRtjf =
                     SnowflakeRuntimeJoinFilter.create(
                         converter.input,
-                        filterKeys,
-                        filterColumns,
-                        areFirstLocations,
+                        filterInfo.joinIDs,
+                        filterInfo.equalityFilterColumns,
+                        filterInfo.equalityFilterIsFirstLocations,
+                        filterInfo.nonEqualityFilterColumns,
                         (converter.input as SnowflakeRel).getCatalogTable(),
                     )
                 liveJoins = JoinFilterProgramState()
@@ -372,13 +390,14 @@ object RuntimeJoinFilterProgram : Program {
             return if (liveJoins.isEmpty() || !emitFilters) {
                 converter
             } else {
-                val (filterKeys, filterColumns, areFirstLocations) = liveJoins.flattenToLists()
+                val filterInfo = liveJoins.flattenToLists()
                 val icebergRtjf =
                     IcebergRuntimeJoinFilter.create(
                         converter.input,
-                        filterKeys,
-                        filterColumns,
-                        areFirstLocations,
+                        filterInfo.joinIDs,
+                        filterInfo.equalityFilterColumns,
+                        filterInfo.equalityFilterIsFirstLocations,
+                        filterInfo.nonEqualityFilterColumns,
                         (converter.input as IcebergRel).getCatalogTable(),
                     )
                 liveJoins = JoinFilterProgramState()
@@ -419,12 +438,12 @@ object RuntimeJoinFilterProgram : Program {
             // gets all the columns, we may need to generate a filter after
             // this join to ensure the bloom filter runs.
             val outputJoinInfo = JoinFilterProgramState()
-            for (joinInfo in liveJoins) {
+            for ((joinId, columnInfo) in liveJoins) {
                 val leftKeys: MutableList<Int> = mutableListOf()
                 val leftIsFirstLocation: MutableList<Boolean> = mutableListOf()
                 val rightKeys: MutableList<Int> = mutableListOf()
                 val rightIsFirstLocation: MutableList<Boolean> = mutableListOf()
-                for (column in joinInfo.remainingColumns) {
+                for (column in columnInfo.filterColumns) {
                     if (column == -1) {
                         // Any column with -1 must propagate -1. These represent
                         // columns that were evaluated higher in the plan.
@@ -466,20 +485,54 @@ object RuntimeJoinFilterProgram : Program {
                         }
                     }
                 }
-                val keepLeft = leftIsFirstLocation.any { it }
-                val keepRight = rightIsFirstLocation.any { it }
-                if (keepLeft) {
+                val keepLeftEquality = leftIsFirstLocation.any { it }
+                val keepRightEquality = rightIsFirstLocation.any { it }
+                val leftNonEqualityInfo: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                val rightNonEqualityInfo: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                for (singleColumnInfo in columnInfo.nonEqualityFilterColumns) {
+                    val column = singleColumnInfo.columnIndex
+                    if (column < numLeftColumns) {
+                        // Column is on the left
+                        leftNonEqualityInfo.add(singleColumnInfo)
+                        // Check if we can also push it to the right side
+                        val keyIndex = info.leftKeys.indexOf(column)
+                        if (keyIndex != -1) {
+                            val rightKey = info.rightKeys[keyIndex]
+                            rightNonEqualityInfo.add(
+                                NonEqualityJoinFilterColumnInfo(singleColumnInfo.type, rightKey, singleColumnInfo.originalJoinBuildIndex),
+                            )
+                        }
+                    } else {
+                        // Column is on the right.
+                        val remappedColumn = column - numLeftColumns
+                        rightNonEqualityInfo.add(
+                            NonEqualityJoinFilterColumnInfo(singleColumnInfo.type, remappedColumn, singleColumnInfo.originalJoinBuildIndex),
+                        )
+                        // Check if we can also push it to the left side
+                        val keyIndex = info.rightKeys.indexOf(column)
+                        if (keyIndex != -1) {
+                            val leftKey = info.leftKeys[keyIndex]
+                            leftNonEqualityInfo.add(
+                                NonEqualityJoinFilterColumnInfo(singleColumnInfo.type, leftKey, singleColumnInfo.originalJoinBuildIndex),
+                            )
+                        }
+                    }
+                }
+
+                if (keepLeftEquality || leftNonEqualityInfo.isNotEmpty()) {
                     leftJoinInfo.add(
-                        joinInfo.joinFilterKey,
+                        joinId,
                         leftKeys,
                         leftIsFirstLocation,
+                        leftNonEqualityInfo,
                     )
                 }
-                if (keepRight) {
+                if (keepRightEquality || rightNonEqualityInfo.isNotEmpty()) {
                     rightJoinInfo.add(
-                        joinInfo.joinFilterKey,
+                        joinId,
                         rightKeys,
                         rightIsFirstLocation,
+                        rightNonEqualityInfo,
                     )
                 }
                 // Add the filter to be generated now if:
@@ -490,24 +543,51 @@ object RuntimeJoinFilterProgram : Program {
                 // We don't need to generate the filter for the partial side
                 // because all shared columns must be key columns, so we already
                 // check equality.
-                if (keepLeft && keepRight) {
-                    val hasAllColumns = joinInfo.isFirstLocation.all { it }
+                if (keepLeftEquality && keepRightEquality) {
+                    val hasAllColumns = columnInfo.filterIsFirstLocations.all { it }
                     if (hasAllColumns) {
                         val allLeft = leftIsFirstLocation.all { it }
                         val allRight = rightIsFirstLocation.all { it }
                         if (!allLeft && !allRight) {
-                            outputJoinInfo.add(joinInfo)
+                            // All columns can be propagated to the left or right side.
+                            val isFirstLocation = List(columnInfo.filterColumns.size) { false }
+                            outputJoinInfo.add(joinId, columnInfo.filterColumns, isFirstLocation, listOf())
                         }
                     }
                 }
             }
             // If we have a RIGHT or Inner join we can generate
             // a runtime join filter.
-            val (filterKey, originalLocations) =
+            // TODO: Unify originalLocations and buildColumnMapping into just
+            // the build column map.
+            val (filterKey, originalLocations, buildColumnMapping) =
                 if (!join.joinType.generatesNullsOnRight()) {
                     val columns = info.leftKeys
                     if (columns.isEmpty()) {
-                        Pair(-1, listOf())
+                        // Mapping for the build keys when generating code.
+                        val buildColumnMap: MutableMap<Int, Int> = mutableMapOf()
+                        val nonEqualityConditions = info.nonEquiConditions
+                        val nonEqualityFilters: MutableList<NonEqualityJoinFilterColumnInfo> = mutableListOf()
+                        for (condition in nonEqualityConditions) {
+                            val nodeInfo = splitRexNodeByType(condition, numLeftColumns)
+                            if (nodeInfo != null) {
+                                val (probe, build, type) = nodeInfo
+                                nonEqualityFilters.add(NonEqualityJoinFilterColumnInfo(type, probe, build))
+                                buildColumnMap[build] = build
+                            }
+                        }
+                        if (nonEqualityFilters.isNotEmpty()) {
+                            val filterKey = cluster.nextJoinId()
+                            leftJoinInfo.add(
+                                filterKey,
+                                listOf(),
+                                listOf(),
+                                nonEqualityFilters,
+                            )
+                            Triple(filterKey, listOf(), buildColumnMap)
+                        } else {
+                            Triple(-1, listOf<Int>(), mapOf<Int, Int>())
+                        }
                     } else {
                         val filterKey = cluster.nextJoinId()
                         // Add a new join to the left side.
@@ -515,11 +595,13 @@ object RuntimeJoinFilterProgram : Program {
                             filterKey,
                             columns,
                             List(columns.size) { true },
+                            // We don't support non-equality conditions with equi-join yet.
+                            listOf(),
                         )
-                        Pair(filterKey, (0 until columns.size).toList())
+                        Triple(filterKey, (0 until columns.size).toList(), mapOf())
                     }
                 } else {
-                    Pair(-1, listOf())
+                    Triple(-1, listOf(), mapOf())
                 }
             liveJoins = leftJoinInfo
             val leftInput = join.left.accept(this)
@@ -536,6 +618,7 @@ object RuntimeJoinFilterProgram : Program {
                         rebalanceOutput = join.rebalanceOutput,
                         joinFilterID = filterKey,
                         originalJoinFilterKeyLocations = originalLocations,
+                        buildColumnMapping = buildColumnMapping,
                         broadcastBuildSide = join.broadcastBuildSide,
                     )
                 return applyFilters(newJoin, outputJoinInfo)
@@ -816,12 +899,13 @@ object RuntimeJoinFilterProgram : Program {
             return if (liveJoins.isEmpty()) {
                 rel
             } else {
-                val (filterKeys, filterColumns, areFirstLocations) = liveJoins.flattenToLists()
+                val filterInfo = liveJoins.flattenToLists()
                 BodoPhysicalRuntimeJoinFilter.create(
                     rel,
-                    filterKeys,
-                    filterColumns,
-                    areFirstLocations,
+                    filterInfo.joinIDs,
+                    filterInfo.equalityFilterColumns,
+                    filterInfo.equalityFilterIsFirstLocations,
+                    filterInfo.nonEqualityFilterColumns,
                 )
             }
         }

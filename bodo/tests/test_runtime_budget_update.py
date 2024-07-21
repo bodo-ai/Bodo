@@ -52,6 +52,7 @@ def hash_join_impl(df1, df2):
             "B",
         )
     )
+    build_interval_cols = bodo.utils.typing.MetaType(())
 
     def impl(df1, df2):
         # Assign a 2MiB budget
@@ -72,6 +73,7 @@ def hash_join_impl(df1, df2):
             probe_col_meta,
             False,
             False,
+            build_interval_cols,
             False,
         )
         _temp1 = 0

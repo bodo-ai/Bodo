@@ -374,7 +374,7 @@ class IcebergReader(Connector):
         dict_encode_in_bodo: bool = False,
         # List of tuples representing runtime join filters
         # that have been pushed down to I/O.
-        rtjf_terms: list[tuple[ir.Var, tuple[int]]] | None = None,
+        rtjf_terms: list[tuple[ir.Var, tuple[int], tuple[int, int, str]]] | None = None,
     ):
         # Column Names and Types. Common for all Connectors
         # - Output Columns
@@ -714,11 +714,32 @@ def iceberg_distributed_run(
     )
 
     if iceberg_node.rtjf_terms is not None:
-        rtjf_cols, rtjf_states_vars, rtjf_states_vars_names = extract_rtjf_terms(
-            iceberg_node.rtjf_terms
-        )
+        (
+            rtjf_cols,
+            rtjf_states_vars,
+            rtjf_states_vars_names,
+            rtjf_non_equality_info,
+        ) = extract_rtjf_terms(iceberg_node.rtjf_terms)
+        rtjf_build_indices_list = []
+        for rtjf_term in iceberg_node.rtjf_terms:
+            state_ir_var = rtjf_term[0]
+            state_type = typemap[state_ir_var.name]
+            build_indices = state_type.build_indices
+            rtjf_build_indices_list.append(build_indices)
     else:
-        rtjf_cols, rtjf_states_vars, rtjf_states_vars_names = [], [], []
+        (
+            rtjf_cols,
+            rtjf_states_vars,
+            rtjf_states_vars_names,
+            rtjf_non_equality_info,
+            rtjf_build_indices_list,
+        ) = (
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
 
     extra_args = ", ".join(list(filter_map.values()) + list(rtjf_states_vars_names))
     func_text = (
@@ -773,6 +794,8 @@ def iceberg_distributed_run(
             sql_op_id=iceberg_node.sql_op_id,
             rtjf_states_vars_names=rtjf_states_vars_names,
             rtjf_cols=[np.array(cols) for cols in rtjf_cols],
+            rtjf_interval_cols=rtjf_non_equality_info,
+            rtjf_build_indices_list=rtjf_build_indices_list,
         )
     else:
         sql_reader_py = _gen_iceberg_reader_py(**genargs)
@@ -956,7 +979,8 @@ def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
 @numba.njit
 def get_rtjf_col_min_max_map(
     rtjf_state: bodo.libs.stream_join.JoinStateType,
-    rtjf_cols: npt.NDArray,
+    rtjf_build_cols: npt.NDArray,
+    rtjf_probe_cols: npt.NDArray,
     col_names: list[str],
     precisions: list[int],
     time_zones: list[str | None],
@@ -966,23 +990,24 @@ def get_rtjf_col_min_max_map(
     """
     Get the min/max bound for each key column in the runtime join filter supplied.
     """
-    n_cols = len(rtjf_cols)
+    n_cols = len(rtjf_build_cols)
     out_col_names = []
     bounds = []
     for i in range(n_cols):
-        col_idx = rtjf_cols[i]
+        build_col = rtjf_build_cols[i]
+        probe_col = rtjf_probe_cols[i]
         tz = time_zones[i]
         # [BSE-3493] fix LTZ support with Iceberg
-        if col_idx == -1 or tz is not None:
+        if probe_col == -1 or tz is not None:
             continue
         # Get the min/max value bounds for the current key column from the join state
         min_val = get_runtime_join_filter_min_max(
-            rtjf_state, np.int64(i), True, precisions[i]
+            rtjf_state, build_col, True, precisions[i]
         )
         max_val = get_runtime_join_filter_min_max(
-            rtjf_state, np.int64(i), False, precisions[i]
+            rtjf_state, build_col, False, precisions[i]
         )
-        col_name = col_names[col_idx]
+        col_name = col_names[probe_col]
         out_col_names.append(col_name)
         bounds.append((min_val, max_val))
     return out_col_names, bounds
@@ -992,6 +1017,7 @@ def get_rtjf_col_min_max_map(
 def add_rtjf_iceberg_filter(
     file_filters,
     filtered_cols: list[str],
+    filter_ops: list[str],
     bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
 ) -> ParquetPredicateType:  # pragma: no cover
     """
@@ -1000,21 +1026,27 @@ def add_rtjf_iceberg_filter(
 
     with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
         rtjf_filters = bic.FilterExpr.default()
-        for col, (min, max) in zip(filtered_cols, bounds):
-            if min is not None:
+        for col, (min, max), op in zip(filtered_cols, bounds, filter_ops):
+            if min is not None and op in ("==", ">=", ">"):
+                filter_op = ">=" if op == "==" else op
                 rtjf_filters = bic.FilterExpr(
                     "AND",
                     [
                         rtjf_filters,
-                        bic.FilterExpr(">=", [bic.ColumnRef(col), bic.Scalar(min)]),
+                        bic.FilterExpr(
+                            filter_op, [bic.ColumnRef(col), bic.Scalar(min)]
+                        ),
                     ],
                 )
-            if max is not None:
+            if max is not None and op in ("==", "<=", "<"):
+                filter_op = "<=" if op == "==" else op
                 rtjf_filters = bic.FilterExpr(
                     "AND",
                     [
                         rtjf_filters,
-                        bic.FilterExpr("<=", [bic.ColumnRef(col), bic.Scalar(max)]),
+                        bic.FilterExpr(
+                            filter_op, [bic.ColumnRef(col), bic.Scalar(max)]
+                        ),
                     ],
                 )
 
@@ -1067,6 +1099,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj, tz):
 @numba.njit
 def gen_runtime_join_filter_expr(
     filtered_cols: list[str],
+    filter_ops: list[str],
     bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
     time_zones: list[str | None],
 ) -> str:  # pragma: no cover
@@ -1080,14 +1113,18 @@ def gen_runtime_join_filter_expr(
 
     with bodo.no_warning_objmode(rtjf_expr="unicode_type"):
         exprs = []
-        for col, (min, max), tz in zip(filtered_cols, bounds, time_zones):
-            if min is not None:
+        for col, (min, max), op, tz in zip(
+            filtered_cols, bounds, filter_ops, time_zones
+        ):
+            if min is not None and op in ("==", ">=", ">"):
+                filter_op = ">=" if op == "==" else op
                 exprs.append(
-                    f"(ds.field('{{{col}}}') >= {convert_pyobj_to_arrow_filter_str(min, tz)})"
+                    f"(ds.field('{{{col}}}') {filter_op} {convert_pyobj_to_arrow_filter_str(min, tz)})"
                 )
-            if max is not None:
+            if max is not None and op in ("==", "<=", "<"):
+                filter_op = "<=" if op == "==" else op
                 exprs.append(
-                    f"(ds.field('{{{col}}}') <= {convert_pyobj_to_arrow_filter_str(max, tz)})"
+                    f"(ds.field('{{{col}}}') {filter_op} {convert_pyobj_to_arrow_filter_str(max, tz)})"
                 )
         rtjf_expr += " & ".join(exprs)
     return rtjf_expr
@@ -1113,14 +1150,26 @@ def _gen_iceberg_reader_chunked_py(
     dict_encode_in_bodo: bool,
     rtjf_states_vars_names: list[str],
     rtjf_cols: list[npt.NDArray[np.int32]],
+    rtjf_interval_cols: list[tuple[tuple[int, int, str], ...]],
+    rtjf_build_indices_list: list[tuple[int, ...]],
     sql_op_id: int = -1,
 ):  # pragma: no cover
     """Function to generate main streaming SQL implementation.
 
-    See _gen_iceberg_reader_py for argument documentation
+    See _gen_iceberg_reader_py for most argument documentation. A couple
+    arguments that aren't forwarded are explained below.
 
     Args:
         chunksize: Number of rows in each batch
+        rtjf_states_vars_names: Python variable name for each join state
+        variable.
+        rtjf_cols: List of each column used in equality rtjf for each join
+        state.
+        rtjf_interval_cols: List of each build column, probe column, and operator
+        for each interval rtjf for each join state.
+        rtjf_build_indices_list: List of build column indices for each join state.
+        This is used for "remapping" the build columns in rtjf_interval_cols to the
+        correct indices.
     """
     source_pyarrow_schema = pyarrow_schema
     assert (
@@ -1191,17 +1240,42 @@ def _gen_iceberg_reader_chunked_py(
     rtjf_str = ""
     if len(rtjf_states_vars_names):
         rtjf_str = "  rtjf_exprs = []\n"
+    probe_cols_list = []
+    build_cols_list = []
+    interval_ops_list = []
     for i, var_name in enumerate(rtjf_states_vars_names):
-        # Fetch the precision and time zone for each of the used columns
-        precisions, time_zones = get_rtjf_cols_extra_info(col_typs, rtjf_cols[i])
-        # Get runtime join filter column min/max map
-        rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
-        # Add runtime join filters to Iceberg file scan filters
-        rtjf_str += f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, bounds)\n"
-        # Add runtime join filters to Iceberg expression filters for Arrow data filtering
-        rtjf_str += f"  rtjf_expr_{i} = gen_runtime_join_filter_expr(filtered_cols, bounds, {time_zones})\n"
-        rtjf_str += f"  if rtjf_expr_{i} != '':\n"
-        rtjf_str += f"    rtjf_exprs.append(rtjf_expr_{i})\n"
+        # Generate list information for interval filters.
+        build_indices = rtjf_build_indices_list[i]
+        probe_cols = np.array([x[0] for x in rtjf_interval_cols[i]], dtype=np.int64)
+        probe_cols_list.append(probe_cols)
+        build_cols = np.array(
+            [build_indices[x[1]] for x in rtjf_interval_cols[i]], dtype=np.int64
+        )
+        build_cols_list.append(build_cols)
+        ops = pd.array([x[2] for x in rtjf_interval_cols[i]], dtype="string")
+        interval_ops_list.append(ops)
+        if len(rtjf_cols[i]) > 0:
+            # Fetch the precision and time zone for each of the used columns
+            precisions, time_zones = get_rtjf_cols_extra_info(col_typs, rtjf_cols[i])
+            # Get runtime join filter column min/max map
+            rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, np.arange(len(rtjf_cols_{call_id}[{i}])), rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
+            # Add runtime join filters to Iceberg file scan filters
+            rtjf_str += f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, equality_ops_{call_id}[{i}], bounds)\n"
+            # Add runtime join filters to Iceberg expression filters for Arrow data filtering
+            rtjf_str += f"  rtjf_expr_{i} = gen_runtime_join_filter_expr(filtered_cols, equality_ops_{call_id}[{i}], bounds, {time_zones})\n"
+            rtjf_str += f"  if rtjf_expr_{i} != '':\n"
+            rtjf_str += f"    rtjf_exprs.append(rtjf_expr_{i})\n"
+        if len(rtjf_interval_cols[i]) > 0:
+            # Fetch the precision and time zone for each of the used columns
+            precisions, time_zones = get_rtjf_cols_extra_info(col_typs, probe_cols)
+            # Get runtime join filter column min/max map
+            rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, build_cols_{call_id}[{i}], probe_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
+            # Add runtime join filters to Iceberg file scan filters
+            rtjf_str += f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, interval_ops_{call_id}[{i}], bounds)\n"
+            # Add runtime join filters to Iceberg expression filters for Arrow data filtering
+            rtjf_str += f"  rtjf_expr_{i} = gen_runtime_join_filter_expr(filtered_cols, interval_ops_{call_id}[{i}], bounds, {time_zones})\n"
+            rtjf_str += f"  if rtjf_expr_{i} != '':\n"
+            rtjf_str += f"    rtjf_exprs.append(rtjf_expr_{i})\n"
     rtjf_str += f"  combined_iceberg_expr_filter_f_str = (iceberg_expr_filter_f_str_{call_id})\n"
     if len(rtjf_states_vars_names):
         rtjf_str += f'  rtjf_expr = f"({{\' & \'.join(rtjf_exprs)}})" if len(rtjf_exprs) else "True"\n'
@@ -1255,6 +1329,13 @@ def _gen_iceberg_reader_chunked_py(
             f"source_pyarrow_schema_{call_id}": source_pyarrow_schema,
             f"used_cols_{call_id}": used_cols,
             f"rtjf_cols_{call_id}": rtjf_cols,
+            f"equality_ops_{call_id}": [
+                pd.array(["=="] * len(rtjf_cols[i]), dtype="string")
+                for i in range(len(rtjf_cols))
+            ],
+            f"interval_ops_{call_id}": interval_ops_list,
+            f"build_cols_{call_id}": build_cols_list,
+            f"probe_cols_{call_id}": probe_cols_list,
             "log_message": bodo.user_logging.log_message,
         }
     )

@@ -5094,7 +5094,7 @@ class TypingTransforms:
                 "init_join_state",
                 rhs.args,
                 dict(rhs.kws),
-                9,
+                10,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5136,7 +5136,7 @@ class TypingTransforms:
                 "init_join_state",
                 join_def.args,
                 dict(join_def.kws),
-                9,
+                10,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5186,16 +5186,17 @@ class TypingTransforms:
                     "probe_column_names",
                     "build_outer",
                     "probe_outer",
+                    "interval_build_columns",
                     "force_broadcast",
                 ]
-                args = join_def.args[:8]
+                args = join_def.args[:9]
 
                 # Fetch the op_pool_size_bytes argument
                 op_pool_size_bytes_var = get_call_expr_arg(
                     "init_join_state",
                     join_def.args,
                     dict(join_def.kws),
-                    8,
+                    9,
                     "op_pool_size_bytes",
                     default=None,
                     use_default=True,
@@ -5214,7 +5215,7 @@ class TypingTransforms:
                     "init_join_state",
                     join_def.args,
                     dict(join_def.kws),
-                    10,
+                    11,
                     "non_equi_condition",
                     default=None,
                     use_default=True,
@@ -5238,6 +5239,7 @@ class TypingTransforms:
                         probe_column_names,
                         build_outer,
                         probe_outer,
+                        interval_build_columns,
                         force_broadcast,
                         op_pool_size_bytes={op_pool_size_bytes_val},
                         expected_state_type=_expected_state_type,

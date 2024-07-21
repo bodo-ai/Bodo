@@ -1,6 +1,7 @@
 package com.bodosql.calcite.adapter.iceberg
 
 import com.bodosql.calcite.plan.makeCost
+import com.bodosql.calcite.prepare.NonEqualityJoinFilterColumnInfo
 import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.plan.RelOptCluster
@@ -15,23 +16,25 @@ class IcebergRuntimeJoinFilter private constructor(
     traits: RelTraitSet,
     input: RelNode,
     joinFilterIDs: List<Int>,
-    filterColumns: List<List<Int>>,
-    filterIsFirstLocations: List<List<Boolean>>,
+    equalityFilterColumns: List<List<Int>>,
+    equalityIsFirstLocations: List<List<Boolean>>,
+    nonEqualityFilterInfo: List<List<NonEqualityJoinFilterColumnInfo>>,
     private val catalogTable: CatalogTable,
 ) : RuntimeJoinFilterBase(
         cluster,
         traits.replace(IcebergRel.CONVENTION),
         input,
         joinFilterIDs,
-        filterColumns,
-        filterIsFirstLocations,
+        equalityFilterColumns,
+        equalityIsFirstLocations,
+        nonEqualityFilterInfo,
     ),
     IcebergRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: MutableList<RelNode>,
     ): IcebergRuntimeJoinFilter {
-        return copy(traitSet, sole(inputs), filterColumns)
+        return copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
     }
 
     /**
@@ -40,9 +43,19 @@ class IcebergRuntimeJoinFilter private constructor(
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
-        newColumns: List<List<Int>>,
+        newEqualityColumns: List<List<Int>>,
+        newNonEqualityColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
     ): IcebergRuntimeJoinFilter {
-        return IcebergRuntimeJoinFilter(cluster, traitSet, input, joinFilterIDs, newColumns, filterIsFirstLocations, catalogTable)
+        return IcebergRuntimeJoinFilter(
+            cluster,
+            traitSet,
+            input,
+            joinFilterIDs,
+            newEqualityColumns,
+            equalityIsFirstLocations,
+            newNonEqualityColumns,
+            catalogTable,
+        )
     }
 
     override fun computeSelfCost(
@@ -58,13 +71,23 @@ class IcebergRuntimeJoinFilter private constructor(
         fun create(
             input: RelNode,
             joinFilterIDs: List<Int>,
-            filterColumns: List<List<Int>>,
-            filterIsFirstLocations: List<List<Boolean>>,
+            equalityFilterColumns: List<List<Int>>,
+            equalityIsFirstLocations: List<List<Boolean>>,
+            nonEqualityFilterInfo: List<List<NonEqualityJoinFilterColumnInfo>>,
             catalogTable: CatalogTable,
         ): IcebergRuntimeJoinFilter {
             val cluster = input.cluster
             val traitSet = cluster.traitSet()
-            return IcebergRuntimeJoinFilter(cluster, traitSet, input, joinFilterIDs, filterColumns, filterIsFirstLocations, catalogTable)
+            return IcebergRuntimeJoinFilter(
+                cluster,
+                traitSet,
+                input,
+                joinFilterIDs,
+                equalityFilterColumns,
+                equalityIsFirstLocations,
+                nonEqualityFilterInfo,
+                catalogTable,
+            )
         }
     }
 

@@ -233,7 +233,7 @@ open class CatalogTable(
      * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
      */
     private fun tryGetViewMetadata(): InlineViewMetadata? {
-        return catalog.tryGetViewMetadata(getFullPath())
+        return catalog.tryGetViewMetadata(fullPath)
     }
 
     /**

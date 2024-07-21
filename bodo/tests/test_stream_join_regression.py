@@ -80,6 +80,7 @@ global_5 = MetaType((0, 5, 13, 14, 15))
 # Codegen change: Global variables for setting build-outer and probe-outer flags.
 global_build_outer = False
 global_probe_outer = False
+build_interval_cols = bodo.utils.typing.MetaType(())
 
 
 def impl(conn_str):  # Codegen change: add conn_str
@@ -147,6 +148,7 @@ def impl(conn_str):  # Codegen change: add conn_str
         global_build_outer,
         global_probe_outer,
         False,
+        build_interval_cols,
         -1,
     )
     _temp20 = time.time()
