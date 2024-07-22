@@ -39,6 +39,7 @@ namespace bodo {
 enum StorageType : uint8_t {
     Local = 0,
     S3 = 1,
+    Azure = 2,
 };
 
 /// @brief Options for Storage Manager Implementations
