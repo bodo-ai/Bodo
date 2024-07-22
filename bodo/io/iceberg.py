@@ -70,7 +70,7 @@ from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
-    from pyarrow._dataset import Scanner
+    from pyarrow._dataset import Dataset
     from pyarrow._fs import PyFileSystem
 
 # ------------------------------ Constants ------------------------------ #
@@ -1600,6 +1600,7 @@ def get_row_counts_for_schema_group(
     nthreads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), 4)
     pa_default_io_thread_count = pa.io_thread_count()
     pa.set_io_thread_count(nthreads)
+    pa_default_cpu_thread_count = pa.cpu_count()
     pa.set_cpu_count(nthreads)
     # Use dataset scanner API to get exact row counts when
     # filter is applied. Arrow will try to calculate this by
@@ -1610,7 +1611,7 @@ def get_row_counts_for_schema_group(
         # Specifying the 'pq_format' and the 'read_schema' with the
         # dictionary field type for the dict-encoded fields is important
         # for correctness since this is what we'll do for the actual read
-        # (see 'get_scanner_for_schema_group'). Without this, the row count
+        # (see 'get_dataset_for_schema_group'). Without this, the row count
         # may be inaccurate (potentially due to bugs in Arrow).
         dataset_ = ds.dataset(
             fpaths,
@@ -1642,7 +1643,7 @@ def get_row_counts_for_schema_group(
             # so it should be valid. We do however need to use the schema with
             # pa.dictionary fields for the dictionary encoded fields. This is
             # important for correctness since this is what we will do during
-            # the actual read (see 'get_scanner_for_schema_group').
+            # the actual read (see 'get_dataset_for_schema_group').
             t0 = time.monotonic()
             row_count = frag.scanner(
                 schema=read_schema,
@@ -1656,6 +1657,7 @@ def get_row_counts_for_schema_group(
     finally:
         # Restore pyarrow default IO thread count
         pa.set_io_thread_count(pa_default_io_thread_count)
+        pa.set_cpu_count(pa_default_cpu_thread_count)
 
     return (
         row_counts,
@@ -2076,22 +2078,19 @@ def get_iceberg_pq_dataset(
     return iceberg_pq_dataset
 
 
-def get_scanner_for_schema_group(
+def get_dataset_for_schema_group(
     schema_group: IcebergSchemaGroup,
     files: list[str],
     files_rows_to_read: list[int],
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
-    selected_fields: list[int],
     filesystem: "PyFileSystem" | pa.fs.FileSystem,
     start_offset: int,
     len_all_fpaths: int,
-    batch_size: pt.Optional[int] = None,
-) -> tuple["Scanner", pa.Schema, int]:
+) -> tuple["Dataset", pa.Schema, int]:
     """
-    Create an Arrow Dataset Scanner for files belonging
+    Create an Arrow Dataset for files belonging
     to the same Iceberg Schema Group.
-
     Args:
         schema_group (IcebergSchemaGroup): Schema Group for
             the files.
@@ -2103,9 +2102,6 @@ def get_scanner_for_schema_group(
             renaming during the read.
         str_as_dict_cols (list[str]): List of column names
             that must be read with dictionary encoding.
-        selected_fields (list[int]): List of field indices in the
-            'final_schema' that must be read. We push this projection
-            into the Scanner to reduce the amount of data read.
         filesystem (PyFileSystem | pa.fs.FileSystem): Filesystem
             to use for reading the files.
         start_offset (int): The starting row offset to read from
@@ -2114,14 +2110,11 @@ def get_scanner_for_schema_group(
             groups that this rank will read. This is used in some
             heuristics to decide whether or not to split the
             file-level dataset into row-group-level dataset.
-        batch_size (Optional[int], optional): Batch size for reading.
-            Defaults to None.
-
     Returns:
-        tuple[Scanner, pa.Schema, int]:
-            - Arrow Dataset Scanner for the files in the
+        tuple[Dataset, pa.Schema, int]:
+            - Arrow Dataset for the files in the
             schema group.
-            - The schema that the Dataset Scanner will use
+            - The schema that the Dataset will use
             while reading the file(s). This may be slightly
             different than the read_schema of the schema-group
             since some columns may be dict-encoded.
@@ -2149,7 +2142,6 @@ def get_scanner_for_schema_group(
         schema=read_schema,
         format=pq_format,
     )
-    selected_names = [dataset.schema.names[field_num] for field_num in selected_fields]
 
     # For the first schema group, prune out row groups if it could be beneficial:
     if (start_offset > 0) and filter_row_groups_from_start_of_dataset_heuristic(
@@ -2168,39 +2160,26 @@ def get_scanner_for_schema_group(
             pq_format,
         )
 
-    scanner: "Scanner" = dataset.scanner(
-        columns=selected_names,
-        filter=schema_group.expr_filter,
-        batch_size=batch_size or 128 * 1024,
-        use_threads=True,
-        # XXX Specify batch_readahead (default: 16)?
-        # XXX Specify fragment_readahead (default: 4)?
-        # XXX Specify memory pool?
-    )
-
-    return scanner, read_schema, start_offset
+    return dataset, read_schema, start_offset
 
 
-def get_dataset_scanners(
+def get_pyarrow_datasets(
     fpaths: list[str],
     file_nrows_to_read: list[int],
     file_schema_group_idxs: list[int],
     schema_groups: list[IcebergSchemaGroup],
-    selected_fields: list[int],
     avg_num_pieces: float,
     is_parallel: bool,
     filesystem: "PyFileSystem" | pa.fs.FileSystem,
     str_as_dict_cols: list[str],
     start_offset: int,
     final_schema: pa.Schema,
-    batch_size: pt.Optional[int] = None,
-) -> tuple[list["Scanner"], list[pa.Schema], int]:
+) -> tuple[list["Dataset"], list[pa.Schema], list[pc.Expression], int]:
     """
-    Get the Arrow Dataset Scanners for the given files.
-    This will return one Scanner for every unique schema
+    Get the PyArrow Datasets for the given files.
+    This will return one Dataset for every unique schema
     group that these filepaths will use.
     This will also return an updated offset for the file/piece.
-
     Args:
         fpaths (list[str]): List of files to read from. The files
             must be ordered by their corresponding schema group.
@@ -2211,9 +2190,6 @@ def get_dataset_scanners(
             that each of these files belongs to.
         schema_groups (list[IcebergSchemaGroup]): List of all the schema
             groups.
-        selected_fields (list[int]): List of field indices in the
-            'final_schema' that must be read. We push this projection
-            into the Scanner to reduce the amount of data read.
         avg_num_pieces (float): Average number of pieces that every
             rank will read. If a rank is going to read many more
             files than average, we assign it more IO threads.
@@ -2228,41 +2204,39 @@ def get_dataset_scanners(
         final_schema (pa.Schema): Target schema for the final
             Iceberg table. This is used for certain column
             renaming during the read.
-        batch_size (Optional[int], optional): Batch size for reading.
-            Defaults to None.
-
     Returns:
-        tuple[list["Scanner"], list[pa.Schema], int]:
-            - List of Arrow Dataset Scanners. There will be one
+        tuple[list["Dataset"], list[pa.Schema], list[pc.Expression], int]:
+            - List of Arrow Datasets. There will be one
             per Schema Group that this rank will end up reading from.
             - List of the corresponding read_schema for each of
-            the scanners.
+            the datasets (based on the schema group the dataset belongs to).
+            - List of the corresponding filter to apply for each of
+            the datasets (based on the schema group the dataset belongs to).
             - Update row offset into the first file/piece.
     """
     cpu_count = os.cpu_count()
     if cpu_count is None or cpu_count == 0:
         cpu_count = 2
-    default_threads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), cpu_count)
-    max_threads = min(int(os.environ.get("BODO_MAX_IO_THREADS", 16)), cpu_count)
+    default_io_threads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), cpu_count)
+    max_io_threads = min(int(os.environ.get("BODO_MAX_IO_THREADS", 16)), cpu_count)
     # Assign more threads to ranks that have to read many more files
     # than the others.
     # TODO Unset this after the read??
     if (
         is_parallel
-        and len(fpaths) > max_threads
+        and len(fpaths) > max_io_threads
         and len(fpaths) / avg_num_pieces >= 2.0
     ):
-        pa.set_io_thread_count(max_threads)
-        pa.set_cpu_count(max_threads)
+        pa.set_io_thread_count(max_io_threads)
     else:
-        pa.set_io_thread_count(default_threads)
-        pa.set_cpu_count(default_threads)
+        pa.set_io_thread_count(default_io_threads)
 
     if len(fpaths) == 0:
-        return []
+        return [], [], start_offset
 
-    scanners: list["Scanner"] = []
-    scanner_read_schemas: list[pa.Schema] = []
+    datasets: list["Dataset"] = []
+    dataset_read_schemas: list[pa.Schema] = []
+    dataset_expr_filters: list[pc.Expression] = []
 
     # Assuming the files are ordered by their corresponding
     # schema group index, we can iterate and group files that way.
@@ -2284,31 +2258,30 @@ def get_dataset_scanners(
         # Get schema group for this set of files.
         schema_group: IcebergSchemaGroup = schema_groups[curr_schema_group_idx]
         # Get the row counts for these files.
-        scanner, scanner_read_schema, new_start_offset = get_scanner_for_schema_group(
+        dataset, dataset_read_schema, new_start_offset = get_dataset_for_schema_group(
             schema_group,
             curr_schema_group_files,
             curr_schema_group_files_rows_to_read,
             final_schema,
             str_as_dict_cols,
-            selected_fields,
             filesystem,
             # 'start_offset' is only applicable to the
             # first schema-group. It's 0 for the rest.
-            start_offset if len(scanners) == 0 else 0,
+            start_offset if len(datasets) == 0 else 0,
             len(fpaths),
-            batch_size,
         )
         # Update the overall start_offset if this is the first
         # schema-group.
-        start_offset = new_start_offset if len(scanners) == 0 else start_offset
-        scanners.append(scanner)
-        scanner_read_schemas.append(scanner_read_schema)
+        start_offset = new_start_offset if len(datasets) == 0 else start_offset
+        datasets.append(dataset)
+        dataset_read_schemas.append(dataset_read_schema)
+        dataset_expr_filters.append(schema_group.expr_filter)
 
         # Update the schema group index.
         if curr_file_idx < len(fpaths):
             curr_schema_group_idx = file_schema_group_idxs[curr_file_idx]
 
-    return scanners, scanner_read_schemas, start_offset
+    return datasets, dataset_read_schemas, dataset_expr_filters, start_offset
 
 
 def determine_str_as_dict_columns(

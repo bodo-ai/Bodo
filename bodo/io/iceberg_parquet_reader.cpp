@@ -4,9 +4,21 @@
 // functionality that is specific to reading iceberg datasets (made up of
 // parquet files)
 
+#include <arrow/compute/expression.h>
+#include <arrow/compute/type_fwd.h>
+#include <arrow/dataset/dataset.h>
+#include <arrow/dataset/scanner.h>
+#include <arrow/python/pyarrow.h>
+#include <arrow/record_batch.h>
+#include <arrow/util/io_util.h>
+#include <arrow/util/thread_pool.h>
 #include <fmt/format.h>
+#include <object.h>
+#include <memory>
 #include <numeric>
+#include <stdexcept>
 #include "../libs/_bodo_to_arrow.h"
+#include "arrow_compat.h"
 #include "arrow_reader.h"
 #include "iceberg_helpers.h"
 
@@ -317,6 +329,143 @@ std::shared_ptr<::arrow::RecordBatch> EvolveRecordBatch(
                                       out_batch_columns);
 }
 
+// ------------ Arrow Helpers -----------
+
+namespace bodo {
+namespace arrow_py_compat {
+
+/**
+ * @brief Equivalent to PyArrow's Scanner._make_scan_options. The main change is
+ * that we have added 'cpu_executor' as a parameter. See that function's
+ * docstring for a more detailed description of the arguments.
+ *
+ * @param dataset
+ * @param expr_filter
+ * @param column_names
+ * @param batch_size
+ * @param use_threads
+ * @param batch_readahead
+ * @param fragment_readahead
+ * @return std::shared_ptr<::arrow::dataset::ScanOptions>
+ */
+static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
+    std::shared_ptr<arrow::dataset::Dataset> dataset,
+    arrow::compute::Expression expr_filter,
+    const std::vector<std::string>& column_names, int64_t batch_size,
+    bool use_threads, int32_t batch_readahead, int32_t fragment_readahead) {
+    std::shared_ptr<arrow::dataset::ScannerBuilder> builder =
+        std::make_shared<arrow::dataset::ScannerBuilder>(dataset);
+
+    auto bind_res = expr_filter.Bind(*(builder->schema()));
+    CHECK_ARROW_AND_ASSIGN(bind_res, "Error while binding schema to the filter",
+                           auto bound_expr_filter);
+    auto filter_res = builder->Filter(bound_expr_filter);
+    CHECK_ARROW(filter_res, "Error during filter");
+    auto project_res = builder->Project(column_names);
+    CHECK_ARROW(project_res, "Error during projection ");
+    auto batch_size_res = builder->BatchSize(batch_size);
+    CHECK_ARROW(batch_size_res, "Error setting batch_size");
+    auto batch_readahead_res = builder->BatchReadahead(batch_readahead);
+    CHECK_ARROW(builder->BatchReadahead(batch_readahead),
+                "Error setting batch_readahead");
+    auto fragment_readahead_res =
+        builder->FragmentReadahead(fragment_readahead);
+    CHECK_ARROW(builder->FragmentReadahead(fragment_readahead),
+                "Error setting fragment_readahead");
+    auto use_threads_res = builder->UseThreads(use_threads);
+    CHECK_ARROW(use_threads_res, "Error setting use_threads");
+    auto pool_res = builder->Pool(bodo::BufferPool::DefaultPtr());
+    CHECK_ARROW(pool_res, "Error setting pool");
+    // XXX Could set FragmentScanOptions similarly
+
+    CHECK_ARROW_AND_ASSIGN(
+        builder->GetScanOptions(), "Error during GetScanOptions",
+        std::shared_ptr<::arrow::dataset::ScanOptions> scan_options);
+
+    return scan_options;
+}
+
+/**
+ * @brief Create an Arrow Scanner from a PyArrow Dataset Object. This is roughly
+ * what PyArrow's `Scanner.from_dataset` function
+ * (https://github.com/apache/arrow/blob/apache-arrow-16.1.0/python/pyarrow/_dataset.pyx#L3491)
+ * does. See that function's docstring for a more detailed description of the
+ * arguments.
+ *
+ * @param dataset_py The PyArrow Dataset Object (pyarrow.Dataset) to create the
+ * Scanner from.
+ * @param expr_filter_py The filter to apply during the scan. This must be a
+ * pyarrow.compute.Expression object.
+ * @param selected_fields List of field indices to keep (based on the dataset's
+ * schema).
+ * @param batch_size
+ * @param use_threads
+ * @param batch_readahead
+ * @param fragment_readahead
+ * @return std::shared_ptr<::arrow::dataset::Scanner>
+ */
+std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
+    PyObject* dataset_py, PyObject* expr_filter_py,
+    const std::vector<int>& selected_fields,
+    int64_t batch_size = arrow::dataset::kDefaultBatchSize,
+    bool use_threads = true,
+    int32_t batch_readahead = arrow::dataset::kDefaultBatchReadahead,
+    int32_t fragment_readahead = arrow::dataset::kDefaultFragmentReadahead) {
+#define CHECK(expr, msg)                                                    \
+    if (expr) {                                                             \
+        throw std::runtime_error(std::string("scanner_from_py_dataset: ") + \
+                                 msg);                                      \
+    }
+    // XXX Only do it once somewhere?
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    // Unwrap Python objects into C++
+    auto unwrap_expr_res = arrow::py::unwrap_expression(expr_filter_py);
+    CHECK_ARROW_AND_ASSIGN(unwrap_expr_res, "Error unwrapping filter",
+                           arrow::compute::Expression expr_filter);
+    auto unwrap_dataset_res = arrow::py::unwrap_dataset(dataset_py);
+    CHECK_ARROW_AND_ASSIGN(unwrap_dataset_res, "Error unwrapping dataset",
+                           std::shared_ptr<arrow::dataset::Dataset> dataset);
+
+    std::vector<std::string> column_names;
+    for (int field_num : selected_fields) {
+        column_names.push_back(dataset->schema()->field_names()[field_num]);
+    }
+
+    std::shared_ptr<::arrow::dataset::ScanOptions> scan_options =
+        make_scan_options(dataset, expr_filter, column_names, batch_size,
+                          use_threads, batch_readahead, fragment_readahead);
+
+    std::shared_ptr<arrow::dataset::ScannerBuilder> scanner_builder =
+        std::make_shared<arrow::dataset::ScannerBuilder>(dataset, scan_options);
+
+    auto builder_res = scanner_builder->Finish();
+    CHECK_ARROW_AND_ASSIGN(builder_res, "Error finalizing ScannerBuilder!",
+                           std::shared_ptr<arrow::dataset::Scanner> scanner);
+    return scanner;
+#undef CHECK
+}
+
+/**
+ * @brief Equivalent to PyArrow's Scanner.to_reader.
+ *
+ * @param scanner
+ * @return std::shared_ptr<arrow::RecordBatchReader>
+ */
+static std::shared_ptr<arrow::RecordBatchReader> scanner_to_rb_reader(
+    std::shared_ptr<::arrow::dataset::Scanner> scanner) {
+    std::shared_ptr<arrow::RecordBatchReader> reader;
+    auto to_reader_res = scanner->ToRecordBatchReader();
+    CHECK_ARROW_AND_ASSIGN(
+        to_reader_res,
+        "scanner_to_rb_reader: Error creating RecordBatchReader from Scanner!",
+        reader)
+    return reader;
+}
+
+}  // namespace arrow_py_compat
+}  // namespace bodo
+
 struct IcebergParquetReaderMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
@@ -387,7 +536,6 @@ class IcebergParquetReader : public ArrowReader {
         Py_XDECREF(this->file_list);
         // The final reader may or may not be decref-ed during the read, so do
         // it here to be safe.
-        Py_XDECREF(this->curr_reader);
         this->curr_reader = nullptr;
     }
 
@@ -612,27 +760,10 @@ class IcebergParquetReader : public ArrowReader {
                 this->iceberg_reader_metrics.n_batches++;
                 time_pt get_batch_start = start_timer();
                 // Get the next batch.
-                PyObject* batch_py = NULL;
+                std::shared_ptr<arrow::RecordBatch> batch = nullptr;
                 do {
-                    batch_py = this->get_next_py_batch();
-                } while (batch_py == NULL);
-
-                ::arrow::Result<std::shared_ptr<::arrow::RecordBatch>>
-                    batch_res = arrow::py::unwrap_batch(batch_py);
-                if (!batch_res.ok()) {
-                    throw std::runtime_error(
-                        "IcebergParquetReader::read_batch(): Error unwrapping "
-                        "batch: " +
-                        batch_res.status().ToString());
-                }
-                std::shared_ptr<::arrow::RecordBatch> batch =
-                    batch_res.ValueOrDie();
-                if (batch == nullptr) {
-                    throw std::runtime_error(
-                        "IcebergParquetReader::read_batch(): The next batch is "
-                        "null");
-                }
-                Py_DECREF(batch_py);
+                    batch = this->get_next_batch();
+                } while (batch == nullptr);
                 this->iceberg_reader_metrics.get_batch_time +=
                     end_timer(get_batch_start);
 
@@ -701,12 +832,10 @@ class IcebergParquetReader : public ArrowReader {
         }
 
         while (this->rows_left_to_read > 0) {
-            PyObject* batch_py = NULL;
+            std::shared_ptr<arrow::RecordBatch> batch = nullptr;
             do {
-                batch_py = this->get_next_py_batch();
-            } while (batch_py == NULL);
-            std::shared_ptr<::arrow::RecordBatch> batch =
-                arrow::py::unwrap_batch(batch_py).ValueOrDie();
+                batch = this->get_next_batch();
+            } while (batch == nullptr);
             // Transform the batch to the required target schema.
             batch = EvolveRecordBatch(std::move(batch), this->curr_read_schema,
                                       this->schema, this->selected_fields);
@@ -723,7 +852,6 @@ class IcebergParquetReader : public ArrowReader {
                 this->rows_left_to_read -= length;
             }
             this->rows_to_skip -= batch_offset;
-            Py_DECREF(batch_py);
         }
 
         table_info* table = builder.get_table();
@@ -747,7 +875,7 @@ class IcebergParquetReader : public ArrowReader {
         }
 
         // Construct Python lists from C++ vectors for values used in
-        // get_dataset_scanners
+        // get_pyarrow_datasets
         assert(this->file_paths.size() == this->pieces_nrows.size());
         assert(this->file_paths.size() == this->pieces_schema_group_idx.size());
         PyObject* fpaths_py = PyList_New(this->file_paths.size());
@@ -783,50 +911,76 @@ class IcebergParquetReader : public ArrowReader {
             }
         }
 
-        PyObject* selected_fields_py = PyList_New(selected_fields.size());
-        size_t i = 0;
-        for (int field_num : selected_fields) {
-            // PyList_SetItem steals the reference created by
-            // PyLong_FromLong.
-            PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
-        }
-
-        PyObject* batch_size_py =
-            batch_size == -1 ? Py_None : PyLong_FromLong(batch_size);
         PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
-        // get_dataset_scanners returns a tuple with the a list of PyArrow
-        // Scanners, a list of the corresponding read_schemas and the updated
+
+        // XXX TODO Use something like this to set the IO thread pool size and
+        // then reset at the end.
+        // uint32_t cpu_count = std::thread::hardware_concurrency();
+        // if (cpu_count == 0) {
+        //     cpu_count = 2;
+        // }
+        // CHECK_ARROW(arrow::io::SetIOThreadPoolCapacity(4),
+        //             "Error setting IO thread pool capacity!");
+
+        // get_pyarrow_datasets returns a tuple with the a list of PyArrow
+        // Datasets, a list of the corresponding read_schemas and the updated
         // offset for the first batch.
         time_pt start = start_timer();
-        PyObject* scanners_updated_offset_tup = PyObject_CallMethod(
-            iceberg_mod, "get_dataset_scanners", "OOOOOdiOOlOO", fpaths_py,
+        PyObject* datasets_updated_offset_tup = PyObject_CallMethod(
+            iceberg_mod, "get_pyarrow_datasets", "OOOOdiOOlO", fpaths_py,
             file_nrows_to_read_py, file_schema_group_idxs_py,
-            this->schema_groups_py, selected_fields_py, this->avg_num_pieces,
-            int(this->parallel), this->filesystem, str_as_dict_cols_py,
-            this->start_row_first_piece, this->pyarrow_schema, batch_size_py);
+            this->schema_groups_py, this->avg_num_pieces, int(this->parallel),
+            this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
+            this->pyarrow_schema);
         iceberg_reader_metrics.get_dataset_scanners_time += end_timer(start);
-        if (scanners_updated_offset_tup == NULL && PyErr_Occurred()) {
+        if (datasets_updated_offset_tup == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
         // PyTuple_GetItem returns a borrowed reference, so we don't need to
         // DECREF it explicitly.
-        PyObject* scanners_py = PyTuple_GetItem(scanners_updated_offset_tup, 0);
-        size_t n_scanners = PyList_Size(scanners_py);
-        this->scanners.reserve(n_scanners);
-        for (size_t i = 0; i < n_scanners; i++) {
-            // This returns a borrowed reference, so we must incref it to
-            // keep the object around.
-            this->scanners.push_back(PyList_GetItem(scanners_py, i));
-            Py_INCREF(this->scanners.back());
+        PyObject* datasets_py = PyTuple_GetItem(datasets_updated_offset_tup, 0);
+        size_t n_datasets = PyList_Size(datasets_py);
+        this->scanners.reserve(n_datasets);
+
+        // PyTuple_GetItem returns a borrowed reference, so we don't need to
+        // DECREF it explicitly.
+        PyObject* dataset_expr_filters_py =
+            PyTuple_GetItem(datasets_updated_offset_tup, 2);
+        size_t n_dataset_expr_filters = PyList_Size(dataset_expr_filters_py);
+        if (n_datasets != n_dataset_expr_filters) {
+            throw std::runtime_error(
+                "IcebergParquetReader::init_scanners: Number of datasets and "
+                "expr_filters don't match! This is likely a bug.");
+        }
+
+        for (size_t i = 0; i < n_datasets; i++) {
+            // PyList_GetItem returns a borrowed reference, so we don't need to
+            // DECREF it explicitly.
+            PyObject* dataset_py = PyList_GetItem(datasets_py, i);
+            PyObject* dataset_expr_filter_py =
+                PyList_GetItem(dataset_expr_filters_py, i);
+            this->scanners.push_back(
+                bodo::arrow_py_compat::scanner_from_py_dataset(
+                    dataset_py, dataset_expr_filter_py, this->selected_fields,
+                    this->batch_size != -1 ? this->batch_size
+                                           : arrow::dataset::kDefaultBatchSize,
+                    /*use_threads*/ true,
+                    arrow::dataset::kDefaultBatchReadahead,
+                    arrow::dataset::kDefaultFragmentReadahead));
         }
 
         // PyTuple_GetItem returns a borrowed reference, so we don't need to
         // DECREF it explicitly.
         PyObject* scanner_read_schemas_py =
-            PyTuple_GetItem(scanners_updated_offset_tup, 1);
+            PyTuple_GetItem(datasets_updated_offset_tup, 1);
         size_t n_read_schemas = PyList_Size(scanner_read_schemas_py);
-        assert(n_scanners == n_read_schemas);
+        if (n_datasets != n_read_schemas) {
+            throw std::runtime_error(
+                "IcebergParquetReader::init_scanners: Number of datasets and "
+                "read_schemas don't match! This is likely a bug.");
+        }
+
         this->scanner_read_schemas.reserve(n_read_schemas);
         for (size_t i = 0; i < n_read_schemas; i++) {
             // This returns a borrowed reference, so we don't need to
@@ -842,16 +996,14 @@ class IcebergParquetReader : public ArrowReader {
         }
 
         this->rows_to_skip =
-            PyLong_AsLong(PyTuple_GetItem(scanners_updated_offset_tup, 2));
+            PyLong_AsLong(PyTuple_GetItem(datasets_updated_offset_tup, 3));
 
         Py_DECREF(iceberg_mod);
         Py_DECREF(fpaths_py);
         Py_DECREF(file_nrows_to_read_py);
         Py_DECREF(file_schema_group_idxs_py);
         Py_DECREF(str_as_dict_cols_py);
-        Py_DECREF(selected_fields_py);
-        Py_XDECREF(batch_size_py);
-        Py_DECREF(scanners_updated_offset_tup);
+        Py_DECREF(datasets_updated_offset_tup);
         Py_XDECREF(this->filesystem);
         Py_XDECREF(this->pyarrow_schema);
         Py_XDECREF(this->schema_groups_py);
@@ -969,7 +1121,7 @@ class IcebergParquetReader : public ArrowReader {
 
     // Scanners to use. There's one per IcebergSchemaGroup
     // that this rank will read from.
-    std::vector<PyObject*> scanners;
+    std::vector<std::shared_ptr<arrow::dataset::Scanner>> scanners;
     // The schemas that the scanners will use for reading.
     // These will be used as the 'source' schemas when evolving
     // the record batches returned by the corresponding scanners.
@@ -977,7 +1129,7 @@ class IcebergParquetReader : public ArrowReader {
     // Next scanner to use.
     size_t next_scanner_idx = 0;
     // Arrow Batched Reader to get next batch iteratively.
-    PyObject* curr_reader = nullptr;
+    std::shared_ptr<arrow::RecordBatchReader> curr_reader = nullptr;
     // Corresponding read schema.
     std::shared_ptr<arrow::Schema> curr_read_schema = nullptr;
     // Number of remaining rows to skip outputting
@@ -996,26 +1148,22 @@ class IcebergParquetReader : public ArrowReader {
 
     /**
      * @brief Helper function to get the next available
-     * RecordBatch (as a Python object that must be unwrapped by the caller).
+     * RecordBatch.
      * Note that this must only be called when there are rows left to read.
      *
-     * @return PyObject*
+     * @return std::shared_ptr<arrow::RecordBatch>
      */
-    PyObject* get_next_py_batch() {
+    std::shared_ptr<arrow::RecordBatch> get_next_batch() {
         // Create the next reader:
         if (this->curr_reader == nullptr) {
             if (this->next_scanner_idx < this->scanners.size()) {
-                this->curr_reader = PyObject_CallMethod(
-                    this->scanners[this->next_scanner_idx], "to_reader", NULL);
-                if (this->curr_reader == NULL && PyErr_Occurred()) {
-                    throw std::runtime_error("python");
-                }
+                this->curr_reader = bodo::arrow_py_compat::scanner_to_rb_reader(
+                    this->scanners[this->next_scanner_idx]);
                 this->curr_read_schema =
                     this->scanner_read_schemas[this->next_scanner_idx];
-                // Decref the corresponding scanner since we don't
+                // Release the corresponding scanner since we don't
                 // need it anymore.
-                Py_XDECREF(this->scanners[this->next_scanner_idx]);
-                this->scanners[this->next_scanner_idx] = nullptr;
+                this->scanners[this->next_scanner_idx].reset();
                 this->next_scanner_idx++;
             } else {
                 // 'this->rows_left_to_emit'/'this->rows_left_to_read' should be
@@ -1025,23 +1173,19 @@ class IcebergParquetReader : public ArrowReader {
                     "Scanners/Readers! This is most likely a bug.");
             }
         }
-        PyObject* batch_py =
-            PyObject_CallMethod(this->curr_reader, "read_next_batch", NULL);
-        if (batch_py == NULL && PyErr_Occurred() &&
-            PyErr_ExceptionMatches(PyExc_StopIteration)) {
-            // StopIteration is raised at the end of iteration.
-            // An iterator would clear this automatically, but we are
-            // not using an interator, so we have to clear it manually
-            PyErr_Clear();
-            // Reset the reader and decref it to free it. This will
+        std::shared_ptr<arrow::RecordBatch> batch = nullptr;
+        auto batch_res = this->curr_reader->ReadNext(&batch);
+        CHECK_ARROW(
+            batch_res,
+            "IcebergParquetReader::get_next_batch: Error reading next batch!");
+
+        if (batch == nullptr) {
+            // Reset the reader to free it. This will
             // prompt the next invocation to create a reader from the
             // next scanner.
-            Py_XDECREF(this->curr_reader);
             this->curr_reader = nullptr;
-        } else if (batch_py == NULL && PyErr_Occurred()) {
-            throw std::runtime_error("python");
         }
-        return batch_py;
+        return batch;
     }
 };
 
