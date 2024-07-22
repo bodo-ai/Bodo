@@ -1,10 +1,12 @@
 import math
 import mmap
+import os
 import re
 import sys
 from pathlib import Path
 from uuid import uuid4
 
+import adlfs
 import boto3
 import numpy as np
 import pandas as pd
@@ -53,6 +55,34 @@ def tmp_s3_path():
     folder_name = str(uuid4())
     yield f"s3://engine-unit-tests-tmp-bucket/{folder_name}/"
     bucket.objects.filter(Prefix=folder_name).delete()
+
+
+@pytest.fixture(scope="session")
+def abfs_fs():
+    """
+    Create an Azure Blob FileSystem instance for testing.
+    """
+
+    account_name = os.environ["AZURE_ICEBERG_STORAGE_ACCOUNT"]
+    account_key = os.environ["AZURE_ICEBERG_ACCESS_KEY"]
+    # TODO: Temp fix until Azure read is supported and the prev 2 ENVs are removed
+    os.environ["AZURE_STORAGE_ACCOUNT_KEY"] = account_key
+    return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
+
+
+@pytest.fixture
+def tmp_abfs_path(abfs_fs):
+    """
+    Create a temporary ABFS path for testing.
+    """
+
+    account_name = os.environ["AZURE_ICEBERG_STORAGE_ACCOUNT"]
+    folder_name = str(uuid4())
+    abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
+    # Need to include account name in path for C++ filesystem code
+    yield f"abfs://engine-unit-tests-tmp-blob@{account_name}.dfs.core.windows.net/{folder_name}/"
+    if abfs_fs.exists(f"engine-unit-tests-tmp-blob/{folder_name}"):
+        abfs_fs.rm(f"engine-unit-tests-tmp-blob/{folder_name}", recursive=True)
 
 
 def test_default_buffer_pool_options():
@@ -516,6 +546,37 @@ def test_default_s3_storage_options(tmp_s3_path: str):
         {
             "BODO_BUFFER_POOL_DISABLE_REMOTE_SPILLING": "1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": tmp_s3_path,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "-1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+        }
+    ):
+        options = StorageOptions.defaults(1)
+        assert options is None
+
+
+def test_default_azure_storage_options(tmp_abfs_path: str):
+    """
+    Test that StorageOptions detection for Azure storage locations
+    works as expected.
+    """
+
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": tmp_abfs_path,
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "-1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
+        }
+    ):
+        options = StorageOptions.defaults(1)
+        assert options.location == bytes(tmp_abfs_path, "utf-8")
+        assert options.usable_size == -1
+
+    # Check that when we explicitly disable remote spilling, we don't
+    # use the provided S3 config.
+    with temp_env_override(
+        {
+            "BODO_BUFFER_POOL_DISABLE_REMOTE_SPILLING": "1",
+            "BODO_BUFFER_POOL_STORAGE_CONFIG_1_DRIVES": tmp_abfs_path,
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_SPACE_PER_DRIVE_GiB": "-1",
             "BODO_BUFFER_POOL_STORAGE_CONFIG_1_USABLE_PERCENTAGE": "100",
         }
@@ -3624,6 +3685,88 @@ def test_spill_to_s3_empty(tmp_s3_path: str):
 
     s3_opt = StorageOptions(
         usable_size=-1, storage_type=1, location=tmp_s3_path.encode()
+    )
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[s3_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+    pool.cleanup()
+    del pool
+
+
+def test_spill_to_azure(abfs_fs, tmp_abfs_path: str):
+    """
+    Test that data spilled to ABFS and read back is
+    correctly preserved.
+    """
+
+    azure_opt = StorageOptions(
+        usable_size=-1, storage_type=2, location=tmp_abfs_path.encode()
+    )
+    options: BufferPoolOptions = BufferPoolOptions(
+        memory_size=8,
+        min_size_class=8,
+        max_num_size_classes=10,
+        spill_on_unpin=True,
+        enforce_max_limit_during_allocation=True,
+        storage_options=[azure_opt],
+    )
+    pool: BufferPool = BufferPool.from_options(options)
+
+    # Make an allocation that goes through a SizeClass
+    write_bytes = b"Hello BufferPool from Bodo!"
+    allocation_1: BufferPoolAllocation = pool.allocate(3.5 * 1024 * 1024)
+    allocation_1.write_bytes(write_bytes)
+
+    # Unpin it
+    pool.unpin(allocation_1)
+
+    # Verify that it's been spilled to S3 and contents are correct
+    assert pool.bytes_pinned() == 0
+    assert pool.bytes_in_memory() == 0
+    assert pool.bytes_allocated() == 4 * 1024 * 1024
+    assert pool.max_memory() == 4 * 1024 * 1024
+    assert not allocation_1.is_nullptr() and not allocation_1.is_in_memory()
+
+    # Look for spilled file in expected location
+    # First Folder Expected to Have Prepended Rank
+    paths = abfs_fs.glob(tmp_abfs_path + str(bodo.get_rank()) + "-*")
+    assert len(paths) == 1
+    inner_path: str = paths[0]  # type: ignore
+    # Block File should be in {size_class_bytes} folder
+    file_path = inner_path + "/" + str(4 * 1024 * 1024) + "/" + "0"
+
+    # Check file contents
+    expected_contents = (
+        write_bytes
+        + b"\x00"
+        + (255 - len(write_bytes)) * b"\xcb"
+        + (4 * 1024 * 1024 - 256) * b"\x00"
+    )
+    assert abfs_fs.cat_file(file_path) == expected_contents
+
+    # Pin it back and verify contents
+    pool.pin(allocation_1)
+    contents_after_pin_back = allocation_1.read_bytes(int(3.5 * 1024 * 1024))
+    assert contents_after_pin_back == write_bytes
+
+    pool.free(allocation_1)
+    pool.cleanup()
+    del pool
+
+
+def test_spill_to_azure_empty(tmp_abfs_path: str):
+    """
+    Ensure that cleaning / deleting an unused Azure storage location
+    does not fail
+    """
+
+    s3_opt = StorageOptions(
+        usable_size=-1, storage_type=2, location=tmp_abfs_path.encode()
     )
     options: BufferPoolOptions = BufferPoolOptions(
         memory_size=8,

@@ -16,6 +16,7 @@
 #include <linux/falloc.h>
 #endif
 
+#include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/result.h>
@@ -82,25 +83,21 @@ std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
         return nullptr;
     }
 
-    if (std::string_view(location_env_).starts_with("s3://")) {
+    auto location_env = std::string_view(location_env_);
+    if (location_env.starts_with("s3://") ||
+        location_env.starts_with("abfs://")) {
         const char* disable_remote_spilling_env_ =
             std::getenv("BODO_BUFFER_POOL_DISABLE_REMOTE_SPILLING");
         if (disable_remote_spilling_env_ &&
             !std::strcmp(disable_remote_spilling_env_, "1")) {
             return nullptr;
         }
-        type = StorageType::S3;
 
-    } else if (std::string_view(location_env_).starts_with("abfs://")) {
-        int rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-        if (rank == 0) {
-            std::cerr << "StorageOptions::Defaults: Spilling to Azure Blob "
-                         "Storage is not supported yet."
-                      << std::endl;
+        if (location_env.starts_with("s3://")) {
+            type = StorageType::S3;
+        } else {
+            type = StorageType::Azure;
         }
-        return nullptr;
     }
 
     std::stringstream ss(location_env_);
@@ -736,6 +733,7 @@ static std::unique_ptr<S3StorageManager> MakeS3(
                         "initialize Arrow S3 -");
     }
 
+    // Construct Options
     auto s3_opts_res = arrow::fs::S3Options::FromUri(s3_location, &rel_path);
     CHECK_ARROW_MEM(s3_opts_res.status(),
                     "S3StorageManager::Make: Failed to "
@@ -754,6 +752,46 @@ static std::unique_ptr<S3StorageManager> MakeS3(
                                               size_class_bytes, true);
 }
 
+using AzureStorageManager = ArrowStorageManager<arrow::fs::AzureFileSystem>;
+static std::unique_ptr<AzureStorageManager> MakeAzure(
+    const std::shared_ptr<StorageOptions> options,
+    const std::span<const uint64_t> size_class_bytes) {
+    auto loc = options->location;
+    std::string rel_path;
+
+    // Construct Options
+    auto azure_opts_res = arrow::fs::AzureOptions::FromUri(loc, &rel_path);
+    CHECK_ARROW_MEM(azure_opts_res.status(),
+                    "AzureStorageManager::Make: Failed to "
+                    "parse AzureFS URI for Buffer Pool Spilling -");
+    auto azure_opts = azure_opts_res.ValueOrDie();
+
+    const char* account_key_ = std::getenv("AZURE_STORAGE_ACCOUNT_KEY");
+    if (account_key_ == nullptr) {
+        CHECK_ARROW_MEM(
+            azure_opts.ConfigureDefaultCredential(),
+            "AzureStorageManager::Make: Failed to "
+            "configure default credentials for Buffer Pool Spilling -");
+    } else {
+        CHECK_ARROW_MEM(
+            azure_opts.ConfigureAccountKeyCredential(std::string(account_key_)),
+            "AzureStorageManager::Make: Failed to "
+            "configure account key credentials for Buffer Pool Spilling -");
+    }
+
+    // Construct FS
+    auto fs_res = arrow::fs::AzureFileSystem::Make(azure_opts);
+    CHECK_ARROW_MEM(fs_res.status(),
+                    "AzureStorageManager::Make: Failed to "
+                    "create AzureFileSystem for Buffer Pool "
+                    "Spilling -");
+    auto fs = fs_res.ValueOrDie();
+
+    options->location = rel_path;
+    return std::make_unique<AzureStorageManager>(options, "AzureStorageManager",
+                                                 fs, size_class_bytes, true);
+}
+
 std::unique_ptr<StorageManager> MakeStorageManager(
     const std::shared_ptr<StorageOptions>& options,
     const std::span<const uint64_t> size_class_bytes) {
@@ -765,6 +803,9 @@ std::unique_ptr<StorageManager> MakeStorageManager(
             break;
         case StorageType::S3:
             manager = MakeS3(options, size_class_bytes);
+            break;
+        case StorageType::Azure:
+            manager = MakeAzure(options, size_class_bytes);
             break;
     }
 
