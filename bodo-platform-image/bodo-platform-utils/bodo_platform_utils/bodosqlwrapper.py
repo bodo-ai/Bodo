@@ -40,6 +40,11 @@ class CatalogType(Enum):
 bodo.set_verbose_level(2)
 bodo_logger = bodo.user_logging.get_current_bodo_verbose_logger()
 
+# Set ENV variable for AzureFS authentication to look for credentials
+# Otherwise it will use anonymous access by default, only for public buckets
+# Must be set before calling `fsspec.open`
+os.environ["AZURE_STORAGE_ANON"] = "false"
+
 
 def run_sql_query(
     query_str,

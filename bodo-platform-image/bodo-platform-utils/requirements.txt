@@ -14,3 +14,6 @@ pyarrow>=16.1.0
 jsonschema
 plotly
 igraph
+fsspec >=2021.09
+adlfs
+s3fs
