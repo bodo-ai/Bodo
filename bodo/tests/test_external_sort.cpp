@@ -300,8 +300,8 @@ bodo::tests::suite external_sort_tests([] {
             arrow::Int64Array* int_arr =
                 static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            // Allow inbalance of 1%
-            int64_t error = std::max((per_host_size + 99) / 100, (int64_t)5);
+            // Allow imbalance of 10%
+            int64_t error = std::max((per_host_size + 9) / 10, (int64_t)5);
             auto in_bound = [&](int64_t diff) -> bool {
                 return std::abs(diff - per_host_size) <= error;
             };
@@ -354,8 +354,14 @@ bodo::tests::suite external_sort_tests([] {
             arrow::Int64Array* int_arr =
                 static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            // Allow inbalance of 1%
-            int64_t error = std::max((per_host_size + 99) / 100, (int64_t)5);
+            // Allow imbalance of 10%
+            // Currently all input individual chunks are unsorted. There is
+            // another version where input individual chunks are sorted (but not
+            // globally Finalized) Random sampling on the current version
+            // produces slightly worse unbalanced bounds (3%) compared to the
+            // sorted version (0.5%). Although already better than theoretical
+            // value (10%) with high probability
+            int64_t error = std::max((per_host_size + 9) / 10, (int64_t)5);
             auto in_bound = [&](int64_t diff) -> bool {
                 return std::abs(diff - per_host_size) <= error;
             };
