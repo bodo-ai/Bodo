@@ -476,7 +476,7 @@ std::vector<std::vector<std::shared_ptr<table_info>>>
 StreamSortState::BuilderByRank(int n_pes, std::shared_ptr<table_info> bounds,
                                std::vector<TableAndRange>&& local_chunks) {
     std::vector<std::unique_ptr<ChunkedTableBuilder>> rankToChunkedBuilders;
-    assert(n_pes == bounds->nrows() + 1);
+    assert(static_cast<uint64_t>(n_pes) == bounds->nrows() + 1);
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builder_helper;
 
     // For each rank, we build n_pes ChunkedTableBuilder to store tables to
