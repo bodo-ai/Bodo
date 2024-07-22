@@ -17,6 +17,10 @@ export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
 
 ruff check . --output-format=full --diff
 
+# Set testing environment variables
+export AZURE_ICEBERG_STORAGE_ACCOUNT=`credstash -r us-east-2 get azure_iceberg_storage_account`
+export AZURE_ICEBERG_ACCESS_KEY=`credstash -r us-east-2 get azure_iceberg_access_key`
+
 # if running on one core, collect coverage, otherwise run without
 if [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$NP" = "1" ]; then
     # run the tests
