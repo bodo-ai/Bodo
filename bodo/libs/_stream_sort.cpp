@@ -382,7 +382,9 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
 
     // TODO(aneesh) unify dictionaries?
     time_pt start_append = start_timer();
-    builder.AppendChunk(table);
+    // Table is not sorted and we also don't want to sort it.
+    // Pass in true to remain unsorted.
+    builder.AppendChunk(table, true);
     metrics.local_sort_chunk_time += end_timer(start_append);
 
     if (is_last) {
@@ -492,46 +494,45 @@ StreamSortState::BuilderByRank(int n_pes, std::shared_ptr<table_info> bounds,
             schema, dict_builder_helper, chunk_size));
     }
 
-    auto _greater = [&](int64_t mid, int rank_id,
-                        const TableAndRange& chunk) -> bool {
+    auto TableGreaterBound = [&](TableAndRange& chunk, size_t start_index,
+                                 int mid) -> bool {
         return KeyComparisonAsPython(
-            n_key_t, vect_ascending.data(), bounds->columns, 0, rank_id,
-            chunk.table->columns, 0, mid, na_position.data());
+            n_key_t, vect_ascending.data(), bounds->columns, 0, mid - 1,
+            chunk.table->columns, 0, start_index, na_position.data());
     };
 
     for (size_t i = 0; i < local_chunks.size(); i++) {
         auto& chunk = local_chunks[i];
         chunk.table->pin();
 
-        int64_t table_size = static_cast<int64_t>(chunk.table->nrows());
-        int64_t offset = chunk.offset;
-        for (int rank_id = 0; rank_id < n_pes; rank_id++) {
-            // r is the first index (or table_size if None) such that
-            // chunk.table[r] belongs to rank j > rank_id rows [offset, l] then
-            // belong to rank rank_id
-            int64_t l = offset - 1, r = table_size;
+        std::vector<std::vector<int64_t>> rankToRows(n_pes);
+        size_t table_size = static_cast<size_t>(chunk.table->nrows());
+        for (size_t start_index = static_cast<size_t>(chunk.offset);
+             start_index < table_size; start_index++) {
+            // Determine the actually rank chunk.table[start_index] belongs and
+            // store in dst_rank Maintain invariant that l <= dst_rank && r >
+            // dst_rank all the time At end l will be the largest rank_id that
+            // is <= dst_rank, which is dst_rank that we want
+            int l = 0, r = n_pes;
             while (l + 1 < r) {
-                if (rank_id == n_pes - 1)
-                    break;
-                int64_t m = l + (r - l) / 2;
-                if (_greater(m, rank_id, chunk))
-                    r = m;
-                else
+                int m = l + (r - l) / 2;
+                // We want to test for if m <= dst_rank
+                // This is equivalent to chunk.table[start_index] > bound[m - 1]
+                // because bound[m - 1] is the largest row for rank m - 1.
+                // Therefore, in TableGreaterBound we are testing if bound[m -
+                // 1] is less than chunk.table[start_index]
+                if (TableGreaterBound(chunk, start_index, m)) {
                     l = m;
+                } else {
+                    r = m;
+                }
             }
-            if (r == offset)
-                continue;
-            // Append row [offset, r) to ChunkedTableBuilder of rank_id
-            std::vector<int64_t> idx(r - offset);
-            iota(idx.begin(), idx.end(), offset);
-            rankToChunkedBuilders[rank_id]->AppendBatch(chunk.table, idx);
-            // TODO After async send rankToChunkedBuilders[rank_id].PopChunk()
-            // here Question: Also might benefit from directly sending the batch
-            // instead of waiting till there is a full batch of chunk_size rows.
-            // Sending directly ensures this chunk is sorted, so later when
-            // calling AppendChunk
-            // we don't need to sort individual chunks any more.
-            offset = r;
+            int dst_rank = l;
+            rankToRows[dst_rank].push_back(static_cast<int64_t>(start_index));
+        }
+        for (int rank_id = 0; rank_id < n_pes; rank_id++) {
+            rankToChunkedBuilders[rank_id]->AppendBatch(chunk.table,
+                                                        rankToRows[rank_id]);
         }
         chunk.table.reset();
     }
