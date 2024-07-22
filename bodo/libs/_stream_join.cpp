@@ -1347,9 +1347,15 @@ HashJoinState::HashJoinState(
                        dtype->array_type == bodo_array_type::DICT);
                 std::shared_ptr<array_info> str_arr =
                     alloc_string_array(Bodo_CTypes::STRING, 2, 0);
+                this->min_max_values.emplace_back(str_arr);
                 str_arr->set_null_bit<bodo_array_type::STRING>(0, 0);
                 str_arr->set_null_bit<bodo_array_type::STRING>(1, 0);
-                this->min_max_values.emplace_back(str_arr);
+                // zero out offsets because there is no data initially
+                offset_t* offsets =
+                    str_arr->data2<bodo_array_type::STRING, offset_t>();
+                offsets[0] = 0;
+                offsets[1] = 0;
+                offsets[2] = 0;
             }
         } else {
             this->min_max_values.emplace_back(std::nullopt);
