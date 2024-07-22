@@ -168,6 +168,9 @@ if platform.system() == "Windows":
 
 # set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
 # NOTE: has to be done before importing Numpy, and for all threading backends
+orig_OPENBLAS_NUM_THREADS = os.environ.get("OPENBLAS_NUM_THREADS")
+orig_OMP_NUM_THREADS = os.environ.get("OMP_NUM_THREADS")
+orig_MKL_NUM_THREADS = os.environ.get("MKL_NUM_THREADS")
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -388,10 +391,19 @@ import bodo.utils.tracing
 import bodo.utils.tracing_py
 from bodo.user_logging import set_bodo_verbose_logger, set_verbose_level
 
-# clear thread limit. We don't want to limit other libraries like Arrow
-os.environ.pop("OPENBLAS_NUM_THREADS", None)
-os.environ.pop("OMP_NUM_THREADS", None)
-os.environ.pop("MKL_NUM_THREADS", None)
+# Restore thread limit. We don't want to limit other libraries like Arrow.
+if orig_OPENBLAS_NUM_THREADS is None:
+    os.environ.pop("OPENBLAS_NUM_THREADS", None)
+else:
+    os.environ["OPENBLAS_NUM_THREADS"] = orig_OPENBLAS_NUM_THREADS
+if orig_OMP_NUM_THREADS is None:
+    os.environ.pop("OMP_NUM_THREADS", None)
+else:
+    os.environ["OMP_NUM_THREADS"] = orig_OMP_NUM_THREADS
+if orig_MKL_NUM_THREADS is None:
+    os.environ.pop("MKL_NUM_THREADS", None)
+else:
+    os.environ["MKL_NUM_THREADS"] = orig_MKL_NUM_THREADS
 
 # threshold for not inlining complex case statements to reduce compilation time (unit: number of lines in generated body code)
 COMPLEX_CASE_THRESHOLD = 100

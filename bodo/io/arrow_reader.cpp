@@ -1207,8 +1207,9 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
 
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
-                if (rows_added == this->count)
+                if (rows_added == this->count) {
                     break;
+                }
             }
         }
     }
