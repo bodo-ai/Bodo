@@ -13,6 +13,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectIntoScanRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeProjectLockRule
 import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
+import com.bodosql.calcite.application.logicalRules.AggregateFilterToCaseRule
 import com.bodosql.calcite.application.logicalRules.AggregateMergeRule
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinDeriveIsNotNullFilterRule
@@ -186,6 +187,17 @@ object BodoRules {
     @JvmField
     val AGGREGATE_MERGE_RULE: RelOptRule =
         AggregateMergeRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Converts an aggregate with a filter expression into an aggregate
+     * whose input has converted all invalid values to NULL.
+     */
+    @JvmField
+    val AGGREGATE_FILTER_TO_CASE_RULE: RelOptRule =
+        AggregateFilterToCaseRule.Config.DEFAULT
+            .withOperandFor(BodoLogicalAggregate::class.java)
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -1009,6 +1021,7 @@ object BodoRules {
         listOf(
             FILTER_EXTRACT_CASE_RULE,
             MIN_ROW_NUMBER_FILTER_RULE,
+            AGGREGATE_FILTER_TO_CASE_RULE,
         )
 
     /**
