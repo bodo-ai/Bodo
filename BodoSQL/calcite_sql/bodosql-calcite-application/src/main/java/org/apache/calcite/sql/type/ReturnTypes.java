@@ -1000,7 +1000,7 @@ public abstract class ReturnTypes {
         if (argType0.getPrecision() == RelDataType.PRECISION_NOT_SPECIFIED
             || argType1.getPrecision() == RelDataType.PRECISION_NOT_SPECIFIED
             || x > typeSystem.getMaxPrecision(typeName)) {
-          typePrecision = RelDataType.PRECISION_NOT_SPECIFIED;
+          typePrecision = typeSystem.getMaxPrecision(typeName);
         } else {
           typePrecision = (int) x;
         }
@@ -1064,7 +1064,7 @@ public abstract class ReturnTypes {
           }
         }
         if (hasPrecisionNotSpecifiedOperand || precisionOverflow) {
-          typePrecision = RelDataType.PRECISION_NOT_SPECIFIED;
+          typePrecision = typeSystem.getMaxPrecision(SqlTypeName.VARCHAR);
         } else {
           typePrecision = (int) amount;
         }
@@ -1130,6 +1130,8 @@ public abstract class ReturnTypes {
     }
     if (!(hasPrecisionNotSpecifiedOperand || precisionOverflow)) {
       typePrecision = (int) amount;
+    } else {
+      typePrecision = typeSystem.getMaxPrecision(SqlTypeName.VARCHAR);
     }
 
     return typeFactory.createSqlType(SqlTypeName.VARCHAR, typePrecision);
