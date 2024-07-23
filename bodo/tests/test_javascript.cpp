@@ -10,6 +10,7 @@
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
 #include "include/v8-script.h"
+#include "utils.h"
 
 // Helper utility to test a JavaScript UDF with certain arguments and verify the
 // result
@@ -23,69 +24,6 @@ void test_javascript_udf_output(
     std::stringstream ss;
     DEBUG_PrintColumn(ss, out_arr);
     bodo::tests::check(ss.str() == expected_result);
-}
-
-// Helper utility to create arrays used for testing JavaScript UDFs.
-// Creates an integer column from vectors of ints and nulls
-template <Bodo_CTypes::CTypeEnum dtype, typename T>
-    requires(dtype != Bodo_CTypes::_BOOL)
-std::shared_ptr<array_info> nullable_array_from_vector(
-    std::vector<T> numbers, std::vector<bool> nulls) {
-    size_t length = numbers.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype);
-    T *buffer = result->data1<bodo_array_type::NULLABLE_INT_BOOL, T>();
-    for (size_t i = 0; i < length; i++) {
-        if (nulls[i]) {
-            buffer[i] = (T)numbers[i];
-        } else {
-            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
-        }
-    }
-    return result;
-}
-
-// Special case of nullable_array_from_vector for booleans
-template <Bodo_CTypes::CTypeEnum dtype, typename T>
-    requires(dtype == Bodo_CTypes::_BOOL)
-std::shared_ptr<array_info> nullable_array_from_vector(
-    std::vector<bool> booleans, std::vector<bool> nulls) {
-    size_t length = booleans.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype);
-    uint8_t *buffer =
-        result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
-    for (size_t i = 0; i < length; i++) {
-        if (nulls[i]) {
-            SetBitTo(buffer, i, booleans[i]);
-        } else {
-            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
-        }
-    }
-    return result;
-}
-
-// Variant of nullable_array_from_vector to build a string array from vectors
-std::shared_ptr<array_info> string_array_from_vector(
-    bodo::vector<std::string> strings, bodo::vector<bool> nulls,
-    Bodo_CTypes::CTypeEnum dtype) {
-    size_t length = strings.size();
-
-    bodo::vector<uint8_t> null_bitmask((length + 7) >> 3, 0);
-    for (size_t i = 0; i < length; i++) {
-        SetBitTo(null_bitmask.data(), i, nulls[i]);
-    }
-    return create_string_array(dtype, null_bitmask, strings, -1);
-}
-
-// Variant of nullable_array_from_vector to build a dict array from vectors
-std::shared_ptr<array_info> dict_array_from_vector(
-    bodo::vector<std::string> strings, std::vector<int32_t> indices,
-    std::vector<bool> nulls) {
-    bodo::vector<bool> string_nulls(strings.size(), true);
-    std::shared_ptr<array_info> dict_arr =
-        string_array_from_vector(strings, string_nulls, Bodo_CTypes::STRING);
-    std::shared_ptr<array_info> index_arr =
-        nullable_array_from_vector<Bodo_CTypes::INT32, int32_t>(indices, nulls);
-    return create_dict_string_array(dict_arr, index_arr);
 }
 
 static bodo::tests::suite tests([] {
@@ -135,8 +73,7 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT32));
         std::vector<std::shared_ptr<array_info>> args(1);
         // Allocate first argument array: [9]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::UINT64, uint64_t>(
-            {9}, {true});
+        args[0] = nullable_array_from_vector<Bodo_CTypes::UINT64>({9}, {true});
         // Compare the UDF output against the expected answer
         std::string refsol =
             "ARRAY_INFO: Column n=1 arr=NULLABLE dtype=INT32\n"
@@ -151,7 +88,7 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT32));
         std::vector<std::shared_ptr<array_info>> args(1);
         // Allocate first argument array: [2, 3, -4, 5, -6]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>(
+        args[0] = nullable_array_from_vector<Bodo_CTypes::INT64>(
             {2, 3, -4, 5, -6}, {true, true, true, true, true});
         // Compare the UDF output against the expected answer
         std::string refsol =
@@ -172,7 +109,7 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT32));
         std::vector<std::shared_ptr<array_info>> args(1);
         // Allocate first argument array: [30, 40, NA, 64, NA]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::INT32, int32_t>(
+        args[0] = nullable_array_from_vector<Bodo_CTypes::INT32>(
             {30, 40, -1, 64, -1}, {true, true, false, true, false});
         // Compare the UDF output against the expected answer
         std::string refsol =
@@ -196,10 +133,10 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT32));
         std::vector<std::shared_ptr<array_info>> args(2);
         // Allocate first argument array: [NA, 3, 5, 8, 40]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::INT16, int16_t>(
+        args[0] = nullable_array_from_vector<Bodo_CTypes::INT16>(
             {-1, 3, 5, 8, 40}, {false, true, true, true, true});
         // Allocate second argument array: [NA, 4, 12, NA, 9]
-        args[1] = nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>(
+        args[1] = nullable_array_from_vector<Bodo_CTypes::INT64>(
             {-1, 4, 12, -1, 9}, {false, true, true, false, true});
         // Compare the UDF output against the expected answer
         std::string refsol =
@@ -222,8 +159,7 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT8));
         std::vector<std::shared_ptr<array_info>> args(1);
         // Allocate first argument array: [0.0, 1.2, -3.4, 5.6, -7.8]
-        args[0] = nullable_array_from_vector<
-            Bodo_CTypes::FLOAT32, dtype_to_type<Bodo_CTypes::FLOAT32>::type>(
+        args[0] = nullable_array_from_vector<Bodo_CTypes::FLOAT32>(
             {0.0, 1.2, -3.4, 5.6, -7.8}, {true, true, true, true, true});
         // Compare the UDF output against the expected answer
         std::string refsol =
@@ -244,7 +180,7 @@ static bodo::tests::suite tests([] {
         std::vector<std::shared_ptr<array_info>> args(1);
         // Allocate first argument array: [2024-03-14, NA, 1999-12-31,
         // 2004-01-21, 2010-07-01]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::DATE, int32_t>(
+        args[0] = nullable_array_from_vector<Bodo_CTypes::DATE>(
             {19796, -1, 10596, 12530, 14792}, {true, false, true, true, true});
         // Compare the UDF output against the expected answer
         std::string refsol =
@@ -272,11 +208,11 @@ static bodo::tests::suite tests([] {
                                              Bodo_CTypes::INT32));
         std::vector<std::shared_ptr<array_info>> args(2);
         // Allocate first argument array: [T, T, T, F, F, F, N, N, N]
-        args[0] = nullable_array_from_vector<Bodo_CTypes::_BOOL, bool>(
+        args[0] = nullable_array_from_vector<Bodo_CTypes::_BOOL>(
             {true, true, true, false, false, false, false, false, false},
             {true, true, true, true, true, true, false, false, false});
         // Allocate second argument array: [T, F, N, T, F, N, T, F, N]
-        args[1] = nullable_array_from_vector<Bodo_CTypes::_BOOL, bool>(
+        args[1] = nullable_array_from_vector<Bodo_CTypes::_BOOL>(
             {true, false, false, true, false, false, true, false, false},
             {true, true, false, true, true, false, true, true, false});
         // Compare the UDF output against the expected answer

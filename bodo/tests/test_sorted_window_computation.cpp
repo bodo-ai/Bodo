@@ -7,6 +7,7 @@
 #include "../libs/_window_compute.h"
 #include "./table_generator.hpp"
 #include "./test.hpp"
+#include "utils.h"
 
 // creates a NUMPY/int64 array that goes from min..(min + length - 1), could be
 // templated
@@ -35,68 +36,6 @@ void add_int64_offset_to_interval(std::shared_ptr<array_info> arr, size_t start,
     for (size_t i = start; i < stop; i++) {
         getv<int64_t>(arr, i) += val;
     }
-}
-
-// Creates an integer column from vectors of ints and nulls
-template <Bodo_CTypes::CTypeEnum dtype, typename T>
-    requires(dtype != Bodo_CTypes::_BOOL)
-std::shared_ptr<array_info> nullable_array_from_vector(
-    std::vector<T> numbers, std::vector<bool> nulls) {
-    size_t length = numbers.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype);
-    T *buffer = result->data1<bodo_array_type::NULLABLE_INT_BOOL, T>();
-    for (size_t i = 0; i < length; i++) {
-        if (nulls[i]) {
-            buffer[i] = (T)numbers[i];
-        } else {
-            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
-        }
-    }
-    return result;
-}
-
-// Special case of nullable_array_from_vector for booleans
-template <Bodo_CTypes::CTypeEnum dtype, typename T>
-    requires(dtype == Bodo_CTypes::_BOOL)
-std::shared_ptr<array_info> nullable_array_from_vector(
-    std::vector<bool> booleans, std::vector<bool> nulls) {
-    size_t length = booleans.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype);
-    uint8_t *buffer =
-        result->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
-    for (size_t i = 0; i < length; i++) {
-        if (nulls[i]) {
-            SetBitTo(buffer, i, booleans[i]);
-        } else {
-            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
-        }
-    }
-    return result;
-}
-
-// Variant of nullable_array_from_vector to build a string array from vectors
-std::shared_ptr<array_info> string_array_from_vector(
-    bodo::vector<std::string> strings, std::vector<bool> nulls,
-    Bodo_CTypes::CTypeEnum dtype) {
-    size_t length = strings.size();
-
-    bodo::vector<uint8_t> null_bitmask((length + 7) >> 3, 0);
-    for (size_t i = 0; i < length; i++) {
-        SetBitTo(null_bitmask.data(), i, nulls[i]);
-    }
-    return create_string_array(dtype, null_bitmask, strings, -1);
-}
-
-// Variant of nullable_array_from_vector to build a dict array from vectors
-std::shared_ptr<array_info> dict_array_from_vector(
-    bodo::vector<std::string> strings, std::vector<int32_t> indices,
-    std::vector<bool> nulls) {
-    std::vector<bool> string_nulls(strings.size(), true);
-    std::shared_ptr<array_info> dict_arr =
-        string_array_from_vector(strings, string_nulls, Bodo_CTypes::STRING);
-    std::shared_ptr<array_info> index_arr =
-        nullable_array_from_vector<Bodo_CTypes::INT32, int32_t>(indices, nulls);
-    return create_dict_string_array(dict_arr, index_arr);
 }
 
 // verify the output of a sorted with function is correct.
@@ -546,8 +485,8 @@ static bodo::tests::suite tests([] {
             in_integers[i] = -((i - 12345) * (i - 1234));
         }
         std::shared_ptr<array_info> in_arr =
-            nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>(in_integers,
-                                                                    in_nulls);
+            nullable_array_from_vector<Bodo_CTypes::INT64>(in_integers,
+                                                           in_nulls);
         std::vector<int64_t> selection_vector;
         for (size_t i = 0; i < n_total_rows; i++) {
             auto marker = static_cast<int64_t>(i + (i >> 1) * (i >> 1));
@@ -560,8 +499,7 @@ static bodo::tests::suite tests([] {
         // Create a singleton array containing the one global answer, and
         // broadcast the correct length to obtain the refsol.
         std::shared_ptr<array_info> answer_singleton =
-            nullable_array_from_vector<Bodo_CTypes::INT64, int64_t>({30863580},
-                                                                    {true});
+            nullable_array_from_vector<Bodo_CTypes::INT64>({30863580}, {true});
         size_t local_length = in_arr->length;
         std::vector<int64_t> zero_idxs(local_length, 0);
         auto expected_out =
@@ -590,8 +528,8 @@ static bodo::tests::suite tests([] {
         std::vector<int32_t> in_integers(n_local_rows, -1);
         std::vector<bool> in_nulls(n_local_rows, false);
         std::shared_ptr<array_info> int32_arr =
-            nullable_array_from_vector<Bodo_CTypes::INT64, int32_t>(in_integers,
-                                                                    in_nulls);
+            nullable_array_from_vector<Bodo_CTypes::INT32>(in_integers,
+                                                           in_nulls);
         input_arrays.push_back(int32_arr);
 
         // Do the same for a string array.

@@ -3,6 +3,7 @@
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_puffin.h"
 #include "./test.hpp"
+#include "./utils.h"
 
 /**
  * Reads a binary file from the bodo/tests/data/ directory and returns
@@ -24,36 +25,6 @@ std::string read_data_file(std::string name) {
     // Convert into a std::string and return the string.
     std::string result(buffer.data(), file_size);
     return result;
-}
-
-// Helper utility to create nullable arrays used for testing.
-// Creates a nullable column from vectors of values and nulls
-template <Bodo_CTypes::CTypeEnum dtype, typename T>
-std::shared_ptr<array_info> nullable_array_from_vector(
-    std::vector<T> numbers, std::vector<bool> nulls) {
-    size_t length = numbers.size();
-    auto result = alloc_nullable_array_no_nulls(length, dtype);
-    T *buffer = result->data1<bodo_array_type::NULLABLE_INT_BOOL, T>();
-    for (size_t i = 0; i < length; i++) {
-        if (nulls[i]) {
-            buffer[i] = (T)numbers[i];
-        } else {
-            result->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
-        }
-    }
-    return result;
-}
-
-// Variant of nullable_array_from_vector to build a string array from vectors
-std::shared_ptr<array_info> string_array_from_vectors(
-    bodo::vector<std::string> strings, bodo::vector<bool> nulls) {
-    size_t length = strings.size();
-
-    bodo::vector<uint8_t> null_bitmask((length + 7) >> 3, 0);
-    for (size_t i = 0; i < length; i++) {
-        SetBitTo(null_bitmask.data(), i, nulls[i]);
-    }
-    return create_string_array(Bodo_CTypes::STRING, null_bitmask, strings, -1);
 }
 
 /**
@@ -284,14 +255,14 @@ static bodo::tests::suite tests([] {
         // Column 0: 5 unique numbers, 2 of which overlap with existing data
         // Column 1: 5 unique strings, all of which overlap with existing data
         // Column 2: 4 unique strings, none of which overlap with existing data
-        auto A0 = nullable_array_from_vector<Bodo_CTypes::INT32, int32_t>(
+        auto A0 = nullable_array_from_vector<Bodo_CTypes::INT32>(
             {261, 9991, 2, 9993, 9994}, {true, true, true, true, true});
-        auto A1 = string_array_from_vectors(
+        auto A1 = string_array_from_vector(
             {"Queens", "Bronx", "EWR", "Brooklyn", "Manhattan"},
-            {true, true, true, true, true});
-        auto A2 = string_array_from_vectors(
+            {true, true, true, true, true}, Bodo_CTypes::STRING);
+        auto A2 = string_array_from_vector(
             {"Alpha", "Beta", "Gamma", "Delta", "Alpha"},
-            {true, true, true, true, true});
+            {true, true, true, true, true}, Bodo_CTypes::STRING);
         std::shared_ptr<table_info> T = std::make_shared<table_info>();
         T->columns.push_back(A0);
         T->columns.push_back(A1);
