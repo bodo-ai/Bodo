@@ -1580,6 +1580,8 @@ def get_window_func_types():
         "first": None,
         "last": None,
         "max": None,
+        "min": None,
+        "sum": None,
     }
     return window_func_types
 

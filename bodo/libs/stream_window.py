@@ -34,6 +34,7 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    dtype_to_array_type,
     error_on_unsupported_streaming_arrays,
     get_overload_const_int,
     is_overload_none,
@@ -193,7 +194,7 @@ class WindowStateType(StreamingStateType):
         Returns:
             Set[str]: Set of function names that can support sort.
         """
-        return {"max", "dense_rank", "row_number", "rank"}
+        return {"min", "max", "count", "sum", "dense_rank", "row_number", "rank"}
 
     @staticmethod
     def _derive_input_type(
@@ -386,13 +387,44 @@ class WindowStateType(StreamingStateType):
             if func_name in window_func_types:
                 output_type = window_func_types[func_name]
                 if output_type is None:
-                    # None = same as input column
+                    # None = infer from input column
                     indices = self.inputs_to_function(func_idx)
                     assert (
                         len(indices) == 1
                     ), f"Expected 1 input column to function {func_name}, received {len(indices)}"
                     input_index = indices[0]
-                    output_type = self.build_table_type.arr_types[input_index]
+                    input_type = self.build_table_type.arr_types[input_index]
+                    if func_name in {"min", "max"}:
+                        output_type = input_type
+                    elif func_name == "sum":
+                        in_dtype = input_type.dtype
+                        if isinstance(in_dtype, bodo.Decimal128Type):
+                            out_dtype = bodo.Decimal128Type(
+                                bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION,
+                                in_dtype.scale,
+                            )
+                            output_type = dtype_to_array_type(out_dtype)
+                        elif (
+                            (func_name == "sum")
+                            and isinstance(in_dtype, types.Integer)
+                            and (in_dtype.bitwidth <= 64)
+                        ):
+                            # Upcast output integer to the 64-bit variant to prevent overflow.
+                            out_dtype = types.int64 if in_dtype.signed else types.uint64
+                            if isinstance(input_type, types.Array):
+                                # If regular numpy (i.e. non-nullable)
+                                output_type = dtype_to_array_type(out_dtype)
+                            else:
+                                # Nullable:
+                                output_type = dtype_to_array_type(
+                                    out_dtype, convert_nullable=True
+                                )
+                        else:
+                            output_type = input_type
+                    else:
+                        raise BodoError(
+                            func_name + " is not a supported window function."
+                        )
                 input_arr_types.append(output_type)
             else:
                 raise BodoError(func_name + " is not a supported window function.")

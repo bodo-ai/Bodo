@@ -1730,12 +1730,15 @@ void global_window_computation(
     dummy_local_grp_info.row_to_group.resize(output_rows, 0);
     for (size_t i = 0; i < window_funcs.size(); i++) {
         switch (window_funcs[i]) {
+            case Bodo_FTypes::sum:
+            case Bodo_FTypes::count:
+            case Bodo_FTypes::min:
             case Bodo_FTypes::max: {
                 int32_t offset = window_offset_indices[i];
                 const std::shared_ptr<array_info>& in_col = window_args[offset];
                 std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
-                // Invoke the groupby codepath for ::max, with every row mapping
-                // to "group 0"
+                // Invoke the groupby codepath for the aggfunc, with every
+                // row mapping to "group 0"
                 do_apply_to_column(in_col, out_arrs[i], dummy_aux_cols,
                                    dummy_local_grp_info, window_funcs[i]);
                 break;
@@ -1757,13 +1760,27 @@ void global_window_computation(
             std::shared_ptr<array_info> combined_arr =
                 gather_array(out_arrs[i], true, true, 0, num_ranks, myrank);
             switch (window_funcs[i]) {
+                case Bodo_FTypes::sum:
+                case Bodo_FTypes::min:
                 case Bodo_FTypes::max: {
                     // Repeat the pre-parallel procedure on the combined
                     // results.
                     std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+                    aggfunc_output_initialize(out_arrs[i], window_funcs[i],
+                                              true);
                     do_apply_to_column(combined_arr, out_arrs[i],
                                        dummy_aux_cols, dummy_combine_grp_info,
                                        window_funcs[i]);
+                    break;
+                }
+                case Bodo_FTypes::count: {
+                    // For count, combine the results by adding them.
+                    std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+                    aggfunc_output_initialize(out_arrs[i], Bodo_FTypes::sum,
+                                              true);
+                    do_apply_to_column(combined_arr, out_arrs[i],
+                                       dummy_aux_cols, dummy_combine_grp_info,
+                                       Bodo_FTypes::sum);
                     break;
                 }
                 default:
