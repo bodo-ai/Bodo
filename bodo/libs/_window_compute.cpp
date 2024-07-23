@@ -1095,9 +1095,11 @@ std::shared_ptr<table_info> recv_sorted_window_data(
             return empty_table;
         } else {
             std::vector<AsyncShuffleRecvState> recv_states;
+            IncrementalShuffleMetrics dummy_metrics;
             while (recv_states.size() == 0) {
                 // Buffer until we receive the first message
-                shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states);
+                shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states,
+                              dummy_metrics);
             }
             std::unique_ptr<bodo::Schema> schema = empty_table->schema();
             std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
