@@ -114,8 +114,12 @@ class BodoPhysicalWindow(
             group.aggCalls.all {
                     aggCall ->
                 when (aggCall.operator.kind) {
+                    SqlKind.MIN,
                     SqlKind.MAX,
+                    SqlKind.SUM,
                     -> true
+                    SqlKind.COUNT,
+                    -> aggCall.operands.size == 1
                     else -> false
                 }
             }

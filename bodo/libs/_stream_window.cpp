@@ -178,6 +178,9 @@ void WindowState::InferWindowOutputDataType(
         case Bodo_FTypes::percent_rank: {
             break;
         }
+        case Bodo_FTypes::sum:
+        case Bodo_FTypes::count:
+        case Bodo_FTypes::min:
         case Bodo_FTypes::max: {
             int32_t in_col_offset = func_input_offsets[func_idx];
             int32_t in_col_idx = func_input_indices[in_col_offset];
