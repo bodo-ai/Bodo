@@ -1239,6 +1239,60 @@ def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
+                    "D": pd.array(
+                        [
+                            Decimal("-8.0"),
+                            Decimal("75.12"),
+                            Decimal("-16777216"),
+                            Decimal("16777.216"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(11, 3)),
+                    )
+                }
+            ),
+            "CBRT(D)",
+            pd.array(
+                [
+                    -2.0,
+                    4.2194112818,
+                    -256,
+                    25.6,
+                    None,
+                ],
+            ),
+            id="cbrt-vector",
+        ),
+    ],
+)
+def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of functions that when called on decimals
+    should cast to float.
+    """
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
                     "D1": pd.array(
                         [
                             Decimal("1.23"),
