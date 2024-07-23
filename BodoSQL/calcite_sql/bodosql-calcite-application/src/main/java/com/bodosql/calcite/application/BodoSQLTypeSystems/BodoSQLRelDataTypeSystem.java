@@ -355,7 +355,6 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
         type1 = RelDataTypeFactoryImpl.isJavaType(type1) ? typeFactory.decimalOf(type1) : type1;
         type2 = RelDataTypeFactoryImpl.isJavaType(type2) ? typeFactory.decimalOf(type2) : type2;
         int p1 = type1.getPrecision();
-        int p2 = type2.getPrecision();
         int s1 = type1.getScale();
         int s2 = type2.getScale();
 
