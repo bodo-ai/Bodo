@@ -94,6 +94,8 @@ class IncrementalShuffleMetrics {
     stat_t peak_utilization_bytes = 0;
     // Total number of times we reset the buffer since it grew too large.
     stat_t n_buffer_resets = 0;
+    // Time spent waiting for a message in recv.
+    time_t recv_wait_time = 0;
 
     /**
      * @brief Helper function for exporting metrics during reporting steps in
@@ -201,6 +203,7 @@ class AsyncShuffleRecvState {
      * @brief Returns true and fills output table builder if recvs of all arrays
      are done. This allows the state to be freed.
      * @param[out] out_builder output table builder to fill.
+    * @param metrics IncrementalShuffleMetrics to update.
      */
     bool recvDone(
         TableBuildBuffer& out_builder,
@@ -219,11 +222,13 @@ class AsyncShuffleRecvState {
      * @param tag Incoming message tag
      * @param comm Communicator
      * @param mpi_datatype MPI datatype of the incoming message
+     * @param metrics IncrementalShuffleMetrics to update.
      * @tparam can_use_simple_array_len Whether we can use the simple_array_len
      */
     template <bool can_use_simple_array_len = true>
     int64_t getArrayLen(const int source, const int tag, const MPI_Comm comm,
-                        const MPI_Datatype mpi_datatype);
+                        const MPI_Datatype mpi_datatype,
+                        IncrementalShuffleMetrics& metrics);
 
     /**
      * @brief Check if the array length is known and can be used.
@@ -525,9 +530,11 @@ void shuffle_issend(std::shared_ptr<table_info> in_table,
  * @param shuffle_comm MPI communicator for shuffle (each operator has to have
  its own)
  * @param recv_states vector of recieve states to fill
+    * @param metrics IncrementalShuffleMetrics to update.
  */
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
-                   std::vector<AsyncShuffleRecvState>& recv_states);
+                   std::vector<AsyncShuffleRecvState>& recv_states,
+                   IncrementalShuffleMetrics& metrics);
 
 /**
  * @brief receive data from other ranks for shuffle
@@ -537,13 +544,14 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
  * @param source Source rank
  * @param curr_tag Current tag
  * @param recv_state AsyncShuffleRecvState
+ * @param metrics IncrementalShuffleMetrics to update.
  * @return std::unique_ptr<array_info> Received array
  */
 template <bool top_level>
 std::unique_ptr<array_info> recv_shuffle_data_unknown_type(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state);
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics);
 
 /**
  * @brief send data to other ranks for shuffle
@@ -637,11 +645,11 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
 
-    int64_t arr_len = recv_state.getArrayLen<top_level>(source, curr_tag,
-                                                        shuffle_comm, mpi_type);
+    int64_t arr_len = recv_state.getArrayLen<top_level>(
+        source, curr_tag, shuffle_comm, mpi_type, metrics);
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
@@ -698,10 +706,10 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
-    int64_t arr_len = recv_state.getArrayLen<top_level>(source, curr_tag,
-                                                        shuffle_comm, mpi_type);
+    int64_t arr_len = recv_state.getArrayLen<top_level>(
+        source, curr_tag, shuffle_comm, mpi_type, metrics);
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
@@ -778,7 +786,7 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
 
     // Add a new entry to the bits_in_last_byte vector
@@ -805,15 +813,17 @@ std::unique_ptr<array_info> recv_shuffle_data(
         // the incoming message might not be the same as the size of the array
         // (some of the bits might not be valid)
         MPI_Status status;
+        time_pt start = start_timer();
         MPI_Probe(source, curr_tag, shuffle_comm, &status);
+        metrics.recv_wait_time += end_timer(start);
         MPI_Get_count(&status, mpi_type, &recv_size);
 
         out_arr_len = recv_size * 8;
     } else {
         // If we already have a simple array length, we can just use that to get
         // the size of the incoming message and set the array's length
-        out_arr_len = recv_state.getArrayLen<top_level>(source, curr_tag,
-                                                        shuffle_comm, mpi_type);
+        out_arr_len = recv_state.getArrayLen<top_level>(
+            source, curr_tag, shuffle_comm, mpi_type, metrics);
         recv_size = arrow::bit_util::BytesForBits(out_arr_len);
     }
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
@@ -882,7 +892,7 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
     // Fill_send_array converts offsets to lengths of type uint32_t
     const MPI_Datatype len_mpi_type = MPI_UINT32_T;
@@ -890,11 +900,13 @@ std::unique_ptr<array_info> recv_shuffle_data(
     // Get the sizes of each incoming message
     MPI_Status data_status;
     int recv_size_sub;
+    time_pt start = start_timer();
     MPI_Probe(source, curr_tag, shuffle_comm, &data_status);
+    metrics.recv_wait_time += end_timer(start);
     MPI_Get_count(&data_status, data_mpi_type, &recv_size_sub);
 
     int64_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag + 1, shuffle_comm, len_mpi_type);
+        source, curr_tag + 1, shuffle_comm, len_mpi_type, metrics);
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, recv_size_sub, 0, arr_type, dtype, -1, 0, 0);
@@ -981,25 +993,29 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     // Receive the indices
     std::unique_ptr<array_info> indices =
         recv_shuffle_data<bodo_array_type::NULLABLE_INT_BOOL,
                           Bodo_CTypes::INT32, top_level>(
             std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
                                              Bodo_CTypes::INT32),
-            shuffle_comm, source, curr_tag, recv_state);
+            shuffle_comm, source, curr_tag, recv_state, metrics);
 
     // Receive the string array used as the dictionary
     // Probe for the size of the incoming dict data
     MPI_Status dict_data_status;
     int dict_data_recv_size;
+    time_pt start = start_timer();
     MPI_Probe(source, curr_tag, shuffle_comm, &dict_data_status);
+    metrics.recv_wait_time += end_timer(start);
     MPI_Get_count(&dict_data_status, MPI_UNSIGNED_CHAR, &dict_data_recv_size);
     // Probe for the size of the incoming dict offsets
     MPI_Status dict_offset_status;
     int dict_offset_recv_size;
+    start = start_timer();
     MPI_Probe(source, curr_tag + 1, shuffle_comm, &dict_offset_status);
+    metrics.recv_wait_time += end_timer(start);
     MPI_Get_count(&dict_offset_status, MPI_UINT64_T, &dict_offset_recv_size);
 
     // Allocate the dict array
@@ -1080,10 +1096,10 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     const MPI_Datatype len_mpi_type = MPI_UINT32_T;
     size_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag, shuffle_comm, len_mpi_type);
+        source, curr_tag, shuffle_comm, len_mpi_type, metrics);
 
     std::unique_ptr<array_info> arr = alloc_array_item(arr_len, nullptr);
 
@@ -1099,7 +1115,7 @@ std::unique_ptr<array_info> recv_shuffle_data(
         static_cast<bodo::ArrayType*>(data_type.get());
     const std::unique_ptr<bodo::DataType>& value_type = array_type->value_type;
     arr->child_arrays[0] = recv_shuffle_data_unknown_type<false>(
-        value_type, shuffle_comm, source, curr_tag, recv_state);
+        value_type, shuffle_comm, source, curr_tag, recv_state, metrics);
 
     return arr;
 }
@@ -1160,12 +1176,12 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     const MPI_Datatype mpi_datetime_type = get_MPI_typ<Bodo_CTypes::DATETIME>();
     const MPI_Datatype mpi_tz_offset_type = get_MPI_typ<Bodo_CTypes::INT16>();
 
     int64_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag, shuffle_comm, mpi_datetime_type);
+        source, curr_tag, shuffle_comm, mpi_datetime_type, metrics);
     std::unique_ptr<array_info> out_arr = alloc_timestamptz_array(arr_len);
 
     MPI_Request datetime_req;
@@ -1223,7 +1239,7 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     std::vector<std::shared_ptr<array_info>> child_arrays;
 
     assert(data_type->is_struct());
@@ -1235,7 +1251,7 @@ std::unique_ptr<array_info> recv_shuffle_data(
         // because all child arrays shuold be the length of the struct array
         child_arrays.push_back(recv_shuffle_data_unknown_type<top_level>(
             struct_type->child_types[i], shuffle_comm, source, curr_tag,
-            recv_state));
+            recv_state, metrics));
     }
     std::unique_ptr<array_info> out_arr = alloc_struct(
         !child_arrays.empty() ? child_arrays[0]->length : 0, child_arrays);
@@ -1268,7 +1284,7 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     // Map arrays are just wrappers around array item arrays of structs
     assert(data_type->is_map());
     const bodo::MapType* map_type =
@@ -1286,7 +1302,7 @@ std::unique_ptr<array_info> recv_shuffle_data(
     std::unique_ptr<array_info> child =
         recv_shuffle_data<bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST,
                           top_level>(std::move(array_type), shuffle_comm,
-                                     source, curr_tag, recv_state);
+                                     source, curr_tag, recv_state, metrics);
     size_t child_len = child->length;
     return alloc_map(child_len, std::move(child));
 }
