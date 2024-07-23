@@ -1790,7 +1790,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction CBRT =
             SqlBasicFunction.create("CBRT",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code COS(numeric)} function. */

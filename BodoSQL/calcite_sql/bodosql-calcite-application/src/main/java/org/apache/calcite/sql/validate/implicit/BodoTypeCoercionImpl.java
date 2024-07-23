@@ -140,6 +140,11 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
     if ((SqlTypeUtil.isCharacter(in)) && (expected == SqlTypeFamily.DATETIME)) {
       return factory.createSqlType(SqlTypeName.TIMESTAMP);
     }
+
+    if (SqlTypeUtil.isNumeric(in) && expected == SqlTypeFamily.APPROXIMATE_NUMERIC) {
+        return factory.createSqlType(SqlTypeName.DOUBLE);
+    }
+
     return super.implicitCast(in, expected);
   }
 
