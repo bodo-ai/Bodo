@@ -1,5 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -9,55 +11,208 @@ import bodo
 from bodo.tests.utils import check_func
 
 
-@pytest.mark.parametrize(
-    "data, func_name, answer",
-    [
+def gen_simple_window_over_nothing_tests():
+    params = []
+    int32_nullable_arr = pd.array(
+        [None if (i // 2500) % 3 < 2 else (i**3) % 99999 for i in range(10000)],
+        dtype=pd.Int32Dtype(),
+    )
+    decimal_arr = pd.array(
+        [
+            None if i % 7 == 0 else Decimal(str(i) * 6 + "." + str(i) * 2)
+            for i in range(10000)
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(32, 8)),
+    )
+    int32_numpy_arr = pd.array([(i**4) % 99999 for i in range(10000)], dtype=np.int32)
+    string_arr = pd.array(
+        [None if (i // 2000) % 2 == 0 else str(i**2) for i in range(5000)]
+    )
+    int32_arr_all_null = pd.array(
+        [None for i in range(10000)],
+        dtype=pd.Int32Dtype(),
+    )
+    string_arr_all_null = pd.array(
+        [None for i in range(5000)], dtype=pd.ArrowDtype(pa.large_string())
+    )
+    params.append(
         pytest.param(
+            int32_nullable_arr,
+            "min",
+            pd.array([8] * len(int32_nullable_arr)),
+            id="min-int32_nullable",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_nullable_arr,
+            "max",
+            pd.array([99972] * len(int32_nullable_arr)),
+            id="max-int32_nullable",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_nullable_arr,
+            "count",
+            pd.array([2500] * len(int32_nullable_arr)),
+            id="count-int32_nullable",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_nullable_arr,
+            "sum",
+            pd.array([124646669] * len(int32_nullable_arr), dtype=pd.Int64Dtype()),
+            id="sum-int32_nullable",
+        )
+    )
+    params.append(
+        pytest.param(
+            decimal_arr,
+            "min",
             pd.array(
-                [
-                    None if (i // 2500) % 3 < 2 else (i**3) % 99999
-                    for i in range(10000)
-                ],
-                dtype=pd.Int32Dtype(),
+                [Decimal("111111.11000000")] * len(decimal_arr),
+                dtype=pd.ArrowDtype(pa.decimal128(32, 8)),
             ),
-            "max",
-            99972,
-            id="max-int_nullable",
-        ),
+            id="min-int32_nullable",
+        )
+    )
+    params.append(
         pytest.param(
-            pd.array([(i**4) % 99999 for i in range(10000)], dtype=np.int32),
+            decimal_arr,
             "max",
-            99976,
-            id="max-int_numpy",
-        ),
-        pytest.param(
             pd.array(
-                [None if (i // 2000) % 2 == 0 else str(i**2) for i in range(5000)]
+                [Decimal("999999999999999999999999.99999999")] * len(decimal_arr),
+                pd.ArrowDtype(pa.decimal128(32, 8)),
             ),
-            "max",
-            "9998244",
-            id="max-string",
-        ),
+            id="max-decimal",
+        )
+    )
+    params.append(
         pytest.param(
+            decimal_arr,
+            "sum",
             pd.array(
-                [None for i in range(10000)],
-                dtype=pd.Int32Dtype(),
+                [Decimal("4242867611357352697748771451.87305829")] * len(decimal_arr),
+                pd.ArrowDtype(pa.decimal128(38, 8)),
             ),
-            "max",
-            None,
-            id="max-int_all_null",
-        ),
+            id="sum-decimal",
+        )
+    )
+    params.append(
         pytest.param(
-            pd.array(
-                [None for i in range(5000)], dtype=pd.ArrowDtype(pa.large_string())
-            ),
+            int32_numpy_arr,
+            "min",
+            pd.array([0] * len(int32_numpy_arr)),
+            id="min-int32_numpy",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_numpy_arr,
             "max",
-            None,
+            pd.array([99976] * len(int32_numpy_arr)),
+            id="max-int32_numpy",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_numpy_arr,
+            "count",
+            pd.array([10000] * len(int32_numpy_arr)),
+            id="count-int32_numpy",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_numpy_arr,
+            "sum",
+            pd.array([494581416] * len(int32_numpy_arr), dtype=pd.Int64Dtype()),
+            id="sum-int32_numpy",
+        )
+    )
+    params.append(
+        pytest.param(
+            string_arr, "min", pd.array(["10004569"] * len(string_arr)), id="min-string"
+        )
+    )
+    params.append(
+        pytest.param(
+            string_arr, "max", pd.array(["9998244"] * len(string_arr)), id="max-string"
+        )
+    )
+    params.append(
+        pytest.param(
+            string_arr, "count", pd.array([2000] * len(string_arr)), id="count-string"
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_arr_all_null,
+            "min",
+            pd.array([None] * len(int32_arr_all_null)),
+            id="min-int32_all_null",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_arr_all_null,
+            "max",
+            pd.array([None] * len(int32_arr_all_null)),
+            id="max-int32_all_null",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_arr_all_null,
+            "count",
+            pd.array([0] * len(int32_arr_all_null)),
+            id="count-int32_all_null",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_arr_all_null,
+            "sum",
+            pd.array([None] * len(int32_arr_all_null)),
+            id="sum-int32_all_null",
+        )
+    )
+    params.append(
+        pytest.param(
+            string_arr_all_null,
+            "min",
+            pd.array([None] * len(string_arr_all_null)),
+            id="min-string_all_null",
+        )
+    )
+    params.append(
+        pytest.param(
+            string_arr_all_null,
+            "max",
+            pd.array([None] * len(string_arr_all_null)),
             id="max-string_all_null",
-        ),
-    ],
+        )
+    )
+    params.append(
+        pytest.param(
+            string_arr_all_null,
+            "count",
+            pd.array([0] * len(string_arr_all_null)),
+            id="count-string_all_null",
+        )
+    )
+    return params
+
+
+@pytest.mark.parametrize(
+    "data, func_name, answer", gen_simple_window_over_nothing_tests()
 )
 def test_simple_window_over_nothing(data, func_name, answer, memory_leak_check):
+    """
+    Tests the streaming window code for `F(X) OVER ()`
+    """
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     col_meta = bodo.utils.typing.ColNamesMetaType(("idx", "win"))
     output_col_order = bodo.utils.typing.MetaType((0, 1))
@@ -136,7 +291,7 @@ def test_simple_window_over_nothing(data, func_name, answer, memory_leak_check):
     out_df = pd.DataFrame(
         {
             "idx": [str(i) for i in range(len(data))],
-            "win": [answer for _ in range(len(data))],
+            "win": answer,
         }
     )
 

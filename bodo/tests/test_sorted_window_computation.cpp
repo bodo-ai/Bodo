@@ -471,22 +471,22 @@ static bodo::tests::suite tests([] {
                                     expected_out, false);
     });
 
-    bodo::tests::test("partitionless_max_integer", [] {
+    bodo::tests::test("partitionless_sum_unsigned", [] {
         int myrank, num_ranks;
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 
-        // Create the total answer array, then have each rank select a
-        // different subset of the rows
-        size_t n_total_rows = 10000;
-        std::vector<int64_t> in_integers(n_total_rows, -1);
+        size_t n_total_rows = 100000;
+        std::vector<uint8_t> in_integers(n_total_rows, -1);
         std::vector<bool> in_nulls(n_total_rows, true);
         for (size_t i = 0; i < n_total_rows; i++) {
-            in_integers[i] = -((i - 12345) * (i - 1234));
+            in_integers[i] = (uint8_t)(i % 256);
+            in_nulls[i] = (bool)((i & 8) | (i & 4));
         }
         std::shared_ptr<array_info> in_arr =
-            nullable_array_from_vector<Bodo_CTypes::INT64>(in_integers,
+            nullable_array_from_vector<Bodo_CTypes::UINT8>(in_integers,
                                                            in_nulls);
+
         std::vector<int64_t> selection_vector;
         for (size_t i = 0; i < n_total_rows; i++) {
             auto marker = static_cast<int64_t>(i + (i >> 1) * (i >> 1));
@@ -496,26 +496,153 @@ static bodo::tests::suite tests([] {
         }
         in_arr = RetrieveArray_SingleColumn(in_arr, selection_vector);
 
-        // Create a singleton array containing the one global answer, and
-        // broadcast the correct length to obtain the refsol.
-        std::shared_ptr<array_info> answer_singleton =
-            nullable_array_from_vector<Bodo_CTypes::INT64>({30863580}, {true});
         size_t local_length = in_arr->length;
+
+        // Create a singleton array containing the one global answer for
+        // the sum value, and broadcast the correct length to obtain the
+        // refsol.
+        std::shared_ptr<array_info> answer_singleton =
+            alloc_nullable_array_no_nulls(1, Bodo_CTypes::UINT64);
+        getv<uint64_t>(answer_singleton, 0) = 9706740;
         std::vector<int64_t> zero_idxs(local_length, 0);
         auto expected_out =
             RetrieveArray_SingleColumn(answer_singleton, zero_idxs);
 
         // Create an empty output array with the correct length
         std::vector<std::shared_ptr<array_info>> out_arrs;
-        std::vector<int64_t> null_idxs(1, -1);
         out_arrs.push_back(
-            RetrieveArray_SingleColumn(answer_singleton, null_idxs));
-
-        verify_sorted_window_output(Bodo_FTypes::max, {}, {}, {in_arr}, {0, 1},
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::UINT64));
+        aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::sum, true);
+        verify_sorted_window_output(Bodo_FTypes::sum, {}, {}, {in_arr}, {0, 1},
                                     out_arrs, expected_out);
     });
 
-    bodo::tests::test("partitionless_max_all_null", [] {
+    bodo::tests::test("partitionless_count", [] {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+        size_t n_total_rows = 10000;
+        std::vector<int32_t> in_integers(n_total_rows, -1);
+        std::vector<bool> in_nulls(n_total_rows, true);
+        for (size_t i = 0; i < n_total_rows; i++) {
+            in_integers[i] = (int32_t)(i % 4);
+            in_nulls[i] = (bool)(i & 8);
+        }
+        std::shared_ptr<array_info> int_arr =
+            nullable_array_from_vector<Bodo_CTypes::INT32>(in_integers,
+                                                           in_nulls);
+
+        std::shared_ptr<array_info> numpy_arr =
+            alloc_numpy(n_total_rows, Bodo_CTypes::INT8);
+
+        bodo::vector<std::string> in_strings(n_total_rows, "ABC");
+        std::shared_ptr<array_info> string_arr =
+            string_array_from_vector(in_strings, in_nulls, Bodo_CTypes::STRING);
+
+        bodo::vector<std::string> dict_strings(4);
+        dict_strings[0] = "ALPHA";
+        dict_strings[1] = "BETA";
+        dict_strings[2] = "GAMMA";
+        dict_strings[3] = "DELTA";
+        std::shared_ptr<array_info> dict_arr =
+            dict_array_from_vector(dict_strings, in_integers, in_nulls);
+
+        std::vector<std::pair<std::shared_ptr<array_info>, uint64_t>> tests = {
+            {int_arr, 5000},
+            {numpy_arr, 10000},
+            {string_arr, 5000},
+            {dict_arr, 5000},
+        };
+
+        for (auto &it : tests) {
+            // Have each rank select a different subset of the rows
+            std::shared_ptr<array_info> in_arr = it.first;
+            std::vector<int64_t> selection_vector;
+            for (size_t i = 0; i < n_total_rows; i++) {
+                auto marker = static_cast<int64_t>(i + (i >> 1) * (i >> 1));
+                if (marker % (int64_t)num_ranks == myrank) {
+                    selection_vector.push_back(i);
+                }
+            }
+            in_arr = RetrieveArray_SingleColumn(in_arr, selection_vector);
+            size_t local_length = in_arr->length;
+
+            // Create a singleton array containing the one global answer for
+            // the count value, and broadcast the correct length to obtain the
+            // refsol.
+            std::shared_ptr<array_info> answer_singleton =
+                alloc_numpy(1, Bodo_CTypes::UINT64);
+            getv<uint64_t>(answer_singleton, 0) = it.second;
+            std::vector<int64_t> zero_idxs(local_length, 0);
+            auto expected_out =
+                RetrieveArray_SingleColumn(answer_singleton, zero_idxs);
+
+            // Create an empty output array with the correct length
+            std::vector<std::shared_ptr<array_info>> out_arrs;
+            out_arrs.push_back(alloc_numpy(1, Bodo_CTypes::UINT64));
+            aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::count, true);
+
+            verify_sorted_window_output(Bodo_FTypes::count, {}, {}, {in_arr},
+                                        {0, 1}, out_arrs, expected_out);
+        }
+    });
+
+    bodo::tests::test("partitionless_min_max_integer", [] {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+        std::vector<std::pair<Bodo_FTypes::FTypeEnum, int64_t>> tests = {
+            {Bodo_FTypes::max, 30863580},
+            {Bodo_FTypes::min, -15233730},
+        };
+
+        for (auto &it : tests) {
+            // Create the total answer array, then have each rank select a
+            // different subset of the rows
+            size_t n_total_rows = 10000;
+            std::vector<int64_t> in_integers(n_total_rows, -1);
+            std::vector<bool> in_nulls(n_total_rows, true);
+            for (size_t i = 0; i < n_total_rows; i++) {
+                in_integers[i] = -(((int64_t)i - 12345) * ((int64_t)i - 1234));
+            }
+            std::shared_ptr<array_info> in_arr =
+                nullable_array_from_vector<Bodo_CTypes::INT64>(in_integers,
+                                                               in_nulls);
+            std::vector<int64_t> selection_vector;
+            for (size_t i = 0; i < n_total_rows; i++) {
+                auto marker = static_cast<int64_t>(i + (i >> 1) * (i >> 1));
+                if (marker % (int64_t)num_ranks == myrank) {
+                    selection_vector.push_back(i);
+                }
+            }
+            in_arr = RetrieveArray_SingleColumn(in_arr, selection_vector);
+
+            // Create a singleton array containing the one global answer for
+            // the min/max value, and broadcast the correct length to obtain the
+            // refsol.
+            std::shared_ptr<array_info> answer_singleton =
+                nullable_array_from_vector<Bodo_CTypes::INT64>({it.second},
+                                                               {true});
+            size_t local_length = in_arr->length;
+            std::vector<int64_t> zero_idxs(local_length, 0);
+            auto expected_out =
+                RetrieveArray_SingleColumn(answer_singleton, zero_idxs);
+
+            // Create an empty output array with the correct length
+            std::vector<std::shared_ptr<array_info>> out_arrs;
+            std::vector<int64_t> null_idxs(1, -1);
+            out_arrs.push_back(
+                RetrieveArray_SingleColumn(answer_singleton, null_idxs));
+            aggfunc_output_initialize(out_arrs[0], it.first, true);
+
+            verify_sorted_window_output(it.first, {}, {}, {in_arr}, {0, 1},
+                                        out_arrs, expected_out);
+        }
+    });
+
+    bodo::tests::test("partitionless_min_max_all_null", [] {
         int myrank, num_ranks;
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
@@ -560,6 +687,8 @@ static bodo::tests::suite tests([] {
                 RetrieveArray_SingleColumn(in_arr, zero_idxs);
 
             verify_sorted_window_output(Bodo_FTypes::max, {}, {}, {in_arr},
+                                        {0, 1}, out_arrs, expected);
+            verify_sorted_window_output(Bodo_FTypes::min, {}, {}, {in_arr},
                                         {0, 1}, out_arrs, expected);
         }
     });
