@@ -756,7 +756,9 @@ static bodo::tests::suite tests([] {
         bool tables_match;
         if (my_rank == 1) {
             std::vector<AsyncShuffleRecvState> recv_states;
-            shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states);
+            IncrementalShuffleMetrics dummy_metrics;
+            shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states,
+                          dummy_metrics);
             std::unique_ptr<bodo::Schema> schema = empty_table->schema();
 
             std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;

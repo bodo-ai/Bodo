@@ -28,9 +28,9 @@ void IncrementalShuffleMetrics::add_to_metrics(
     metrics.emplace_back(TimerMetric("shuffle_recv_finalization_time",
                                      this->shuffle_recv_finalization_time));
     metrics.emplace_back(
-        StatMetric("n_shuffle_send", this->n_shuffle_send, true));
+        StatMetric("n_shuffle_send", this->n_shuffle_send, false));
     metrics.emplace_back(
-        StatMetric("n_shuffle_recv", this->n_shuffle_recv, true));
+        StatMetric("n_shuffle_recv", this->n_shuffle_recv, false));
     metrics.emplace_back(TimerMetric("shuffle_hash_time", this->hash_time));
     metrics.emplace_back(TimerMetric("shuffle_dict_unification_time",
                                      this->dict_unification_time));
@@ -54,6 +54,7 @@ void IncrementalShuffleMetrics::add_to_metrics(
                                     this->peak_utilization_bytes));
     metrics.emplace_back(
         StatMetric("shuffle_n_buffer_resets", this->n_buffer_resets));
+    metrics.emplace_back(TimerMetric("recv_wait_time", this->recv_wait_time));
 }
 
 int64_t get_shuffle_threshold() {
@@ -374,12 +375,12 @@ AsyncShuffleSendState send_shuffle_data_unknown_type(
 
 #define RECV_SHUFFLE_DATA(ARR_TYPE, DTYPE)                \
     return recv_shuffle_data<ARR_TYPE, DTYPE, top_level>( \
-        data_type, shuffle_comm, source, curr_tag, recv_state);
+        data_type, shuffle_comm, source, curr_tag, recv_state, metrics);
 template <bool top_level>
 std::unique_ptr<array_info> recv_shuffle_data_unknown_type(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state) {
+    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
     if (data_type->array_type == bodo_array_type::NULLABLE_INT_BOOL) {
         switch (data_type->c_type) {
             case Bodo_CTypes::INT8:
@@ -572,7 +573,8 @@ void shuffle_issend(std::shared_ptr<table_info> in_table,
 }
 
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
-                   std::vector<AsyncShuffleRecvState>& recv_states) {
+                   std::vector<AsyncShuffleRecvState>& recv_states,
+                   IncrementalShuffleMetrics& metrics) {
     // TODO: add output buffer size limit
     while (true) {
         int flag;
@@ -596,8 +598,9 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
                 schema->column_types[i];
             std::shared_ptr<array_info>& in_arr = in_table->columns[i];
             std::shared_ptr<array_info> out_arr =
-                recv_shuffle_data_unknown_type<true>(
-                    data_type, shuffle_comm, source, curr_tag, recv_state);
+                recv_shuffle_data_unknown_type<true>(data_type, shuffle_comm,
+                                                     source, curr_tag,
+                                                     recv_state, metrics);
             out_arr->precision = in_arr->precision;
             out_arr->scale = in_arr->scale;
             recv_state.out_arrs.push_back(out_arr);
@@ -617,7 +620,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         time_pt start = start_timer();
         size_t prev_recv_states_size = this->recv_states.size();
         shuffle_irecv(this->table_buffer->data_table, this->shuffle_comm,
-                      this->recv_states);
+                      this->recv_states, this->metrics);
         this->metrics.n_shuffle_recv +=
             this->recv_states.size() - prev_recv_states_size;
         this->metrics.shuffle_recv_time += end_timer(start);
@@ -858,7 +861,8 @@ AsyncShuffleSendState::addArray(const std::shared_ptr<array_info>& in_arr,
 template <bool can_use_simple_array_len>
 int64_t AsyncShuffleRecvState::getArrayLen(const int source, const int tag,
                                            const MPI_Comm comm,
-                                           const MPI_Datatype mpi_datatype) {
+                                           const MPI_Datatype mpi_datatype,
+                                           IncrementalShuffleMetrics& metrics) {
     int64_t arr_len = -1;
     if (can_use_simple_array_len) {
         arr_len = this->simple_array_len;
@@ -866,7 +870,10 @@ int64_t AsyncShuffleRecvState::getArrayLen(const int source, const int tag,
 
     if (arr_len == -1) {
         MPI_Status status;
+        time_pt start = start_timer();
         MPI_Probe(source, tag, comm, &status);
+        metrics.recv_wait_time += end_timer(start);
+
         int count;
         MPI_Get_count(&status, mpi_datatype, &count);
         arr_len = count;
