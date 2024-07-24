@@ -1455,21 +1455,32 @@ def group_files_by_schema_group_identifier(
             names. Note that only the top-level fields are considered.
     """
     # Get the Field IDs and Column Names of the files:
-    iceberg_field_ids: list[tuple[int]] = []
-    pq_field_names: list[tuple[str]] = []
+    iceberg_field_ids: list[tuple[int | tuple, ...]] = []
+    pq_field_names: list[tuple[str | tuple, ...]] = []
+    pq_file_format = ds.ParquetFileFormat()
+    pq_file_frags: list[ds.ParquetFileFragment] = []
     for fpath in fpaths:
-        # TODO Verify that this doesn't read anything other than
-        # the schema and metadata.
-        # TODO Check if there's a faster way to get this information.
-        pq_file = pq.ParquetFile(fpath, filesystem=fs)
+        pq_file_frags.append(pq_file_format.make_fragment(fpath, fs))
 
+    # Presumably the work is partitioned more or less equally among ranks,
+    # and we are mostly (or just) reading metadata, so we assign four IO
+    # threads to every rank
+    nthreads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), 4)
+    pa_default_io_thread_count = pa.io_thread_count()
+    pa.set_io_thread_count(nthreads)
+    try:
+        arrow_cpp.fetch_parquet_frags_metadata(pq_file_frags)
+    finally:
+        pa.set_io_thread_count(pa_default_io_thread_count)
+
+    for pq_file_frag in pq_file_frags:
         try:
             schema_group_identifier = get_schema_group_identifier_from_pa_schema(
-                pq_file.schema_arrow
+                pq_file_frag.physical_schema
             )
         except Exception as e:
             msg = (
-                f"Encountered an error while generating the schema group identifier for file {fpath}. "
+                f"Encountered an error while generating the schema group identifier for file {pq_file_frag.path}. "
                 "This is most likely either a corrupted/invalid Parquet file or represents a bug/gap in Bodo.\n"
                 f"{str(e)}"
             )
@@ -1478,7 +1489,7 @@ def group_files_by_schema_group_identifier(
         pq_field_names.append(schema_group_identifier[1])
 
     fpaths_schema_group_ids: list[
-        tuple[str, tuple[int | tuple], tuple[str | tuple]]
+        tuple[str, tuple[int | tuple, ...], tuple[str | tuple, ...]]
     ] = list(zip(fpaths, iceberg_field_ids, pq_field_names))
     # Sort/Groupby the field-ids and field-names tuples.
     # We must flatten the tuples for sorting because you
@@ -1488,7 +1499,8 @@ def group_files_by_schema_group_identifier(
     sort_key_func = lambda item: (flatten_tuple(item[1]), flatten_tuple(item[2]))
     keyfunc = lambda item: (item[1], item[2])
     schema_group_id_to_fpaths: dict[
-        tuple[tuple[int, ...], tuple[str, ...]], list[str]
+        tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]],
+        list[str],
     ] = {
         k: [x[0] for x in list(v)]
         for k, v in itertools.groupby(

@@ -6,6 +6,13 @@
 
 #include <arrow/array/concatenate.h>
 #include <arrow/compute/api.h>
+#include <arrow/dataset/dataset.h>
+#include <arrow/dataset/file_parquet.h>
+#include <arrow/io/interfaces.h>
+#include <arrow/status.h>
+#include <arrow/util/future.h>
+#include <fmt/format.h>
+#include <pyerrors.h>
 
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
@@ -14,6 +21,7 @@
 #include "../libs/_distributed.h"
 #include "../libs/_stl.h"
 
+#include "arrow_compat.h"
 #include "json_col_parser.h"
 #include "timestamptz_parser.h"
 
@@ -1646,3 +1654,74 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
  * @param[in] reader ArrowReader object to delete
  */
 void arrow_reader_del_py_entry(ArrowReader* reader) { delete reader; }
+
+/**
+ * @brief Impl for PyCFunction arrow_cpp.fetch_parquet_frags_metadata
+ * Unwraps a python list of pyarrow ParquetFileFragments into
+ * arrow::dataset::ParquetFileFragments and dispatches an async task to fetch
+ * there metadata. Returns upon completion of all tasks
+ * @param self: unused, will be NULL
+ * @param args: list of python arguments, should always be 1 list of pyarrow
+ * ParquetFileFragments
+ * @param nargs: number of args, should always be 1
+ */
+
+PyObject* fetch_parquet_frags_metadata(PyObject* self, PyObject* const* args,
+                                       Py_ssize_t nargs) {
+    arrow::py::import_pyarrow_wrappers();
+
+    // Ensure there is only one argument
+    if (nargs != 1) {
+        PyErr_SetString(PyExc_TypeError,
+                        "fetch_frags_metadata takes 1 argument");
+        return nullptr;
+    }
+
+    // Make sure the argument is a list
+    PyObject* arg = args[0];
+    if (!PyList_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "Argument must be a list");
+        return nullptr;
+    }
+    std::vector<std::shared_ptr<arrow::dataset::ParquetFileFragment>> fragments;
+    for (Py_ssize_t i = 0; i < PyList_Size(arg); i++) {
+        PyObject* py_frag = PyList_GET_ITEM(arg, i);
+        auto res = arrow::py::unwrap_fragment(py_frag);
+        if (!res.ok()) {
+            PyErr_Format(PyExc_RuntimeError,
+                         "Failed to unwrap fragment at index %s",
+                         std::to_string(i).c_str());
+            return nullptr;
+        } else {
+            fragments.push_back(
+                std::static_pointer_cast<arrow::dataset::ParquetFileFragment>(
+                    res.ValueOrDie()));
+        }
+    }
+    std::vector<arrow::Future<>> futures;
+    for (auto& frag : fragments) {
+        arrow::io::IOContext io_context = arrow::io::default_io_context();
+        auto res = io_context.executor()->Submit([frag]() {
+            auto status = frag->EnsureCompleteMetadata();
+            return status;
+        });
+        if (!res.ok()) {
+            PyErr_SetString(PyExc_RuntimeError, "Failed to submit task");
+            return nullptr;
+        }
+        futures.push_back(std::move(res.ValueOrDie()));
+    }
+
+    // Again we don't care about the result of the futures, we just want to make
+    auto all_future = arrow::AllComplete(futures);
+    all_future.Wait();
+
+    auto res = all_future.MoveResult();
+    if (!res.ok()) {
+        PyErr_Format(PyExc_RuntimeError, "Failed to fetch metadata: %s",
+                     res.status().message().c_str());
+        return nullptr;
+    }
+
+    Py_RETURN_NONE;
+}
