@@ -2017,40 +2017,40 @@ package:
   category: main
   optional: false
 - name: c-ares
-  version: 1.32.2
+  version: 1.32.3
   manager: conda
   platform: linux-64
   dependencies:
     __glibc: '>=2.17,<3.0.a0'
     libgcc-ng: '>=12'
-  url: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.32.2-h4bc722e_0.conda
+  url: https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.32.3-h4bc722e_0.conda
   hash:
-    md5: 8024af1ee7078e37fa3101c0a0296af2
-    sha256: d1b01f9e3d10b97fd09e19fda0caf9bfad3c884a6b19fb3f654a9aed02a70b58
+    md5: 7624e34ee6baebfc80d67bac76cc9d9d
+    sha256: 3c5a844bb60b0d52d89c3f1bd828c9856417fe33a6102fd8bbd5c13c3351704a
   category: main
   optional: false
 - name: c-ares
-  version: 1.32.2
+  version: 1.32.3
   manager: conda
   platform: osx-64
   dependencies:
     __osx: '>=10.13'
-  url: https://conda.anaconda.org/conda-forge/osx-64/c-ares-1.32.2-h51dda26_0.conda
+  url: https://conda.anaconda.org/conda-forge/osx-64/c-ares-1.32.3-h51dda26_0.conda
   hash:
-    md5: be4a9b58fcf1374aeb79e873c1166e19
-    sha256: b900aed0d474caed6735ba9936f372eb45df4f43c893fcc0e7b434372fa3c5c8
+    md5: 5487b45a597e142da7839941ab2494a9
+    sha256: 2454287fa7d32b2cd089ad2bb46c8f8634b6f409d6fa8892c37ccc66134ec076
   category: main
   optional: false
 - name: c-ares
-  version: 1.32.2
+  version: 1.32.3
   manager: conda
   platform: osx-arm64
   dependencies:
     __osx: '>=11.0'
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/c-ares-1.32.2-h99b78c6_0.conda
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/c-ares-1.32.3-h99b78c6_0.conda
   hash:
-    md5: b0bcd3b8a19fb530d6106467dc681bb4
-    sha256: c9cb861e4cc5458df7e9277dd16623efc69491d1d74a85d826c121e2d831415c
+    md5: c27bebc62991ab075b773f86ba64aa9b
+    sha256: dc8e2c2508295595675fb829345a156b0bb42b164271c2fcafb7fb193449bcf8
   category: main
   optional: false
 - name: ca-certificates
@@ -7121,7 +7121,7 @@ package:
   category: main
   optional: false
 - name: libcurl
-  version: 8.8.0
+  version: 8.9.0
   manager: conda
   platform: linux-64
   dependencies:
@@ -7129,47 +7129,47 @@ package:
     libgcc-ng: '>=12'
     libnghttp2: '>=1.58.0,<2.0a0'
     libssh2: '>=1.11.0,<2.0a0'
-    libzlib: '>=1.2.13,<2.0a0'
+    libzlib: '>=1.3.1,<2.0a0'
     openssl: '>=3.3.1,<4.0a0'
     zstd: '>=1.5.6,<1.6.0a0'
-  url: https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.8.0-hca28451_1.conda
+  url: https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.9.0-hdb1bdb2_0.conda
   hash:
-    md5: b8afb3e3cb3423cc445cf611ab95fdb0
-    sha256: 6b5b64cdcdb643368ebe236de07eedee99b025bb95129bbe317c46e5bdc693f3
+    md5: 5badfbdb2688d8aaca7bd3c98d557b97
+    sha256: ff97a3160117385649e1b7e8b84fefb3561fceae09bb48d2bfdf37bc2b6bfdc9
   category: main
   optional: false
 - name: libcurl
-  version: 8.8.0
+  version: 8.9.0
   manager: conda
   platform: osx-64
   dependencies:
     krb5: '>=1.21.3,<1.22.0a0'
     libnghttp2: '>=1.58.0,<2.0a0'
     libssh2: '>=1.11.0,<2.0a0'
-    libzlib: '>=1.2.13,<2.0a0'
+    libzlib: '>=1.3.1,<2.0a0'
     openssl: '>=3.3.1,<4.0a0'
     zstd: '>=1.5.6,<1.6.0a0'
-  url: https://conda.anaconda.org/conda-forge/osx-64/libcurl-8.8.0-hf9fcc65_1.conda
+  url: https://conda.anaconda.org/conda-forge/osx-64/libcurl-8.9.0-hfcf2730_0.conda
   hash:
-    md5: 11711bab5306a6534797a68b3c4c2bed
-    sha256: 25e2b044e6978f1714a4b2844f34a45fc8a0c60185db8d332906989d70b65927
+    md5: 861e66c46985b6eadd97c73ac77d1a07
+    sha256: 1e2c6482eb7753589d66dfe9997e1916611bcce387dfde55cd7d9f595fe84b72
   category: main
   optional: false
 - name: libcurl
-  version: 8.8.0
+  version: 8.9.0
   manager: conda
   platform: osx-arm64
   dependencies:
     krb5: '>=1.21.3,<1.22.0a0'
     libnghttp2: '>=1.58.0,<2.0a0'
     libssh2: '>=1.11.0,<2.0a0'
-    libzlib: '>=1.2.13,<2.0a0'
+    libzlib: '>=1.3.1,<2.0a0'
     openssl: '>=3.3.1,<4.0a0'
     zstd: '>=1.5.6,<1.6.0a0'
-  url: https://conda.anaconda.org/conda-forge/osx-arm64/libcurl-8.8.0-h7b6f9a7_1.conda
+  url: https://conda.anaconda.org/conda-forge/osx-arm64/libcurl-8.9.0-hfd8ffcc_0.conda
   hash:
-    md5: e9580b0bb247a2ccf937b16161478f19
-    sha256: 9da82a9bd72e9872941da32be54543076c92dbeb2aba688a1c24adbc1c699e64
+    md5: 32cee38aa05c3812c8e9d61a2077409b
+    sha256: ba011ec32dec44a19f810a7df05f333f6f6619a93a5a213575493f03abc8e851
   category: main
   optional: false
 - name: libcxx
