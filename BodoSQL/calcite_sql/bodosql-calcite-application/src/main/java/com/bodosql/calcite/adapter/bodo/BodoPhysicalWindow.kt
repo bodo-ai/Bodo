@@ -76,26 +76,53 @@ class BodoPhysicalWindow(
         return traitSet.isEnabled(BatchingPropertyTraitDef.INSTANCE) && constants.isEmpty() && groups.size == 1 &&
             groups.all {
                     group ->
-                isSupportedHashOrSortGroup(group) || isSupportedBlankWindowGroup(group)
+                isSupportedHashGroup(group) || isSupportedSortGroup(group) || isSupportedBlankWindowGroup(group)
             }
     }
 
     /**
      * Returns whether a window cohort is supported for the
-     * Bodo execution codepath that either hashes on the partition,
-     * or sorts on the partition+orderby columns.
+     * Bodo execution codepath that either hashes on the partition.
+     * Requires all aggfuncs in the group to be supported in the hash codepath,
+     * and for there to be at least one partition column.
      */
-    fun isSupportedHashOrSortGroup(group: Window.Group): Boolean {
+    fun isSupportedHashGroup(group: Window.Group): Boolean {
         return group.keys.cardinality() >= 1 &&
             group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
+
+                aggCall.distinct == false &&
+                    aggCall.ignoreNulls == false
                 when (aggCall.operator.kind) {
                     SqlKind.ROW_NUMBER,
                     SqlKind.RANK,
                     SqlKind.DENSE_RANK,
                     SqlKind.PERCENT_RANK,
                     SqlKind.CUME_DIST,
+                    -> true
+                    else -> false
+                }
+            }
+    }
+
+    /**
+     * Returns whether a window cohort is supported for the
+     * Bodo execution codepath that sorts on the partition+orderby columns.
+     * Requires all aggfuncs in the group to be supported in the sort codepath,
+     * and for there to be at least one partition or orderby column.
+     */
+    fun isSupportedSortGroup(group: Window.Group): Boolean {
+        return (group.keys.cardinality() >= 1 || group.orderKeys.keys.isNotEmpty()) &&
+            group.aggCalls.size == 1 &&
+            group.aggCalls.all {
+                    aggCall ->
+                aggCall.distinct == false &&
+                    aggCall.ignoreNulls == false
+                when (aggCall.operator.kind) {
+                    SqlKind.ROW_NUMBER,
+                    SqlKind.RANK,
+                    SqlKind.DENSE_RANK,
                     -> true
                     else -> false
                 }
@@ -113,6 +140,8 @@ class BodoPhysicalWindow(
             group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
+                aggCall.distinct == false &&
+                    aggCall.ignoreNulls == false
                 when (aggCall.operator.kind) {
                     SqlKind.MIN,
                     SqlKind.MAX,

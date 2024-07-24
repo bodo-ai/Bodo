@@ -708,6 +708,58 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
     )
 
 
+def test_partitionless_rank_fns(memory_leak_check):
+    """
+    Tests executing the RANK family of functions with the streaming
+    window code when there are no partition columns.
+    """
+    query = """
+    (
+        SELECT 
+            'A' AS FID,
+            IDX,
+            ROW_NUMBER() OVER (ORDER BY O1, O2) AS VAL
+        FROM TABLE1
+    ) UNION ALL (
+        SELECT 
+            'B' AS FID,
+            IDX,
+            RANK() OVER (ORDER BY O1) AS VAL
+        FROM TABLE1
+    ) UNION ALL (
+        SELECT 
+            'C' AS FID,
+            IDX,
+            DENSE_RANK() OVER (ORDER BY O1) AS VAL
+        FROM TABLE1
+    )
+    """
+    in_df = pd.DataFrame(
+        {
+            "IDX": range(25),
+            "O1": [i // 5 for i in range(25)],
+            "O2": [i % 5 for i in range(25)],
+        }
+    )
+    out_df = pd.DataFrame(
+        {
+            "FID": ["A"] * 25 + ["B"] * 25 + ["C"] * 25,
+            "IDX": list(range(25)) * 3,
+            "VAL": list(range(1, 26))
+            + [1 + 5 * (i // 5) for i in range(25)]
+            + [1 + (i // 5) for i in range(25)],
+        }
+    )
+    check_query(
+        query,
+        {"TABLE1": in_df},
+        None,
+        expected_output=out_df,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
 @pytest.mark.parametrize(
     "window_func, expected_df, expected_log_message",
     [
