@@ -124,7 +124,6 @@ nav:
   - About Bodo: about_bodo.md
   - Getting Started:
     - quick_start/index.md
-    - Bodo SDK Trial: quick_start/sdktrial.md
     - Quick Start (Cloud): quick_start/quick_start_platform.md
     - Local SQL Engine Quick Start (Community Edition): quick_start/quickstart_local_sql.md
     - Local Python Engine Quick Start (Community Edition): quick_start/quickstart_local_python.md
