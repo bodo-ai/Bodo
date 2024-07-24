@@ -423,3 +423,179 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
         reset_index=True,
         sort_output=True,
     )
+
+
+@pytest.mark.parametrize(
+    "func_name, order_keys, in_df, out_df",
+    [
+        pytest.param(
+            "row_number",
+            (0,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": range(1, 1001),
+                }
+            ),
+            id="row_number",
+        ),
+        pytest.param(
+            "rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": [i // 10 for i in range(1000)],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + 10 * (i // 10) for i in range(1000)],
+                }
+            ),
+            id="rank",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": [i // 10 for i in range(1000)],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank",
+        ),
+        pytest.param(
+            "percent_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": [i // 10 for i in range(1000)],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [(10 * (i // 10)) / 999 for i in range(1000)],
+                }
+            ),
+            id="percent_rank",
+            marks=pytest.mark.skip("[BSE-3613]"),
+        ),
+        pytest.param(
+            "cume_dist",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": [i // 10 for i in range(1000)],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [(1 + (10 * (i // 10))) / 1000 for i in range(1000)],
+                }
+            ),
+            id="cume_dist",
+            marks=pytest.mark.skip("[BSE-3624]"),
+        ),
+    ],
+)
+def test_partitionless_rank_family(
+    func_name, order_keys, in_df, out_df, memory_leak_check
+):
+    # Randomize the order of the input data
+    rng = np.random.default_rng(42)
+    perm = rng.permutation(len(in_df))
+    in_df = in_df.iloc[perm, :]
+
+    n_inputs = len(in_df.columns)
+    kept_cols = bodo.utils.typing.MetaType(tuple(range(n_inputs)))
+    col_meta = bodo.utils.typing.ColNamesMetaType(("IDX", "OUT"))
+    empty_global = bodo.utils.typing.MetaType(())
+    order_global = bodo.utils.typing.MetaType(order_keys)
+    true_global = bodo.utils.typing.MetaType(tuple([True] * len(order_keys)))
+    kept_indices = bodo.utils.typing.MetaType((0,))
+    func_names = bodo.utils.typing.MetaType((func_name,))
+    func_input_indices = bodo.utils.typing.MetaType(((),))
+
+    def impl(in_df):
+        in_table = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(in_df),
+            (),
+            kept_cols,
+            n_inputs,
+        )
+        window_state = bodo.libs.stream_window.init_window_state(
+            4001,
+            empty_global,
+            order_global,
+            true_global,
+            true_global,
+            func_names,
+            func_input_indices,
+            kept_indices,
+            True,
+            n_inputs,
+        )
+        iteration = 0
+        local_len = bodo.hiframes.table.local_len(in_table)
+        is_last_1 = False
+        is_last_2 = False
+        while not (is_last_2):
+            table_section = bodo.hiframes.table.table_local_filter(
+                in_table, slice((iteration * 4096), ((iteration + 1) * 4096))
+            )
+            is_last_1 = (iteration * 4096) >= local_len
+            (
+                is_last_2,
+                _,
+            ) = bodo.libs.stream_window.window_build_consume_batch(
+                window_state, table_section, is_last_1
+            )
+            iteration = iteration + 1
+        is_last_3 = False
+        table_builder_state = bodo.libs.table_builder.init_table_builder_state(5001)
+        while not (is_last_3):
+            (
+                window_output_batch,
+                is_last_3,
+            ) = bodo.libs.stream_window.window_produce_output_batch(window_state, True)
+            bodo.libs.table_builder.table_builder_append(
+                table_builder_state, window_output_batch
+            )
+        bodo.libs.stream_window.delete_window_state(window_state)
+        window_output = bodo.libs.table_builder.table_builder_finalize(
+            table_builder_state
+        )
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(window_output), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (window_output,), index_var, col_meta
+        )
+        return out_df
+
+    check_func(
+        impl,
+        (in_df,),
+        py_output=out_df,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=True,
+    )
