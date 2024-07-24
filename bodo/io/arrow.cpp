@@ -5,6 +5,9 @@
 
 #include <Python.h>
 #include <arrow/filesystem/filesystem.h>
+#include <cpython/funcobject.h>
+#include <object.h>
+#include <pytypedefs.h>
 #include "../libs/_bodo_common.h"
 #include "../libs/_theta_sketches.h"
 #include "_s3_reader.h"
@@ -15,6 +18,9 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
                                        bool produce_output);
 
 void arrow_reader_del_py_entry(ArrowReader* reader);
+
+PyObject* fetch_parquet_frags_metadata(PyObject* self, PyObject* const* args,
+                                       Py_ssize_t nargs);
 
 // --------- functions defined in parquet_reader.cpp ---------
 table_info* pq_read_py_entry(PyObject* path, bool parallel,
@@ -119,6 +125,10 @@ void arrow_filesystem_del_py_entry(numba_optional<arrow::fs::FileSystem> fs) {
     }
 }
 
+PyMethodDef fetch_frags_method_def = {"fetch_parquet_frags_metadata",
+                                      (PyCFunction)fetch_parquet_frags_metadata,
+                                      METH_FASTCALL, ""};
+
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;
     MOD_DEF(m, "arrow_cpp", "No docs", NULL);
@@ -142,6 +152,9 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
 
     SetAttrStringFromVoidPtr(m, arrow_reader_read_py_entry);
     SetAttrStringFromVoidPtr(m, arrow_reader_del_py_entry);
+
+    PyObject_SetAttrString(m, "fetch_parquet_frags_metadata",
+                           PyCFunction_New(&fetch_frags_method_def, NULL));
 
     SetAttrStringFromVoidPtr(m, arrow_filesystem_del_py_entry);
 
