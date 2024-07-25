@@ -878,9 +878,7 @@ public class AggCodeGen {
       return new Pair<>(equivalentExtendedNamedAggAggregates.get(name), false);
     } else {
       throw new BodoSQLCodegenException(
-          "Unsupported Aggregate Function, "
-              + a.getAggregation().toString()
-              + " specified in query.");
+          "Unsupported Aggregate Function, " + a.getAggregation() + " specified in query.");
     }
   }
 
