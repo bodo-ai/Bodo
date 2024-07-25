@@ -4623,3 +4623,105 @@ def test_decimal_to_str_scalar(scalar, expected, memory_leak_check):
         return bodo.libs.bodosql_array_kernels.to_char(scalar, is_scalar=True)
 
     check_func(impl, (scalar,), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "val, expected",
+    [
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(15, 5)),
+            pa.scalar(Decimal("1.0"), pa.decimal128(15, 5)),
+            id="basic-positive",
+        ),
+        # Zeroes
+        pytest.param(
+            pa.scalar(Decimal("0"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal("0"), pa.decimal128(10, 3)),
+            id="zero-with-scale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("0"), pa.decimal128(38, 37)),
+            pa.scalar(Decimal("0"), pa.decimal128(38, 37)),
+            id="zero-with-large-scale",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-0.00"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal("0.00"), pa.decimal128(10, 3)),
+            id="negative-zero-with-scale",
+        ),
+        # Negative Numbers
+        pytest.param(
+            pa.scalar(Decimal("-12.345"), pa.decimal128(12, 3)),
+            pa.scalar(Decimal("12.345"), pa.decimal128(12, 3)),
+            id="negative-number",
+        ),
+        # Large Values (Precision and Scale Variation)
+        pytest.param(
+            pa.scalar(Decimal("123456789012.34567"), pa.decimal128(20, 7)),
+            pa.scalar(Decimal("123456789012.34567"), pa.decimal128(20, 7)),
+            id="large-value",
+        ),
+        # Large Scale
+        pytest.param(
+            pa.scalar(
+                Decimal("0.12345678901234567890123456789012345678"),
+                pa.decimal128(38, 38),
+            ),
+            pa.scalar(
+                Decimal("0.12345678901234567890123456789012345678"),
+                pa.decimal128(38, 38),
+            ),
+            id="large-scale-1",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.12345678901234567890123456789012345678"),
+                pa.decimal128(38, 38),
+            ),
+            pa.scalar(
+                Decimal("0.12345678901234567890123456789012345678"),
+                pa.decimal128(38, 38),
+            ),
+            id="large-scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.00000000000000000000000000000000000001"),
+                pa.decimal128(38, 38),
+            ),
+            pa.scalar(
+                Decimal("0.00000000000000000000000000000000000001"),
+                pa.decimal128(38, 38),
+            ),
+            id="small_number",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1234567890.12",
+                    "-9876543210.99",
+                    None,
+                    "0",
+                    "-0.00000001",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 10)),
+            ),
+            pd.array(
+                [
+                    "1234567890.12",
+                    "9876543210.99",
+                    None,
+                    "0",
+                    "0.00000001",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 10)),
+            ),
+            id="array",
+        ),
+    ],
+)
+def test_decimal_abs(val, expected, memory_leak_check):
+    def impl(val):
+        return bodo.libs.bodosql_array_kernels.abs_decimal(val)
+
+    check_func(impl, (val,), py_output=expected)

@@ -28,6 +28,7 @@ from bodo.libs.bodosql_javascript_udf_array_kernels import *  # noqa
 
 broadcasted_fixed_arg_functions = {
     "abs",
+    "abs_decimal",
     "acos",
     "acosh",
     "add_date_interval_to_date",

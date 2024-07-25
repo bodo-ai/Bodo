@@ -1487,3 +1487,151 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
         )
     finally:
         bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("89.10"),
+                            Decimal("-11.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            "ABS(D1)",
+            pd.array(
+                [
+                    Decimal("1.23"),
+                    None,
+                    Decimal("45.67"),
+                    Decimal("89.10"),
+                    Decimal("11.12"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+            ),
+            id="same-scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.673"),
+                            Decimal("89.1056"),
+                            Decimal("-11.123456"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 6)),
+                    ),
+                }
+            ),
+            "ABS(D1)",
+            pd.array(
+                [
+                    Decimal("1.23"),
+                    None,
+                    Decimal("45.673"),
+                    Decimal("89.1056"),
+                    Decimal("11.123456"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(20, 6)),
+            ),
+            id="varying-scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            "ABS(D1)",
+            pd.array([None, None, None, None, None]),
+            id="all-none-values",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("0.12345678901234567890"),
+                            None,
+                            Decimal("-0.1234567890123456789012345678901234567"),
+                            Decimal("0.0000000000000000000000000000000000001"),
+                            Decimal("-0.0000000000000000000000000000000000001"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 38)),
+                    ),
+                }
+            ),
+            "ABS(D1)",
+            pd.array(
+                [
+                    Decimal("0.12345678901234567890"),
+                    None,
+                    Decimal("0.1234567890123456789012345678901234567"),
+                    Decimal("0.0000000000000000000000000000000000001"),
+                    Decimal("0.0000000000000000000000000000000000001"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 37)),
+            ),
+            id="large-scale-38-37",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("89.10"),
+                            Decimal("-11.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            "(CASE WHEN D1 IS NULL THEN '' ELSE ABS(D1)::VARCHAR END)",
+            pd.array(["1.23", "", "45.67", "89.10", "11.12"]),
+            id="case-same-scale",
+        ),
+    ],
+)
+def test_decimal_abs(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal conversion to string.
+    """
+    query = f"SELECT {expr} AS res FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
