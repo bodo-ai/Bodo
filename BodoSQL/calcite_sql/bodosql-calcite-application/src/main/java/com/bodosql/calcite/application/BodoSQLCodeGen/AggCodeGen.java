@@ -308,7 +308,11 @@ public class AggCodeGen {
           && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
           && !aggFunc.equals("count_if")) {
         Expr lengthFlag =
-            new Expr.Binary(">", new Expr.Call("len", filteredExpr), Expr.Companion.getZero());
+            new Expr.Binary(
+                ">",
+                new Expr.Method(
+                    new Expr.Call("pd.notna", filteredExpr), "sum", List.of(), List.of()),
+                Expr.Companion.getZero());
         aggExpr = new Expr.Call("bodosql.libs.null_handling.null_if_not_flag", aggExpr, lengthFlag);
       }
 
@@ -791,17 +795,15 @@ public class AggCodeGen {
           // We currently don't support any extra arguments
           fnString.append(".").append(aggFunc).append("(");
         }
-        // Both func and method need a closing )
+        // Both func and method need a closing ")"
         fnString.append(")");
       }
-      if (filterCol.length() > 0
-          && a.getAggregation().getKind() != SqlKind.COUNT
+      if (a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0
           && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
           && !aggFunc.equals("count_if")) {
-        // We need an optional type in case the series is empty. Since this is
-        // groupby we must have a filter for this to occur.
-        fnString.append(", len(").append(seriesVar).append(") > 0)");
+        // We need an optional type in case the series is empty or all null.
+        fnString.append(", pd.notna(").append(seriesVar).append(").sum() > 0)");
       }
       // Both func and method need a closing )
       fnString.append("\n");
