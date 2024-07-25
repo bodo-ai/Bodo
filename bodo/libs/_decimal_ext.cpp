@@ -1409,6 +1409,62 @@ array_info* round_decimal_array_py_entry(array_info* arr_, int64_t round_scale,
 }
 
 /**
+ * Computes the absolute value of a given decimal scalar.
+ *
+ * @param val The decimal value for which the absolute value is to be computed.
+ * @return The absolute value of the input as a scalar.
+ */
+arrow::Decimal128 abs_decimal_scalar_py_entry(arrow::Decimal128 val) {
+    arrow::Decimal128 result;
+    try {
+        result = val.Abs();
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+    }
+    return result;
+}
+
+/**
+ * Computes the absolute values for all elements in a given decimal array.
+ *
+ * @param arr_ input array containing the decimal values.
+ * @return Pointer to a new array_info object with the absolute values of the
+ * input array elements. Returns nullptr if an exception occurs.
+ */
+array_info* abs_decimal_array_py_entry(array_info* arr_) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        size_t len = arr->length;
+        std::unique_ptr<array_info> out_arr =
+            alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
+        out_arr->precision = arr->precision;
+        out_arr->scale = arr->scale;
+        for (size_t i = 0; i < len; i++) {
+            if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
+            } else {
+                arrow::Decimal128* out_ptr =
+                    out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                   arrow::Decimal128>() +
+                    i;
+                const arrow::Decimal128& in_val =
+                    *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                 arrow::Decimal128>() +
+                      i);
+                *out_ptr = abs_decimal_scalar_py_entry(in_val);
+            }
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
  * @param val input decimal value
@@ -2197,6 +2253,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, decimal_array_to_str_array_py_entry);
     SetAttrStringFromVoidPtr(m, round_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, round_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, abs_decimal_array_py_entry);
+    SetAttrStringFromVoidPtr(m, abs_decimal_scalar_py_entry);
 
     return m;
 }
