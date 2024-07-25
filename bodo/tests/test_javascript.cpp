@@ -4,12 +4,14 @@
 #include "../../bodo/libs/_bodo_common.h"
 #include "../../bodo/libs/_javascript_udf.h"
 #include "../../bodo/tests/test.hpp"
+PUSH_IGNORED_COMPILER_ERROR("-Wtemplate-id-cdtor")
 #include "include/v8-context.h"
 #include "include/v8-date.h"
 #include "include/v8-isolate.h"
 #include "include/v8-local-handle.h"
 #include "include/v8-primitive.h"
 #include "include/v8-script.h"
+POP_IGNORED_COMPILER_ERROR()
 #include "utils.h"
 
 // Helper utility to test a JavaScript UDF with certain arguments and verify the

@@ -6,12 +6,14 @@
 #include "_dict_builder.h"
 #include "_table_builder.h"
 #include "include/libplatform/libplatform.h"
+PUSH_IGNORED_COMPILER_ERROR("-Wtemplate-id-cdtor")
 #include "include/v8-context.h"
 #include "include/v8-exception.h"
 #include "include/v8-isolate.h"
 #include "include/v8-persistent-handle.h"
 #include "include/v8-script.h"
 #include "include/v8-typed-array.h"
+POP_IGNORED_COMPILER_ERROR()
 
 #ifndef CHECK_v8_EXCEPTION
 #define CHECK_V8_EXCEPTION(isolate, context, try_catch, error_prefix)         \
