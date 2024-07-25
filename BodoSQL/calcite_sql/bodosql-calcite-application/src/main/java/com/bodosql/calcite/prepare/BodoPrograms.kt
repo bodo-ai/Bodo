@@ -8,6 +8,7 @@ import com.bodosql.calcite.application.logicalRules.SubQueryRemoveRule.verifyNoS
 import com.bodosql.calcite.prepare.BodoRules.FieldPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE
 import com.bodosql.calcite.prepare.BodoRules.MULTI_JOIN_CONSTRUCTION_RULES
+import com.bodosql.calcite.prepare.BodoRules.PHYSICAL_CONVERSION_RULES
 import com.bodosql.calcite.prepare.BodoRules.PROJECTION_PULL_UP_RULES
 import com.bodosql.calcite.prepare.BodoRules.ProjectionPushdownRules
 import com.bodosql.calcite.prepare.BodoRules.SINGLE_VALUE_REMOVE_RULE
@@ -163,6 +164,7 @@ object BodoPrograms {
             // TODO(jsternberg): This can likely be adapted and integrated directly with
             // the VolcanoPlanner, but that hasn't been done so leave this here.
             DecorateAttributesProgram(),
+            HepOptimizerProgram(PHYSICAL_CONVERSION_RULES),
             MergeRelProgram(),
             CacheSubPlanProgram(),
             // Note: No program after this should call builder.join() without

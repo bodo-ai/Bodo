@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.core.Aggregate;
@@ -105,35 +106,34 @@ public class AggregateMergeRule extends RelRule<AggregateMergeRule.Config>
         return;
       }
       AggregateCall bottomCall = bottomAgg.getAggCallList().get(bottomIndex);
-      // Bodo Change: When the top and bottom aggregates have the exact same group keys,
-      // sometimes we can still generate an aggregate even if it wasn't initially supported.
-      // We check this by verifying that the merged aggregate is the same as the original.
-      boolean supportedAggregate = isAggregateSupported(bottomCall);
+      // Bodo Change: When the exact same keys are present, check if uppermost
+      // aggregate is one of SUM, MIN, or MAX. If so, we can just reuse the
+      // lower aggregate as is. Note: We can't include SUM0 because we can't
+      // convert NULL to 0.
       boolean matchingKeys = bottomGroupSet.equals(topGroupSet);
-
-      // Should not merge if top agg with empty group keys and the lower agg
-      // function is COUNT, because in case of empty input for lower agg,
-      // the result is empty, if we merge them, we end up with 1 result with
-      // 0, which is wrong.
-      if ((!supportedAggregate && !matchingKeys)
-          || (bottomCall.getAggregation() == SqlStdOperatorTable.COUNT
-              && topCall.getAggregation().getKind() != SqlKind.SUM0
-              && hasEmptyGroup)) {
-        return;
+      Set<SqlKind> matchingKinds = Set.of(SqlKind.SUM, SqlKind.MIN, SqlKind.MAX);
+      if (matchingKeys && matchingKinds.contains(topCall.getAggregation().kind)) {
+        finalCalls.add(bottomCall);
+      } else {
+        // Should not merge if top agg with empty group keys and the lower agg
+        // function is COUNT, because in case of empty input for lower agg,
+        // the result is empty, if we merge them, we end up with 1 result with
+        // 0, which is wrong.
+        if (!isAggregateSupported(bottomCall)
+            || (bottomCall.getAggregation() == SqlStdOperatorTable.COUNT
+                && topCall.getAggregation().getKind() != SqlKind.SUM0
+                && hasEmptyGroup)) {
+          return;
+        }
+        SqlSplittableAggFunction splitter =
+            bottomCall.getAggregation().unwrapOrThrow(SqlSplittableAggFunction.class);
+        AggregateCall finalCall = splitter.merge(topCall, bottomCall);
+        // fail to merge the aggregate call, bail out
+        if (finalCall == null) {
+          return;
+        }
+        finalCalls.add(finalCall);
       }
-      SqlSplittableAggFunction splitter =
-          bottomCall.getAggregation().unwrapOrThrow(SqlSplittableAggFunction.class);
-      AggregateCall finalCall = splitter.merge(topCall, bottomCall);
-      // fail to merge the aggregate call, bail out
-      if (finalCall == null) {
-        return;
-      }
-      if (!supportedAggregate && !finalCall.equals(bottomCall)) {
-        // The bottom aggregate wasn't supported and after transformation
-        // it's different from the original. We can't merge them.
-        return;
-      }
-      finalCalls.add(finalCall);
     }
 
     // re-map grouping sets

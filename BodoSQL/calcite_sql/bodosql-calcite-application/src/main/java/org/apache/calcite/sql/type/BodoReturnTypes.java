@@ -269,7 +269,7 @@ public class BodoReturnTypes {
     public static final SqlTypeTransform UNKNOWN_PRECISION =
             (opBinding, typeToTransform) ->
                     opBinding.getTypeFactory().createTypeWithNullability(
-                            opBinding.getTypeFactory().createSqlType(typeToTransform.getSqlTypeName(), RelDataType.PRECISION_NOT_SPECIFIED),
+                            opBinding.getTypeFactory().createSqlType(typeToTransform.getSqlTypeName(), BodoSQLRelDataTypeSystem.MAX_STRING_PRECISION),
                             typeToTransform.isNullable()
                     );
 

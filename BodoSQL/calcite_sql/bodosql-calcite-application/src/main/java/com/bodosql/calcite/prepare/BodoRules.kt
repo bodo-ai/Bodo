@@ -33,6 +33,7 @@ import com.bodosql.calcite.application.logicalRules.FilterSetOpTransposeRuleNoWi
 import com.bodosql.calcite.application.logicalRules.FilterWindowEjectRule
 import com.bodosql.calcite.application.logicalRules.FilterWindowMrnfRule
 import com.bodosql.calcite.application.logicalRules.FilterWindowSplitRule
+import com.bodosql.calcite.application.logicalRules.GroupingSetsToUnionAllRule
 import com.bodosql.calcite.application.logicalRules.JoinConditionToFilterRule
 import com.bodosql.calcite.application.logicalRules.JoinReorderConditionRule
 import com.bodosql.calcite.application.logicalRules.LimitProjectTransposeRule
@@ -70,6 +71,7 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Filter
 import org.apache.calcite.rel.core.Join
 import org.apache.calcite.rel.core.SetOp
+import org.apache.calcite.rel.rules.AggregateExpandDistinctAggregatesRule
 import org.apache.calcite.rel.rules.AggregateJoinJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateJoinRemoveRule
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule
@@ -187,6 +189,18 @@ object BodoRules {
     @JvmField
     val AGGREGATE_MERGE_RULE: RelOptRule =
         AggregateMergeRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Convert COUNT (DISTINCT x) to COUNT() via an extra group by.
+     */
+    @JvmField
+    val EXPAND_COUNT_DISTINCT_RULE: RelOptRule =
+        AggregateExpandDistinctAggregatesRule.Config.DEFAULT
+            .withOperandSupplier { b: OperandBuilder ->
+                b.operand(BodoLogicalAggregate::class.java).anyInputs()
+            }
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -641,6 +655,15 @@ object BodoRules {
             .toRule()
 
     /**
+     * Expand Grouping sets into a UNION ALL of Aggregates
+     */
+    @JvmField
+    val BODO_PHYSICAL_GROUPING_SETS_TO_UNION_ALL_RULE: RelOptRule =
+        GroupingSetsToUnionAllRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_PHYSICAL_BUILDER)
+            .toRule()
+
+    /**
      * Allow join inputs to be swapped. This is kept to reorder outer joins
      * until we are certain it will be handled by multi-join, but then it should
      * be removed.
@@ -1061,6 +1084,15 @@ object BodoRules {
     val LIMIT_PUSH_DOWN_RULES: List<RelOptRule> =
         listOf(
             LIMIT_PROJECT_TRANSPOSE_RULE,
+        )
+
+    /**
+     * These are rules that only operate on physical nodes because
+     * the general structure of the plan should be maintained.
+     */
+    val PHYSICAL_CONVERSION_RULES: List<RelOptRule> =
+        listOf(
+            BODO_PHYSICAL_GROUPING_SETS_TO_UNION_ALL_RULE,
         )
 
     /**
