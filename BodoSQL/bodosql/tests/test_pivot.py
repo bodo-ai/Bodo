@@ -91,18 +91,19 @@ def test_tz_aware_pivot(memory_leak_check):
         FOR (name) IN ('John' as john, 'mike' as mike)
     )
     """
+    session_tz = "Poland"
     df = pd.DataFrame(
         {
             "NAME": ["John", "mike", "Luke", "Matthew", None] * 8,
             "TZ": [
                 None,
                 None,
-                pd.Timestamp("2022-1-1", tz="Poland"),
-                pd.Timestamp("2028-1-1", tz="Poland"),
-                pd.Timestamp("2017-1-1", tz="Poland"),
+                pd.Timestamp("2022-1-1", tz=session_tz),
+                pd.Timestamp("2028-1-1", tz=session_tz),
+                pd.Timestamp("2017-1-1", tz=session_tz),
                 None,
-                pd.Timestamp("2015-1-1", tz="Poland"),
-                pd.Timestamp("2022-1-2", tz="Poland"),
+                pd.Timestamp("2015-1-1", tz=session_tz),
+                pd.Timestamp("2022-1-2", tz=session_tz),
             ]
             * 5,
         }
@@ -130,6 +131,7 @@ def test_tz_aware_pivot(memory_leak_check):
         None,
         expected_output=py_output,
         is_out_distributed=False,
+        session_tz=session_tz,
     )
 
 
