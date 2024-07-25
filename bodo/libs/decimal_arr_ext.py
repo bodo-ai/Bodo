@@ -133,6 +133,15 @@ ll.add_symbol(
     "round_decimal_scalar",
     decimal_ext.round_decimal_scalar_py_entry,
 )
+ll.add_symbol(
+    "abs_decimal_scalar",
+    decimal_ext.abs_decimal_scalar_py_entry,
+)
+ll.add_symbol(
+    "abs_decimal_array",
+    decimal_ext.abs_decimal_array_py_entry,
+)
+
 
 ll.add_symbol(
     "decimal_array_to_str_array",
@@ -2330,6 +2339,103 @@ def _round_decimal_scalar(
         ret_type(val_t, round_scale_t, input_p_t, input_s_t, output_p_t, output_s_t),
         codegen,
     )
+
+
+def abs_decimal_array(arr):  # pragma: no cover
+    pass
+
+
+@overload(abs_decimal_array, inline="always")
+def overload_abs_decimal_array(arr):
+    """
+    Return the absolute value of a decimal array.
+    """
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "abs_decimal_array: decimal array expected"
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    out_precision = arr.precision
+    out_scale = arr.scale
+    out_type = DecimalArrayType(out_precision, out_scale)
+
+    def impl(arr):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_arr_info = _abs_decimal_array(arr_info)
+        out_arr = info_to_array(out_arr_info, out_type)
+        delete_info(out_arr_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _abs_decimal_array(typingctx, arr):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        (arr,) = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="abs_decimal_array"
+        )
+        ret = builder.call(fn, [arr])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (array_info_type(arr), codegen)
+
+
+def abs_decimal_scalar(arr):  # pragma: no cover
+    pass
+
+
+@overload(abs_decimal_scalar, inline="always", prefer_literal=True)
+def overload_abs_decimal_scalar(arr):
+    """
+    Return the absolute value of a decimal scalar.
+    """
+    assert isinstance(arr, Decimal128Type)
+
+    def impl(arr):
+        return _abs_decimal_scalar(arr)
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _abs_decimal_scalar(typingctx, arr_t):
+    assert isinstance(arr_t, Decimal128Type), "_abs_decimal_scalar: decimal expected"
+
+    def codegen(context, builder, signature, args):
+        arr = args[0]
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="abs_decimal_scalar"
+        )
+        ret = builder.call(
+            fn,
+            [
+                arr,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    output_precision = arr_t.precision
+    output_scale = arr_t.scale
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    return (output_decimal_type(arr_t), codegen)
 
 
 class DecimalArrayType(types.ArrayCompatible):

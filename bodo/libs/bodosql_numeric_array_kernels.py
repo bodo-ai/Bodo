@@ -287,7 +287,17 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
     if func_name not in double_arg_funcs:
 
         def overload_numeric_util(arr):
-            verify_int_float_arg(arr, func_name, "arr")
+            # These functions support decimal types natively
+            if func_name in {"ABS"}:
+                verify_numeric_arg(arr, func_name, "arr")
+                if isinstance(arr, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+
+                    def impl(arr):
+                        return bodo.libs.bodosql_array_kernels.abs_decimal(arr)
+
+                    return impl
+            else:
+                verify_int_float_arg(arr, func_name, "arr")
 
             arg_names = [
                 "arr",
@@ -389,6 +399,24 @@ def _install_numeric_overload(funcs_utils_names):
 
 
 _install_numeric_overload(funcs_utils_names)
+
+
+@numba.generated_jit(nopython=True)
+def abs_decimal(arr):
+    # Array case
+    if isinstance(arr, bodo.DecimalArrayType):
+
+        def impl(arr):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.abs_decimal_array(arr)
+
+        return impl
+    # Scalar case
+    else:
+
+        def impl(arr):
+            return bodo.libs.decimal_arr_ext.abs_decimal_scalar(arr)
+
+        return impl
 
 
 @numba.generated_jit(nopython=True)
