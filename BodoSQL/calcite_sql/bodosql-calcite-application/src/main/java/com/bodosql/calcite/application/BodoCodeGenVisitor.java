@@ -1,13 +1,5 @@
 package com.bodosql.calcite.application;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.concatDataFrames;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoAgg;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeNoGroupBy;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateAggCodeWithGroupBy;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByKeyIndices;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupByOffsetAndCols;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.getStreamingGroupbyFnames;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
@@ -18,17 +10,13 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.genera
 import static com.bodosql.calcite.application.JoinCondVisitor.getStreamingJoinKeyIndices;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
 import static com.bodosql.calcite.application.JoinCondVisitor.visitNonEquiConditions;
-import static com.bodosql.calcite.application.utils.AggHelpers.aggContainsFilter;
 import static com.bodosql.calcite.application.utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
-import static com.bodosql.calcite.application.utils.Utils.concatenateLiteralAggValue;
 import static com.bodosql.calcite.application.utils.Utils.integerLiteralArange;
 import static com.bodosql.calcite.application.utils.Utils.isSnowflakeCatalogTable;
-import static com.bodosql.calcite.application.utils.Utils.literalAggPrunedAggList;
 import static com.bodosql.calcite.application.utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.utils.Utils.stringsToStringLiterals;
 
 import com.bodosql.calcite.adapter.bodo.ArrayRexToBodoTranslator;
-import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalIntersect;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalJoin;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalMinRowNumberFilter;
@@ -86,7 +74,6 @@ import kotlin.jvm.functions.Function2;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
-import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Correlate;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.TableCreate;
@@ -101,7 +88,6 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.type.BodoTZInfo;
-import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.NotNull;
@@ -325,15 +311,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * generate a new variable for group by apply functions in agg.
-   *
-   * @return variable
-   */
-  private Variable genGroupbyApplyAggFnVar() {
-    return generatedCode.getSymbolTable().genGroupbyApplyAggFnName();
-  }
-
-  /**
    * Generate the new variable for a streaming accumulator variable
    *
    * @return variable
@@ -398,19 +375,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Modifies the codegen so that an expression representing an array is stored in a new variable
-   * that can be used later, to help avoid excessively long lines in the codegen.
-   *
-   * @param expression the expression that is to be stored in a local variable
-   * @return the newly created variable that the expression was stored in
-   */
-  public Variable storeAsArrayVariable(Expr expression) {
-    Variable var = genArrayVar();
-    this.generatedCode.add(new Op.Assign(var, expression));
-    return var;
-  }
-
-  /**
    * Return the final code after step by step Bodo codegen. Coerces the final answer to a DataFrame
    * if it is a Table, lowering a new global in the process.
    *
@@ -465,8 +429,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
       this.visitPandasRel((PandasRel) node);
     } else if (node instanceof BodoPhysicalJoin) {
       this.visitBodoJoin((BodoPhysicalJoin) node);
-    } else if (node instanceof BodoPhysicalAggregate) {
-      this.visitBodoAggregate((BodoPhysicalAggregate) node);
     } else if (node instanceof BodoPhysicalMinRowNumberFilter) {
       this.visitBodoMinRowNumberFilter((BodoPhysicalMinRowNumberFilter) node);
     } else if (node instanceof BodoPhysicalIntersect) {
@@ -1241,295 +1203,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for Bodo Aggregate, support for Aggregations in SQL such as SUM, COUNT, MIN, MAX.
-   *
-   * @param node BatchingProperty node to be visited
-   */
-  public void visitBodoAggregate(BodoPhysicalAggregate node) {
-    if (node.getTraitSet().contains(BatchingProperty.STREAMING)) {
-      visitStreamingBodoAggregate(node);
-    } else {
-      visitSingleBatchedBodoAggregate(node);
-    }
-  }
-
-  /**
-   * Visitor for Aggregate without streaming.
-   *
-   * @param node aggregate node being visited
-   */
-  private void visitSingleBatchedBodoAggregate(BodoPhysicalAggregate node) {
-    BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
-    final List<Integer> groupingVariables = node.getGroupSet().asList();
-    final List<ImmutableBitSet> groups = node.getGroupSets();
-
-    // Based on the calcite code that we've seen generated, we assume that every
-    // Logical Aggregation
-    // node has
-    // at least one grouping set.
-    assert groups.size() > 0;
-
-    List<String> expectedOutputCols = node.getRowType().getFieldNames();
-    Variable outVar = this.genDfVar();
-    final List<AggregateCall> aggCallList = node.getAggCallList();
-    // Remove any LITERAL_AGG nodes.
-    final List<AggregateCall> filteredAggregateCallList = literalAggPrunedAggList(aggCallList);
-
-    // Expected output column names according to the calcite plan, contains any/all
-    // of the
-    // expected aliases
-
-    List<String> aggCallNames = new ArrayList<>();
-    for (int i = 0; i < filteredAggregateCallList.size(); i++) {
-      AggregateCall aggregateCall = filteredAggregateCallList.get(i);
-
-      if (aggregateCall.getName() == null) {
-        aggCallNames.add(expectedOutputCols.get(groupingVariables.size() + i));
-      } else {
-        aggCallNames.add(aggregateCall.getName());
-      }
-    }
-
-    RelNode inputNode = node.getInput();
-    this.visit(inputNode, 0, node);
-
-    singleBatchTimer(
-        node,
-        () -> {
-          Variable finalOutVar = outVar;
-          List<String> inputColumnNames = inputNode.getRowType().getFieldNames();
-          BodoEngineTable inTable = tableGenStack.pop();
-          Variable inVar = ctx.convertTableToDf(inTable);
-          List<String> outputDfNames = new ArrayList<>();
-
-          // If any group is missing a column we may need to do a concat.
-          boolean hasMissingColsGroup = false;
-
-          boolean distIfNoGroup = groups.size() > 1;
-
-          // Naive implementation for handling multiple aggregation groups, where we
-          // repeatedly
-          // call group by, and append the dataframes together
-          for (int i = 0; i < groups.size(); i++) {
-            List<Integer> curGroup = groups.get(i).toList();
-
-            hasMissingColsGroup = hasMissingColsGroup || curGroup.size() < groupingVariables.size();
-            Expr curGroupAggExpr;
-            /* First rename any input keys to the output. */
-
-            /* group without aggregation : e.g. select B from table1 groupby A */
-            if (filteredAggregateCallList.isEmpty()) {
-              curGroupAggExpr = generateAggCodeNoAgg(inVar, inputColumnNames, curGroup);
-            }
-            /* aggregate without group : e.g. select sum(A) from table1 */
-            else if (curGroup.isEmpty()) {
-              curGroupAggExpr =
-                  generateAggCodeNoGroupBy(
-                      inVar,
-                      inputColumnNames,
-                      filteredAggregateCallList,
-                      aggCallNames,
-                      distIfNoGroup,
-                      this);
-            }
-            /* group with aggregation : e.g. select sum(B) from table1 groupby A */
-            else {
-              Pair<Expr, @Nullable Op> curGroupAggExprAndAdditionalGeneratedCode =
-                  handleLogicalAggregateWithGroups(
-                      inVar, inputColumnNames, filteredAggregateCallList, aggCallNames, curGroup);
-
-              curGroupAggExpr = curGroupAggExprAndAdditionalGeneratedCode.getKey();
-              @Nullable Op prependOp = curGroupAggExprAndAdditionalGeneratedCode.getValue();
-              if (prependOp != null) {
-                this.generatedCode.add(prependOp);
-              }
-            }
-            // assign each of the generated dataframes their own variable, for greater
-            // clarity in
-            // the
-            // generated code
-            Variable outDf = this.genDfVar();
-            outputDfNames.add(outDf.getName());
-            this.generatedCode.add(new Op.Assign(outDf, curGroupAggExpr));
-          }
-          // If we have multiple groups, append the dataframes together
-          if (groups.size() > 1 || hasMissingColsGroup) {
-            // It is not guaranteed that a particular input column exists in any of the
-            // output
-            // dataframes,
-            // but Calcite expects
-            // All input dataframes to be carried into the output. It is also not
-            // guaranteed that the output dataframes contain the columns in the order
-            // expected by
-            // calcite.
-            // In order to ensure that we have all the input columns in the output,
-            // we create a dummy dataframe that has all the columns with
-            // a length of 0. The ordering is handled by a loc after the concat
-
-            // We initialize the dummy column like this, as Bodo will default these columns
-            // to
-            // string type if we initialize empty columns.
-            List<String> concatDfs = new ArrayList<>();
-            if (hasMissingColsGroup) {
-              Variable dummyDfVar = genDfVar();
-              // TODO: Switch to proper IR
-              Expr dummyDfExpr = new Expr.Raw(inVar.getName() + ".iloc[:0, :]");
-              // Assign the dummy df to a variable name,
-              this.generatedCode.add(new Op.Assign(dummyDfVar, dummyDfExpr));
-              concatDfs.add(dummyDfVar.emit());
-            }
-            concatDfs.addAll(outputDfNames);
-
-            // Generate the concatenation expression
-            StringBuilder concatExprRaw = new StringBuilder(concatDataFrames(concatDfs).emit());
-
-            // Sort the output dataframe, so that they are in the ordering expected by
-            // Calcite
-            // Needed in the case that the topmost dataframe in the concat does not contain
-            // all
-            // the
-            // columns in the correct ordering
-            concatExprRaw.append(".loc[:, [");
-
-            for (int i = 0; i < expectedOutputCols.size(); i++) {
-              concatExprRaw.append(makeQuoted(expectedOutputCols.get(i))).append(", ");
-            }
-            concatExprRaw.append("]]");
-
-            // Generate the concatenation
-            this.generatedCode.add(
-                new Op.Assign(finalOutVar, new Expr.Raw(concatExprRaw.toString())));
-
-          } else {
-            finalOutVar = new Variable(outputDfNames.get(0));
-          }
-          // Generate a table using just the node members that aren't LITERAL_AGG
-          final int numCols =
-              node.getRowType().getFieldCount()
-                  - (aggCallList.size() - filteredAggregateCallList.size());
-          BodoEngineTable intermediateTable = ctx.convertDfToTable(finalOutVar, numCols);
-          final BodoEngineTable outTable;
-          if (node.getRowType().getFieldCount() != numCols) {
-            // Insert the LITERAL_AGG results
-            outTable = concatenateLiteralAggValue(this.generatedCode, ctx, intermediateTable, node);
-          } else {
-            outTable = intermediateTable;
-          }
-          tableGenStack.push(outTable);
-        });
-  }
-
-  /**
-   * Visitor for Aggregate with streaming.
-   *
-   * @param node aggregate node being visited
-   */
-  private void visitStreamingBodoAggregate(BodoPhysicalAggregate node) {
-
-    // Visit the input node
-    this.visit(node.getInput(), 0, node);
-    Variable buildTable = tableGenStack.pop();
-
-    // Create the state var.
-    OperatorID operatorID = generatedCode.newOperatorID(node);
-    StreamingRelNodeTimer timerInfo =
-        StreamingRelNodeTimer.createStreamingTimer(
-            operatorID,
-            this.generatedCode,
-            this.verboseLevel,
-            this.tracingLevel,
-            node.operationDescriptor(),
-            node.loggingTitle(),
-            node.nodeDetails(),
-            node.getTimerType());
-
-    StateVariable groupbyStateVar = genStateVar();
-    List<Expr.IntegerLiteral> keyIndiciesList = getStreamingGroupByKeyIndices(node.getGroupSet());
-    Variable keyIndices = this.lowerAsMetaType(new Expr.Tuple(keyIndiciesList));
-    List<AggregateCall> filteredAggCallList = literalAggPrunedAggList(node.getAggCallList());
-    Pair<Variable, Variable> offsetAndCols =
-        getStreamingGroupByOffsetAndCols(filteredAggCallList, this, keyIndiciesList.get(0));
-    Variable offset = offsetAndCols.left;
-    Variable cols = offsetAndCols.right;
-    Variable fnames = getStreamingGroupbyFnames(filteredAggCallList, this);
-    Expr.Call stateCall =
-        new Expr.Call(
-            "bodo.libs.stream_groupby.init_groupby_state",
-            operatorID.toExpr(),
-            keyIndices,
-            fnames,
-            offset,
-            cols);
-    Op.Assign groupbyInit = new Op.Assign(groupbyStateVar, stateCall);
-    // Fetch the streaming pipeline
-    StreamingPipelineFrame inputPipeline = generatedCode.getCurrentStreamingPipeline();
-    timerInfo.insertStateStartTimer(0);
-    RelMetadataQuery mq = node.getCluster().getMetadataQuery();
-    inputPipeline.initializeStreamingState(
-        operatorID, groupbyInit, OperatorType.GROUPBY, node.estimateBuildMemory(mq));
-    timerInfo.insertStateEndTimer(0);
-    Variable batchExitCond = inputPipeline.getExitCond();
-    Variable newExitCond = genGenericTempVar();
-    inputPipeline.endSection(newExitCond);
-    Variable inputRequest = genInputRequestVar();
-    // is_final_pipeline is always True in the regular Groupby case.
-    Expr.Call batchCall =
-        new Expr.Call(
-            "bodo.libs.stream_groupby.groupby_build_consume_batch",
-            List.of(
-                groupbyStateVar,
-                buildTable,
-                batchExitCond,
-                /*is_final_pipeline*/
-                new Expr.BooleanLiteral(true)));
-    timerInfo.insertLoopOperationStartTimer(1);
-    generatedCode.add(new Op.TupleAssign(List.of(newExitCond, inputRequest), batchCall));
-    inputPipeline.addInputRequest(inputRequest);
-    timerInfo.insertLoopOperationEndTimer(1);
-    // Finalize and add the batch pipeline.
-    StreamingPipelineFrame finishedPipeline = generatedCode.endCurrentStreamingPipeline();
-    generatedCode.add(new Op.StreamingPipeline(finishedPipeline));
-    // Only Groupby build needs a memory budget since output only has a ChunkedTableBuilder
-    generatedCode.forceEndOperatorAtCurPipeline(operatorID, finishedPipeline);
-
-    // Create a new pipeline
-    Variable newFlag = genGenericTempVar();
-    Variable iterVar = genIterVar();
-    generatedCode.startStreamingPipelineFrame(newFlag, iterVar);
-    StreamingPipelineFrame outputPipeline = generatedCode.getCurrentStreamingPipeline();
-    // Add the output side
-    Variable outTable = genTableVar();
-    Variable outputControl = genOutputControlVar();
-    outputPipeline.addOutputControl(outputControl);
-    Expr.Call outputCall =
-        new Expr.Call(
-            "bodo.libs.stream_groupby.groupby_produce_output_batch",
-            List.of(groupbyStateVar, outputControl));
-    timerInfo.insertLoopOperationStartTimer(2);
-    generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
-    BodoEngineTable intermediateTable = new BodoEngineTable(outTable.emit(), node);
-    final BodoEngineTable table;
-    if (filteredAggCallList.size() != node.getAggCallList().size()) {
-      // Append any Literal data if it exists.
-      final BuildContext ctx = new BuildContext(node, genDefaultTZ(), this.getParentMappings());
-      table = concatenateLiteralAggValue(this.generatedCode, ctx, intermediateTable, node);
-    } else {
-      table = intermediateTable;
-    }
-    timerInfo.insertLoopOperationEndTimer(2);
-
-    // Append the code to delete the state
-    Op.Stmt deleteState =
-        new Op.Stmt(
-            new Expr.Call(
-                "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
-    outputPipeline.addTermination(deleteState);
-    // Add the table to the stack
-    tableGenStack.push(table);
-    timerInfo.terminateTimer();
-  }
-
-  /**
    * Generates an expression for a Logical Aggregation with grouped variables. May return code to be
    * appended to the generated code (this is needed if the aggregation list contains a filter).
    *
@@ -1541,39 +1214,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
    * @return A pair of strings, the key is the expression that evaluates to the output of the
    *     aggregation, and the value is the code that needs to be appended to the generated code.
    */
-  public Pair<Expr, @Nullable Op> handleLogicalAggregateWithGroups(
-      Variable inVar,
-      List<String> inputColumnNames,
-      List<AggregateCall> aggCallList,
-      List<String> aggCallNames,
-      List<Integer> group) {
-
-    Pair<Expr, Op> exprAndAdditionalGeneratedCode;
-
-    if (aggContainsFilter(aggCallList)) {
-      // If we have a Filter we need to generate a groupby apply
-
-      exprAndAdditionalGeneratedCode =
-          generateApplyCodeWithGroupBy(
-              inVar,
-              inputColumnNames,
-              group,
-              aggCallList,
-              aggCallNames,
-              this.genGroupbyApplyAggFnVar(),
-              this);
-
-    } else {
-
-      // Otherwise generate groupby.agg
-      Expr output =
-          generateAggCodeWithGroupBy(inVar, inputColumnNames, group, aggCallList, aggCallNames);
-
-      exprAndAdditionalGeneratedCode = new Pair<>(output, null);
-    }
-
-    return exprAndAdditionalGeneratedCode;
-  }
 
   /** Visitor for MinRowNumberFilter. */
   public void visitBodoMinRowNumberFilter(BodoPhysicalMinRowNumberFilter node) {

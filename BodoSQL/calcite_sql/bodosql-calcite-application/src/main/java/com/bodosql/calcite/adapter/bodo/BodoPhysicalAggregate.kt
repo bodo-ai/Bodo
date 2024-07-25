@@ -1,7 +1,23 @@
 package com.bodosql.calcite.adapter.bodo
 
+import com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen
+import com.bodosql.calcite.application.utils.AggHelpers
+import com.bodosql.calcite.application.utils.Utils
+import com.bodosql.calcite.codeGeneration.OperatorEmission
+import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
+import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
+import com.bodosql.calcite.codeGeneration.TerminatingPipelineEmission
+import com.bodosql.calcite.codeGeneration.TerminatingStageEmission
 import com.bodosql.calcite.ir.BodoEngineTable
+import com.bodosql.calcite.ir.Expr
+import com.bodosql.calcite.ir.Op
+import com.bodosql.calcite.ir.Op.Assign
+import com.bodosql.calcite.ir.Op.Stmt
+import com.bodosql.calcite.ir.Op.TupleAssign
+import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
+import com.bodosql.calcite.ir.StreamingPipelineFrame
+import com.bodosql.calcite.ir.Variable
 import com.bodosql.calcite.rel.core.AggregateBase
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
@@ -14,6 +30,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
 import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
+import org.apache.calcite.util.Pair
 import kotlin.math.ceil
 
 class BodoPhysicalAggregate(
@@ -44,18 +61,318 @@ class BodoPhysicalAggregate(
     }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        TODO("Not yet implemented")
+        return if (isStreaming()) {
+            emitStreaming(implementor)
+        } else {
+            emitSingleBatch(implementor)
+        }
+    }
+
+    private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
+        val stage =
+            TerminatingStageEmission { ctx, stateVar, table ->
+                emitStreamingBuild(ctx, stateVar, table!!)
+                null
+            }
+        val terminatingPipeline = TerminatingPipelineEmission(listOf(), stage, false, input)
+        // The final pipeline generates the output from the state.
+        val outputStage =
+            OutputtingStageEmission(
+                {
+                        ctx, stateVar, _ ->
+                    emitStreamingProduceOutput(ctx, stateVar)
+                },
+                // Out table sizes are handled directly in C++.
+                reportOutTableSize = false,
+            )
+        val outputPipeline = OutputtingPipelineEmission(listOf(outputStage), true, null)
+        val operatorEmission =
+            OperatorEmission(
+                { ctx -> initStateVariable(ctx) },
+                { ctx, stateVar -> deleteStateVariable(ctx, stateVar) },
+                listOf(terminatingPipeline),
+                outputPipeline,
+                timeStateInitialization = true,
+            )
+
+        return implementor.buildStreaming(operatorEmission)!!
+    }
+
+    private fun emitStreamingBuild(
+        ctx: BodoPhysicalRel.BuildContext,
+        stateVar: StateVariable,
+        input: BodoEngineTable,
+    ) {
+        val builder = ctx.builder()
+        val pipeline: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
+        val batchExitCond: Variable = pipeline.getExitCond()
+        val newExitCond: Variable = builder.symbolTable.genFinishedStreamingFlag()
+        val inputRequest: Variable = builder.symbolTable.genInputRequestVar()
+        // is_final_pipeline is always True in the regular GroupBy case.
+        val batchCall =
+            Expr.Call(
+                "bodo.libs.stream_groupby.groupby_build_consume_batch",
+                listOf(
+                    stateVar,
+                    input,
+                    batchExitCond,
+                    // is_final_pipeline
+                    Expr.BooleanLiteral(true),
+                ),
+            )
+        builder.add(TupleAssign(listOf(newExitCond, inputRequest), batchCall))
+        pipeline.addInputRequest(inputRequest)
+        pipeline.endSection(newExitCond)
+        // Only GroupBy build needs a memory budget since output only has a ChunkedTableBuilder
+        builder.forceEndOperatorAtCurPipeline(ctx.operatorID(), pipeline)
+    }
+
+    private fun emitStreamingProduceOutput(
+        ctx: BodoPhysicalRel.BuildContext,
+        stateVar: StateVariable,
+    ): BodoEngineTable {
+        val builder = ctx.builder()
+        val pipeline: StreamingPipelineFrame = builder.getCurrentStreamingPipeline()
+        // Add the output side
+        val outTable: Variable = builder.symbolTable.genTableVar()
+        val outputControl: Variable = builder.symbolTable.genOutputControlVar()
+        pipeline.addOutputControl(outputControl)
+        val outputCall =
+            Expr.Call(
+                "bodo.libs.stream_groupby.groupby_produce_output_batch",
+                listOf(stateVar, outputControl),
+            )
+        builder.add(TupleAssign(listOf(outTable, pipeline.getExitCond()), outputCall))
+        val intermediateTable = BodoEngineTable(outTable.emit(), this)
+        val filteredAggCallList = Utils.literalAggPrunedAggList(this.aggCallList)
+        return if (filteredAggCallList.size !== this.aggCallList.size) {
+            // Append any Literal data if it exists.
+            Utils.concatenateLiteralAggValue(builder, ctx, intermediateTable, this)
+        } else {
+            intermediateTable
+        }
+    }
+
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
+        return (implementor::build)(this.inputs) {
+                ctx, inputs ->
+            val groupingVariables = this.getGroupSet().asList()
+            val groups = this.getGroupSets()
+            val expectedOutputCols: List<String> = this.getRowType().fieldNames
+            val outVar: Variable = ctx.builder().symbolTable.genDfVar()
+            val aggCallList: List<AggregateCall> = this.aggCallList
+            // Remove any LITERAL_AGG nodes.
+            val filteredAggregateCallList = Utils.literalAggPrunedAggList(aggCallList)
+
+            // Expected output column names according to the calcite plan, contains any/all
+            // of the expected aliases
+            val aggCallNames: MutableList<String> = ArrayList()
+            for (i in filteredAggregateCallList.indices) {
+                val aggregateCall = filteredAggregateCallList[i]
+                if (aggregateCall.getName() == null) {
+                    aggCallNames.add(expectedOutputCols[groupingVariables.size + i])
+                } else {
+                    aggCallNames.add(aggregateCall.getName()!!)
+                }
+            }
+            var finalOutVar = outVar
+            val inputColumnNames: List<String> = input.rowType.fieldNames
+            val inTable: BodoEngineTable = inputs[0]
+            val inVar: Variable = ctx.convertTableToDf(inTable)
+            val outputDfNames: MutableList<String> = java.util.ArrayList()
+            // If any group is missing a column we may need to do a concat.
+            var hasMissingColsGroup = false
+
+            val distIfNoGroup = groups.size > 1
+
+            // Naive implementation for handling multiple aggregation groups, where we
+            // repeatedly
+            // call group by, and append the dataframes together
+            for (i in groups.indices) {
+                val curGroup = groups[i].toList()
+                hasMissingColsGroup = hasMissingColsGroup || curGroup.size < groupingVariables.size
+                var curGroupAggExpr: Expr?
+                // First rename any input keys to the output
+                // group without aggregation : e.g. select B from table1 groupby A
+                if (filteredAggregateCallList.isEmpty()) {
+                    curGroupAggExpr = AggCodeGen.generateAggCodeNoAgg(inVar, inputColumnNames, curGroup)
+                } else if (curGroup.isEmpty()) {
+                    curGroupAggExpr =
+                        AggCodeGen.generateAggCodeNoGroupBy(
+                            inVar,
+                            inputColumnNames,
+                            filteredAggregateCallList,
+                            aggCallNames,
+                            distIfNoGroup,
+                            ctx,
+                        )
+                } else {
+                    val (key, prependOp) =
+                        handleLogicalAggregateWithGroups(
+                            inVar,
+                            inputColumnNames,
+                            filteredAggregateCallList,
+                            aggCallNames,
+                            curGroup,
+                            ctx,
+                        )
+                    curGroupAggExpr = key
+                    if (prependOp != null) {
+                        ctx.builder().add(prependOp)
+                    }
+                }
+                // assign each of the generated dataframes their own variable, for greater
+                // clarity in
+                // the
+                // generated code
+                val outDf: Variable = ctx.builder().symbolTable.genDfVar()
+                outputDfNames.add(outDf.name)
+                ctx.builder().add(Assign(outDf, curGroupAggExpr!!))
+            }
+            // If we have multiple groups, append the dataframes together
+            if (groups.size > 1 || hasMissingColsGroup) {
+                // It is not guaranteed that a particular input column exists in any of the
+                // output
+                // dataframes,
+                // but Calcite expects
+                // All input dataframes to be carried into the output. It is also not
+                // guaranteed that the output dataframes contain the columns in the order
+                // expected by
+                // calcite.
+                // In order to ensure that we have all the input columns in the output,
+                // we create a dummy dataframe that has all the columns with
+                // a length of 0. The ordering is handled by a loc after the concat
+
+                // We initialize the dummy column like this, as Bodo will default these columns
+                // to
+                // string type if we initialize empty columns.
+                val concatDfs: MutableList<String> = java.util.ArrayList()
+                if (hasMissingColsGroup) {
+                    val dummyDfVar: Variable = ctx.builder().symbolTable.genDfVar()
+                    // TODO: Switch to proper IR
+                    val dummyDfExpr: Expr = Expr.Raw(inVar.name + ".iloc[:0, :]")
+                    // Assign the dummy df to a variable name,
+                    ctx.builder().add(Assign(dummyDfVar, dummyDfExpr))
+                    concatDfs.add(dummyDfVar.emit())
+                }
+                concatDfs.addAll(outputDfNames)
+
+                // Generate the concatenation expression
+                val concatExprRaw = StringBuilder(AggCodeGen.concatDataFrames(concatDfs).emit())
+
+                // Sort the output dataframe, so that they are in the ordering expected by
+                // Calcite
+                // Needed in the case that the topmost dataframe in the concat does not contain
+                // all
+                // the
+                // columns in the correct ordering
+                concatExprRaw.append(".loc[:, [")
+                for (i in expectedOutputCols.indices) {
+                    concatExprRaw.append(Utils.makeQuoted(expectedOutputCols[i])).append(", ")
+                }
+                concatExprRaw.append("]]")
+
+                // Generate the concatenation
+                ctx.builder().add(
+                    Assign(finalOutVar, Expr.Raw(concatExprRaw.toString())),
+                )
+            } else {
+                finalOutVar = Variable(outputDfNames[0])
+            }
+            // Generate a table using just the node members that aren't LITERAL_AGG
+            val numCols: Int = (
+                this.getRowType().fieldCount -
+                    (aggCallList.size - filteredAggregateCallList.size)
+            )
+            val intermediateTable: BodoEngineTable = ctx.convertDfToTable(finalOutVar, numCols)
+            if (this.getRowType().fieldCount != numCols) {
+                // Insert the LITERAL_AGG results
+                Utils.concatenateLiteralAggValue(ctx.builder(), ctx, intermediateTable, this)
+            } else {
+                intermediateTable
+            }
+        }
+    }
+
+    /**
+     * Generates an expression for a Logical Aggregation with grouped variables. May return code to be
+     * appended to the generated code (this is needed if the aggregation list contains a filter).
+     *
+     * @param inVar The input variable.
+     * @param inputColumnNames The names of the columns of the input var.
+     * @param aggCallList The list of aggregations to be performed.
+     * @param aggCallNames The list of column names to be used for the output of the aggregations
+     * @param group List of integer column indices by which to group
+     * @param ctx The build context for lowering globals.
+     * @return A pair of strings, the key is the expression that evaluates to the output of the
+     *     aggregation, and the value is the code that needs to be appended to the generated code.
+     */
+    private fun handleLogicalAggregateWithGroups(
+        inVar: Variable,
+        inputColumnNames: List<String>,
+        aggCallList: List<AggregateCall>,
+        aggCallNames: List<String>,
+        group: List<Int>,
+        ctx: BodoPhysicalRel.BuildContext,
+    ): Pair<Expr, Op?> {
+        return if (AggHelpers.aggContainsFilter(aggCallList)) {
+            // If we have a Filter we need to generate a groupby apply
+            AggCodeGen.generateApplyCodeWithGroupBy(
+                inVar,
+                inputColumnNames,
+                group,
+                aggCallList,
+                aggCallNames,
+                ctx.builder().symbolTable.genGroupbyApplyAggFnName(),
+                ctx,
+            )
+        } else {
+            // Otherwise generate groupby.agg
+            val output =
+                AggCodeGen.generateAggCodeWithGroupBy(inVar, inputColumnNames, group, aggCallList, aggCallNames)
+            Pair(output, null)
+        }
     }
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
-        TODO("Not yet implemented")
+        val builder = ctx.builder()
+        val stateVar = builder.symbolTable.genStateVar()
+        val keyIndicesList = AggCodeGen.getStreamingGroupByKeyIndices(this.getGroupSet())
+        val keyIndices: Variable = ctx.lowerAsMetaType(Expr.Tuple(keyIndicesList))
+        val filteredAggCallList = Utils.literalAggPrunedAggList(this.aggCallList)
+        val offsetAndCols = AggCodeGen.getStreamingGroupByOffsetAndCols(filteredAggCallList, ctx, keyIndicesList[0])
+        val offset = offsetAndCols.left
+        val cols = offsetAndCols.right
+        val fnames = AggCodeGen.getStreamingGroupbyFnames(filteredAggCallList, ctx)
+        val stateCall =
+            Expr.Call(
+                "bodo.libs.stream_groupby.init_groupby_state",
+                ctx.operatorID().toExpr(),
+                keyIndices,
+                fnames,
+                offset,
+                cols,
+            )
+        val groupbyInit = Assign(stateVar, stateCall)
+        // Fetch the streaming pipeline
+        val inputPipeline: StreamingPipelineFrame = ctx.builder().getCurrentStreamingPipeline()
+        val mq: RelMetadataQuery = this.cluster.metadataQuery
+        inputPipeline.initializeStreamingState(
+            ctx.operatorID(),
+            groupbyInit,
+            OperatorType.GROUPBY,
+            this.estimateBuildMemory(mq),
+        )
+        return stateVar
     }
 
     override fun deleteStateVariable(
         ctx: BodoPhysicalRel.BuildContext,
         stateVar: StateVariable,
     ) {
-        TODO("Not yet implemented")
+        val finalizePipeline = ctx.builder().getCurrentStreamingPipeline()
+        val deleteState = Stmt(Expr.Call("bodo.libs.stream_groupby.delete_groupby_state", listOf(stateVar)))
+        finalizePipeline.addTermination(deleteState)
     }
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
@@ -65,7 +382,7 @@ class BodoPhysicalAggregate(
     /**
      * Get group by build memory estimate for memory budget comptroller
      */
-    fun estimateBuildMemory(mq: RelMetadataQuery): Int {
+    private fun estimateBuildMemory(mq: RelMetadataQuery): Int {
         // See if streaming group by will use accumulate or aggregate code path
         var isStreamAccumulate = false
         for (aggCall in aggCalls) {

@@ -72,7 +72,7 @@ class BodoPhysicalFilter(
     }
 
     private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return (implementor::build)(listOf(this.input)) {
+        return (implementor::build)(this.inputs) {
                 ctx, inputs ->
             val inputVar = inputs[0]
             // Extract window aggregates and update the nodes.

@@ -6,7 +6,7 @@ import static com.bodosql.calcite.application.utils.AggHelpers.generateGroupByCa
 import static com.bodosql.calcite.application.utils.AggHelpers.getCountCall;
 import static com.bodosql.calcite.application.utils.AggHelpers.getDummyColName;
 
-import com.bodosql.calcite.application.BodoCodeGenVisitor;
+import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.utils.Utils;
 import com.bodosql.calcite.ir.Expr;
@@ -184,7 +184,7 @@ public class AggCodeGen {
    *     is used as 1 step in an aggregation (e.g. group by cube), then the output is distributed.
    *     When it is the only aggregation group across the entire output (e.g. select SUM(A) from
    *     table1), then it is replicated.
-   * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
+   * @param buildCtx The build context used to lower globals.
    * @return The code generated for the aggregation.
    */
   public static Expr generateAggCodeNoGroupBy(
@@ -193,7 +193,7 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       boolean distOutput,
-      BodoCodeGenVisitor pdVisitorClass) {
+      BodoPhysicalRel.BuildContext buildCtx) {
     // Generates code like: pd.DataFrame({"sum(A)": [test_df1["A"].sum()], "mean(B)":
     // [test_df1["A"].mean()]})
     // Generate any filters. This is done on a separate line for simpler
@@ -331,7 +331,8 @@ public class AggCodeGen {
       }
 
       // Store the result in a variable
-      Variable arrayVar = pdVisitorClass.storeAsArrayVariable(aggExpr);
+      Variable arrayVar = buildCtx.builder().getSymbolTable().genArrayVar();
+      buildCtx.builder().add(new Op.Assign(arrayVar, aggExpr));
       aggVars.add(arrayVar);
     }
 
@@ -362,7 +363,7 @@ public class AggCodeGen {
     // Generate the column names global
     List<Expr.StringLiteral> colNamesLiteral = Utils.stringsToStringLiterals(aggCallNames);
     Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-    Variable colNamesMeta = pdVisitorClass.lowerAsColNamesMetaType(colNamesTuple);
+    Variable colNamesMeta = buildCtx.lowerAsColNamesMetaType(colNamesTuple);
     Expr dfExpr =
         new Expr.Call(
             "bodo.hiframes.pd_dataframe_ext.init_dataframe",
@@ -686,7 +687,7 @@ public class AggCodeGen {
    * @param aggCallList The list of aggregations to be performed.
    * @param aggCallNames The column names into which to store the outputs of the aggregation
    * @param funcVar Variable for the function generated for df.apply.
-   * @param pdVisitorClass The PandasCodeGenVisitor used to lower globals.
+   * @param buildCtx The build context used to lower globals.
    * @return A pair of the code expression generated for the aggregation, and the function
    *     definition that is used in the groupby apply.
    */
@@ -697,7 +698,7 @@ public class AggCodeGen {
       List<AggregateCall> aggCallList,
       List<String> aggCallNames,
       Variable funcVar,
-      BodoCodeGenVisitor pdVisitorClass) {
+      BodoPhysicalRel.BuildContext buildCtx) {
     StringBuilder fnString = new StringBuilder();
 
     final String indent = Utils.getBodoIndent();
@@ -837,7 +838,7 @@ public class AggCodeGen {
       colNamesLiteral.add(new Expr.StringLiteral(aggCallName));
     }
     Expr.Tuple colNamesTuple = new Expr.Tuple(colNamesLiteral);
-    Variable colNamesMeta = pdVisitorClass.lowerAsColNamesMetaType(colNamesTuple);
+    Variable colNamesMeta = buildCtx.lowerAsColNamesMetaType(colNamesTuple);
     Expr dfExpr =
         new Expr.Call(
             "bodo.hiframes.pd_dataframe_ext.init_dataframe",
@@ -917,14 +918,14 @@ public class AggCodeGen {
    * second one is the list of indices of all aggregate calls.
    *
    * @param aggCalls The list of aggregate calls.
-   * @param visitor The visitor used for lowering global variables.
+   * @param buildCtx The build Context used for lowering global variables.
    * @param firstKeyColumnIndex An expr that evaluates to the index of the first key column (Used
    *     for COUNT(*))
    * @return A pair of variables the contains these two lists.
    */
   public static Pair<Variable, Variable> getStreamingGroupByOffsetAndCols(
       List<AggregateCall> aggCalls,
-      BodoCodeGenVisitor visitor,
+      BodoPhysicalRel.BuildContext buildCtx,
       Expr.IntegerLiteral firstKeyColumnIndex) {
     List<Expr.IntegerLiteral> offsets = new ArrayList<>();
     offsets.add(new Expr.IntegerLiteral(0));
@@ -952,8 +953,8 @@ public class AggCodeGen {
       }
       offsets.add(new Expr.IntegerLiteral(length));
     }
-    Variable offsetVar = visitor.lowerAsMetaType(new Expr.Tuple(offsets));
-    Variable colsVar = visitor.lowerAsMetaType(new Expr.Tuple(cols));
+    Variable offsetVar = buildCtx.lowerAsMetaType(new Expr.Tuple(offsets));
+    Variable colsVar = buildCtx.lowerAsMetaType(new Expr.Tuple(cols));
     return new Pair<>(offsetVar, colsVar);
   }
 
@@ -962,11 +963,11 @@ public class AggCodeGen {
    * Bodo_FTypes::FTypeEnum in _groupby_ftypes.h
    *
    * @param aggCalls The list of aggregate calls.
-   * @param visitor The visitor used for lowering global variables.
+   * @param buildCtx The build Context used for lowering global variables.
    * @return A variable that contains this integer list
    */
   public static Variable getStreamingGroupbyFnames(
-      List<AggregateCall> aggCalls, BodoCodeGenVisitor visitor) {
+      List<AggregateCall> aggCalls, BodoPhysicalRel.BuildContext buildCtx) {
     List<Expr.StringLiteral> fnames = new ArrayList<>();
     for (int i = 0; i < aggCalls.size(); i++) {
       AggregateCall curAggCall = aggCalls.get(i);
@@ -997,6 +998,6 @@ public class AggCodeGen {
       // TODO: [BSE-714] Support ANY_VALUE and SINGLE_VALUE in streaming
       fnames.add(new Expr.StringLiteral(name));
     }
-    return visitor.lowerAsMetaType(new Expr.Tuple(fnames));
+    return buildCtx.lowerAsMetaType(new Expr.Tuple(fnames));
   }
 }
