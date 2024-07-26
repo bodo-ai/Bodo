@@ -1,9 +1,11 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_update.h"
+#include <arrow/util/decimal.h>
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
+#include "_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_hashing.h"
@@ -734,7 +736,11 @@ void median_computation(std::shared_ptr<array_info> arr,
         return;
     }
     assert(out_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
-    assert(out_arr->dtype == Bodo_CTypes::FLOAT64);
+    assert(out_arr->dtype == Bodo_CTypes::FLOAT64 ||
+           (arr->dtype == Bodo_CTypes::DECIMAL &&
+            out_arr->dtype == Bodo_CTypes::DECIMAL));
+
+    // Median operation lambda for float columns
     auto median_operation = [&](auto const& isnan_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
@@ -788,6 +794,80 @@ void median_computation(std::shared_ptr<array_info> arr,
                 valReturn;
         }
     };
+
+    // Median operation lambda for decimal columns
+    auto median_operation_decimal = [&](auto const& isnan_entry) -> void {
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            int64_t i = grp_info.group_to_first_row[igrp];
+            bodo::vector<arrow::Decimal128> ListValue(pool);
+            bool HasNaN = false;
+            while (true) {
+                if (i == -1) {
+                    break;
+                }
+                if (!isnan_entry(i)) {
+                    char* ptr = arr->data1() + i * siztype;
+                    arrow::Decimal128 eVal = GetTentry<arrow::Decimal128>(ptr);
+                    ListValue.emplace_back(eVal);
+                } else {
+                    if (!skipna) {
+                        HasNaN = true;
+                        break;
+                    }
+                }
+                i = grp_info.next_row_in_group[i];
+            }
+            auto GetKthValue = [&](size_t const& pos) -> arrow::Decimal128 {
+                std::nth_element(ListValue.begin(), ListValue.begin() + pos,
+                                 ListValue.end());
+                return ListValue[pos];
+            };
+            arrow::Decimal128 decimal_val = 0;
+            // a group can be empty if it has all NaNs so output will be NaN
+            // even if skipna=True
+            if (HasNaN || ListValue.size() == 0) {
+                // We always set the output to NA.
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    igrp, false);
+                continue;
+            } else {
+                size_t len = ListValue.size();
+                size_t res = len % 2;
+                if (res == 0) {
+                    size_t kMid1 = len / 2;
+                    size_t kMid2 = kMid1 - 1;
+                    decimal_val = (GetKthValue(kMid1) + GetKthValue(kMid2)) / 2;
+                } else {
+                    size_t kMid = len / 2;
+                    decimal_val = GetKthValue(kMid);
+                }
+            }
+            // Rescale the decimal appropriately
+            bool overflow = false;
+            boost::multiprecision::int256_t decimal_val_int256 =
+                decimalops::ConvertToInt256(decimal_val);
+            int scale_delta = out_arr->scale - arr->scale;
+            decimal_val_int256 =
+                decimalops::IncreaseScaleBy(decimal_val_int256, scale_delta);
+            decimal_val =
+                decimalops::ConvertToDecimal128(decimal_val_int256, &overflow);
+            if (overflow) {
+                std::string err_msg =
+                    "Intermediate values for MEDIAN do not fit within "
+                    "Decimal(" +
+                    std::to_string(out_arr->precision) + ", " +
+                    std::to_string(out_arr->scale) + ")";
+                Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
+                return;
+            }
+            // The output array is always a nullable decimal array
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(igrp,
+                                                                      true);
+            out_arr->at<arrow::Decimal128, bodo_array_type::NULLABLE_INT_BOOL>(
+                igrp) = decimal_val;
+        }
+    };
+
     if (arr->arr_type == bodo_array_type::NUMPY) {
         median_operation([=](size_t pos) -> bool {
             if (arr->dtype == Bodo_CTypes::FLOAT32) {
@@ -800,9 +880,17 @@ void median_computation(std::shared_ptr<array_info> arr,
         });
     }
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        median_operation([=](size_t pos) -> bool {
-            return !arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(pos);
-        });
+        if (arr->dtype == Bodo_CTypes::DECIMAL) {
+            median_operation_decimal([=](size_t pos) -> bool {
+                return !arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    pos);
+            });
+        } else {
+            median_operation([=](size_t pos) -> bool {
+                return !arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    pos);
+            });
+        }
     }
 }
 

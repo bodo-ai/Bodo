@@ -575,7 +575,6 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
             break;
         case Bodo_FTypes::percentile_disc:
         case Bodo_FTypes::percentile_cont:
-        case Bodo_FTypes::median:
         case Bodo_FTypes::mean:
         case Bodo_FTypes::var_pop:
         case Bodo_FTypes::std_pop:
@@ -585,6 +584,15 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum array_type,
         case Bodo_FTypes::skew:
             out_array_type = bodo_array_type::NULLABLE_INT_BOOL;
             out_dtype = Bodo_CTypes::FLOAT64;
+            break;
+        case Bodo_FTypes::median:
+            out_array_type = bodo_array_type::NULLABLE_INT_BOOL;
+            if (dtype == Bodo_CTypes::DECIMAL) {
+                // Decimal median has a dedicated version that returns decimal
+                out_dtype = Bodo_CTypes::DECIMAL;
+            } else {
+                out_dtype = Bodo_CTypes::FLOAT64;
+            }
             break;
         case Bodo_FTypes::listagg:
             out_array_type = bodo_array_type::STRING;

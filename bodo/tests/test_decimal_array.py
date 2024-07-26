@@ -4830,6 +4830,296 @@ def test_decimal_to_str_scalar(scalar, expected, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "df, expected",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            None,
+            id="basic",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 4, 5],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            None,
+            id="all-separate",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 1, 1, 1],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            None,
+            id="all-same-group",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 1, 1, 1, 1],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            None,
+            id="even",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 1, 1, 1],
+                    "B": pd.array(
+                        [
+                            "5.12309891",
+                            "6.123125236",
+                            "1.6325",
+                            "2.5123",
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            None,
+            id="decimals",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 1, 1, 1],
+                    "B": pd.array(
+                        [
+                            "0",
+                            "6.123125236",
+                            "-1.6325",
+                            "2.5123",
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            None,
+            id="negatives-and-zeroes",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 1, 1, 1],
+                    "B": pd.array(
+                        [
+                            "0",
+                            None,
+                            "-1.6325",
+                            None,
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            None,
+            id="nulls",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 2],
+                    "B": pd.array(
+                        [
+                            None,
+                            None,
+                            "-1.6325",
+                            "0.45",
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            None,
+            id="group-of-nulls",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1.1",
+                            "1.1",
+                            "1.1234567890123456789012345678901234",
+                            "1.1234567890123456789012345678901234",
+                            "1.0000000000000000000000000000000001",
+                            "1.0000000000000000000000000000000003",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(37, 34)),
+                    ),
+                }
+            ),
+            pd.Series(
+                {
+                    1: Decimal("1.1"),
+                    2: Decimal("1.1234567890123456789012345678901234"),
+                    3: Decimal("1.0000000000000000000000000000000002"),
+                },
+                name="B",
+            ).rename_axis("A"),
+            id="large_scale_precision",
+        ),
+    ],
+)
+def test_decimal_median(df, expected, memory_leak_check):
+    def impl(df):
+        A = df.groupby("A")["B"].median()
+        return A
+
+    if expected is not None:
+        check_func(impl, (df,), sort_output=True, py_output=expected, check_dtype=False)
+    else:
+        check_func(impl, (df,), sort_output=True, check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "df, error_msg",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 35)),
+                    ),
+                }
+            ),
+            "too large for MEDIAN operation",
+            id="overflow_1",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(37, 35)),
+                    ),
+                }
+            ),
+            "too large for MEDIAN operation",
+            id="overflow_2",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 36)),
+                    ),
+                }
+            ),
+            "too large for MEDIAN operation",
+            id="scale_too_large",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "12345678901234567890123456789012345.123",
+                            "12345678901234567890123456789012345.123",
+                            "12345678901234567890123456789012345.123",
+                            "12345678901234567890123456789012345.123",
+                            "12345678901234567890123456789012345.123",
+                            "12345678901234567890123456789012345.123",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 3)),
+                    ),
+                }
+            ),
+            "Intermediate values for MEDIAN do not fit within Decimal",
+            id="intermediate_overflow",
+        ),
+    ],
+)
+def test_decimal_median_overflow(df, error_msg):
+    def impl(df):
+        A = df.groupby("A")["B"].median()
+        return A
+
+    with pytest.raises(Exception, match=error_msg):
+        check_func(impl, (df,), sort_output=True, check_dtype=False)
+
+
+@pytest.mark.parametrize(
     "val, expected",
     [
         pytest.param(

@@ -1490,6 +1490,246 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "df, expected",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 3, 3, 4, 4, 4, 4, 4],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "5.12309891",
+                            "6.123125236",
+                            "1.6325",
+                            "2.5123",
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    0: [1, 2, 3, 4],
+                    1: [
+                        Decimal("1.5"),
+                        Decimal("3"),
+                        Decimal("4.5"),
+                        Decimal("4.10906127"),
+                    ],
+                }
+            ),
+            id="basic",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 4, 5],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    0: [1, 2, 3, 4, 5],
+                    1: [
+                        Decimal("1"),
+                        Decimal("2"),
+                        Decimal("3"),
+                        Decimal("4"),
+                        Decimal("5"),
+                    ],
+                }
+            ),
+            id="all-separate",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 1, 1, 1, 2, 2, 2, 2, 2],
+                    "B": pd.array(
+                        [
+                            "0",
+                            "6.123125236",
+                            "-1.6325",
+                            "2.5123",
+                            "4.10906127",
+                            "0",
+                            None,
+                            "-1.6325",
+                            None,
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            pd.DataFrame({0: [1, 2], 1: [Decimal("2.5123"), Decimal("0")]}),
+            id="negatives-zeroes-nulls",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 2],
+                    "B": pd.array(
+                        [
+                            None,
+                            None,
+                            "-1.6325",
+                            "0.45",
+                            "4.10906127",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            pd.DataFrame({0: [1, 2], 1: [None, Decimal("0.45")]}),
+            id="group-of-nulls",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1.1",
+                            "1.1",
+                            "1.1234567890123456789012345678901234",
+                            "1.1234567890123456789012345678901234",
+                            "1.0000000000000000000000000000000001",
+                            "1.0000000000000000000000000000000003",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(37, 34)),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    0: [1, 2, 3],
+                    1: [
+                        Decimal("1.1"),
+                        Decimal("1.1234567890123456789012345678901234"),
+                        Decimal("1.0000000000000000000000000000000002"),
+                    ],
+                }
+            ),
+            id="large_scale_precision",
+        ),
+    ],
+)
+def test_decimal_median(df, expected, spark_info, memory_leak_check):
+    query = "SELECT A, median(B) FROM TABLE1 GROUP BY A"
+
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "arr, error_msg",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 35)),
+                    ),
+                }
+            ),
+            "Intermediate values for MEDIAN do not fit",
+            id="overflow_1",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(37, 35)),
+                    ),
+                }
+            ),
+            "Intermediate values for MEDIAN do not fit",
+            id="overflow_2",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1, 2, 2, 3, 3],
+                    "B": pd.array(
+                        [
+                            "1",
+                            "2",
+                            "3",
+                            "4",
+                            "5",
+                            "6",
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 36)),
+                    ),
+                }
+            ),
+            "too large for MEDIAN operation",
+            id="scale_too_large",
+        ),
+    ],
+)
+def test_decimal_median_error(arr, error_msg, spark_info):
+    query = "SELECT A, median(B) FROM TABLE1 GROUP BY A"
+
+    try:
+        bodo.bodo_use_decimal = True
+        with pytest.raises(Exception, match=error_msg):
+            check_query(
+                query,
+                {"TABLE1": arr},
+                spark_info,
+                check_names=False,
+                check_dtype=False,
+            )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
     "df, expr, answer",
     [
         pytest.param(
