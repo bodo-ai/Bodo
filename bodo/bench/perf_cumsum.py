@@ -9,7 +9,7 @@ import pandas as pd
 from bodo.tests.utils import check_timing_func
 
 
-def test_median_large_random_numpy():
+def test_cumsum_large_random_numpy():
     def get_random_array(n, sizlen):
         elist = []
         for i in range(n):

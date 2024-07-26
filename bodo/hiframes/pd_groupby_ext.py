@@ -391,6 +391,21 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         else:
             # Nullable:
             return dtype_to_array_type(out_dtype, convert_nullable=True), "ok"
+    elif func_name == "median" and isinstance(in_dtype, Decimal128Type):
+        # These functions have a dedicated decimal implementation.
+        # MEDIAN:
+
+        # For median, the input precision and scale are increased by 3,
+        # while precision remains capped at 38.
+        # This means that an input scale of 36 or more is invalid.
+        # (Based off of Snowflake's MEDIAN)
+        new_scale = in_dtype.scale + 3
+        new_precision = min(38, in_dtype.precision + 3)
+        if new_scale > 38:
+            raise BodoError(
+                f"Input scale of {in_dtype.precision} too large for MEDIAN operation"
+            )
+        return bodo.DecimalArrayType(new_precision, new_scale), "ok"
     elif (
         func_name
         in {
