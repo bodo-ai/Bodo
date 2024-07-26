@@ -2099,6 +2099,210 @@ def test_decimal_array_division(arg1, arg2, expected, memory_leak_check):
     check_func(impl, (arg1, arg2), py_output=expected)
 
 
+@pytest.mark.parametrize(
+    "arg1, arg2, expected",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    "2.1",
+                    "0",
+                    "2.4336",
+                    "0",
+                    "1001000.25",
+                    "0",
+                    None,
+                    "100082016.81",
+                    "130.1881",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 6)),
+            ),
+            pd.array(
+                [
+                    "0.47619048",
+                    "0",
+                    "0.64102564",
+                    "0",
+                    "0.00099950",
+                    None,
+                    None,
+                    "0.00009996",
+                    "-0.08764242",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+            ),
+            id="array_array",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pa.scalar(Decimal("0"), pa.decimal128(4, 2)),
+            pd.array(
+                [
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    None,
+                    None,
+                    "0",
+                    "0",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+            ),
+            id="array_scalar",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("2"), pa.decimal128(4, 2)),
+            pd.array(
+                [
+                    "1",
+                    "0",
+                    "1.56",
+                    "10.56",
+                    "0",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    "2.00000000",
+                    "0",
+                    "1.28205128",
+                    "0.18939394",
+                    "0",
+                    None,
+                    None,
+                    "0.00019992",
+                    "-0.17528484",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+            ),
+            id="scalar_array",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
+            pa.scalar(Decimal("0"), pa.decimal128(5, 3)),
+            pa.scalar(Decimal("0"), pa.decimal128(13, 8)),
+            id="scalar_scalar",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
+            0,
+            pa.scalar(Decimal("0"), pa.decimal128(13, 8)),
+            id="decimal-int",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    2,
+                    0,
+                    6,
+                    None,
+                    3,
+                ],
+            ),
+            pd.array(
+                [
+                    "0.5",
+                    "0",
+                    None,
+                    None,
+                    "-3.80333333",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+            ),
+            id="decimal-int-array",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
+            float(0.00),
+            0,
+            id="decimal_float",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            ),
+            pd.array(
+                [
+                    2.1,
+                    0,
+                    1.23,
+                    None,
+                    130.1881,
+                ],
+            ),
+            pd.array(
+                [
+                    0.47619048,
+                    0,
+                    None,
+                    None,
+                    -0.08764242,
+                ],
+            ),
+            id="decimal-float-array",
+        ),
+    ],
+)
+def test_decimal_div0(arg1, arg2, expected, memory_leak_check):
+    """Test decimal div0"""
+
+    def impl(arr1, arr2):
+        return bodo.libs.bodosql_array_kernels.div0(arr1, arr2)
+
+    check_func(impl, (arg1, arg2), py_output=expected)
+
+
 @pytest_mark_one_rank
 def test_decimal_array_division_error_handling():
     """

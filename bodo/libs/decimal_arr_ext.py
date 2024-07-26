@@ -1991,12 +1991,12 @@ def decimal_division_output_precision_scale(p1, s1, p2, s2):
     return p, s
 
 
-def divide_decimal_scalars(d1, d2):  # pragma: no cover
+def divide_decimal_scalars(d1, d2, do_div0=False):  # pragma: no cover
     pass
 
 
 @overload(divide_decimal_scalars)
-def overload_divide_decimal_scalars(d1, d2):
+def overload_divide_decimal_scalars(d1, d2, do_div0=False):
     """
     Divide two decimal scalars. If overflow occurs this raises an exception.
     """
@@ -2009,8 +2009,8 @@ def overload_divide_decimal_scalars(d1, d2):
         d1.precision, d1.scale, d2.precision, d2.scale
     )
 
-    def impl(d1, d2):  # pragma: no cover
-        output, overflow = _divide_decimal_scalars(d1, d2, p, s)
+    def impl(d1, d2, do_div0=False):  # pragma: no cover
+        output, overflow = _divide_decimal_scalars(d1, d2, p, s, do_div0)
         if overflow:
             raise ValueError("Number out of representable range")
         else:
@@ -2020,7 +2020,7 @@ def overload_divide_decimal_scalars(d1, d2):
 
 
 @intrinsic(prefer_literal=True)
-def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
+def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t, do_div0):
     assert isinstance(d1_t, Decimal128Type), "_divide_decimal_scalars: decimal expected"
     assert isinstance(d2_t, Decimal128Type), "_divide_decimal_scalars: decimal expected"
     assert is_overload_constant_int(
@@ -2037,7 +2037,7 @@ def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
     d2_scale = d2_t.scale
 
     def codegen(context, builder, signature, args):
-        d1, d2, output_precision, output_scale = args
+        d1, d2, output_precision, output_scale, do_div0 = args
         fnty = lir.FunctionType(
             lir.IntType(128),
             [
@@ -2050,6 +2050,7 @@ def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(1),
             ],
         )
         d1_precision_const = context.get_constant(types.int64, d1_precision)
@@ -2072,6 +2073,7 @@ def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
                 output_precision,
                 output_scale,
                 overflow_pointer,
+                do_div0,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -2080,15 +2082,15 @@ def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
 
     output_decimal_type = Decimal128Type(output_precision, output_scale)
     ret_type = types.Tuple([output_decimal_type, types.bool_])
-    return ret_type(d1_t, d2_t, precision_t, scale_t), codegen
+    return ret_type(d1_t, d2_t, precision_t, scale_t, do_div0), codegen
 
 
-def divide_decimal_arrays(d1, d2):  # pragma: no cover
+def divide_decimal_arrays(d1, d2, do_div0=False):  # pragma: no cover
     pass
 
 
 @overload(divide_decimal_arrays)
-def overload_divide_decimal_arrays(d1, d2):
+def overload_divide_decimal_arrays(d1, d2, do_div0=False):
     """
     Divide two decimal arrays or a decimal array and a decimal scalar.
     Raises an exception if overflows.
@@ -2110,13 +2112,13 @@ def overload_divide_decimal_arrays(d1, d2):
     )
     output_decimal_arr_type = DecimalArrayType(p, s)
 
-    def impl(d1, d2):  # pragma: no cover
+    def impl(d1, d2, do_div0=False):  # pragma: no cover
         # For simplicity, convert scalar inputs to arrays and pass a flag to C++ to
         # convert back to scalars
         d1_info, is_scalar_d1 = array_or_scalar_to_info(d1)
         d2_info, is_scalar_d2 = array_or_scalar_to_info(d2)
         out_arr_info, overflow = _divide_decimal_arrays(
-            d1_info, d2_info, p, s, is_scalar_d1, is_scalar_d2
+            d1_info, d2_info, p, s, is_scalar_d1, is_scalar_d2, do_div0
         )
         out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
         delete_info(out_arr_info)
@@ -2129,12 +2131,27 @@ def overload_divide_decimal_arrays(d1, d2):
 
 @intrinsic(prefer_literal=False)
 def _divide_decimal_arrays(
-    typingctx, d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+    typingctx,
+    d1_t,
+    d2_t,
+    out_precision_t,
+    out_scale_t,
+    is_scalar_d1_t,
+    is_scalar_d2_t,
+    do_div0,
 ):
     from bodo.libs.array import array_info_type
 
     def codegen(context, builder, signature, args):
-        d1, d2, output_precision, output_scale, is_scalar_d1, is_scalar_d2 = args
+        (
+            d1,
+            d2,
+            output_precision,
+            output_scale,
+            is_scalar_d1,
+            is_scalar_d2,
+            do_div0,
+        ) = args
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -2145,6 +2162,7 @@ def _divide_decimal_arrays(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1).as_pointer(),
+                lir.IntType(1),
             ],
         )
         fn = cgutils.get_or_insert_function(
@@ -2161,6 +2179,7 @@ def _divide_decimal_arrays(
                 is_scalar_d1,
                 is_scalar_d2,
                 overflow_pointer,
+                do_div0,
             ],
         )
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -2170,7 +2189,13 @@ def _divide_decimal_arrays(
     ret_type = types.Tuple([array_info_type, types.bool_])
     return (
         ret_type(
-            d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
+            d1_t,
+            d2_t,
+            out_precision_t,
+            out_scale_t,
+            is_scalar_d1_t,
+            is_scalar_d2_t,
+            do_div0,
         ),
         codegen,
     )

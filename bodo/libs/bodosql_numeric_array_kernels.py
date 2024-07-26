@@ -840,6 +840,11 @@ def div0(arr, divisor):
     """
     Handles cases where DIV0 receives optional arguments and forwards
     to the appropriate version of the real implementaiton.
+
+    This function also handles the logic to appropriately redirect to the
+    correct div0 implementation (decimal vs. non-decimal) based on the
+    types of the arguments. It also handles typecasting between decimal
+    and non-decimal types.
     """
     args = [arr, divisor]
     for i in range(2):
@@ -848,10 +853,66 @@ def div0(arr, divisor):
                 "bodo.libs.bodosql_array_kernels.div0", ["arr", "divisor"], i
             )
 
-    def impl(arr, divisor):  # pragma: no cover
-        return div0_util(arr, divisor)
+    # Perform typechecking to determine the appropriate implementation.
 
-    return impl
+    # Both are decimals -- use decimal implementation.
+    if isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type)) and isinstance(
+        divisor, (bodo.DecimalArrayType, bodo.Decimal128Type)
+    ):
+
+        def impl(arr, divisor):  # pragma: no cover
+            return bodo.libs.bodosql_array_kernels.div0_decimal_util(arr, divisor)
+
+        return impl
+
+    # One is a decimal -- need to typecast appropriately with gen_coerced.
+    elif (
+        (
+            isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+            or isinstance(divisor, (bodo.DecimalArrayType, bodo.Decimal128Type))
+        )
+        and not is_overload_none(arr)
+        and not is_overload_none(divisor)
+    ):
+        args = [arr, divisor]
+        arg_names = ["arr", "divisor"]
+        for arg_idx in range(len(args)):
+            # For decimal/float, we can cast decimal to float.
+            if isinstance(args[arg_idx], types.Float) or (
+                is_array_typ(args[arg_idx])
+                and isinstance(args[arg_idx].dtype, types.Float)
+            ):
+                return gen_coerced(
+                    "bodo.libs.bodosql_array_kernels.div0",
+                    "bodo.libs.bodosql_array_kernels.to_double({}, None)",
+                    arg_names,
+                    1 - arg_idx,
+                )
+
+            # For decimal/int, we can cast the int to decimal.
+            if isinstance(args[arg_idx], types.Integer) or (
+                is_array_typ(args[arg_idx])
+                and isinstance(args[arg_idx].dtype, types.Integer)
+            ):
+                return gen_coerced(
+                    f"bodo.libs.bodosql_array_kernels.div0",
+                    "bodo.libs.decimal_arr_ext.int_to_decimal({})",
+                    arg_names,
+                    arg_idx,
+                )
+
+        # Should not get here...
+        raise_bodo_error(
+            f"DIV0 not supported between operands of type {arr} and {divisor}"
+        )
+
+    # No arguments are decimals, and we can use the standard implmentation.
+    else:
+
+        def impl(arr, divisor):  # pragma: no cover
+            return div0_util(arr, divisor)
+
+        return impl
 
 
 @numba.generated_jit(nopython=True)
@@ -1205,6 +1266,55 @@ def div0_util(arr, divisor):
     out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def div0_decimal_util(arr, divisor):
+    """
+    Kernel for div0 with decimal arrays.
+    """
+    if not (
+        is_overload_none(arr)
+        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("div0_decimal_util: arr must be a decimal array or scalar")
+    if not (
+        is_overload_none(divisor)
+        or isinstance(divisor, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("div0_decimal_util: divisor must be a decimal array or scalar")
+
+    # If either are decimal arrays, we can perform decimal division with do_div0=True.
+    if (
+        isinstance(arr, bodo.DecimalArrayType)
+        and (not is_overload_none(arr))
+        or isinstance(divisor, bodo.DecimalArrayType)
+        and (not is_overload_none(divisor))
+    ):
+
+        def impl(arr, divisor):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.divide_decimal_arrays(arr, divisor, True)
+
+        return impl
+    # If both are decimal scalars, use gen_vectorized with do_div0=True.
+    else:
+        arg_names = ["arr", "divisor"]
+        arg_types = [arr, divisor]
+        propogate_null = [True] * 2
+
+        p, s = bodo.libs.decimal_arr_ext.decimal_division_output_precision_scale(
+            arr.precision, arr.scale, divisor.precision, divisor.scale
+        )
+        out_dtype = bodo.DecimalArrayType(p, s)
+        # Call divide_decimal_scalars with do_div0=True
+        scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.divide_decimal_scalars(arg0, arg1, True)"
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propogate_null,
+            scalar_text,
+            out_dtype,
+        )
 
 
 @numba.generated_jit(nopython=True)

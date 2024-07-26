@@ -1127,13 +1127,17 @@ array_info* modulo_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
  * @param out_precision Output precision
  * @param out_scale Output scale
  * @param[out] overflow Overflow flag
+ * @param do_div0 If true, return 0 if v2 is 0, otherwise return v1/v2
  * @return arrow::Decimal128
  */
 arrow::Decimal128 divide_decimal_scalars_py_entry(
     arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
     int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
-    bool* overflow) noexcept {
+    bool* overflow, bool do_div0 = false) noexcept {
     try {
+        if (do_div0 && v2 == 0) {
+            return arrow::Decimal128(0);
+        }
         int32_t delta_scale = out_scale + s2 - s1;
         return decimalops::Divide(v1, v2, delta_scale, overflow);
     } catch (const std::exception& e) {
@@ -1157,8 +1161,10 @@ arrow::Decimal128 divide_decimal_scalars_py_entry(
  * @param is_scalar_arg2 second argument is scalar (passed as a one element
  * array)
  * @param[out] overflow Overflow flag.
+ * @param do_div0 If true, return 0 if v2 is 0, otherwise return v1/v2
  * @return std::shared_ptr<array_info> Output nullable decimal array.
  */
+template <bool do_div0 = false>
 std::unique_ptr<array_info> divide_decimal_arrays(
     const std::unique_ptr<array_info>& arr1,
     const std::unique_ptr<array_info>& arr2, int64_t out_precision,
@@ -1204,7 +1210,17 @@ std::unique_ptr<array_info> divide_decimal_arrays(
                   d2_ind);
 
             bool overflow_i;
-            *out_ptr = decimalops::Divide(d1, d2, delta_scale, &overflow_i);
+            if constexpr (do_div0) {
+                if (d2 == arrow::Decimal128(0)) {
+                    *out_ptr = arrow::Decimal128(0);
+                    overflow_i = false;
+                } else {
+                    *out_ptr =
+                        decimalops::Divide(d1, d2, delta_scale, &overflow_i);
+                }
+            } else {
+                *out_ptr = decimalops::Divide(d1, d2, delta_scale, &overflow_i);
+            }
             out_overflow |= overflow_i;
         }
     }
@@ -1217,8 +1233,8 @@ array_info* divide_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
                                            int64_t out_precision,
                                            int64_t out_scale,
                                            bool is_scalar_arg1,
-                                           bool is_scalar_arg2,
-                                           bool* overflow) noexcept {
+                                           bool is_scalar_arg2, bool* overflow,
+                                           bool do_div0 = false) noexcept {
     try {
         std::unique_ptr<array_info> arr1 = std::unique_ptr<array_info>(arr1_);
         std::unique_ptr<array_info> arr2 = std::unique_ptr<array_info>(arr2_);
@@ -1226,9 +1242,16 @@ array_info* divide_decimal_arrays_py_entry(array_info* arr1_, array_info* arr2_,
                arr2->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                arr1->dtype == Bodo_CTypes::DECIMAL &&
                arr2->dtype == Bodo_CTypes::DECIMAL);
-        std::unique_ptr<array_info> out_arr =
-            divide_decimal_arrays(arr1, arr2, out_precision, out_scale,
-                                  is_scalar_arg1, is_scalar_arg2, overflow);
+        std::unique_ptr<array_info> out_arr;
+        if (do_div0) {
+            out_arr = divide_decimal_arrays<true>(arr1, arr2, out_precision,
+                                                  out_scale, is_scalar_arg1,
+                                                  is_scalar_arg2, overflow);
+        } else {
+            out_arr = divide_decimal_arrays<false>(arr1, arr2, out_precision,
+                                                   out_scale, is_scalar_arg1,
+                                                   is_scalar_arg2, overflow);
+        }
         return new array_info(*out_arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
