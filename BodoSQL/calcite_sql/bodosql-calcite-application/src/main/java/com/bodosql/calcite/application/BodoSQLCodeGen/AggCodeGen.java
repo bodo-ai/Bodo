@@ -306,7 +306,8 @@ public class AggCodeGen {
       if (a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0
           && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
-          && !aggFunc.equals("count_if")) {
+          && !aggFunc.equals("count_if")
+          && !aggFunc.equals("listagg")) {
         Expr lengthFlag =
             new Expr.Binary(
                 ">",
@@ -761,7 +762,8 @@ public class AggCodeGen {
           && a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0
           && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE
-          && !aggFunc.equals("count_if")) {
+          && !aggFunc.equals("count_if")
+          && !aggFunc.equals("listagg")) {
         // We need an optional type in case the series is empty. Since this is
         // groupby we must have a filter for this to occur.
         fnString.append("bodosql.libs.null_handling.null_if_not_flag(");
