@@ -1715,14 +1715,14 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlBasicFunction POWER =
             SqlBasicFunction.create("POWER",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC_NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC, SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code SQRT(numeric)} function. */
     public static final SqlFunction SQRT =
             SqlBasicFunction.create("SQRT",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC);
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC));
 
     /**
      * Arithmetic remainder function {@code MOD}.
@@ -1741,7 +1741,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction LN =
             SqlBasicFunction.create("LN",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code LOG10(numeric)} function. */
@@ -1762,28 +1762,28 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction ACOS =
             SqlBasicFunction.create("ACOS",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code ASIN(numeric)} function. */
     public static final SqlFunction ASIN =
             SqlBasicFunction.create("ASIN",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code ATAN(numeric)} function. */
     public static final SqlFunction ATAN =
             SqlBasicFunction.create("ATAN",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code ATAN2(numeric, numeric)} function. */
     public static final SqlFunction ATAN2 =
             SqlBasicFunction.create("ATAN2",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC_NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC, SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code CBRT(numeric)} function. */
@@ -1797,35 +1797,35 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction COS =
             SqlBasicFunction.create("COS",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code COT(numeric)} function. */
     public static final SqlFunction COT =
             SqlBasicFunction.create("COT",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code DEGREES(numeric)} function. */
     public static final SqlFunction DEGREES =
             SqlBasicFunction.create("DEGREES",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code EXP(numeric)} function. */
     public static final SqlFunction EXP =
             SqlBasicFunction.create("EXP",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code RADIANS(numeric)} function. */
     public static final SqlFunction RADIANS =
             SqlBasicFunction.create("RADIANS",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code ROUND(numeric [, numeric])} function. */
@@ -1846,14 +1846,14 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction SIN =
             SqlBasicFunction.create("SIN",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code TAN(numeric)} function. */
     public static final SqlFunction TAN =
             SqlBasicFunction.create("TAN",
                     ReturnTypes.DOUBLE_NULLABLE,
-                    OperandTypes.NUMERIC,
+                    OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code TRUNCATE(numeric [, numeric])} function. */

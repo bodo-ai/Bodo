@@ -1263,6 +1263,543 @@ def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
             ),
             id="cbrt-vector",
         ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "ATAN(D)",
+            pd.array(
+                [
+                    0.8881737743776796,
+                    None,
+                    -1.2124361655324638,
+                    0.48211338922722113,
+                    -0.11942892601833846,
+                ],
+            ),
+            id="atan_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("0.23"),
+                            None,
+                            Decimal("-1.67"),
+                            Decimal("0.1233"),
+                            Decimal("-2.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "ATAN2(D, D2)",
+            pd.array(
+                [
+                    1.385939294776456,
+                    None,
+                    -2.1297322291334897,
+                    1.3393967973933203,
+                    -3.085049216644976,
+                ],
+            ),
+            id="atan2_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("0.23"),
+                            None,
+                            Decimal("-0.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "ATANH(D)",
+            pd.array(
+                [
+                    0.2341894667593668,
+                    None,
+                    -0.8107431254751375,
+                    0.5808734754659377,
+                    -0.12058102840844405,
+                ],
+            ),
+            id="atanh_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "COS(D)",
+            pd.array(
+                [
+                    0.3342377271245024,
+                    None,
+                    -0.8908458667805766,
+                    0.8661747529276824,
+                    0.9928086358538663,
+                ],
+            ),
+            id="cos_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "COSH(D)",
+            pd.array(
+                [
+                    1.8567610569852668,
+                    None,
+                    7.2546107090561165,
+                    1.140074686717299,
+                    1.0072086441482666,
+                ],
+            ),
+            id="cosh_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "COT(D)",
+            pd.array(
+                [
+                    0.35463310167660184,
+                    None,
+                    1.9608953309196617,
+                    1.7332465287768206,
+                    -8.29329488059453,
+                ],
+            ),
+            id="cot_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "DEGREES(D)",
+            pd.array(
+                [
+                    70.47380880109127,
+                    None,
+                    -152.97973129992982,
+                    29.98288141919598,
+                    -6.875493541569879,
+                ],
+            ),
+            id="degrees_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "RADIANS(D)",
+            pd.array(
+                [
+                    0.021467549799530257,
+                    None,
+                    -0.04660029102824861,
+                    0.009133307975686327,
+                    -0.0020943951023931957,
+                ],
+            ),
+            id="radians_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "SIN(D)",
+            pd.array(
+                [
+                    0.9424888019316976,
+                    None,
+                    -0.45430566983030607,
+                    0.4997412304289775,
+                    -0.11971220728891938,
+                ],
+            ),
+            id="sin_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "SINH(D)",
+            pd.array(
+                [
+                    1.5644684793044075,
+                    None,
+                    -7.1853584837467706,
+                    0.5475128229489677,
+                    -0.12028820743110909,
+                ],
+            ),
+            id="sinh_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "TAN(D)",
+            pd.array(
+                [
+                    2.819815734268154,
+                    None,
+                    0.5099711260626028,
+                    0.5769519704191854,
+                    -0.12057933721130533,
+                ],
+            ),
+            id="tan_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-2.67"),
+                            Decimal("0.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 5)),
+                    ),
+                }
+            ),
+            "TANH(D)",
+            pd.array(
+                [
+                    0.8425793256589296,
+                    None,
+                    -0.9904540397704736,
+                    0.4802429431403847,
+                    -0.1194272985343859,
+                ],
+            ),
+            id="tanh_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "EXP(D)",
+            pd.array(
+                [
+                    507.7554834957939,
+                    None,
+                    4.464286286584116e222,
+                    2676536492286818.5,
+                    0.8869204367171575,
+                ],
+            ),
+            id="exp_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "LN(D)",
+            pd.array(
+                [
+                    1.8293763327993617,
+                    None,
+                    6.239632363326927,
+                    3.570188819213935,
+                    -2.120263536200091,
+                ],
+            ),
+            id="ln_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "SQRT(D)",
+            pd.array(
+                [
+                    2.495996794869737,
+                    None,
+                    22.642217205918683,
+                    5.960142615743352,
+                    0.34641016151377546,
+                ],
+            ),
+            id="sqrt_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("-0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "SQUARE(D)",
+            pd.array(
+                [
+                    38.812900000000006,
+                    None,
+                    262830.5289000001,
+                    1261.9048428899998,
+                    0.014400000000000003,
+                ],
+            ),
+            id="square_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("1.2"),
+                            None,
+                            Decimal("2.34"),
+                            Decimal("0"),
+                            Decimal("-0.9"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "POWER(D, D2)",
+            pd.array(
+                [8.982260703582106, None, 2192909.437077487, 1.0, 6.741194822493127],
+            ),
+            id="power_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                    "D2": pd.array(
+                        [
+                            Decimal("1.2"),
+                            None,
+                            Decimal("2.34"),
+                            Decimal("4.1"),
+                            Decimal("0.9"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "LOG(D, D2)",
+            pd.array(
+                [
+                    10.033790655192673,
+                    None,
+                    7.339440736662648,
+                    2.5302776607681507,
+                    20.123891032253084,
+                ],
+            ),
+            id="log_vector",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D": pd.array(
+                        [
+                            Decimal("6.23"),
+                            None,
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("0.12"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "LOG(D)",
+            pd.array(
+                [
+                    0.7944880466591696,
+                    None,
+                    2.7098379044978307,
+                    1.5505133035372982,
+                    -0.9208187539523751,
+                ],
+            ),
+            id="log_onearg_vector",
+        ),
     ],
 )
 def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
