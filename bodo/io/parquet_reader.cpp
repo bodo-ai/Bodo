@@ -8,8 +8,7 @@
 #include <span>
 
 #include <arrow/python/pyarrow.h>
-
-#include "../libs/_array_utils.h"
+#include <object.h>
 
 // -------- Helper functions --------
 
@@ -117,22 +116,28 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
 }
 
 PyObject* ParquetReader::get_dataset() {
+    // partitioning = "hive" if use_hive else None
+    PyObject* partitioning = use_hive ? PyUnicode_FromString("hive") : Py_None;
+
     // import bodo.io.parquet_pio
     PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-    // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
-    // storage_options)
+    // ds = bodo.io.parquet_pio.get_parquet_dataset(path, get_row_counts=True,
+    // filters, storage_options, read_categories=False, tot_rows_to_read,
+    // schema, partitioning)
     PyObject* ds = PyObject_CallMethod(
         pq_mod, "get_parquet_dataset", "OOOOOLOO", path, Py_True, expr_filters,
         storage_options, Py_False, tot_rows_to_read, this->pyarrow_schema,
-        PyBool_FromLong(this->use_hive));
+        partitioning);
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
     Py_DECREF(path);
     Py_DECREF(pq_mod);
-    if (PyErr_Occurred())
+    Py_DECREF(partitioning);
+    if (PyErr_Occurred()) {
         throw std::runtime_error("python");
+    }
 
     this->ds_partitioning = PyObject_GetAttrString(ds, "partitioning");
     this->set_arrow_schema(PyObject_GetAttrString(ds, "schema"));

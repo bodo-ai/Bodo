@@ -1,5 +1,4 @@
 import os
-import platform
 from io import StringIO
 
 import numpy as np
@@ -568,8 +567,8 @@ def create_core_site():
     # will be written
     bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
 
-    storage_account_name = os.environ["AZURE_ICEBERG_STORAGE_ACCOUNT"]
-    access_key = os.environ["AZURE_ICEBERG_ACCESS_KEY"]
+    storage_account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    access_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
 
     # Define the core-site for your regular ADLS/HDFS read/write
     # operations
@@ -606,9 +605,6 @@ def create_core_site():
             f.write(CORE_SITE_SPEC)
 
 
-@pytest.mark.skipif(
-    platform.system() != "Linux", reason="HDFS is only supported on Linux"
-)
 def test_azure_basic_read(create_core_site, memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake in SQL with
@@ -646,9 +642,6 @@ def test_azure_basic_read(create_core_site, memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    platform.system() != "Linux", reason="HDFS is only supported on Linux"
-)
 def test_azure_basic_write(create_core_site, memory_leak_check):
     """
     Test writing an Iceberg table from Snowflake in SQL with
