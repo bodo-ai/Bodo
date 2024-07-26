@@ -32,10 +32,12 @@ from bodo.io.parquet_pio import ParquetFilterScalarsListType, ParquetPredicateTy
 from bodo.ir.connector import Connector, log_limit_pushdown
 from bodo.ir.filter import Filter, FilterVisitor
 from bodo.ir.sql_ext import (
-    RtjfMinMaxValueType,
+    RtjfValueType,
     extract_rtjf_terms,
     get_rtjf_cols_extra_info,
     get_runtime_join_filter_min_max,
+    get_runtime_join_filter_unique_values,
+    has_runtime_join_filter_unique_values,
     rtjf_term_repr,
 )
 from bodo.libs.array import (
@@ -977,7 +979,7 @@ def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
 
 
 @numba.njit
-def get_rtjf_col_min_max_map(
+def get_rtjf_col_min_max_unique_map(
     rtjf_state: bodo.libs.stream_join.JoinStateType,
     rtjf_build_cols: npt.NDArray,
     rtjf_probe_cols: npt.NDArray,
@@ -985,10 +987,11 @@ def get_rtjf_col_min_max_map(
     precisions: list[int],
     time_zones: list[str | None],
 ) -> tuple[
-    list[str], list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]]
+    list[str], list[tuple[RtjfValueType, RtjfValueType, RtjfValueType]]
 ]:  # pragma: no cover
     """
-    Get the min/max bound for each key column in the runtime join filter supplied.
+    Get the min/max bound for each key column in the runtime join filter supplied,
+    or the list of unique values if it exists.
     """
     n_cols = len(rtjf_build_cols)
     out_col_names = []
@@ -1001,6 +1004,10 @@ def get_rtjf_col_min_max_map(
         if probe_col == -1 or tz is not None:
             continue
         # Get the min/max value bounds for the current key column from the join state
+        if has_runtime_join_filter_unique_values(rtjf_state, build_col):
+            unique_vals = get_runtime_join_filter_unique_values(rtjf_state, build_col)
+        else:
+            unique_vals = None
         min_val = get_runtime_join_filter_min_max(
             rtjf_state, build_col, True, precisions[i]
         )
@@ -1009,7 +1016,7 @@ def get_rtjf_col_min_max_map(
         )
         col_name = col_names[probe_col]
         out_col_names.append(col_name)
-        bounds.append((min_val, max_val))
+        bounds.append((min_val, max_val, unique_vals))
     return out_col_names, bounds
 
 
@@ -1018,7 +1025,7 @@ def add_rtjf_iceberg_filter(
     file_filters,
     filtered_cols: list[str],
     filter_ops: list[str],
-    bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
+    bounds: list[tuple[RtjfValueType, RtjfValueType, RtjfValueType]],
 ) -> ParquetPredicateType:  # pragma: no cover
     """
     For each column in filtered_cols create a FilterExpr containing it's bounds and combine them all with file_filters
@@ -1026,29 +1033,40 @@ def add_rtjf_iceberg_filter(
 
     with bodo.no_warning_objmode(combined_filters="parquet_predicate_type"):
         rtjf_filters = bic.FilterExpr.default()
-        for col, (min, max), op in zip(filtered_cols, bounds, filter_ops):
-            if min is not None and op in ("==", ">=", ">"):
-                filter_op = ">=" if op == "==" else op
+        for col, (min, max, unique_vals), op in zip(filtered_cols, bounds, filter_ops):
+            if unique_vals != None and len(unique_vals) > 0 and op == "==":
                 rtjf_filters = bic.FilterExpr(
                     "AND",
                     [
                         rtjf_filters,
                         bic.FilterExpr(
-                            filter_op, [bic.ColumnRef(col), bic.Scalar(min)]
+                            "IN", [bic.ColumnRef(col), bic.Scalar(unique_vals)]
                         ),
                     ],
                 )
-            if max is not None and op in ("==", "<=", "<"):
-                filter_op = "<=" if op == "==" else op
-                rtjf_filters = bic.FilterExpr(
-                    "AND",
-                    [
-                        rtjf_filters,
-                        bic.FilterExpr(
-                            filter_op, [bic.ColumnRef(col), bic.Scalar(max)]
-                        ),
-                    ],
-                )
+            else:
+                if min is not None and op in ("==", ">=", ">"):
+                    filter_op = ">=" if op == "==" else op
+                    rtjf_filters = bic.FilterExpr(
+                        "AND",
+                        [
+                            rtjf_filters,
+                            bic.FilterExpr(
+                                filter_op, [bic.ColumnRef(col), bic.Scalar(min)]
+                            ),
+                        ],
+                    )
+                if max is not None and op in ("==", "<=", "<"):
+                    filter_op = "<=" if op == "==" else op
+                    rtjf_filters = bic.FilterExpr(
+                        "AND",
+                        [
+                            rtjf_filters,
+                            bic.FilterExpr(
+                                filter_op, [bic.ColumnRef(col), bic.Scalar(max)]
+                            ),
+                        ],
+                    )
 
         combined_filters = bic.FilterExpr("AND", [file_filters, rtjf_filters])
 
@@ -1100,7 +1118,7 @@ def convert_pyobj_to_arrow_filter_str(pyobj, tz):
 def gen_runtime_join_filter_expr(
     filtered_cols: list[str],
     filter_ops: list[str],
-    bounds: list[tuple[RtjfMinMaxValueType, RtjfMinMaxValueType]],
+    bounds: list[tuple[RtjfValueType, RtjfValueType, RtjfValueType]],
     time_zones: list[str | None],
 ) -> str:  # pragma: no cover
     """
@@ -1113,19 +1131,30 @@ def gen_runtime_join_filter_expr(
 
     with bodo.no_warning_objmode(rtjf_expr="unicode_type"):
         exprs = []
-        for col, (min, max), op, tz in zip(
+        for col, (min, max, unique_vals), op, tz in zip(
             filtered_cols, bounds, filter_ops, time_zones
         ):
-            if min is not None and op in ("==", ">=", ">"):
-                filter_op = ">=" if op == "==" else op
-                exprs.append(
-                    f"(ds.field('{{{col}}}') {filter_op} {convert_pyobj_to_arrow_filter_str(min, tz)})"
+            if unique_vals is not None and len(unique_vals) > 0 and op == "==":
+                unique_strs = sorted(
+                    [
+                        convert_pyobj_to_arrow_filter_str(elem, tz)
+                        for elem in unique_vals
+                    ]
                 )
-            if max is not None and op in ("==", "<=", "<"):
-                filter_op = "<=" if op == "==" else op
                 exprs.append(
-                    f"(ds.field('{{{col}}}') {filter_op} {convert_pyobj_to_arrow_filter_str(max, tz)})"
+                    f"(ds.field('{{{col}}}').isin([{', '.join(unique_strs)}]))"
                 )
+            else:
+                if min is not None and op in ("==", ">=", ">"):
+                    filter_op = ">=" if op == "==" else op
+                    exprs.append(
+                        f"(ds.field('{{{col}}}') {filter_op} {convert_pyobj_to_arrow_filter_str(min, tz)})"
+                    )
+                if max is not None and op in ("==", "<=", "<"):
+                    filter_op = "<=" if op == "==" else op
+                    exprs.append(
+                        f"(ds.field('{{{col}}}') {filter_op} {convert_pyobj_to_arrow_filter_str(max, tz)})"
+                    )
         rtjf_expr += " & ".join(exprs)
     return rtjf_expr
 
@@ -1258,7 +1287,7 @@ def _gen_iceberg_reader_chunked_py(
             # Fetch the precision and time zone for each of the used columns
             precisions, time_zones = get_rtjf_cols_extra_info(col_typs, rtjf_cols[i])
             # Get runtime join filter column min/max map
-            rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, np.arange(len(rtjf_cols_{call_id}[{i}])), rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
+            rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_unique_map({var_name}, np.arange(len(rtjf_cols_{call_id}[{i}])), rtjf_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
             # Add runtime join filters to Iceberg file scan filters
             rtjf_str += f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, equality_ops_{call_id}[{i}], bounds)\n"
             # Add runtime join filters to Iceberg expression filters for Arrow data filtering
@@ -1269,7 +1298,7 @@ def _gen_iceberg_reader_chunked_py(
             # Fetch the precision and time zone for each of the used columns
             precisions, time_zones = get_rtjf_cols_extra_info(col_typs, probe_cols)
             # Get runtime join filter column min/max map
-            rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_map({var_name}, build_cols_{call_id}[{i}], probe_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
+            rtjf_str += f"  filtered_cols, bounds = get_rtjf_col_min_max_unique_map({var_name}, build_cols_{call_id}[{i}], probe_cols_{call_id}[{i}], used_cols_{call_id}, {precisions}, {time_zones})\n"
             # Add runtime join filters to Iceberg file scan filters
             rtjf_str += f"  iceberg_filters = add_rtjf_iceberg_filter(iceberg_filters, filtered_cols, interval_ops_{call_id}[{i}], bounds)\n"
             # Add runtime join filters to Iceberg expression filters for Arrow data filtering

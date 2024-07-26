@@ -22,8 +22,14 @@ from bodo.utils.utils import run_rank0
 comm = MPI.COMM_WORLD
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
-def test_simple_join(memory_leak_check, iceberg_database):
+@pytest.mark.parametrize(
+    "allow_low_ndv_filter",
+    [
+        pytest.param(True, id="low_ndv"),
+        pytest.param(False, id="min_max"),
+    ],
+)
+def test_simple_join(iceberg_database, allow_low_ndv_filter, memory_leak_check):
     """
     Test data and file pruning runtime join filters are generated correctly when reading from filesystem catalog
     """
@@ -47,26 +53,40 @@ def test_simple_join(memory_leak_check, iceberg_database):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     py_output = pd.DataFrame({"A": [1] * 100})
-    with set_logging_stream(logger, 2):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_output,
-            only_1DVar=True,
-            sort_output=True,
-            reset_index=True,
-        )
+    if allow_low_ndv_filter:
+        limit = 20
+        log_msg = "Runtime join filter expression: ((ds.field('{A}').isin([1])))"
+    else:
+        limit = 0
+        log_msg = "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))"
+    with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
+            check_logger_msg(
+                stream,
+                log_msg,
+            )
+            check_logger_msg(stream, "Total number of files is 5. Reading 1 files:")
 
-        check_logger_msg(
-            stream,
-            "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 1))",
-        )
-        check_logger_msg(stream, "Total number of files is 5. Reading 1 files:")
 
-
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
+@pytest.mark.parametrize(
+    "allow_low_ndv_filter",
+    [
+        pytest.param(True, id="low_ndv"),
+        pytest.param(False, id="min_max"),
+    ],
+)
 @pytest.mark.parametrize("join_same_col", [True, False])
-def test_multiple_filter_join(memory_leak_check, iceberg_database, join_same_col):
+def test_multiple_filter_join(
+    iceberg_database, allow_low_ndv_filter, join_same_col, memory_leak_check
+):
     """
     Test data runtime join filters are generated correctly when reading from filesystem catalog with multiple filters on the same reader
     """
@@ -81,11 +101,21 @@ def test_multiple_filter_join(memory_leak_check, iceberg_database, join_same_col
 
     db_schema, warehouse_loc = iceberg_database(table_names)
     second_key = "A" if join_same_col else "G"
-    log_msg = (
-        "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 5) & (ds.field('{A}') >= 2) & (ds.field('{A}') <= 2))"
-        if join_same_col
-        else "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{G}') >= 1) & (ds.field('{G}') <= 5))"
-    )
+    if allow_low_ndv_filter:
+        limit = 20
+        log_msg = (
+            "Runtime join filter expression: ((ds.field('{A}').isin([1, 2, 3, 4, 5])) & (ds.field('{A}').isin([2])))"
+            if join_same_col
+            else "Runtime join filter expression: ((ds.field('{A}').isin([2])) & (ds.field('{G}').isin([1, 2, 3, 4, 5])))"
+        )
+    else:
+        limit = 0
+        log_msg = (
+            "Runtime join filter expression: ((ds.field('{A}') >= 1) & (ds.field('{A}') <= 5) & (ds.field('{A}') >= 2) & (ds.field('{A}') <= 2))"
+            if join_same_col
+            else "Runtime join filter expression: ((ds.field('{A}') >= 2) & (ds.field('{A}') <= 2) & (ds.field('{G}') >= 1) & (ds.field('{G}') <= 5))"
+        )
+
     query = f'SELECT EVOLVED.A FROM (SELECT * FROM {table_names[0]}) EVOLVED, (SELECT * FROM "{table_names[1]}" LIMIT 10) PARTITIONED, (SELECT * FROM "{table_names[2]}" LIMIT 10) SIMPLE WHERE EVOLVED.A = PARTITIONED.A AND EVOLVED.{second_key} = SIMPLE.A'
 
     catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
@@ -93,23 +123,24 @@ def test_multiple_filter_join(memory_leak_check, iceberg_database, join_same_col
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     py_output = pd.DataFrame({"A": [2] * 200})
-    with set_logging_stream(logger, 2):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_output,
-            only_1DVar=True,
-            sort_output=True,
-            reset_index=True,
-        )
+    with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
 
-        check_logger_msg(
-            stream,
-            log_msg,
-        )
+            check_logger_msg(
+                stream,
+                log_msg,
+            )
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
 def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
     """
     Test data runtime join filters are generated correctly when reading a schema evolved table from filesystem catalog
@@ -148,7 +179,7 @@ def test_rtjf_schema_evolved(memory_leak_check, iceberg_database):
         )
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
 def test_string_keys(memory_leak_check, iceberg_database):
     """
     Variant of test_simple_join with string columns as keys.
@@ -215,8 +246,14 @@ def test_string_keys(memory_leak_check, iceberg_database):
         # )
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
-def test_dict_keys(memory_leak_check, iceberg_database):
+@pytest.mark.parametrize(
+    "allow_low_ndv_filter",
+    [
+        pytest.param(True, id="low_ndv", marks=pytest.mark.skip("[BSE-3538]")),
+        pytest.param(False, id="min_max"),
+    ],
+)
+def test_dict_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
     """
     Variant of test_simple_join with dictionary encoded columns as keys.
     """
@@ -259,20 +296,28 @@ def test_dict_keys(memory_leak_check, iceberg_database):
         }
     )
 
-    with set_logging_stream(logger, 2):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_output,
-            only_1DVar=True,
-            sort_output=True,
-            reset_index=True,
-        )
-        check_logger_msg(
-            stream,
-            "Runtime join filter expression: ((ds.field('{WORD}') >= 'A') & (ds.field('{WORD}') <= 'Autolycus'))",
-        )
-        check_logger_msg(stream, "Total number of files is 16. Reading 1 files:")
+    if allow_low_ndv_filter:
+        limit = 20
+        log_msg = ""  # TODO: add the runtime join expression once we have dict support for low-ndv filter
+    else:
+        limit = 0
+        log_msg = "Runtime join filter expression: ((ds.field('{WORD}') >= 'A') & (ds.field('{WORD}') <= 'Autolycus'))"
+
+    with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
+            check_logger_msg(
+                stream,
+                log_msg,
+            )
+            check_logger_msg(stream, "Total number of files is 16. Reading 1 files:")
 
 
 @pytest.fixture
@@ -347,7 +392,7 @@ def rtjf_test_tables():
     }
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
+@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "0"})
 @pytest.mark.parametrize(
     "query, expected_out",
     [
@@ -455,8 +500,14 @@ def test_merged_rtjf(
         )
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
-def test_date_keys(memory_leak_check, iceberg_database):
+@pytest.mark.parametrize(
+    "allow_low_ndv_filter",
+    [
+        pytest.param(True, id="low_ndv"),
+        pytest.param(False, id="min_max"),
+    ],
+)
+def test_date_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
     """
     Variant of test_simple_join with date columns as keys.
     """
@@ -518,24 +569,38 @@ def test_date_keys(memory_leak_check, iceberg_database):
         }
     )
 
-    with set_logging_stream(logger, 2):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_output,
-            only_1DVar=True,
-            sort_output=True,
-            reset_index=True,
-        )
-        check_logger_msg(
-            stream,
-            "Runtime join filter expression: ((ds.field('{DAY}') >= pa.scalar(18672, pa.date32())) & (ds.field('{DAY}') <= pa.scalar(18986, pa.date32())))",
-        )
-        check_logger_msg(stream, "Total number of files is 3. Reading 1 files:")
+    if allow_low_ndv_filter:
+        limit = 20
+        log_msg = "Runtime join filter expression: ((ds.field('{DAY}').isin([pa.scalar(18672, pa.date32()), pa.scalar(18778, pa.date32()), pa.scalar(18797, pa.date32()), pa.scalar(18812, pa.date32()), pa.scalar(18876, pa.date32()), pa.scalar(18931, pa.date32()), pa.scalar(18956, pa.date32()), pa.scalar(18986, pa.date32())])))"
+    else:
+        limit = 0
+        log_msg = "Runtime join filter expression: ((ds.field('{DAY}') >= pa.scalar(18672, pa.date32())) & (ds.field('{DAY}') <= pa.scalar(18986, pa.date32())))"
+
+    with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
+            check_logger_msg(
+                stream,
+                log_msg,
+            )
+            check_logger_msg(stream, "Total number of files is 3. Reading 1 files:")
 
 
-@temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "20"})
-def test_float_keys(memory_leak_check, iceberg_database):
+@pytest.mark.parametrize(
+    "allow_low_ndv_filter",
+    [
+        pytest.param(True, id="low_ndv"),
+        pytest.param(False, id="min_max"),
+    ],
+)
+def test_float_keys(allow_low_ndv_filter, iceberg_database, memory_leak_check):
     """
     Variant of test_simple_join with float columns as keys.
     """
@@ -615,19 +680,27 @@ def test_float_keys(memory_leak_check, iceberg_database):
         }
     )
 
-    with set_logging_stream(logger, 2):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_output,
-            only_1DVar=True,
-            sort_output=True,
-            reset_index=True,
-        )
-        check_logger_msg(
-            stream,
-            "Runtime join filter expression: ((ds.field('{BALANCE}') >= 0.0) & (ds.field('{BALANCE}') <= 488000.09))",
-        )
+    if allow_low_ndv_filter:
+        limit = 20
+        log_msg = "Runtime join filter expression: ((ds.field('{BALANCE}').isin([0.0, 375000.81, 488000.09, 78125.42])))"
+    else:
+        limit = 0
+        log_msg = "Runtime join filter expression: ((ds.field('{BALANCE}') >= 0.0) & (ds.field('{BALANCE}') <= 488000.09))"
+
+    with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": str(limit)}):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_output,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
+            check_logger_msg(
+                stream,
+                log_msg,
+            )
 
 
 def test_interval_join_rtjf(memory_leak_check, iceberg_database):

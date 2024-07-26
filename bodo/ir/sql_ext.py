@@ -463,8 +463,8 @@ install_py_obj_class(
     types_name="rtjf_value_type",
     python_type=None,
     module=this_module,
-    class_name="RtjfMinMaxValueType",
-    model_name="RtjfMinMaxValueModel",
+    class_name="RtjfValueType",
+    model_name="RtjfValueType",
 )
 
 
