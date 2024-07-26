@@ -1039,8 +1039,17 @@ static bodo::tests::suite tests([] {
         TEST_GROUPBY_FN(perc_cont_col_set, n,                                  \
                         bodo_array_type::NULLABLE_INT_BOOL,                    \
                         Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT); \
-        TEST_GROUPBY_FN(median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL, \
-                        Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT); \
+        /* Test decimal median separately because it has a different return    \
+         * type. */                                                            \
+        if (dtype == Bodo_CTypes::DECIMAL) {                                   \
+            TEST_GROUPBY_FN(                                                   \
+                median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,         \
+                Bodo_CTypes::DECIMAL, empty_return_enum::NULL_OUTPUT);         \
+        } else {                                                               \
+            TEST_GROUPBY_FN(                                                   \
+                median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,         \
+                Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT);         \
+        }                                                                      \
     }
         TEST_ORDINAL_GROUPBY_FN(bodo_array_type::NULLABLE_INT_BOOL,
                                 Bodo_CTypes::INT8);
