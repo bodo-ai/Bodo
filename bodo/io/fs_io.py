@@ -441,6 +441,34 @@ def abfs_list_dir_fnames(path):  # pragma: no cover
     return (hdfs, file_names)
 
 
+def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
+    from pyarrow.fs import AzureFileSystem
+
+    def get_attr(opt_key: str, env_key: str) -> str | None:
+        opt_val = storage_options.get(opt_key) if storage_options else None
+        return opt_val or os.environ.get(env_key)
+
+    # account_name is always required, until PyArrow or we support
+    # - anonymous access
+    # - parsing a connection string
+    account_name = get_attr("account_name", "AZURE_STORAGE_ACCOUNT_NAME")
+    # PyArrow currently only supports:
+    # - Passing in Account Key Directly
+    # - Default Credential Chain, i.e. ENVs, shared config, VM identity, etc.
+    #   when nothing else is provided
+    # To support other credential formats like SAS tokens, we need to use ENVs
+    account_key = get_attr("account_key", "AZURE_STORAGE_ACCOUNT_KEY")
+
+    if account_name is None:
+        raise BodoError(
+            "abfs_get_fs: Azure storage account name is not provided. Please set either the account_name in the storage_options or the AZURE_STORAGE_ACCOUNT_NAME environment variable."
+        )
+
+    # Note, Azure validates credentials at use-time instead of at
+    # initialization
+    return AzureFileSystem(account_name, account_key=account_key)
+
+
 def directory_of_files_common_filter(fname):
     # Ignore the same files as pyarrow,
     # https://github.com/apache/arrow/blob/4beb514d071c9beec69b8917b5265e77ade22fb3/python/pyarrow/parquet.py#L1039

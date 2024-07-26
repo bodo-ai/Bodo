@@ -63,10 +63,8 @@ def abfs_fs():
     Create an Azure Blob FileSystem instance for testing.
     """
 
-    account_name = os.environ["AZURE_ICEBERG_STORAGE_ACCOUNT"]
-    account_key = os.environ["AZURE_ICEBERG_ACCESS_KEY"]
-    # TODO: Temp fix until Azure read is supported and the prev 2 ENVs are removed
-    os.environ["AZURE_STORAGE_ACCOUNT_KEY"] = account_key
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
+    account_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
     return adlfs.AzureBlobFileSystem(account_name=account_name, account_key=account_key)
 
 
@@ -76,7 +74,7 @@ def tmp_abfs_path(abfs_fs):
     Create a temporary ABFS path for testing.
     """
 
-    account_name = os.environ["AZURE_ICEBERG_STORAGE_ACCOUNT"]
+    account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
     folder_name = str(uuid4())
     abfs_fs.mkdir(f"engine-unit-tests-tmp-blob/{folder_name}")
     # Need to include account name in path for C++ filesystem code

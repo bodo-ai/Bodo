@@ -39,6 +39,7 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.io.fs_io import (
+    abfs_get_fs,
     get_hdfs_fs,
     get_s3_fs_from_path,
     validate_gcsfs_installed,
@@ -444,7 +445,7 @@ def glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[str]:
 def getfs(
     fpath: str | list[str],
     protocol: str,
-    storage_options: dict | None = None,
+    storage_options: dict[str, pt.Any] | None = None,
     parallel: bool = False,
 ) -> PyFileSystem | pa.fs.FileSystem:
     """
@@ -472,6 +473,7 @@ def getfs(
         # "anon" is the only storage_options supported by PyArrow
         # If other storage_options fields are given,
         # we need to use S3Fs to read instead
+        validate_s3fs_installed()
         import s3fs
 
         sopts = storage_options.copy()
@@ -481,7 +483,7 @@ def getfs(
             **sopts,
         )
         return PyFileSystem(FSSpecHandler(s3_fs))
-    elif protocol == "s3":
+    if protocol == "s3":
         return (
             get_s3_fs_from_path(
                 fpath,
@@ -495,13 +497,13 @@ def getfs(
                 storage_options=storage_options,
             )
         )
-
     if storage_options is not None and len(storage_options) > 0:
         raise BodoError(
             f"ParquetReader: `storage_options` is not supported for protocol {protocol}"
         )
 
     if protocol in {"gcs", "gs"}:
+        validate_gcsfs_installed()
         import gcsfs
 
         # TODO pass storage_options to GCSFileSystem
@@ -511,6 +513,8 @@ def getfs(
         import fsspec
 
         return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
+    elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+        return abfs_get_fs(storage_options)
     elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
         return (
             get_hdfs_fs(fpath) if not isinstance(fpath, list) else get_hdfs_fs(fpath[0])
@@ -583,6 +587,26 @@ def get_fpath_without_protocol_prefix(
         tuple[str | list[str], str]: Filepath(s) without the prefix
             and the prefix itself.
     """
+    if protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+        # PyArrow AzureBlobFileSystem is initialized with account_name only
+        # so the host / container name should be included in the files
+        prefix = f"{protocol}://"
+
+        def norm_path(p: str) -> str:
+            url = urlparse(p)
+            container = (
+                parsed_url.netloc
+                if parsed_url.username is None
+                else parsed_url.username
+            )
+            return f"{container}{url.path}"
+
+        if isinstance(fpath, list):
+            mod_fpath = [norm_path(f) for f in fpath]
+        else:
+            mod_fpath = norm_path(fpath)
+        return mod_fpath, prefix
+
     prefix = ""
     if protocol == "s3":
         prefix = "s3://"
@@ -986,8 +1010,7 @@ def get_parquet_dataset(
     read_categories: bool = False,
     tot_rows_to_read: Optional[int] = None,
     typing_pa_schema: Optional[pa.Schema] = None,
-    use_hive: bool = True,
-    partitioning="hive",
+    partitioning: str | None = "hive",
 ) -> ParquetDataset:
     """
     Get ParquetDataset object for 'fpath' and set the number of total rows as an
@@ -1008,8 +1031,6 @@ def get_parquet_dataset(
             and throw an error otherwise. Currently this is only used in runtime.
             https://bodo.atlassian.net/browse/BE-2787
     """
-    if not use_hive:
-        partitioning = None
 
     # NOTE: This function obtains the metadata for a parquet dataset and works
     # in the same way regardless of whether the read is going to be parallel or
@@ -1029,56 +1050,29 @@ def get_parquet_dataset(
         storage_options.pop("bodo_dummy", None)
 
     comm = MPI.COMM_WORLD
-
     fpath, parsed_url, protocol = parse_fpath(fpath)
 
-    if protocol in {"gcs", "gs"}:
-        validate_gcsfs_installed()
-
-    if (
-        protocol == "s3"
-        and storage_options
-        and ("anon" not in storage_options or len(storage_options) > 1)
-    ):
-        validate_s3fs_installed()
-
-    fs = None
-
-    def get_fs_cached(parallel=False):
-        nonlocal fs
-        if fs is None:
-            fs = getfs(fpath, protocol, storage_options, parallel)
-        return fs
-
-    validate_schema = False
-    if get_row_counts:
-        # Getting row counts and schema validation is going to be
-        # distributed across ranks, so every rank will need a filesystem
-        # object to query the metadata of their assigned pieces.
-        # We have seen issues in the past with broadcasting some filesystem
-        # objects (e.g. s3) and even if they don't exist in Arrow >= 8
-        # broadcasting the filesystem adds extra time, so instead we initialize
-        # the filesystem before the broadcast. That way all ranks do it in parallel
-        # at the same time.
-        _ = get_fs_cached(parallel=True)
-        validate_schema = bodo.parquet_validate_schema
+    # Getting row counts and schema validation is going to be
+    # distributed across ranks, so every rank will need a filesystem
+    # object to query the metadata of their assigned pieces.
+    # We have seen issues in the past with broadcasting some filesystem
+    # objects (e.g. s3) and broadcasting the filesystem adds extra time,
+    # so instead we initialize the filesystem before the broadcast.
+    # That way all ranks do it in parallel at the same time.
+    fs = getfs(fpath, protocol, storage_options, get_row_counts)
+    validate_schema = bodo.parquet_validate_schema if get_row_counts else False
 
     dataset_or_err: ParquetDataset | Exception | None = None
     if bodo.get_rank() == 0:
-        try:
-            get_fs_cached()
-        except Exception as e:
-            dataset_or_err = e
-        else:
-            dataset_or_err = get_bodo_pq_dataset_from_fpath(
-                fpath,
-                protocol,
-                parsed_url,
-                get_fs_cached(),
-                partitioning,
-                filters,
-                typing_pa_schema,
-            )
+        dataset_or_err = get_bodo_pq_dataset_from_fpath(
+            fpath,
+            protocol,
+            parsed_url,
+            fs,
+            partitioning,
+            filters,
+            typing_pa_schema,
+        )
     if get_row_counts:
         ev_bcast = tracing.Event("bcast dataset")
     dataset_or_err = comm.bcast(dataset_or_err)
@@ -1093,7 +1087,7 @@ def get_parquet_dataset(
     # As mentioned above, we don't want to broadcast the filesystem because it
     # adds time (so initially we didn't include it in the dataset). We add
     # it to the dataset now that it's been broadcasted
-    dataset.set_fs(get_fs_cached())
+    dataset.set_fs(fs)
 
     if get_row_counts and tot_rows_to_read == 0:
         get_row_counts = validate_schema = False
@@ -1534,7 +1528,7 @@ def parquet_file_schema(
     storage_options=None,
     input_file_name_col=None,
     read_as_dict_cols=None,
-    use_hive=True,
+    use_hive: bool = True,
 ) -> FileSchema:
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     col_names = []
@@ -1548,7 +1542,7 @@ def parquet_file_schema(
         get_row_counts=False,
         storage_options=storage_options,
         read_categories=True,
-        use_hive=use_hive,
+        partitioning="hive" if use_hive else None,
     )
 
     partition_names = pq_dataset.partition_names

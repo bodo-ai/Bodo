@@ -27,7 +27,8 @@ export SCCACHE_BUCKET=engine-codebuild-cache
 export SCCACHE_REGION=us-east-2
 export SCCACHE_S3_USE_SSL=true
 export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-export CCACHE_PREFIX=sccache
+# We should just use sccache directly on CI
+export DISABLE_CCACHE=1
 
 # Bodo Install
 pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
