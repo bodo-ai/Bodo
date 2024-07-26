@@ -141,6 +141,9 @@ bodosql_full_caching = os.environ.get("BODO_USE_PARTIAL_CACHING", "0") != "0"
 bodo_disable_streaming_window_sort = (
     os.environ.get("BODO_DISABLE_STREAMING_WINDOW_SORT", "0") != "0"
 )
+# Should Bodo use the new Arrow Azure FileSystem implementation instead of
+# the old HDFS implementation.
+enable_azure_fs = os.environ.get("BODO_USE_AZURE_FS", "1") != "0"
 
 # --------------------------- End Streaming Config ---------------------------
 
