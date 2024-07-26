@@ -18,7 +18,6 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
-import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -121,8 +120,11 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
           // What Input Types does the function accept.
-          // This function one or two numeric argument
-          OperandTypes.NUMERIC.or(OperandTypes.NUMERIC_NUMERIC),
+          // This function one or two approximate numeric argument
+          OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC)
+              .or(
+                  OperandTypes.family(
+                      SqlTypeFamily.APPROXIMATE_NUMERIC, SqlTypeFamily.APPROXIMATE_NUMERIC)),
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
@@ -171,7 +173,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   public static final SqlNullPolicyFunction ACOSH =
       SqlNullPolicyFunction.createAnyPolicy(
-          "ACOSH", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
+          "ACOSH",
+          ReturnTypes.DOUBLE_NULLABLE,
+          OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
+          SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction ASINH = ACOSH.withName("ASINH");
 
@@ -186,11 +191,14 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction SQUARE =
       SqlNullPolicyFunction.createAnyPolicy(
-          "SQUARE", ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC, SqlFunctionCategory.NUMERIC);
+          "SQUARE",
+          ReturnTypes.DOUBLE_NULLABLE,
+          OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
+          SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction COSH = SqlLibraryOperators.COSH;
-  public static final SqlFunction SINH = SqlLibraryOperators.SINH;
-  public static final SqlFunction TANH = SqlLibraryOperators.TANH;
+  public static final SqlFunction COSH = ACOSH.withName("COSH");
+  public static final SqlFunction SINH = ACOSH.withName("SINH");
+  public static final SqlFunction TANH = ACOSH.withName("TANH");
 
   public static final SqlFunction UNIFORM =
       SqlBasicFunction.create(
