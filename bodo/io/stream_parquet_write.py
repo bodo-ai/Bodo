@@ -271,9 +271,6 @@ def gen_parquet_writer_init_impl(
         _is_parallel=False,
     ):
         ev = tracing.Event("parquet_writer_init", is_parallel=_is_parallel)
-        assert (
-            _is_parallel
-        ), "Streaming Parquet write only supported for distributed tables"
 
         bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
             path, parallel=_is_parallel
@@ -466,7 +463,11 @@ def gen_parquet_writer_append_table_impl_inner(
             )
             out_table_len = len(out_table)
             fname_prefix = get_fname_prefix(writer["bodo_file_prefix"], iter)
-            if out_table_len > 0:
+
+            # Write only on rank 0 for replicated input. Since streaming write is used
+            # only for SQL, replicated in this context means actually replicated data
+            # (instead of independent sequential functions with different data).
+            if out_table_len > 0 and (writer["parallel"] or bodo.get_rank() == 0):
                 ev_pq_write_cpp = tracing.Event("pq_write_cpp", is_parallel=False)
                 ev_pq_write_cpp.add_attribute("out_table_len", out_table_len)
                 parquet_write_table_cpp(
@@ -479,7 +480,9 @@ def gen_parquet_writer_append_table_impl_inner(
                     # metadata
                     unicode_to_utf8("null"),
                     unicode_to_utf8(writer["compression"]),
-                    writer["parallel"],
+                    # Set parallel=True even in replicated case since streaming write
+                    # requires a directory to write multiple pieces.
+                    True,
                     # write_rangeindex_to_metadata
                     0,
                     # range index start, stop, step

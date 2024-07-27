@@ -971,6 +971,69 @@ def test_streaming_parquet_write(memory_leak_check):
             shutil.rmtree(write_filename)
 
 
+def test_streaming_parquet_write_rep(memory_leak_check):
+    """Test streaming Parquet write with replicated input"""
+
+    df = gen_dataframe(80, None)
+
+    col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
+    batch_size = 11
+
+    @bodo.jit(distributed=False)
+    def impl(df, path):
+        writer = parquet_writer_init(-1, path, "snappy", -1, "part-", "")
+        all_is_last = False
+        iter_val = 0
+        T1 = bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df)
+        while not all_is_last:
+            table = bodo.hiframes.table.table_local_filter(
+                T1,
+                slice(
+                    (iter_val * batch_size),
+                    ((iter_val + 1) * batch_size),
+                ),
+            )
+            is_last = (iter_val * batch_size) >= len(df)
+            all_is_last = parquet_writer_append_table(
+                writer, table, col_meta, is_last, iter_val
+            )
+            iter_val += 1
+
+    write_filename = "test_stream_pq_write.pq"
+    orig_chunk_size = bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE
+    try:
+        # set chunk size to a small number to make sure multiple iterations write files
+        bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = 300
+        impl(df, write_filename)
+        bodo.barrier()
+        df2 = cast_dt64_to_ns(pd.read_parquet(write_filename))
+        # to test equality, we have to coerce datetime columns to ms
+        # because pandas writes to parquet as datetime64[ms]
+        df[df._datetime_col] = df[df._datetime_col].dt.floor("ms")
+        # need to coerce column from bodo-generated parquet to ms (note
+        # that the column has us precision because Arrow cpp converts
+        # nanoseconds to microseconds when writing to parquet version 1)
+        df2[df._datetime_col] = df2[df._datetime_col].dt.floor("ms")
+
+        # Sort data since streaming writes chunks out of order.
+        # Not using sort_output since it fails with nested columns (first column is enough).
+        df2 = df2.sort_values(by="col_0")
+        passed = _test_equal_guard(
+            df,
+            df2,
+            sort_output=False,
+            check_names=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size()
+    finally:
+        bodo.io.stream_parquet_write.PARQUET_WRITE_CHUNK_SIZE = orig_chunk_size
+        if bodo.get_rank() == 0:
+            shutil.rmtree(write_filename)
+
+
 # ---------------------------- Test Error Checking ---------------------------- #
 @pytest.mark.slow
 def test_to_parquet_missing_arg(memory_leak_check):

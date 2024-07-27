@@ -49,13 +49,15 @@ from bodo.utils.utils import run_rank0
 pytestmark = pytest.mark.iceberg
 
 
-def _write_iceberg_table(df, table_name, conn, db_schema, create_table_meta, if_exists):
+def _write_iceberg_table(
+    df, table_name, conn, db_schema, create_table_meta, if_exists, parallel=True
+):
     """helper that writes Iceberg table using Bodo's streaming write"""
 
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     batch_size = 11
 
-    @bodo.jit(distributed=["df"])
+    @bodo.jit(distributed=(["df"] if parallel else False))
     def impl(df, table_name, conn, db_schema):
         writer = iceberg_writer_init(
             -1,
@@ -83,7 +85,7 @@ def _write_iceberg_table(df, table_name, conn, db_schema, create_table_meta, if_
             )
             iter_val += 1
 
-    impl(_get_dist_arg(df), table_name, conn, db_schema)
+    impl((_get_dist_arg(df) if parallel else df), table_name, conn, db_schema)
 
 
 def init_create_table_meta(
@@ -273,6 +275,45 @@ def test_iceberg_write_basic(
             column_comments=column_comments,
             table_properties=ref_table_properties,
         )
+    passed = comm.bcast(passed)
+    assert passed == 1
+
+
+def test_iceberg_write_basic_rep(
+    iceberg_database,
+    iceberg_table_conn,
+    memory_leak_check,
+):
+    """Test basic streaming Iceberg write with replicated input"""
+    table_name = "SIMPLE_STRING_TABLE"
+    df = SIMPLE_TABLES_MAP["SIMPLE_STRING_TABLE"][0]
+    db_schema, warehouse_loc = iceberg_database(table_name)
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # set chunk size to a small number to make sure multiple iterations write files
+    bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = 300
+
+    create_table_meta = init_create_table_meta()
+
+    _write_iceberg_table(
+        df, table_name, conn, db_schema, create_table_meta, "replace", parallel=False
+    )
+
+    py_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    py_out = _gather_output(py_out)
+
+    comm = MPI.COMM_WORLD
+    passed = None
+
+    if comm.Get_rank() == 0:
+        passed = _test_equal_guard(
+            df,
+            py_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
     passed = comm.bcast(passed)
     assert passed == 1
 
