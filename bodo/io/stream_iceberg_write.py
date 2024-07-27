@@ -965,7 +965,6 @@ def gen_iceberg_writer_init_impl(
         _is_parallel=False,
     ):
         ev = tracing.Event("iceberg_writer_init", is_parallel=_is_parallel)
-        assert _is_parallel, "Iceberg Write only supported for distributed DataFrames"
         con_str = bodo.io.iceberg.format_iceberg_conn_njit(conn)
 
         (
@@ -1282,7 +1281,11 @@ def gen_iceberg_writer_append_table_impl_inner(
                 table_builder_state
             )
             out_table_len = len(out_table)
-            if out_table_len > 0:
+
+            # Write only on rank 0 for replicated input. Since streaming write is used
+            # only for SQL, replicated in this context means actually replicated data
+            # (instead of independent sequential functions with different data).
+            if out_table_len > 0 and (writer["parallel"] or bodo.get_rank() == 0):
                 ev_upload_table = tracing.Event("upload_table", is_parallel=False)
 
                 table_info = py_table_to_cpp_table(out_table, py_table_typ)
