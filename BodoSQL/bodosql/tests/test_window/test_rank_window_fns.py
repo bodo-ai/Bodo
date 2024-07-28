@@ -812,7 +812,41 @@ def test_partitionless_rank_fns(memory_leak_check):
                 }
             ),
             "[DEBUG] WindowState::FinalizeBuild: Finished",
-            id="rank",
+            id="dense_rank",
+        ),
+        pytest.param(
+            "PERCENT_RANK()",
+            pd.DataFrame(
+                {
+                    "window_out": np.concatenate(
+                        (
+                            np.array([0.0, 1.0 / 3.0, 1.0 / 3.0, 1.0]),
+                            np.zeros(100, dtype="float64"),
+                            (np.arange(1, 101) - 1.0) / 99.0,
+                            np.array([0.0]),
+                        )
+                    )
+                }
+            ),
+            "[DEBUG] WindowState::FinalizeBuild: Finished",
+            id="percent_rank",
+        ),
+        pytest.param(
+            "CUME_DIST()",
+            pd.DataFrame(
+                {
+                    "window_out": np.concatenate(
+                        (
+                            np.array([0.25, 0.75, 0.75, 1.0]),
+                            np.ones(100, dtype="float64"),
+                            (np.arange(1, 101)) / 100.0,
+                            np.array([1.0]),
+                        )
+                    )
+                }
+            ),
+            "[DEBUG] WindowState::FinalizeBuild: Finished",
+            id="cume_rank",
         ),
     ],
 )
