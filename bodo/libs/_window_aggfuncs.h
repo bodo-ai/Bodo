@@ -46,13 +46,19 @@ template <int ftype>
 concept any_value = ftype == Bodo_FTypes::any_value;
 
 template <int ftype>
-concept dense_rank = ftype == Bodo_FTypes::dense_rank;
+concept row_number = ftype == Bodo_FTypes::row_number;
 
 template <int ftype>
 concept rank = ftype == Bodo_FTypes::rank;
 
 template <int ftype>
-concept row_number = ftype == Bodo_FTypes::row_number;
+concept dense_rank = ftype == Bodo_FTypes::dense_rank;
+
+template <int ftype>
+concept percent_rank = ftype == Bodo_FTypes::percent_rank;
+
+template <int ftype>
+concept cume_dist = ftype == Bodo_FTypes::cume_dist;
 
 // Enums to specify which type of window frame is being computer, in case
 // a window function should have different implementaitons for some of
