@@ -180,9 +180,9 @@ stages:
       name: BodoSQL_Pip_Build
 
   # Bodo tests
-- stage: Test_Bodo_Binary
-  displayName: 'Test Bodo Binary'
-  dependsOn: Build_Bodo_Binary_Linux_Conda
+- stage: Test_Bodo
+  displayName: 'Test Bodo'
+  dependsOn: []
   jobs:
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -217,9 +217,9 @@ stages:
 
 
   # BodoSQL tests
-- stage: Test_BodoSQL_Binary_Streaming
-  displayName: 'Test BodoSQL Binary Streaming'
-  dependsOn: Build_BodoSQL_Conda_Binary
+- stage: Test_BodoSQL_Streaming
+  displayName: 'Test BodoSQL Streaming'
+  dependsOn: []
   jobs:
 
   - template: buildscripts/bodosql/azure/azure-test-conda-linux-macos.yml

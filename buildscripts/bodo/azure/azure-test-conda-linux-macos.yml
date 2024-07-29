@@ -67,45 +67,28 @@ jobs:
     displayName: 'Install Numba Dev'
     condition: and(succeeded(), eq('${{ parameters.useNumbaDev }}', 'true'))
 
-  - download: current
-    artifact: Bodo-CondaPkg-Linux
-
   - script: |
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
       set -x
 
-      export BODO_VERSION=`python -m setuptools_scm`
+      # Enable Sccache to use and save C/C++ cache to S3
+      # TODO: Should we move directly into CMake?
+      export SCCACHE_BUCKET=engine-codebuild-cache
+      export SCCACHE_REGION=us-east-2
+      export SCCACHE_S3_USE_SSL=true
+      export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
+      export SCCACHE_LOG=debug
+      # We should just use sccache directly on CI
+      export DISABLE_CCACHE=1
+      pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
-      # -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ is used to install the package
-      # from the locally built artifact in the previous step.
-      # This works even if we build multiple versions of the package in the same pipeline.
-      # --no-update-deps ensures that no dependencies are upgraded.
-      # If the conda-lock file is out of date, this would cause this installation
-      # to fail. To fix, we usually need to update the lock-file.
-      mamba install -y bodo=$BODO_VERSION -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-update-deps
-    displayName: 'Install Bodo'
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-
-      mkdir -p $HOME/bodo-inc
-      cd $HOME/bodo-inc
-      mkdir bodo
-      unamestr=`uname`
-      if [[ "$unamestr" == 'Linux' ]]; then
-        cp -avr $(System.DefaultWorkingDirectory)/bodo/tests bodo
-      else
-        cp -r $(System.DefaultWorkingDirectory)/bodo/tests bodo
-      fi
-    displayName: 'Copy Test Data'
-
-  - script: |
-      buildscripts/setup_minio.sh
-    displayName: 'Setup Minio'
-    retryCountOnTaskFailure: 5
+      cd iceberg
+      pip install -v .
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+    displayName: 'Build Bodo & Iceberg Connector'
 
   - script: |
       set -eo pipefail
@@ -119,13 +102,8 @@ jobs:
     retryCountOnTaskFailure: 5
 
   - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-
-      cd iceberg
-      pip install -v .
-    displayName: "Build Iceberg Connector"
+      buildscripts/setup_minio.sh
+    displayName: 'Setup Minio'
     retryCountOnTaskFailure: 5
 
   - script: |
@@ -160,19 +138,10 @@ jobs:
     artifact: TestEnv $(Agent.JobName)
     continueOnError: true
 
-  - task: DownloadSecureFile@1
-    name: testLicense
-    inputs:
-      secureFile: 'bodo.lic'
-    displayName: 'Download Test License'
-
   - script: |
       set -eo pipefail
       source activate ${{ parameters.CONDA_ENV }}
       set -x
-
-      sudo chmod a+r $(testLicense.secureFilePath)
-      sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -201,8 +170,7 @@ jobs:
       # For debugging purposes
       export BODO_SF_WRITE_DEBUG=1
 
-      cd $HOME/bodo-inc
-      cp `python -c "import bodo; print(bodo.__file__[:-11])"`pytest.ini .
+      cd $(System.DefaultWorkingDirectory)
       # For caching tests we need to update the location of the decryption file.
       # We set the absolute path as an environment variable.
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
