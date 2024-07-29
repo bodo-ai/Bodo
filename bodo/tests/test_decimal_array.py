@@ -1036,6 +1036,58 @@ def test_decimal_modulo_error(arg0, arg1, exception_type, msg, array_0, array_1)
 
 
 @pytest.mark.parametrize(
+    "arg, answer",
+    [
+        pytest.param(
+            pa.scalar(Decimal("85.23"), pa.decimal128(4, 2)),
+            1,
+            id="scalar-positive",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("0"), pa.decimal128(4, 2)),
+            0,
+            id="scalar-zero",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-12.345"), pa.decimal128(10, 5)),
+            -1,
+            id="scalar-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("123456789012345678901234567890.12345678"), pa.decimal128(38, 8)
+            ),
+            1,
+            id="scalar-large",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("512.32"),
+                    Decimal("0"),
+                    Decimal("-153245.152"),
+                    None,
+                    Decimal("123456789012345678901234567890.12345678"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+            ),
+            pd.array(
+                [1, 0, -1, None, 1],
+            ),
+            id="array",
+        ),
+    ],
+)
+def test_decimal_sign(arg, answer, memory_leak_check):
+    """Test adding decimals"""
+
+    def impl(arg0):
+        return bodo.libs.bodosql_array_kernels.sign(arg0)
+
+    check_func(impl, (arg,), py_output=answer)
+
+
+@pytest.mark.parametrize(
     "arg0, arg1, answer",
     [
         pytest.param(

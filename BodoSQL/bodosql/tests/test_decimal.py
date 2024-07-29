@@ -443,6 +443,65 @@ def test_decimal_to_float_cast(memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "df, expr, expected",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("0"),
+                            Decimal("123456789012345678901234567890.12345678"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+                    )
+                }
+            ),
+            "SIGN(D1)",
+            pd.array([1, None, -1, 0, 1]),
+            id="array",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("1.23"),
+                            None,
+                            Decimal("-45.67"),
+                            Decimal("0"),
+                            Decimal("123456789012345678901234567890.12345678"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 8)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE SIGN(D1) :: VARCHAR END",
+            pd.array(["1", "", "-1", "0", "1"]),
+            id="array-case",
+        ),
+    ],
+)
+def test_decimal_sign(df, expr, expected, memory_leak_check):
+    """
+    Tests the correctness of the SIGN function for decimals.
+    """
+    query = f"SELECT {expr} AS res FROM TABLE1"
+    ctx = {"TABLE1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=pd.DataFrame({"RES": expected}),
+        sort_output=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
     "df, expr, answer",
     [
         pytest.param(

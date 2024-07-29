@@ -372,6 +372,40 @@ array_info* decimal_arr_to_double_py_entry(array_info* arr_) {
     }
 }
 
+array_info* decimal_array_sign_py_entry(array_info* arr_) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        size_t len = arr->length;
+        std::unique_ptr<array_info> out_arr =
+            alloc_nullable_array_no_nulls(len, Bodo_CTypes::INT8);
+        for (size_t i = 0; i < len; i++) {
+            if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            } else {
+                int8_t* out_ptr =
+                    out_arr
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL, int8_t>() +
+                    i;
+                const arrow::Decimal128& in_val =
+                    *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                 arrow::Decimal128>() +
+                      i);
+                *out_ptr = in_val == arrow::Decimal128(0) ? 0 : in_val.Sign();
+            }
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+int8_t decimal_scalar_sign_py_entry(arrow::Decimal128 val) {
+    return val == arrow::Decimal128(0) ? 0 : val.Sign();
+}
+
 template <bool fast_add, bool rescale_left, bool rescale_right,
           bool do_addition>
 inline void add_or_subtract_decimal_scalars(const arrow::Decimal128& d1,
@@ -2265,6 +2299,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_scalar_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
+    SetAttrStringFromVoidPtr(m, decimal_array_sign_py_entry);
+    SetAttrStringFromVoidPtr(m, decimal_scalar_sign_py_entry);
     SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_arrays_py_entry);
     SetAttrStringFromVoidPtr(m, multiply_decimal_scalars_py_entry);
