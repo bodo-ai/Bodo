@@ -272,15 +272,15 @@ def create_numeric_func_overload(func_name):
 
 
 def create_numeric_util_overload(func_name):  # pragma: no cover
-    """Creates an overload function to support trig functions on
+    """Creates an overload function to support numeric functions on
        a string array representing a column of a SQL table
 
     Args:
-        func_name: which trig function is being called (e.g. "ACOS")
+        func_name: which numeric function is being called (e.g. "ACOS")
 
     Returns:
         (function): a utility that takes in one argument and returns
-        the appropriate trig function applied to the argument, where the
+        the appropriate numeric function applied to the argument, where the
         argument could be an array/scalar/null.
     """
 
@@ -288,14 +288,24 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
         def overload_numeric_util(arr):
             # These functions support decimal types natively
-            if func_name in {"ABS"}:
+            if func_name in {"ABS", "SIGN"}:
                 verify_numeric_arg(arr, func_name, "arr")
                 if isinstance(arr, (bodo.Decimal128Type, bodo.DecimalArrayType)):
+                    # Return decimal version of implementations
 
-                    def impl(arr):
-                        return bodo.libs.bodosql_array_kernels.abs_decimal(arr)
+                    if func_name == "ABS":
 
-                    return impl
+                        def impl(arr):  # pragma: no cover
+                            return bodo.libs.bodosql_array_kernels.abs_decimal(arr)
+
+                        return impl
+
+                    if func_name == "SIGN":
+
+                        def impl(arr):  # pragma: no cover
+                            return bodo.libs.bodosql_array_kernels.sign_decimal(arr)
+
+                        return impl
             else:
                 verify_int_float_arg(arr, func_name, "arr")
 
@@ -390,7 +400,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
 
 def _install_numeric_overload(funcs_utils_names):
-    """Creates and installs the overloads for trig functions"""
+    """Creates and installs the overloads for numeric functions"""
     for func, util, func_name in funcs_utils_names:
         func_overload_impl = create_numeric_func_overload(func_name)
         overload(func)(func_overload_impl)
@@ -468,6 +478,33 @@ def round_half_always_up(x, places):
     )
     impl = loc_vars["impl"]
     return impl
+
+
+def sign_decimal(arr):  # pragma: no cover
+    pass
+
+
+@overload(sign_decimal, prefer_literal=True)
+def overload_sign_decimal(arr):
+    if not (
+        is_overload_none(arr)
+        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("sign_decimal: arr must be a decimal array or scalar")
+
+    if isinstance(arr, bodo.DecimalArrayType):
+        # Array case
+        def impl(arr):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.decimal_array_sign(arr)
+
+        return impl
+
+    else:
+        # Scalar case
+        def impl(arr):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.decimal_scalar_sign(arr)
+
+        return impl
 
 
 def round_decimal(arr, round_scale):  # pragma: no cover
