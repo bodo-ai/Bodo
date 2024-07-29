@@ -1,6 +1,7 @@
 package com.bodosql.calcite.table
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
 import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rel.type.RelDataTypeFactory
@@ -13,11 +14,31 @@ import org.apache.calcite.sql.type.VariantSqlType
 data class ColumnDataTypeInfo(
     val dataType: BodoSQLColumnDataType,
     val isNullable: Boolean,
-    val precision: Int,
+    private var precision: Int,
     val scale: Int,
     val children: List<ColumnDataTypeInfo>,
     val fieldNames: List<String>,
 ) {
+    init {
+        // Update the precision so all IO sources (including Python) are consistent.
+        precision =
+            if (precision == RelDataType.PRECISION_NOT_SPECIFIED) {
+                when (dataType) {
+                    BodoSQLColumnDataType.STRING -> {
+                        BodoSQLRelDataTypeSystem.MAX_STRING_PRECISION
+                    }
+                    BodoSQLColumnDataType.BINARY -> {
+                        BodoSQLRelDataTypeSystem.MAX_BINARY_PRECISION
+                    }
+                    else -> {
+                        precision
+                    }
+                }
+            } else {
+                precision
+            }
+    }
+
     // Constructor for most data types without precision or scale
     constructor(
         dataType: BodoSQLColumnDataType,
