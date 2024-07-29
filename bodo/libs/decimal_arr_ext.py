@@ -94,6 +94,14 @@ ll.add_symbol(
     decimal_ext.cast_decimal_to_decimal_array_unsafe_py_entry,
 )
 ll.add_symbol(
+    "decimal_scalar_sign",
+    decimal_ext.decimal_scalar_sign_py_entry,
+)
+ll.add_symbol(
+    "decimal_array_sign",
+    decimal_ext.decimal_array_sign_py_entry,
+)
+ll.add_symbol(
     "add_or_subtract_decimal_scalars",
     decimal_ext.add_or_subtract_decimal_scalars_py_entry,
 )
@@ -1369,6 +1377,98 @@ def _cast_float_to_decimal_scalar(typingctx, val_t, precision_t, scale_t):
     decimal_type = Decimal128Type(precision, scale)
     ret_type = types.Tuple([decimal_type, types.bool_])
     return ret_type(val_t, types.int32, types.int32), codegen
+
+
+def decimal_scalar_sign(val):  # pragma: no cover
+    pass
+
+
+@overload(decimal_scalar_sign, prefer_literal=True)
+def overload_decimal_scalar_sign(val):
+    """
+    Returns the sign of the decimal scalar. 0 for 0, 1 for positive, -1 for negative.
+    """
+    assert isinstance(
+        val, Decimal128Type
+    ), "decimal_scalar_sign: Decimal128Type expected"
+
+    def impl(val):  # pragma: no cover
+        return _decimal_scalar_sign(val)
+
+    return impl
+
+
+@intrinsic
+def _decimal_scalar_sign(typingctx, val_t):
+    """
+    Returns the sign of the decimal scalar. 0 for 0, 1 for positive, -1 for negative.
+    """
+    assert isinstance(val_t, Decimal128Type), "Decimal128Type expected"
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8),
+            [
+                lir.IntType(128),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="decimal_scalar_sign"
+        )
+        ret = builder.call(fn, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return types.int8(val_t), codegen
+
+
+def decimal_array_sign(arr):  # pragma: no cover
+    pass
+
+
+@overload(decimal_array_sign, prefer_literal=True)
+def overload_decimal_array_sign(arr):
+    """
+    Returns the element-wise signs of the decimal array.
+    0 for 0, 1 for positive, -1 for negative.
+    """
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "decimal_array_sign: DecimalArrayType expected"
+
+    output_arr_type = bodo.IntegerArrayType(types.int8)
+
+    def impl(arr):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_info = _decimal_array_sign(arr_info)
+        out_arr = info_to_array(out_info, output_arr_type)
+        delete_info(out_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic
+def _decimal_array_sign(typingctx, val_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="decimal_array_sign"
+        )
+        ret = builder.call(fn, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return array_info_type(val_t), codegen
 
 
 def decimal_addition_subtraction_output_precision_scale(p1, s1, p2, s2):

@@ -232,6 +232,7 @@ broadcasted_fixed_arg_functions = {
     "second_timestamp",
     "sha2",
     "sign",
+    "sign_decimal",
     "sin",
     "sinh",
     "space",
