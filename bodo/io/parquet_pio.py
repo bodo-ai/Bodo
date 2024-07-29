@@ -273,6 +273,8 @@ class ParquetDataset:
     """
 
     def __init__(self, pa_pq_dataset, prefix=""):
+        # We always get exact row counts (after filters) for now.
+        self.row_level = True
         self.schema: pa.Schema = pa_pq_dataset.schema  # Arrow schema
         # We don't store the filesystem initially, and instead set it after
         # ParquetDataset is broadcasted. This is because some filesystems

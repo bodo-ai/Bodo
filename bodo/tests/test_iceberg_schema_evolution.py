@@ -551,7 +551,7 @@ def test_filter_pushdown_on_newly_added_column(
     memory_leak_check,
     filter: str,
     dtype_cols_to_add_isin_tuple: tuple[
-        str, pd.Series, pd.Series, pd.Series, pd.Series, tuple[Any]
+        str, bool, pd.Series, pd.Series, pd.Series, pd.Series, tuple[Any]
     ],
     evol_type: str,
 ):

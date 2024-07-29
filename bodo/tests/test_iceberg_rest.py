@@ -155,6 +155,8 @@ def test_iceberg_tabular_write_basic(
             read,
             tuple([table_name]),
             py_output=bodo.allgatherv(dist_df),
+            sort_output=True,
+            reset_index=True,
         )
     finally:
         delete_succeeded = run_rank0(bic.delete_table)(

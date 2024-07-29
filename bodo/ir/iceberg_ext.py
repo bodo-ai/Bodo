@@ -482,10 +482,9 @@ class IcebergReader(Connector):
         return vars
 
     def out_table_distribution(self) -> Distribution:
-        if self.limit is not None:
-            return Distribution.OneD_Var
-        else:
-            return Distribution.OneD
+        # Output is not guaranteed to be equally distributed
+        # since there might be differences in the sizes of files.
+        return Distribution.OneD_Var
 
 
 def remove_dead_iceberg(

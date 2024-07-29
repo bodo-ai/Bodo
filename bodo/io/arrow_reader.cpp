@@ -13,11 +13,9 @@
 #include <arrow/util/future.h>
 #include <fmt/format.h>
 #include <pyerrors.h>
+#include <stdexcept>
 
-#include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "../libs/_datetime_ext.h"
-#include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
 #include "../libs/_stl.h"
 
@@ -1046,8 +1044,149 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 
 // -------------------- ArrowReader --------------------
 
+void ArrowReader::distribute_rows(PyObject* pieces_py) {
+    assert(this->row_level);
+    if (!this->parallel) {
+        // The process will read the whole dataset.
+
+        // head-only optimization ("limit pushdown"): user code may only use
+        // df.head() so we just read the necessary rows
+        this->count = (this->tot_rows_to_read != -1)
+                          ? std::min(this->tot_rows_to_read, this->total_rows)
+                          : this->total_rows;
+
+        if (this->total_rows > 0) {
+            // total number of rows of all the pieces we iterate through
+            int64_t count_rows = 0;
+            PyObject* piece;
+            // iterate through pieces next
+            PyObject* iterator = PyObject_GetIter(pieces_py);
+            if (iterator == NULL) {
+                throw std::runtime_error(
+                    "ArrowReader::distribute_rows(): error getting pieces "
+                    "iterator");
+            }
+            while ((piece = PyIter_Next(iterator))) {
+                PyObject* num_rows_piece_py =
+                    PyObject_GetAttrString(piece, "_bodo_num_rows");
+                if (num_rows_piece_py == NULL) {
+                    throw std::runtime_error(
+                        "ArrowReader::distribute_rows: _bodo_num_rows "
+                        "attribute not in piece");
+                }
+                int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
+                Py_DECREF(num_rows_piece_py);
+                if (num_rows_piece > 0) {
+                    this->add_piece(piece, num_rows_piece);
+                    this->metrics.local_n_pieces_to_read_from++;
+                }
+                Py_DECREF(piece);
+                count_rows += num_rows_piece;
+                // finish when number of rows of my pieces covers my chunk
+                if (count_rows >= this->count) {
+                    break;
+                }
+            }
+            Py_DECREF(iterator);
+        }
+    } else {
+        // Is parallel (this process will read a chunk of dataset)
+
+        // calculate the portion of rows that this process needs to read
+        size_t rank = dist_get_rank();
+        size_t nranks = dist_get_size();
+        int64_t start_row_global =
+            dist_get_start(this->total_rows, nranks, rank);
+        this->count = dist_get_node_portion(this->total_rows, nranks, rank);
+
+        // head-only optimization ("limit pushdown"): user code may only use
+        // df.head() so we just read the necessary rows. This reads the data
+        // in an imbalanced way. The assumed use case is printing df.head()
+        // which looks better if the data is in fewer ranks.
+        // TODO: explore if balancing data is necessary for some use cases
+        if (this->tot_rows_to_read != -1) {
+            // no rows to read on this process
+            if (start_row_global >= this->tot_rows_to_read) {
+                start_row_global = 0;
+                this->count = 0;
+            }
+            // there may be fewer rows to read
+            else {
+                int64_t new_end = std::min(start_row_global + this->count,
+                                           this->tot_rows_to_read);
+                this->count = new_end - start_row_global;
+            }
+        }
+
+        // get those pieces that correspond to my chunk
+        if (this->count > 0) {
+            // total number of rows of all the pieces we iterate through
+            int64_t count_rows = 0;
+            // track total rows that this rank will read from pieces we
+            // iterate through
+            int64_t rows_added = 0;
+            PyObject* piece;
+            // iterate through pieces next
+            PyObject* iterator = PyObject_GetIter(pieces_py);
+            if (iterator == NULL) {
+                throw std::runtime_error(
+                    "ArrowReader::distribute_rows(): error getting "
+                    "pieces iterator");
+            }
+            while ((piece = PyIter_Next(iterator))) {
+                PyObject* num_rows_piece_py =
+                    PyObject_GetAttrString(piece, "_bodo_num_rows");
+                if (num_rows_piece_py == NULL) {
+                    throw std::runtime_error(
+                        "ArrowReader::distribute_rows(): _bodo_num_rows "
+                        "attribute not in piece");
+                }
+                int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
+                Py_DECREF(num_rows_piece_py);
+
+                // We skip all initial pieces whose total row count is less
+                // than start_row_global (first row of my chunk). After
+                // that, we get all subsequent pieces until the number of
+                // rows is greater or equal to number of rows in my chunk
+                if ((num_rows_piece > 0) &&
+                    (start_row_global < count_rows + num_rows_piece)) {
+                    int64_t rows_added_from_piece;
+                    if (get_num_pieces() == 0) {
+                        // this is the first piece
+                        this->start_row_first_piece =
+                            start_row_global - count_rows;
+                        rows_added_from_piece = std::min(
+                            num_rows_piece - this->start_row_first_piece,
+                            this->count);
+                    } else {
+                        rows_added_from_piece =
+                            std::min(num_rows_piece, this->count - rows_added);
+                    }
+                    rows_added += rows_added_from_piece;
+                    this->add_piece(piece, rows_added_from_piece);
+                    this->metrics.local_n_pieces_to_read_from++;
+                }
+                Py_DECREF(piece);
+
+                count_rows += num_rows_piece;
+                // finish when number of rows of my pieces covers my chunk
+                if (rows_added == this->count) {
+                    break;
+                }
+            }
+            Py_DECREF(iterator);
+        }
+    }
+    this->metrics.local_rows_to_read = this->count;
+}
+
+void ArrowReader::distribute_pieces(PyObject* pieces_py) {
+    throw std::runtime_error("ArrowReader::distribute_pieces: Unsupported!");
+}
+
 void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
                                     const bool create_dict_from_string) {
+    auto start = start_timer();
     if (initialized) {
         throw std::runtime_error("ArrowReader already initialized");
     }
@@ -1087,142 +1226,44 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
     PyObject* ds = get_dataset();
     this->metrics.get_ds_time += end_timer(start_get_ds);
 
+    // row_level = ds.row_level
+    PyObject* row_level_py = PyObject_GetAttrString(ds, "row_level");
+    this->row_level = PyObject_IsTrue(row_level_py);
+    Py_DECREF(row_level_py);
+
     // total_rows = ds.total_rows
+    // In the row-level case, this is the exact count of the rows that will be
+    // output after applying filters. In the piece-level case, this is the
+    // amount of rows that will read from source before filtering.
     PyObject* total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");
     this->total_rows = PyLong_AsLongLong(total_rows_py);
     Py_DECREF(total_rows_py);
-    this->metrics.global_nrows_to_read = this->total_rows;
 
     // all_pieces = ds.pieces
     PyObject* all_pieces = PyObject_GetAttrString(ds, "pieces");
+
+    // Total number of pieces globally.
     this->metrics.global_n_pieces = PyObject_Length(all_pieces);
     ev.add_attribute("g_total_num_pieces",
                      static_cast<size_t>(this->metrics.global_n_pieces));
+
     Py_DECREF(ds);
 
-    // iterate through pieces next
-    PyObject* iterator = PyObject_GetIter(all_pieces);
-    Py_DECREF(all_pieces);
-    PyObject* piece;
-
-    if (iterator == NULL) {
+    if (this->force_row_level_read() && !this->row_level) {
         throw std::runtime_error(
-            "ArrowReader::init_arrow_reader(): error getting pieces "
-            "iterator");
+            "ArrowReader::init_arrow_reader: Must do a row-level read but the "
+            "dataset returned row_level=false. This is likely a bug!");
     }
 
-    if (!parallel) {
-        // The process will read the whole dataset
-
-        // head-only optimization ("limit pushdown"): user code may only use
-        // df.head() so we just read the necessary rows
-        this->count = (tot_rows_to_read != -1)
-                          ? std::min(tot_rows_to_read, total_rows)
-                          : total_rows;
-
-        if (total_rows > 0) {
-            // total number of rows of all the pieces we iterate through
-            int64_t count_rows = 0;
-            while ((piece = PyIter_Next(iterator))) {
-                PyObject* num_rows_piece_py =
-                    PyObject_GetAttrString(piece, "_bodo_num_rows");
-                if (num_rows_piece_py == NULL) {
-                    throw std::runtime_error(
-                        "_bodo_num_rows attribute not in piece");
-                }
-                int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
-                Py_DECREF(num_rows_piece_py);
-                if (num_rows_piece > 0) {
-                    this->add_piece(piece, num_rows_piece, this->count);
-                    this->metrics.local_n_pieces_to_read_from++;
-                }
-                Py_DECREF(piece);
-                count_rows += num_rows_piece;
-                // finish when number of rows of my pieces covers my chunk
-                if (count_rows >= this->count)
-                    break;
-            }
-        }
+    auto start_dist = start_timer();
+    if (this->row_level) {
+        this->distribute_rows(all_pieces);
     } else {
-        // is parallel (this process will read a chunk of dataset)
-
-        // calculate the portion of rows that this process needs to read
-        size_t rank = dist_get_rank();
-        size_t nranks = dist_get_size();
-        int64_t start_row_global =
-            dist_get_start(this->total_rows, nranks, rank);
-        this->count = dist_get_node_portion(total_rows, nranks, rank);
-
-        // head-only optimization ("limit pushdown"): user code may only use
-        // df.head() so we just read the necessary rows. This reads the data
-        // in an imbalanced way. The assumed use case is printing df.head()
-        // which looks better if the data is in fewer ranks.
-        // TODO: explore if balancing data is necessary for some use cases
-        if (this->tot_rows_to_read != -1) {
-            // no rows to read on this process
-            if (start_row_global >= this->tot_rows_to_read) {
-                start_row_global = 0;
-                this->count = 0;
-            }
-            // there may be fewer rows to read
-            else {
-                int64_t new_end = std::min(start_row_global + this->count,
-                                           this->tot_rows_to_read);
-                this->count = new_end - start_row_global;
-            }
-        }
-
-        // get those pieces that correspond to my chunk
-        if (this->count > 0) {
-            // total number of rows of all the pieces we iterate through
-            int64_t count_rows = 0;
-            // track total rows that this rank will read from pieces we
-            // iterate through
-            int64_t rows_added = 0;
-            while ((piece = PyIter_Next(iterator))) {
-                PyObject* num_rows_piece_py =
-                    PyObject_GetAttrString(piece, "_bodo_num_rows");
-                if (num_rows_piece_py == NULL) {
-                    throw std::runtime_error(
-                        "_bodo_num_rows attribute not in piece");
-                }
-                int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
-                Py_DECREF(num_rows_piece_py);
-
-                // we skip all initial pieces whose total row count is less
-                // than start_row_global (first row of my chunk). After
-                // that, we get all subsequent pieces until the number of
-                // rows is greater or equal to number of rows in my chunk
-                if ((num_rows_piece > 0) &&
-                    (start_row_global < count_rows + num_rows_piece)) {
-                    int64_t rows_added_from_piece;
-                    if (get_num_pieces() == 0) {
-                        // this is the first piece
-                        this->start_row_first_piece =
-                            start_row_global - count_rows;
-                        rows_added_from_piece = std::min(
-                            num_rows_piece - this->start_row_first_piece,
-                            this->count);
-                    } else {
-                        rows_added_from_piece =
-                            std::min(num_rows_piece, this->count - rows_added);
-                    }
-                    rows_added += rows_added_from_piece;
-                    this->add_piece(piece, rows_added_from_piece, this->count);
-                    this->metrics.local_n_pieces_to_read_from++;
-                }
-                Py_DECREF(piece);
-
-                count_rows += num_rows_piece;
-                // finish when number of rows of my pieces covers my chunk
-                if (rows_added == this->count) {
-                    break;
-                }
-            }
-        }
+        this->distribute_pieces(all_pieces);
     }
-    Py_DECREF(iterator);
-    this->metrics.local_rows_to_read = this->count;
+    this->metrics.distribute_pieces_or_rows_time += end_timer(start_dist);
+
+    Py_DECREF(all_pieces);
 
     if (PyErr_Occurred()) {
         throw std::runtime_error("python");
@@ -1242,10 +1283,10 @@ void ArrowReader::init_arrow_reader(std::span<int32_t> str_as_dict_cols,
     }
 
     // Initialize the number of rows left to read
-    rows_left_to_emit = count;
-    rows_left_to_read = count;
-
-    initialized = true;
+    this->rows_left_to_emit = count;
+    this->rows_left_to_read = count;
+    this->initialized = true;
+    this->metrics.init_arrow_reader_total_time += end_timer(start);
 }
 
 std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
@@ -1521,12 +1562,20 @@ void ArrowReader::ReportInitStageMetrics() {
     std::vector<MetricBase> metrics;
     metrics.reserve(16);
 
+    // Globals
+    MetricBase::StatValue limit_nrows_ = this->tot_rows_to_read;
+    metrics.emplace_back(StatMetric("limit_nrows", limit_nrows_, true));
+    MetricBase::StatValue force_row_level_ =
+        this->force_row_level_read() ? 1 : 0;
+    metrics.emplace_back(StatMetric("force_row_level", force_row_level_, true));
+    MetricBase::StatValue row_level_ = this->row_level ? 1 : 0;
+    metrics.emplace_back(StatMetric("row_level", row_level_, true));
+    // In the row-level case, this is the exact count of the rows that will be
+    // output after applying filters. In the piece-level case, this is the
+    // amount of rows that will read from source before filtering.
+    MetricBase::StatValue global_nrows_to_read = this->total_rows;
     metrics.emplace_back(
-        StatMetric("limit_nrows", this->metrics.limit_nrows, true));
-    metrics.emplace_back(
-        TimerMetric("get_ds_time", this->metrics.get_ds_time, true));
-    metrics.emplace_back(StatMetric("global_nrows_to_read",
-                                    this->metrics.global_nrows_to_read, true));
+        StatMetric("global_nrows_to_read", global_nrows_to_read, true));
     metrics.emplace_back(
         StatMetric("global_n_pieces", this->metrics.global_n_pieces, true));
     MetricBase::StatValue create_dict_from_str =
@@ -1536,6 +1585,15 @@ void ArrowReader::ReportInitStageMetrics() {
     metrics.emplace_back(StatMetric("n_str_as_dict_cols",
                                     this->metrics.n_str_as_dict_cols, true));
 
+    // Locals
+    metrics.emplace_back(
+        TimerMetric("get_ds_time", this->metrics.get_ds_time, false));
+    metrics.emplace_back(TimerMetric("init_arrow_reader_total_time",
+                                     this->metrics.init_arrow_reader_total_time,
+                                     false));
+    metrics.emplace_back(
+        TimerMetric("distribute_pieces_or_rows_time",
+                    this->metrics.distribute_pieces_or_rows_time, false));
     metrics.emplace_back(
         StatMetric("local_rows_to_read", this->metrics.local_rows_to_read));
     metrics.emplace_back(StatMetric("local_n_pieces_to_read_from",

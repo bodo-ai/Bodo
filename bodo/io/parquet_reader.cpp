@@ -83,8 +83,7 @@ static void fill_input_file_name_col_dict(
 }
 
 // -------- ParquetReader --------
-void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
-                              int64_t total_rows) {
+void ParquetReader::add_piece(PyObject* piece, int64_t num_rows) {
     // p = piece.path
     PyObject* p = PyObject_GetAttrString(piece, "path");
     const char* c_path = PyUnicode_AsUTF8(p);
@@ -97,7 +96,8 @@ void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
             // use alloc_nullable_array_no_nulls since there cannot
             // be any nulls here
             this->input_file_name_col_indices_arr =
-                alloc_nullable_array_no_nulls(total_rows, Bodo_CTypes::INT32);
+                alloc_nullable_array_no_nulls(get_local_rows(),
+                                              Bodo_CTypes::INT32);
         }
         // fill a range in the indices array
         fill_input_file_name_col_indices(
@@ -243,7 +243,7 @@ std::shared_ptr<table_info> ParquetReader::get_empty_out_table() {
     return out_table;
 }
 
-std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner() {
+std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
     // Generate out_schema from schema and selected_columns
     std::vector<std::shared_ptr<arrow::Field>> out_schema_fields;
     std::transform(this->selected_fields.begin(), this->selected_fields.end(),
