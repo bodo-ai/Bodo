@@ -196,7 +196,7 @@ class ExpectedBatchingProperty {
             inputRowType: RelDataType,
         ): BatchingProperty {
             // We can stream if it's a Snowflake write via the Snowflake Catalog.
-            val canStream = (table is CatalogTable) && (table.dbType.equals("SNOWFLAKE"))
+            val canStream = (table is CatalogTable) && (table.dbType == "SNOWFLAKE")
             val nodeTypes = rowTypeToTypes(inputRowType)
             return getBatchingProperty(canStream, nodeTypes)
         }
