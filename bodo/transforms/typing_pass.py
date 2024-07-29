@@ -5735,7 +5735,7 @@ class TypingTransforms:
                 "init_stream_sort_state",
                 rhs.args,
                 dict(rhs.kws),
-                5,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5785,7 +5785,7 @@ class TypingTransforms:
                 "init_stream_sort_state",
                 builder_def.args,
                 dict(builder_def.kws),
-                5,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5825,7 +5825,7 @@ class TypingTransforms:
                 "init_stream_sort_state",
                 builder_def.args,
                 dict(builder_def.kws),
-                5,
+                7,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5840,7 +5840,7 @@ class TypingTransforms:
                 return [assign]
 
             if input_table_type != output_type.build_table_type:
-                num_pos_args = 5
+                num_pos_args = 7
                 arg_variables = []
                 arg_values = []
                 for i in range(num_pos_args):
@@ -5871,8 +5871,8 @@ class TypingTransforms:
                 # strings. We want to convert that to a list of indices into the
                 # list of columns to store in the state type. The list of
                 # columns is available as the 4th argument.
-                by = arg_values[1]
-                col_names = arg_values[4]
+                by = arg_values[3]
+                col_names = arg_values[6]
                 key_inds = tuple(col_names.index(col) for col in by)
                 new_type = bodo.libs.stream_sort.SortStateType(
                     input_table_type, key_inds

@@ -447,6 +447,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_timestamp_tz,
                     bodo.enable_runtime_join_filters,
                     bodo.enable_streaming_sort,
+                    bodo.enable_streaming_sort_limit_offset,
                     bodo.bodo_sql_style,
                     bodo.bodosql_full_caching,
                 )
@@ -468,6 +469,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_timestamp_tz,
                     bodo.enable_runtime_join_filters,
                     bodo.enable_streaming_sort,
+                    bodo.enable_streaming_sort_limit_offset,
                     bodo.bodo_sql_style,
                     bodo.bodosql_full_caching,
                     *extra_args,

@@ -50,7 +50,7 @@ class BodoPhysicalSort(
 
     private fun getLimitAndOffsetStrs(
         ctx: BodoPhysicalRel.BuildContext,
-        inTable: BodoEngineTable,
+        inTable: BodoEngineTable?,
     ): Pair<String, String> {
         var limitStr = ""
         var offsetStr = ""
@@ -188,6 +188,38 @@ class BodoPhysicalSort(
         val sortOrders: kotlin.collections.List<RelFieldCollation> = this.getCollation().fieldCollations
         val (byList, ascendingList, naPositionList) = SortCodeGen.generateSortParameters(colNames, sortOrders)
         val batchPipeline: StreamingPipelineFrame = ctx.builder().getCurrentStreamingPipeline()
+        val limitAndOffsetStrs = getLimitAndOffsetStrs(ctx, null)
+        val limitStr = limitAndOffsetStrs.first
+        val offsetStr = limitAndOffsetStrs.second
+        val typeSystem = cluster.typeFactory.typeSystem
+        val limit =
+            if ((limitStr == "" && offsetStr == "") ||
+                (typeSystem is BodoSQLRelDataTypeSystem && !typeSystem.enableStreamingSortLimitOffset)
+            ) {
+                Expr.IntegerLiteral(
+                    -1,
+                )
+            } else {
+                if (limitStr == "") {
+                    Expr.IntegerLiteral(0)
+                } else {
+                    Expr.Raw(limitStr)
+                }
+            }
+        val offset =
+            if ((limitStr == "" && offsetStr == "") ||
+                (typeSystem is BodoSQLRelDataTypeSystem && !typeSystem.enableStreamingSortLimitOffset)
+            ) {
+                Expr.IntegerLiteral(
+                    -1,
+                )
+            } else {
+                if (offsetStr == "") {
+                    Expr.IntegerLiteral(0)
+                } else {
+                    Expr.Raw(offsetStr)
+                }
+            }
 
         val sortStateVar: StateVariable = ctx.builder().symbolTable.genStateVar()
         val stateCall =
@@ -195,6 +227,8 @@ class BodoPhysicalSort(
                 "bodo.libs.stream_sort.init_stream_sort_state",
                 listOf(
                     ctx.operatorID().toExpr(),
+                    limit,
+                    offset,
                     byList,
                     ascendingList,
                     naPositionList,
@@ -226,7 +260,7 @@ class BodoPhysicalSort(
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         val typeSystem = cluster.typeFactory.typeSystem
         if (typeSystem is BodoSQLRelDataTypeSystem) {
-            if (typeSystem.enableStreamingSort && offset == null && fetch == null) {
+            if (typeSystem.enableStreamingSort) {
                 return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
             }
         }

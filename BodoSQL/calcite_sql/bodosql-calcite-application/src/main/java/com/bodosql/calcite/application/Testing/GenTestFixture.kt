@@ -41,6 +41,8 @@ abstract class GenTestFixture {
                 true,
                 // Disable Streaming Sort
                 false,
+                // Disable Streaming Sort Limit Offset
+                false,
                 // Maintain case sensitivity in the Snowflake style by default
                 "SNOWFLAKE",
                 false,

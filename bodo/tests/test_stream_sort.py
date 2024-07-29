@@ -27,7 +27,7 @@ def test_stream_sort_compiles():
         _iter_1 = 0
         _temp9 = bodo.hiframes.table.local_len(T1)
         state_1 = bodo.libs.stream_sort.init_stream_sort_state(
-            4001, ["C"], [True], ["last"], ("A", "B", "C")
+            4001, -1, -1, ["C"], [True], ["last"], ("A", "B", "C")
         )
         __bodo_is_last_streaming_output_2 = False
         while not (__bodo_is_last_streaming_output_2):
