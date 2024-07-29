@@ -172,8 +172,7 @@ class SnowflakeReader : public ArrowReader {
     }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows) override {
+    virtual void add_piece(PyObject* piece, int64_t num_rows) override {
         Py_INCREF(piece);  // keeping a reference to this piece
         result_batches.push(piece);
     }
@@ -216,7 +215,7 @@ class SnowflakeReader : public ArrowReader {
         int64_t sf_exec_time_us = PyLong_AsLong(sf_exec_time_us_py);
         this->metrics.sf_data_prep_time = sf_exec_time_us;
         Py_DECREF(ds_tuple);
-        sf_conn = PyObject_GetAttrString(ds, "conn");
+        this->sf_conn = PyObject_GetAttrString(ds, "conn");
         if (sf_conn == NULL) {
             throw std::runtime_error(
                 "Could not retrieve conn attribute of Snowflake dataset");
@@ -283,7 +282,7 @@ class SnowflakeReader : public ArrowReader {
     // https://bodo.atlassian.net/l/cp/4JwaiChQ
     // Non-Streaming Uses TableBuilder to Construct Output
     // Streaming Uses ChunkedTableBuilder to Construct Batches
-    std::tuple<table_info*, bool, uint64_t> read_inner() override {
+    std::tuple<table_info*, bool, uint64_t> read_inner_row_level() override {
         // In the case when we only need to perform a count(*)
         // We need to still return a table with 0 columns but
         // `this->total_nrows` rows We can return a nullptr for the table_info*,
@@ -324,7 +323,7 @@ class SnowflakeReader : public ArrowReader {
         // TODO: Handle when len(piece) < batch_size and remove this special
         // case
         if (batch_size == -1) {
-            tracing::Event ev("reader::read_inner", false);
+            tracing::Event ev("reader::read_inner_row_level", false);
             TableBuilder builder(this->schema, selected_fields, count,
                                  is_nullable, str_as_dict_colnames,
                                  create_dict_encoding_from_strings);
@@ -423,6 +422,11 @@ class SnowflakeReader : public ArrowReader {
         bool is_last = result_batches.empty() && out_batches->empty();
         return std::make_tuple(new table_info(*next_batch), is_last,
                                out_batch_size);
+    }
+
+    std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {
+        throw std::runtime_error(
+            "SnowflakeReader::read_inner_piece_level: Not supported!");
     }
 
    private:

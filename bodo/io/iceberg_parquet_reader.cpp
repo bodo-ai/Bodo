@@ -22,6 +22,25 @@
 #include "arrow_reader.h"
 #include "iceberg_helpers.h"
 
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                                    \
+    if (expr) {                                                             \
+        throw std::runtime_error(std::string("scanner_from_py_dataset: ") + \
+                                 msg);                                      \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
+
 /**
  * @brief Recursive helper for EvolveRecordBatch to handle the evolution of
  * columns, including nested columns by calling this function recursively on the
@@ -411,14 +430,7 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
     bool use_threads = true,
     int32_t batch_readahead = arrow::dataset::kDefaultBatchReadahead,
     int32_t fragment_readahead = arrow::dataset::kDefaultFragmentReadahead) {
-#define CHECK(expr, msg)                                                    \
-    if (expr) {                                                             \
-        throw std::runtime_error(std::string("scanner_from_py_dataset: ") + \
-                                 msg);                                      \
-    }
-    // XXX Only do it once somewhere?
-    CHECK(arrow::py::import_pyarrow_wrappers(),
-          "importing pyarrow_wrappers failed!");
+    ensure_pa_wrappers_imported();
     // Unwrap Python objects into C++
     auto unwrap_expr_res = arrow::py::unwrap_expression(expr_filter_py);
     CHECK_ARROW_AND_ASSIGN(unwrap_expr_res, "Error unwrapping filter",
@@ -443,7 +455,6 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
     CHECK_ARROW_AND_ASSIGN(builder_res, "Error finalizing ScannerBuilder!",
                            std::shared_ptr<arrow::dataset::Scanner> scanner);
     return scanner;
-#undef CHECK
 }
 
 /**
@@ -471,25 +482,83 @@ struct IcebergParquetReaderMetrics {
     using time_t = MetricBase::TimerValue;
     using blob_t = MetricBase::BlobValue;
 
-    // Time to get the file list.
-    time_t file_list_time = 0;
+    //// Metrics from the initialization step
+
+    /// During get_dataset:
+
+    // Time to get the file list from the Iceberg Connector
+    time_t get_ds_file_list_time = 0;
     // Time to get the filesystem.
-    time_t get_filesystem_time = 0;
-    // Time to scan the files and get the schema groups.
-    time_t scan_time = 0;
-    // Time to validate the schema
-    time_t schema_validation_time = 0;
-    // Time to get dataset scanners
-    time_t get_dataset_scanners_time = 0;
-    // Number of row groups to read on this rank.
-    stat_t n_row_groups = 0;
-    // Total bytes to read on this rank.
-    stat_t total_bytes = 0;
+    time_t get_ds_get_fs_time = 0;
+    // Number of files that we're analyzing (schema validation, row counts,
+    // etc.)
+    stat_t get_ds_n_files_analyzed = 0;
+    // Time to create the file fragments
+    time_t get_ds_file_frags_creation_time = 0;
+    // Time to fetch the metadata for the file fragments
+    time_t get_ds_file_frags_fetch_md_time = 0;
+    // Time to get Schema Group identifiers for all fragments
+    time_t get_ds_get_sg_id_time = 0;
+    // Time to sort the fragments by their schema group identifier
+    time_t get_ds_sort_by_sg_id_time = 0;
+    // Number of unique schema groups in files analyzed by this rank.
+    stat_t get_ds_nunique_sgs_seen = 0;
+    // Time to filter out row groups (only applicable in the piece level read
+    // case).
+    time_t get_ds_rg_filtering_time = 0;
+    // Time to get exact row counts (only applicable in the row_level case).
+    time_t get_ds_exact_row_counts_time = 0;
+    // Whether we needed to recreate the fragments and refetch the metadata
+    // (only applicable in the row level case). The time spent recreating the
+    // frags and fetching the metadata again is part of
+    // get_ds_file_frags_creation_time and get_ds_file_frags_fetch_md_time
+    // respectively.
+    stat_t get_ds_exact_row_counts_recreated_frags = 0;
+    // Time to validate the schemas of all the files
+    time_t get_ds_schema_validation_time = 0;
+    // Number of row groups in files assigned to this rank for analysis
+    stat_t get_ds_get_row_counts_nrgs = 0;
+    // Number of rows in files assigned to this rank for scan planning. In the
+    // row-level case, this is the row count after filtering. In the piece level
+    // case, this is the total number of rows in all the row groups that survive
+    // the row group level filtering.
+    stat_t get_ds_get_row_counts_nrows = 0;
+    // Total size in bytes of row groups of files analyzed by this file.
+    stat_t get_ds_get_row_counts_total_bytes = 0;
+    // Time spent in all-gathering all the pieces to create the global
+    // IcebergParquetDataset after the initial parallel analysis.
+    time_t get_ds_pieces_allgather_time = 0;
+    // Time spent sorting all the pieces based on their schema group identifier
+    // (after the allgather)
+    time_t get_ds_sort_all_pieces_time = 0;
+    // Time spent assembling the final IcebergParquetDataset object from all the
+    // pieces.
+    time_t get_ds_assemble_ds_time = 0;
+
+    /// Metrics about the dataset (global)
+
+    // Number of unique schema groups overall.
+    stat_t ds_nunique_schema_groups = 0;
+
+    /// During init_scanners:
+
+    // Time to get the PyArrow datasets
+    time_t init_scanners_get_pa_datasets_time = 0;
+    // Number of scanners this rank will use. There's one per schema group, so
+    // this is also the number of unique schema groups that this rank will read
+    // files from.
+    stat_t n_scanners = 0;
+    // Time spent creating scanners from the pa datasets.
+    time_t create_scanners_time = 0;
+
+    //// Metrics from the the actual read step:
 
     // Time to get the next batches.
     time_t get_batch_time = 0;
     // Time to evolve the schema of the record batch.
     time_t evolve_time = 0;
+    // Time to convert an Arrow RecordBatch to a Bodo table.
+    time_t arrow_rb_to_bodo_time = 0;
     // Time to unify dictionaries full batches.
     time_t unify_time = 0;
     // Time to unify and append small batches.
@@ -498,7 +567,10 @@ struct IcebergParquetReaderMetrics {
     stat_t n_batches = 0;
     // Number of small batches read.
     stat_t n_small_batches = 0;
+    // Time spent popping a chunk from 'out_batches'.
+    time_t output_pop_chunk_time = 0;
 };
+
 // -------- IcebergParquetReader --------
 
 class IcebergParquetReader : public ArrowReader {
@@ -534,9 +606,6 @@ class IcebergParquetReader : public ArrowReader {
         // Py_XDECREF checks if the input is null,
         // while Py_DECREF doesn't and would just segfault
         Py_XDECREF(this->file_list);
-        // The final reader may or may not be decref-ed during the read, so do
-        // it here to be safe.
-        this->curr_reader = nullptr;
     }
 
     void init_iceberg_reader(std::span<int32_t> str_as_dict_cols,
@@ -612,6 +681,26 @@ class IcebergParquetReader : public ArrowReader {
     IcebergParquetReaderMetrics iceberg_reader_metrics;
 
    protected:
+    bool force_row_level_read() const override {
+        // Env var to explicitly disable piece level read. This is useful for
+        // performance testing, etc.
+        char* disable_piece_level_env_ =
+            std::getenv("BODO_ICEBERG_DISABLE_PIECE_LEVEL_READ");
+        if (disable_piece_level_env_ &&
+            !std::strcmp(disable_piece_level_env_, "1")) {
+            return true;
+        }
+        // Piece level read is only supported in distributed mode
+        // when there's no LIMIT (this->tot_rows_to_read == -1).
+        // TODO Add support for piece level read when there's a LIMIT
+        // clause, the file planning itself could be optimized to only look at a
+        // few files instead of all files.
+        // TODO Add support for piece-level read in the replicated case. This
+        // can be supported pretty easily by simply having all ranks read
+        // all the pieces.
+        return (this->tot_rows_to_read != -1) || (!this->parallel);
+    }
+
     PyObject* get_dataset() override {
         // import bodo.io.iceberg
         PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
@@ -637,16 +726,20 @@ class IcebergParquetReader : public ArrowReader {
             }
         }
 
+        PyObject* force_row_level_py =
+            this->force_row_level_read() ? Py_True : Py_False;
+
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
         //          conn, database_schema, table_name,
         //          pyarrow_schema, iceberg_filter_str,
         //          expr_filter_f_str, filter_scalars,
         //      )
         PyObject* ds = PyObject_CallMethod(
-            iceberg_mod, "get_iceberg_pq_dataset", "sssOOOsO", this->conn,
+            iceberg_mod, "get_iceberg_pq_dataset", "sssOOOsOO", this->conn,
             this->database_schema, this->table_name, this->pyarrow_schema,
             str_as_dict_cols_py, this->iceberg_filter_str,
-            this->expr_filter_f_str.c_str(), this->filter_scalars);
+            this->expr_filter_f_str.c_str(), this->filter_scalars,
+            force_row_level_py);
         if (ds == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
@@ -665,37 +758,117 @@ class IcebergParquetReader : public ArrowReader {
         Py_DECREF(py_snapshot_id);
         // Returns a new reference.
         this->schema_groups_py = PyObject_GetAttrString(ds, "schema_groups");
-        // Copy over metrics
-        PyObject* file_list_time_py =
-            PyObject_GetAttrString(ds, "file_list_time");
-        this->iceberg_reader_metrics.file_list_time =
-            PyLong_AsUnsignedLongLong(file_list_time_py);
-        Py_DECREF(file_list_time_py);
-        PyObject* get_filesystem_time_py =
-            PyObject_GetAttrString(ds, "get_fs_time");
-        this->iceberg_reader_metrics.get_filesystem_time =
-            PyLong_AsUnsignedLongLong(get_filesystem_time_py);
-        Py_DECREF(get_filesystem_time_py);
-        PyObject* scan_time_py = PyObject_GetAttrString(ds, "scan_time");
-        this->iceberg_reader_metrics.scan_time =
-            PyLong_AsUnsignedLongLong(scan_time_py);
-        Py_DECREF(scan_time_py);
-        PyObject* schema_validation_time_py =
-            PyObject_GetAttrString(ds, "schema_validation_time");
-        this->iceberg_reader_metrics.schema_validation_time =
-            PyLong_AsUnsignedLongLong(schema_validation_time_py);
-        Py_DECREF(schema_validation_time_py);
-        PyObject* n_row_groups_py =
-            PyObject_GetAttrString(ds, "num_row_groups");
-        this->iceberg_reader_metrics.n_row_groups =
-            PyLong_AsUnsignedLongLong(n_row_groups_py);
-        Py_DECREF(n_row_groups_py);
-        PyObject* total_bytes_py = PyObject_GetAttrString(ds, "total_bytes");
-        this->iceberg_reader_metrics.total_bytes =
-            PyLong_AsUnsignedLongLong(total_bytes_py);
-        Py_DECREF(total_bytes_py);
+        this->iceberg_reader_metrics.ds_nunique_schema_groups =
+            PyObject_Length(this->schema_groups_py);
+
+        // Copy over metrics. This object is of type IcebergPqDatasetMetrics.
+        PyObject* ds_metrics_py = PyObject_GetAttrString(ds, "metrics");
+        if (ds_metrics_py == NULL) {
+            throw std::runtime_error(
+                "IcebergParquetReader::get_dataset: metrics attribute not in "
+                "dataset!");
+        }
+
+#define COPY_NUMERIC_METRIC(field)                                             \
+    {                                                                          \
+        PyObject* metric_py = PyObject_GetAttrString(ds_metrics_py, #field);   \
+        if (metric_py == NULL) {                                               \
+            throw std::runtime_error(                                          \
+                fmt::format("IcebergParquetReader::get_dataset: {} attribute " \
+                            "not in dataset metrics!",                         \
+                            #field));                                          \
+        }                                                                      \
+        this->iceberg_reader_metrics.get_ds_##field =                          \
+            PyLong_AsUnsignedLongLong(metric_py);                              \
+        Py_DECREF(metric_py);                                                  \
+    }
+
+#define COPY_BOOL_METRIC(field)                                                \
+    {                                                                          \
+        PyObject* metric_py = PyObject_GetAttrString(ds_metrics_py, #field);   \
+        if (metric_py == NULL) {                                               \
+            throw std::runtime_error(                                          \
+                fmt::format("IcebergParquetReader::get_dataset: {} attribute " \
+                            "not in dataset metrics!",                         \
+                            #field));                                          \
+        }                                                                      \
+        this->iceberg_reader_metrics.get_ds_##field =                          \
+            PyObject_IsTrue(metric_py) ? 1 : 0;                                \
+        Py_DECREF(metric_py);                                                  \
+    }
+
+        COPY_NUMERIC_METRIC(file_list_time);
+        COPY_NUMERIC_METRIC(get_fs_time);
+        COPY_NUMERIC_METRIC(n_files_analyzed);
+        COPY_NUMERIC_METRIC(file_frags_creation_time);
+        COPY_NUMERIC_METRIC(file_frags_fetch_md_time);
+        COPY_NUMERIC_METRIC(get_sg_id_time);
+        COPY_NUMERIC_METRIC(sort_by_sg_id_time);
+        COPY_NUMERIC_METRIC(nunique_sgs_seen);
+        COPY_NUMERIC_METRIC(rg_filtering_time);
+        COPY_NUMERIC_METRIC(exact_row_counts_time);
+        COPY_BOOL_METRIC(exact_row_counts_recreated_frags);
+        COPY_NUMERIC_METRIC(schema_validation_time);
+        COPY_NUMERIC_METRIC(get_row_counts_nrgs);
+        COPY_NUMERIC_METRIC(get_row_counts_nrows);
+        COPY_NUMERIC_METRIC(get_row_counts_total_bytes);
+        COPY_NUMERIC_METRIC(pieces_allgather_time);
+        COPY_NUMERIC_METRIC(sort_all_pieces_time);
+        COPY_NUMERIC_METRIC(assemble_ds_time);
+
+        Py_DECREF(ds_metrics_py);
 
         return ds;
+
+#undef COPY_BOOL_METRIC
+#undef COPY_NUMERIC_METRIC
+    }
+
+    void distribute_pieces(PyObject* pieces_py) override {
+        assert(!this->row_level);
+        assert(this->parallel);
+        assert(this->tot_rows_to_read == -1);
+
+        // import bodo.io.iceberg
+        PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
+        if (PyErr_Occurred()) {
+            throw std::runtime_error("python");
+        }
+
+        // pieces_myrank_py = bodo.io.iceberg.distribute_pieces(pieces_py)
+        PyObject* pieces_myrank_py = PyObject_CallMethod(
+            iceberg_mod, "distribute_pieces", "O", pieces_py);
+        if (pieces_myrank_py == NULL && PyErr_Occurred()) {
+            throw std::runtime_error("python");
+        }
+
+        PyObject* piece;
+        PyObject* iterator = PyObject_GetIter(pieces_myrank_py);
+        if (iterator == NULL) {
+            throw std::runtime_error(
+                "ArrowReader::distribute_pieces(): error getting "
+                "pieces iterator");
+        }
+
+        while ((piece = PyIter_Next(iterator))) {
+            PyObject* num_rows_piece_py =
+                PyObject_GetAttrString(piece, "_bodo_num_rows");
+            if (num_rows_piece_py == NULL) {
+                throw std::runtime_error(
+                    "ArrowReader::distribute_pieces(): _bodo_num_rows "
+                    "attribute not in piece");
+            }
+            int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
+            Py_DECREF(num_rows_piece_py);
+            this->add_piece(piece, num_rows_piece);
+            this->metrics.local_rows_to_read += num_rows_piece;
+            this->metrics.local_n_pieces_to_read_from++;
+            Py_DECREF(piece);
+        }
+
+        Py_DECREF(iterator);
+        Py_DECREF(pieces_myrank_py);
+        Py_DECREF(iceberg_mod);
     }
 
     /**
@@ -705,10 +878,8 @@ class IcebergParquetReader : public ArrowReader {
      *
      * @param piece Python object (IcebergPiece)
      * @param num_rows Number of rows to read from this file.
-     * @param total_rows (ignored)
      */
-    void add_piece(PyObject* piece, int64_t num_rows,
-                   int64_t total_rows) override {
+    void add_piece(PyObject* piece, int64_t num_rows) override {
         // p = piece.path
         PyObject* p = PyObject_GetAttrString(piece, "path");
         const char* c_path = PyUnicode_AsUTF8(p);
@@ -747,7 +918,7 @@ class IcebergParquetReader : public ArrowReader {
         return out_table;
     }
 
-    std::tuple<table_info*, bool, uint64_t> read_inner() override {
+    std::tuple<table_info*, bool, uint64_t> read_inner_row_level() override {
         // If batch_size is set, then we need to iteratively read a
         // batch at a time.
         if (this->batch_size != -1) {
@@ -762,7 +933,15 @@ class IcebergParquetReader : public ArrowReader {
                 // Get the next batch.
                 std::shared_ptr<arrow::RecordBatch> batch = nullptr;
                 do {
-                    batch = this->get_next_batch();
+                    bool out_of_pieces = false;
+                    std::tie(out_of_pieces, batch) = this->get_next_batch();
+                    if (out_of_pieces) {
+                        // 'this->rows_left_to_emit'/'this->rows_left_to_read'
+                        // should be 0 by now!
+                        throw std::runtime_error(
+                            "IcebergParquetReader::read_inner_row_level: Out "
+                            "of pieces! This is most likely a bug.");
+                    }
                 } while (batch == nullptr);
                 this->iceberg_reader_metrics.get_batch_time +=
                     end_timer(get_batch_start);
@@ -784,8 +963,13 @@ class IcebergParquetReader : public ArrowReader {
                 this->rows_to_skip -= batch_offset;
                 // This is zero-copy slice.
                 batch = batch->Slice(batch_offset, length);
+
+                time_pt start_rb_to_bodo = start_timer();
+                // TODO Pass BufferPool as the source pool!
                 std::shared_ptr<table_info> bodo_table =
                     arrow_recordbatch_to_bodo(batch, length);
+                this->iceberg_reader_metrics.arrow_rb_to_bodo_time +=
+                    end_timer(start_rb_to_bodo);
                 if (length == this->batch_size) {
                     // We have read a batch of the exact size. Just reuse this
                     // batch for the next read and unify the dictionaries.
@@ -814,7 +998,10 @@ class IcebergParquetReader : public ArrowReader {
                 }
             }
             // Emit from the chunked table builder.
+            time_pt start_pop = start_timer();
             auto [next_batch, out_batch_size] = out_batches->PopChunk(true);
+            this->iceberg_reader_metrics.output_pop_chunk_time +=
+                end_timer(start_pop);
             rows_left_to_emit -= out_batch_size;
             bool is_last = (this->rows_left_to_emit <= 0) &&
                            (this->out_batches->total_remaining <= 0);
@@ -834,7 +1021,15 @@ class IcebergParquetReader : public ArrowReader {
         while (this->rows_left_to_read > 0) {
             std::shared_ptr<arrow::RecordBatch> batch = nullptr;
             do {
-                batch = this->get_next_batch();
+                bool out_of_pieces = false;
+                std::tie(out_of_pieces, batch) = this->get_next_batch();
+                if (out_of_pieces) {
+                    // 'this->rows_left_to_emit'/'this->rows_left_to_read'
+                    // should be 0 by now!
+                    throw std::runtime_error(
+                        "IcebergParquetReader::read_inner_row_level: Out "
+                        "of pieces! This is most likely a bug.");
+                }
             } while (batch == nullptr);
             // Transform the batch to the required target schema.
             batch = EvolveRecordBatch(std::move(batch), this->curr_read_schema,
@@ -861,6 +1056,114 @@ class IcebergParquetReader : public ArrowReader {
         this->rows_left_to_emit = this->rows_left_to_read;
         assert(this->rows_left_to_read == 0);
         return std::make_tuple(table, true, table->nrows());
+    }
+
+    std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {
+        if (this->batch_size != -1) {
+            while (this->out_batches->total_remaining <
+                       static_cast<size_t>(this->batch_size) &&
+                   !this->done_reading_pieces) {
+                time_pt get_batch_start = start_timer();
+                std::shared_ptr<arrow::RecordBatch> batch = nullptr;
+                do {
+                    std::tie(this->done_reading_pieces, batch) =
+                        this->get_next_batch();
+                } while (batch == nullptr && !this->done_reading_pieces);
+                if (this->done_reading_pieces) {
+                    assert(batch == nullptr);
+                    break;
+                }
+                this->iceberg_reader_metrics.get_batch_time +=
+                    end_timer(get_batch_start);
+                this->iceberg_reader_metrics.n_batches++;
+                time_pt evolve_start = start_timer();
+                batch =
+                    EvolveRecordBatch(std::move(batch), this->curr_read_schema,
+                                      this->schema, this->selected_fields);
+                this->iceberg_reader_metrics.evolve_time +=
+                    end_timer(evolve_start);
+                int64_t nrows = batch->num_rows();
+                time_pt start_rb_to_bodo = start_timer();
+                // TODO Pass BufferPool as the source pool!
+                std::shared_ptr<table_info> bodo_table =
+                    arrow_recordbatch_to_bodo(std::move(batch), nrows);
+                this->iceberg_reader_metrics.arrow_rb_to_bodo_time +=
+                    end_timer(start_rb_to_bodo);
+                if (nrows == this->batch_size) {
+                    time_pt unify_start = start_timer();
+                    table_info* out_table =
+                        this->unify_table_with_dictionary_builders(
+                            std::move(bodo_table));
+                    this->iceberg_reader_metrics.unify_time +=
+                        end_timer(unify_start);
+                    return std::make_tuple(out_table, false, nrows);
+                } else {
+                    // We are reading less than a full batch. We need to append
+                    // to the chunked table builder. Assuming we are prefetching
+                    // then its likely more efficient to read the next full
+                    // batch then to output a partial batch that could be
+                    // extremely small.
+                    this->iceberg_reader_metrics.n_small_batches++;
+                    time_pt unify_start = start_timer();
+                    this->out_batches->UnifyDictionariesAndAppend(
+                        bodo_table, dict_builders);
+                    this->iceberg_reader_metrics.unify_append_small_time +=
+                        end_timer(unify_start);
+                }
+            }
+
+            time_pt start_pop = start_timer();
+            auto [next_batch, out_batch_size] =
+                this->out_batches->PopChunk(true);
+            this->iceberg_reader_metrics.output_pop_chunk_time +=
+                end_timer(start_pop);
+            this->emitted_all_output =
+                (this->done_reading_pieces) &&
+                (this->out_batches->total_remaining <= 0);
+            return std::make_tuple(new table_info(*next_batch),
+                                   /*is_last*/ this->emitted_all_output,
+                                   out_batch_size);
+        }
+
+        /// Non-streaming case:
+
+        // Read all batches. We cannot create the TableBuilder before reading
+        // since we don't know the total row count yet.
+        std::vector<std::shared_ptr<::arrow::Table>> batches;
+        int64_t total_nrows = 0;
+        while (!this->done_reading_pieces) {
+            std::shared_ptr<arrow::RecordBatch> batch = nullptr;
+            do {
+                std::tie(this->done_reading_pieces, batch) =
+                    this->get_next_batch();
+            } while (batch == nullptr && !this->done_reading_pieces);
+
+            if (this->done_reading_pieces) {
+                assert(batch == nullptr);
+                this->emitted_all_output = true;
+                break;
+            }
+            batch = EvolveRecordBatch(std::move(batch), this->curr_read_schema,
+                                      this->schema, this->selected_fields);
+            int64_t nrows = batch->num_rows();
+            if (nrows > 0) {
+                batches.push_back(
+                    arrow::Table::Make(this->schema, batch->columns()));
+                total_nrows += nrows;
+            }
+        }
+
+        TableBuilder builder(this->schema, this->selected_fields, total_nrows,
+                             this->is_nullable, this->str_as_dict_colnames,
+                             this->create_dict_encoding_from_strings);
+
+        for (size_t i = 0; i < batches.size(); i++) {
+            builder.append(std::move(batches[i]));
+        }
+        batches.clear();
+
+        table_info* table = builder.get_table();
+        return std::make_tuple(table, true, total_nrows);
     }
 
     /**
@@ -932,7 +1235,8 @@ class IcebergParquetReader : public ArrowReader {
             this->schema_groups_py, this->avg_num_pieces, int(this->parallel),
             this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
             this->pyarrow_schema);
-        iceberg_reader_metrics.get_dataset_scanners_time += end_timer(start);
+        iceberg_reader_metrics.init_scanners_get_pa_datasets_time +=
+            end_timer(start);
         if (datasets_updated_offset_tup == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
@@ -942,6 +1246,7 @@ class IcebergParquetReader : public ArrowReader {
         PyObject* datasets_py = PyTuple_GetItem(datasets_updated_offset_tup, 0);
         size_t n_datasets = PyList_Size(datasets_py);
         this->scanners.reserve(n_datasets);
+        this->iceberg_reader_metrics.n_scanners = n_datasets;
 
         // PyTuple_GetItem returns a borrowed reference, so we don't need to
         // DECREF it explicitly.
@@ -954,6 +1259,7 @@ class IcebergParquetReader : public ArrowReader {
                 "expr_filters don't match! This is likely a bug.");
         }
 
+        start = start_timer();
         for (size_t i = 0; i < n_datasets; i++) {
             // PyList_GetItem returns a borrowed reference, so we don't need to
             // DECREF it explicitly.
@@ -969,6 +1275,7 @@ class IcebergParquetReader : public ArrowReader {
                     arrow::dataset::kDefaultBatchReadahead,
                     arrow::dataset::kDefaultFragmentReadahead));
         }
+        this->iceberg_reader_metrics.create_scanners_time += end_timer(start);
 
         // PyTuple_GetItem returns a borrowed reference, so we don't need to
         // DECREF it explicitly.
@@ -1020,24 +1327,40 @@ class IcebergParquetReader : public ArrowReader {
             return;
         }
         std::vector<MetricBase> metrics;
-        metrics.reserve(8);
-        metrics.push_back(TimerMetric(
-            "file_list_time", iceberg_reader_metrics.file_list_time, true));
-        metrics.push_back(
-            TimerMetric("get_filesystem_time",
-                        iceberg_reader_metrics.get_filesystem_time, false));
-        metrics.push_back(
-            TimerMetric("scan_time", iceberg_reader_metrics.scan_time, false));
-        metrics.push_back(
-            TimerMetric("schema_validation_time",
-                        iceberg_reader_metrics.schema_validation_time, false));
-        metrics.push_back(StatMetric(
-            "num_row_groups", iceberg_reader_metrics.n_row_groups, false));
-        metrics.push_back(StatMetric(
-            "total_bytes", iceberg_reader_metrics.total_bytes, false));
-        metrics.push_back(TimerMetric(
-            "get_dataset_scanners_time",
-            iceberg_reader_metrics.get_dataset_scanners_time, false));
+        metrics.reserve(32);
+
+#define APPEND_TIMER_METRIC(field) \
+    metrics.push_back(TimerMetric(#field, this->iceberg_reader_metrics.field));
+
+#define APPEND_STAT_METRIC(field) \
+    metrics.push_back(StatMetric(#field, this->iceberg_reader_metrics.field));
+
+#define APPEND_GLOBAL_STAT_METRIC(field) \
+    metrics.push_back(                   \
+        StatMetric(#field, this->iceberg_reader_metrics.field, true));
+
+        APPEND_TIMER_METRIC(get_ds_file_list_time);
+        APPEND_TIMER_METRIC(get_ds_get_fs_time);
+        APPEND_STAT_METRIC(get_ds_n_files_analyzed);
+        APPEND_TIMER_METRIC(get_ds_file_frags_creation_time);
+        APPEND_TIMER_METRIC(get_ds_file_frags_fetch_md_time);
+        APPEND_TIMER_METRIC(get_ds_get_sg_id_time);
+        APPEND_TIMER_METRIC(get_ds_sort_by_sg_id_time);
+        APPEND_STAT_METRIC(get_ds_nunique_sgs_seen);
+        APPEND_TIMER_METRIC(get_ds_rg_filtering_time);
+        APPEND_TIMER_METRIC(get_ds_exact_row_counts_time);
+        APPEND_STAT_METRIC(get_ds_exact_row_counts_recreated_frags);
+        APPEND_TIMER_METRIC(get_ds_schema_validation_time);
+        APPEND_STAT_METRIC(get_ds_get_row_counts_nrgs);
+        APPEND_STAT_METRIC(get_ds_get_row_counts_nrows);
+        APPEND_STAT_METRIC(get_ds_get_row_counts_total_bytes);
+        APPEND_TIMER_METRIC(get_ds_pieces_allgather_time);
+        APPEND_TIMER_METRIC(get_ds_sort_all_pieces_time);
+        APPEND_TIMER_METRIC(get_ds_assemble_ds_time);
+        APPEND_GLOBAL_STAT_METRIC(ds_nunique_schema_groups);
+        APPEND_TIMER_METRIC(init_scanners_get_pa_datasets_time);
+        APPEND_STAT_METRIC(n_scanners);
+        APPEND_TIMER_METRIC(create_scanners_time);
 
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(
@@ -1046,6 +1369,10 @@ class IcebergParquetReader : public ArrowReader {
 
         // Report the ArrowReader Init Stage metrics.
         ArrowReader::ReportInitStageMetrics();
+
+#undef APPEND_GLOBAL_STAT_METRIC
+#undef APPEND_STAT_METRIC
+#undef APPEND_TIMER_METRIC
     }
 
     /**
@@ -1060,19 +1387,22 @@ class IcebergParquetReader : public ArrowReader {
         }
         std::vector<MetricBase> metrics;
         metrics.reserve(8);
-        metrics.push_back(TimerMetric(
-            "get_batch_time", iceberg_reader_metrics.get_batch_time, false));
-        metrics.push_back(TimerMetric(
-            "evolve_time", iceberg_reader_metrics.evolve_time, false));
-        metrics.push_back(TimerMetric(
-            "unify_time", iceberg_reader_metrics.unify_time, false));
-        metrics.push_back(
-            TimerMetric("unify_append_small_time",
-                        iceberg_reader_metrics.unify_append_small_time, false));
-        metrics.push_back(
-            StatMetric("n_batches", iceberg_reader_metrics.n_batches, false));
-        metrics.push_back(StatMetric(
-            "n_small_batches", iceberg_reader_metrics.n_small_batches, false));
+
+#define APPEND_TIMER_METRIC(field) \
+    metrics.push_back(TimerMetric(#field, this->iceberg_reader_metrics.field));
+
+#define APPEND_STAT_METRIC(field) \
+    metrics.push_back(StatMetric(#field, this->iceberg_reader_metrics.field));
+
+        APPEND_TIMER_METRIC(get_batch_time);
+        APPEND_TIMER_METRIC(evolve_time);
+        APPEND_TIMER_METRIC(arrow_rb_to_bodo_time);
+        APPEND_TIMER_METRIC(unify_time);
+        APPEND_TIMER_METRIC(unify_append_small_time);
+        APPEND_STAT_METRIC(n_batches);
+        APPEND_STAT_METRIC(n_small_batches);
+        APPEND_TIMER_METRIC(output_pop_chunk_time);
+
         QueryProfileCollector::Default().RegisterOperatorStageMetrics(
             QueryProfileCollector::MakeOperatorStageID(
                 this->op_id, QUERY_PROFILE_READ_STAGE_ID),
@@ -1080,6 +1410,9 @@ class IcebergParquetReader : public ArrowReader {
 
         // Report the ArrowReader Read Stage metrics.
         ArrowReader::ReportReadStageMetrics();
+
+#undef APPEND_STAT_METRIC
+#undef APPEND_TIMER_METRIC
     }
 
    private:
@@ -1133,7 +1466,8 @@ class IcebergParquetReader : public ArrowReader {
     // Corresponding read schema.
     std::shared_ptr<arrow::Schema> curr_read_schema = nullptr;
     // Number of remaining rows to skip outputting
-    // from the first file assigned to this process.
+    // from the first file assigned to this process. Only applicable in the
+    // row-level read case.
     int64_t rows_to_skip = -1;
 
     // List of the original Iceberg file names as relative paths.
@@ -1148,12 +1482,17 @@ class IcebergParquetReader : public ArrowReader {
 
     /**
      * @brief Helper function to get the next available
-     * RecordBatch.
-     * Note that this must only be called when there are rows left to read.
+     * RecordBatch. Note that in the row-level case, this must only be called
+     * when there are rows left to read.
      *
-     * @return std::shared_ptr<arrow::RecordBatch>
+     * @return std::tuple<bool, std::shared_ptr<arrow::RecordBatch>>: Boolean
+     * indicating if we're out of scanners/pieces, next batch (potentially
+     * nullptr). If we're out of pieces, the batch is guaranteed to be nullptr.
+     * If we return a valid batch (i.e. not nullptr), the bool is guaranteed to
+     * be false. However, we may return {false, nullptr}, which indicates that
+     * the user should call this function again to get the next batch.
      */
-    std::shared_ptr<arrow::RecordBatch> get_next_batch() {
+    std::tuple<bool, std::shared_ptr<arrow::RecordBatch>> get_next_batch() {
         // Create the next reader:
         if (this->curr_reader == nullptr) {
             if (this->next_scanner_idx < this->scanners.size()) {
@@ -1166,26 +1505,22 @@ class IcebergParquetReader : public ArrowReader {
                 this->scanners[this->next_scanner_idx].reset();
                 this->next_scanner_idx++;
             } else {
-                // 'this->rows_left_to_emit'/'this->rows_left_to_read' should be
-                // 0 by now!
-                throw std::runtime_error(
-                    "IcebergParquetReader::get_next_py_batch: Out of Arrow "
-                    "Scanners/Readers! This is most likely a bug.");
+                // Out of scanners, so return done=true.
+                return {true, nullptr};
             }
         }
         std::shared_ptr<arrow::RecordBatch> batch = nullptr;
         auto batch_res = this->curr_reader->ReadNext(&batch);
-        CHECK_ARROW(
-            batch_res,
-            "IcebergParquetReader::get_next_batch: Error reading next batch!");
-
+        CHECK_ARROW(batch_res,
+                    "IcebergParquetReader::get_next_batch_: Error reading "
+                    "next batch!");
         if (batch == nullptr) {
             // Reset the reader to free it. This will
             // prompt the next invocation to create a reader from the
             // next scanner.
             this->curr_reader = nullptr;
         }
-        return batch;
+        return {false, batch};
     }
 };
 
@@ -1273,14 +1608,20 @@ table_info* iceberg_pq_read_py_entry(
             *snapshot_id_ptr = -1;
         }
 
-        *total_rows_out = reader.get_total_rows();
         table_info* read_output = reader.read_all();
+        uint64_t local_nrows = read_output->nrows();
+        uint64_t global_nrows = local_nrows;
+        if (parallel) {
+            MPI_Allreduce(&local_nrows, &global_nrows, 1, MPI_UINT64_T, MPI_SUM,
+                          MPI_COMM_WORLD);
+        }
+        *total_rows_out = global_nrows;
 
         // Append the index column to the output table used for MERGE INTO COW
         // Since the MERGE INTO flag is internal, we assume that this column
         // is never dead for simplicity sake.
         if (is_merge_into_cow) {
-            int64_t num_local_rows = reader.get_local_rows();
+            int64_t num_local_rows = read_output->nrows();
             std::shared_ptr<array_info> row_id_col_arr =
                 alloc_numpy(num_local_rows, Bodo_CTypes::INT64);
 

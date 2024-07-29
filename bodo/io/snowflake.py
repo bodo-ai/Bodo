@@ -1892,6 +1892,8 @@ class SnowflakeDataset(object):
             self._bodo_total_rows += b._bodo_num_rows  # type: ignore
         self.schema = schema
         self.conn = conn
+        # We have exact row counts (after filtering).
+        self.row_level = True
 
 
 class FakeArrowJSONResultBatch:
