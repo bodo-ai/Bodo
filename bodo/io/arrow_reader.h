@@ -11,6 +11,7 @@
 
 #include <Python.h>
 #include <set>
+#include <stdexcept>
 
 #include <arrow/array.h>
 #include <arrow/python/pyarrow.h>
@@ -146,15 +147,25 @@ struct ArrowReaderMetrics {
     /// Init Stage
 
     // Global
-    stat_t limit_nrows = 0;
-    time_t get_ds_time = 0;
-    stat_t global_nrows_to_read = 0;
-    stat_t global_n_pieces = 0;
     stat_t n_str_as_dict_cols = 0;
+    stat_t global_n_pieces = 0;
 
     // Local
+    time_t get_ds_time = 0;
+    time_t init_arrow_reader_total_time = 0;
+    // In the row-level case, this is the exact number of rows that this rank
+    // will output (after applying filters and skipping rows).
+    // In the piece-level read case, this is the total number of rows that this
+    // rank will read from the source (across all the pieces assigned to it)
+    // before applying the filter.
     stat_t local_rows_to_read = 0;
+    // In the row-level case, this is the number of pieces that this rank will
+    // read from. However, it might only read them partially.
+    // In the piece-level case, this is the number of pieces that this rank will
+    // read all the rows from. For every piece, exactly one rank will read that
+    // piece.
     stat_t local_n_pieces_to_read_from = 0;
+    time_t distribute_pieces_or_rows_time = 0;
 
     /// Read Stage
     time_t read_batch_total_time = 0;
@@ -194,7 +205,6 @@ class ArrowReader {
           batch_size(batch_size),
           op_id(op_id_) {
         this->set_arrow_schema(pyarrow_schema);
-        this->metrics.limit_nrows = tot_rows_to_read;
     }
 
     virtual ~ArrowReader() { release_gil(); }
@@ -210,11 +220,19 @@ class ArrowReader {
      */
     virtual size_t get_num_pieces() const = 0;
 
-    /// return the total number of global rows that we are reading
-    int64_t get_total_rows() const { return total_rows; }
+    /// Return the total number of global rows that we are reading. Only
+    /// relevant in the row-level case.
+    int64_t get_total_rows() const {
+        assert(this->row_level);
+        return this->total_rows;
+    }
 
-    /// Return the number of rows read by the current rank
-    int64_t get_local_rows() const { return count; }
+    /// Return the number of rows read by the current rank. Only
+    /// relevant in the row-level case.
+    int64_t get_local_rows() const {
+        assert(this->row_level);
+        return this->count;
+    }
 
     /**
      * @brief Read a batch of data and return a Bodo table
@@ -235,34 +253,52 @@ class ArrowReader {
         }
         ScopedTimer timer(this->metrics.read_batch_total_time);
 
-        // Handling for repeated extra calls to reader
-        // TODO: Determine the general handling for the no-column case
-        // (when selected_fields.empty() == true)
-        // Right now, this occurs when reading a Snowflake DELETE
-        // What would be the equivalent for Parquet?
-        if (rows_left_to_emit == 0 && !selected_fields.empty()) {
-            is_last = true;
-            total_rows_out = 0;
+        if (this->row_level) {
+            // Handling for repeated extra calls to reader
+            // TODO: Determine the general handling for the no-column case
+            // (when selected_fields.empty() == true)
+            // Right now, this occurs when reading a Snowflake DELETE
+            // What would be the equivalent for Parquet?
+            if (this->rows_left_to_emit == 0 && !selected_fields.empty()) {
+                is_last = true;
+                total_rows_out = 0;
+                return new table_info(*this->get_empty_out_table());
+            }
+            if (!produce_output) {
+                is_last = this->rows_left_to_emit == 0;
+                total_rows_out = 0;
+                return new table_info(*this->get_empty_out_table());
+            }
 
-            return new table_info(*this->get_empty_out_table());
+            auto [out_table, is_last_, total_rows_out_] =
+                this->read_inner_row_level();
+
+            if (is_last_ && this->rows_left_to_emit != 0) {
+                throw std::runtime_error(
+                    "ArrowReader::read_batch(): did not read all rows");
+            }
+
+            total_rows_out = total_rows_out_;
+            is_last = is_last_;
+            return out_table;
+        } else {
+            if (this->emitted_all_output && !selected_fields.empty()) {
+                is_last = true;
+                total_rows_out = 0;
+                return new table_info(*this->get_empty_out_table());
+            }
+            if (!produce_output) {
+                is_last = this->emitted_all_output;
+                total_rows_out = 0;
+                return new table_info(*this->get_empty_out_table());
+            }
+
+            auto [out_table, is_last_, total_rows_out_] =
+                this->read_inner_piece_level();
+            total_rows_out = total_rows_out_;
+            is_last = is_last_;
+            return out_table;
         }
-
-        if (!produce_output) {
-            is_last = rows_left_to_emit == 0;
-            total_rows_out = 0;
-
-            return new table_info(*this->get_empty_out_table());
-        }
-
-        auto [out_table, is_last_, total_rows_out_] = read_inner();
-        if (is_last_ && rows_left_to_emit != 0) {
-            throw std::runtime_error(
-                "ArrowReader::read_batch(): did not read all rows");
-        }
-
-        total_rows_out = total_rows_out_;
-        is_last = is_last_;
-        return out_table;
     }
 
     /**
@@ -284,21 +320,34 @@ class ArrowReader {
         }
 
         tracing::Event ev("reader::read_all", parallel);
-        auto [out_table, is_last_, total_rows_out_] = read_inner();
-        assert(is_last_ == true);
-        if (selected_fields.size()) {
-            // If we are not reading any columns, we don't need to check
-            // the number of rows read
-            assert(total_rows_out_ ==
-                   static_cast<uint64_t>(this->get_local_rows()));
-        }
-        if (rows_left_to_emit != 0) {
-            throw std::runtime_error(
-                "ArrowReader::read_all(): did not read all rows. " +
-                std::to_string(rows_left_to_emit) + " rows left!");
-        }
 
-        return out_table;
+        if (this->row_level) {
+            auto [out_table, is_last_, total_rows_out_] =
+                read_inner_row_level();
+            assert(is_last_ == true);
+            if (this->selected_fields.size()) {
+                // If we are not reading any columns, we don't need to check
+                // the number of rows read
+                assert(total_rows_out_ ==
+                       static_cast<uint64_t>(this->get_local_rows()));
+            }
+            if (this->rows_left_to_emit != 0) {
+                throw std::runtime_error(
+                    "ArrowReader::read_all(): did not read all rows. " +
+                    std::to_string(this->rows_left_to_emit) + " rows left!");
+            }
+
+            return out_table;
+        } else {
+            auto [out_table, is_last_, total_rows_out_] =
+                read_inner_piece_level();
+            assert(is_last_ == true);
+            if (!this->emitted_all_output) {
+                throw std::runtime_error(
+                    "ArrowReader::read_all(): did not read all rows!");
+            }
+            return out_table;
+        }
     }
 
     /**
@@ -336,6 +385,20 @@ class ArrowReader {
     const int64_t tot_rows_to_read;  // used for df.head(N) case
     bool initialized = false;
 
+    // During the initialization phase, we have two ways of splitting the
+    // dataset between ranks. Either we apply filters at a row level to get
+    // exact row counts and then split the dataset exactly between all ranks. In
+    // this situation, multiple ranks may read from the same piece (disjoint
+    // slices). We call this a "row-level" (i.e. row_level=True) read.
+    // The other option is to only apply the filter at the piece level to prune
+    // entire pieces. In these cases, we don't know the exact row count (after
+    // filtering) up front and must assign every piece to a single rank. We will
+    // then filter during the read and return all the rows that satisfy the
+    // filter. This is called a "piece-level" (i.e. row_level=False) read.
+    // Currently, only the Iceberg reader supports both row-level and
+    // piece-level readers. Parquet and Snowflake always do a row-level read.
+    bool row_level = true;
+
     /// Schema of the input, before column pruning, rearranging, or casting
     /// Note for SnowflakeReader, this is the output of the query, not a table
     ///     so it accounts for any transformations done inside of the query
@@ -358,25 +421,39 @@ class ArrowReader {
     bool create_dict_encoding_from_strings = false;
     std::set<std::string> str_as_dict_colnames;
 
-    /// Total number of rows in the dataset (all pieces)
+    /// Output batch size of streaming tables
+    int64_t batch_size;
+
+    /* ROW LEVEL READ CASE */
+
+    /// Total number of rows in the dataset globally (all pieces)
     int64_t total_rows = 0;
 
-    /// Starting row for first piece
+    /// Starting row for first piece that this rank will read from.
     int64_t start_row_first_piece = 0;
 
-    /// Total number of rows this process has to read (across pieces)
+    /// Total number of rows this rank has to read (across pieces)
     int64_t count = 0;
 
     /// Number of rows left to emit out of ArrowReader
-    /// Needed for streaming reads in ArrowReader::read_inner()
+    /// Needed for streaming reads in ArrowReader::read_inner_row_level()
     int64_t rows_left_to_emit;
 
     /// Rows left to read from input pieces
     /// Should be equivalent to rows_left_to_emit in non-streaming
     int64_t rows_left_to_read;
 
-    /// Output batch size of streaming tables
-    int64_t batch_size;
+    /* PIECE LEVEL READ CASE */
+
+    /// Whether we're done reading all pieces. Note that this only means that
+    /// there's no more data to read from the source. We might still have output
+    /// left to emit from this operator.
+    bool done_reading_pieces = false;
+
+    /// Whether we've emitted all output. This is required since unlike the
+    /// row-level case we don't know the row count up front, and so the
+    /// implementation must explicitly set this once done.
+    bool emitted_all_output = false;
 
     /// Prepared streaming output batches (Bodo tables) ready to emit. There is
     /// one dictionary builder per column in the output table, with nullptr for
@@ -388,6 +465,22 @@ class ArrowReader {
     /// initialize reader
     void init_arrow_reader(std::span<int32_t> str_as_dict_cols = {},
                            bool create_dict_from_string = false);
+
+    /**
+     * @brief Distribute and assign rows to all ranks from the global set of
+     * pieces. Only applicable in the row_level=True case.
+     *
+     * @param pieces_py List of pieces
+     */
+    virtual void distribute_rows(PyObject* pieces_py);
+
+    /**
+     * @brief Distribute and assign entire pieces to all ranks from the global
+     * set of pieces. Only applicable in the piece_level (row_level=False) case.
+     *
+     * @param pieces_py List of pieces
+     */
+    virtual void distribute_pieces(PyObject* pieces_py);
 
     /**
      * Helper Function to Upcast Runtime Data to Expected Reader Schema
@@ -405,21 +498,32 @@ class ArrowReader {
      * Register a piece for this process to read
      * @param piece : piece to register
      * @param num_rows : number of rows from this piece to read
-     * @param total_rows : total number of rows this process has to read (across
-     * pieces)
      */
-    virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows) = 0;
+    virtual void add_piece(PyObject* piece, int64_t num_rows) = 0;
 
     /// Return Python object representing Arrow dataset
     virtual PyObject* get_dataset() = 0;
 
+    // Force a row-level read by default. Individual readers can override this.
+    virtual bool force_row_level_read() const { return true; }
+
     /**
-     * @brief Helper Interface Function for sub Readers to implement
-     * Perform the actual management and read of input pieces into batches
-     * Depending on the reader, must handle batched and non-batched reads
+     * @brief Helper Interface Function for sub Readers to implement when
+     * reading at a row-level. Perform the actual management and read of input
+     * pieces into batches Depending on the reader, must handle batched and
+     * non-batched reads.
      */
-    virtual std::tuple<table_info*, bool, uint64_t> read_inner() = 0;
+    virtual std::tuple<table_info*, bool, uint64_t> read_inner_row_level() = 0;
+
+    /**
+     * @brief Same as read_inner_row_level, expect when we're doing a
+     * piece-level read instead of row-level read, i.e. the exact row counts are
+     * not known up front.
+     *
+     * @return std::tuple<table_info*, bool, uint64_t>
+     */
+    virtual std::tuple<table_info*, bool, uint64_t>
+    read_inner_piece_level() = 0;
 
     /**
      * @brief Helper function to construct an empty Bodo table with the

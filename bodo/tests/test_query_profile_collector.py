@@ -1561,26 +1561,56 @@ def test_iceberg_metrics_collection(
     read_metrics_dict = {x["name"]: x["stat"] for x in read_metrics}
 
     assert "limit_nrows" in init_metrics_dict
-    assert "get_ds_time" in init_metrics_dict and init_metrics_dict["get_ds_time"] > 0
-    assert "global_nrows_to_read" in init_metrics_dict
-    assert "global_n_pieces" in init_metrics_dict
     assert "create_dict_encoding_from_strings" in init_metrics_dict
     assert "n_str_as_dict_cols" in init_metrics_dict
-    assert "local_rows_to_read" in init_metrics_dict
-    assert "local_n_pieces_to_read_from" in init_metrics_dict
-    assert "file_list_time" in init_metrics_dict
-    assert "get_filesystem_time" in init_metrics_dict
-    assert "scan_time" in init_metrics_dict
-    assert "schema_validation_time" in init_metrics_dict
-    assert "num_row_groups" in init_metrics_dict
-    assert "total_bytes" in init_metrics_dict
-    assert "get_dataset_scanners_time" in init_metrics_dict
+    assert "get_ds_exact_row_counts_time" in init_metrics_dict
+    assert "get_ds_exact_row_counts_recreated_frags" in init_metrics_dict
+    assert "force_row_level" in init_metrics_dict
+    assert "row_level" in init_metrics_dict
 
-    assert "read_batch_total_time" in read_metrics_dict
-    assert "get_batch_time" in read_metrics_dict
-    assert "evolve_time" in read_metrics_dict
+    for k in [
+        "get_ds_time",
+        "global_nrows_to_read",
+        "global_n_pieces",
+        "local_rows_to_read",
+        "local_n_pieces_to_read_from",
+        "get_ds_file_list_time",
+        "get_ds_get_fs_time",
+        "get_ds_n_files_analyzed",
+        "get_ds_file_frags_creation_time",
+        "get_ds_file_frags_fetch_md_time",
+        "get_ds_get_sg_id_time",
+        "get_ds_sort_by_sg_id_time",
+        "get_ds_nunique_sgs_seen",
+        "get_ds_rg_filtering_time",
+        "get_ds_schema_validation_time",
+        "get_ds_get_row_counts_nrgs",
+        "get_ds_get_row_counts_nrows",
+        "get_ds_get_row_counts_total_bytes",
+        "get_ds_pieces_allgather_time",
+        "get_ds_sort_all_pieces_time",
+        "get_ds_assemble_ds_time",
+        "ds_nunique_schema_groups",
+        "init_scanners_get_pa_datasets_time",
+        "n_scanners",
+        "create_scanners_time",
+        "init_arrow_reader_total_time",
+        "distribute_pieces_or_rows_time",
+    ]:
+        assert k in init_metrics_dict, k
+        assert init_metrics_dict[k] > 0
+
+    for k in [
+        "get_batch_time",
+        "evolve_time",
+        "arrow_rb_to_bodo_time",
+        "n_batches",
+        "read_batch_total_time",
+    ]:
+        assert k in read_metrics_dict, k
+        assert read_metrics_dict[k] > 0, k
+
     assert "unify_time" in read_metrics_dict
-    # There aren't always small batches
-    # assert "unify_append_small_time" in read_metrics
-    assert "n_batches" in read_metrics_dict
+    assert "unify_append_small_time" in read_metrics_dict
+    assert "output_pop_chunk_time" in read_metrics_dict
     assert "n_small_batches" in read_metrics_dict

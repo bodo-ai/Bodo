@@ -124,12 +124,17 @@ class ParquetReader : public ArrowReader {
     }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows) override;
+    virtual void add_piece(PyObject* piece, int64_t num_rows) override;
 
     virtual PyObject* get_dataset() override;
 
-    virtual std::tuple<table_info*, bool, uint64_t> read_inner() override;
+    virtual std::tuple<table_info*, bool, uint64_t> read_inner_row_level()
+        override;
+
+    std::tuple<table_info*, bool, uint64_t> read_inner_piece_level() override {
+        throw std::runtime_error(
+            "ParquetReader::read_inner_piece_level: Not supported!");
+    }
 
     virtual std::shared_ptr<table_info> get_empty_out_table() override;
 
