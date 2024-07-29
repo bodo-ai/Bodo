@@ -441,14 +441,39 @@ class BodoRelMdRowCount : RelMdRowCount() {
         mq: RelMetadataQuery,
     ): Double? {
         val groupKey = rel.groupSet
+        val groupingSets = rel.groupSets
         if (groupKey.isEmpty) {
             // Aggregate with no GROUP BY always returns 1 row (even on empty table).
             return 1.0
         }
-        if (mq.areColumnsUnique(rel.input, groupKey) == true) {
-            // If the group by columns are unique, then the number of rows is the same as the input
-            return mq.getRowCount(rel.input)
+        // Handle the row count representation. For grouping sets we try to estimate each
+        // group by explicitly. Note: A regular group by is represented as a single grouping
+        // set with all the columns.
+        var totalRowCount = 0.0
+        var foundAllGroups = true
+        for (groupingSet in groupingSets) {
+            // rowCount is the cardinality of the group by columns
+            val distinctRowCount =
+                if (groupingSet.isEmpty) {
+                    1.0
+                } else if (mq.areColumnsUnique(rel.input, groupingSet) == true) {
+                    // If the group by columns are unique, then the number of rows is the same as the input
+                    mq.getRowCount(rel.input)
+                } else {
+                    mq.getDistinctRowCount(rel.input, groupingSet, null)
+                }
+            if (distinctRowCount == null) {
+                foundAllGroups = false
+                break
+            } else {
+                totalRowCount += distinctRowCount
+            }
         }
-        return super.getRowCount(rel, mq)
+        return if (foundAllGroups) {
+            totalRowCount
+        } else {
+            // Just fall back to the Calcite default
+            super.getRowCount(rel, mq)
+        }
     }
 }
