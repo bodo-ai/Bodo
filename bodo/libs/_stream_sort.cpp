@@ -772,12 +772,10 @@ void StreamSortState::ReportMetrics() {
         std::move(metrics));
 }
 
-StreamSortState* stream_sort_state_init_py_entry(int64_t op_id, int64_t n_key_t,
-                                                 int64_t* vect_ascending,
-                                                 int64_t* na_position,
-                                                 int8_t* arr_c_types,
-                                                 int8_t* arr_array_types,
-                                                 int n_arrs, bool parallel) {
+StreamSortState* stream_sort_state_init_py_entry(
+    int64_t op_id, int64_t limit, int64_t offset, int64_t n_key_t,
+    int64_t* vect_ascending, int64_t* na_position, int8_t* arr_c_types,
+    int8_t* arr_array_types, int n_arrs, bool parallel) {
     try {
         // Copy the per-column configuration into owned vectors
         std::vector<int64_t> vect_ascending_(n_key_t);

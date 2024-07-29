@@ -127,6 +127,8 @@ def _init_stream_sort_state(
     typingctx,
     output_state_type,
     operator_id,
+    limit,
+    offset,
     n_table_cols,
     vect_ascending,
     na_position,
@@ -141,6 +143,8 @@ def _init_stream_sort_state(
         (
             _,
             operator_id,
+            limit,
+            offset,
             n_table_cols,
             vect_ascending,
             na_position,
@@ -152,6 +156,8 @@ def _init_stream_sort_state(
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
+                lir.IntType(64),
+                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
@@ -169,6 +175,8 @@ def _init_stream_sort_state(
             fn_tp,
             (
                 operator_id,
+                limit,
+                offset,
                 n_table_cols,
                 vect_ascending,
                 na_position,
@@ -185,6 +193,8 @@ def _init_stream_sort_state(
         output_state_type,
         types.int64,
         types.int64,
+        types.int64,
+        types.int64,
         types.voidptr,
         types.voidptr,
         types.voidptr,
@@ -198,6 +208,8 @@ def _init_stream_sort_state(
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_stream_sort_state(
     operator_id,
+    limit,
+    offset,
     by,
     asc_cols,
     na_position,
@@ -223,6 +235,8 @@ def init_stream_sort_state(
 
     def impl(
         operator_id,
+        limit,
+        offset,
         by,
         asc_cols,
         na_position,
@@ -235,6 +249,8 @@ def init_stream_sort_state(
         return _init_stream_sort_state(
             output_type,
             operator_id,
+            limit,
+            offset,
             n_table_cols,
             vect_asc.ctypes,
             na_pos.ctypes,

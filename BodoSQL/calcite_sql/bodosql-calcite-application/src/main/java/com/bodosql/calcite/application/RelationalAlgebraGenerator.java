@@ -193,6 +193,7 @@ public class RelationalAlgebraGenerator {
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
       boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset,
       String sqlStyle,
       boolean coveringExpressionCaching) {
     this.catalog = null;
@@ -206,7 +207,8 @@ public class RelationalAlgebraGenerator {
             (root, defaults) -> {
               defaults.add(root.add(localSchema.getName(), localSchema));
             });
-    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(enableStreamingSort);
+    RelDataTypeSystem typeSystem =
+        new BodoSQLRelDataTypeSystem(enableStreamingSort, enableStreamingSortLimitOffset);
     this.typeSystem = typeSystem;
     this.sqlStyle = sqlStyle;
     setupPlanner(defaultSchemas, typeSystem);
@@ -229,6 +231,7 @@ public class RelationalAlgebraGenerator {
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
       boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset,
       String sqlStyle,
       boolean coveringExpressionCaching,
       String defaultTz) {
@@ -245,7 +248,8 @@ public class RelationalAlgebraGenerator {
             });
     BodoTZInfo tzInfo = new BodoTZInfo(defaultTz, "str");
     RelDataTypeSystem typeSystem =
-        new BodoSQLRelDataTypeSystem(tzInfo, 0, 0, null, enableStreamingSort);
+        new BodoSQLRelDataTypeSystem(
+            tzInfo, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
     this.typeSystem = typeSystem;
     this.sqlStyle = sqlStyle;
     setupPlanner(defaultSchemas, typeSystem);
@@ -277,6 +281,7 @@ public class RelationalAlgebraGenerator {
       boolean enableTimestampTz,
       boolean enableRuntimeJoinFilters,
       boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset,
       String sqlStyle,
       boolean coveringExpressionCaching) {
     this.catalog = catalog;
@@ -364,7 +369,8 @@ public class RelationalAlgebraGenerator {
             weekStart,
             weekOfYearPolicy,
             new BodoSQLRelDataTypeSystem.CatalogContext(currentDatabase, catalog.getAccountName()),
-            enableStreamingSort);
+            enableStreamingSort,
+            enableStreamingSortLimitOffset);
     this.typeSystem = typeSystem;
     setupPlanner(defaultSchemas, typeSystem);
   }
