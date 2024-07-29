@@ -44,6 +44,9 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
 
   // TODO(aneesh) remove enableStreamingSort once streaming sort is fully implemented
   public boolean enableStreamingSort;
+  // TODO(ivan) remove enableStreamingSortLimitOffset once streaming sort limit and offset is fully
+  // implemented
+  public boolean enableStreamingSortLimitOffset;
 
   public static class CatalogContext {
     public String currentDatabase;
@@ -62,11 +65,12 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   private CatalogContext currentDatabase;
 
   public BodoSQLRelDataTypeSystem() {
-    this(BodoTZInfo.UTC, 0, 0, null, false);
+    this(BodoTZInfo.UTC, 0, 0, null, false, false);
   }
 
-  public BodoSQLRelDataTypeSystem(boolean enableStreamingSort) {
-    this(BodoTZInfo.UTC, 0, 0, null, enableStreamingSort);
+  public BodoSQLRelDataTypeSystem(
+      boolean enableStreamingSort, boolean enableStreamingSortLimitOffset) {
+    this(BodoTZInfo.UTC, 0, 0, null, enableStreamingSort, enableStreamingSortLimitOffset);
   }
 
   public BodoSQLRelDataTypeSystem(
@@ -74,12 +78,14 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       Integer weekStart,
       Integer weekOfYearPolicy,
       @Nullable CatalogContext currentDatabase,
-      boolean enableStreamingSort) {
+      boolean enableStreamingSort,
+      boolean enableStreamingSortLimitOffset) {
     defaultTZInfo = tzInfo;
     this.weekStart = weekStart;
     this.weekOfYearPolicy = weekOfYearPolicy;
     this.currentDatabase = currentDatabase;
     this.enableStreamingSort = enableStreamingSort;
+    this.enableStreamingSortLimitOffset = enableStreamingSortLimitOffset;
   }
 
   /**

@@ -1196,6 +1196,7 @@ class BodoSQLContext:
                 bodo.enable_timestamp_tz,
                 bodo.enable_runtime_join_filters,
                 bodo.enable_streaming_sort,
+                bodo.enable_streaming_sort_limit_offset,
                 bodo.bodo_sql_style,
                 bodo.bodosql_full_caching,
             )
@@ -1211,6 +1212,7 @@ class BodoSQLContext:
             bodo.enable_timestamp_tz,
             bodo.enable_runtime_join_filters,
             bodo.enable_streaming_sort,
+            bodo.enable_streaming_sort_limit_offset,
             bodo.bodo_sql_style,
             bodo.bodosql_full_caching,
             *extra_args,

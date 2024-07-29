@@ -22,8 +22,10 @@ public class PandasGenTest {
   public static void main(String[] args) throws Exception {
 
     String sql =
-        "select CASE WHEN A > 10 THEN @c + 1 WHEN A > 100 THEN @c + 2 WHEN A > 1000 THEN @c + 3"
-            + " ELSE @c + 4 END from table1";
+        //        "select CASE WHEN A > 10 THEN @c + 1 WHEN A > 100 THEN @c + 2 WHEN A > 1000 THEN
+        // @c + 3"
+        //            + " ELSE @c + 4 END from table1";
+        "select * from table1 order by A limit 10000000000000000000 offset 10";
     int plannerChoice = RelationalAlgebraGenerator.STREAMING_PLANNER;
 
     LocalSchema schema = new LocalSchema("__BODOLOCAL__");
@@ -97,7 +99,8 @@ public class PandasGenTest {
             true, // Enable Iceberg for testing
             true, // Enable TIMESTAMP_TZ for testing
             true, // Enable Join Runtime filters for Testing
-            false, // Disable Streaming Sort for Testing
+            true, // Disable Streaming Sort for Testing
+            false, // Disable Streaming Sort Limit Offset for Testing
             "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
             false // Only cache identical nodes
             );

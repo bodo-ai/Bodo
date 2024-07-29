@@ -2020,7 +2020,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
 
     @NotNull
     @Override
-    public RexToBodoTranslator rexTranslator(@NotNull final BodoEngineTable input) {
+    public RexToBodoTranslator rexTranslator(@Nullable final BodoEngineTable input) {
       return getRexTranslator(input);
     }
 

@@ -130,7 +130,7 @@ interface BodoPhysicalRel : TimerSupportedRel {
         /**
          * Returns a RexToBodoTranslator that works in this build context.
          */
-        fun rexTranslator(input: BodoEngineTable): RexToBodoTranslator
+        fun rexTranslator(input: BodoEngineTable?): RexToBodoTranslator
 
         /**
          * Returns a RexToBodoTranslator that works in this build context
