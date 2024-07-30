@@ -2097,7 +2097,7 @@ def test_binary_pad_2args_errorchecking(func, memory_leak_check):
     }
     with pytest.raises(
         Exception,
-        match=f".*Cannot apply '{func.upper()}' to arguments of type '{func.upper()}\\(<VARBINARY>, <INTEGER>\\).*'",
+        match=f".*Cannot apply '{func.upper()}' to arguments of type '{func.upper()}\\(<VARBINARY\\(.*\\)>, <INTEGER>\\).*'",
     ):
         check_query(
             query,

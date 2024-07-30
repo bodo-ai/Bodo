@@ -39,6 +39,16 @@ def tabular_test_harness(tabular_catalog, tabular_connection, test_harness_path)
     return TabularTestHarness(tabular_catalog, tabular_connection, test_harness_path)
 
 
+def trim_describe_table_output(output: pd.DataFrame):
+    """Retrieve only the name and type field from the output of calling
+    describe_table. Additionally, erase precision from VARCHAR types"""
+    trimmed = output[["NAME", "TYPE"]]
+    # replace VARCHAR(precision) with VARCHAR
+    type_is_varchar = trimmed["TYPE"].map(lambda x: x.startswith("VARCHAR"))
+    trimmed["TYPE"][type_is_varchar] = "VARCHAR"
+    return trimmed
+
+
 ###############################################
 #                   Testing                   #
 ###############################################
@@ -785,7 +795,8 @@ def test_alter_table_add_column(request, harness_name: str):
             "TYPE": [sqlnode_type_names[name] for name in typeNames],
         }
         answer = pd.DataFrame(data)
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        assert_equal_par(trim_describe_table_output(output), answer)
 
     finally:
         harness.drop_test_table(table_identifier)
@@ -867,7 +878,8 @@ def test_alter_table_drop_column(request, harness_name: str):
                 ],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop top level column
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL1"
@@ -882,7 +894,8 @@ def test_alter_table_drop_column(request, harness_name: str):
                 "TYPE": ["RecordType(DOUBLE X, DOUBLE Y)", "INTEGER", "INTEGER"],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop nested column
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL2.X"
@@ -897,7 +910,7 @@ def test_alter_table_drop_column(request, harness_name: str):
                 "TYPE": ["RecordType(DOUBLE Y)", "INTEGER", "INTEGER"],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop top level column of nested column
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL2"
@@ -909,7 +922,7 @@ def test_alter_table_drop_column(request, harness_name: str):
         answer = pd.DataFrame(
             {"NAME": ["TESTCOL3", "TESTCOL4"], "TYPE": ["INTEGER", "INTEGER"]}
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop multiple columns
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL3, TESTCOL4"
@@ -919,7 +932,7 @@ def test_alter_table_drop_column(request, harness_name: str):
         # Check
         output = harness.describe_table(table_identifier)
         answer = pd.DataFrame({"NAME": [], "TYPE": []})
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
     finally:
         harness.drop_test_table(table_identifier)
@@ -961,7 +974,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
                 "TYPE": ["INTEGER", "RecordType(DOUBLE X, DOUBLE Y)"],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Drop non-existent column
         with pytest.raises(BodoError, match="Cannot delete missing column"):
@@ -990,7 +1003,7 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
         answer = pd.DataFrame(
             {"NAME": ["TESTCOL2"], "TYPE": ["RecordType(DOUBLE X, DOUBLE Y)"]}
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
     finally:
         harness.drop_test_table(table_identifier)
@@ -1038,7 +1051,7 @@ def test_alter_table_rename_column(request, harness_name: str):
                 "TYPE": ["INTEGER", "RecordType(DOUBLE X, DOUBLE Y)", "INTEGER"],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Rename top level column
         query = (
@@ -1059,7 +1072,7 @@ def test_alter_table_rename_column(request, harness_name: str):
                 ],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Rename again
         query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED TO TESTCOL1_RENAMED2"
@@ -1078,7 +1091,7 @@ def test_alter_table_rename_column(request, harness_name: str):
                 ],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Rename nested column
         # Note that we cannot change the hierarchy of nesting.
@@ -1100,7 +1113,7 @@ def test_alter_table_rename_column(request, harness_name: str):
                 ],
             }
         )
-        assert_equal_par(output[["NAME", "TYPE"]], answer)
+        assert_equal_par(trim_describe_table_output(output), answer)
 
         # Rename to existing column (should error)
         query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED2 TO TESTCOL3"
