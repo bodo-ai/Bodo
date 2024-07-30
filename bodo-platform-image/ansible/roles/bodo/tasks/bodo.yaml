@@ -3,14 +3,14 @@
 - name: BODO | Install bodo
   command:
     cmd: |
-      /opt/conda/bin/mamba install --yes -c {{ URL_BODO }} -c conda-forge bodo=={{ BODO_VERSION }}
+      /opt/conda/bin/mamba install --yes -c {{ URL_BODO }} -c conda-forge bodo=={{ BODO_VERSION }} --no-update-deps
   tags:
     - bodo
 
 - name: BODO | Install BodoSQL if specified
   command:
     cmd: |
-      /opt/conda/bin/mamba install --yes -c {{ BODOSQL_CHANNEL }} -c conda-forge bodosql=={{ BODOSQL_VERSION }}
+      /opt/conda/bin/mamba install --yes -c {{ BODOSQL_CHANNEL }} -c conda-forge bodosql=={{ BODOSQL_VERSION }} --no-update-deps
   when: "BODOSQL_VERSION | length > 0"
   tags:
     - bodo
@@ -18,7 +18,7 @@
 - name: BODO | Install ICEBERG Connector if specified
   command:
     cmd: |
-      /opt/conda/bin/mamba install --yes -c {{ ICEBERG_CONNECTOR_CHANNEL }} -c conda-forge bodo-iceberg-connector=={{ ICEBERG_CONNECTOR_VERSION }}
+      /opt/conda/bin/mamba install --yes -c {{ ICEBERG_CONNECTOR_CHANNEL }} -c conda-forge bodo-iceberg-connector=={{ ICEBERG_CONNECTOR_VERSION }} --no-update-deps
   when: "ICEBERG_CONNECTOR_VERSION | length > 0"
   tags:
     - bodo
@@ -78,7 +78,6 @@
     cmd: "/opt/conda/bin/pip install bodo-platform-extensions /tmp/bodo-platform-extensions"
   tags:
     - bodo
-
 
 - name: BODO | Clean Cache for Conda
   command:

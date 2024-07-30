@@ -18,7 +18,7 @@ def conda_packages(host):
     assert out.rc == 0, "Error while executing pip list"
     pkgs = {}
     for pkg in json.loads(out.stdout):
-        pkgs[pkg["name"]] = {"version": pkg["version"]}
+        pkgs[pkg["name"]] = {"version": pkg["version"], "channel": pkg["channel"]}
     return pkgs
 
 
