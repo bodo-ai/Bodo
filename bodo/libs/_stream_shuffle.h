@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arrow/util/bit_util.h>
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_query_profile_collector.h"
@@ -16,6 +17,9 @@ constexpr float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
 // Minimum utilization of shuffle buffer, used as a factor in determining when
 // to clear
 constexpr float SHUFFLE_BUFFER_MIN_UTILIZATION = 0.5;
+
+// Tag for message sending the lengths of the outgoing arrays
+constexpr int LENGTH_TAG = 0;
 
 // Streaming batch size. The default of 4096 should match the default of
 // bodosql_streaming_batch_size defined in __init__.py
@@ -35,6 +39,10 @@ const int STREAMING_BATCH_SIZE = __env_streaming_batch_size_str != nullptr
 // Update sync freq every 10 syncs by default.
 #define DEFAULT_SYNC_UPDATE_FREQ 10
 #endif
+
+using comm_info_iter_t = std::vector<mpi_comm_info>::const_iterator;
+using str_comm_info_iter_t = std::vector<mpi_str_comm_info>::const_iterator;
+using len_iter_t = std::vector<uint64_t>::const_iterator;
 
 /**
  * @brief Get the default shuffle threshold for all streaming operators. We
@@ -113,22 +121,15 @@ class IncrementalShuffleMetrics {
  */
 class AsyncShuffleSendState {
    public:
-    // Arrays that are being sent, all from a single column.
-    // Will be one array for simple types and more for nested/dictionary types.
-    std::vector<std::shared_ptr<array_info>> send_arrs;
-    std::vector<MPI_Request> send_requests;
-    // Track whether a nullable boolean arrays length needs adjusted and by how
-    // much
-    std::vector<std::unique_ptr<uint8_t>> bits_in_last_byte;
-
     /**
-     * @brief Add an array to the send state. This will allocate a send array,
-     * fill it, add it to send_arrs, and return the send array info and MPI
-     * communication information.
+     * @brief Post async sends to shuffle a table to other ranks
+     * @param in_table Input table
+     * @param comm_info MPI communication information
+     * @param shuffle_comm MPI communicator for shuffle
      */
-    std::tuple<std::shared_ptr<array_info>, mpi_str_comm_info> addArray(
-        const std::shared_ptr<array_info>& _in_arr,
-        const mpi_comm_info& comm_info);
+
+    void send(const std::shared_ptr<table_info>& in_table,
+              mpi_comm_info& comm_info, MPI_Comm shuffle_comm);
 
     /**
      * @brief Returns true if send is done which allows this state to be freed.
@@ -141,28 +142,6 @@ class AsyncShuffleSendState {
         return flag;
     }
 
-    /**
-     * @brief Merge the send state of another AsyncShuffleSendState into this
-     * one.
-     * Takes ownership of the other state's arrays and requests.
-     *
-     * @param other Other AsyncShuffleSendState to merge into this one.
-     */
-    void merge(AsyncShuffleSendState&& other) {
-        this->send_arrs.reserve(this->send_arrs.size() +
-                                other.send_arrs.size());
-        std::move(other.send_arrs.begin(), other.send_arrs.end(),
-                  std::back_inserter(this->send_arrs));
-        this->send_requests.reserve(this->send_requests.size() +
-                                    other.send_requests.size());
-        std::move(other.send_requests.begin(), other.send_requests.end(),
-                  std::back_inserter(this->send_requests));
-        this->bits_in_last_byte.reserve(this->bits_in_last_byte.size() +
-                                        other.bits_in_last_byte.size());
-        std::move(other.bits_in_last_byte.begin(),
-                  other.bits_in_last_byte.end(),
-                  std::back_inserter(this->bits_in_last_byte));
-    }
     /**
      * @brief Get total size of send buffers in flight
      *
@@ -177,6 +156,465 @@ class AsyncShuffleSendState {
         }
         return total_size;
     }
+
+   private:
+    using comm_infos_t =
+        std::tuple<std::vector<mpi_comm_info>, std::vector<mpi_str_comm_info>>;
+    // Arrays that are being sent, all from a single table.
+    // Will be one array for simple types and more for nested/dictionary types.
+    std::vector<std::shared_ptr<array_info>> send_arrs;
+
+    std::vector<std::vector<uint64_t>> rank_to_lens;
+    std::vector<MPI_Request> send_requests;
+
+    /**
+     * @brief Compute communication information for sending a table
+     * @param in_table Input table
+     * @param comm_info Base comminfo
+     * @return comm_infos_t sub comm infos and string comm infos
+     */
+    comm_infos_t compute_comm_infos(const std::shared_ptr<table_info>& in_table,
+                                    mpi_comm_info& comm_info);
+
+    /**
+     * @brief Send lengths for a table to each rank
+     * @param in_table Input table
+     * @param comm_info base comm info to get the lengths from
+     * @param comm_infos sub comm infos and str comm infos to get the lengths
+     * from
+     * @param shuffle_comm MPI communicator for shuffle
+     */
+    void send_lengths(const std::shared_ptr<table_info>& in_table,
+                      mpi_comm_info& comm_info, comm_infos_t& comm_infos,
+                      MPI_Comm shuffle_comm);
+
+    /**
+     * @brief send array buffers for table to each rank
+     * @param in_table Input table to send
+     * @param comm_info base comm info to get the lengths  and offsets from
+     * @param comm_infos sub comm infos and str comm infos to get the lengths
+     * and offsets from
+     * @param shuffle_comm MPI communicator for shuffle
+     */
+    void send_arrays(const std::shared_ptr<table_info>& in_table,
+                     mpi_comm_info& comm_info, comm_infos_t& comm_infos,
+                     MPI_Comm shuffle_comm);
+    /**
+     * @brief Add an array to the send state. This will allocate a send array,
+     * fill it, add it to send_arrs, and return the send array info
+     */
+    std::shared_ptr<array_info> addArray(
+        const std::shared_ptr<array_info>& _in_arr,
+        const mpi_comm_info& comm_info, const mpi_str_comm_info& str_comm_info);
+
+    /**
+     * @brief send data to other ranks for shuffle
+     * @tparam top_level whether this is a top level array
+     * @param shuffle_comm MPI communicator for shuffle
+     * @param comm_info MPI communication information
+     * @param in_arr Input array
+     * @param curr_tags Current tags
+     * @param must_shuffle_to_rank Whether we must shuffle to the rank, this is
+     * only true for ranks that are children of an array item that sent offsets
+     * to this rank
+     * @return AsyncShuffleSendState Send state
+     */
+    void send_shuffle_data_unknown_type(
+        const MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
+        comm_info_iter_t& comm_info_iter,
+        str_comm_info_iter_t& str_comm_info_iter,
+        const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
+        std::vector<bool>& must_shuffle_to_rank);
+
+    /**
+     * Shuffle the null bitmask for an array
+     */
+    template <bodo_array_type::arr_type_enum arr_type>
+    inline void send_shuffle_null_bitmask(
+        const MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
+        const std::shared_ptr<array_info>& send_arr,
+        std::vector<int>& curr_tags, size_t p) {
+        MPI_Datatype mpi_type_null = MPI_UNSIGNED_CHAR;
+        const void* buf =
+            send_arr->null_bitmask<arr_type>() +
+            comm_info.send_disp_null[p] * numpy_item_size[Bodo_CTypes::UINT8];
+
+        MPI_Request send_req_null;
+        // TODO: check err return
+        MPI_Issend(buf, comm_info.send_count_null[p], mpi_type_null, p,
+                   curr_tags[p]++, shuffle_comm, &send_req_null);
+        this->send_requests.push_back(send_req_null);
+    }
+    /**
+     * Send the data1 buffer for a numpy array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::NUMPY)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+
+        const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+        for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+            const void* buff =
+                send_arr->template data1<arr_type>() +
+                (numpy_item_size[dtype] * comm_info.send_disp[p]);
+            MPI_Request send_req;
+            // TODO: check err return
+            MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &send_req);
+            this->send_requests.push_back(send_req);
+        }
+    }
+    /**
+     * Send the data1 buffer and null bitmask for a nullable array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 dtype != Bodo_CTypes::_BOOL)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+
+        const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+        for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+
+            MPI_Request send_req;
+            const void* buff =
+                send_arr->template data1<arr_type>() +
+                (numpy_item_size[dtype] * comm_info.send_disp[p]);
+            // TODO: check err return
+            MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &send_req);
+
+            this->send_requests.push_back(send_req);
+            this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
+                                                      send_arr, curr_tags, p);
+        }
+    }
+    /**
+     * Send the data1 buffer and null bitmask for a nullable boolean array.
+     * Also sends the number of bits used in the last byte so the receiver knows
+     * the array's length.
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+                 dtype == Bodo_CTypes::_BOOL)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+        const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+        for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+
+            // Send the data
+            MPI_Request send_req;
+            char* buff = send_arr->template data1<arr_type>() +
+                         comm_info.send_disp_null[p];
+            MPI_Issend(buff, comm_info.send_count_null[p], mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &send_req);
+            this->send_requests.push_back(send_req);
+
+            this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
+                                                      send_arr, curr_tags, p);
+        }
+    }
+
+    /**
+     * Send the data1 buffer, data2 buffer, and null bitmask for a string array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::STRING)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+
+        const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
+        // Fill_send_array converts offsets to send lengths of type uint32_t
+        const MPI_Datatype len_mpi_type = MPI_UINT32_T;
+        for (int p = 0; p < comm_info.n_pes; p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+            MPI_Request data_send_req;
+            const void* data_buff = send_arr->template data1<arr_type>() +
+                                    str_comm_info.send_disp_sub[p];
+            // TODO: check err return
+            MPI_Issend(data_buff, str_comm_info.send_count_sub[p],
+                       data_mpi_type, p, curr_tags[p]++, shuffle_comm,
+                       &data_send_req);
+            this->send_requests.push_back(data_send_req);
+
+            MPI_Request len_send_req;
+            const void* len_buff = send_arr->data2<arr_type>() +
+                                   (sizeof(uint32_t) * comm_info.send_disp[p]);
+
+            MPI_Issend(len_buff, comm_info.send_count[p], len_mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &len_send_req);
+            this->send_requests.push_back(len_send_req);
+
+            this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
+                                                      send_arr, curr_tags, p);
+        }
+    }
+
+    /**
+     * Send the child offsets and dictionary for a dictionary array
+     * The dictionary is sent as a string array to all ranks so the offests
+     * remain valid
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::DICT)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        str_comm_info_iter++;
+        // Shuffle the indices
+        this->send_shuffle_data<bodo_array_type::NULLABLE_INT_BOOL,
+                                Bodo_CTypes::INT32>(
+            shuffle_comm, comm_info, sub_comm_info_iter, str_comm_info_iter,
+            in_arr->child_arrays[1], curr_tags, must_shuffle_to_rank);
+        // Copy the dict array because the dictionary comes from a builder.
+        // Builders can be appended to which can cause resizes invalidating the
+        // pointer.
+        std::shared_ptr<array_info> dict_arr =
+            copy_array(in_arr->child_arrays[0]);
+        const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
+        const MPI_Datatype offset_mpi_type = MPI_UINT64_T;
+        // Send the whole dict to each rank
+        for (int p = 0; p < comm_info.n_pes; p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+            MPI_Request data_send_req;
+            const void* data_buff = dict_arr->data1<bodo_array_type::STRING>();
+            // TODO: check err return
+            MPI_Issend(data_buff, dict_arr->n_sub_elems(), data_mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &data_send_req);
+            this->send_requests.push_back(data_send_req);
+
+            MPI_Request offset_send_req;
+            const void* offset_buff =
+                dict_arr->data2<bodo_array_type::STRING>();
+            // TODO: check err return
+            MPI_Issend(offset_buff, dict_arr->length + 1, offset_mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &offset_send_req);
+            this->send_requests.push_back(offset_send_req);
+
+            MPI_Request null_send_req;
+            const void* null_buff =
+                dict_arr->null_bitmask<bodo_array_type::STRING>();
+            MPI_Issend(null_buff,
+                       arrow::bit_util::BytesForBits(dict_arr->length),
+                       MPI_UNSIGNED_CHAR, p, curr_tags[p]++, shuffle_comm,
+                       &null_send_req);
+            this->send_requests.push_back(null_send_req);
+        }
+        this->send_arrs.push_back(dict_arr);
+    }
+
+    /**
+     * Send the data1 buffer, null bitmask, and child array for a list array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::ARRAY_ITEM)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+        const MPI_Datatype lens_mpi_type = MPI_UINT32_T;
+        std::vector<bool> must_shuffle_to_rank_inner(comm_info.n_pes, false);
+
+        for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+            must_shuffle_to_rank_inner[p] = true;
+
+            // Shuffle the lengths
+            MPI_Request send_req;
+            const void* buff = send_arr->data1<arr_type>() +
+                               (sizeof(uint32_t) * comm_info.send_disp[p]);
+            // TODO: check err return
+            MPI_Issend(buff, comm_info.send_count[p], lens_mpi_type, p,
+                       curr_tags[p]++, shuffle_comm, &send_req);
+
+            // Shuffle the null bitmask
+            this->send_requests.push_back(send_req);
+            this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
+                                                      send_arr, curr_tags, p);
+        }
+        mpi_comm_info sub_comm_info = *sub_comm_info_iter++;
+        this->send_shuffle_data_unknown_type(
+            shuffle_comm, sub_comm_info, sub_comm_info_iter, str_comm_info_iter,
+            in_arr->child_arrays[0], curr_tags, must_shuffle_to_rank_inner);
+    }
+    /**
+     * Send the data1 buffer, data2 buffer, and null bitmask for a timestamptz
+     * array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::TIMESTAMPTZ)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+
+        constexpr Bodo_CTypes::CTypeEnum offset_type = Bodo_CTypes::INT16;
+        const MPI_Datatype mpi_datetime_type =
+            get_MPI_typ<Bodo_CTypes::TIMESTAMPTZ>();
+        const MPI_Datatype mpi_tz_offset_type = get_MPI_typ<offset_type>();
+        for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+
+            MPI_Request datetime_send_req;
+            const void* buff =
+                send_arr->data1<arr_type>() +
+                (numpy_item_size[dtype] * comm_info.send_disp[p]);
+            // TODO: check err return
+            MPI_Issend(buff, comm_info.send_count[p], mpi_datetime_type, p,
+                       curr_tags[p]++, shuffle_comm, &datetime_send_req);
+            this->send_requests.push_back(datetime_send_req);
+
+            MPI_Request tz_offset_send_req;
+            buff = send_arr->data2<arr_type>() +
+                   (numpy_item_size[offset_type] * comm_info.send_disp[p]);
+            // TODO: check err return
+            MPI_Issend(buff, comm_info.send_count[p], mpi_tz_offset_type, p,
+                       curr_tags[p]++, shuffle_comm, &tz_offset_send_req);
+            this->send_requests.push_back(tz_offset_send_req);
+
+            this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
+                                                      send_arr, curr_tags, p);
+        }
+    }
+    /**
+     * Send nested arrays and null bitmask for a struct array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::STRUCT)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        const mpi_str_comm_info& str_comm_info = *(str_comm_info_iter++);
+        std::shared_ptr<array_info> send_arr =
+            this->addArray(in_arr, comm_info, str_comm_info);
+
+        for (size_t i = 0; i < in_arr->child_arrays.size(); i++) {
+            this->send_shuffle_data_unknown_type(
+                shuffle_comm, comm_info, sub_comm_info_iter, str_comm_info_iter,
+                in_arr->child_arrays[i], curr_tags, must_shuffle_to_rank);
+        }
+
+        for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
+            // Skip ranks that don't have any data and don't need to be shuffled
+            // to They need to be shuffled to if they are the child of an array
+            // item that sent offsets to this rank
+            if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
+                continue;
+            }
+            this->send_shuffle_null_bitmask<arr_type>(shuffle_comm, comm_info,
+                                                      send_arr, curr_tags, p);
+        }
+    }
+    /**
+     * Send nested array(item) array for a map array
+     */
+    template <bodo_array_type::arr_type_enum arr_type,
+              Bodo_CTypes::CTypeEnum dtype>
+        requires(arr_type == bodo_array_type::MAP)
+    void send_shuffle_data(const MPI_Comm shuffle_comm, mpi_comm_info comm_info,
+                           comm_info_iter_t& sub_comm_info_iter,
+                           str_comm_info_iter_t& str_comm_info_iter,
+                           const std::shared_ptr<array_info>& in_arr,
+                           std::vector<int>& curr_tags,
+                           std::vector<bool>& must_shuffle_to_rank) {
+        str_comm_info_iter++;
+        // Map arrays are just wrappers around array item arrays of structs
+        return send_shuffle_data<bodo_array_type::ARRAY_ITEM,
+                                 Bodo_CTypes::LIST>(
+            shuffle_comm, comm_info, sub_comm_info_iter, str_comm_info_iter,
+            in_arr->child_arrays[0], curr_tags, must_shuffle_to_rank);
+    }
 };
 
 /**
@@ -188,16 +626,9 @@ class AsyncShuffleRecvState {
    public:
     std::vector<std::shared_ptr<array_info>> out_arrs;
     std::vector<MPI_Request> recv_requests;
-    // Track whether a nullable boolean arrays length needs adjusted and
-    // which rows are valid in the last byte
-    // used to adjust the size of the output array
-    // in case the last byte is not fully used and we don't have the length
-    // Keep a pointer to the object so reallocations don't change the address
-    // of the object. This is necessary because buffers referenced by MPI_Irecv
-    // must stay valid until the receive is done.
-    std::vector<std::unique_ptr<std::tuple<bool, uint8_t>>> bits_in_last_byte;
+    int source;
 
-    AsyncShuffleRecvState() {}
+    AsyncShuffleRecvState(int source_) : source(source_) {}
 
     /**
      * @brief Returns true and fills output table builder if recvs of all arrays
@@ -211,34 +642,18 @@ class AsyncShuffleRecvState {
         IncrementalShuffleMetrics& metrics);
 
     /**
-     * @brief Get the incoming array length from the source rank. If the array
-     * is a simple array type (numpy, nullable except bool), and
-     * can_use_simple_array_len is true, we will use the simple_array_len value
-     * if it is known. Otherwise, we will probe the incoming message to get the
-     * array length. If the array is not a simple array type, we will probe the
-     * incoming message.
-     *
-     * @param source Source rank
-     * @param tag Incoming message tag
-     * @param comm Communicator
-     * @param mpi_datatype MPI datatype of the incoming message
-     * @param metrics IncrementalShuffleMetrics to update.
-     * @tparam can_use_simple_array_len Whether we can use the simple_array_len
+     * @brief Return the lengths of incoming arrays
+     * @param shuffle_comm MPI communicator for shuffle
+     * note that this function should only be called once
+     * since it clears the underlying buffer
      */
-    template <bool can_use_simple_array_len = true>
-    int64_t getArrayLen(const int source, const int tag, const MPI_Comm comm,
-                        const MPI_Datatype mpi_datatype,
-                        IncrementalShuffleMetrics& metrics);
-
+    std::optional<std::vector<uint64_t>> GetRecvLens(MPI_Comm shuffle_comm);
     /**
-     * @brief Check if the array length is known and can be used.
-     *
-     * @tparam can_use_simple_array_len Whether we can use the simple_array_len
+     * @brief Post MPI_Irecv call for lengths of incoming arrays
+     * @param status MPI status object for probe of length message
+     * @param shuffle_comm MPI communicator for shuffle
      */
-    template <bool can_use_simple_array_len = true>
-    bool array_len_known() {
-        return simple_array_len != -1 && can_use_simple_array_len;
-    }
+    void PostLensRecv(MPI_Status& status, MPI_Comm shuffle_comm);
 
     /**
      * @brief Get total memory size of recv buffers in flight
@@ -254,15 +669,13 @@ class AsyncShuffleRecvState {
     }
 
    private:
-    // Length of array for simple array types (numpy, nullable except bool)
-    // used so we don't have to probe incoming messages unnecessarily
-    int64_t simple_array_len = -1;
-
     std::shared_ptr<array_info> finalize_receive_array(
         const std::shared_ptr<array_info>& arr,
         const std::shared_ptr<DictionaryBuilder>& dict_builder,
-        std::vector<uint32_t>& data_lens_vec, size_t& nullable_bool_count,
+        std::vector<uint32_t>& data_lens_vec,
         IncrementalShuffleMetrics& metrics);
+    MPI_Request lens_request = MPI_REQUEST_NULL;
+    std::vector<uint64_t> recv_lens;
 };
 
 /**
@@ -510,15 +923,13 @@ class IncrementalShuffleState {
  *
  * @param in_table input table to shuffle
  * @param hashes partition hashes for choosing target ranks
- * @param send_states vector of send states to fill
  * @param shuffle_comm MPI communicator for shuffle (each operator has to have
  its own)
  */
-void shuffle_issend(std::shared_ptr<table_info> in_table,
-                    const std::shared_ptr<uint32_t[]>& hashes,
-                    const uint8_t* keep_row_bitmask,
-                    std::vector<AsyncShuffleSendState>& send_states,
-                    MPI_Comm shuffle_comm);
+AsyncShuffleSendState shuffle_issend(std::shared_ptr<table_info> in_table,
+                                     const std::shared_ptr<uint32_t[]>& hashes,
+                                     const uint8_t* keep_row_bitmask,
+                                     MPI_Comm shuffle_comm);
 
 /**
  * @brief Checks for incoming shuffle messages using MPI probe and fills recieve
@@ -533,8 +944,7 @@ void shuffle_issend(std::shared_ptr<table_info> in_table,
     * @param metrics IncrementalShuffleMetrics to update.
  */
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
-                   std::vector<AsyncShuffleRecvState>& recv_states,
-                   IncrementalShuffleMetrics& metrics);
+                   std::vector<AsyncShuffleRecvState>& recv_states);
 
 /**
  * @brief receive data from other ranks for shuffle
@@ -551,44 +961,7 @@ template <bool top_level>
 std::unique_ptr<array_info> recv_shuffle_data_unknown_type(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics);
-
-/**
- * @brief send data to other ranks for shuffle
- * @tparam top_level whether this is a top level array
- * @param shuffle_comm MPI communicator for shuffle
- * @param comm_info MPI communication information
- * @param in_arr Input array
- * @param curr_tags Current tags
- * @param must_shuffle_to_rank Whether we must shuffle to the rank, this is only
- * true for ranks that are children of an array item that sent offsets to this
- * rank
- * @return AsyncShuffleSendState Send state
- */
-AsyncShuffleSendState send_shuffle_data_unknown_type(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank);
-
-/**
- * Shuffle the null bitmask for an array
- */
-template <bodo_array_type::arr_type_enum arr_type>
-inline void send_shuffle_null_bitmask(
-    AsyncShuffleSendState& send_state, const MPI_Comm shuffle_comm,
-    const mpi_comm_info& comm_info, const std::shared_ptr<array_info>& send_arr,
-    std::vector<int>& curr_tags, size_t p) {
-    MPI_Datatype mpi_type_null = MPI_UNSIGNED_CHAR;
-    const void* buf =
-        send_arr->null_bitmask<arr_type>() +
-        comm_info.send_disp_null[p] * numpy_item_size[Bodo_CTypes::UINT8];
-
-    MPI_Request send_req_null;
-    // TODO: check err return
-    MPI_Issend(buf, comm_info.send_count_null[p], mpi_type_null, p,
-               curr_tags[p]++, shuffle_comm, &send_req_null);
-    send_state.send_requests.push_back(send_req_null);
-}
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter);
 
 /**
  * Receive the null bitmask for an array
@@ -606,37 +979,6 @@ void recv_null_bitmask(std::unique_ptr<array_info>& out_arr,
 }
 
 /**
- * Send the data1 buffer for a numpy array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::NUMPY)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-
-    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
-    for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-        const void* buff = send_arr->data1<arr_type>() +
-                           (numpy_item_size[dtype] * comm_info.send_disp[p]);
-        MPI_Request send_req;
-        // TODO: check err return
-        MPI_Issend(buff, comm_info.send_count[p], mpi_type, p, curr_tags[p]++,
-                   shuffle_comm, &send_req);
-        send_state.send_requests.push_back(send_req);
-    }
-    return send_state;
-}
-
-/**
  * Receive the data1 buffer for a numpy array
  */
 template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
@@ -645,11 +987,10 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
 
-    int64_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag, shuffle_comm, mpi_type, metrics);
+    uint64_t arr_len = *lens_iter++;
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
@@ -658,42 +999,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
               shuffle_comm, &recv_req);
     recv_state.recv_requests.push_back(recv_req);
     return out_arr;
-}
-
-/**
- * Send the data1 buffer and null bitmask for a nullable array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-             dtype != Bodo_CTypes::_BOOL)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-
-    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
-    for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-
-        MPI_Request send_req;
-        const void* buff = send_arr->data1<arr_type>() +
-                           (numpy_item_size[dtype] * comm_info.send_disp[p]);
-        // TODO: check err return
-        MPI_Issend(buff, comm_info.send_count[p], mpi_type, p, curr_tags[p]++,
-                   shuffle_comm, &send_req);
-
-        send_state.send_requests.push_back(send_req);
-        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
-                                            send_arr, curr_tags, p);
-    }
-    return send_state;
 }
 
 /**
@@ -706,10 +1011,9 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
-    int64_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag, shuffle_comm, mpi_type, metrics);
+    uint64_t arr_len = *lens_iter++;
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
@@ -722,56 +1026,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
     recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
                                 recv_state);
     return out_arr;
-}
-
-/**
- * Send the data1 buffer and null bitmask for a nullable boolean array.
- * Also sends the number of bits used in the last byte so the receiver knows
- * the array's length.
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-             dtype == Bodo_CTypes::_BOOL)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-    const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
-    for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-
-        // Since the data is stored as bits, we need to send the number
-        // of bits used in the last byte so the receiver knows the
-        // array's length
-        // TODO: technically we only need to do this if
-        // there hasn't been a simple array sent first
-        send_state.bits_in_last_byte.push_back(
-            std::make_unique<uint8_t>(comm_info.send_count[p] % 8));
-        // TODO: check err return
-        MPI_Request bits_in_last_byte_req;
-        MPI_Issend(send_state.bits_in_last_byte.back().get(), sizeof(uint8_t),
-                   mpi_type, p, curr_tags[p]++, shuffle_comm,
-                   &bits_in_last_byte_req);
-        send_state.send_requests.push_back(bits_in_last_byte_req);
-
-        // Send the data
-        MPI_Request send_req;
-        char* buff = send_arr->data1<arr_type>() + comm_info.send_disp_null[p];
-        MPI_Issend(buff, comm_info.send_count_null[p], mpi_type, p,
-                   curr_tags[p]++, shuffle_comm, &send_req);
-        send_state.send_requests.push_back(send_req);
-
-        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
-                                            send_arr, curr_tags, p);
-    }
-    return send_state;
 }
 
 /**
@@ -786,101 +1040,22 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     const MPI_Datatype mpi_type = get_MPI_typ<dtype>();
+    uint64_t arr_len = *lens_iter++;
 
-    // Add a new entry to the bits_in_last_byte vector
-    recv_state.bits_in_last_byte.emplace_back(
-        std::make_unique<std::tuple<bool, uint8_t>>(false, 0));
-    // Only adjust the resulting length if we don't already have a simple array
-    std::get<0>(*recv_state.bits_in_last_byte.back()) =
-        !recv_state.array_len_known<top_level>();
-
-    uint8_t& bits_in_last_byte =
-        std::get<1>(*recv_state.bits_in_last_byte.back());
-
-    // Receive a message telling us how many bits of the last byte are valid
-    MPI_Request bits_in_last_byte_req;
-    MPI_Irecv(&bits_in_last_byte, sizeof(uint8_t), mpi_type, source, curr_tag++,
-              shuffle_comm, &bits_in_last_byte_req);
-    recv_state.recv_requests.push_back(bits_in_last_byte_req);
-
-    int recv_size;
-    size_t out_arr_len = -1;
-    if (!recv_state.array_len_known<top_level>()) {
-        // If we don't have a simple array length, we need to get the incoming
-        // message size we can't set simple_array_len here because the size of
-        // the incoming message might not be the same as the size of the array
-        // (some of the bits might not be valid)
-        MPI_Status status;
-        time_pt start = start_timer();
-        MPI_Probe(source, curr_tag, shuffle_comm, &status);
-        metrics.recv_wait_time += end_timer(start);
-        MPI_Get_count(&status, mpi_type, &recv_size);
-
-        out_arr_len = recv_size * 8;
-    } else {
-        // If we already have a simple array length, we can just use that to get
-        // the size of the incoming message and set the array's length
-        out_arr_len = recv_state.getArrayLen<top_level>(
-            source, curr_tag, shuffle_comm, mpi_type, metrics);
-        recv_size = arrow::bit_util::BytesForBits(out_arr_len);
-    }
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
-        out_arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
+        arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request recv_req;
-    MPI_Irecv(out_arr->data1<arr_type>(), recv_size, mpi_type, source,
+    MPI_Irecv(out_arr->data1<arr_type>(),
+              arrow::bit_util::BytesForBits(arr_len), mpi_type, source,
               curr_tag++, shuffle_comm, &recv_req);
     recv_state.recv_requests.push_back(recv_req);
 
     recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
                                 recv_state);
     return out_arr;
-}
-
-/**
- * Send the data1 buffer, data2 buffer, and null bitmask for a string array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::STRING)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-
-    const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
-    // Fill_send_array converts offsets to send lengths of type uint32_t
-    const MPI_Datatype len_mpi_type = MPI_UINT32_T;
-    for (int p = 0; p < comm_info.n_pes; p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-        MPI_Request data_send_req;
-        const void* data_buff =
-            send_arr->data1<arr_type>() + str_comm_info.send_disp_sub[p];
-        // TODO: check err return
-        MPI_Issend(data_buff, str_comm_info.send_count_sub[p], data_mpi_type, p,
-                   curr_tags[p]++, shuffle_comm, &data_send_req);
-        send_state.send_requests.push_back(data_send_req);
-
-        MPI_Request len_send_req;
-        const void* len_buff = send_arr->data2<arr_type>() +
-                               (sizeof(uint32_t) * comm_info.send_disp[p]);
-
-        MPI_Issend(len_buff, comm_info.send_count[p], len_mpi_type, p,
-                   curr_tags[p]++, shuffle_comm, &len_send_req);
-        send_state.send_requests.push_back(len_send_req);
-
-        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
-                                            send_arr, curr_tags, p);
-    }
-    return send_state;
 }
 
 /**
@@ -892,27 +1067,19 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
     // Fill_send_array converts offsets to lengths of type uint32_t
     const MPI_Datatype len_mpi_type = MPI_UINT32_T;
 
-    // Get the sizes of each incoming message
-    MPI_Status data_status;
-    int recv_size_sub;
-    time_pt start = start_timer();
-    MPI_Probe(source, curr_tag, shuffle_comm, &data_status);
-    metrics.recv_wait_time += end_timer(start);
-    MPI_Get_count(&data_status, data_mpi_type, &recv_size_sub);
-
-    int64_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag + 1, shuffle_comm, len_mpi_type, metrics);
+    uint64_t arr_len = *lens_iter++;
+    uint64_t n_chars = *lens_iter++;
 
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
-        arr_len, recv_size_sub, 0, arr_type, dtype, -1, 0, 0);
+        arr_len, n_chars, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request data_req;
-    MPI_Irecv(out_arr->data1<arr_type>(), recv_size_sub, data_mpi_type, source,
+    MPI_Irecv(out_arr->data1<arr_type>(), n_chars, data_mpi_type, source,
               curr_tag++, shuffle_comm, &data_req);
     recv_state.recv_requests.push_back(data_req);
 
@@ -929,62 +1096,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
 }
 
 /**
- * Send the child offsets and dictionary for a dictionary array
- * The dictionary is sent as a string array to all ranks so the offests
- * remain valid
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::DICT)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    // Shuffle the indices
-    AsyncShuffleSendState send_state =
-        send_shuffle_data<bodo_array_type::NULLABLE_INT_BOOL,
-                          Bodo_CTypes::INT32>(shuffle_comm, comm_info,
-                                              in_arr->child_arrays[1],
-                                              curr_tags, must_shuffle_to_rank);
-    // Copy the dict array because the dictionary comes from a builder. Builders
-    // can be appended to which can cause resizes invalidating the pointer.
-    std::shared_ptr<array_info> dict_arr = copy_array(in_arr->child_arrays[0]);
-    const MPI_Datatype data_mpi_type = MPI_UNSIGNED_CHAR;
-    const MPI_Datatype offset_mpi_type = MPI_UINT64_T;
-    // Send the whole dict to each rank
-    for (int p = 0; p < comm_info.n_pes; p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-        MPI_Request data_send_req;
-        const void* data_buff = dict_arr->data1<bodo_array_type::STRING>();
-        // TODO: check err return
-        MPI_Issend(data_buff, dict_arr->n_sub_elems(), data_mpi_type, p,
-                   curr_tags[p]++, shuffle_comm, &data_send_req);
-        send_state.send_requests.push_back(data_send_req);
-
-        MPI_Request offset_send_req;
-        const void* offset_buff = dict_arr->data2<bodo_array_type::STRING>();
-        // TODO: check err return
-        MPI_Issend(offset_buff, dict_arr->length + 1, offset_mpi_type, p,
-                   curr_tags[p]++, shuffle_comm, &offset_send_req);
-        send_state.send_requests.push_back(offset_send_req);
-
-        MPI_Request null_send_req;
-        const void* null_buff =
-            dict_arr->null_bitmask<bodo_array_type::STRING>();
-        MPI_Issend(null_buff, arrow::bit_util::BytesForBits(dict_arr->length),
-                   MPI_UNSIGNED_CHAR, p, curr_tags[p]++, shuffle_comm,
-                   &null_send_req);
-        send_state.send_requests.push_back(null_send_req);
-    }
-    send_state.send_arrs.push_back(dict_arr);
-    return send_state;
-}
-
-/**
  * Receive an offsets array and dictionary for a dictionary array
  */
 template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
@@ -993,41 +1104,28 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     // Receive the indices
     std::unique_ptr<array_info> indices =
         recv_shuffle_data<bodo_array_type::NULLABLE_INT_BOOL,
                           Bodo_CTypes::INT32, top_level>(
             std::make_unique<bodo::DataType>(bodo_array_type::NULLABLE_INT_BOOL,
                                              Bodo_CTypes::INT32),
-            shuffle_comm, source, curr_tag, recv_state, metrics);
+            shuffle_comm, source, curr_tag, recv_state, lens_iter);
 
-    // Receive the string array used as the dictionary
-    // Probe for the size of the incoming dict data
-    MPI_Status dict_data_status;
-    int dict_data_recv_size;
-    time_pt start = start_timer();
-    MPI_Probe(source, curr_tag, shuffle_comm, &dict_data_status);
-    metrics.recv_wait_time += end_timer(start);
-    MPI_Get_count(&dict_data_status, MPI_UNSIGNED_CHAR, &dict_data_recv_size);
-    // Probe for the size of the incoming dict offsets
-    MPI_Status dict_offset_status;
-    int dict_offset_recv_size;
-    start = start_timer();
-    MPI_Probe(source, curr_tag + 1, shuffle_comm, &dict_offset_status);
-    metrics.recv_wait_time += end_timer(start);
-    MPI_Get_count(&dict_offset_status, MPI_UINT64_T, &dict_offset_recv_size);
+    uint64_t dict_len = *lens_iter++;
+    uint64_t dict_data_len = *lens_iter++;
 
     // Allocate the dict array
-    std::unique_ptr<array_info> dict_arr = alloc_string_array(
-        Bodo_CTypes::STRING, dict_offset_recv_size - 1, dict_data_recv_size);
+    std::unique_ptr<array_info> dict_arr =
+        alloc_string_array(Bodo_CTypes::STRING, dict_len, dict_data_len);
     // Receive the dict data, offsets and null bitmask
     MPI_Request data_req;
-    MPI_Irecv(dict_arr->data1<bodo_array_type::STRING>(), dict_data_recv_size,
+    MPI_Irecv(dict_arr->data1<bodo_array_type::STRING>(), dict_data_len,
               MPI_UNSIGNED_CHAR, source, curr_tag++, shuffle_comm, &data_req);
     recv_state.recv_requests.push_back(data_req);
     MPI_Request offset_req;
-    MPI_Irecv(dict_arr->data2<bodo_array_type::STRING>(), dict_offset_recv_size,
+    MPI_Irecv(dict_arr->data2<bodo_array_type::STRING>(), dict_len + 1,
               MPI_UINT64_T, source, curr_tag++, shuffle_comm, &offset_req);
     recv_state.recv_requests.push_back(offset_req);
     MPI_Request null_req;
@@ -1040,54 +1138,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
 }
 
 /**
- * Send the data1 buffer, null bitmask, and child array for a list array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::ARRAY_ITEM)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-    const MPI_Datatype lens_mpi_type = MPI_UINT32_T;
-    std::vector<bool> must_shuffle_to_rank_inner(comm_info.n_pes, false);
-
-    for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-        must_shuffle_to_rank_inner[p] = true;
-
-        // Shuffle the lengths
-        MPI_Request send_req;
-        const void* buff = send_arr->data1<arr_type>() +
-                           (sizeof(uint32_t) * comm_info.send_disp[p]);
-        // TODO: check err return
-        MPI_Issend(buff, comm_info.send_count[p], lens_mpi_type, p,
-                   curr_tags[p]++, shuffle_comm, &send_req);
-
-        // Shuffle the null bitmask
-        send_state.send_requests.push_back(send_req);
-        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
-                                            send_arr, curr_tags, p);
-    }
-
-    // Shuffle the child array
-    mpi_comm_info comm_info_inner(
-        in_arr, comm_info, in_arr->child_arrays[0]->null_bitmask() != nullptr,
-        /*send_only=*/true);
-
-    send_state.merge(send_shuffle_data_unknown_type(
-        shuffle_comm, comm_info_inner, in_arr->child_arrays[0], curr_tags,
-        must_shuffle_to_rank_inner));
-    return send_state;
-}
-
-/**
  * Receive the data1 buffer, null bitmask, and child array for a list array
  */
 template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
@@ -1096,10 +1146,9 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     const MPI_Datatype len_mpi_type = MPI_UINT32_T;
-    size_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag, shuffle_comm, len_mpi_type, metrics);
+    int64_t arr_len = *lens_iter++;
 
     std::unique_ptr<array_info> arr = alloc_array_item(arr_len, nullptr);
 
@@ -1115,55 +1164,9 @@ std::unique_ptr<array_info> recv_shuffle_data(
         static_cast<bodo::ArrayType*>(data_type.get());
     const std::unique_ptr<bodo::DataType>& value_type = array_type->value_type;
     arr->child_arrays[0] = recv_shuffle_data_unknown_type<false>(
-        value_type, shuffle_comm, source, curr_tag, recv_state, metrics);
+        value_type, shuffle_comm, source, curr_tag, recv_state, lens_iter);
 
     return arr;
-}
-
-/**
- * Send the data1 buffer, data2 buffer, and null bitmask for a timestamptz array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::TIMESTAMPTZ)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-
-    constexpr Bodo_CTypes::CTypeEnum offset_type = Bodo_CTypes::INT16;
-    const MPI_Datatype mpi_datetime_type =
-        get_MPI_typ<Bodo_CTypes::TIMESTAMPTZ>();
-    const MPI_Datatype mpi_tz_offset_type = get_MPI_typ<offset_type>();
-    for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-
-        MPI_Request datetime_send_req;
-        const void* buff = send_arr->data1<arr_type>() +
-                           (numpy_item_size[dtype] * comm_info.send_disp[p]);
-        // TODO: check err return
-        MPI_Issend(buff, comm_info.send_count[p], mpi_datetime_type, p,
-                   curr_tags[p]++, shuffle_comm, &datetime_send_req);
-        send_state.send_requests.push_back(datetime_send_req);
-
-        MPI_Request tz_offset_send_req;
-        buff = send_arr->data2<arr_type>() +
-               (numpy_item_size[offset_type] * comm_info.send_disp[p]);
-        // TODO: check err return
-        MPI_Issend(buff, comm_info.send_count[p], mpi_tz_offset_type, p,
-                   curr_tags[p]++, shuffle_comm, &tz_offset_send_req);
-        send_state.send_requests.push_back(tz_offset_send_req);
-
-        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
-                                            send_arr, curr_tags, p);
-    }
-    return send_state;
 }
 
 /**
@@ -1176,12 +1179,11 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     const MPI_Datatype mpi_datetime_type = get_MPI_typ<Bodo_CTypes::DATETIME>();
     const MPI_Datatype mpi_tz_offset_type = get_MPI_typ<Bodo_CTypes::INT16>();
 
-    int64_t arr_len = recv_state.getArrayLen<top_level>(
-        source, curr_tag, shuffle_comm, mpi_datetime_type, metrics);
+    uint64_t arr_len = *lens_iter++;
     std::unique_ptr<array_info> out_arr = alloc_timestamptz_array(arr_len);
 
     MPI_Request datetime_req;
@@ -1200,37 +1202,6 @@ std::unique_ptr<array_info> recv_shuffle_data(
 }
 
 /**
- * Send nested arrays and null bitmask for a struct array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::STRUCT)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    AsyncShuffleSendState send_state;
-    auto [send_arr, str_comm_info] = send_state.addArray(in_arr, comm_info);
-
-    for (size_t i = 0; i < in_arr->child_arrays.size(); i++) {
-        send_state.merge(send_shuffle_data_unknown_type(
-            shuffle_comm, comm_info, in_arr->child_arrays[i], curr_tags,
-            must_shuffle_to_rank));
-    }
-
-    for (size_t p = 0; p < static_cast<size_t>(comm_info.n_pes); p++) {
-        // Skip ranks that don't have any data and don't need to be shuffled to
-        // They need to be shuffled to if they are the child of an array item
-        // that sent offsets to this rank
-        if (comm_info.send_count[p] == 0 && !must_shuffle_to_rank[p]) {
-            continue;
-        }
-        send_shuffle_null_bitmask<arr_type>(send_state, shuffle_comm, comm_info,
-                                            send_arr, curr_tags, p);
-    }
-    return send_state;
-}
-
-/**
  * Receive nested arrays and null bitmask for a struct array
  */
 template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
@@ -1239,8 +1210,9 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     std::vector<std::shared_ptr<array_info>> child_arrays;
+    uint64_t arr_len = *lens_iter++;
 
     assert(data_type->is_struct());
     const bodo::StructType* struct_type =
@@ -1251,28 +1223,12 @@ std::unique_ptr<array_info> recv_shuffle_data(
         // because all child arrays shuold be the length of the struct array
         child_arrays.push_back(recv_shuffle_data_unknown_type<top_level>(
             struct_type->child_types[i], shuffle_comm, source, curr_tag,
-            recv_state, metrics));
+            recv_state, lens_iter));
     }
-    std::unique_ptr<array_info> out_arr = alloc_struct(
-        !child_arrays.empty() ? child_arrays[0]->length : 0, child_arrays);
+    std::unique_ptr<array_info> out_arr = alloc_struct(arr_len, child_arrays);
     recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
                                 recv_state);
     return out_arr;
-}
-
-/**
- * Send nested array(item) array for a map array
- */
-template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype>
-    requires(arr_type == bodo_array_type::MAP)
-AsyncShuffleSendState send_shuffle_data(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
-    const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
-    std::vector<bool>& must_shuffle_to_rank) {
-    // Map arrays are just wrappers around array item arrays of structs
-    return send_shuffle_data<bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST>(
-        shuffle_comm, comm_info, in_arr->child_arrays[0], curr_tags,
-        must_shuffle_to_rank);
 }
 
 /**
@@ -1284,7 +1240,8 @@ template <bodo_array_type::arr_type_enum arr_type, Bodo_CTypes::CTypeEnum dtype,
 std::unique_ptr<array_info> recv_shuffle_data(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
+    lens_iter++;
     // Map arrays are just wrappers around array item arrays of structs
     assert(data_type->is_map());
     const bodo::MapType* map_type =
@@ -1302,7 +1259,7 @@ std::unique_ptr<array_info> recv_shuffle_data(
     std::unique_ptr<array_info> child =
         recv_shuffle_data<bodo_array_type::ARRAY_ITEM, Bodo_CTypes::LIST,
                           top_level>(std::move(array_type), shuffle_comm,
-                                     source, curr_tag, recv_state, metrics);
+                                     source, curr_tag, recv_state, lens_iter);
     size_t child_len = child->length;
     return alloc_map(child_len, std::move(child));
 }

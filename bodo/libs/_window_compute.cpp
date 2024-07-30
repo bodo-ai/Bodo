@@ -1364,11 +1364,9 @@ std::shared_ptr<table_info> recv_sorted_window_data(
             return empty_table;
         } else {
             std::vector<AsyncShuffleRecvState> recv_states;
-            IncrementalShuffleMetrics dummy_metrics;
             while (recv_states.size() == 0) {
                 // Buffer until we receive the first message
-                shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states,
-                              dummy_metrics);
+                shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states);
             }
             std::unique_ptr<bodo::Schema> schema = empty_table->schema();
             // Note: assuming that the only dictionary encoded columns come
@@ -1714,8 +1712,8 @@ MPI_Request send_sorted_window_data(
             std::shared_ptr<uint32_t[]> hashes =
                 std::make_shared<uint32_t[]>(1);
             hashes[0] = dest_hash;
-            shuffle_issend(send_data, hashes, nullptr, send_states,
-                           MPI_COMM_WORLD);
+            send_states.push_back(
+                shuffle_issend(send_data, hashes, nullptr, MPI_COMM_WORLD));
         }
         return final_send;
     } else {

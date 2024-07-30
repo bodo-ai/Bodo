@@ -251,11 +251,14 @@ static bodo::tests::suite tests([] {
                           MPI_SUM, MPI_COMM_WORLD);
             MPI_Allreduce(MPI_IN_PLACE, &length_col2, 1, MPI_UNSIGNED_LONG,
                           MPI_SUM, MPI_COMM_WORLD);
-            bodo::tests::check(n_nulls == n_nulls_expected);
-            bodo::tests::check(n_false == n_false_expected);
             bodo::tests::check(
                 length_col1 == array_size,
-                fmt::format("{} != {}", length_col1, array_size).c_str());
+                fmt::format("length_col1: {} != {}", length_col1, array_size)
+                    .c_str());
+            bodo::tests::check(
+                n_nulls == n_nulls_expected,
+                fmt::format("{} != {}", n_nulls, n_nulls_expected).c_str());
+            bodo::tests::check(n_false == n_false_expected);
             bodo::tests::check(length_col2 == array_size);
         };
         for (size_t i = 1; i < 1000; i++) {
@@ -595,16 +598,24 @@ static bodo::tests::suite tests([] {
             std::shared_ptr<table_info> shuffle_table =
                 test_shuffle(std::move(table));
             size_t length_col1 = 0;
+            std::vector<size_t> child_lens(child_arrays.size(), 0);
             if (shuffle_table != nullptr) {
                 length_col1 = shuffle_table->columns[0]->length;
                 bodo::tests::check(
-                    shuffle_table->columns[0]->child_arrays.size() == 4);
-                for (auto child_arr : shuffle_table->columns[0]->child_arrays) {
-                    bodo::tests::check(child_arr->length == array_size);
+                    shuffle_table->columns[0]->child_arrays.size() ==
+                    child_arrays.size());
+                for (size_t i = 0; i < child_arrays.size(); ++i) {
+                    child_lens[i] +=
+                        shuffle_table->columns[0]->child_arrays[i]->length;
                 }
             }
             MPI_Allreduce(MPI_IN_PLACE, &length_col1, 1, MPI_UNSIGNED_LONG,
                           MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(MPI_IN_PLACE, child_lens.data(), child_lens.size(),
+                          MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+            for (auto child_len : child_lens) {
+                bodo::tests::check(child_len == array_size);
+            }
             bodo::tests::check(
                 length_col1 == array_size,
                 fmt::format("length_col1 {} != {}", length_col1, array_size)
@@ -636,6 +647,9 @@ static bodo::tests::suite tests([] {
                     ->data1<bodo_array_type::ARRAY_ITEM, offset_t>()[i] =
                     i * 2 - 1;
             }
+            size_t expected_len_keys =
+                array_item_arr->data1<bodo_array_type::ARRAY_ITEM,
+                                      offset_t>()[array_size];
 
             size_t expected_nulls = 0;
             // Set nulls with some non-byte aligned pattern
@@ -654,10 +668,13 @@ static bodo::tests::suite tests([] {
                 test_shuffle(std::move(table));
             size_t shuffled_nulls = 0;
             size_t length_col1 = 0;
+            size_t length_keys = 0;
             if (shuffle_table != nullptr) {
                 auto shuffled_child =
                     shuffle_table->columns[0]->child_arrays[0];
                 length_col1 = shuffled_child->length;
+                length_keys =
+                    shuffled_child->child_arrays[0]->child_arrays[0]->length;
                 for (size_t i = 0; i < shuffled_child->length; ++i) {
                     if (!shuffled_child->get_null_bit(i)) {
                         shuffled_nulls++;
@@ -669,8 +686,11 @@ static bodo::tests::suite tests([] {
                           MPI_SUM, MPI_COMM_WORLD);
             MPI_Allreduce(MPI_IN_PLACE, &shuffled_nulls, 1, MPI_UNSIGNED_LONG,
                           MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(MPI_IN_PLACE, &length_keys, 1, MPI_UNSIGNED_LONG,
+                          MPI_SUM, MPI_COMM_WORLD);
             bodo::tests::check(shuffled_nulls == expected_nulls);
             bodo::tests::check(length_col1 == array_size);
+            bodo::tests::check(length_keys == expected_len_keys);
         };
 
         for (size_t i = 1; i < 1000; i++) {
@@ -739,8 +759,8 @@ static bodo::tests::suite tests([] {
             void* loc_before =
                 (void*)(dict_builders[0]->dict_buff->data_array->data1());
 
-            shuffle_issend(table_buffer.data_table, hashes, nullptr,
-                           send_states, MPI_COMM_WORLD);
+            send_states.push_back(shuffle_issend(
+                table_buffer.data_table, hashes, nullptr, MPI_COMM_WORLD));
 
             table_buffer.UnifyTablesAndAppend(new_vals_table, dict_builders);
             void* loc_after =
@@ -756,9 +776,7 @@ static bodo::tests::suite tests([] {
         bool tables_match;
         if (my_rank == 1) {
             std::vector<AsyncShuffleRecvState> recv_states;
-            IncrementalShuffleMetrics dummy_metrics;
-            shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states,
-                          dummy_metrics);
+            shuffle_irecv(empty_table, MPI_COMM_WORLD, recv_states);
             std::unique_ptr<bodo::Schema> schema = empty_table->schema();
 
             std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
