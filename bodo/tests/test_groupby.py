@@ -4436,12 +4436,24 @@ def test_mean_median_other_supported_types(memory_leak_check):
         py_output=impl1(df_decimal.astype({"B": "float64"})),
         check_dtype=False,
     )
+
+    # Median supports decimal natively
+    expected = pd.DataFrame(
+        {
+            "B": [
+                Decimal("0.800000000000000000000"),
+                Decimal("22.000000000000000000000"),
+            ],
+        },
+        index=[1, 2],
+    ).rename_axis("A")
+
     check_func(
         impl2,
         (df_decimal,),
         sort_output=True,
         reset_index=True,
-        py_output=impl2(df_decimal.astype({"B": "float64"})),
+        py_output=expected,
         check_dtype=False,
     )
 
