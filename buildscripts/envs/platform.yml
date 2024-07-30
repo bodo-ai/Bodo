@@ -6,7 +6,7 @@
 # Once https://github.com/conda/conda-lock/pull/390 is merged and released,
 # we can delete the platform lockfile and use the main lockfile for both
 
-# TODO: Change to category: main
+# TODO: Change to category: platform
 category: main
 channels:
   - bodo.ai

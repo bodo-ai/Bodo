@@ -1,5 +1,6 @@
 category: dev
 channels:
+  - bodo.ai
   - conda-forge
 
 platforms:

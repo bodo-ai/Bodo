@@ -222,6 +222,13 @@ jobs:
         export BUILD_PY_VERSION=""
       fi
 
+      # Custom channel for platform builds
+      if [ -n "${{ parameters.platformBuild }}" ]; then
+        export PLATFORM_CHANNEL="-c bodo.ai"
+      else
+        export PLATFORM_CHANNEL=""
+      fi
+
       # --no-test because we'll test ourselves
       # --no-verify because it doesn't work for Conda v2 packages
       # --no-anaconda-upload because we'll upload ourselves
@@ -233,7 +240,7 @@ jobs:
       # --build-id-pat for consistent build directory path for sccache
 
       # --keep-old-work --dirty --merge-build-host for keeping all intermediate files around
-      conda build . -c conda-forge \
+      conda build . $PLATFORM_CHANNEL -c conda-forge \
         --no-test --no-verify --no-anaconda-upload \
         $CONDA_VARIANT_ARG $BUILD_PY_VERSION \
         --croot $HOME/conda-bld --build-id-pat='bb'
