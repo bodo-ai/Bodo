@@ -301,6 +301,7 @@ supported_agg_funcs = [
     "conditional_true_event",
     "conditional_change_event",
     "any_value",
+    "grouping",
 ]
 
 # This is just a list of the functions that can be used with

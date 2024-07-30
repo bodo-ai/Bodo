@@ -28,6 +28,7 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.metadata.RelMetadataQuery
+import org.apache.calcite.sql.SqlKind
 import org.apache.calcite.util.ImmutableBitSet
 import org.apache.calcite.util.Pair
 import kotlin.math.ceil
@@ -175,7 +176,6 @@ class BodoPhysicalAggregate(
         builder.add(TupleAssign(listOf(outTable, pipeline.getExitCond()), outputCall))
         val intermediateTable = BodoEngineTable(outTable.emit(), this)
         val filteredAggCallList = Utils.literalAggPrunedAggList(aggCallList)
-        // TODO: Modify this to handle grouping
         return if (filteredAggCallList.size !== aggCallList.size) {
             // Append any Literal data if it exists.
             Utils.concatenateLiteralAggValue(builder, ctx, intermediateTable, this)
@@ -191,14 +191,15 @@ class BodoPhysicalAggregate(
             val groups = groupSets
             val expectedOutputCols: List<String> = this.getRowType().fieldNames
             val outVar: Variable = ctx.builder().symbolTable.genDfVar()
-            // Remove any LITERAL_AGG nodes.
+            // Remove any LITERAL_AGG and GROUPING nodes for the non-streaming code path.
             val filteredAggregateCallList = Utils.literalAggPrunedAggList(aggCallList)
+            val groupingPrunedAggregateCallList = Utils.groupingPrunedAggList(filteredAggregateCallList)
 
             // Expected output column names according to the calcite plan, contains any/all
             // of the expected aliases
             val aggCallNames: MutableList<String> = ArrayList()
-            for (i in filteredAggregateCallList.indices) {
-                val aggregateCall = filteredAggregateCallList[i]
+            for (i in groupingPrunedAggregateCallList.indices) {
+                val aggregateCall = groupingPrunedAggregateCallList[i]
                 if (aggregateCall.getName() == null) {
                     aggCallNames.add(expectedOutputCols[groupingVariables.size + i])
                 } else {
@@ -216,20 +217,19 @@ class BodoPhysicalAggregate(
             // Naive implementation for handling multiple aggregation groups, where we
             // repeatedly
             // call group by, and append the dataframes together
-            for (i in groups.indices) {
-                val curGroup = groups[i].toList()
-                hasMissingColsGroup = hasMissingColsGroup || curGroup.size < groupingVariables.size
+            for (curGroup in groups) {
+                hasMissingColsGroup = hasMissingColsGroup || curGroup.cardinality() < groupingVariables.size
                 var curGroupAggExpr: Expr?
                 // First rename any input keys to the output
                 // group without aggregation : e.g. select B from table1 groupby A
-                if (filteredAggregateCallList.isEmpty()) {
-                    curGroupAggExpr = AggCodeGen.generateAggCodeNoAgg(inVar, inputColumnNames, curGroup)
-                } else if (curGroup.isEmpty()) {
+                if (groupingPrunedAggregateCallList.isEmpty()) {
+                    curGroupAggExpr = AggCodeGen.generateAggCodeNoAgg(inVar, inputColumnNames, curGroup.toList())
+                } else if (curGroup.isEmpty) {
                     curGroupAggExpr =
                         AggCodeGen.generateAggCodeNoGroupBy(
                             inVar,
                             inputColumnNames,
-                            filteredAggregateCallList,
+                            groupingPrunedAggregateCallList,
                             aggCallNames,
                             usesGroupingSets(),
                             ctx,
@@ -239,9 +239,9 @@ class BodoPhysicalAggregate(
                         handleLogicalAggregateWithGroups(
                             inVar,
                             inputColumnNames,
-                            filteredAggregateCallList,
+                            groupingPrunedAggregateCallList,
                             aggCallNames,
-                            curGroup,
+                            curGroup.toList(),
                             ctx,
                         )
                     curGroupAggExpr = key
@@ -254,8 +254,42 @@ class BodoPhysicalAggregate(
                 // the
                 // generated code
                 val outDf: Variable = ctx.builder().symbolTable.genDfVar()
-                outputDfNames.add(outDf.name)
                 ctx.builder().add(Assign(outDf, curGroupAggExpr!!))
+                if (groupingPrunedAggregateCallList.size != filteredAggregateCallList.size) {
+                    // We have at least 1 grouping call, so we need to concatenates the literal value
+                    // for this group.
+                    val tableColumns = curGroup.cardinality() + groupingPrunedAggregateCallList.size
+                    val tableRepresentation: BodoEngineTable = ctx.convertDfToTable(outDf, tableColumns)
+                    val tableVar =
+                        Utils.appendLiteralGroupingValues(
+                            ctx.builder(),
+                            ctx,
+                            tableRepresentation,
+                            curGroup,
+                            filteredAggregateCallList,
+                            tableColumns,
+                        )
+                    val keptFields =
+                        this.getRowType().fieldList.withIndex().filter {
+                            curGroup.contains(it.index) || (
+                                it.index >= groupingVariables.size &&
+                                    aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
+                            )
+                        }.map { it.value.type }
+                    val keptNames =
+                        this.getRowType().fieldNames.withIndex().filter {
+                            curGroup.contains(it.index) || (
+                                it.index >= groupingVariables.size &&
+                                    aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
+                            )
+                        }.map { it.value }
+                    val outputRowType = cluster.typeFactory.createStructType(keptFields, keptNames)
+                    val engineTable = BodoEngineTable(tableVar.emit(), outputRowType)
+                    val finalDf = ctx.convertTableToDf(engineTable)
+                    outputDfNames.add(finalDf.name)
+                } else {
+                    outputDfNames.add(outDf.name)
+                }
             }
             // If we have multiple groups, append the dataframes together
             if (usesGroupingSets() || hasMissingColsGroup) {
@@ -367,7 +401,6 @@ class BodoPhysicalAggregate(
         val stateVar = builder.symbolTable.genStateVar()
         val keyIndicesList = AggCodeGen.getStreamingGroupByKeyIndices(groupSet)
         val keyIndices: Variable = ctx.lowerAsMetaType(Expr.Tuple(keyIndicesList))
-        // TODO: Modify this to handle grouping
         val filteredAggCallList = Utils.literalAggPrunedAggList(aggCallList)
         val offsetAndCols = AggCodeGen.getStreamingGroupByOffsetAndCols(filteredAggCallList, ctx, keyIndicesList[0])
         val offset = offsetAndCols.left

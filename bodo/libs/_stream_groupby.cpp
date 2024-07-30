@@ -2683,10 +2683,10 @@ GroupbyState::GroupbyState(
 
     std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
     if (key_dict_builders_.has_value()) {
-        assert(key_dict_builders_.size() == this->n_keys);
         // Enable sharing dictionary builders across group by used by multiple
         // grouping sets.
         key_dict_builders = key_dict_builders_.value();
+        assert(key_dict_builders.size() == this->n_keys);
     } else {
         // Create dictionary builders for key columns (if not provided by
         // caller
@@ -4554,8 +4554,11 @@ GroupingSetsState::ProduceOutputBatch(bool produce_output) {
         this->output_columns_remaps[this->current_output_idx];
     const std::vector<int64_t>& nulls_vector =
         this->missing_output_columns_remaps[this->current_output_idx];
-    std::vector<std::shared_ptr<array_info>> final_columns(remap_vector.size() +
-                                                           nulls_vector.size());
+    const std::vector<int64_t>& grouping_indices = this->grouping_output_idxs;
+    const std::vector<int64_t>& grouping_values =
+        this->grouping_values[this->current_output_idx];
+    std::vector<std::shared_ptr<array_info>> final_columns(
+        remap_vector.size() + nulls_vector.size() + grouping_indices.size());
     size_t table_size = out_table->nrows();
     for (size_t i = 0; i < remap_vector.size(); i++) {
         final_columns[remap_vector[i]] = out_table->columns[i];
@@ -4579,6 +4582,18 @@ GroupingSetsState::ProduceOutputBatch(bool produce_output) {
             }
         }
         final_columns[idx] = null_arr;
+    }
+    // Append the grouping function.
+    for (size_t i = 0; i < grouping_indices.size(); i++) {
+        std::shared_ptr<array_info> grouping_arr =
+            alloc_numpy(table_size, Bodo_CTypes::INT64);
+        int64_t* grouping_data =
+            (int64_t*)grouping_arr->data1<bodo_array_type::NUMPY>();
+        int64_t grouping_value = grouping_values[i];
+        for (size_t j = 0; j < table_size; j++) {
+            grouping_data[j] = grouping_value;
+        }
+        final_columns[grouping_indices[i]] = grouping_arr;
     }
     std::shared_ptr<table_info> final_table =
         std::make_shared<table_info>(final_columns, table_size);
@@ -4676,6 +4691,34 @@ GroupbyState* groupby_state_init_py_entry(
 }
 
 /**
+ * @brief Get the grouping value for a particular group by state
+ * based on which keys are which keys are "live" in the group by.
+ * GROUPING places a 1 bit when a key is missing in the order given
+ * by its argument order. So GROUPING(KEY1, KEY0, KEY2) would be
+ * 0b110 if we group by KEY2 in a particular grouping set, 0b110 if
+ * we group by KEY0, and 0b011 if we group by KEY1.
+ *
+ * @param live_keys vector of booleans indicating which keys are live.
+ * @param arg_data array of grouping arguments
+ * @param start_idx The starting index of the grouping arguments.
+ * @param end_idx The ending index of the grouping arguments (exclusive).
+ * @return int64_t The value of grouping.
+ */
+int64_t get_grouping_value(const std::vector<bool>& live_keys,
+                           int32_t* arg_data, int32_t start_idx,
+                           int32_t end_idx) {
+    int64_t output = 0;
+    for (int i = start_idx; i < end_idx; i++) {
+        output <<= 1;
+        int32_t key = arg_data[i];
+        if (!live_keys[key]) {
+            output |= 1;
+        }
+    }
+    return output;
+}
+
+/**
  * @brief Python wrapper to create and initialize a new streaming grouping sets
  * state object. This object will also create and manage several groupby states.
  * @param operator_id The operator ID of the grouping sets operator.
@@ -4725,11 +4768,29 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
             key_dict_builders[i] = create_dict_builder_for_array(
                 keys_schema->column_types[i]->copy(), true);
         }
-
-        // Generate components that are shared across all groupby states.
-        std::vector<int32_t> ftypes_vector(ftypes, ftypes + n_funcs);
-        std::vector<int32_t> f_in_offsets_vector(f_in_offsets,
-                                                 f_in_offsets + n_funcs + 1);
+        // Remove any ftypes for grouping.
+        std::vector<int32_t> ftypes_vector;
+        std::vector<int32_t> f_in_cols_vector;
+        std::vector<int32_t> f_in_offsets_vector;
+        f_in_offsets_vector.push_back(f_in_offsets[0]);
+        std::vector<int64_t> grouping_output_idxs;
+        int64_t num_skipped_columns = 0;
+        for (int i = 0; i < n_funcs; i++) {
+            if (ftypes[i] != Bodo_FTypes::grouping) {
+                int64_t f_types_start = f_in_offsets[i];
+                int64_t f_types_end = f_in_offsets[i + 1];
+                for (int64_t j = f_types_start; j < f_types_end; j++) {
+                    f_in_cols_vector.push_back(f_in_cols[j]);
+                }
+                ftypes_vector.push_back(ftypes[i]);
+                f_in_offsets_vector.push_back(f_in_offsets[i + 1] -
+                                              num_skipped_columns);
+            } else {
+                grouping_output_idxs.push_back(i +
+                                               static_cast<int64_t>(n_keys));
+                num_skipped_columns += f_in_offsets[i + 1] - f_in_offsets[i];
+            }
+        }
         bool allow_any_work_stealing = false;
         // Compute the window information up front because there are never
         // window functions.
@@ -4747,6 +4808,8 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
         std::vector<std::vector<int64_t>> output_columns_remaps;
         // Generate the vector of null keys for remapping the outputs.
         std::vector<std::vector<int64_t>> skipped_columns_remaps;
+        // Collect grouping values
+        std::vector<std::vector<int64_t>> total_grouping_values;
         for (int i = 0; i < n_grouping_sets; i++) {
             // Compute the bitmask for which keys need to be dropped.
             std::vector<bool> kept_columns(n_build_arrs, false);
@@ -4764,8 +4827,9 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
             int32_t num_skipped_keys =
                 static_cast<int32_t>(n_keys) - num_grouping_keys;
             std::vector<int32_t> remapped_f_in_cols;
-            for (int j = 0; j < n_funcs; j++) {
-                remapped_f_in_cols.push_back(f_in_cols[j] - num_skipped_keys);
+            for (size_t j = 0; j < f_in_cols_vector.size(); j++) {
+                remapped_f_in_cols.push_back(f_in_cols_vector[j] -
+                                             num_skipped_keys);
             }
             // Remap the build information to skip any extra keys.
             std::vector<int8_t> remapped_build_arr_c_types;
@@ -4795,11 +4859,17 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                     skipped_columns.push_back(j);
                 }
             }
-            size_t total_outptut_columns =
-                n_keys + static_cast<size_t>(n_funcs);
-            for (size_t j = n_keys; j < total_outptut_columns; j++) {
-                kept_output_column_idxs.push_back(j);
+            std::vector<int64_t> grouping_values;
+            for (int32_t j = 0; j < n_funcs; j++) {
+                if (ftypes[j] != Bodo_FTypes::grouping) {
+                    kept_output_column_idxs.push_back(j + n_keys);
+                } else {
+                    grouping_values.push_back(get_grouping_value(
+                        kept_columns, f_in_cols, f_in_offsets[j],
+                        f_in_offsets[j + 1]));
+                }
             }
+            total_grouping_values.push_back(grouping_values);
             output_columns_remaps.push_back(kept_output_column_idxs);
             skipped_columns_remaps.push_back(skipped_columns);
             int64_t sub_operator_id = sub_operator_ids[i];
@@ -4817,11 +4887,11 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 sync_iter, sub_operator_id, op_pool_size_bytes,
                 allow_any_work_stealing, local_key_dict_builders));
         }
-
         return new GroupingSetsState(
             std::move(keys_schema), std::move(groupby_states),
             input_columns_remaps, output_columns_remaps, skipped_columns_remaps,
-            key_dict_builders, operator_id);
+            grouping_output_idxs, total_grouping_values, key_dict_builders,
+            operator_id);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
