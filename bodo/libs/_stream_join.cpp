@@ -1186,46 +1186,37 @@ std::shared_ptr<table_info> JoinState::UnifyProbeTableDictionaryArrays(
         only_transpose_existing_on_key_cols);
 }
 
-void JoinState::ReportBuildStageMetrics() {
-    std::vector<MetricBase> metrics;
-    metrics.reserve(2);
-    metrics.emplace_back(TimerMetric("min_max_update_time",
-                                     this->metrics.build_min_max_update_time));
-    metrics.emplace_back(TimerMetric(
+void JoinState::ReportBuildStageMetrics(std::vector<MetricBase>& metrics_out) {
+    metrics_out.reserve(metrics_out.size() + 2);
+    metrics_out.emplace_back(TimerMetric(
+        "min_max_update_time", this->metrics.build_min_max_update_time));
+    metrics_out.emplace_back(TimerMetric(
         "min_max_finalize_time", this->metrics.build_min_max_finalize_time));
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(
-            this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
-        std::move(metrics));
 }
 
-void JoinState::ReportProbeStageMetrics() {
+void JoinState::ReportProbeStageMetrics(std::vector<MetricBase>& metrics_out) {
     assert(this->probe_input_finalized);
     if (this->op_id == -1) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(4);
+    metrics_out.reserve(metrics_out.size() + 4);
 
     // Get time spent appending to, total number of rows appended to, and max
     // reached size of the output buffer
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("output_append_time", this->output_buffer->append_time));
     MetricBase::StatValue output_total_size = this->output_buffer->total_size;
-    metrics.emplace_back(StatMetric("output_total_nrows", output_total_size));
+    metrics_out.emplace_back(
+        StatMetric("output_total_nrows", output_total_size));
     MetricBase::StatValue output_total_rem =
         this->output_buffer->total_remaining;
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("output_total_nrows_rem_at_finalize", output_total_rem));
     MetricBase::StatValue output_peak_nrows =
         this->output_buffer->max_reached_size;
-    metrics.emplace_back(StatMetric("output_peak_nrows", output_peak_nrows));
-
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(
-            this->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
-        std::move(metrics));
+    metrics_out.emplace_back(
+        StatMetric("output_peak_nrows", output_peak_nrows));
 }
 
 #pragma endregion  // JoinState
@@ -1719,128 +1710,129 @@ std::string HashJoinState::GetPartitionStateString() const {
     return partition_state;
 }
 
-void HashJoinState::ReportBuildStageMetrics() {
+void HashJoinState::ReportBuildStageMetrics(
+    std::vector<MetricBase>& metrics_out) {
     assert(this->build_input_finalized);
     if (this->op_id == -1) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(128);
+    metrics_out.reserve(metrics_out.size() + 128);
 
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("bcast_join", this->metrics.is_build_bcast_join, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("bcast_time", this->metrics.build_bcast_time));
-    metrics.emplace_back(StatMetric("bloom_filter_enabled",
-                                    this->metrics.bloom_filter_enabled, true));
-    metrics.emplace_back(TimerMetric("appends_active_time",
-                                     this->metrics.build_appends_active_time));
-    metrics.emplace_back(StatMetric("appends_active_nrows",
-                                    this->metrics.build_appends_active_nrows));
-    metrics.emplace_back(TimerMetric(
+    metrics_out.emplace_back(StatMetric(
+        "bloom_filter_enabled", this->metrics.bloom_filter_enabled, true));
+    metrics_out.emplace_back(TimerMetric(
+        "appends_active_time", this->metrics.build_appends_active_time));
+    metrics_out.emplace_back(StatMetric(
+        "appends_active_nrows", this->metrics.build_appends_active_nrows));
+    metrics_out.emplace_back(TimerMetric(
         "appends_inactive_time", this->metrics.build_appends_inactive_time));
-    metrics.emplace_back(StatMetric(
+    metrics_out.emplace_back(StatMetric(
         "appends_inactive_nrows", this->metrics.build_appends_inactive_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("input_partition_check_time",
                     this->metrics.build_input_partition_check_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("input_partition_check_nrows",
                    this->metrics.build_input_partition_check_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("ht_hashing_time", this->metrics.build_ht_hashing_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("ht_hashing_nrows", this->metrics.build_ht_hashing_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("ht_insert_time", this->metrics.build_ht_insert_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("ht_insert_nrows", this->metrics.build_ht_insert_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("n_partitions", this->metrics.n_partitions));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("n_rows", this->metrics.build_nrows, !this->build_parallel));
-    metrics.emplace_back(StatMetric("n_groups", this->metrics.build_n_groups,
-                                    !this->build_parallel));
-    metrics.emplace_back(StatMetric("n_repartitions_in_appends",
-                                    this->metrics.n_repartitions_in_appends));
-    metrics.emplace_back(StatMetric("n_repartitions_in_finalize",
-                                    this->metrics.n_repartitions_in_finalize));
-    metrics.emplace_back(TimerMetric("repartitioning_time_total",
-                                     this->metrics.repartitioning_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(StatMetric(
+        "n_groups", this->metrics.build_n_groups, !this->build_parallel));
+    metrics_out.emplace_back(StatMetric(
+        "n_repartitions_in_appends", this->metrics.n_repartitions_in_appends));
+    metrics_out.emplace_back(
+        StatMetric("n_repartitions_in_finalize",
+                   this->metrics.n_repartitions_in_finalize));
+    metrics_out.emplace_back(TimerMetric("repartitioning_time_total",
+                                         this->metrics.repartitioning_time));
+    metrics_out.emplace_back(
         TimerMetric("repartitioning_part_hashing_time",
                     this->metrics.repartitioning_part_hashing_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("repartitioning_part_hashing_nrows",
                    this->metrics.repartitioning_part_hashing_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("repartitioning_active_part1_append_time",
                     this->metrics.repartitioning_active_part1_append_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("repartitioning_active_part1_append_nrows",
                    this->metrics.repartitioning_active_part1_append_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("repartitioning_active_part2_append_time",
                     this->metrics.repartitioning_active_part2_append_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("repartitioning_active_part2_append_nrows",
                    this->metrics.repartitioning_active_part2_append_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("repartitioning_inactive_append_time",
                     this->metrics.repartitioning_inactive_append_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("repartitioning_inactive_pop_chunk_time",
                     this->metrics.repartitioning_inactive_pop_chunk_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("repartitioning_inactive_n_pop_chunks",
                    this->metrics.repartitioning_inactive_n_pop_chunks));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("finalize_time_total", this->metrics.build_finalize_time));
-    metrics.emplace_back(TimerMetric("finalize_groups_time",
-                                     this->metrics.build_finalize_groups_time));
-    metrics.emplace_back(TimerMetric(
+    metrics_out.emplace_back(TimerMetric(
+        "finalize_groups_time", this->metrics.build_finalize_groups_time));
+    metrics_out.emplace_back(TimerMetric(
         "finalize_activate_time", this->metrics.build_finalize_activate_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("input_part_hashing_time",
                     this->metrics.build_input_part_hashing_time));
-    metrics.emplace_back(TimerMetric("bloom_filter_add_time",
-                                     this->metrics.bloom_filter_add_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(TimerMetric("bloom_filter_add_time",
+                                         this->metrics.bloom_filter_add_time));
+    metrics_out.emplace_back(
         TimerMetric("bloom_filter_union_reduction_time",
                     this->metrics.bloom_filter_union_reduction_time));
-    metrics.emplace_back(StatMetric("max_partition_size_bytes",
-                                    this->metrics.max_partition_size_bytes,
-                                    !this->build_parallel));
-    metrics.emplace_back(StatMetric("total_partitions_size_bytes",
-                                    this->metrics.total_partitions_size_bytes,
-                                    !this->build_parallel));
-    metrics.emplace_back(StatMetric("final_op_pool_size_bytes",
-                                    this->metrics.final_op_pool_size_bytes,
-                                    !this->build_parallel));
-    metrics.emplace_back(
+    metrics_out.emplace_back(StatMetric("max_partition_size_bytes",
+                                        this->metrics.max_partition_size_bytes,
+                                        !this->build_parallel));
+    metrics_out.emplace_back(StatMetric(
+        "total_partitions_size_bytes",
+        this->metrics.total_partitions_size_bytes, !this->build_parallel));
+    metrics_out.emplace_back(StatMetric("final_op_pool_size_bytes",
+                                        this->metrics.final_op_pool_size_bytes,
+                                        !this->build_parallel));
+    metrics_out.emplace_back(
         TimerMetric("filter_na_time", this->metrics.build_filter_na_time));
-    metrics.emplace_back(StatMetric(
+    metrics_out.emplace_back(StatMetric(
         "filter_na_output_nrows", this->metrics.build_filter_na_output_nrows));
-    metrics.emplace_back(BlobMetric("final_partitioning_state",
-                                    this->metrics.final_partitioning_state,
-                                    !this->build_parallel));
-    metrics.emplace_back(
+    metrics_out.emplace_back(BlobMetric("final_partitioning_state",
+                                        this->metrics.final_partitioning_state,
+                                        !this->build_parallel));
+    metrics_out.emplace_back(
         TimerMetric("unique_values_update_time",
                     this->metrics.build_unique_values_update_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("unique_values_finalize_time",
                     this->metrics.build_unique_values_finalize_time));
 
     // Get shuffle stats from build shuffle state
-    this->build_shuffle_state.ExportMetrics(metrics);
+    this->build_shuffle_state.ExportMetrics(metrics_out);
 
     // Get time spent appending to and number of rows in build_na_key_buffer
-    metrics.emplace_back(TimerMetric("na_buffer_append_time",
-                                     this->build_na_key_buffer.append_time));
+    metrics_out.emplace_back(TimerMetric(
+        "na_buffer_append_time", this->build_na_key_buffer.append_time));
     MetricBase::StatValue na_buffer_nrows =
         this->build_na_key_buffer.total_size;
-    metrics.emplace_back(StatMetric("na_buffer_nrows", na_buffer_nrows));
+    metrics_out.emplace_back(StatMetric("na_buffer_nrows", na_buffer_nrows));
 
     // Get and combine metrics from dict-builders
     DictBuilderMetrics key_dict_builder_metrics;
@@ -1861,24 +1853,19 @@ void HashJoinState::ReportBuildStageMetrics() {
             }
         }
     }
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("n_key_dict_builders", n_key_dict_builders, true));
-    key_dict_builder_metrics.add_to_metrics(metrics, "key_dict_builders_");
-    metrics.emplace_back(
+    key_dict_builder_metrics.add_to_metrics(metrics_out, "key_dict_builders_");
+    metrics_out.emplace_back(
         StatMetric("n_non_key_dict_builders", n_non_key_dict_builders, true));
-    non_key_dict_builder_metrics.add_to_metrics(metrics,
+    non_key_dict_builder_metrics.add_to_metrics(metrics_out,
                                                 "non_key_dict_builders_");
-
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(
-            this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
-        std::move(metrics));
 
     // Save a snapshot of the dict-builder metrics of the key columns.
     this->metrics.key_dict_builder_metrics_build_stage_snapshot =
         key_dict_builder_metrics;
 
-    JoinState::ReportBuildStageMetrics();
+    JoinState::ReportBuildStageMetrics(metrics_out);
 }
 
 void HashJoinState::FinalizeBuild() {
@@ -2218,81 +2205,81 @@ bool HashJoinState::RuntimeFilter(
     return applied_any_filter;
 }
 
-void HashJoinState::ReportProbeStageMetrics() {
+void HashJoinState::ReportProbeStageMetrics(
+    std::vector<MetricBase>& metrics_out) {
     assert(this->probe_input_finalized);
     if (this->op_id == -1) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(64);
+    metrics_out.reserve(metrics_out.size() + 64);
 
-    metrics.emplace_back(StatMetric(
+    metrics_out.emplace_back(StatMetric(
         "nrows_processed", this->metrics.num_processed_probe_table_rows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("append_inactive_partitions_time",
                     this->metrics.append_probe_inactive_partitions_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("append_inactive_partitions_nrows",
                    this->metrics.append_probe_inactive_partitions_nrows));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("inactive_partition_check_time",
                     this->metrics.probe_inactive_partition_check_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("ht_probe_time", this->metrics.ht_probe_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("produce_probe_out_idxs_time",
                     this->metrics.produce_probe_out_idxs_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("build_outer_output_idx_time",
                     this->metrics.build_outer_output_idx_time));
-    metrics.emplace_back(TimerMetric("join_hashing_time",
-                                     this->metrics.probe_join_hashing_time));
-    metrics.emplace_back(TimerMetric("part_hashing_time",
-                                     this->metrics.probe_part_hashing_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(TimerMetric(
+        "join_hashing_time", this->metrics.probe_join_hashing_time));
+    metrics_out.emplace_back(TimerMetric(
+        "part_hashing_time", this->metrics.probe_part_hashing_time));
+    metrics_out.emplace_back(
         TimerMetric("finalize_inactive_partitions_total_time",
                     this->metrics.finalize_probe_inactive_partitions_time));
-    metrics.emplace_back(TimerMetric(
+    metrics_out.emplace_back(TimerMetric(
         "finalize_inactive_partitions_pin_partition_time",
         this->metrics.finalize_probe_inactive_partitions_pin_partition_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("inactive_pop_chunk_time",
                     this->metrics.probe_inactive_pop_chunk_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("inactive_pop_chunk_n_chunks",
                    this->metrics.probe_inactive_pop_chunk_n_chunks));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("filter_na_time", this->metrics.probe_filter_na_time));
-    metrics.emplace_back(StatMetric(
+    metrics_out.emplace_back(StatMetric(
         "filter_na_output_nrows", this->metrics.probe_filter_na_output_nrows));
     if (this->probe_table_outer) {
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             StatMetric("probe_outer_bloom_filter_misses",
                        this->metrics.probe_outer_bloom_filter_misses));
     } else {
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             TimerMetric("join_filter_bloom_filter_hashing_time",
                         this->metrics.join_filter_bloom_filter_hashing_time));
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             StatMetric("join_filter_bloom_filter_hashing_nrows",
                        this->metrics.join_filter_bloom_filter_hashing_nrows));
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             TimerMetric("join_filter_bloom_filter_probe_time",
                         this->metrics.join_filter_bloom_filter_probe_time));
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             StatMetric("join_filter_bloom_filter_probe_nrows",
                        this->metrics.join_filter_bloom_filter_probe_nrows));
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             StatMetric("num_runtime_filter_applied_rows",
                        this->metrics.num_runtime_filter_applied_rows));
     }
 
     // Get shuffle stats from probe shuffle state
-    this->probe_shuffle_state.ExportMetrics(metrics);
+    this->probe_shuffle_state.ExportMetrics(metrics_out);
 
     MetricBase::StatValue na_counter = this->probe_na_counter;
-    metrics.emplace_back(StatMetric("na_counter", na_counter));
+    metrics_out.emplace_back(StatMetric("na_counter", na_counter));
 
     // Get and combine metrics from dict-builders
     DictBuilderMetrics key_dict_builder_metrics;
@@ -2320,20 +2307,15 @@ void HashJoinState::ReportProbeStageMetrics() {
     // between the metrics from the build stage and those from the probe stage.
     key_dict_builder_metrics.subtract_metrics(
         this->metrics.key_dict_builder_metrics_build_stage_snapshot);
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("n_key_dict_builders", n_key_dict_builders, true));
-    key_dict_builder_metrics.add_to_metrics(metrics, "key_dict_builders_");
-    metrics.emplace_back(
+    key_dict_builder_metrics.add_to_metrics(metrics_out, "key_dict_builders_");
+    metrics_out.emplace_back(
         StatMetric("n_non_key_dict_builders", n_non_key_dict_builders, true));
-    non_key_dict_builder_metrics.add_to_metrics(metrics,
+    non_key_dict_builder_metrics.add_to_metrics(metrics_out,
                                                 "non_key_dict_builders_");
 
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(
-            this->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
-        std::move(metrics));
-
-    JoinState::ReportProbeStageMetrics();
+    JoinState::ReportProbeStageMetrics(metrics_out);
 }
 
 void HashJoinState::FinalizeProbe() {

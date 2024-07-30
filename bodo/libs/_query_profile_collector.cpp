@@ -145,13 +145,10 @@ int64_t QueryProfileCollector::GetOperatorDuration(operator_id_t operator_id) {
 
 void QueryProfileCollector::RegisterOperatorStageMetrics(
     operator_stage_t op_stage, std::vector<MetricBase> metrics) {
-    if (operator_stage_metrics.count(op_stage) > 0) {
-        auto& old_metrics = operator_stage_metrics[op_stage];
-        old_metrics.insert(old_metrics.end(), metrics.begin(), metrics.end());
-        return;
+    if (operator_stage_metrics.count(op_stage) == 0) {
+        operator_stage_metrics[op_stage] = metrics;
     }
-
-    operator_stage_metrics[op_stage] = metrics;
+    // TODO(aneesh) error when metrics are resubmitted
 }
 
 template <MetricTypes::TypeEnum metric_type>

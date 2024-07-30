@@ -6,29 +6,29 @@
 #include "_shuffle.h"
 #include "_stream_join.h"
 
-void NestedLoopJoinState::ReportBuildStageMetrics() {
+void NestedLoopJoinState::ReportBuildStageMetrics(
+    std::vector<MetricBase>& metrics_out) {
     assert(this->build_input_finalized);
     if (this->op_id == -1) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(32);
+    metrics_out.reserve(metrics_out.size() + 32);
 
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("block_size_bytes", this->metrics.block_size_bytes, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("chunk_size_nrows", this->metrics.chunk_size_nrows, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("finalize_time", this->metrics.build_finalize_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("bcast_join", this->metrics.is_build_bcast_join, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("bcast_time", this->metrics.build_bcast_time));
     NestedLoopJoinMetrics::stat_t build_table_num_chunks =
         this->build_table_buffer->chunks.size();
-    metrics.emplace_back(StatMetric("num_chunks", build_table_num_chunks));
-    metrics.emplace_back(
+    metrics_out.emplace_back(StatMetric("num_chunks", build_table_num_chunks));
+    metrics_out.emplace_back(
         TimerMetric("append_time", this->build_table_buffer->append_time));
 
     // Get and combine dict-builder stats
@@ -41,44 +41,40 @@ void NestedLoopJoinState::ReportBuildStageMetrics() {
         dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
         n_dict_builders++;
     }
-    metrics.emplace_back(StatMetric("n_dict_builders", n_dict_builders, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
+        StatMetric("n_dict_builders", n_dict_builders, true));
+    metrics_out.emplace_back(
         StatMetric("dict_builders_unify_cache_id_misses",
                    dict_builder_metrics.unify_cache_id_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("dict_builders_unify_cache_length_misses",
                    dict_builder_metrics.unify_cache_length_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("dict_builders_transpose_filter_cache_id_misses",
                    dict_builder_metrics.transpose_filter_cache_id_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("dict_builders_transpose_filter_cache_length_misses",
                    dict_builder_metrics.transpose_filter_cache_length_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_unify_build_transpose_map_time",
                     dict_builder_metrics.unify_build_transpose_map_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_unify_transpose_time",
                     dict_builder_metrics.unify_transpose_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_unify_string_arr_time",
                     dict_builder_metrics.unify_string_arr_time));
-    metrics.emplace_back(TimerMetric(
+    metrics_out.emplace_back(TimerMetric(
         "dict_builders_transpose_filter_build_transpose_map_time",
         dict_builder_metrics.transpose_filter_build_transpose_map_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_transpose_filter_transpose_time",
                     dict_builder_metrics.transpose_filter_transpose_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_transpose_filter_string_arr_time",
                     dict_builder_metrics.transpose_filter_string_arr_time));
 
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(
-            this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
-        std::move(metrics));
-
-    JoinState::ReportBuildStageMetrics();
+    JoinState::ReportBuildStageMetrics(metrics_out);
 }
 
 void NestedLoopJoinState::FinalizeBuild() {
@@ -355,25 +351,25 @@ void NestedLoopJoinState::ProcessProbeChunk(
     this->metrics.probe_compute_matches_time += end_timer(start) - append_time;
 }
 
-void NestedLoopJoinState::ReportProbeStageMetrics() {
+void NestedLoopJoinState::ReportProbeStageMetrics(
+    std::vector<MetricBase>& metrics_out) {
     assert(this->probe_input_finalized);
     if (this->op_id == -1) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(16);
+    metrics_out.reserve(metrics_out.size() + 16);
 
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("global_dict_unification_time",
                     this->metrics.probe_global_dict_unification_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("bcast_size_bytes", this->metrics.probe_bcast_size_bytes));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("bcast_table_time", this->metrics.probe_bcast_table_time));
-    metrics.emplace_back(TimerMetric("compute_matches_time",
-                                     this->metrics.probe_compute_matches_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(TimerMetric(
+        "compute_matches_time", this->metrics.probe_compute_matches_time));
+    metrics_out.emplace_back(
         TimerMetric("add_unmatched_build_rows_time",
                     this->metrics.probe_add_unmatched_build_rows_time));
 
@@ -387,44 +383,40 @@ void NestedLoopJoinState::ReportProbeStageMetrics() {
         dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
         n_dict_builders++;
     }
-    metrics.emplace_back(StatMetric("n_dict_builders", n_dict_builders, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
+        StatMetric("n_dict_builders", n_dict_builders, true));
+    metrics_out.emplace_back(
         StatMetric("dict_builders_unify_cache_id_misses",
                    dict_builder_metrics.unify_cache_id_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("dict_builders_unify_cache_length_misses",
                    dict_builder_metrics.unify_cache_length_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("dict_builders_transpose_filter_cache_id_misses",
                    dict_builder_metrics.transpose_filter_cache_id_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("dict_builders_transpose_filter_cache_length_misses",
                    dict_builder_metrics.transpose_filter_cache_length_misses));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_unify_build_transpose_map_time",
                     dict_builder_metrics.unify_build_transpose_map_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_unify_transpose_time",
                     dict_builder_metrics.unify_transpose_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_unify_string_arr_time",
                     dict_builder_metrics.unify_string_arr_time));
-    metrics.emplace_back(TimerMetric(
+    metrics_out.emplace_back(TimerMetric(
         "dict_builders_transpose_filter_build_transpose_map_time",
         dict_builder_metrics.transpose_filter_build_transpose_map_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_transpose_filter_transpose_time",
                     dict_builder_metrics.transpose_filter_transpose_time));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("dict_builders_transpose_filter_string_arr_time",
                     dict_builder_metrics.transpose_filter_string_arr_time));
 
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(
-            this->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
-        std::move(metrics));
-
-    JoinState::ReportProbeStageMetrics();
+    JoinState::ReportProbeStageMetrics(metrics_out);
 }
 
 /**

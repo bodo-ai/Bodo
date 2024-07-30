@@ -94,58 +94,51 @@ class SnowflakeReader : public ArrowReader {
 
     /// @brief Report SnowflakeReader specific metrics in addition to the
     /// ArrowReader metrics.
-    void ReportInitStageMetrics() override {
+    void ReportInitStageMetrics(std::vector<MetricBase>& metrics_out) override {
         if ((this->op_id == -1) || this->reported_init_stage_metrics) {
             return;
         }
 
-        std::vector<MetricBase> metrics;
-        metrics.reserve(2);
+        metrics_out.reserve(metrics_out.size() + 2);
 
-        metrics.emplace_back(TimerMetric(
+        metrics_out.emplace_back(TimerMetric(
             "sf_data_prep_time", this->metrics.sf_data_prep_time, true));
 
-        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(
-                this->op_id, QUERY_PROFILE_INIT_STAGE_ID),
-            std::move(metrics));
-
-        ArrowReader::ReportInitStageMetrics();
+        ArrowReader::ReportInitStageMetrics(metrics_out);
     }
 
     /// @brief Report SnowflakeReader specific metrics in addition to the
     /// ArrowReader metrics.
-    void ReportReadStageMetrics() override {
+    void ReportReadStageMetrics(std::vector<MetricBase>& metrics_out) override {
         if ((this->op_id == -1) || this->reported_read_stage_metrics) {
             return;
         }
 
-        std::vector<MetricBase> metrics;
-        metrics.reserve(32);
+        metrics_out.reserve(metrics_out.size() + 32);
 
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             TimerMetric("to_arrow_time", this->metrics.to_arrow_time));
-        metrics.emplace_back(TimerMetric("cast_arrow_table_time",
-                                         this->metrics.cast_arrow_table_time));
-        metrics.emplace_back(
+        metrics_out.emplace_back(TimerMetric(
+            "cast_arrow_table_time", this->metrics.cast_arrow_table_time));
+        metrics_out.emplace_back(
             TimerMetric("total_append_time", this->metrics.total_append_time));
-        metrics.emplace_back(TimerMetric("arrow_rb_to_bodo_time",
-                                         this->metrics.arrow_rb_to_bodo_time));
-        metrics.emplace_back(TimerMetric("ctb_pop_chunk_time",
-                                         this->metrics.ctb_pop_chunk_time));
+        metrics_out.emplace_back(TimerMetric(
+            "arrow_rb_to_bodo_time", this->metrics.arrow_rb_to_bodo_time));
+        metrics_out.emplace_back(TimerMetric("ctb_pop_chunk_time",
+                                             this->metrics.ctb_pop_chunk_time));
 
         // Get time spent appending to, total number of rows appended to, and
         // max reached size of the output buffer
         if (this->out_batches != nullptr) {
-            metrics.emplace_back(TimerMetric("output_append_time",
-                                             this->out_batches->append_time));
+            metrics_out.emplace_back(TimerMetric(
+                "output_append_time", this->out_batches->append_time));
             MetricBase::StatValue output_total_size =
                 this->out_batches->total_size;
-            metrics.emplace_back(
+            metrics_out.emplace_back(
                 StatMetric("output_total_nrows", output_total_size));
             MetricBase::StatValue output_peak_nrows =
                 this->out_batches->max_reached_size;
-            metrics.emplace_back(
+            metrics_out.emplace_back(
                 StatMetric("output_peak_nrows", output_peak_nrows));
         }
 
@@ -159,16 +152,11 @@ class SnowflakeReader : public ArrowReader {
                 n_dict_builders++;
             }
         }
-        metrics.emplace_back(
+        metrics_out.emplace_back(
             StatMetric("n_dict_builders", n_dict_builders, true));
-        dict_builder_metrics.add_to_metrics(metrics, "dict_builders_");
+        dict_builder_metrics.add_to_metrics(metrics_out, "dict_builders_");
 
-        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(
-                this->op_id, QUERY_PROFILE_READ_STAGE_ID),
-            std::move(metrics));
-
-        ArrowReader::ReportReadStageMetrics();
+        ArrowReader::ReportReadStageMetrics(metrics_out);
     }
 
    protected:
@@ -518,7 +506,14 @@ ArrowReader* snowflake_reader_init_py_entry(
             query, conn, parallel, is_independent, arrow_schema,
             selected_fields, is_nullable, str_as_dict_cols, _only_length_query,
             _is_select_query, downcast_decimal_to_double, batch_size, op_id);
-        snowflake->ReportInitStageMetrics();
+
+        std::vector<MetricBase> metrics;
+        snowflake->ReportInitStageMetrics(metrics);
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(
+                snowflake->op_id, QUERY_PROFILE_INIT_STAGE_ID),
+            std::move(metrics));
+
         return static_cast<ArrowReader*>(snowflake);
 
     } catch (const std::exception& e) {
