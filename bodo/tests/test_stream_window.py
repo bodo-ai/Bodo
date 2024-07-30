@@ -442,7 +442,7 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
                     "OUT": range(1, 1001),
                 }
             ),
-            id="row_number",
+            id="row_number-integer",
         ),
         pytest.param(
             "rank",
@@ -459,7 +459,7 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
                     "OUT": [1 + 10 * (i // 10) for i in range(1000)],
                 }
             ),
-            id="rank",
+            id="rank-integer",
         ),
         pytest.param(
             "dense_rank",
@@ -476,7 +476,7 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
                     "OUT": [1 + (i // 10) for i in range(1000)],
                 }
             ),
-            id="dense_rank",
+            id="dense_rank-integer",
         ),
         pytest.param(
             "percent_rank",
@@ -493,7 +493,7 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
                     "OUT": [(10 * (i // 10)) / 999 for i in range(1000)],
                 }
             ),
-            id="percent_rank",
+            id="percent_rank-integer",
             marks=pytest.mark.skip("[BSE-3613]"),
         ),
         pytest.param(
@@ -511,8 +511,174 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
                     "OUT": [(1 + (10 * (i // 10))) / 1000 for i in range(1000)],
                 }
             ),
-            id="cume_dist",
+            id="cume_dist-integer",
             marks=pytest.mark.skip("[BSE-3624]"),
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": [f"{(i//10):02}" for i in range(1000)],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank-strings",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": pd.array(
+                        [f"{(i//10):02}" for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())),
+                    ),
+                },
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                },
+            ),
+            id="dense_rank-dictionary",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": pd.array(
+                        [[i // 10, None] for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.large_list(pa.int32())),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank-array_item",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": pd.array(
+                        [
+                            {"A": i // 10, "B": 7, "C": ["A", "B", "A"]}
+                            for i in range(1000)
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.struct(
+                                [
+                                    pa.field("A", pa.int32()),
+                                    pa.field("B", pa.int32()),
+                                    pa.field(
+                                        "C",
+                                        pa.large_list(
+                                            pa.dictionary(pa.int32(), pa.string())
+                                        ),
+                                    ),
+                                ]
+                            )
+                        ),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank-struct",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": pd.array(
+                        [{"A": i // 10, "B": 7, "C": None} for i in range(1000)],
+                        dtype=pd.ArrowDtype(pa.map_(pa.large_string(), pa.int64())),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank-map",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": pd.array(
+                        [
+                            [[], None, [{"A": 0}, {"B": 7 * (i // 10), "C": i // 100}]]
+                            for i in range(1000)
+                        ],
+                        dtype=pd.ArrowDtype(
+                            pa.large_list(
+                                pa.large_list(pa.map_(pa.large_string(), pa.int16()))
+                            )
+                        ),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank-multi_nested",
+        ),
+        pytest.param(
+            "dense_rank",
+            (1,),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "O": pd.array(
+                        [
+                            bodo.TimestampTZ(
+                                pd.Timestamp("2018-10-1")
+                                + pd.DateOffset(months=5 * (i // 10)),
+                                i,
+                            )
+                            for i in range(1000)
+                        ]
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "OUT": [1 + (i // 10) for i in range(1000)],
+                }
+            ),
+            id="dense_rank-timestamptz",
         ),
     ],
 )

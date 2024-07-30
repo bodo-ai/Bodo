@@ -1335,14 +1335,21 @@ std::shared_ptr<table_info> local_sorted_window_fn(
  *
  * @param[in] empty_table An empty table with the same schema as
  * the one that should be received.
+ * @param[out] partition_by_arrs The partition by columns, transposed with the
+ * updated dict builders
+ * @param[out] order_by_arrs The order by columns, transposed with the updated
+ * dict builders
  * @param[in] recv_from The rank we are receiving data from.
  * @return std::shared_ptr<table_info> The received table info
  * or an empty table if there is no data to receive.
  */
 std::shared_ptr<table_info> recv_sorted_window_data(
-    const std::shared_ptr<table_info>& empty_table, int recv_from) {
-    int n_pes;
+    const std::shared_ptr<table_info>& empty_table,
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders, int recv_from) {
     int my_rank;
+    int n_pes;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     if (recv_from < 0 || recv_from >= n_pes) {
@@ -1364,11 +1371,19 @@ std::shared_ptr<table_info> recv_sorted_window_data(
                               dummy_metrics);
             }
             std::unique_ptr<bodo::Schema> schema = empty_table->schema();
-            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
-            for (size_t i = 0; i < empty_table->ncols(); i++) {
-                dict_builders.push_back(create_dict_builder_for_array(
-                    schema->column_types[i]->copy(), false));
+            // Note: assuming that the only dictionary encoded columns come
+            // from the partition/orderby columns, not the function columns.
+            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(
+                empty_table->columns.size());
+            for (size_t i = 0;
+                 i < std::min(dict_builders.size(), builders.size()); i++) {
+                dict_builders[i] = builders[i];
             }
+            for (size_t i = builders.size(); i < dict_builders.size(); i++) {
+                dict_builders[i] = create_dict_builder_for_array(
+                    schema->column_types[i]->copy(), false);
+            }
+
             TableBuildBuffer result_table(std::move(schema), dict_builders);
             IncrementalShuffleMetrics metrics;
             while (recv_states.size() != 0) {
@@ -1376,6 +1391,23 @@ std::shared_ptr<table_info> recv_sorted_window_data(
                     return s.recvDone(result_table, dict_builders, metrics);
                 });
             }
+
+            // Transpose the partition by and order by columns with the updated
+            // dictionary builders
+            for (size_t i = 0; i < partition_by_arrs.size(); ++i) {
+                if (builders[i] != nullptr) {
+                    partition_by_arrs[i] =
+                        builders[i]->TransposeExisting(partition_by_arrs[i]);
+                }
+            }
+            for (size_t i = 0; i < order_by_arrs.size(); ++i) {
+                if (builders[i + partition_by_arrs.size()] != nullptr) {
+                    order_by_arrs[i] =
+                        builders[i + partition_by_arrs.size()]
+                            ->TransposeExisting(order_by_arrs[i]);
+                }
+            }
+
             return result_table.data_table;
         }
     }
@@ -1724,11 +1756,12 @@ template <bodo_array_type::arr_type_enum PartitionByArrType,
              dense_rank<window_func>)
 std::tuple<std::shared_ptr<table_info>, MPI_Request>
 sorted_window_boundary_communication(
-    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr,
     std::vector<AsyncShuffleSendState>& send_states,
     const std::unique_ptr<int>& length_ptr, uint64_t last_group_size,
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders,
     std::shared_ptr<table_info> boundary_send_data) {
     // TODO refactor to make this interface more generic
     std::vector<std::shared_ptr<array_info>> arrs;
@@ -1771,7 +1804,10 @@ sorted_window_boundary_communication(
         // need to receive data from our neighbor first to send to the next
         // neighbor.
         // recv from previous neighbor myrank - 1
-        recv_boundary = recv_sorted_window_data(empty_table, my_rank - 1);
+        recv_boundary =
+            recv_sorted_window_data(empty_table, partition_by_arrs,
+                                    order_by_arrs, builders, my_rank - 1);
+
         // send data looks slightly different in this case (do not need to check
         // if rows the same, just the groups)
         std::shared_ptr<table_info> send_boundary =
@@ -1792,7 +1828,9 @@ sorted_window_boundary_communication(
         send_request = send_sorted_window_data(send_boundary, send_states,
                                                length_ptr, my_rank + 1);
         // recv from previous neighbor (myrank -1)
-        recv_boundary = recv_sorted_window_data(empty_table, my_rank - 1);
+        recv_boundary =
+            recv_sorted_window_data(empty_table, partition_by_arrs,
+                                    order_by_arrs, builders, my_rank - 1);
     }
     return std::tuple(recv_boundary, send_request);
 }
@@ -1886,11 +1924,12 @@ template <bodo_array_type::arr_type_enum PartitionByArrType,
     requires(percent_rank<window_func> || cume_dist<window_func>)
 std::tuple<std::shared_ptr<table_info>, MPI_Request>
 sorted_window_boundary_communication(
-    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::shared_ptr<array_info>& window_out_arr,
     std::vector<AsyncShuffleSendState>& send_states,
     const std::unique_ptr<int>& length_ptr, uint64_t last_group_size,
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders,
     std::shared_ptr<table_info> boundary_send_data) {
     // TODO refactor to make this interface more generic
     std::shared_ptr<table_info> empty_table =
@@ -1916,7 +1955,9 @@ sorted_window_boundary_communication(
         // need to receive data from our neighbor first to send to the next
         // neighbor.
         // recv from previous neighbor myrank - 1
-        recv_boundary_lower = recv_sorted_window_data(empty_table, my_rank - 1);
+        recv_boundary_lower =
+            recv_sorted_window_data(empty_table, partition_by_arrs,
+                                    order_by_arrs, builders, my_rank - 1);
 
         // first we want to propagate information about the last groupby/orderby
         // vals to our next neighbor
@@ -1936,7 +1977,9 @@ sorted_window_boundary_communication(
 
         // NOTE: here we rely on the fact that the last rank will return without
         // any MPI calls
-        recv_boundary_upper = recv_sorted_window_data(empty_table, my_rank + 1);
+        recv_boundary_upper =
+            recv_sorted_window_data(empty_table, partition_by_arrs,
+                                    order_by_arrs, builders, my_rank + 1);
 
         // then we propagate information about the first groupby/orderby vals to
         // our previous neighbor
@@ -1959,7 +2002,9 @@ sorted_window_boundary_communication(
         send_request = send_sorted_window_data(send_boundary_upper, send_states,
                                                length_ptr, my_rank + 1);
         // recv from my_rank - 1
-        recv_boundary_lower = recv_sorted_window_data(empty_table, my_rank - 1);
+        recv_boundary_lower =
+            recv_sorted_window_data(empty_table, partition_by_arrs,
+                                    order_by_arrs, builders, my_rank - 1);
 
         // ensure all send/recvs are done before doing the next round of sends
         MPI_Barrier(MPI_COMM_WORLD);
@@ -1972,7 +2017,9 @@ sorted_window_boundary_communication(
                                                length_ptr, my_rank - 1);
 
         // recv from my_rank + 1
-        recv_boundary_upper = recv_sorted_window_data(empty_table, my_rank + 1);
+        recv_boundary_upper =
+            recv_sorted_window_data(empty_table, partition_by_arrs,
+                                    order_by_arrs, builders, my_rank + 1);
     }
     // if we recv'd empty data from either of our neighbors, set data values to
     // zero to ensure the final update step can be performed correctly
@@ -2446,17 +2493,18 @@ void update_sorted_window_output(
 template <bodo_array_type::arr_type_enum PartitionByArrType,
           bodo_array_type::arr_type_enum OrderByArrType, int32_t window_func>
 void sorted_window_parallel_step(
-    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
-    std::shared_ptr<array_info> out_arr, int64_t last_group_size,
-    std::shared_ptr<table_info> boundary_send_data) {
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::shared_ptr<array_info> out_arr,
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders,
+    int64_t last_group_size, std::shared_ptr<table_info> boundary_send_data) {
     std::vector<AsyncShuffleSendState> send_states;
     std::unique_ptr<int> length_ptr = std::make_unique<int>(0);
     auto [boundary_info, send_request] =
         sorted_window_boundary_communication<PartitionByArrType, OrderByArrType,
                                              window_func>(
             partition_by_arrs, order_by_arrs, out_arr, send_states, length_ptr,
-            last_group_size, boundary_send_data);
+            last_group_size, builders, boundary_send_data);
     update_sorted_window_output<PartitionByArrType, OrderByArrType,
                                 window_func>(partition_by_arrs, order_by_arrs,
                                              out_arr, boundary_info,
@@ -2494,10 +2542,12 @@ void sorted_window_parallel_step(
 template <bodo_array_type::arr_type_enum PartitionByArrType,
           bodo_array_type::arr_type_enum OrderByArrType>
 void _sorted_window_computation(
-    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::vector<int32_t>& window_funcs,
-    std::vector<std::shared_ptr<array_info>> out_arrs, bool is_parallel) {
+    std::vector<std::shared_ptr<array_info>> out_arrs,
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders,
+    bool is_parallel) {
     // rank
     uint64_t last_group_size = 0;
     std::shared_ptr<table_info> boundary_send_data;
@@ -2552,7 +2602,7 @@ void _sorted_window_computation(
                     sorted_window_parallel_step<PartitionByArrType,
                                                 OrderByArrType,
                                                 Bodo_FTypes::dense_rank>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        partition_by_arrs, order_by_arrs, out_arrs[i], builders,
                         last_group_size, boundary_send_data);
                     break;
                 }
@@ -2560,14 +2610,14 @@ void _sorted_window_computation(
                     sorted_window_parallel_step<PartitionByArrType,
                                                 OrderByArrType,
                                                 Bodo_FTypes::row_number>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        partition_by_arrs, order_by_arrs, out_arrs[i], builders,
                         last_group_size, boundary_send_data);
                     break;
                 }
                 case Bodo_FTypes::rank: {
                     sorted_window_parallel_step<
                         PartitionByArrType, OrderByArrType, Bodo_FTypes::rank>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        partition_by_arrs, order_by_arrs, out_arrs[i], builders,
                         last_group_size, boundary_send_data);
                     break;
                 }
@@ -2575,7 +2625,7 @@ void _sorted_window_computation(
                     sorted_window_parallel_step<PartitionByArrType,
                                                 OrderByArrType,
                                                 Bodo_FTypes::percent_rank>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        partition_by_arrs, order_by_arrs, out_arrs[i], builders,
                         last_group_size, boundary_send_data);
                     break;
                 }
@@ -2583,7 +2633,7 @@ void _sorted_window_computation(
                     sorted_window_parallel_step<PartitionByArrType,
                                                 OrderByArrType,
                                                 Bodo_FTypes::cume_dist>(
-                        partition_by_arrs, order_by_arrs, out_arrs[i],
+                        partition_by_arrs, order_by_arrs, out_arrs[i], builders,
                         last_group_size, boundary_send_data);
                     break;
                 }
@@ -2691,12 +2741,13 @@ void global_window_computation(
  * with a neighboring rank for boundary groups.
  */
 void sorted_window_computation(
-    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& window_args,
     const std::vector<int32_t>& window_offset_indices,
     const std::vector<int32_t>& window_funcs,
     std::vector<std::shared_ptr<array_info>>& out_arrs, size_t out_rows,
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders,
     bool is_parallel) {
     if (partition_by_arrs.size() == 0 && order_by_arrs.size() == 0) {
         // If there is no partition/order column, re-route to the global
@@ -2724,7 +2775,7 @@ void sorted_window_computation(
     if (!single_part_arr_type && !single_order_arr_type) {
         _sorted_window_computation<bodo_array_type::UNKNOWN,
                                    bodo_array_type::UNKNOWN>(
-            partition_by_arrs, order_by_arrs, window_funcs, out_arrs,
+            partition_by_arrs, order_by_arrs, window_funcs, out_arrs, builders,
             is_parallel);
     } else if (!single_order_arr_type) {
 #define SORTED_WINDOW_PART_ATYPE_CASE(PartitionByArrType)             \
@@ -2732,7 +2783,7 @@ void sorted_window_computation(
         _sorted_window_computation<PartitionByArrType,                \
                                    bodo_array_type::UNKNOWN>(         \
             partition_by_arrs, order_by_arrs, window_funcs, out_arrs, \
-            is_parallel);                                             \
+            builders, is_parallel);                                   \
         break;                                                        \
     }
 
@@ -2740,6 +2791,11 @@ void sorted_window_computation(
             SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
             SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::NUMPY);
             SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::STRING);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::DICT);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::ARRAY_ITEM);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::MAP);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::STRUCT);
+            SORTED_WINDOW_PART_ATYPE_CASE(bodo_array_type::TIMESTAMPTZ);
             default: {
                 throw std::runtime_error(
                     "Unsupported partition by array type for the sorted "
@@ -2754,13 +2810,18 @@ void sorted_window_computation(
     case OrderByArrType: {                                                    \
         _sorted_window_computation<bodo_array_type::UNKNOWN, OrderByArrType>( \
             partition_by_arrs, order_by_arrs, window_funcs, out_arrs,         \
-            is_parallel);                                                     \
+            builders, is_parallel);                                           \
         break;                                                                \
     }
         switch (order_by_arrs[0]->arr_type) {
             SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::NULLABLE_INT_BOOL);
             SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::NUMPY);
             SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::STRING);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::DICT);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::ARRAY_ITEM);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::MAP);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::STRUCT);
+            SORTED_WINDOW_ORDER_ATYPE_CASE(bodo_array_type::TIMESTAMPTZ);
             default: {
                 throw std::runtime_error(
                     "Unsupported partition by array type for the sorted "
@@ -2775,7 +2836,7 @@ void sorted_window_computation(
     case OrderByArrType: {                                              \
         _sorted_window_computation<PartitionByArrType, OrderByArrType>( \
             partition_by_arrs, order_by_arrs, window_funcs, out_arrs,   \
-            is_parallel);                                               \
+            builders, is_parallel);                                     \
         break;                                                          \
     }
 
@@ -2788,6 +2849,16 @@ void sorted_window_computation(
                                                   bodo_array_type::NUMPY);  \
             SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
                                                   bodo_array_type::STRING); \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
+                                                  bodo_array_type::DICT);   \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
+                                                  bodo_array_type::MAP);    \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(PartitionByArrType,       \
+                                                  bodo_array_type::STRUCT); \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(                          \
+                PartitionByArrType, bodo_array_type::ARRAY_ITEM);           \
+            SORTED_WINDOW_NESTED_ORDER_ATYPE_CASE(                          \
+                PartitionByArrType, bodo_array_type::TIMESTAMPTZ);          \
             default: {                                                      \
                 throw std::runtime_error(                                   \
                     "Unsupported partition by array type for the sorted "   \
@@ -2803,6 +2874,11 @@ void sorted_window_computation(
                 bodo_array_type::NULLABLE_INT_BOOL);
             SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::NUMPY);
             SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::STRING);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::DICT);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::ARRAY_ITEM);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::MAP);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::STRUCT);
+            SORTED_WINDOW_NESTED_PART_ATYPE_CASE(bodo_array_type::TIMESTAMPTZ);
             default: {
                 throw std::runtime_error(
                     "Unsupported partition by array type for the sorted "
