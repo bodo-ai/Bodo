@@ -197,11 +197,13 @@ IncrementalShuffleState::GetShuffleTableAndHashes() {
                            std::unique_ptr<uint8_t[]>(nullptr));
 }
 
-#define SEND_SHUFFLE_DATA(ARR_TYPE, DTYPE)     \
-    return send_shuffle_data<ARR_TYPE, DTYPE>( \
-        shuffle_comm, comm_info, in_arr, curr_tags, must_shuffle_to_rank);
-AsyncShuffleSendState send_shuffle_data_unknown_type(
-    MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
+#define SEND_SHUFFLE_DATA(ARR_TYPE, DTYPE)                                   \
+    send_shuffle_data<ARR_TYPE, DTYPE>(                                      \
+        shuffle_comm, comm_info, comm_info_iter, str_comm_info_iter, in_arr, \
+        curr_tags, must_shuffle_to_rank);
+void AsyncShuffleSendState::send_shuffle_data_unknown_type(
+    const MPI_Comm shuffle_comm, const mpi_comm_info& comm_info,
+    comm_info_iter_t& comm_info_iter, str_comm_info_iter_t& str_comm_info_iter,
     const std::shared_ptr<array_info>& in_arr, std::vector<int>& curr_tags,
     std::vector<bool>& must_shuffle_to_rank) {
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -375,12 +377,12 @@ AsyncShuffleSendState send_shuffle_data_unknown_type(
 
 #define RECV_SHUFFLE_DATA(ARR_TYPE, DTYPE)                \
     return recv_shuffle_data<ARR_TYPE, DTYPE, top_level>( \
-        data_type, shuffle_comm, source, curr_tag, recv_state, metrics);
+        data_type, shuffle_comm, source, curr_tag, recv_state, lens_iter);
 template <bool top_level>
 std::unique_ptr<array_info> recv_shuffle_data_unknown_type(
     const std::unique_ptr<bodo::DataType>& data_type,
     const MPI_Comm shuffle_comm, const int source, int& curr_tag,
-    AsyncShuffleRecvState& recv_state, IncrementalShuffleMetrics& metrics) {
+    AsyncShuffleRecvState& recv_state, len_iter_t& lens_iter) {
     if (data_type->array_type == bodo_array_type::NULLABLE_INT_BOOL) {
         switch (data_type->c_type) {
             case Bodo_CTypes::INT8:
@@ -552,29 +554,24 @@ std::unique_ptr<array_info> recv_shuffle_data_unknown_type(
 }
 #undef RECV_SHUFFLE_DATA
 
-void shuffle_issend(std::shared_ptr<table_info> in_table,
-                    const std::shared_ptr<uint32_t[]>& hashes,
-                    const uint8_t* keep_row_bitmask,
-                    std::vector<AsyncShuffleSendState>& send_states,
-                    MPI_Comm shuffle_comm) {
+AsyncShuffleSendState shuffle_issend(std::shared_ptr<table_info> in_table,
+                                     const std::shared_ptr<uint32_t[]>& hashes,
+                                     const uint8_t* keep_row_bitmask,
+                                     MPI_Comm shuffle_comm) {
     mpi_comm_info comm_info(in_table->columns, hashes,
                             /*is_parallel*/ true, /*filter*/ nullptr,
                             keep_row_bitmask,
                             /*keep_filter_misses*/ false, /*send_only*/ true);
 
-    std::vector<int> curr_tags(comm_info.n_pes, 0);
+    AsyncShuffleSendState send_state;
+    send_state.send(in_table, comm_info, shuffle_comm);
 
-    for (uint64_t i = 0; i < in_table->ncols(); i++) {
-        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-        std::vector<bool> must_shuffle_to_rank(comm_info.n_pes, false);
-        send_states.push_back(send_shuffle_data_unknown_type(
-            shuffle_comm, comm_info, in_arr, curr_tags, must_shuffle_to_rank));
-    }
+    return send_state;
 }
 
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
-                   std::vector<AsyncShuffleRecvState>& recv_states,
-                   IncrementalShuffleMetrics& metrics) {
+                   std::vector<AsyncShuffleRecvState>& recv_states) {
+    assert(in_table->ncols() > 0);
     // TODO: add output buffer size limit
     while (true) {
         int flag;
@@ -584,23 +581,39 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
         if (!flag) {
             break;
         }
+        AsyncShuffleRecvState recv_state(status.MPI_SOURCE);
 
-        int source = status.MPI_SOURCE;
-        assert(in_table->ncols() > 0);
+        recv_state.PostLensRecv(status, shuffle_comm);
+        recv_states.push_back(std::move(recv_state));
+    }
 
+    for (auto& recv_state : recv_states) {
+        // Only post irecv if we haven't already
+        if (!recv_state.recv_requests.empty()) {
+            continue;
+        }
+        std::optional<std::vector<uint64_t>> recv_lens_opt =
+            recv_state.GetRecvLens(shuffle_comm);
+        // Only post irecv if we have received the lens
+        if (!recv_lens_opt.has_value()) {
+            continue;
+        }
+        std::vector<uint64_t>& recv_lens = recv_lens_opt.value();
+
+        len_iter_t lens_iter = recv_lens.cbegin();
+
+        // Start with tag = 1 since tag = 0 is for the lengths
+        int curr_tag = 1;
         // Post irecv for all data
-        int curr_tag = 0;
-        recv_states.emplace_back();
-        AsyncShuffleRecvState& recv_state = recv_states.back();
         std::unique_ptr<bodo::Schema> schema = in_table->schema();
         for (uint64_t i = 0; i < in_table->ncols(); i++) {
             std::unique_ptr<bodo::DataType>& data_type =
                 schema->column_types[i];
             std::shared_ptr<array_info>& in_arr = in_table->columns[i];
             std::shared_ptr<array_info> out_arr =
-                recv_shuffle_data_unknown_type<true>(data_type, shuffle_comm,
-                                                     source, curr_tag,
-                                                     recv_state, metrics);
+                recv_shuffle_data_unknown_type<true>(
+                    data_type, shuffle_comm, recv_state.source, curr_tag,
+                    recv_state, lens_iter);
             out_arr->precision = in_arr->precision;
             out_arr->scale = in_arr->scale;
             recv_state.out_arrs.push_back(out_arr);
@@ -620,7 +633,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
         time_pt start = start_timer();
         size_t prev_recv_states_size = this->recv_states.size();
         shuffle_irecv(this->table_buffer->data_table, this->shuffle_comm,
-                      this->recv_states, this->metrics);
+                      this->recv_states);
         this->metrics.n_shuffle_recv +=
             this->recv_states.size() - prev_recv_states_size;
         this->metrics.shuffle_recv_time += end_timer(start);
@@ -706,9 +719,9 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
             table_local_dictionary_memory_size(shuffle_table) * this->n_pes;
     }
 
-    shuffle_issend(std::move(shuffle_table), shuffle_hashes,
-                   keep_row_bitmask.get(), this->send_states,
-                   this->shuffle_comm);
+    this->send_states.push_back(
+        shuffle_issend(std::move(shuffle_table), shuffle_hashes,
+                       keep_row_bitmask.get(), this->shuffle_comm));
 
     this->metrics.shuffle_send_time += end_timer(start);
     this->metrics.n_shuffle_send++;
@@ -744,8 +757,7 @@ bool IncrementalShuffleState::SendRecvEmpty() {
 std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
     const std::shared_ptr<array_info>& arr,
     const std::shared_ptr<DictionaryBuilder>& dict_builder,
-    std::vector<uint32_t>& data_lens_vec, size_t& nullable_bool_count,
-    IncrementalShuffleMetrics& metrics) {
+    std::vector<uint32_t>& data_lens_vec, IncrementalShuffleMetrics& metrics) {
     if (arr->arr_type == bodo_array_type::STRING) {
         data_lens_vec.resize(arr->length);
         // Now all the data in data2 is lengths not offsets, we
@@ -757,15 +769,6 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
         convert_len_arr_to_offset(
             data_lens_vec.data(),
             arr->data2<bodo_array_type::STRING, offset_t>(), arr->length);
-    } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-               arr->dtype == Bodo_CTypes::_BOOL) {
-        // Calculate the length of the data array in bits
-        auto [adjust_length, used_bits_in_last_byte] =
-            *this->bits_in_last_byte[nullable_bool_count];
-        if (adjust_length && used_bits_in_last_byte != 0) {
-            arr->length = arr->length - 8 + used_bits_in_last_byte;
-        }
-        nullable_bool_count++;
     } else if (arr->arr_type == bodo_array_type::DICT) {
         time_pt start = start_timer();
         // Unify the dictionary but don't use the cache
@@ -789,12 +792,12 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
             arr->data1<bodo_array_type::ARRAY_ITEM, offset_t>(), arr->length);
         arr->child_arrays[0] = this->finalize_receive_array(
             arr->child_arrays[0], dict_builder->child_dict_builders[0],
-            data_lens_vec, nullable_bool_count, metrics);
+            data_lens_vec, metrics);
     } else if (arr->arr_type == bodo_array_type::STRUCT) {
         for (size_t i = 0; i < arr->child_arrays.size(); ++i) {
             arr->child_arrays[i] = this->finalize_receive_array(
                 arr->child_arrays[i], dict_builder->child_dict_builders[i],
-                data_lens_vec, nullable_bool_count, metrics);
+                data_lens_vec, metrics);
         }
         // We need to adjust the struct array's length in case the first child
         // array's length was adjusted due to nullable bools.
@@ -809,7 +812,7 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
     } else if (arr->arr_type == bodo_array_type::MAP) {
         arr->child_arrays[0] = this->finalize_receive_array(
             arr->child_arrays[0], dict_builder->child_dict_builders[0],
-            data_lens_vec, nullable_bool_count, metrics);
+            data_lens_vec, metrics);
     }
     return arr;
 }
@@ -818,6 +821,10 @@ bool AsyncShuffleRecvState::recvDone(
     TableBuildBuffer& out_builder,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     IncrementalShuffleMetrics& metrics) {
+    if (recv_requests.empty()) {
+        return false;
+    }
+
     // This could be optimzed by allocating the required size upfront and having
     // the recv step fill it directly instead
     // of each rank having its own array and inserting them all into a builder
@@ -825,16 +832,14 @@ bool AsyncShuffleRecvState::recvDone(
     MPI_Testall(recv_requests.size(), recv_requests.data(), &flag,
                 MPI_STATUSES_IGNORE);
     if (flag) {
-        size_t nullable_bool_count = 0;
         std::vector<uint32_t> lens;
         std::vector<std::shared_ptr<array_info>> out_table_arrs;
-
         for (size_t i = 0; i < out_builder.data_table->ncols(); ++i) {
             const std::shared_ptr<array_info>& arr = this->out_arrs[i];
             const std::shared_ptr<DictionaryBuilder>& dict_builder =
                 dict_builders[i];
-            out_table_arrs.push_back(this->finalize_receive_array(
-                arr, dict_builder, lens, nullable_bool_count, metrics));
+            out_table_arrs.push_back(
+                this->finalize_receive_array(arr, dict_builder, lens, metrics));
         }
 
         std::shared_ptr<table_info> out_table =
@@ -844,43 +849,184 @@ bool AsyncShuffleRecvState::recvDone(
     }
     return flag;
 }
-std::tuple<std::shared_ptr<array_info>, mpi_str_comm_info>
-AsyncShuffleSendState::addArray(const std::shared_ptr<array_info>& in_arr,
-                                const mpi_comm_info& comm_info) {
-    mpi_str_comm_info str_comm_info(in_arr, comm_info,
-                                    /*send_only*/ true);
-
+std::shared_ptr<array_info> AsyncShuffleSendState::addArray(
+    const std::shared_ptr<array_info>& in_arr, const mpi_comm_info& comm_info,
+    const mpi_str_comm_info& str_comm_info) {
     std::shared_ptr<array_info> send_arr = alloc_array_top_level(
         comm_info.n_rows_send, str_comm_info.n_sub_send, 0, in_arr->arr_type,
         in_arr->dtype, -1, 2 * comm_info.n_pes, in_arr->num_categories);
     fill_send_array(send_arr, in_arr, comm_info, str_comm_info, true);
     this->send_arrs.push_back(send_arr);
-    return {send_arr, str_comm_info};
+    return send_arr;
 }
 
-template <bool can_use_simple_array_len>
-int64_t AsyncShuffleRecvState::getArrayLen(const int source, const int tag,
-                                           const MPI_Comm comm,
-                                           const MPI_Datatype mpi_datatype,
-                                           IncrementalShuffleMetrics& metrics) {
-    int64_t arr_len = -1;
-    if (can_use_simple_array_len) {
-        arr_len = this->simple_array_len;
+void AsyncShuffleSendState::send(const std::shared_ptr<table_info>& in_table,
+                                 mpi_comm_info& comm_info,
+                                 MPI_Comm shuffle_comm) {
+    comm_infos_t sub_comm_infos = this->compute_comm_infos(in_table, comm_info);
+    this->send_lengths(in_table, comm_info, sub_comm_infos, shuffle_comm);
+    this->send_arrays(in_table, comm_info, sub_comm_infos, shuffle_comm);
+}
+
+/**
+ * @brief Helper function to compute the communication info for the given array
+ * and its children and store it in the comm_infos vectors. Only intended to be
+ * called by compute_comm_infos.
+ * @param in_arr The array for which to compute the communication info.
+ * @param parent The parent communication info.
+ * @param comm_infos The vector of communication info to which to append the
+ * comm_info
+ * @param str_comm_infos The vector of string communication info to which to
+ * append the str_comm_info
+ */
+void compute_comm_infos_helper(const std::shared_ptr<array_info>& in_arr,
+                               mpi_comm_info& parent,
+                               std::vector<mpi_comm_info>& comm_infos,
+                               std::vector<mpi_str_comm_info>& str_comm_infos) {
+    str_comm_infos.emplace_back(in_arr, parent, true);
+    if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        comm_infos.emplace_back(
+            in_arr, parent, in_arr->child_arrays[0]->null_bitmask() != nullptr,
+            true);
+        compute_comm_infos_helper(in_arr->child_arrays[0], comm_infos.back(),
+                                  comm_infos, str_comm_infos);
+    } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+        for (const auto& child : in_arr->child_arrays) {
+            compute_comm_infos_helper(child, parent, comm_infos,
+                                      str_comm_infos);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::MAP) {
+        compute_comm_infos_helper(in_arr->child_arrays[0], parent, comm_infos,
+                                  str_comm_infos);
+    } else if (in_arr->arr_type == bodo_array_type::DICT) {
+        // Compute the comm info for the offsets
+        compute_comm_infos_helper(in_arr->child_arrays[1], parent, comm_infos,
+                                  str_comm_infos);
     }
+}
 
-    if (arr_len == -1) {
-        MPI_Status status;
-        time_pt start = start_timer();
-        MPI_Probe(source, tag, comm, &status);
-        metrics.recv_wait_time += end_timer(start);
+AsyncShuffleSendState::comm_infos_t AsyncShuffleSendState::compute_comm_infos(
+    const std::shared_ptr<table_info>& in_table, mpi_comm_info& comm_info) {
+    std::vector<mpi_comm_info> comm_infos;
+    std::vector<mpi_str_comm_info> str_comm_infos;
+    for (const auto& arr : in_table->columns) {
+        compute_comm_infos_helper(arr, comm_info, comm_infos, str_comm_infos);
+    }
+    return {comm_infos, str_comm_infos};
+}
 
-        int count;
-        MPI_Get_count(&status, mpi_datatype, &count);
-        arr_len = count;
-        if (can_use_simple_array_len) {
-            this->simple_array_len = count;
+/**
+ * @brief Helper function to compute the lengths of the arrays in the supplied
+ * array_info and it's children and store them in the rank_to_lens vector. Only
+ * intended to be called by send_lengths.
+ * @param in_arr The array_info for which to compute the lengths
+ * @param rank_to_lens length vector for each rank
+ * @param rank The rank for which to compute the lengths
+ * @param comm_info The communication info for the array
+ * @param sub_comm_info_iter Iterator to the sub communication info for the
+ * array
+ * @param str_comm_info_iter Iterator to the string communication info for the
+ * array
+ */
+void compute_lengths_helper(const std::shared_ptr<array_info>& in_arr,
+                            std::vector<std::vector<uint64_t>>& rank_to_lens,
+                            int rank, const mpi_comm_info& comm_info,
+                            comm_info_iter_t& sub_comm_info_iter,
+                            str_comm_info_iter_t& str_comm_info_iter) {
+    rank_to_lens[rank].push_back(comm_info.send_count[rank]);
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        rank_to_lens[rank].push_back(str_comm_info_iter->send_count_sub[rank]);
+    }
+    // All arrays have a str_comm_info
+    str_comm_info_iter++;
+
+    if (in_arr->arr_type == bodo_array_type::ARRAY_ITEM) {
+        const mpi_comm_info& sub_comm_info = *sub_comm_info_iter++;
+        compute_lengths_helper(in_arr->child_arrays[0], rank_to_lens, rank,
+                               sub_comm_info, sub_comm_info_iter,
+                               str_comm_info_iter);
+    } else if (in_arr->arr_type == bodo_array_type::STRUCT) {
+        for (const auto& child : in_arr->child_arrays) {
+            compute_lengths_helper(child, rank_to_lens, rank, comm_info,
+                                   sub_comm_info_iter, str_comm_info_iter);
+        }
+    } else if (in_arr->arr_type == bodo_array_type::MAP) {
+        compute_lengths_helper(in_arr->child_arrays[0], rank_to_lens, rank,
+                               comm_info, sub_comm_info_iter,
+                               str_comm_info_iter);
+    } else if (in_arr->arr_type == bodo_array_type::DICT) {
+        // Add total dict num elements and num characters
+        rank_to_lens[rank].push_back(in_arr->child_arrays[0]->length);
+        rank_to_lens[rank].push_back(in_arr->child_arrays[0]->n_sub_elems());
+        // Update iterator since we are not calling the function recursively for
+        // offset array here
+        str_comm_info_iter++;
+    }
+}
+
+void AsyncShuffleSendState::send_lengths(
+    const std::shared_ptr<table_info>& in_table, mpi_comm_info& comm_info,
+    comm_infos_t& sub_comm_infos, MPI_Comm shuffle_comm) {
+    this->rank_to_lens = std::vector<std::vector<uint64_t>>(comm_info.n_pes);
+
+    for (int rank = 0; rank < comm_info.n_pes; rank++) {
+        comm_info_iter_t comm_info_iter = std::get<0>(sub_comm_infos).cbegin();
+        str_comm_info_iter_t str_comm_info_iter =
+            std::get<1>(sub_comm_infos).cbegin();
+        for (const auto& in_arr : in_table->columns) {
+            compute_lengths_helper(in_arr, rank_to_lens, rank, comm_info,
+                                   comm_info_iter, str_comm_info_iter);
         }
     }
 
-    return arr_len;
+    for (size_t rank = 0; rank < rank_to_lens.size(); rank++) {
+        // Don't send messages to ranks with no data
+        if (rank_to_lens[rank][0] == 0) {
+            continue;
+        }
+        MPI_Request req;
+        MPI_Issend(rank_to_lens[rank].data(), rank_to_lens[rank].size(),
+                   MPI_UINT64_T, rank, LENGTH_TAG, shuffle_comm, &req);
+        this->send_requests.push_back(req);
+    }
+}
+void AsyncShuffleSendState::send_arrays(
+    const std::shared_ptr<table_info>& in_table, mpi_comm_info& comm_info,
+    AsyncShuffleSendState::comm_infos_t& comm_infos, MPI_Comm shuffle_comm) {
+    std::vector<int> curr_tags(comm_info.n_pes, 1);
+    comm_info_iter_t sub_comm_info_iter = std::get<0>(comm_infos).begin();
+    str_comm_info_iter_t str_comm_info_iter = std::get<1>(comm_infos).begin();
+    for (uint64_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        std::vector<bool> must_shuffle_to_rank(comm_info.n_pes, false);
+        this->send_shuffle_data_unknown_type(
+            shuffle_comm, comm_info, sub_comm_info_iter, str_comm_info_iter,
+            in_arr, curr_tags, must_shuffle_to_rank);
+    }
+}
+
+std::optional<std::vector<uint64_t>> AsyncShuffleRecvState::GetRecvLens(
+    MPI_Comm shuffle_comm) {
+    int flag;
+    assert(this->lens_request != MPI_REQUEST_NULL);
+    MPI_Test(&this->lens_request, &flag, MPI_STATUS_IGNORE);
+    if (!flag) {
+        return std::nullopt;
+    }
+    this->lens_request = MPI_REQUEST_NULL;
+
+    std::vector<uint64_t> ret_val = std::move(this->recv_lens);
+    this->recv_lens.clear();
+    return ret_val;
+}
+
+void AsyncShuffleRecvState::PostLensRecv(MPI_Status& status,
+                                         MPI_Comm shuffle_comm) {
+    assert(this->lens_request == MPI_REQUEST_NULL);
+    int n_lens;
+    MPI_Get_count(&status, MPI_UINT64_T, &n_lens);
+    this->recv_lens.resize(n_lens);
+
+    MPI_Irecv(this->recv_lens.data(), this->recv_lens.size(), MPI_UINT64_T,
+              status.MPI_SOURCE, 0, shuffle_comm, &this->lens_request);
 }
