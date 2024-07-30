@@ -616,6 +616,28 @@ std::unique_ptr<array_info> alloc_numpy(
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}));
 }
 
+std::unique_ptr<array_info> alloc_numpy_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    // Note: This check is derived from SQLNASentinelDtype
+    if (typ_enum == Bodo_CTypes::DATETIME ||
+        typ_enum == Bodo_CTypes::TIMEDELTA) {
+        std::unique_ptr<array_info> arr =
+            alloc_numpy(length, typ_enum, pool, mm);
+        int64_t* data = (int64_t*)arr->data1<bodo_array_type::NUMPY>();
+        for (int64_t i = 0; i < length; i++) {
+            // Set all values to the sentinel NULL value.
+            data[i] = std::numeric_limits<int64_t>::min();
+        }
+        return arr;
+    } else {
+        throw std::runtime_error(
+            "alloc_numpy_array_all_nulls called on a NUMPY array without null "
+            "support. Possible type mismatch.");
+    }
+}
+
 std::unique_ptr<array_info> alloc_interval_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool,
@@ -687,6 +709,18 @@ std::unique_ptr<array_info> alloc_categorical(
         bodo_array_type::CATEGORICAL, typ_enum, length,
         std::vector<std::shared_ptr<BodoBuffer>>({std::move(buffer)}),
         std::vector<std::shared_ptr<array_info>>({}), 0, 0, num_categories);
+}
+
+std::unique_ptr<array_info> alloc_categorical_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
+    bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr = alloc_categorical(
+        length, typ_enum, num_categories, pool, std::move(mm));
+    int64_t size = length * numpy_item_size[typ_enum];
+    // Null is -1 for Categorical arrays, so set all values to -1.
+    memset(arr->data1<bodo_array_type::CATEGORICAL>(), 0xff, size);
+    return arr;
 }
 
 std::unique_ptr<array_info> alloc_nullable_array(
@@ -779,6 +813,21 @@ std::unique_ptr<array_info> alloc_string_array(
         is_globally_replicated, is_locally_unique, is_locally_sorted);
 }
 
+std::unique_ptr<array_info> alloc_string_array_all_nulls(
+    Bodo_CTypes::CTypeEnum typ_enum, int64_t length, int64_t extra_null_bytes,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr =
+        alloc_string_array(typ_enum, length, 0, -1, extra_null_bytes, false,
+                           false, false, pool, std::move(mm));
+    int64_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    // set to all null
+    memset(arr->null_bitmask(), 0x00, n_bytes);
+    // set offsets to all 0
+    offset_t* offsets_ptr = (offset_t*)arr->data2<bodo_array_type::STRING>();
+    memset(offsets_ptr, 0, (length + 1) * sizeof(offset_t));
+    return arr;
+}
+
 std::unique_ptr<array_info> alloc_dict_string_array(
     int64_t length, int64_t n_keys, int64_t n_chars_keys,
     int64_t extra_null_bytes, bodo::IBufferPool* const pool,
@@ -796,6 +845,16 @@ std::unique_ptr<array_info> alloc_dict_string_array(
         std::vector<std::shared_ptr<BodoBuffer>>({}),
         std::vector<std::shared_ptr<array_info>>(
             {dict_data_arr, indices_data_arr}));
+}
+
+std::unique_ptr<array_info> alloc_dict_string_array_all_nulls(
+    int64_t length, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr = alloc_dict_string_array(
+        length, 0, 0, extra_null_bytes, pool, std::move(mm));
+    size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    memset(arr->null_bitmask<bodo_array_type::DICT>(), 0x00, n_bytes);
+    return arr;
 }
 
 std::unique_ptr<array_info> alloc_timestamptz_array(
@@ -821,6 +880,50 @@ std::unique_ptr<array_info> alloc_timestamptz_array(
             {std::move(timestamp_buffer), std::move(offset_buffer),
              std::move(null_bitmap_buffer)}),
         std::vector<std::shared_ptr<array_info>>({}));
+}
+
+std::unique_ptr<array_info> alloc_timestamptz_array_all_nulls(
+    int64_t length, int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr =
+        alloc_timestamptz_array(length, extra_null_bytes, pool, std::move(mm));
+    size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    memset(arr->null_bitmask<bodo_array_type::TIMESTAMPTZ>(), 0x00, n_bytes);
+    return arr;
+}
+
+std::unique_ptr<array_info> alloc_all_null_array_top_level(
+    int64_t length, bodo_array_type::arr_type_enum arr_type,
+    Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes,
+    int64_t num_categories, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    switch (arr_type) {
+        case bodo_array_type::NUMPY:
+            return alloc_numpy_array_all_nulls(length, dtype, pool, mm);
+        case bodo_array_type::STRING:
+            return alloc_string_array_all_nulls(dtype, length, extra_null_bytes,
+                                                pool, mm);
+        case bodo_array_type::NULLABLE_INT_BOOL:
+            return alloc_nullable_array_all_nulls(length, dtype,
+                                                  extra_null_bytes, pool, mm);
+        case bodo_array_type::CATEGORICAL:
+            return alloc_categorical_array_all_nulls(length, dtype,
+                                                     num_categories, pool, mm);
+        case bodo_array_type::DICT:
+            return alloc_dict_string_array_all_nulls(length, dtype, pool, mm);
+        case bodo_array_type::TIMESTAMPTZ:
+            return alloc_timestamptz_array_all_nulls(length, extra_null_bytes,
+                                                     pool, mm);
+        default:
+            // Interval arrays don't seem to have a valid "null" representation.
+            // TODO: How do we handle array item array? We can make the output
+            // null easily, but it seems like we need the inner array to have a
+            // consistent type.
+            // TODO: How do we handle struct? Conceptually it seems like Python
+            // will expect n arrays of all nulls rather than nulls at the upper
+            // most level.
+            throw std::runtime_error("Unsupported array type");
+    }
 }
 
 std::unique_ptr<array_info> create_string_array(

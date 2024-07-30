@@ -1083,6 +1083,16 @@ std::shared_ptr<table_info> RetrieveTable(
     return RetrieveTable(std::move(in_table), std::move(rows_to_keep));
 }
 
+std::shared_ptr<table_info> ProjectTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const int64_t> column_indices) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    for (size_t i_col : column_indices) {
+        out_arrs.emplace_back(in_table->columns[i_col]);
+    }
+    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+}
+
 // @brief Compare the bitmap of two arrow arrays at a given position
 // @param na_position_bis True if NA should be considered greater than any value
 // @param arrow1 First array

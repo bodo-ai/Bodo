@@ -533,7 +533,7 @@ def _init_window_state(
     parallel_t,
     allow_work_stealing_t,
 ):
-    """Initialize C++ GroupbyState pointer
+    """Initialize C++ WindowState pointer
 
     Args:
         operator_id (int64): ID of this operator (used for looking up budget),

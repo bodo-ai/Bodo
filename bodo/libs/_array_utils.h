@@ -384,6 +384,22 @@ std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
     std::shared_ptr<array_info> row_bitmask);
 
+/**
+ * @brief This function takes a table and computes
+ * a "projection" by selecting or reordering the
+ * columns in the table to match the order found
+ * in column_indices. This doesn't copy the data.
+ *
+ * @param in_table The input table to project.
+ * @param column_indices The column indices for
+ * the projection.
+ * @return std::shared_ptr<table_info> The new table
+ * with the projected columns.
+ */
+std::shared_ptr<table_info> ProjectTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const int64_t> column_indices);
+
 template <typename T, int dtype>
     requires std::integral<T>
 inline bool isnan_categorical(T const& val) {

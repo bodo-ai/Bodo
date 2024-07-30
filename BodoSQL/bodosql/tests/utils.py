@@ -141,7 +141,7 @@ def check_query(
 
         convert_columns_bytearray: Convert the given list of
             columns to bytes types. This is because BodoSQL always
-            outputs bytes types, but Spark outputs binaryarray.
+            outputs bytes types, but Spark outputs binary array.
 
         convert_columns_string: Convert the given list of string
             columns to bytes types. This is needed when the SUBSTR function

@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.logicalRules;
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalAggregate;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.traits.ExpectedBatchingProperty;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -178,7 +179,13 @@ public class GroupingSetsToUnionAllRule extends RelRule<GroupingSetsToUnionAllRu
                       .predicate(
                           a ->
                               !Aggregate.isSimple(a)
-                                  && a.getGroupSets().stream().allMatch(s -> !s.isEmpty()))
+                                  && a.getGroupSets().stream().allMatch(s -> !s.isEmpty())
+                                  && a.getAggCallList().stream()
+                                      .anyMatch(
+                                          agg ->
+                                              !ExpectedBatchingProperty
+                                                  .streamingSupportedWithoutAccumulateAggFunction(
+                                                      agg)))
                       .anyInputs())
           .as(GroupingSetsToUnionAllRule.Config.class);
     }

@@ -3,7 +3,7 @@
 This file is mostly wrappers for C++ implementations.
 """
 from functools import cached_property
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 
 import llvmlite.binding as ll
 import numba
@@ -33,6 +33,7 @@ from bodo.utils.typing import (
     MetaType,
     error_on_unsupported_streaming_arrays,
     is_overload_none,
+    to_nullable_type,
     unwrap_typeref,
 )
 
@@ -40,15 +41,29 @@ ll.add_symbol(
     "groupby_state_init_py_entry", stream_groupby_cpp.groupby_state_init_py_entry
 )
 ll.add_symbol(
+    "grouping_sets_state_init_py_entry",
+    stream_groupby_cpp.grouping_sets_state_init_py_entry,
+)
+ll.add_symbol(
     "groupby_build_consume_batch_py_entry",
     stream_groupby_cpp.groupby_build_consume_batch_py_entry,
 )
-
+ll.add_symbol(
+    "grouping_sets_build_consume_batch_py_entry",
+    stream_groupby_cpp.grouping_sets_build_consume_batch_py_entry,
+)
 ll.add_symbol(
     "groupby_produce_output_batch_py_entry",
     stream_groupby_cpp.groupby_produce_output_batch_py_entry,
 )
+ll.add_symbol(
+    "grouping_sets_produce_output_batch_py_entry",
+    stream_groupby_cpp.grouping_sets_produce_output_batch_py_entry,
+)
 ll.add_symbol("delete_groupby_state", stream_groupby_cpp.delete_groupby_state)
+ll.add_symbol(
+    "delete_grouping_sets_state", stream_groupby_cpp.delete_grouping_sets_state
+)
 
 ll.add_symbol(
     "end_union_consume_pipeline_py_entry",
@@ -83,6 +98,7 @@ class GroupbyStateType(StreamingStateType):
     def __init__(
         self,
         key_inds,
+        grouping_sets,
         fnames,
         f_in_offsets,
         f_in_cols,
@@ -95,6 +111,7 @@ class GroupbyStateType(StreamingStateType):
         error_on_unsupported_streaming_arrays(build_table_type)
 
         self.key_inds = key_inds
+        self.grouping_sets = grouping_sets
         self.fnames = fnames
         self.f_in_offsets = f_in_offsets
         self.f_in_cols = f_in_cols
@@ -104,7 +121,7 @@ class GroupbyStateType(StreamingStateType):
         self.mrnf_col_inds_keep: tuple[int] = mrnf_col_inds_keep
         self.build_table_type = build_table_type
         super().__init__(
-            f"GroupbyStateType({key_inds=}, {fnames=}, {f_in_offsets=}, "
+            f"GroupbyStateType({key_inds=}, {grouping_sets=}, {fnames=}, {f_in_offsets=}, "
             f"{f_in_cols=}, {mrnf_sort_col_inds=}, {mrnf_sort_col_asc=}, {mrnf_sort_col_na=}, "
             f"{mrnf_col_inds_keep=}, build_table={build_table_type})"
         )
@@ -113,6 +130,7 @@ class GroupbyStateType(StreamingStateType):
     def key(self):
         return (
             self.key_inds,
+            self.grouping_sets,
             self.fnames,
             self.f_in_offsets,
             self.f_in_cols,
@@ -130,6 +148,15 @@ class GroupbyStateType(StreamingStateType):
     @property
     def n_mrnf_sort_keys(self):
         return len(self.mrnf_sort_col_inds)
+
+    @property
+    def ftypes(self):
+        func_types = []
+        for fname in self.fnames:
+            if fname not in supported_agg_funcs:
+                raise BodoError(fname + " is not a supported aggregate function.")
+            func_types.append(supported_agg_funcs.index(fname))
+        return func_types
 
     @cached_property
     def _col_reorder_map(self) -> Dict[int, int]:
@@ -160,6 +187,22 @@ class GroupbyStateType(StreamingStateType):
         return tuple([self._col_reorder_map[i] for i in self.f_in_cols])
 
     @cached_property
+    def force_nullable_keys(self) -> Set[int]:
+        """Determine the set of key indices that may be
+        missing from a grouping set and therefore must be
+        converted to a nullable type.
+
+        Returns:
+            Set[int]: The set of keys that must be nullable because
+            they are missing from at least 1 grouping set.
+        """
+        nullable_keys = set()
+        keys_set = set(self.key_inds)
+        for grouping_set in self.grouping_sets:
+            nullable_keys.update(keys_set - set(grouping_set))
+        return nullable_keys
+
+    @cached_property
     def key_types(self) -> List[types.ArrayCompatible]:
         """Generate the list of array types that should be used for the
         keys to groupby.
@@ -176,13 +219,37 @@ class GroupbyStateType(StreamingStateType):
         build_key_inds = self.key_inds
         arr_types = []
         num_keys = len(build_key_inds)
+        nullable_keys = self.force_nullable_keys
 
         for i in range(num_keys):
             build_key_index = build_key_inds[i]
             build_arr_type = self.build_table_type.arr_types[build_key_index]
+            if build_key_index in nullable_keys:
+                build_arr_type = to_nullable_type(build_arr_type)
             arr_types.append(build_arr_type)
 
         return arr_types
+
+    @property
+    def key_casted_table_type(self) -> bodo.hiframes.table.TableType:
+        """Returns the type of a table after casting any keys to nullable
+        due to missing keys from grouping sets.
+
+        Returns:
+            bodo.hiframes.table.TableType: The output table type.
+        """
+        build_table_type = self.build_table_type
+        if build_table_type == types.unknown:
+            # Typing transformations haven't fully finished yet.
+            return build_table_type
+
+        total_arr_types = []
+        nullable_keys = self.force_nullable_keys
+        for i, arr_type in enumerate(build_table_type.arr_types):
+            if i in nullable_keys:
+                arr_type = to_nullable_type(arr_type)
+            total_arr_types.append(arr_type)
+        return bodo.hiframes.table.TableType(tuple(total_arr_types))
 
     @cached_property
     def mrnf_sort_col_types(self) -> list[types.ArrayCompatible]:
@@ -670,6 +737,8 @@ def init_groupby_state(
 
         output_type = GroupbyStateType(
             key_inds,
+            # A regular groupby has a single grouping set that matches the keys.
+            (key_inds,),
             fnames,
             f_in_offsets,
             f_in_cols,
@@ -683,13 +752,7 @@ def init_groupby_state(
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_array_types)
-
-    # convert function name strings to integer
-    ftypes = []
-    for fname in output_type.fnames:
-        if fname not in supported_agg_funcs:
-            raise BodoError(fname + " is not a supported aggregate function.")
-        ftypes.append(supported_agg_funcs.index(fname))
+    ftypes = output_type.ftypes
 
     ## Validation checks for the MRNF case (assuming typing transformations are done):
     if (
@@ -834,6 +897,229 @@ def init_groupby_state(
 
 
 @intrinsic
+def _init_grouping_sets_state(
+    typingctx,
+    operator_id,
+    sub_operator_ids,
+    build_arr_dtypes,
+    build_arr_array_types,
+    n_build_arrs,
+    grouping_sets_data_arr_t,
+    grouping_sets_offset_arr_t,
+    n_grouping_sets,
+    ftypes_t,
+    f_in_offsets_t,
+    f_in_cols_t,
+    n_funcs_t,
+    output_state_type,
+    parallel_t,
+):
+    """Initialize C++ GroupingSetsState pointer
+
+    Args:
+        operator_id (int64): ID of this operator (used for looking up budget),
+        sub_operator_ids (int64*): IDs of the sub-operators for each group by state
+            (used for looking up budget). There is always 1 per grouping set.
+        build_arr_dtypes (int8*): pointer to array of ints representing array dtypes
+                                   (as provided by numba_to_c_type)
+        build_arr_array_types (int8*): pointer to array of ints representing array types
+                                    (as provided by numba_to_c_array_type)
+        n_build_arrs (int32): number of build columns
+        grouping_sets_data_arr_t (int32*): Flatten data array of the keys used by each
+            grouping set.
+        grouping_sets_offset_arr_t (int32*): Offset array into the data array for each
+            grouping set. Grouping set i uses offsets i and i+1.
+        n_grouping_sets (int64): Number of grouping sets.
+        ftypes (int32*): List of aggregate functions to use
+        f_in_offsets (int32*): Offsets into f_in_cols for the aggregate functions.
+        f_in_cols (int32*): Columns for the aggregate functions.
+        n_funcs (int32): Number of aggregate functions.
+        output_state_type (TypeRef[GroupbyStateType]): The output type for the state
+                                                    that should be generated.
+        parallel_t (bool): Whether to run in parallel.
+    """
+    output_type = unwrap_typeref(output_state_type)
+
+    def codegen(context, builder, sig, args):
+        (
+            operator_id,
+            sub_operator_ids,
+            build_arr_dtypes,
+            build_arr_array_types,
+            n_build_arrs,
+            grouping_sets_data,
+            grouping_sets_offsets,
+            n_grouping_sets,
+            ftypes,
+            f_in_offsets,
+            f_in_cols,
+            n_funcs,
+            _,  # output_state_type
+            parallel,
+        ) = args
+        n_keys = context.get_constant(types.uint64, output_type.n_keys)
+        output_batch_size = context.get_constant(
+            types.int64, bodo.bodosql_streaming_batch_size
+        )
+        sync_iter = context.get_constant(types.int64, bodo.stream_loop_sync_iters)
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(64),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(32).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="grouping_sets_state_init_py_entry"
+        )
+        input_args = (
+            operator_id,
+            sub_operator_ids,
+            build_arr_dtypes,
+            build_arr_array_types,
+            n_build_arrs,
+            grouping_sets_data,
+            grouping_sets_offsets,
+            n_grouping_sets,
+            ftypes,
+            f_in_offsets,
+            f_in_cols,
+            n_funcs,
+            n_keys,
+            output_batch_size,
+            parallel,
+            sync_iter,
+        )
+        ret = builder.call(fn_tp, input_args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    sig = output_type(
+        types.int64,
+        types.CPointer(types.int64),
+        types.voidptr,
+        types.voidptr,
+        types.int32,
+        types.CPointer(types.int32),
+        types.CPointer(types.int32),
+        types.int64,
+        types.CPointer(types.int32),
+        types.CPointer(types.int32),
+        types.CPointer(types.int32),
+        types.int32,
+        output_state_type,
+        parallel_t,
+    )
+    return sig, codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def init_grouping_sets_state(
+    operator_id,
+    sub_operator_ids,
+    key_inds,
+    grouping_sets,
+    fnames,  # fnames matches function names in supported_agg_funcs
+    f_in_offsets,
+    f_in_cols,
+    expected_state_type=None,
+    parallel=False,
+):
+    expected_state_type = unwrap_typeref(expected_state_type)
+    if is_overload_none(expected_state_type):
+        key_inds = unwrap_typeref(key_inds).meta
+        grouping_sets = unwrap_typeref(grouping_sets).meta
+        fnames = unwrap_typeref(fnames).meta
+        f_in_offsets = unwrap_typeref(f_in_offsets).meta
+        f_in_cols = unwrap_typeref(f_in_cols).meta
+
+        output_type = GroupbyStateType(
+            key_inds,
+            grouping_sets,
+            fnames,
+            f_in_offsets,
+            f_in_cols,
+        )
+    else:
+        output_type = expected_state_type
+
+    build_arr_dtypes = output_type.build_arr_ctypes
+    build_arr_array_types = output_type.build_arr_array_types
+    n_build_arrs = len(build_arr_array_types)
+    ftypes = output_type.ftypes
+    ftypes_arr = np.array(ftypes, np.int32)
+    f_in_offsets_arr = np.array(output_type.f_in_offsets, np.int32)
+    f_in_cols_arr = np.array(output_type.reordered_f_in_cols, np.int32)
+    n_funcs = len(output_type.fnames)
+    sub_operator_ids = unwrap_typeref(sub_operator_ids).meta
+    sub_operator_id_arr = np.array(sub_operator_ids, np.int64)
+    # Flatten the grouping sets into a single array for C++.
+    # We pass this with 3 values:
+    # 1. A data array containing the total grouping sets indices,
+    # remapped for C++.
+    # 2. An offsets array of length num_grouping_sets + 1
+    # for indexing into the flattened array.
+    # 3. The number of grouping sets.
+    flatten_grouping_sets = []
+    offsets = [0]
+    for group in output_type.grouping_sets:
+        offsets.append(offsets[-1] + len(group))
+        # Remap the indices for C++. We use get because before typing is finished
+        # the indices are not reordered yet.
+        for index in group:
+            flatten_grouping_sets.append(output_type._col_reorder_map.get(index, index))
+    grouping_sets_arr = np.array(flatten_grouping_sets, np.int32)
+    offsets_arr = np.array(offsets, np.int32)
+    num_grouping_sets = len(output_type.grouping_sets)
+    if num_grouping_sets <= 0:
+        raise BodoError("Grouping sets must have at least one grouping set.")
+
+    def impl_init_grouping_sets_state(
+        operator_id,
+        sub_operator_ids,
+        key_inds,
+        grouping_sets,
+        fnames,  # fnames matches function names in supported_agg_funcs
+        f_in_offsets,
+        f_in_cols,
+        expected_state_type=None,
+        parallel=False,
+    ):  # pragma: no cover
+        return _init_grouping_sets_state(
+            operator_id,
+            sub_operator_id_arr.ctypes,
+            build_arr_dtypes.ctypes,
+            build_arr_array_types.ctypes,
+            n_build_arrs,
+            grouping_sets_arr.ctypes,
+            offsets_arr.ctypes,
+            num_grouping_sets,
+            ftypes_arr.ctypes,
+            f_in_offsets_arr.ctypes,
+            f_in_cols_arr.ctypes,
+            n_funcs,
+            output_type,
+            parallel,
+        )
+
+    return impl_init_grouping_sets_state
+
+
+@intrinsic
 def _groupby_build_consume_batch(
     typingctx,
     groupby_state,
@@ -918,6 +1204,96 @@ class GroupbyBuildConsumeBatchInfer(AbstractTemplate):
 def lower_groupby_build_consume_batch(context, builder, sig, args):
     """lower groupby_build_consume_batch() using gen_groupby_build_consume_batch_impl above"""
     impl = gen_groupby_build_consume_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+@intrinsic
+def _groupby_grouping_sets_build_consume_batch(
+    typingctx,
+    groupby_state,
+    cpp_table,
+    is_last,
+):
+    def codegen(context, builder, sig, args):
+        request_input = cgutils.alloca_once(builder, lir.IntType(1))
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="grouping_sets_build_consume_batch_py_entry"
+        )
+        ret = builder.call(fn_tp, tuple(args) + (request_input,))
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return context.make_tuple(
+            builder, sig.return_type, [ret, builder.load(request_input)]
+        )
+
+    ret_type = types.Tuple([types.bool_, types.bool_])
+    sig = ret_type(groupby_state, cpp_table, is_last)
+    return sig, codegen
+
+
+def groupby_grouping_sets_build_consume_batch(grouping_sets_state, table, is_last):
+    pass
+
+
+def gen_groupby_grouping_sets_build_consume_batch_impl(
+    grouping_sets_state: GroupbyStateType, table, is_last
+):
+    """Consume a build table batch in streaming groupby (insert into hash table and
+    update running values) with grouping sets.
+
+    Args:
+        grouping_sets_state (GroupbyState): C++ GroupingSetsState pointer
+        table (table_type): build table batch
+        is_last (bool): is last batch (in this pipeline) locally
+    Returns:
+        tuple(bool, bool): is last batch globally with possibility of false negatives
+        due to iterations between syncs, whether to request input rows from preceding
+         operators
+    """
+    in_col_inds = MetaType(grouping_sets_state.build_indices)
+    n_table_cols = len(in_col_inds)
+
+    cast_table_type = grouping_sets_state.key_casted_table_type
+    if cast_table_type == types.unknown:
+        cast_table_type = table
+
+    def impl_groupby_build_consume_batch(
+        grouping_sets_state, table, is_last
+    ):  # pragma: no cover
+        cast_table = bodo.utils.table_utils.table_astype(
+            table, cast_table_type, False, False
+        )
+        cpp_table = py_data_to_cpp_table(cast_table, (), in_col_inds, n_table_cols)
+        return _groupby_grouping_sets_build_consume_batch(
+            grouping_sets_state, cpp_table, is_last
+        )
+
+    return impl_groupby_build_consume_batch
+
+
+@infer_global(groupby_grouping_sets_build_consume_batch)
+class GroupbyBuildConsumeGroupingSetsBatchInfer(AbstractTemplate):
+    """Typer for groupby_grouping_sets_build_consume_batch that returns bool as output type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(groupby_grouping_sets_build_consume_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        output_type = types.BaseTuple.from_types((types.bool_, types.bool_))
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+@lower_builtin(groupby_grouping_sets_build_consume_batch, types.VarArg(types.Any))
+def lower_groupby_grouping_sets_build_consume_batch(context, builder, sig, args):
+    """lower groupby_grouping_sets_build_consume_batch() using gen_groupby_grouping_sets_build_consume_batch_impl above"""
+    impl = gen_groupby_grouping_sets_build_consume_batch_impl(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
@@ -1023,6 +1399,111 @@ def lower_groupby_produce_output_batch(context, builder, sig, args):
 
 
 @intrinsic
+def _groupby_grouping_sets_produce_output_batch(
+    typingctx,
+    groupby_state,
+    produce_output,
+):
+    def codegen(context, builder, sig, args):
+        out_is_last = cgutils.alloca_once(builder, lir.IntType(1))
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(1).as_pointer(), lir.IntType(1)],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="grouping_sets_produce_output_batch_py_entry"
+        )
+        func_args = [
+            args[0],
+            out_is_last,
+            args[1],
+        ]
+        table_ret = builder.call(fn_tp, func_args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        items = [table_ret, builder.load(out_is_last)]
+        return context.make_tuple(builder, sig.return_type, items)
+
+    ret_type = types.Tuple([cpp_table_type, types.bool_])
+    sig = ret_type(
+        groupby_state,
+        produce_output,
+    )
+    return sig, codegen
+
+
+def groupby_grouping_sets_produce_output_batch(grouping_sets_state, produce_output):
+    pass
+
+
+def gen_groupby_grouping_sets_produce_output_batch_impl(
+    grouping_sets_state: GroupbyStateType, produce_output
+):
+    """Produce output batches of groupby operation
+
+    Args:
+        grouping_sets_state (GroupbyStateType): C++ GroupingSetsState pointer
+        produce_output (bool): whether to produce output
+
+    Returns:
+        table_type: output table batch
+        bool: global is last batch with possibility of false negatives due to iterations between syncs
+    """
+    out_table_type = grouping_sets_state.out_table_type
+
+    if out_table_type == types.unknown:
+        out_cols_arr = np.array([], dtype=np.int64)
+    else:
+        out_cols = grouping_sets_state.cpp_output_table_to_py_table_idx_map
+        out_cols_arr = np.array(out_cols, dtype=np.int64)
+
+    def impl_groupby_grouping_sets_produce_output_batch(
+        grouping_sets_state,
+        produce_output,
+    ):  # pragma: no cover
+        out_cpp_table, out_is_last = _groupby_grouping_sets_produce_output_batch(
+            grouping_sets_state, produce_output
+        )
+        out_table = cpp_table_to_py_table(
+            out_cpp_table, out_cols_arr, out_table_type, 0
+        )
+        delete_table(out_cpp_table)
+        return out_table, out_is_last
+
+    return impl_groupby_grouping_sets_produce_output_batch
+
+
+@infer_global(groupby_grouping_sets_produce_output_batch)
+class GroupbyProduceGroupingSetsOutputInfer(AbstractTemplate):
+    """Typer for groupby_grouping_sets_produce_output_batch that returns (output_table_type, bool)
+    as output type.
+    """
+
+    def generic(self, args, kws):
+        kws = dict(kws)
+        grouping_sets_state = get_call_expr_arg(
+            "groupby_grouping_sets_produce_output_batch",
+            args,
+            kws,
+            0,
+            "grouping_sets_state",
+        )
+        out_table_type = grouping_sets_state.out_table_type
+        # Output is (out_table, out_is_last)
+        output_type = types.BaseTuple.from_types((out_table_type, types.bool_))
+
+        pysig = numba.core.utils.pysignature(groupby_grouping_sets_produce_output_batch)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+@lower_builtin(groupby_grouping_sets_produce_output_batch, types.VarArg(types.Any))
+def lower_groupby_grouping_sets_produce_output_batch(context, builder, sig, args):
+    """lower groupby_grouping_sets_produce_output_batch() using gen_groupby_grouping_sets_produce_output_batch_impl above"""
+    impl = gen_groupby_grouping_sets_produce_output_batch_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+@intrinsic
 def delete_groupby_state(
     typingctx,
     groupby_state,
@@ -1041,6 +1522,28 @@ def delete_groupby_state(
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
     sig = types.void(groupby_state)
+    return sig, codegen
+
+
+@intrinsic
+def delete_grouping_sets_state(
+    typingctx,
+    grouping_sets_state,
+):
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_grouping_sets_state"
+        )
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    sig = types.void(grouping_sets_state)
     return sig, codegen
 
 

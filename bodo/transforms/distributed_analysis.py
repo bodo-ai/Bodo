@@ -1721,6 +1721,7 @@ class DistributedAnalysis:
 
         if fdef in (
             ("init_groupby_state", "bodo.libs.stream_groupby"),
+            ("init_grouping_sets_state", "bodo.libs.stream_groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),
             ("init_union_state", "bodo.libs.stream_union"),
             ("init_window_state", "bodo.libs.stream_window"),
@@ -1733,6 +1734,7 @@ class DistributedAnalysis:
 
         if fdef in (
             ("groupby_build_consume_batch", "bodo.libs.stream_groupby"),
+            ("groupby_grouping_sets_build_consume_batch", "bodo.libs.stream_groupby"),
             ("window_build_consume_batch", "bodo.libs.stream_window"),
             ("sort_build_consume_batch", "bodo.libs.stream_sort"),
         ):  # pragma: no cover
@@ -1741,6 +1743,7 @@ class DistributedAnalysis:
 
         if fdef in (
             ("groupby_produce_output_batch", "bodo.libs.stream_groupby"),
+            ("groupby_grouping_sets_produce_output_batch", "bodo.libs.stream_groupby"),
             ("window_produce_output_batch", "bodo.libs.stream_window"),
             ("produce_output_batch", "bodo.libs.stream_sort"),
         ):  # pragma: no cover
