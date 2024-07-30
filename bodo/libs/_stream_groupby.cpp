@@ -2366,7 +2366,9 @@ GroupbyState::GroupbyState(
     std::vector<bool> mrnf_part_cols_to_keep_,
     std::vector<bool> mrnf_sort_cols_to_keep_, int64_t output_batch_size_,
     bool parallel_, int64_t sync_iter_, int64_t op_id_,
-    int64_t op_pool_size_bytes_, bool allow_any_work_stealing)
+    int64_t op_pool_size_bytes_, bool allow_any_work_stealing,
+    std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
+        key_dict_builders_)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -2679,13 +2681,22 @@ GroupbyState::GroupbyState(
         build_table_schema = std::make_shared<bodo::Schema>(*in_schema_);
     }
 
-    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders(
-        this->n_keys);
+    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
+    if (key_dict_builders_.has_value()) {
+        assert(key_dict_builders_.size() == this->n_keys);
+        // Enable sharing dictionary builders across group by used by multiple
+        // grouping sets.
+        key_dict_builders = key_dict_builders_.value();
+    } else {
+        // Create dictionary builders for key columns (if not provided by
+        // caller
+        key_dict_builders.resize(this->n_keys);
 
-    // Create dictionary builders for key columns:
-    for (uint64_t i = 0; i < this->n_keys; i++) {
-        key_dict_builders[i] = create_dict_builder_for_array(
-            build_table_schema->column_types[i]->copy(), true);
+        // Create dictionary builders for key columns:
+        for (uint64_t i = 0; i < this->n_keys; i++) {
+            key_dict_builders[i] = create_dict_builder_for_array(
+                build_table_schema->column_types[i]->copy(), true);
+        }
     }
 
     std::vector<std::shared_ptr<DictionaryBuilder>>
@@ -4554,8 +4565,20 @@ GroupingSetsState::ProduceOutputBatch(bool produce_output) {
             this->keys_schema->column_types[idx]->array_type;
         const Bodo_CTypes::CTypeEnum c_typ =
             this->keys_schema->column_types[idx]->c_type;
-        final_columns[idx] =
+        std::shared_ptr<array_info> null_arr =
             alloc_all_null_array_top_level(table_size, arr_typ, c_typ);
+        // Reuse the dictionary builder to avoid unnecessary
+        // transposing/unification.
+        if (this->key_dict_builders[idx] != nullptr) {
+            if (arr_typ == bodo_array_type::DICT) {
+                null_arr->child_arrays[0] =
+                    this->key_dict_builders[idx]->dict_buff->data_array;
+            } else {
+                throw std::runtime_error(
+                    "Unsupported dictionary builder for null array");
+            }
+        }
+        final_columns[idx] = null_arr;
     }
     std::shared_ptr<table_info> final_table =
         std::make_shared<table_info>(final_columns, table_size);
@@ -4688,6 +4711,21 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
     int32_t* f_in_cols, int n_funcs, uint64_t n_keys, int64_t output_batch_size,
     bool parallel, int64_t sync_iter) {
     try {
+        // Generate the general keys schema for remapping the output from
+        // grouping sets.
+        std::unique_ptr<bodo::Schema> keys_schema = bodo::Schema::Deserialize(
+            std::vector<int8_t>(build_arr_array_types,
+                                build_arr_array_types + n_keys),
+            std::vector<int8_t>(build_arr_c_types, build_arr_c_types + n_keys));
+        // Generate the key dictionary builders for all group by states.
+        std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders(
+            n_keys);
+        // Create dictionary builders for key columns:
+        for (uint64_t i = 0; i < n_keys; i++) {
+            key_dict_builders[i] = create_dict_builder_for_array(
+                keys_schema->column_types[i]->copy(), true);
+        }
+
         // Generate components that are shared across all groupby states.
         std::vector<int32_t> ftypes_vector(ftypes, ftypes + n_funcs);
         std::vector<int32_t> f_in_offsets_vector(f_in_offsets,
@@ -4745,9 +4783,14 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
             // Remap the output columns
             std::vector<int64_t> kept_output_column_idxs;
             std::vector<int64_t> skipped_columns;
+            // Track the keys that are used so all group by states can share
+            // dictionary builders.
+            std::vector<std::shared_ptr<DictionaryBuilder>>
+                local_key_dict_builders;
             for (size_t j = 0; j < n_keys; j++) {
                 if (kept_columns[j]) {
                     kept_output_column_idxs.push_back(j);
+                    local_key_dict_builders.push_back(key_dict_builders[j]);
                 } else {
                     skipped_columns.push_back(j);
                 }
@@ -4772,19 +4815,13 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
                 mrnf_sort_cols_to_keep_vec, output_batch_size, parallel,
                 sync_iter, sub_operator_id, op_pool_size_bytes,
-                allow_any_work_stealing));
+                allow_any_work_stealing, local_key_dict_builders));
         }
-        // Generate the general keys schema for remapping the output from
-        // grouping sets.
-        std::unique_ptr<bodo::Schema> keys_schema = bodo::Schema::Deserialize(
-            std::vector<int8_t>(build_arr_array_types,
-                                build_arr_array_types + n_keys),
-            std::vector<int8_t>(build_arr_c_types, build_arr_c_types + n_keys));
 
         return new GroupingSetsState(
             std::move(keys_schema), std::move(groupby_states),
             input_columns_remaps, output_columns_remaps, skipped_columns_remaps,
-            operator_id);
+            key_dict_builders, operator_id);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return nullptr;
