@@ -1108,7 +1108,9 @@ class GroupbyState {
                  std::vector<bool> mrnf_sort_cols_to_keep_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
                  int64_t op_id_, int64_t op_pool_size_bytes_,
-                 bool allow_any_work_stealing = true);
+                 bool allow_any_work_stealing = true,
+                 std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
+                     key_dict_builders_ = std::nullopt);
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1486,6 +1488,7 @@ class GroupingSetsState {
         std::vector<std::vector<int64_t>> input_columns_remaps_,
         std::vector<std::vector<int64_t>> output_columns_remaps_,
         std::vector<std::vector<int64_t>> missing_output_columns_remaps_,
+        std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders_,
         int64_t op_id_)
         : op_id(op_id_),
           keys_schema(std::move(keys_schema_)),
@@ -1493,7 +1496,8 @@ class GroupingSetsState {
           input_columns_remaps(std::move(input_columns_remaps_)),
           output_columns_remaps(std::move(output_columns_remaps_)),
           missing_output_columns_remaps(
-              std::move(missing_output_columns_remaps_)) {
+              std::move(missing_output_columns_remaps_)),
+          key_dict_builders(std::move(key_dict_builders_)) {
         this->current_output_idx = groupby_states.size() - 1;
     }
 
@@ -1547,6 +1551,8 @@ class GroupingSetsState {
     // Index for tracking which group by state we are currently producing
     // output for.
     int current_output_idx;
+    // Dictionary builders that are shared between all group by states.
+    std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
 };
 
 /**
