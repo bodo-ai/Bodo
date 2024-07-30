@@ -10,6 +10,7 @@
 
 > [!NOTE]
 > When running step 3 (or any other similar building and cloning instructions) below, please avoid building in `/bodofs`. Its usage has to be limited to storing basic files and nothing that requires high disk performance or full POSIX.
+
 1. SSH into the cluster node (`My Notebook` -> `BODO CLUSTERS` -> `Terminal` beside the running cluster).
 1. Copy single_node_install.sh to the node.
 1. Run the script: `bash single_node_install.sh` (recommended in directory `/home/bodo`).
@@ -31,6 +32,7 @@
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
 1. Build Bodo: `BODO_SKIP_CPP_TESTS=1 psh pip install --no-deps --no-build-isolation -ve .`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
+1. Build Iceberg Connector: `cd iceberg && psh python setup.py develop && cd ..`
 1. Install bodo-platform-utils for bodosqlwrapper use: `cd bodo-platform-image/bodo-platform-utils/ && psh pip install -ve . && cd ../..`
 1. Set same modify time for bodosqlwrapper.py on all nodes: `psh python -c "import os; os.utime(r'/home/bodo/Bodo/bodo-platform-image/bodo-platform-utils/bodo_platform_utils/bodosqlwrapper.py', (1602179630, 1602179630))"`
 
