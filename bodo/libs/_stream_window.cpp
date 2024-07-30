@@ -467,7 +467,8 @@ void WindowState::FinalizeBuild() {
 
     sorted_window_computation(partition_by_cols, order_by_cols, argument_cols,
                               func_input_offsets, this->window_ftypes, out_arrs,
-                              input_size, this->parallel);
+                              input_size, this->build_table_dict_builders,
+                              this->parallel);
     window_timer.finalize();
     // Append the table to the output buffer.
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(

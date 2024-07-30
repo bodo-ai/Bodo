@@ -141,51 +141,13 @@ class WindowStateType(StreamingStateType):
             self.n_inputs,
         )
 
-    @staticmethod
-    def is_sort_supported_array_type(arr_type: types.Type) -> bool:
-        """Is the given type an array type supported with sort.
-
-        Args:
-            arr_type (types.Type): The array type to check
-
-        Returns:
-            bool: Can the array be used in the sort implementation.
-        """
-        return isinstance(
-            arr_type,
-            (
-                types.Array,
-                bodo.IntegerArrayType,
-                bodo.TimeArrayType,
-                bodo.DecimalArrayType,
-                bodo.FloatingArrayType,
-                bodo.DatetimeArrayType,
-            ),
-        ) or arr_type in (
-            bodo.boolean_array_type,
-            bodo.datetime_date_array_type,
-            bodo.null_array_type,
-            bodo.string_array_type,
-            bodo.binary_array_type,
-            bodo.datetime_timedelta_array_type,
-        )
-
     @cached_property
     def is_sort_impl(self) -> bool:
         if bodo.bodo_disable_streaming_window_sort:
             return False
-        sort_supporting_funcs = all(
+        return all(
             [name in self.sort_supporting_func_names() for name in self.func_names]
         )
-        if sort_supporting_funcs:
-            # Verify that all types in the partition by and order by columns are supported.
-            # These are regular numpy arrays, nullable arrays, and string/binary arrays.
-            key_types = self.partition_by_types + self.order_by_types
-            for arr_type in key_types:
-                if not self.is_sort_supported_array_type(arr_type):
-                    return False
-            return True
-        return False
 
     @staticmethod
     def sort_supporting_func_names():
@@ -798,6 +760,11 @@ def overload_init_window_state(
 
         return impl
     else:
+        if len(output_type.partition_indices) == 0:  # pragma: no cover
+            raise BodoError(
+                "Invalid window state: cannot use hash-based implementation of window functions without partition columns"
+            )
+
         # The hash partition window state C++ object is just a group by state.
         def impl(
             operator_id,

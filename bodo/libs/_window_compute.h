@@ -4,6 +4,7 @@
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_dict_builder.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
@@ -115,10 +116,10 @@ void window_computation(
  * with a neighboring rank for boundary groups.
  */
 void sorted_window_computation(
-    const std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& order_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
+    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
     const std::vector<std::shared_ptr<array_info>>& window_args,
     const std::vector<int32_t>& window_offset_indices,
     const std::vector<int32_t>& window_funcs,
     std::vector<std::shared_ptr<array_info>>& out_arrs, size_t out_rows,
-    bool is_parallel);
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders, bool is_parallel);
