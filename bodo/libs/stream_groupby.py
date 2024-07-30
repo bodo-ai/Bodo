@@ -120,6 +120,7 @@ class GroupbyStateType(StreamingStateType):
         self.mrnf_sort_col_na: tuple[int] = mrnf_sort_col_na
         self.mrnf_col_inds_keep: tuple[int] = mrnf_col_inds_keep
         self.build_table_type = build_table_type
+        self.uses_grouping_sets = len(grouping_sets) > 1 or grouping_sets[0] != key_inds
         super().__init__(
             f"GroupbyStateType({key_inds=}, {grouping_sets=}, {fnames=}, {f_in_offsets=}, "
             f"{f_in_cols=}, {mrnf_sort_col_inds=}, {mrnf_sort_col_asc=}, {mrnf_sort_col_na=}, "
@@ -153,7 +154,12 @@ class GroupbyStateType(StreamingStateType):
     def ftypes(self):
         func_types = []
         for fname in self.fnames:
-            if fname not in supported_agg_funcs:
+            if fname not in supported_agg_funcs or (
+                not self.uses_grouping_sets and fname == "grouping"
+            ):
+                # Note: While 'grouping' could be supported in regular group by, it really only makes
+                # sense in the context of grouping sets (and is only supported there). In general it should
+                # be simplified to a constant value in the non-grouping sets case.
                 raise BodoError(fname + " is not a supported aggregate function.")
             func_types.append(supported_agg_funcs.index(fname))
         return func_types
@@ -440,9 +446,10 @@ class GroupbyStateType(StreamingStateType):
         out_arr_types = []
         if self.fnames != ("min_row_number_filter",):
             for i, f_name in enumerate(self.fnames):
-                assert (
-                    self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
-                ), "only functions with single input column supported in streaming groupby currently"
+                if f_name != "grouping":
+                    assert (
+                        self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
+                    ), "only functions with single input column expect grouping supported in streaming groupby currently"
                 # Note: Use f_in_cols because we need the original column location before reordering
                 # for C++.
                 in_type = self.build_table_type.arr_types[

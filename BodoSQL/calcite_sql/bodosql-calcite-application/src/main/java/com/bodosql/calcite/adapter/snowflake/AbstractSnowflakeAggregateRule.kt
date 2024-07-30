@@ -20,7 +20,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
             val catalogTable = rel.getCatalogTable()
             // Do we need a transformation with a projection for any literal values.
             val needsProjection = aggregate.aggCallList.any { x -> x.aggregation.kind == SqlKind.LITERAL_AGG }
-            // Filter out any literals from the Snowflake Pushdown.
+            // Filter out any literals from the Snowflake Push down.
             val usedCallList = literalAggPrunedAggList(aggregate.aggCallList)
             val newAggregate =
                 SnowflakeAggregate.create(
@@ -40,7 +40,7 @@ abstract class AbstractSnowflakeAggregateRule protected constructor(config: Conf
                     // Track the offset for any functions that were pushed down.
                     var offset = aggregate.groupCount
                     val rexNodes: ArrayList<RexNode> = ArrayList()
-                    for (i in 0 until aggregate.getRowType().fieldCount) {
+                    for (i in 0 until aggregate.rowType.fieldCount) {
                         if (i < aggregate.groupCount) {
                             rexNodes.add(builder.field(i))
                         } else {

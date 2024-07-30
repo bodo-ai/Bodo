@@ -370,7 +370,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             f"column type of {arr_type} of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
-    elif func_name == "size":
+    elif func_name == "size" or func_name == "grouping":
         return dtype_to_array_type(types.int64), "ok"
     elif func_name == "sum" and isinstance(in_dtype, Decimal128Type):
         # Use maximum precision since sum can produce large output values

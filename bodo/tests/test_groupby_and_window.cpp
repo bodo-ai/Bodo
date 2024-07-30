@@ -329,6 +329,7 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::skew_eval,
             Bodo_FTypes::kurt_eval,
             Bodo_FTypes::boolxor_eval,
+            Bodo_FTypes::grouping,
             Bodo_FTypes::n_ftypes,
         };
         for (size_t i = 0; i < Bodo_FTypes::n_ftypes; i++) {
@@ -738,6 +739,7 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::ratio_to_report,
             Bodo_FTypes::conditional_true_event,
             Bodo_FTypes::conditional_change_event,
+            Bodo_FTypes::grouping,
         };
         for (size_t i = 0; i < Bodo_FTypes::n_ftypes; i++) {
             bool is_groupby_fn_tested =
