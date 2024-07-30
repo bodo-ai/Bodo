@@ -399,6 +399,17 @@ public class RelationalAlgebraGenerator {
   }
 
   /**
+   * Calls "RESET" on the current planner and clears any cached state need to compile a single query
+   * (but not configuration).
+   *
+   * <p>Note: This is exposed to Python.
+   */
+  public void resetPlanner() {
+    this.planner.close();
+    this.parseNode = null;
+  }
+
+  /**
    * Parses the SQL query into a SQLNode and updates the relational Algebra Generator's state
    *
    * @param sql Query to parse Sets parseNode to the generated SQLNode
