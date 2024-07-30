@@ -19,6 +19,7 @@ import org.apache.calcite.sql.type.BodoReturnTypes;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.util.Optionality;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -137,10 +138,12 @@ public class AggOperatorTable implements SqlOperatorTable {
 
   public static final SqlBasicAggFunction CORR =
       SqlBasicAggFunction.create(
-          "CORR",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.DOUBLE_NULLABLE,
-          OperandTypes.NUMERIC_NUMERIC);
+              "CORR",
+              SqlKind.CORR,
+              ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE),
+              OperandTypes.NUMERIC_NUMERIC)
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   public static final SqlAggFunction APPROX_PERCENTILE =
       SqlBasicAggFunction.create(

@@ -4,6 +4,8 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.type.BodoTZInfo;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
@@ -208,14 +210,34 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
     }
   }
 
-  @Override
-  // This function, misleadingly is also used to get the types of a number of different
-  // aggregations, namely STD and VAR. In Calcite, it returns the type of the input, which
-  // is correct by the ANSI SQL standard. However, for our purposes, it makes more sense
-  // for this to upcast to double.
-  public RelDataType deriveAvgAggType(RelDataTypeFactory typeFactory, RelDataType argumentType) {
+  /** Derives the output type of functions in the AVG, VAR, STD family. */
+  public RelDataType deriveAvgVarStdType(
+      RelDataTypeFactory typeFactory, SqlOperator operator, RelDataType argumentType) {
+    // For Avg/Var, the output will also be decimal
+    boolean isAvg = operator.kind == SqlKind.AVG;
+    boolean isVar = (operator.kind == SqlKind.VAR_SAMP) || (operator.kind == SqlKind.VAR_POP);
+    boolean isSample =
+        (operator.kind == SqlKind.STDDEV_SAMP) || (operator.kind == SqlKind.VAR_SAMP);
+    boolean outNullable = argumentType.isNullable() || isSample;
+    if ((isAvg || isVar) && argumentType.getSqlTypeName() == SqlTypeName.DECIMAL) {
+      // The new precision must be the maximum because we don't know how much the magnitude was
+      // increased by sums/products across many rows.
+      int prec = getMaxNumericPrecision();
+      int scale = argumentType.getScale();
+      // For Var: double the scale (increasing it to no more than 12) to account for multiplying by
+      // itself
+      // (follows multiplication protocols).
+      if (isVar) {
+        scale = Integer.max(scale, Integer.min(scale * 2, 12));
+      }
+      // Then for Avg or Var: increase the scale by 6, but do not increase beyond 12 (follows
+      // division protocols).
+      scale = Integer.max(scale, Integer.min(scale + 6, 12));
+      return typeFactory.createTypeWithNullability(
+          typeFactory.createSqlType(SqlTypeName.DECIMAL, prec, scale), outNullable);
+    }
     return typeFactory.createTypeWithNullability(
-        typeFactory.createSqlType(SqlTypeName.DOUBLE), argumentType.isNullable());
+        typeFactory.createSqlType(SqlTypeName.DOUBLE), outNullable);
   }
 
   public BodoTZInfo getDefaultTZInfo() {
