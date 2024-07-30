@@ -16,4 +16,5 @@ conda run -n DEV conda remove mpi mpich --force --yes
 cd ~/Bodo
 conda run -n DEV pip install --no-deps --no-build-isolation -ve .
 cd BodoSQL && conda run -n DEV python setup.py develop && cd ..
-
+cd iceberg && conda run -n DEV python setup.py develop && cd ..
+cd bodo-platform-image/bodo-platform-utils/ && conda run -n DEV pip install -ve . && cd ../..

@@ -1,14 +1,11 @@
 #include <mpi.h>
-#include <mpi_proto.h>
 #include <cstddef>
-#include <iostream>
 #include <memory>
 #include <sstream>
 #include <tuple>
 #include <vector>
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
-#include "../libs/_groupby_col_set.h"
 #include "../libs/_window_compute.h"
 #include "./table_generator.hpp"
 #include "./test.hpp"
