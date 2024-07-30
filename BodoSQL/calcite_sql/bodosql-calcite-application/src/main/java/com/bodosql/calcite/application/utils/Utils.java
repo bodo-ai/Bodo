@@ -5,6 +5,7 @@ import static com.bodosql.calcite.application.utils.IsScalar.isScalar;
 import com.bodosql.calcite.adapter.bodo.ArrayRexToBodoTranslator;
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.logicalRules.GroupingSetsToUnionAllRule;
 import com.bodosql.calcite.ir.BodoEngineTable;
 import com.bodosql.calcite.ir.Expr;
 import com.bodosql.calcite.ir.Expr.IntegerLiteral;
@@ -34,6 +35,7 @@ import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.MapSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.VariantSqlType;
+import org.apache.calcite.util.ImmutableBitSet;
 
 /** Class filled with static utility functions. */
 public class Utils {
@@ -410,6 +412,12 @@ public class Utils {
     return output;
   }
 
+  /**
+   * Prune any literal agg calls from the list of aggregate calls.
+   *
+   * @param aggregateCallList The list of aggregate calls to prune.
+   * @return The pruned list of aggregate calls.
+   */
   public static List<AggregateCall> literalAggPrunedAggList(List<AggregateCall> aggregateCallList) {
     return aggregateCallList.stream()
         .filter(x -> x.getAggregation().getKind() != SqlKind.LITERAL_AGG)
@@ -417,8 +425,21 @@ public class Utils {
   }
 
   /**
+   * Prune any grouping calls from the list of aggregate calls.
+   *
+   * @param aggregateCallList The list of aggregate calls to prune.
+   * @return The pruned list of aggregate calls.
+   */
+  public static List<AggregateCall> groupingPrunedAggList(List<AggregateCall> aggregateCallList) {
+    return aggregateCallList.stream()
+        .filter(x -> x.getAggregation().getKind() != SqlKind.GROUPING)
+        .collect(Collectors.toList());
+  }
+
+  /**
    * Given a table that contains the outputs of an aggregate, this inserts any LITERAL_AGG values,
-   * which are just literals added to the original locations.
+   * which are just literals added to the original locations. Optionally if we are in a context
+   * where a GROUPING call can be statically calculated, we can also replace GROUPING calls.
    *
    * @param builder The builder used for generating intermediate code.
    * @param ctx The ctx used to generate code for literals.
@@ -475,6 +496,63 @@ public class Utils {
             new Expr.IntegerLiteral(numAggCols));
     builder.add(new Op.Assign(outVar, tableExpr));
     return new BodoEngineTable(outVar.emit(), node);
+  }
+
+  /**
+   * Appends the literal values for the grouping function to the table.
+   *
+   * @param builder The builder used for generating intermediate code.
+   * @param ctx The ctx used to generate code for literals.
+   * @param inputTable The table with the aggregate output.
+   * @param groupingSet The grouping set used to determine the grouping result.
+   * @param filteredAggCalls The list of aggregate calls excluding and LITERAL_AGG calls.
+   * @param totalInputColumns The total number of columns in the input table.
+   * @return A Variable containing the table with the grouping values appended.
+   */
+  public static Variable appendLiteralGroupingValues(
+      final Module.Builder builder,
+      BodoPhysicalRel.BuildContext ctx,
+      final BodoEngineTable inputTable,
+      final ImmutableBitSet groupingSet,
+      final List<AggregateCall> filteredAggCalls,
+      final int totalInputColumns) {
+    final List<IntegerLiteral> indices = new ArrayList<>();
+    for (int i = 0; i < groupingSet.cardinality(); i++) {
+      indices.add(new IntegerLiteral(i));
+    }
+    int seenGroupings = 0;
+    int keptColumns = groupingSet.cardinality();
+    final List<Expr> literalArrays = new ArrayList<>();
+    ArrayRexToBodoTranslator translator = ctx.arrayRexTranslator(inputTable);
+    for (int i = 0; i < filteredAggCalls.size(); i++) {
+      final AggregateCall call = filteredAggCalls.get(i);
+      final IntegerLiteral outputIndex;
+      if (call.getAggregation().getKind() == SqlKind.GROUPING) {
+        // Generate the code for the literal array.
+        long literalValue =
+            GroupingSetsToUnionAllRule.getGroupingValue(call.getArgList(), groupingSet);
+        Expr.IntegerLiteral literal = new Expr.IntegerLiteral(Math.toIntExact(literalValue));
+        literalArrays.add(translator.scalarToArray(literal, call.getType()));
+        outputIndex = new IntegerLiteral(totalInputColumns + seenGroupings);
+        seenGroupings += 1;
+      } else {
+        outputIndex = new IntegerLiteral(keptColumns);
+        keptColumns += 1;
+      }
+      indices.add(outputIndex);
+    }
+    // Concatenate the arrays to the table.
+    Variable outVar = builder.getSymbolTable().genTableVar();
+    Variable buildIndices = ctx.lowerAsMetaType(new Expr.Tuple(indices));
+    Expr tableExpr =
+        new Expr.Call(
+            "bodo.hiframes.table.logical_table_to_table",
+            inputTable,
+            new Expr.Tuple(literalArrays),
+            buildIndices,
+            new Expr.IntegerLiteral(totalInputColumns));
+    builder.add(new Op.Assign(outVar, tableExpr));
+    return outVar;
   }
 
   /**

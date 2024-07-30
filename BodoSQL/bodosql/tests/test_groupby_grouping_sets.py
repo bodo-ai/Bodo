@@ -39,6 +39,7 @@ from bodosql.tests.utils import check_query
                 ),
             ),
             id="timestamp",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -62,6 +63,7 @@ from bodosql.tests.utils import check_query
                 ),
             ),
             id="timestamp-tz",
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -145,6 +147,86 @@ def test_grouping_sets_subset(grouping_sets_inputs, memory_leak_check):
             "A": a_data_list,
             "B": b_data_list,
             "OUTPUT": output_column,
+        }
+    )
+    check_query(query, ctx, None, check_dtype=False, expected_output=expected_output)
+
+
+def test_grouping_non_streaming(grouping_sets_inputs, memory_leak_check):
+    """
+    Tests the GROUPING function when taking the non-streaming code path.
+    """
+    query = "SELECT A, B, GROUPING(B, A) as OUTPUT1, GROUPING(A) as OUTPUT2, GROUPING(A, B) as OUTPUT3, SUM(C) as OUTPUT4 FROM TABLE1 GROUP BY GROUPING SETS (A, B, ())"
+    ctx = {"TABLE1": grouping_sets_inputs}
+    output_column1 = pd.array([2, 2, 2, 1, 1, 1, 3], dtype="Int64")
+    output_column2 = pd.array([0, 0, 0, 1, 1, 1, 1], dtype="Int64")
+    output_column3 = pd.array([1, 1, 1, 2, 2, 2, 3], dtype="Int64")
+    output_column4 = pd.array([13, 12, None, 13, 12, None, 25], dtype="Int64")
+    a_data_list = [
+        grouping_sets_inputs["A"][0],
+        grouping_sets_inputs["A"][2],
+        grouping_sets_inputs["A"][4],
+        None,
+        None,
+        None,
+        None,
+    ]
+    b_data_list = [
+        None,
+        None,
+        None,
+        grouping_sets_inputs["B"][0],
+        grouping_sets_inputs["B"][3],
+        grouping_sets_inputs["B"][4],
+        None,
+    ]
+    expected_output = pd.DataFrame(
+        {
+            "A": a_data_list,
+            "B": b_data_list,
+            "OUTPUT1": output_column1,
+            "OUTPUT2": output_column2,
+            "OUTPUT3": output_column3,
+            "OUTPUT4": output_column4,
+        }
+    )
+    check_query(query, ctx, None, check_dtype=False, expected_output=expected_output)
+
+
+def test_grouping_streaming(grouping_sets_inputs, memory_leak_check):
+    """
+    Tests the GROUPING function when taking the streaming code path.
+    """
+    query = "SELECT A, B, GROUPING(B, A) as OUTPUT1, GROUPING(A) as OUTPUT2, GROUPING(A, B) as OUTPUT3, SUM(C) as OUTPUT4 FROM TABLE1 GROUP BY GROUPING SETS (A, B)"
+    ctx = {"TABLE1": grouping_sets_inputs}
+    output_column1 = pd.array([2, 2, 2, 1, 1, 1], dtype="Int64")
+    output_column2 = pd.array([0, 0, 0, 1, 1, 1], dtype="Int64")
+    output_column3 = pd.array([1, 1, 1, 2, 2, 2], dtype="Int64")
+    output_column4 = pd.array([13, 12, None, 13, 12, None], dtype="Int64")
+    a_data_list = [
+        grouping_sets_inputs["A"][0],
+        grouping_sets_inputs["A"][2],
+        grouping_sets_inputs["A"][4],
+        None,
+        None,
+        None,
+    ]
+    b_data_list = [
+        None,
+        None,
+        None,
+        grouping_sets_inputs["B"][0],
+        grouping_sets_inputs["B"][3],
+        grouping_sets_inputs["B"][4],
+    ]
+    expected_output = pd.DataFrame(
+        {
+            "A": a_data_list,
+            "B": b_data_list,
+            "OUTPUT1": output_column1,
+            "OUTPUT2": output_column2,
+            "OUTPUT3": output_column3,
+            "OUTPUT4": output_column4,
         }
     )
     check_query(query, ctx, None, check_dtype=False, expected_output=expected_output)

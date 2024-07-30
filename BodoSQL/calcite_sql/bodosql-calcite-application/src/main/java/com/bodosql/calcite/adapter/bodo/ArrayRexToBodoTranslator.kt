@@ -45,7 +45,7 @@ class ArrayRexToBodoTranslator(
     /**
      * Convert a scalar output to an array.
      */
-    private fun scalarToArray(
+    fun scalarToArray(
         scalar: Expr,
         dataType: RelDataType,
     ): Expr.Call {

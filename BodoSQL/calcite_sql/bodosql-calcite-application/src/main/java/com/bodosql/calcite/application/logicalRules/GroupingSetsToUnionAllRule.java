@@ -98,7 +98,7 @@ public class GroupingSetsToUnionAllRule extends RelRule<GroupingSetsToUnionAllRu
     }
     for (AggregateCall aggCall : aggCallList) {
       if (aggCall.getAggregation().kind == SqlKind.GROUPING) {
-        long literalGroupingValue = getGroupingValue(baseGroupSet, groupingSet);
+        long literalGroupingValue = getGroupingValue(aggCall.getArgList(), groupingSet);
         fields.add(rexBuilder.makeLiteral(literalGroupingValue, aggCall.getType()));
       } else {
         fields.add(builder.field(currentIndex++));
@@ -112,14 +112,14 @@ public class GroupingSetsToUnionAllRule extends RelRule<GroupingSetsToUnionAllRu
    * Returns the grouping value for a given grouping set. Here we depend on group by always
    * enforcing the full group set to be stored in ascending order.
    *
-   * @param fullGroupSet The full group set.
-   * @param groupSet The grouping set.
+   * @param groupingArgs The ordered arguments to grouping.
+   * @param groupSet The grouping set for the current group by operation.
    * @return The grouping value.
    */
-  static long getGroupingValue(ImmutableBitSet fullGroupSet, ImmutableBitSet groupSet) {
+  public static long getGroupingValue(List<Integer> groupingArgs, ImmutableBitSet groupSet) {
     long v = 0;
-    long x = 1L << (fullGroupSet.cardinality() - 1);
-    for (int i : fullGroupSet) {
+    long x = 1L << (groupingArgs.size() - 1);
+    for (int i : groupingArgs) {
       if (!groupSet.get(i)) {
         v |= x;
       }

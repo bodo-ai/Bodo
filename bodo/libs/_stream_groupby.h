@@ -1488,6 +1488,8 @@ class GroupingSetsState {
         std::vector<std::vector<int64_t>> input_columns_remaps_,
         std::vector<std::vector<int64_t>> output_columns_remaps_,
         std::vector<std::vector<int64_t>> missing_output_columns_remaps_,
+        std::vector<int64_t> grouping_output_idxs_,
+        std::vector<std::vector<int64_t>> grouping_values_,
         std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders_,
         int64_t op_id_)
         : op_id(op_id_),
@@ -1497,6 +1499,8 @@ class GroupingSetsState {
           output_columns_remaps(std::move(output_columns_remaps_)),
           missing_output_columns_remaps(
               std::move(missing_output_columns_remaps_)),
+          grouping_output_idxs(std::move(grouping_output_idxs_)),
+          grouping_values(std::move(grouping_values_)),
           key_dict_builders(std::move(key_dict_builders_)) {
         this->current_output_idx = groupby_states.size() - 1;
     }
@@ -1547,6 +1551,11 @@ class GroupingSetsState {
     const std::vector<std::vector<int64_t>> output_columns_remaps;
     // Mapping of which columns are missing from the output type.
     const std::vector<std::vector<int64_t>> missing_output_columns_remaps;
+    // Locations where "GROUPING" values need to be inserted.
+    const std::vector<int64_t> grouping_output_idxs;
+    // Values for each "evaluated" grouping function.
+    const std::vector<std::vector<int64_t>> grouping_values;
+
     bool finalized_output = false;
     // Index for tracking which group by state we are currently producing
     // output for.
