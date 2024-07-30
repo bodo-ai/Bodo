@@ -989,6 +989,9 @@ public enum SqlKind {
   /** The {@code COVAR_SAMP} aggregate function. */
   COVAR_SAMP,
 
+  /** The {@code CORR} aggregate function. */
+  CORR,
+
   /** The {@code REGR_COUNT} aggregate function. */
   REGR_COUNT,
 
@@ -1433,7 +1436,7 @@ public enum SqlKind {
    * {@link #REGR_SYY}.
    */
   public static final Set<SqlKind> COVAR_AVG_AGG_FUNCTIONS =
-      EnumSet.of(COVAR_POP, COVAR_SAMP, REGR_COUNT, REGR_SXX, REGR_SYY);
+      EnumSet.of(COVAR_POP, COVAR_SAMP, CORR, REGR_COUNT, REGR_SXX, REGR_SYY);
 
   /**
    * Category of comparison operators.
