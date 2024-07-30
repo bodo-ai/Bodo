@@ -16,6 +16,7 @@
  */
 package org.apache.calcite.sql.type;
 
+import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -858,12 +859,10 @@ public abstract class ReturnTypes {
   /**
    * Type-inference strategy whereby the result type of a call is
    * {@link #DECIMAL_QUOTIENT_NULLABLE} with a fallback to
-   * {@link #ARG0_INTERVAL_NULLABLE} and {@link #LEAST_RESTRICTIVE}. These rules
-   * are used for division.
+   * always double. These rules are used for division.
    */
   public static final SqlReturnTypeInference QUOTIENT_NULLABLE =
-      DECIMAL_QUOTIENT_NULLABLE.orElse(ARG0_INTERVAL_NULLABLE)
-          .orElse(LEAST_RESTRICTIVE);
+      DECIMAL_QUOTIENT_NULLABLE.orElse(DOUBLE_NULLABLE);
 
   /**
    * Type-inference strategy whereby the result type of a call is the decimal
@@ -1321,8 +1320,10 @@ public abstract class ReturnTypes {
 
   public static final SqlReturnTypeInference AVG_AGG_FUNCTION = opBinding -> {
     final RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
+    BodoSQLRelDataTypeSystem typeSystem = (BodoSQLRelDataTypeSystem)typeFactory.getTypeSystem();
     final RelDataType relDataType =
-        typeFactory.getTypeSystem().deriveAvgAggType(typeFactory,
+            typeSystem.deriveAvgVarStdType(typeFactory,
+            opBinding.getOperator(),
             opBinding.getOperandType(0));
     if (opBinding.getGroupCount() == 0 || opBinding.hasFilter()) {
       return typeFactory.createTypeWithNullability(relDataType, true);

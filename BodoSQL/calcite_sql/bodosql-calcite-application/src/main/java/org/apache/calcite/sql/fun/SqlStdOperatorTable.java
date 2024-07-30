@@ -72,6 +72,7 @@ import org.apache.calcite.sql.type.SqlOperandCountRanges;
 import org.apache.calcite.sql.type.SqlReturnTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.SqlTypeTransforms;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.util.ReflectiveSqlOperatorTable;
 import org.apache.calcite.sql.validate.SqlConformance;
@@ -95,6 +96,7 @@ import java.util.function.Supplier;
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.calcite.sql.type.BodoReturnTypes.BOOL_AGG_RET_TYPE;
 
 /**
  * Implementation of {@link org.apache.calcite.sql.SqlOperatorTable} containing
@@ -1202,13 +1204,27 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
      * <code>COVAR_POP</code> aggregate function.
      */
     public static final SqlAggFunction COVAR_POP =
-            new SqlCovarAggFunction(SqlKind.COVAR_POP);
+            SqlBasicAggFunction.create(
+                            "COVAR_POP",
+                            SqlKind.COVAR_POP,
+                            ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE),
+                            OperandTypes.NUMERIC_NUMERIC
+                    )
+                    .withGroupOrder(Optionality.FORBIDDEN)
+                    .withFunctionType(SqlFunctionCategory.SYSTEM);
 
     /**
      * <code>COVAR_SAMP</code> aggregate function.
      */
     public static final SqlAggFunction COVAR_SAMP =
-            new SqlCovarAggFunction(SqlKind.COVAR_SAMP);
+            SqlBasicAggFunction.create(
+                            "COVAR_SAMP",
+                            SqlKind.COVAR_SAMP,
+                            ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE),
+                            OperandTypes.NUMERIC_NUMERIC
+                    )
+                    .withGroupOrder(Optionality.FORBIDDEN)
+                    .withFunctionType(SqlFunctionCategory.SYSTEM);
 
     /**
      * <code>STDDEV_SAMP</code> aggregate function.
