@@ -488,7 +488,7 @@ def test_single_op_numeric_fns_scalars(
         if arg1[-5:] == "_INTS" and any(
             bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
-            spark_query = f"SELECT CASE WHEN CAST({spark_fn_name}({arg1}, 2) AS TINYINT) = 0 THEN 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS TINYINT) END FROM table1"
+            spark_query = f"SELECT CASE WHEN CAST({spark_fn_name}({arg1}, 2) AS DOUBLE) = 0 THEN 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS DOUBLE) END FROM table1"
         else:
             spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}, 2) = 0 THEN 1 ELSE {spark_fn_name}({arg1}, 2) END FROM table1"
     else:
