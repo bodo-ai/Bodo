@@ -102,6 +102,25 @@ def test_ucx_not_installed(pip_packages, conda_packages):
     ), "UCX Package Installed in Python, DELETE them!"
 
 
+@pytest.mark.skip
+def test_bodo_arrow_fork_installed(conda_packages):
+    pkgs = [
+        "libarrow",
+        "libarrow-acero",
+        "libarrow-dataset",
+        "libarrow-substrait",
+        "libparquet",
+        "pyarrow-core",
+        "pyarrow",
+    ]
+
+    for pkg in pkgs:
+        assert pkg in conda_packages, f"Package {pkg} not installed in AMI"
+        assert (
+            conda_packages[pkg]["channel"] == "bodo.ai"
+        ), f"Package {pkg} not installed from `bodo.ai` channel"
+
+
 @pytest.mark.parametrize(
     "package",
     [
