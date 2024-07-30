@@ -665,7 +665,14 @@ class IcebergParquetReader : public ArrowReader {
             this->out_batches = std::make_shared<ChunkedTableBuilder>(
                 empty_table->schema(), this->dict_builders, (size_t)batch_size);
         }
-        this->ReportInitStageMetrics();
+
+        std::vector<MetricBase> metrics;
+        this->ReportInitStageMetrics(metrics);
+
+        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+            QueryProfileCollector::MakeOperatorStageID(
+                this->op_id, QUERY_PROFILE_INIT_STAGE_ID),
+            std::move(metrics));
     }
 
     // Return and incref the file list.
@@ -1322,21 +1329,22 @@ class IcebergParquetReader : public ArrowReader {
      * the first time it's called.
      *
      */
-    void ReportInitStageMetrics() override {
+    void ReportInitStageMetrics(std::vector<MetricBase>& metrics_out) override {
         if ((this->op_id == -1) || this->reported_init_stage_metrics) {
             return;
         }
-        std::vector<MetricBase> metrics;
-        metrics.reserve(32);
+        metrics_out.reserve(metrics_out.size() + 32);
 
 #define APPEND_TIMER_METRIC(field) \
-    metrics.push_back(TimerMetric(#field, this->iceberg_reader_metrics.field));
+    metrics_out.push_back(         \
+        TimerMetric(#field, this->iceberg_reader_metrics.field));
 
 #define APPEND_STAT_METRIC(field) \
-    metrics.push_back(StatMetric(#field, this->iceberg_reader_metrics.field));
+    metrics_out.push_back(        \
+        StatMetric(#field, this->iceberg_reader_metrics.field));
 
 #define APPEND_GLOBAL_STAT_METRIC(field) \
-    metrics.push_back(                   \
+    metrics_out.push_back(               \
         StatMetric(#field, this->iceberg_reader_metrics.field, true));
 
         APPEND_TIMER_METRIC(get_ds_file_list_time);
@@ -1362,13 +1370,8 @@ class IcebergParquetReader : public ArrowReader {
         APPEND_STAT_METRIC(n_scanners);
         APPEND_TIMER_METRIC(create_scanners_time);
 
-        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(
-                this->op_id, QUERY_PROFILE_INIT_STAGE_ID),
-            std::move(metrics));
-
         // Report the ArrowReader Init Stage metrics.
-        ArrowReader::ReportInitStageMetrics();
+        ArrowReader::ReportInitStageMetrics(metrics_out);
 
 #undef APPEND_GLOBAL_STAT_METRIC
 #undef APPEND_STAT_METRIC
@@ -1381,18 +1384,19 @@ class IcebergParquetReader : public ArrowReader {
      * the first time it's called.
      *
      */
-    void ReportReadStageMetrics() override {
+    void ReportReadStageMetrics(std::vector<MetricBase>& metrics_out) override {
         if ((this->op_id == -1) || this->reported_read_stage_metrics) {
             return;
         }
-        std::vector<MetricBase> metrics;
-        metrics.reserve(8);
+        metrics_out.reserve(metrics_out.size() + 8);
 
 #define APPEND_TIMER_METRIC(field) \
-    metrics.push_back(TimerMetric(#field, this->iceberg_reader_metrics.field));
+    metrics_out.push_back(         \
+        TimerMetric(#field, this->iceberg_reader_metrics.field));
 
 #define APPEND_STAT_METRIC(field) \
-    metrics.push_back(StatMetric(#field, this->iceberg_reader_metrics.field));
+    metrics_out.push_back(        \
+        StatMetric(#field, this->iceberg_reader_metrics.field));
 
         APPEND_TIMER_METRIC(get_batch_time);
         APPEND_TIMER_METRIC(evolve_time);
@@ -1403,13 +1407,8 @@ class IcebergParquetReader : public ArrowReader {
         APPEND_STAT_METRIC(n_small_batches);
         APPEND_TIMER_METRIC(output_pop_chunk_time);
 
-        QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-            QueryProfileCollector::MakeOperatorStageID(
-                this->op_id, QUERY_PROFILE_READ_STAGE_ID),
-            std::move(metrics));
-
         // Report the ArrowReader Read Stage metrics.
-        ArrowReader::ReportReadStageMetrics();
+        ArrowReader::ReportReadStageMetrics(metrics_out);
 
 #undef APPEND_STAT_METRIC
 #undef APPEND_TIMER_METRIC

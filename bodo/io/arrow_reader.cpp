@@ -1554,73 +1554,64 @@ std::shared_ptr<arrow::Table> ArrowReader::cast_arrow_table(
     return arrow::Table::Make(schema, new_cols, table->num_rows());
 }
 
-void ArrowReader::ReportInitStageMetrics() {
+void ArrowReader::ReportInitStageMetrics(std::vector<MetricBase>& metrics_out) {
     if ((this->op_id == -1) || this->reported_init_stage_metrics) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(16);
+    metrics_out.reserve(metrics_out.size() + 16);
 
     // Globals
     MetricBase::StatValue limit_nrows_ = this->tot_rows_to_read;
-    metrics.emplace_back(StatMetric("limit_nrows", limit_nrows_, true));
+    metrics_out.emplace_back(StatMetric("limit_nrows", limit_nrows_, true));
     MetricBase::StatValue force_row_level_ =
         this->force_row_level_read() ? 1 : 0;
-    metrics.emplace_back(StatMetric("force_row_level", force_row_level_, true));
+    metrics_out.emplace_back(
+        StatMetric("force_row_level", force_row_level_, true));
     MetricBase::StatValue row_level_ = this->row_level ? 1 : 0;
-    metrics.emplace_back(StatMetric("row_level", row_level_, true));
+    metrics_out.emplace_back(StatMetric("row_level", row_level_, true));
     // In the row-level case, this is the exact count of the rows that will be
     // output after applying filters. In the piece-level case, this is the
     // amount of rows that will read from source before filtering.
     MetricBase::StatValue global_nrows_to_read = this->total_rows;
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("global_nrows_to_read", global_nrows_to_read, true));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("global_n_pieces", this->metrics.global_n_pieces, true));
     MetricBase::StatValue create_dict_from_str =
         this->create_dict_encoding_from_strings ? 1 : 0;
-    metrics.emplace_back(StatMetric("create_dict_encoding_from_strings",
-                                    create_dict_from_str, true));
-    metrics.emplace_back(StatMetric("n_str_as_dict_cols",
-                                    this->metrics.n_str_as_dict_cols, true));
+    metrics_out.emplace_back(StatMetric("create_dict_encoding_from_strings",
+                                        create_dict_from_str, true));
+    metrics_out.emplace_back(StatMetric(
+        "n_str_as_dict_cols", this->metrics.n_str_as_dict_cols, true));
 
     // Locals
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         TimerMetric("get_ds_time", this->metrics.get_ds_time, false));
-    metrics.emplace_back(TimerMetric("init_arrow_reader_total_time",
-                                     this->metrics.init_arrow_reader_total_time,
-                                     false));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
+        TimerMetric("init_arrow_reader_total_time",
+                    this->metrics.init_arrow_reader_total_time, false));
+    metrics_out.emplace_back(
         TimerMetric("distribute_pieces_or_rows_time",
                     this->metrics.distribute_pieces_or_rows_time, false));
-    metrics.emplace_back(
+    metrics_out.emplace_back(
         StatMetric("local_rows_to_read", this->metrics.local_rows_to_read));
-    metrics.emplace_back(StatMetric("local_n_pieces_to_read_from",
-                                    this->metrics.local_n_pieces_to_read_from));
+    metrics_out.emplace_back(
+        StatMetric("local_n_pieces_to_read_from",
+                   this->metrics.local_n_pieces_to_read_from));
 
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(this->op_id,
-                                                   QUERY_PROFILE_INIT_STAGE_ID),
-        std::move(metrics));
     this->reported_init_stage_metrics = true;
 }
 
-void ArrowReader::ReportReadStageMetrics() {
+void ArrowReader::ReportReadStageMetrics(std::vector<MetricBase>& metrics_out) {
     if ((this->op_id == -1) || this->reported_read_stage_metrics) {
         return;
     }
 
-    std::vector<MetricBase> metrics;
-    metrics.reserve(2);
+    metrics_out.reserve(metrics_out.size() + 2);
 
-    metrics.emplace_back(TimerMetric("read_batch_total_time",
-                                     this->metrics.read_batch_total_time));
-
-    QueryProfileCollector::Default().RegisterOperatorStageMetrics(
-        QueryProfileCollector::MakeOperatorStageID(this->op_id,
-                                                   QUERY_PROFILE_READ_STAGE_ID),
-        std::move(metrics));
+    metrics_out.emplace_back(TimerMetric("read_batch_total_time",
+                                         this->metrics.read_batch_total_time));
 
     this->reported_read_stage_metrics = true;
 }
@@ -1692,8 +1683,14 @@ table_info* arrow_reader_read_py_entry(ArrowReader* reader, bool* is_last_out,
                     QueryProfileCollector::MakeOperatorStageID(
                         reader->op_id, QUERY_PROFILE_READ_STAGE_ID),
                     reader->metrics.output_row_count);
+
+                std::vector<MetricBase> metrics;
+                reader->ReportReadStageMetrics(metrics);
+                QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+                    QueryProfileCollector::MakeOperatorStageID(
+                        reader->op_id, QUERY_PROFILE_READ_STAGE_ID),
+                    std::move(metrics));
             }
-            reader->ReportReadStageMetrics();
         }
         return table;
     } catch (const std::exception& e) {

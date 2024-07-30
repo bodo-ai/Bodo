@@ -355,16 +355,18 @@ class ArrowReader {
      * Note that this will only report the metrics to the QueryProfileCollector
      * the first time it's called.
      *
+     * @param metrics_out out param to push metrics into
      */
-    virtual void ReportInitStageMetrics();
+    virtual void ReportInitStageMetrics(std::vector<MetricBase>& metrics_out);
 
     /**
      * @brief Report Read Stage metrics if they haven't already been reported.
      * Note that this will only report the metrics to the QueryProfileCollector
      * the first time it's called.
      *
+     * @param metrics_out out param to push metrics into
      */
-    virtual void ReportReadStageMetrics();
+    virtual void ReportReadStageMetrics(std::vector<MetricBase>& metrics_out);
 
     /**
      * @brief getter for reported_init_stage_metrics

@@ -215,8 +215,13 @@ class QueryProfileCollector {
     void SubmitOperatorStageTime(operator_stage_t op_stage, int64_t time);
     int64_t GetOperatorDuration(operator_id_t operator_id);
 
-    // This is only required by C++ at this point since
-    // only operators with states in C++ will use this.
+    /**
+     * @brief This is only required by C++ at this point since
+     * only operators with states in C++ will use this.
+     *
+     * @param op_stage id of the operator and stage to report metrics for
+     * @param metrics metrics to report
+     */
     void RegisterOperatorStageMetrics(operator_stage_t op_stage,
                                       std::vector<MetricBase> metrics);
 

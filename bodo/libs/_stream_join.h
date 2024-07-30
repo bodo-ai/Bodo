@@ -769,16 +769,30 @@ class JoinState {
     virtual ~JoinState() {}
 
     virtual void FinalizeBuild() {
+        if (!this->build_input_finalized) {
+            // Report metrics to the QueryProfileCollector
+            std::vector<MetricBase> metrics;
+            this->ReportBuildStageMetrics(metrics);
+            QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+                QueryProfileCollector::MakeOperatorStageID(
+                    this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
+                std::move(metrics));
+        }
         this->build_input_finalized = true;
-        // Report metrics to the QueryProfileCollector
-        this->ReportBuildStageMetrics();
     }
 
     virtual void FinalizeProbe() {
         this->output_buffer->Finalize(/*shrink_to_fit*/ true);
+        if (!this->probe_input_finalized) {
+            // Report metrics to the QueryProfileCollector
+            std::vector<MetricBase> metrics;
+            this->ReportProbeStageMetrics(metrics);
+            QueryProfileCollector::Default().RegisterOperatorStageMetrics(
+                QueryProfileCollector::MakeOperatorStageID(
+                    this->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
+                std::move(metrics));
+        }
         this->probe_input_finalized = true;
-        // Report metrics to the QueryProfileCollector
-        this->ReportProbeStageMetrics();
     }
 
     virtual void InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
@@ -866,7 +880,7 @@ class JoinState {
      * is a NOP. Children classes are expected to override this.
      *
      */
-    virtual void ReportBuildStageMetrics();
+    virtual void ReportBuildStageMetrics(std::vector<MetricBase>& metrics_out);
 
     /**
      * @brief Helper function to report metrics from the probe stage to the
@@ -875,7 +889,7 @@ class JoinState {
      * expected to override and extend this.
      *
      */
-    virtual void ReportProbeStageMetrics();
+    virtual void ReportProbeStageMetrics(std::vector<MetricBase>& metrics_out);
 };
 
 class HashJoinState : public JoinState {
@@ -1232,8 +1246,8 @@ class HashJoinState : public JoinState {
    protected:
     /// Override the metric reporting helpers to report the detailed metrics
     /// collected during the build and probe stages.
-    void ReportBuildStageMetrics() override;
-    void ReportProbeStageMetrics() override;
+    void ReportBuildStageMetrics(std::vector<MetricBase>& metrics_out) override;
+    void ReportProbeStageMetrics(std::vector<MetricBase>& metrics_out) override;
 };
 
 /**
@@ -1386,8 +1400,8 @@ class NestedLoopJoinState : public JoinState {
    protected:
     /// Override the metric reporting helpers to report the detailed metrics
     /// collected during the build and probe stages.
-    void ReportBuildStageMetrics() override;
-    void ReportProbeStageMetrics() override;
+    void ReportBuildStageMetrics(std::vector<MetricBase>& metrics_out) override;
+    void ReportProbeStageMetrics(std::vector<MetricBase>& metrics_out) override;
 };
 
 /**
