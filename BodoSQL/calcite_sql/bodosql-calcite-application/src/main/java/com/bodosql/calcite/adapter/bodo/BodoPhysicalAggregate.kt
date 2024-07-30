@@ -14,6 +14,7 @@ import com.bodosql.calcite.ir.Op
 import com.bodosql.calcite.ir.Op.Assign
 import com.bodosql.calcite.ir.Op.Stmt
 import com.bodosql.calcite.ir.Op.TupleAssign
+import com.bodosql.calcite.ir.OperatorID
 import com.bodosql.calcite.ir.OperatorType
 import com.bodosql.calcite.ir.StateVariable
 import com.bodosql.calcite.ir.StreamingPipelineFrame
@@ -27,8 +28,6 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.AggregateCall
 import org.apache.calcite.rel.metadata.RelMetadataQuery
-import org.apache.calcite.sql.SqlKind
-import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
 import org.apache.calcite.util.Pair
 import kotlin.math.ceil
@@ -58,6 +57,14 @@ class BodoPhysicalAggregate(
         aggCalls: List<AggregateCall>,
     ): BodoPhysicalAggregate {
         return BodoPhysicalAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
+    }
+
+    /**
+     * Determine if this aggregate should use the
+     * grouping sets code paths.
+     */
+    private fun usesGroupingSets(): Boolean {
+        return groupSets.size > 1 || (groupSets[0] != groupSet)
     }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
@@ -108,23 +115,44 @@ class BodoPhysicalAggregate(
         val batchExitCond: Variable = pipeline.getExitCond()
         val newExitCond: Variable = builder.symbolTable.genFinishedStreamingFlag()
         val inputRequest: Variable = builder.symbolTable.genInputRequestVar()
-        // is_final_pipeline is always True in the regular GroupBy case.
         val batchCall =
-            Expr.Call(
-                "bodo.libs.stream_groupby.groupby_build_consume_batch",
-                listOf(
-                    stateVar,
-                    input,
-                    batchExitCond,
-                    // is_final_pipeline
-                    Expr.BooleanLiteral(true),
-                ),
-            )
+            if (usesGroupingSets()) {
+                Expr.Call(
+                    "bodo.libs.stream_groupby.groupby_grouping_sets_build_consume_batch",
+                    listOf(
+                        stateVar,
+                        input,
+                        batchExitCond,
+                    ),
+                )
+            } else {
+                Expr.Call(
+                    "bodo.libs.stream_groupby.groupby_build_consume_batch",
+                    listOf(
+                        stateVar,
+                        input,
+                        batchExitCond,
+                        // is_final_pipeline is always true for groupBy
+                        Expr.BooleanLiteral(true),
+                    ),
+                )
+            }
         builder.add(TupleAssign(listOf(newExitCond, inputRequest), batchCall))
         pipeline.addInputRequest(inputRequest)
         pipeline.endSection(newExitCond)
         // Only GroupBy build needs a memory budget since output only has a ChunkedTableBuilder
         builder.forceEndOperatorAtCurPipeline(ctx.operatorID(), pipeline)
+        // Also end any nested operators.
+        if (usesGroupingSets()) {
+            val subOperatorIDs = generateSubOperatorIDs(ctx.operatorID())
+            subOperatorIDs.forEach {
+                builder.forceEndOperatorAtCurPipeline(it, pipeline)
+            }
+        }
+    }
+
+    private fun generateSubOperatorIDs(operatorID: OperatorID): List<OperatorID> {
+        return (1..groupSets.size).map { OperatorID(operatorID.id + it, operatorID.hide) }
     }
 
     private fun emitStreamingProduceOutput(
@@ -137,15 +165,18 @@ class BodoPhysicalAggregate(
         val outTable: Variable = builder.symbolTable.genTableVar()
         val outputControl: Variable = builder.symbolTable.genOutputControlVar()
         pipeline.addOutputControl(outputControl)
-        val outputCall =
-            Expr.Call(
-                "bodo.libs.stream_groupby.groupby_produce_output_batch",
-                listOf(stateVar, outputControl),
-            )
+        val functionName =
+            if (usesGroupingSets()) {
+                "bodo.libs.stream_groupby.groupby_grouping_sets_produce_output_batch"
+            } else {
+                "bodo.libs.stream_groupby.groupby_produce_output_batch"
+            }
+        val outputCall = Expr.Call(functionName, listOf(stateVar, outputControl))
         builder.add(TupleAssign(listOf(outTable, pipeline.getExitCond()), outputCall))
         val intermediateTable = BodoEngineTable(outTable.emit(), this)
-        val filteredAggCallList = Utils.literalAggPrunedAggList(this.aggCallList)
-        return if (filteredAggCallList.size !== this.aggCallList.size) {
+        val filteredAggCallList = Utils.literalAggPrunedAggList(aggCallList)
+        // TODO: Modify this to handle grouping
+        return if (filteredAggCallList.size !== aggCallList.size) {
             // Append any Literal data if it exists.
             Utils.concatenateLiteralAggValue(builder, ctx, intermediateTable, this)
         } else {
@@ -154,13 +185,12 @@ class BodoPhysicalAggregate(
     }
 
     private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return (implementor::build)(this.inputs) {
+        return (implementor::build)(inputs) {
                 ctx, inputs ->
-            val groupingVariables = this.getGroupSet().asList()
-            val groups = this.getGroupSets()
+            val groupingVariables = groupSet.asList()
+            val groups = groupSets
             val expectedOutputCols: List<String> = this.getRowType().fieldNames
             val outVar: Variable = ctx.builder().symbolTable.genDfVar()
-            val aggCallList: List<AggregateCall> = this.aggCallList
             // Remove any LITERAL_AGG nodes.
             val filteredAggregateCallList = Utils.literalAggPrunedAggList(aggCallList)
 
@@ -183,8 +213,6 @@ class BodoPhysicalAggregate(
             // If any group is missing a column we may need to do a concat.
             var hasMissingColsGroup = false
 
-            val distIfNoGroup = groups.size > 1
-
             // Naive implementation for handling multiple aggregation groups, where we
             // repeatedly
             // call group by, and append the dataframes together
@@ -203,7 +231,7 @@ class BodoPhysicalAggregate(
                             inputColumnNames,
                             filteredAggregateCallList,
                             aggCallNames,
-                            distIfNoGroup,
+                            usesGroupingSets(),
                             ctx,
                         )
                 } else {
@@ -230,7 +258,7 @@ class BodoPhysicalAggregate(
                 ctx.builder().add(Assign(outDf, curGroupAggExpr!!))
             }
             // If we have multiple groups, append the dataframes together
-            if (groups.size > 1 || hasMissingColsGroup) {
+            if (usesGroupingSets() || hasMissingColsGroup) {
                 // It is not guaranteed that a particular input column exists in any of the
                 // output
                 // dataframes,
@@ -337,32 +365,70 @@ class BodoPhysicalAggregate(
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         val builder = ctx.builder()
         val stateVar = builder.symbolTable.genStateVar()
-        val keyIndicesList = AggCodeGen.getStreamingGroupByKeyIndices(this.getGroupSet())
+        val keyIndicesList = AggCodeGen.getStreamingGroupByKeyIndices(groupSet)
         val keyIndices: Variable = ctx.lowerAsMetaType(Expr.Tuple(keyIndicesList))
-        val filteredAggCallList = Utils.literalAggPrunedAggList(this.aggCallList)
+        // TODO: Modify this to handle grouping
+        val filteredAggCallList = Utils.literalAggPrunedAggList(aggCallList)
         val offsetAndCols = AggCodeGen.getStreamingGroupByOffsetAndCols(filteredAggCallList, ctx, keyIndicesList[0])
         val offset = offsetAndCols.left
         val cols = offsetAndCols.right
-        val fnames = AggCodeGen.getStreamingGroupbyFnames(filteredAggCallList, ctx)
-        val stateCall =
-            Expr.Call(
-                "bodo.libs.stream_groupby.init_groupby_state",
-                ctx.operatorID().toExpr(),
-                keyIndices,
-                fnames,
-                offset,
-                cols,
+        val funcNames = AggCodeGen.getStreamingGroupbyFnames(filteredAggCallList, ctx)
+        if (usesGroupingSets()) {
+            // Generate the grouping state indices.
+            val groupingSets =
+                groupSets.map {
+                    Expr.Tuple(AggCodeGen.getStreamingGroupByKeyIndices(it))
+                }
+            val groupingSetsVar = ctx.lowerAsMetaType(Expr.Tuple(groupingSets))
+            val operatorId = ctx.operatorID()
+            val subOperatorIDs = generateSubOperatorIDs(operatorId)
+            val subOperatorIDCodegen = ctx.lowerAsMetaType(Expr.Tuple(subOperatorIDs.map { it.toExpr() }))
+            // TODO: Add handling for if we are using GROUPING.
+            val stateCall =
+                Expr.Call(
+                    "bodo.libs.stream_groupby.init_grouping_sets_state",
+                    operatorId.toExpr(),
+                    subOperatorIDCodegen,
+                    keyIndices,
+                    groupingSetsVar,
+                    funcNames,
+                    offset,
+                    cols,
+                )
+            val groupByInit = Assign(stateVar, stateCall)
+            // Fetch the streaming pipeline
+            val pipeline: StreamingPipelineFrame = ctx.builder().getCurrentStreamingPipeline()
+            val mq: RelMetadataQuery = cluster.metadataQuery
+            pipeline.initializeStreamingState(
+                operatorId,
+                groupByInit,
+                OperatorType.GROUPING_SETS,
+                0,
             )
-        val groupbyInit = Assign(stateVar, stateCall)
-        // Fetch the streaming pipeline
-        val inputPipeline: StreamingPipelineFrame = ctx.builder().getCurrentStreamingPipeline()
-        val mq: RelMetadataQuery = this.cluster.metadataQuery
-        inputPipeline.initializeStreamingState(
-            ctx.operatorID(),
-            groupbyInit,
-            OperatorType.GROUPBY,
-            this.estimateBuildMemory(mq),
-        )
+            subOperatorIDs.withIndex().forEach {
+                pipeline.startNestedOperator(it.value, OperatorType.GROUPBY, estimateGroupingSetMemory(mq, groupSets[it.index]))
+            }
+        } else {
+            val stateCall =
+                Expr.Call(
+                    "bodo.libs.stream_groupby.init_groupby_state",
+                    ctx.operatorID().toExpr(),
+                    keyIndices,
+                    funcNames,
+                    offset,
+                    cols,
+                )
+            val groupByInit = Assign(stateVar, stateCall)
+            // Fetch the streaming pipeline
+            val pipeline: StreamingPipelineFrame = ctx.builder().getCurrentStreamingPipeline()
+            val mq: RelMetadataQuery = cluster.metadataQuery
+            pipeline.initializeStreamingState(
+                ctx.operatorID(),
+                groupByInit,
+                OperatorType.GROUPBY,
+                estimateBuildMemory(mq),
+            )
+        }
         return stateVar
     }
 
@@ -371,12 +437,31 @@ class BodoPhysicalAggregate(
         stateVar: StateVariable,
     ) {
         val finalizePipeline = ctx.builder().getCurrentStreamingPipeline()
-        val deleteState = Stmt(Expr.Call("bodo.libs.stream_groupby.delete_groupby_state", listOf(stateVar)))
+        val functionName =
+            if (usesGroupingSets()) {
+                "bodo.libs.stream_groupby.delete_grouping_sets_state"
+            } else {
+                "bodo.libs.stream_groupby.delete_groupby_state"
+            }
+        val deleteState = Stmt(Expr.Call(functionName, listOf(stateVar)))
         finalizePipeline.addTermination(deleteState)
     }
 
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.aggregateProperty(groupSets, aggCalls, getRowType())
+        return ExpectedBatchingProperty.aggregateProperty(groupSet, groupSets, aggCalls, getRowType())
+    }
+
+    /**
+     * Estimate the memory needed for each grouping set. If a key cannot be found then we select an equal fraction
+     * of the total row count.
+     */
+    private fun estimateGroupingSetMemory(
+        mq: RelMetadataQuery,
+        groupKeys: ImmutableBitSet,
+    ): Int {
+        val distinctRows = mq.getDistinctRowCount(this, groupKeys, null) ?: mq.getRowCount(this) / groupSets.size
+        val averageBuildRowSize = mq.getAverageRowSize(this) ?: 8.0
+        return ceil(distinctRows * averageBuildRowSize).toInt()
     }
 
     /**
@@ -386,13 +471,9 @@ class BodoPhysicalAggregate(
         // See if streaming group by will use accumulate or aggregate code path
         var isStreamAccumulate = false
         for (aggCall in aggCalls) {
-            val kind = aggCall.aggregation.getKind()
-            val name = aggCall.aggregation.name
             // Should match accumulate function check in C++:
             // https://github.com/Bodo-inc/Bodo/blob/3c902f01b0aa0748793b00554304d8a051f511aa/bodo/libs/_stream_groupby.cpp#L1101
-            if (name == "LISTAGG" || kind == SqlKind.MEDIAN || kind == SqlKind.MODE ||
-                (kind == SqlKind.COUNT && aggCall.argList.isNotEmpty() && aggCall.isDistinct)
-            ) {
+            if (!ExpectedBatchingProperty.streamingSupportedWithoutAccumulateAggFunction(aggCall)) {
                 isStreamAccumulate = true
                 break
             }
@@ -405,39 +486,17 @@ class BodoPhysicalAggregate(
                 keySet.add(i)
             }
         }
-
-        // Streaming groupby uses accumulate path when running values are string or nested data types
-        // https://github.com/Bodo-inc/Bodo/blob/da5696256a1fc44d41a62354de8f492bf0e7f148/bodo/libs/_stream_groupby.cpp#L1182
-        for (i in 0..<this.getRowType().fieldList.size) {
-            // NOTE: this.rowType will access the actual attribute here which could be null.
-            // We are in a subclass and the attributed is protected, so we have access and Kotlin won't use the getter.
-            if (keySet.contains(i)) {
-                continue
-            }
-            val field = this.getRowType().fieldList[i]
-            val typeName = field.type.sqlTypeName
-            if (typeName.equals(SqlTypeName.VARCHAR) || typeName.equals(SqlTypeName.VARBINARY) ||
-                typeName.equals(SqlTypeName.CHAR) || typeName.equals(SqlTypeName.BINARY) ||
-                typeName.equals(SqlTypeName.ARRAY) || typeName.equals(SqlTypeName.MAP) ||
-                // OTHER is VARIANT type
-                typeName.equals(SqlTypeName.OTHER)
-            ) {
-                isStreamAccumulate = true
-                break
-            }
-        }
-
         // Accumulate code path needs all input in memory
-        if (isStreamAccumulate) {
-            val buildRows = mq.getRowCount(this.getInput())
-            val averageBuildRowSize = mq.getAverageRowSize(this.getInput()) ?: 8.0
+        return if (isStreamAccumulate) {
+            val buildRows = mq.getRowCount(input)
+            val averageBuildRowSize = mq.getAverageRowSize(input) ?: 8.0
             // multiply by 3 to account for extra memory needed in update call at the end
-            return ceil(3 * buildRows * averageBuildRowSize).toInt()
+            ceil(3 * buildRows * averageBuildRowSize).toInt()
         } else {
             // Use output row count for aggregate code path
             val distinctRows = mq.getRowCount(this)
             val averageBuildRowSize = mq.getAverageRowSize(this) ?: 8.0
-            return ceil(distinctRows * averageBuildRowSize).toInt()
+            ceil(distinctRows * averageBuildRowSize).toInt()
         }
     }
 

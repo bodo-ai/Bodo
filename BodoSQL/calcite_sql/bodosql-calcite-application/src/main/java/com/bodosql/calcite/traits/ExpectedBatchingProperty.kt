@@ -1,7 +1,6 @@
 package com.bodosql.calcite.traits
 
 import com.bodosql.calcite.application.operatorTables.AggOperatorTable
-import com.bodosql.calcite.application.utils.AggHelpers
 import com.bodosql.calcite.table.BodoSqlTable
 import com.bodosql.calcite.table.CatalogTable
 import org.apache.calcite.rel.core.AggregateCall
@@ -10,9 +9,11 @@ import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
-import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.`fun`.SqlAggOperatorTable
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
+import org.apache.calcite.sql.type.SqlTypeFamily
+import org.apache.calcite.sql.type.SqlTypeName
+import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.util.ImmutableBitSet
 
 /**
@@ -132,7 +133,7 @@ class ExpectedBatchingProperty {
         }
 
         @JvmStatic
-        val unsupportedAggregates =
+        private val unsupportedAggregates =
             setOf(
                 SqlStdOperatorTable.PERCENTILE_CONT.name,
                 SqlStdOperatorTable.PERCENTILE_DISC.name,
@@ -142,14 +143,42 @@ class ExpectedBatchingProperty {
                 AggOperatorTable.OBJECT_AGG.name,
             )
 
+        // Note: This is based on the list in the GroupbyState
+        // constructor in _stream_groupby.cpp.
         @JvmStatic
-        private fun streamingSupportedAggFunction(a: SqlAggFunction): Boolean {
-            return !unsupportedAggregates.contains(a.name)
+        private val accumulateOnlyAggregates =
+            setOf(
+                AggOperatorTable.MEDIAN.name,
+                SqlStdOperatorTable.MODE.name,
+            )
+
+        @JvmStatic
+        private val semiStructuredTypes = setOf(SqlTypeName.ARRAY, SqlTypeName.MAP, SqlTypeName.STRUCTURED)
+
+        // Note: This is based on the list in the GroupbyState
+        // constructor in _stream_groupby.cpp.
+        @JvmStatic
+        private fun isAccumulateType(type: RelDataType): Boolean {
+            return type is VariantSqlType || SqlTypeFamily.STRING.contains(type) || semiStructuredTypes.contains(type.sqlTypeName)
+        }
+
+        @JvmStatic
+        fun streamingSupportedWithoutAccumulateAggFunction(a: AggregateCall): Boolean {
+            return streamingSupportedAggFunction(a) &&
+                !(
+                    a.isDistinct || accumulateOnlyAggregates.contains(a.aggregation.name) || isAccumulateType(a.getType())
+                )
+        }
+
+        @JvmStatic
+        fun streamingSupportedAggFunction(a: AggregateCall): Boolean {
+            return !a.hasFilter() && !unsupportedAggregates.contains(a.aggregation.name)
         }
 
         /**
          * Determine the streaming trait that can be used for an aggregation.
          *
+         * @param groupSet the total group set of all keys used by any grouping set.
          * @param groupSets the grouping sets used by the aggregation node.
          * If there is more than one grouping in the sets, or the singleton
          * grouping is a no-groupby aggregation, then the aggregation
@@ -163,17 +192,25 @@ class ExpectedBatchingProperty {
          */
         @JvmStatic
         fun aggregateProperty(
+            groupSet: ImmutableBitSet,
             groupSets: List<ImmutableBitSet>,
             aggCallList: List<AggregateCall>,
             rowType: RelDataType,
         ): BatchingProperty {
             var canStream =
-                groupSets.size == 1 && groupSets[0].cardinality() != 0 &&
-                    !AggHelpers.aggContainsFilter(aggCallList) &&
-                    aggCallList.all {
-                            a ->
-                        streamingSupportedAggFunction(a.aggregation)
-                    }
+                (
+                    groupSet.cardinality() != 0 && groupSets.size == 1 && groupSets[0] == groupSet &&
+                        aggCallList.all {
+                                a ->
+                            streamingSupportedAggFunction(a)
+                        }
+                ) || (
+                    groupSets.all { !it.isEmpty } && aggCallList.all { streamingSupportedWithoutAccumulateAggFunction(it) } &&
+                        groupSet.all {
+                            val keyType = rowType.fieldList[it].type
+                            !semiStructuredTypes.contains(keyType.sqlTypeName) && keyType!is VariantSqlType
+                        }
+                )
 
             val nodeTypes = rowTypeToTypes(rowType)
             return getBatchingProperty(canStream, nodeTypes)

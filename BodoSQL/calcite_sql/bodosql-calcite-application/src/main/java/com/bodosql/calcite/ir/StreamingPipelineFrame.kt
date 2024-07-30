@@ -133,6 +133,18 @@ class StreamingPipelineFrame(
     }
 
     /**
+     * Adds a new operator to the scope that doesn't have its own
+     * state variable because it's nested inside another operator.
+     */
+    fun startNestedOperator(
+        opID: OperatorID,
+        type: OperatorType,
+        memoryEstimate: Int = -1,
+    ) {
+        scope.startOperator(opID, pipelineID, type, memoryEstimate)
+    }
+
+    /**
      * Adds a new Op to be executed after the loop
      * This is intended if we need to "clean up" state.
      * @param term Operation to add.
