@@ -12,4 +12,5 @@ enum class OperatorType {
     WINDOW,
     ACCUMULATE_TABLE,
     SORT,
+    GROUPING_SETS,
 }

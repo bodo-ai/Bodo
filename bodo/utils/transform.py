@@ -365,6 +365,7 @@ no_side_effect_call_tuples = {
     # Streaming state init functions
     ("init_join_state", "stream_join", "libs", bodo),
     ("init_groupby_state", "stream_groupby", "libs", bodo),
+    ("init_grouping_sets_state", "stream_groupby", "libs", bodo),
     ("init_union_state", "stream_union", "libs", bodo),
     # Datetime utils
     # TODO(njriasan): Move all "pure" datetime_date_ext functions

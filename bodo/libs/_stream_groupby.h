@@ -1107,7 +1107,8 @@ class GroupbyState {
                  std::vector<bool> mrnf_part_cols_to_keep_,
                  std::vector<bool> mrnf_sort_cols_to_keep_,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 int64_t op_id_, int64_t op_pool_size_bytes_);
+                 int64_t op_id_, int64_t op_pool_size_bytes_,
+                 bool allow_any_work_stealing = true);
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1466,6 +1467,86 @@ class GroupbyState {
      */
     bool MaxPartitionExceedsThreshold(size_t num_bits, uint32_t bitmask,
                                       double threshold);
+};
+
+struct GroupingSetsMetrics {
+    using stat_t = MetricBase::StatValue;
+    stat_t output_row_count = 0;
+};
+
+/**
+ * @brief State for a group by operator that is used as a wrapper
+ * around several GroupbyState objects.
+ */
+class GroupingSetsState {
+   public:
+    GroupingSetsState(
+        std::unique_ptr<bodo::Schema> keys_schema_,
+        std::vector<std::unique_ptr<GroupbyState>> groupby_states_,
+        std::vector<std::vector<int64_t>> input_columns_remaps_,
+        std::vector<std::vector<int64_t>> output_columns_remaps_,
+        std::vector<std::vector<int64_t>> missing_output_columns_remaps_,
+        int64_t op_id_)
+        : op_id(op_id_),
+          keys_schema(std::move(keys_schema_)),
+          groupby_states(std::move(groupby_states_)),
+          input_columns_remaps(std::move(input_columns_remaps_)),
+          output_columns_remaps(std::move(output_columns_remaps_)),
+          missing_output_columns_remaps(
+              std::move(missing_output_columns_remaps_)) {
+        this->current_output_idx = groupby_states.size() - 1;
+    }
+
+    /**
+     * @brief Consume a batch of the input data and dispatch to each group by
+     * state. Returns a pair of booleans. The first boolean indicates if the
+     * input was the final input across all states. The second boolean indicates
+     * if any state wants us to pause the input.
+     *
+     * @param input_table The input table to consume.
+     * @param is_last Is this our local last entry.
+     * @return std::pair<bool, bool> The pair of outputs for determining if we
+     * are globally done receiving inputs (with false negatives) and if we
+     * should pause the input.
+     */
+    std::pair<bool, bool> ConsumeBuildBatch(
+        std::shared_ptr<table_info> input_table, bool is_last);
+
+    /**
+     * @brief Produce an output batch of data from one of the group by states.
+     * This includes the logic to remap the columns to the final output schema,
+     * inserting nulls where necessary.
+     *
+     * @param produce_output Should output be produced.
+     * @return std::pair<std::shared_ptr<table_info>, bool> The output table and
+     * if this is the final output.
+     */
+    std::pair<std::shared_ptr<table_info>, bool> ProduceOutputBatch(
+        bool produce_output);
+
+    const int64_t op_id;
+
+    GroupingSetsMetrics metrics;
+
+   private:
+    // The schema of keys so we can output null values of the correct type.
+    const std::unique_ptr<bodo::Schema> keys_schema;
+    // States to dispatch to for each group by operation.
+    const std::vector<std::unique_ptr<GroupbyState>> groupby_states;
+    // Mapping on the build side to go from the general input to the subset
+    // used by the groupby_states.
+    const std::vector<std::vector<int64_t>> input_columns_remaps;
+    // Mapping from the output type from each group by state to its locations
+    // in the final output type. This is largely the same as the
+    // input_columns_remaps but the data columns are replaced with the output
+    // columns from the functions.
+    const std::vector<std::vector<int64_t>> output_columns_remaps;
+    // Mapping of which columns are missing from the output type.
+    const std::vector<std::vector<int64_t>> missing_output_columns_remaps;
+    bool finalized_output = false;
+    // Index for tracking which group by state we are currently producing
+    // output for.
+    int current_output_idx;
 };
 
 /**

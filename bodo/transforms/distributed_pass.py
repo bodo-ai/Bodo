@@ -583,6 +583,10 @@ class DistributedPass:
                 "bodo.libs.stream_groupby",
             ),
             (
+                "init_grouping_sets_state",
+                "bodo.libs.stream_groupby",
+            ),
+            (
                 "init_stream_sort_state",
                 "bodo.libs.stream_sort",
             ),

@@ -907,10 +907,8 @@ public class AggCodeGen {
    */
   public static List<Expr.IntegerLiteral> getStreamingGroupByKeyIndices(ImmutableBitSet groupSet) {
     List<Expr.IntegerLiteral> indices = new ArrayList<>();
-    for (int i = 0; i < groupSet.size(); i++) {
-      if (groupSet.get(i)) {
-        indices.add(new Expr.IntegerLiteral(i));
-      }
+    for (int key : groupSet) {
+      indices.add(new Expr.IntegerLiteral(key));
     }
     return indices;
   }

@@ -2357,18 +2357,16 @@ void GroupbyOutputState::ExportMetrics(std::vector<MetricBase>& metrics) {
 /* ----------------------------- GroupbyState ----------------------------- */
 #pragma region  // GroupbyState
 
-GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
-                           std::vector<int32_t> ftypes,
-                           std::vector<int32_t> window_ftypes_,
-                           std::vector<int32_t> f_in_offsets_,
-                           std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                           std::vector<bool> mrnf_sort_asc_vec_,
-                           std::vector<bool> mrnf_sort_na_pos_,
-                           std::vector<bool> mrnf_part_cols_to_keep_,
-                           std::vector<bool> mrnf_sort_cols_to_keep_,
-                           int64_t output_batch_size_, bool parallel_,
-                           int64_t sync_iter_, int64_t op_id_,
-                           int64_t op_pool_size_bytes_)
+GroupbyState::GroupbyState(
+    const std::unique_ptr<bodo::Schema>& in_schema_,
+    std::vector<int32_t> ftypes, std::vector<int32_t> window_ftypes_,
+    std::vector<int32_t> f_in_offsets_, std::vector<int32_t> f_in_cols_,
+    uint64_t n_keys_, std::vector<bool> mrnf_sort_asc_vec_,
+    std::vector<bool> mrnf_sort_na_pos_,
+    std::vector<bool> mrnf_part_cols_to_keep_,
+    std::vector<bool> mrnf_sort_cols_to_keep_, int64_t output_batch_size_,
+    bool parallel_, int64_t sync_iter_, int64_t op_id_,
+    int64_t op_pool_size_bytes_, bool allow_any_work_stealing)
     :  // Create the operator buffer pool
       op_pool(std::make_unique<bodo::OperatorBufferPool>(
           op_id_,
@@ -2491,20 +2489,26 @@ GroupbyState::GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
                            this->n_keys, "GroupbyState::GroupbyState");
     }
 
-    if (this->agg_type == AggregationType::WINDOW) {
-        char* disable_output_work_stealing_env_ =
-            std::getenv("BODO_STREAM_WINDOW_DISABLE_OUTPUT_WORK_STEALING");
-        if (disable_output_work_stealing_env_) {
-            this->enable_output_work_stealing_window =
-                (std::strcmp(disable_output_work_stealing_env_, "0") == 0);
+    if (allow_any_work_stealing) {
+        if (this->agg_type == AggregationType::WINDOW) {
+            char* disable_output_work_stealing_env_ =
+                std::getenv("BODO_STREAM_WINDOW_DISABLE_OUTPUT_WORK_STEALING");
+            if (disable_output_work_stealing_env_) {
+                this->enable_output_work_stealing_window =
+                    (std::strcmp(disable_output_work_stealing_env_, "0") == 0);
+            }
+        } else {
+            char* enable_output_work_stealing_env_ =
+                std::getenv("BODO_STREAM_GROUPBY_ENABLE_OUTPUT_WORK_STEALING");
+            if (enable_output_work_stealing_env_) {
+                this->enable_output_work_stealing_groupby =
+                    (std::strcmp(enable_output_work_stealing_env_, "1") == 0);
+            }
         }
     } else {
-        char* enable_output_work_stealing_env_ =
-            std::getenv("BODO_STREAM_GROUPBY_ENABLE_OUTPUT_WORK_STEALING");
-        if (enable_output_work_stealing_env_) {
-            this->enable_output_work_stealing_groupby =
-                (std::strcmp(enable_output_work_stealing_env_, "1") == 0);
-        }
+        // Work stealing isn't safe (e.g. grouping sets)
+        this->enable_output_work_stealing_window = false;
+        this->enable_output_work_stealing_groupby = false;
     }
 
     // TODO[BSE-578]: handle all necessary ColSet parameters for BodoSQL
@@ -4297,6 +4301,63 @@ std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
 }
 
 /**
+ * @brief Logic to consume a build table batch. This is called
+ * directly by groupby_build_consume_batch_py_entry to avoid
+ * complex exception handling with grouping sets.
+ *
+ * @param groupby_state groupby state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch (in this pipeline) locally
+ * @param is_final_pipeline Is this the final pipeline. Only relevant for the
+ * Union-Distinct case where this is called in multiple pipelines. For regular
+ * groupby, this should always be true. We only call FinalizeBuild in the last
+ * pipeline.
+ * @param[out] request_input whether to request input rows from preceding
+ * operators.
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
+ */
+bool groupby_build_consume_batch(GroupbyState* groupby_state,
+                                 std::shared_ptr<table_info> input_table,
+                                 bool is_last, const bool is_final_pipeline,
+                                 bool* request_input) {
+    // Request input rows from preceding operators by default
+    *request_input = true;
+    if (groupby_state->build_input_finalized) {
+        // If the build input has been finalized, we should not be
+        // consuming any more build input.
+        return true;
+    }
+    groupby_state->metrics.build_input_row_count += input_table->nrows();
+    if (groupby_state->accumulate_before_update) {
+        is_last = groupby_acc_build_consume_batch(
+            groupby_state, std::move(input_table), is_last, is_final_pipeline);
+    } else {
+        is_last = groupby_agg_build_consume_batch(
+            groupby_state, std::move(input_table), is_last, is_final_pipeline);
+    }
+    *request_input = !groupby_state->shuffle_state->BuffersFull();
+
+    if (is_last) {
+        // Report and reset metrics
+        groupby_state->ReportAndResetBuildMetrics(is_final_pipeline);
+        groupby_state->curr_stage_id++;
+        if (is_final_pipeline) {
+            // groupby_state->out_dict_builders retains references
+            // to the DictionaryBuilders required for the output
+            // buffer, so clearing these is safe.
+            // We cannot free these during FinalizeBuild since we need these
+            // for the metric calculation. Once we've collected the metrics,
+            // these are safe to release.
+            assert(groupby_state->build_input_finalized);
+            groupby_state->build_table_dict_builders.clear();
+        }
+    }
+
+    return is_last;
+}
+
+/**
  * @brief Python wrapper to consume build table batch
  *
  * @param groupby_state groupby state pointer
@@ -4306,6 +4367,8 @@ std::tuple<std::shared_ptr<table_info>, bool> groupby_produce_output_batch(
  * Union-Distinct case where this is called in multiple pipelines. For regular
  * groupby, this should always be true. We only call FinalizeBuild in the last
  * pipeline.
+ * @param[out] request_input whether to request input rows from preceding
+ * operators.
  * @return updated global is_last with possibility of false negatives due to
  * iterations between syncs
  */
@@ -4313,45 +4376,58 @@ bool groupby_build_consume_batch_py_entry(GroupbyState* groupby_state,
                                           table_info* in_table, bool is_last,
                                           const bool is_final_pipeline,
                                           bool* request_input) {
-    // Request input rows from preceding operators by default
-    *request_input = true;
-
     try {
         std::unique_ptr<table_info> input_table(in_table);
-        groupby_state->metrics.build_input_row_count += input_table->nrows();
-        if (groupby_state->accumulate_before_update) {
-            is_last = groupby_acc_build_consume_batch(
-                groupby_state, std::move(input_table), is_last,
-                is_final_pipeline);
-        } else {
-            is_last = groupby_agg_build_consume_batch(
-                groupby_state, std::move(input_table), is_last,
-                is_final_pipeline);
-        }
-        *request_input = !groupby_state->shuffle_state->BuffersFull();
-
-        if (is_last) {
-            // Report and reset metrics
-            groupby_state->ReportAndResetBuildMetrics(is_final_pipeline);
-            groupby_state->curr_stage_id++;
-            if (is_final_pipeline) {
-                // groupby_state->out_dict_builders retains references
-                // to the DictionaryBuilders required for the output
-                // buffer, so clearing these is safe.
-                // We cannot free these during FinalizeBuild since we need these
-                // for the metric calculation. Once we've collected the metrics,
-                // these are safe to release.
-                assert(groupby_state->build_input_finalized);
-                groupby_state->build_table_dict_builders.clear();
-            }
-        }
-
-        return is_last;
-
+        return groupby_build_consume_batch(groupby_state,
+                                           std::move(input_table), is_last,
+                                           is_final_pipeline, request_input);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
+        return false;
     }
-    return false;
+}
+
+/**
+ * @brief Python wrapper to consume build table batch across all groupby
+ * states in the grouping sets object.
+ * @param groupby_state groupby state pointer
+ * @param in_table build table batch
+ * @param is_last is last batch (in this pipeline) locally
+ * @param[out] request_input whether to request input rows from preceding
+ * operators.
+ * @return updated global is_last with possibility of false negatives due to
+ * iterations between syncs
+ */
+bool grouping_sets_build_consume_batch_py_entry(
+    GroupingSetsState* grouping_sets_state, table_info* in_table, bool is_last,
+    bool* request_input) {
+    try {
+        std::unique_ptr<table_info> input_table(in_table);
+        std::pair<bool, bool> result = grouping_sets_state->ConsumeBuildBatch(
+            std::move(input_table), is_last);
+        *request_input = result.second;
+        return result.first;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return false;
+    }
+}
+
+std::pair<bool, bool> GroupingSetsState::ConsumeBuildBatch(
+    std::shared_ptr<table_info> input_table, bool is_last) {
+    bool global_is_last = true;
+    bool global_request_input = true;
+    for (size_t i = 0; i < this->groupby_states.size(); i++) {
+        bool local_request_input;
+        std::shared_ptr<table_info> pruned_table =
+            ProjectTable(input_table, this->input_columns_remaps[i]);
+        bool local_is_last = groupby_build_consume_batch(
+            this->groupby_states[i].get(), pruned_table, is_last, true,
+            &local_request_input);
+        global_is_last = global_is_last && local_is_last;
+        global_request_input = global_request_input && local_request_input;
+    }
+    return std::make_pair(global_is_last, global_request_input);
 }
 
 /**
@@ -4367,8 +4443,38 @@ void end_union_consume_pipeline_py_entry(GroupbyState* groupby_state) {
 }
 
 /**
+ * @brief Function to produce an output table called directly from
+ * Python. This is handles all the functionality separately for exception
+ * handling with grouping sets.
+ *
+ * @param groupby_state groupby state pointer
+ * @param[out] out_is_last is last batch
+ * @param produce_output whether to produce output
+ * @return table_info* output table batch
+ */
+std::shared_ptr<table_info> groupby_produce_output_batch_wrapper(
+    GroupbyState* groupby_state, bool* out_is_last, bool produce_output) {
+    bool is_last;
+    std::shared_ptr<table_info> out;
+    std::tie(out, is_last) =
+        groupby_produce_output_batch(groupby_state, produce_output);
+    *out_is_last = is_last;
+    groupby_state->metrics.output_row_count += out->nrows();
+    if (is_last) {
+        if (groupby_state->op_id != -1) {
+            QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
+                QueryProfileCollector::MakeOperatorStageID(
+                    groupby_state->op_id, groupby_state->curr_stage_id),
+                groupby_state->metrics.output_row_count);
+        }
+        groupby_state->ReportOutputMetrics();
+    }
+    return out;
+}
+
+/**
  * @brief Python wrapper to produce output table
- * batch
+ * batch.
  *
  * @param groupby_state groupby state pointer
  * @param[out] out_is_last is last batch
@@ -4379,26 +4485,91 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
                                                   bool* out_is_last,
                                                   bool produce_output) {
     try {
+        std::shared_ptr<table_info> out = groupby_produce_output_batch_wrapper(
+            groupby_state, out_is_last, produce_output);
+        return new table_info(*out);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
+#define GROUPING_SETS_OUTPUT_STAGE 2
+
+/**
+ * @brief Python wrapper to produce an output table
+ * batch
+ *
+ * @param grouping_sets_state grouping sets state pointer
+ * @param[out] out_is_last is last batch
+ * @param produce_output whether to produce output
+ * @return table_info* output table batch
+ */
+table_info* grouping_sets_produce_output_batch_py_entry(
+    GroupingSetsState* grouping_sets_state, bool* out_is_last,
+    bool produce_output) {
+    try {
         bool is_last;
         std::shared_ptr<table_info> out;
         std::tie(out, is_last) =
-            groupby_produce_output_batch(groupby_state, produce_output);
+            grouping_sets_state->ProduceOutputBatch(produce_output);
         *out_is_last = is_last;
-        groupby_state->metrics.output_row_count += out->nrows();
         if (is_last) {
-            if (groupby_state->op_id != -1) {
+            if (grouping_sets_state->op_id != -1) {
                 QueryProfileCollector::Default().SubmitOperatorStageRowCounts(
                     QueryProfileCollector::MakeOperatorStageID(
-                        groupby_state->op_id, groupby_state->curr_stage_id),
-                    groupby_state->metrics.output_row_count);
+                        grouping_sets_state->op_id, GROUPING_SETS_OUTPUT_STAGE),
+                    grouping_sets_state->metrics.output_row_count);
             }
-            groupby_state->ReportOutputMetrics();
         }
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
+}
+
+#undef GROUPING_SETS_OUTPUT_STAGE
+
+std::pair<std::shared_ptr<table_info>, bool>
+GroupingSetsState::ProduceOutputBatch(bool produce_output) {
+    bool state_is_last;
+    std::shared_ptr<table_info> out_table =
+        groupby_produce_output_batch_wrapper(
+            this->groupby_states[this->current_output_idx].get(),
+            &state_is_last, produce_output);
+    // Remap the kept and generate nulls.
+    const std::vector<int64_t>& remap_vector =
+        this->output_columns_remaps[this->current_output_idx];
+    const std::vector<int64_t>& nulls_vector =
+        this->missing_output_columns_remaps[this->current_output_idx];
+    std::vector<std::shared_ptr<array_info>> final_columns(remap_vector.size() +
+                                                           nulls_vector.size());
+    size_t table_size = out_table->nrows();
+    for (size_t i = 0; i < remap_vector.size(); i++) {
+        final_columns[remap_vector[i]] = out_table->columns[i];
+    }
+    for (int64_t idx : nulls_vector) {
+        bodo_array_type::arr_type_enum arr_typ =
+            this->keys_schema->column_types[idx]->array_type;
+        const Bodo_CTypes::CTypeEnum c_typ =
+            this->keys_schema->column_types[idx]->c_type;
+        final_columns[idx] =
+            alloc_all_null_array_top_level(table_size, arr_typ, c_typ);
+    }
+    std::shared_ptr<table_info> final_table =
+        std::make_shared<table_info>(final_columns, table_size);
+    this->metrics.output_row_count += final_table->nrows();
+    if (state_is_last) {
+        if (this->current_output_idx == 0) {
+            // Keep the last group by state around to simplify generating the
+            // empty output.
+            this->finalized_output = true;
+        } else {
+            this->current_output_idx--;
+        }
+    }
+    return std::make_pair(final_table, this->finalized_output);
 }
 
 /**
@@ -4482,12 +4653,160 @@ GroupbyState* groupby_state_init_py_entry(
 }
 
 /**
+ * @brief Python wrapper to create and initialize a new streaming grouping sets
+ * state object. This object will also create and manage several groupby states.
+ * @param operator_id The operator ID of the grouping sets operator.
+ * @param sub_operator_ids The operator IDs for each groupby state being
+ * generated.
+ * @param build_arr_c_types The array types of the build table columns
+ * (Bodo_CTypes ints).
+ * @param build_arr_array_types The array types of the build table columns
+ * (bodo_array_type ints).
+ * @param n_build_arrs The number of build table columns.
+ * @param grouping_sets_data The grouping sets data.
+ * @param grouping_sets_offsets The grouping sets offsets. Groupby i uses the
+ * values between grouping_sets_offsets[i] and grouping_sets_offsets[i+1]
+ * (exclusive).
+ * @param n_grouping_sets The number of grouping sets.
+ * @param ftypes The function types (Bodo_FTypes ints).
+ * @param f_in_offsets The offsets into the f_in_cols array for each function.
+ * These are shared across all group by states.
+ * @param f_in_cols The column indices for each function. These need to be
+ * remapped for each group by state.
+ * @param n_funcs The number of functions.
+ * @param n_keys The number of total group by keys across all grouping sets.
+ * @param output_batch_size The batch size for reading output.
+ * @param parallel Whether to run in parallel.
+ * @param sync_iter The synchronization iteration.
+ *
+ */
+GroupingSetsState* grouping_sets_state_init_py_entry(
+    int64_t operator_id, int64_t* sub_operator_ids, int8_t* build_arr_c_types,
+    int8_t* build_arr_array_types, int32_t n_build_arrs,
+    int32_t* grouping_sets_data, int32_t* grouping_sets_offsets,
+    int n_grouping_sets, int32_t* ftypes, int32_t* f_in_offsets,
+    int32_t* f_in_cols, int n_funcs, uint64_t n_keys, int64_t output_batch_size,
+    bool parallel, int64_t sync_iter) {
+    try {
+        // Generate components that are shared across all groupby states.
+        std::vector<int32_t> ftypes_vector(ftypes, ftypes + n_funcs);
+        std::vector<int32_t> f_in_offsets_vector(f_in_offsets,
+                                                 f_in_offsets + n_funcs + 1);
+        bool allow_any_work_stealing = false;
+        // Compute the window information up front because there are never
+        // window functions.
+        std::vector<int32_t> window_ftypes(0, 0);
+        std::vector<bool> mrnf_sort_asc_vec(0, false);
+        std::vector<bool> mrnf_sort_na_vec(0, false);
+        std::vector<bool> mrnf_part_cols_to_keep_vec(0, true);
+        std::vector<bool> mrnf_sort_cols_to_keep_vec(0, true);
+
+        // Generate a grouping state for each grouping set and perform any
+        // necessary remapping.
+        std::vector<std::unique_ptr<GroupbyState>> groupby_states;
+        // Generate the column index remapping for each build input.
+        std::vector<std::vector<int64_t>> input_columns_remaps;
+        std::vector<std::vector<int64_t>> output_columns_remaps;
+        // Generate the vector of null keys for remapping the outputs.
+        std::vector<std::vector<int64_t>> skipped_columns_remaps;
+        for (int i = 0; i < n_grouping_sets; i++) {
+            // Compute the bitmask for which keys need to be dropped.
+            std::vector<bool> kept_columns(n_build_arrs, false);
+            for (int64_t j = grouping_sets_offsets[i];
+                 j < grouping_sets_offsets[i + 1]; j++) {
+                kept_columns[grouping_sets_data[j]] = true;
+            }
+            for (uint64_t j = n_keys; j < static_cast<uint64_t>(n_build_arrs);
+                 j++) {
+                kept_columns[j] = true;
+            }
+            // Remap each function to the correct columns to avoid extra keys.
+            int32_t num_grouping_keys =
+                grouping_sets_offsets[i + 1] - grouping_sets_offsets[i];
+            int32_t num_skipped_keys =
+                static_cast<int32_t>(n_keys) - num_grouping_keys;
+            std::vector<int32_t> remapped_f_in_cols;
+            for (int j = 0; j < n_funcs; j++) {
+                remapped_f_in_cols.push_back(f_in_cols[j] - num_skipped_keys);
+            }
+            // Remap the build information to skip any extra keys.
+            std::vector<int8_t> remapped_build_arr_c_types;
+            std::vector<int8_t> remapped_build_arr_array_types;
+            std::vector<int64_t> kept_input_column_idxs;
+            for (int j = 0; j < n_build_arrs; j++) {
+                if (kept_columns[j]) {
+                    remapped_build_arr_c_types.push_back(build_arr_c_types[j]);
+                    remapped_build_arr_array_types.push_back(
+                        build_arr_array_types[j]);
+                    kept_input_column_idxs.push_back(j);
+                }
+            }
+            input_columns_remaps.push_back(kept_input_column_idxs);
+            // Remap the output columns
+            std::vector<int64_t> kept_output_column_idxs;
+            std::vector<int64_t> skipped_columns;
+            for (size_t j = 0; j < n_keys; j++) {
+                if (kept_columns[j]) {
+                    kept_output_column_idxs.push_back(j);
+                } else {
+                    skipped_columns.push_back(j);
+                }
+            }
+            size_t total_outptut_columns =
+                n_keys + static_cast<size_t>(n_funcs);
+            for (size_t j = n_keys; j < total_outptut_columns; j++) {
+                kept_output_column_idxs.push_back(j);
+            }
+            output_columns_remaps.push_back(kept_output_column_idxs);
+            skipped_columns_remaps.push_back(skipped_columns);
+            int64_t sub_operator_id = sub_operator_ids[i];
+            int64_t op_pool_size_bytes =
+                OperatorComptroller::Default()->GetOperatorBudget(
+                    sub_operator_id);
+            // Create the groupby state.
+            groupby_states.push_back(std::make_unique<GroupbyState>(
+                bodo::Schema::Deserialize(remapped_build_arr_array_types,
+                                          remapped_build_arr_c_types),
+                ftypes_vector, window_ftypes, f_in_offsets_vector,
+                remapped_f_in_cols, num_grouping_keys, mrnf_sort_asc_vec,
+                mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
+                mrnf_sort_cols_to_keep_vec, output_batch_size, parallel,
+                sync_iter, sub_operator_id, op_pool_size_bytes,
+                allow_any_work_stealing));
+        }
+        // Generate the general keys schema for remapping the output from
+        // grouping sets.
+        std::unique_ptr<bodo::Schema> keys_schema = bodo::Schema::Deserialize(
+            std::vector<int8_t>(build_arr_array_types,
+                                build_arr_array_types + n_keys),
+            std::vector<int8_t>(build_arr_c_types, build_arr_c_types + n_keys));
+
+        return new GroupingSetsState(
+            std::move(keys_schema), std::move(groupby_states),
+            input_columns_remaps, output_columns_remaps, skipped_columns_remaps,
+            operator_id);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief delete groupby state (called from Python after output loop is
  * finished)
  *
  * @param groupby_state groupby state pointer to delete
  */
 void delete_groupby_state(GroupbyState* groupby_state) { delete groupby_state; }
+
+/**
+ * @brief delete a grouping sets state object (called from Python after the
+ * output loop is finished).
+ * @param grouping_sets_state The grouping set state pointer to delete
+ */
+void delete_grouping_sets_state(GroupingSetsState* grouping_sets_state) {
+    delete grouping_sets_state;
+}
 
 uint64_t get_op_pool_bytes_pinned(GroupbyState* groupby_state) {
     return groupby_state->op_pool_bytes_pinned();
@@ -4546,9 +4865,13 @@ PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     bodo_common_init();
 
     SetAttrStringFromVoidPtr(m, groupby_state_init_py_entry);
+    SetAttrStringFromVoidPtr(m, grouping_sets_state_init_py_entry);
     SetAttrStringFromVoidPtr(m, groupby_build_consume_batch_py_entry);
+    SetAttrStringFromVoidPtr(m, grouping_sets_build_consume_batch_py_entry);
     SetAttrStringFromVoidPtr(m, groupby_produce_output_batch_py_entry);
+    SetAttrStringFromVoidPtr(m, grouping_sets_produce_output_batch_py_entry);
     SetAttrStringFromVoidPtr(m, delete_groupby_state);
+    SetAttrStringFromVoidPtr(m, delete_grouping_sets_state);
     SetAttrStringFromVoidPtr(m, end_union_consume_pipeline_py_entry);
     SetAttrStringFromVoidPtr(m, get_op_pool_bytes_pinned);
     SetAttrStringFromVoidPtr(m, get_op_pool_bytes_allocated);

@@ -1221,6 +1221,23 @@ std::unique_ptr<array_info> alloc_numpy(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+/**
+ * @brief Allocate a numpy array with all nulls.
+ * If the provided dtype does not have a sentinel representation for nulls,
+ * this function will throw an exception.
+ *
+ * @param length The length of the array
+ * @param typ_enum The dtype of the array. Only some dtypes are supported.
+ * @param pool The buffer pool to use for allocations.
+ * @param mm The memory manager to use for allocations.
+ * @return std::unique_ptr<array_info> The allocated array of all nulls.
+ */
+std::unique_ptr<array_info> alloc_numpy_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 //  NOTE: extra_null_bytes is used to account for padding in null buffer
 //  for process boundaries in shuffle (bits of two different processes cannot be
 //  packed in the same byte).
@@ -1257,6 +1274,12 @@ std::unique_ptr<array_info> alloc_categorical(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+std::unique_ptr<array_info> alloc_categorical_array_all_nulls(
+    int64_t length, Bodo_CTypes::CTypeEnum typ_enum, int64_t num_categories,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 std::unique_ptr<array_info> alloc_nullable_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     int64_t extra_null_bytes = 0,
@@ -1287,6 +1310,12 @@ std::unique_ptr<array_info> alloc_string_array(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+std::unique_ptr<array_info> alloc_string_array_all_nulls(
+    Bodo_CTypes::CTypeEnum typ_enum, int64_t length,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 std::unique_ptr<array_info> alloc_interval_array(
     int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
     bodo::IBufferPool* const pool,
@@ -1302,8 +1331,53 @@ std::unique_ptr<array_info> alloc_dict_string_array(
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
 
+/**
+ * @brief Allocate an empty dictionary string array. By default
+ * this generates an empty dictionary, but callers can "swap" the
+ * underlying dictionary to unify with another dictionary.
+ *
+ * @param length The number of null rows.
+ * @param extra_null_bytes An extra null bytes to allocate.
+ * @param pool The buffer pool to use for allocations.
+ * @param mm The memory manager to use for allocations.
+ * @return std::unique_ptr<array_info> The allocated dictionary string array.
+ */
+std::unique_ptr<array_info> alloc_dict_string_array_all_nulls(
+    int64_t length, int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 std::unique_ptr<array_info> alloc_timestamptz_array(
     int64_t length, int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+std::unique_ptr<array_info> alloc_timestamptz_array_all_nulls(
+    int64_t length, int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Allocate a fully null array for each array type. This throws
+ * an error if the array type + dtype combination is not supported.
+ *
+ * @param length The length of the array to allocate.
+ * @param arr_type The array type to allocate.
+ * @param dtype The dtype to allocate.
+ * @param extra_null_bytes The extra null bytes to allocate.
+ * @param num_categories The number of categories for categorical arrays.
+ * @param pool The operator pool to use for allocations.
+ * @param mm The memory manager to use for allocations.
+ * @return std::unique_ptr<array_info> The allocated array filled entirely
+ * with null values.
+ */
+std::unique_ptr<array_info> alloc_all_null_array_top_level(
+    int64_t length, bodo_array_type::arr_type_enum arr_type,
+    Bodo_CTypes::CTypeEnum dtype, int64_t extra_null_bytes = 0,
+    int64_t num_categories = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());

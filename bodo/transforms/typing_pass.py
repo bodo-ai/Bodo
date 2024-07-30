@@ -5263,12 +5263,13 @@ class TypingTransforms:
         Handle the typing pass information needed for updating the groupby state with
         streaming groupby.
         """
-        if func_name == "init_groupby_state":
+        if func_name in ("init_groupby_state", "init_grouping_sets_state"):
+            arg_no = 10 if func_name == "init_groupby_state" else 7
             expected_arg = get_call_expr_arg(
-                "init_groupby_state",
+                func_name,
                 rhs.args,
                 dict(rhs.kws),
-                10,
+                arg_no,
                 "expected_state_type",
                 default=None,
                 use_default=True,
@@ -5328,6 +5329,7 @@ class TypingTransforms:
                 # We need to update the expected type
                 new_type = bodo.libs.stream_groupby.GroupbyStateType(
                     output_type.key_inds,
+                    output_type.grouping_sets,
                     output_type.fnames,
                     output_type.f_in_offsets,
                     output_type.f_in_cols,
@@ -5341,7 +5343,7 @@ class TypingTransforms:
                 params = [
                     "operator_id",
                     "key_inds",
-                    "ftypes",
+                    "fnames",
                     "f_in_offsets",
                     "f_in_cols",
                 ]
@@ -5396,7 +5398,7 @@ class TypingTransforms:
                     return bodo.libs.stream_groupby.init_groupby_state(
                         operator_id,
                         key_inds,
-                        ftypes,
+                        fnames,
                         f_in_offsets,
                         f_in_cols,
                         mrnf_sort_col_inds={mrnf_vals['mrnf_sort_col_inds']},
@@ -5447,6 +5449,133 @@ class TypingTransforms:
                     len(self.func_ir._definitions[groupby_state.name])
                 ) == 1, "There must be exactly 1 definition for groupby state."
                 del self.func_ir._definitions[groupby_state.name]
+                update_node_list_definitions(new_nodes, self.func_ir)
+                # Update the labels as well
+                for inst in new_nodes:
+                    if is_assign(inst):
+                        self.rhs_labels[inst.value] = label
+                self.needs_transform = True
+                self.changed = True
+        elif func_name == "groupby_grouping_sets_build_consume_batch":
+            grouping_sets_state = rhs.args[0]
+            table = rhs.args[1]
+            # Load the types
+            state_type = self.typemap.get(grouping_sets_state.name, None)
+            input_table_type = self.typemap.get(table.name, None)
+            if state_type in unresolved_types or input_table_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+
+            # Fetch the groupby information from the definition
+            grouping_sets_def = guard(get_definition, self.func_ir, grouping_sets_state)
+            if grouping_sets_def is None:
+                # If we can't find the definition we need to transform
+                self.needs_transform = True
+                return [assign]
+            state_init = guard(find_callname, self.func_ir, grouping_sets_def)
+            # Verify we are at init_grouping_sets_state and we can fetch the call name.
+            if state_init != ("init_grouping_sets_state", "bodo.libs.stream_groupby"):
+                self.needs_transform = True
+                return [assign]
+                # Fetch the expected type.
+            expected_arg = get_call_expr_arg(
+                "init_grouping_sets_state",
+                grouping_sets_def.args,
+                dict(grouping_sets_def.kws),
+                7,
+                "expected_state_type",
+                default=None,
+                use_default=True,
+            )
+            if expected_arg is None:
+                expected_type = state_type
+            else:
+                expected_type = self.typemap.get(expected_arg.name, None)
+            output_type = unwrap_typeref(expected_type)
+            # Check that the build/probe type match.
+            if output_type in unresolved_types:
+                self.needs_transform = True
+                return [assign]
+            if input_table_type != output_type.build_table_type:
+                # We need to update the expected type
+                new_type = bodo.libs.stream_groupby.GroupbyStateType(
+                    output_type.key_inds,
+                    output_type.grouping_sets,
+                    output_type.fnames,
+                    output_type.f_in_offsets,
+                    output_type.f_in_cols,
+                    output_type.mrnf_sort_col_inds,
+                    output_type.mrnf_sort_col_asc,
+                    output_type.mrnf_sort_col_na,
+                    output_type.mrnf_col_inds_keep,
+                    build_table_type=input_table_type,
+                )
+
+                params = [
+                    "operator_id",
+                    "sub_operator_ids",
+                    "key_inds",
+                    "grouping_sets",
+                    "fnames",
+                    "f_in_offsets",
+                    "f_in_cols",
+                ]
+
+                args = grouping_sets_def.args[:7]
+
+                # Compile a new function.
+                func_text = f"""def impl({", ".join(params)}):
+                    return bodo.libs.stream_groupby.init_grouping_sets_state(
+                        operator_id,
+                        sub_operator_ids,
+                        key_inds,
+                        grouping_sets,
+                        fnames,
+                        f_in_offsets,
+                        f_in_cols,
+                        expected_state_type=_expected_state_type,
+                    )
+                """
+                loc_vars = {}
+                exec(
+                    func_text,
+                    {"bodo": bodo, "_expected_state_type": new_type},
+                    loc_vars,
+                )
+                func = loc_vars["impl"]
+
+                new_nodes = compile_func_single_block(
+                    func,
+                    args,
+                    grouping_sets_state,
+                    self,
+                    extra_globals={"_expected_state_type": new_type},
+                )
+                # Find the label.
+                label = self.rhs_labels[grouping_sets_def]
+                block = self.func_ir.blocks[label]
+                remove_line = -1
+                for i, stmt in enumerate(block.body):
+                    # Find the instruction
+                    if is_assign(stmt) and stmt.target.name == grouping_sets_state.name:
+                        # Just want to set i here
+                        remove_line = i
+                        break
+                assert (
+                    remove_line != -1
+                ), "Could not find original groupby state to replace"
+                block.body = (
+                    block.body[:remove_line] + new_nodes + block.body[remove_line + 1 :]
+                )
+                # Replicate the changes that would occur to defintions and labels if this was
+                # done in the active block.
+
+                # Delete the old definition. Note the function may cause an intermediate assignment,
+                # so we need to delete all definitions.
+                assert (
+                    len(self.func_ir._definitions[grouping_sets_state.name])
+                ) == 1, "There must be exactly 1 definition for grouping sets state."
+                del self.func_ir._definitions[grouping_sets_state.name]
                 update_node_list_definitions(new_nodes, self.func_ir)
                 # Update the labels as well
                 for inst in new_nodes:
