@@ -399,7 +399,7 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
       vect_ascending(vect_ascending_),
       na_position(na_position_),
       parallel(parallel),
-      mem_budget_bytes(StreamSortState::GetBudget(op_id)),
+      mem_budget_bytes(StreamSortState::GetBudget()),
       num_chunks(GetOptimalChunkNumber()),
       // Currently Operator pool and Memory manager are set to default
       // because not fully implemented. Can turn on during testing for
@@ -771,8 +771,7 @@ void StreamSortState::GlobalSort(
 
         if (recv_states.size() < static_cast<size_t>(n_pes)) {
             // Check if we can receive
-            shuffle_irecv(dummy_output_chunk, MPI_COMM_WORLD, recv_states,
-                          metrics.ishuffle_metrics);
+            shuffle_irecv(dummy_output_chunk, MPI_COMM_WORLD, recv_states);
         }
         // If we have any completed receives, add them to the builder
         std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
