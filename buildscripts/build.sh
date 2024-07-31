@@ -29,6 +29,8 @@ export SCCACHE_S3_USE_SSL=true
 export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
 # We should just use sccache directly on CI
 export DISABLE_CCACHE=1
+# Build Bodo with our fork of Arrow
+export USE_BODO_ARROW_FORK=1
 
 # Bodo Install
 pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .

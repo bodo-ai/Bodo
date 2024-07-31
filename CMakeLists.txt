@@ -589,6 +589,11 @@ if (IS_PLATFORM)
   target_include_directories(ext PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/gason")
 endif()
 
+# Build with our fork of Arrow
+if (IS_PLATFORM OR DEFINED ENV{USE_BODO_ARROW_FORK})
+  target_compile_definitions(ext PRIVATE "USE_BODO_ARROW_FORK=1")
+endif()
+
 if (DEFINED ENV{BUILD_WITH_V8})
   target_link_libraries(ext PRIVATE
     v8_libbase
