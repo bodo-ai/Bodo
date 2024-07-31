@@ -15,6 +15,7 @@ import com.bodosql.calcite.adapter.snowflake.SnowflakeRel
 import com.bodosql.calcite.adapter.snowflake.SnowflakeSort
 import com.bodosql.calcite.application.logicalRules.AggregateFilterToCaseRule
 import com.bodosql.calcite.application.logicalRules.AggregateMergeRule
+import com.bodosql.calcite.application.logicalRules.AggregateReduceFunctionsRule
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinDeriveIsNotNullFilterRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
@@ -189,6 +190,17 @@ object BodoRules {
     @JvmField
     val AGGREGATE_MERGE_RULE: RelOptRule =
         AggregateMergeRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    /**
+     * Decompose aggregates when rewrites are applicable.
+     * For example AVG(X) -> SUM(X) / COUNT(X).
+     */
+    @JvmField
+    val AGGREGATE_REDUCE_FUNCTIONS_RULE: RelOptRule =
+        AggregateReduceFunctionsRule.Config.DEFAULT
+            .withOperandFor(BodoLogicalAggregate::class.java)
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -1045,6 +1057,7 @@ object BodoRules {
             FILTER_EXTRACT_CASE_RULE,
             MIN_ROW_NUMBER_FILTER_RULE,
             AGGREGATE_FILTER_TO_CASE_RULE,
+            AGGREGATE_REDUCE_FUNCTIONS_RULE,
         )
 
     /**

@@ -5,11 +5,13 @@ Tests for BodoSQL involving the decimal type
 
 from decimal import Decimal
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.tests.utils import pytest_mark_one_rank
 from bodosql.tests.utils import check_query
 
 
@@ -47,6 +49,442 @@ def decimal_data():
         }
     )
     return {"TABLE_1": df_1, "TABLE_2": df_2, "TABLE_3": df_3}
+
+
+@pytest_mark_one_rank
+@pytest.mark.parametrize(
+    "expr",
+    [
+        pytest.param("sum(D)", id="sum"),
+        pytest.param("avg(D)", id="avg"),
+        pytest.param("var_pop(D)", id="var_pop"),
+        pytest.param("var_samp(D)", id="var_samp"),
+        pytest.param("stddev_pop(D)", id="stddev_pop"),
+        pytest.param("stddev_samp(D)", id="stddev_samp"),
+        pytest.param("covar_samp(D, D-1)", id="covar_samp"),
+        pytest.param("covar_pop(D, D-1)", id="covar_pop"),
+        pytest.param("corr(D, D-1)", id="corr"),
+    ],
+)
+def test_decimal_moment_functions_overflow(expr):
+    """
+    Tests that decimal moment-based aggregation functions (with groupby)
+    correctly raise an error when their underlying data causes them to go
+    out of bounds as a result of their subcomputations.
+    """
+    query = f"SELECT K, {expr} FROM TABLE1 GROUP BY K"
+    keys = ["A"] * 25
+    decimals = pd.array(
+        [Decimal("123.45")] * 25, dtype=pd.ArrowDtype(pa.decimal128(38, 35))
+    )
+    ctx = {"TABLE1": pd.DataFrame({"K": keys, "D": decimals})}
+
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        with pytest.raises(
+            Exception,
+            match="(Overflow detected in groupby sum of Decimal data)|(Number out of representable range)",
+        ):
+            check_query(
+                query,
+                ctx,
+                None,
+                expected_output=pd.DataFrame({"K": [0], "RES": [0]}),
+                check_dtype=False,
+            )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "SELECT K, SUM(D) :: VARCHAR as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+                    "RES": [
+                        "493.80",
+                        "1111111111111.10",
+                        None,
+                        "-3.14",
+                        "1989999999999.97",
+                        "2767777777777.09",
+                        "3434444444443.75",
+                        "479074.00",
+                        "-645.12",
+                        "0.00",
+                    ],
+                }
+            ),
+            id="sum",
+        ),
+        pytest.param(
+            "SELECT K, AVG(D) :: VARCHAR as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+                    "RES": [
+                        "123.45000000",
+                        "277777777777.77500000",
+                        None,
+                        "-3.14000000",
+                        "994999999999.98500000",
+                        "922592592592.36333333",
+                        "858611111110.93750000",
+                        "108.51053228",
+                        "-645.12000000",
+                        "0.00000000",
+                    ],
+                }
+            ),
+            id="avg",
+        ),
+        pytest.param(
+            "SELECT K, VAR_POP(D) :: VARCHAR as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+                    "RES": [
+                        "0.0000000000",
+                        "15432098765431790123456.7901250000",
+                        None,
+                        "0.0000000000",
+                        "24999999999950000000.0000250000",
+                        "10502331961653243347050.8462888889",
+                        "20157638888914043055555.6337187500",
+                        "48214.5026637031",
+                        "0.0000000000",
+                        "320.4062500000",
+                    ],
+                }
+            ),
+            id="var_pop",
+        ),
+        pytest.param(
+            # NOTE: trimming the last decimal place due to instability in the
+            # last digit when division is capped by scale-level truncation.
+            "SELECT K, REGEXP_REPLACE(VAR_SAMP(D) :: VARCHAR, '.$', '') as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+                    "RES": [
+                        "0.000000000",
+                        "20576131687242386831275.720166666",
+                        None,
+                        None,
+                        "49999999999900000000.000050000",
+                        "15753497942479865020576.269433333",
+                        "26876851851885390740740.844958333",
+                        "48225.425749943",
+                        None,
+                        "427.208333333",
+                    ],
+                }
+            ),
+            id="var_samp",
+        ),
+        pytest.param(
+            "SELECT K, STDDEV_POP(D) as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+                    "RES": [
+                        0.0,
+                        124225998749.987,
+                        None,
+                        0.0,
+                        4999999999.995,
+                        102480885835.619,
+                        141977599954.761,
+                        219.578010428,
+                        0.0,
+                        17.899895251,
+                    ],
+                }
+            ),
+            id="stddev_pop",
+        ),
+        pytest.param(
+            "SELECT K, STDDEV_SAMP(D) as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+                    "RES": [
+                        0.0,
+                        143443827637.31,
+                        None,
+                        None,
+                        7071067811.8584,
+                        125512939342.842,
+                        163941611105.556,
+                        219.602881925,
+                        None,
+                        20.669018683,
+                    ],
+                }
+            ),
+            id="stddev_samp",
+        ),
+    ],
+)
+def test_decimal_moment_functions_groupby(query, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal moment-based aggregation
+    functions (with group by) on decimal data. Converts to a varchar
+    at the end to verify the correct scales are being used. Reference
+    answers calculated from Snowflake. Uses strings for many of the answers
+    to check the scale, at least when the output of the aggfunc is a decimal.
+    """
+    keys = []
+    decimals = []
+
+    # First group: all the same value (4x)
+    keys.extend(["A"] * 4)
+    decimals.extend([Decimal("123.45")] * 4)
+
+    # Second group: evenly spaced values (4x)
+    keys.extend(["B"] * 4)
+    decimals.extend(
+        [
+            Decimal("1" * 12 + ".11"),
+            Decimal("2" * 12 + ".22"),
+            Decimal("3" * 12 + ".33"),
+            Decimal("4" * 12 + ".44"),
+        ]
+    )
+
+    # Third group: all null (10x)
+    keys.extend(["C"] * 10)
+    decimals.extend([None] * 10)
+
+    # Fourth group: all null except 1 value (5x)
+    keys.extend(["D"] * 5)
+    decimals.extend([None, None, None, None, Decimal("-3.14")])
+
+    # Fifth group: all null except 2 values (5x)
+    keys.extend(["E"] * 5)
+    decimals.extend(
+        [None, None, None, Decimal("98" + "9" * 10 + ".99"), Decimal("9" * 12 + ".98")]
+    )
+
+    # Sixth group: all null except 3 values (5x)
+    keys.extend(["F"] * 5)
+    decimals.extend(
+        [
+            None,
+            None,
+            Decimal("7" * 12 + ".12"),
+            Decimal("98" + "9" * 10 + ".99"),
+            Decimal("9" * 12 + ".98"),
+        ]
+    )
+
+    # Seventh group: all null except 4 values (5x)
+    keys.extend(["G"] * 5)
+    decimals.extend(
+        [
+            None,
+            Decimal("6" * 12 + ".66"),
+            Decimal("7" * 12 + ".12"),
+            Decimal("98" + "9" * 10 + ".99"),
+            Decimal("9" * 12 + ".98"),
+        ]
+    )
+
+    # Eighth group: much larger group with smaller individual values
+    keys.extend(["H"] * 10000)
+    for i in range(10000):
+        vals = [i % 3, i % 5, i % 7, i % 29]
+        if 1 in vals:
+            decimals.append(None)
+        else:
+            decimals.append(Decimal(vals[0] * vals[1] * vals[2] * vals[3]))
+
+    # Ninth group: single row (non-null)
+    keys.extend(["I"])
+    decimals.extend([Decimal("-645.12")])
+
+    # Ninth group: four rows that sum to zero
+    keys.extend(["J"] * 4)
+    decimals.extend(
+        [Decimal("-10.75"), Decimal("-10"), Decimal("-10.25"), Decimal("31")]
+    )
+
+    # Combine with the correct dtype, and deterministically shuffle the order of the data
+    df = pd.DataFrame(
+        {"K": keys, "D": pd.array(decimals, dtype=pd.ArrowDtype(pa.decimal128(14, 2)))}
+    )
+    rng = np.random.default_rng(42)
+    perm = rng.permutation(len(df))
+    df = df.iloc[perm, :]
+    ctx = {"TABLE1": df}
+
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=answer,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "query, answer",
+    [
+        pytest.param(
+            "SELECT K, COVAR_POP(D1, D2) as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F"],
+                    "RES": [
+                        36.666666667,
+                        None,
+                        None,
+                        0,
+                        0,
+                        -47.0391,
+                    ],
+                }
+            ),
+            id="covar_pop",
+        ),
+        pytest.param(
+            "SELECT K, COVAR_SAMP(D1, D2) as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F"],
+                    "RES": [
+                        55.0,
+                        None,
+                        None,
+                        None,
+                        0,
+                        -70.55865,
+                    ],
+                }
+            ),
+            id="covar_samp",
+        ),
+        pytest.param(
+            "SELECT K, CORR(D1, D2) as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F"],
+                    "RES": [
+                        0.9986254289,
+                        None,
+                        None,
+                        None,
+                        None,
+                        -0.2949576235,
+                    ],
+                }
+            ),
+            id="corr",
+        ),
+        pytest.param(
+            "SELECT K, COVAR_SAMP(D1, D2) + COVAR_POP(D1, D2) + CORR(D1, D2) as RES FROM TABLE1 GROUP BY K",
+            pd.DataFrame(
+                {
+                    "K": ["A", "B", "C", "D", "E", "F"],
+                    "RES": [
+                        92.665292096,
+                        None,
+                        None,
+                        None,
+                        None,
+                        -117.892707624,
+                    ],
+                }
+            ),
+            id="multiple",
+        ),
+    ],
+)
+def test_decimal_two_arg_moment_functions_groupby(query, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal covariance/correlation aggregation
+    functions (with group by) on decimal data. Reference
+    answers calculated from Snowflake.
+    """
+    keys = []
+    decimals_1 = []
+    decimals_2 = []
+
+    # First group: 6 values, 3 have at least 1 null.
+    keys.extend(["A"] * 6)
+    decimals_1.extend(
+        [
+            Decimal("1.0"),
+            Decimal("3.0"),
+            Decimal("5.0"),
+            Decimal("7.0"),
+            Decimal("8.0"),
+            None,
+        ]
+    )
+    decimals_2.extend(
+        [Decimal("20.0"), Decimal("50.0"), Decimal("75.0"), None, None, Decimal("-1.0")]
+    )
+
+    # Second group: 3 values, all 3 have at least 1 null.
+    keys.extend(["B"] * 3)
+    decimals_1.extend([None, Decimal("1.0"), None])
+    decimals_2.extend([Decimal("7.5"), None, None])
+
+    # Third group: 1 value, everything is null
+    keys.extend(["C"] * 3)
+    decimals_1.extend([None] * 3)
+    decimals_2.extend([None] * 3)
+
+    # Fourth group: 3 values, 2 have at least 1 null.
+    keys.extend(["D"] * 3)
+    decimals_1.extend([Decimal("-5.63"), Decimal("7.0"), None])
+    decimals_2.extend([Decimal("20.14"), None, Decimal("19.0")])
+
+    # Fifth group: 3 values, no nulls, no covariance.
+    keys.extend(["E"] * 3)
+    decimals_1.extend([Decimal("100.0"), Decimal("125.3"), Decimal("128.61")])
+    decimals_2.extend([Decimal("20.25")] * 3)
+
+    # Sixth group: 3 values, no nulls, with covariance.
+    keys.extend(["F"] * 3)
+    decimals_1.extend([Decimal("100.0"), Decimal("125.3"), Decimal("128.61")])
+    decimals_2.extend([Decimal("20.25"), Decimal("30.16"), Decimal("0.16")])
+
+    # Combine with the correct dtype, and deterministically shuffle the order of the data
+    df = pd.DataFrame(
+        {
+            "K": keys,
+            "D1": pd.array(decimals_1, dtype=pd.ArrowDtype(pa.decimal128(10, 2))),
+            "D2": pd.array(decimals_2, dtype=pd.ArrowDtype(pa.decimal128(10, 2))),
+        }
+    )
+    rng = np.random.default_rng(42)
+    perm = rng.permutation(len(df))
+    df = df.iloc[perm, :]
+    ctx = {"TABLE1": df}
+
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=answer,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
 
 
 def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
