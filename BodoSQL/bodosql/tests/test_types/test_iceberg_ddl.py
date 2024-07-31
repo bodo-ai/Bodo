@@ -13,7 +13,7 @@ import bodo
 import bodosql
 from bodo.tests.utils import pytest_tabular
 from bodo.utils.typing import BodoError
-from bodosql.tests.utils import assert_equal_par
+from bodosql.tests.utils import assert_equal_par, replace_type_varchar
 
 pytestmark = pytest_tabular
 
@@ -43,10 +43,7 @@ def trim_describe_table_output(output: pd.DataFrame):
     """Retrieve only the name and type field from the output of calling
     describe_table. Additionally, erase precision from VARCHAR types"""
     trimmed = output[["NAME", "TYPE"]]
-    # replace VARCHAR(precision) with VARCHAR
-    type_is_varchar = trimmed["TYPE"].map(lambda x: x.startswith("VARCHAR"))
-    trimmed["TYPE"][type_is_varchar] = "VARCHAR"
-    return trimmed
+    return replace_type_varchar(trimmed)
 
 
 ###############################################

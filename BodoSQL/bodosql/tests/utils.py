@@ -1647,3 +1647,14 @@ def assert_equal_par(bodo_output, py_output):
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), "Parallel test failed"
+
+
+def replace_type_varchar(output: pd.DataFrame):
+    """Additionally, erase precision from VARCHAR types. This is useful for
+    asserting on the output of functions like describe_table, where we just want
+    to check if a column is a VARCHAR type."""
+    res = output.copy()
+    # replace VARCHAR(precision) with VARCHAR
+    type_is_varchar = res["TYPE"].map(lambda x: x.startswith("VARCHAR"))
+    res["TYPE"][type_is_varchar] = "VARCHAR"
+    return res

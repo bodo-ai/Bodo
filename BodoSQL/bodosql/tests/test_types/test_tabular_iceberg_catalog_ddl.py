@@ -23,7 +23,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import run_rank0
-from bodosql.tests.utils import assert_equal_par, gen_unique_id
+from bodosql.tests.utils import assert_equal_par, gen_unique_id, replace_type_varchar
 
 pytestmark = pytest_tabular
 
@@ -302,7 +302,7 @@ def test_iceberg_describe_view_basic(
     with view_helper_nontrivialview(bc, tabular_connection, view_name, create=True):
         # execute_ddl Version
         output = bc.execute_ddl(query_describe_view)
-        _test_equal_par(output, expected_output)
+        _test_equal_par(replace_type_varchar(output), expected_output)
 
         # Python Version
         output = bc.sql(query_describe_view)
