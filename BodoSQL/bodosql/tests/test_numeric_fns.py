@@ -152,7 +152,7 @@ def test_single_op_numeric_fns_cols(
             bodosql_negative_numeric_types["TABLE1"].dtypes == np.int8
         ):
             spark_query = (
-                f"SELECT CAST({spark_fn_name}({arg1}, 2) AS TINYINT) from table1"
+                f"SELECT CAST({spark_fn_name}({arg1}, 2) AS DOUBLE) from table1"
             )
         else:
             spark_query = f"SELECT {spark_fn_name}({arg1}, 2) from table1"
