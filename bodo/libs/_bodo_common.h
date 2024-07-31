@@ -1771,15 +1771,19 @@ void reset_col_if_last_table_ref(std::shared_ptr<table_info> const& table,
 void clear_all_cols_if_last_table_ref(std::shared_ptr<table_info> const& table);
 
 /**
- * @brief Calculate the toal memory of local array
+ * @brief Calculate the toal memory of local array. Note that the array must be
+ * pinned if approximate_string_size is set to false.
  *
  * @param earr input array
  * @param include_dict_size Should the size of dictionaries be included?
  * @param include_children Should the size of children be included?
+ * @param approximate_string_size Should the total number of chars in string
+ * arrays be computed or approximated by buffer size?
  * @return int64_t total size of input array in memory
  */
 int64_t array_memory_size(std::shared_ptr<array_info> earr,
-                          bool include_dict_size, bool include_children = true);
+                          bool include_dict_size, bool include_children = true,
+                          bool approximate_string_size = false);
 
 /**
  * @brief Calculate the total memory of the dictionaries of the array
@@ -1788,14 +1792,18 @@ int64_t array_memory_size(std::shared_ptr<array_info> earr,
  */
 int64_t array_dictionary_memory_size(std::shared_ptr<array_info> earr);
 /**
- * Compute the total memory of local chunk of the table on current rank
+ * Compute the total memory of local chunk of the table on current rank. Note
+ * that the table must be pinned if approximate_string_size is set to false.
  *
  * @param table : The input table
  * @param include_dict_size : Should the size of dictionaries be included?
+ * @param approximate_string_size Should the total number of chars in string
+ * arrays be computed or approximated by buffer size?
  * @return the total size of the local chunk of the table
  */
 int64_t table_local_memory_size(const std::shared_ptr<table_info>& table,
-                                bool include_dict_size);
+                                bool include_dict_size,
+                                bool approximate_string_size = false);
 /**
  * Compute the total memory of the dictionaries of the table on current rank
  *

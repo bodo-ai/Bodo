@@ -1,6 +1,6 @@
 #include "../libs/_bodo_common.h"
-#include "../libs/_memory.h"
 #include "../libs/_table_builder.h"
+#include "../libs/_table_builder_utils.h"
 #include "./test.hpp"
 
 bodo::tests::suite table_builder_tests([] {

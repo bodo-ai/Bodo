@@ -1,10 +1,10 @@
 #pragma once
 #include <deque>
 
+#include "_array_build_buffer.h"
 #include "_array_utils.h"
 #include "_dict_builder.h"
 #include "_query_profile_collector.h"
-#include "_table_builder_utils.h"
 
 // Pre-allocate 32 bytes per string for now.
 // Keep in sync with value in
@@ -1173,30 +1173,14 @@ class ChunkedTableBuilderIterator {
 };
 
 /**
- * @brief Chunked Table Builder for use cases like outputs
- * of streaming operators, etc.
- * Columnar table chunks (essentially PAX) are maintained such that
- * each chunk is of size at most 'active_chunk_capacity'
- * rows. The chunks are stored in a std::deque to provide
- * queue like behavior, while allowing iteration over the
- * chunks without removing them. All finalized chunks are kept unpinned and we
- * use PopChunk to pin and return chunks. See design doc here:
- * https://bodo.atlassian.net/l/cp/mzidHW9G.
- *
+ * @brief Interface and implementation of a table builder that consumes tables
+ * or rows and produces a stream of tables with a bound on the number of rows.
+ * This stream will be consumed and output by implementations in child classes
+ * which allows customizing the behavior of newly produced tables. (e.g.
+ * ChunkedTableBuilder will unpin tables as they are produced)
  */
-struct ChunkedTableBuilder {
-    // Queue of finalized chunks. We use a deque instead of
-    // a regular queue since it gives us ability to both
-    // iterate over elements as well as pop/push. Finalized chunks are unpinned.
-    // If we want to access finalized chunks, we need to pin and unpin them
-    // manually.
-    std::deque<std::shared_ptr<table_info>> chunks;
-
-    using iterator = ChunkedTableBuilderIterator<
-        std::deque<std::shared_ptr<table_info>>::iterator>;
-    using const_iterator = ChunkedTableBuilderIterator<
-        std::deque<std::shared_ptr<table_info>>::const_iterator>;
-
+class AbstractChunkedTableBuilder {
+   public:
     /* Active chunk state */
 
     // Active chunk
@@ -1256,7 +1240,7 @@ struct ChunkedTableBuilder {
      * this function.
      * @param mm Memory manager associated with the pool.
      */
-    ChunkedTableBuilder(
+    AbstractChunkedTableBuilder(
         const std::shared_ptr<bodo::Schema>& schema,
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
         size_t chunk_size,
@@ -1265,6 +1249,8 @@ struct ChunkedTableBuilder {
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager());
+
+    virtual ~AbstractChunkedTableBuilder() = default;
 
     /**
      * @brief Finalize the active chunk and create a new active chunk.
@@ -1311,6 +1297,10 @@ struct ChunkedTableBuilder {
     void AppendBatch(const std::shared_ptr<table_info>& in_table,
                      const std::span<const int64_t> idxs);
 
+    void AppendBatch(const std::shared_ptr<table_info>& build_table,
+                     const std::span<const int64_t> idxs,
+                     const std::span<const uint64_t> cols);
+
     /**
      * @brief Similar to AppendRow, but specifically for
      * Join Output Buffer use case. In join computation, we collect
@@ -1345,15 +1335,14 @@ struct ChunkedTableBuilder {
     void Finalize(bool shrink_to_fit = true);
 
     /**
-     * @brief Get the first available chunk. This will pop
-     * an element from this->chunks. The returned chunk is pinned.
+     * @brief Get the first available chunk. It is assumed that the output table
+     * is pinned.
      *
-     * @param force_return If this->chunks is
-     * empty, it will finalize and return the active chunk
-     * if force_return=True (useful in the "is_last" case),
-     * else it will return an empty table.
-     * Note that it might return an empty table even in the
-     * force_return case if the active chunk is empty.
+     * @param force_return If true, when no complete chunks are availible, it
+     * will finalize and return the active chunk (useful in
+     * the "is_last" case), else it will return an empty table. Note that it
+     * might return an empty table even in the force_return case if the active
+     * chunk is empty.
      * @return std::tuple<std::shared_ptr<table_info>, int64_t> Tuple
      * of the chunk and the size of the chunk (in case all columns are dead).
      */
@@ -1384,6 +1373,67 @@ struct ChunkedTableBuilder {
         const std::shared_ptr<table_info>& in_table,
         const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders);
 
+   private:
+    /**
+     * @brief number of chunks that are ready for output
+     */
+    virtual size_t NumReadyChunks() = 0;
+
+    /**
+     * @brief Pop the first chunk for output
+     */
+    virtual std::shared_ptr<table_info> PopFront() = 0;
+
+    /**
+     * @brief trigger consumption of this->active_chunk. After this method is
+     * called, the reference in this->active_chunk will be dropped.
+     */
+    virtual void PushActiveChunk() = 0;
+
+    /**
+     * @brief Reset any state used by a child class
+     */
+    virtual void ResetInternal() = 0;
+};
+
+/**
+ * @brief Chunked Table Builder for use cases like outputs
+ * of streaming operators, etc.
+ * Columnar table chunks (essentially PAX) are maintained such that
+ * each chunk is of size at most 'active_chunk_capacity'
+ * rows. The chunks are stored in a std::deque to provide
+ * queue like behavior, while allowing iteration over the
+ * chunks without removing them. All finalized chunks are kept unpinned and we
+ * use PopChunk to pin and return chunks. See design doc here:
+ * https://bodo.atlassian.net/l/cp/mzidHW9G.
+ */
+class ChunkedTableBuilder : public AbstractChunkedTableBuilder {
+   public:
+    using iterator = ChunkedTableBuilderIterator<
+        std::deque<std::shared_ptr<table_info>>::iterator>;
+    using const_iterator = ChunkedTableBuilderIterator<
+        std::deque<std::shared_ptr<table_info>>::const_iterator>;
+
+    // Queue of finalized chunks. We use a deque instead of
+    // a regular queue since it gives us ability to both
+    // iterate over elements as well as pop/push. Finalized chunks are unpinned.
+    // If we want to access finalized chunks, we need to pin and unpin them
+    // manually.
+    std::deque<std::shared_ptr<table_info>> chunks;
+
+    ChunkedTableBuilder(
+        const std::shared_ptr<bodo::Schema>& schema,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        size_t chunk_size,
+        size_t max_resize_count_for_variable_size_dtypes =
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager())
+        : AbstractChunkedTableBuilder(schema, dict_builders, chunk_size,
+                                      max_resize_count_for_variable_size_dtypes,
+                                      pool, mm) {}
+
     iterator begin() { return iterator(chunks.begin(), chunks); }
 
     iterator end() { return iterator(chunks.end(), chunks); }
@@ -1391,4 +1441,17 @@ struct ChunkedTableBuilder {
     const_iterator cbegin() { return const_iterator(chunks.cbegin(), chunks); }
 
     const_iterator cend() { return const_iterator(chunks.cend(), chunks); }
+
+   private:
+    // Gets the size of chunks
+    size_t NumReadyChunks() final;
+
+    // Removes the first element of chunks, pins it, and returns it
+    std::shared_ptr<table_info> PopFront() final;
+
+    // Unpins the active chunks and appends to chunks
+    void PushActiveChunk() final;
+
+    // Clears chunks
+    void ResetInternal() final;
 };

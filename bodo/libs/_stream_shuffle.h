@@ -631,13 +631,14 @@ class AsyncShuffleRecvState {
     AsyncShuffleRecvState(int source_) : source(source_) {}
 
     /**
-     * @brief Returns true and fills output table builder if recvs of all arrays
-     are done. This allows the state to be freed.
-     * @param[out] out_builder output table builder to fill.
-    * @param metrics IncrementalShuffleMetrics to update.
+     * @brief Returns a tuple of a boolean and a shared_ptr to a table_info. If
+     * recvs of all arrays are done, the boolean will be true, and the table
+     * will be non-null, otherwise the return value will be (false, NULL).
+     * When the boolean is true this state can be freed.
+     * @param dict_builders dictionary builders to use for assembling arrays.
+     * @param[out] metrics metrics object to track stats about recv.
      */
-    bool recvDone(
-        TableBuildBuffer& out_builder,
+    std::pair<bool, std::shared_ptr<table_info>> recvDone(
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
         IncrementalShuffleMetrics& metrics);
 
@@ -677,6 +678,15 @@ class AsyncShuffleRecvState {
     MPI_Request lens_request = MPI_REQUEST_NULL;
     std::vector<uint64_t> recv_lens;
 };
+
+/**
+ * @brief If any recieve states are complete, erase them from the input and
+ * append their out tables to out_builder
+ */
+void consume_completed_recvs(
+    std::vector<AsyncShuffleRecvState>& recv_states,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    IncrementalShuffleMetrics& metrics, TableBuildBuffer& out_builder);
 
 /**
  * @brief Common hash-shuffle functionality for streaming operators such as
