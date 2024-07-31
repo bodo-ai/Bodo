@@ -1701,7 +1701,17 @@ bool KeyComparisonAsPython(
     }
     // If all keys are equal then we return false
     return false;
-};
+}
+
+bool KeyComparisonAsPython(
+    size_t const& n_key, const int64_t* vect_ascending,
+    std::vector<std::shared_ptr<array_info>> const& columns1,
+    size_t const& iRow1,
+    std::vector<std::shared_ptr<array_info>> const& columns2,
+    size_t const& iRow2, const int64_t* na_position) {
+    return KeyComparisonAsPython(n_key, vect_ascending, columns1, 0, iRow1,
+                                 columns2, 0, iRow2, na_position);
+}
 
 /**
  * @brief Helper function for create_temp_null_bitmask_for_array to fill the

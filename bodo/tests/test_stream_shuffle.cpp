@@ -787,9 +787,8 @@ static bodo::tests::suite tests([] {
             TableBuildBuffer result_table(std::move(schema), dict_builders);
             IncrementalShuffleMetrics metrics;
             while (recv_states.size() != 0) {
-                std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
-                    return s.recvDone(result_table, dict_builders, metrics);
-                });
+                consume_completed_recvs(recv_states, dict_builders, metrics,
+                                        result_table);
             }
 
             // check that the recv'd table looks correct

@@ -19,6 +19,7 @@
 #include "_query_profile_collector.h"
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
+#include "_table_builder_utils.h"
 #include "_utils.h"
 
 // When estimating the required size of the OperatorBufferPool, we add some

@@ -984,6 +984,15 @@ bool KeyComparisonAsPython(
     std::vector<std::shared_ptr<array_info>> const& columns2,
     size_t const& shift_key2, size_t const& iRow2, const int64_t* na_position);
 
+/// Convinience wrapper that calls KeyComparisonAsPython with the shift_key
+/// parameters set to 0
+bool KeyComparisonAsPython(
+    size_t const& n_key, const int64_t* vect_ascending,
+    std::vector<std::shared_ptr<array_info>> const& columns1,
+    size_t const& iRow1,
+    std::vector<std::shared_ptr<array_info>> const& columns2,
+    size_t const& iRow2, const int64_t* na_position);
+
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
                                  const std::shared_ptr<array_info>& arr1,
                                  size_t const& iRow1,

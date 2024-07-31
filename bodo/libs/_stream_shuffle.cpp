@@ -643,9 +643,8 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
 
     time_pt start = start_timer();
     // Check for finished recvs
-    std::erase_if(this->recv_states, [&](AsyncShuffleRecvState& s) {
-        return s.recvDone(out_builder, this->dict_builders, this->metrics);
-    });
+    consume_completed_recvs(this->recv_states, this->dict_builders,
+                            this->metrics, out_builder);
     this->metrics.shuffle_recv_finalization_time += end_timer(start);
 
     std::optional<std::shared_ptr<table_info>> new_data =
@@ -817,12 +816,11 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
     return arr;
 }
 
-bool AsyncShuffleRecvState::recvDone(
-    TableBuildBuffer& out_builder,
+std::pair<bool, std::shared_ptr<table_info>> AsyncShuffleRecvState::recvDone(
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     IncrementalShuffleMetrics& metrics) {
     if (recv_requests.empty()) {
-        return false;
+        return std::make_pair(false, nullptr);
     }
 
     // This could be optimzed by allocating the required size upfront and having
@@ -831,10 +829,12 @@ bool AsyncShuffleRecvState::recvDone(
     int flag;
     MPI_Testall(recv_requests.size(), recv_requests.data(), &flag,
                 MPI_STATUSES_IGNORE);
+
+    std::shared_ptr<table_info> out_table = nullptr;
     if (flag) {
         std::vector<uint32_t> lens;
         std::vector<std::shared_ptr<array_info>> out_table_arrs;
-        for (size_t i = 0; i < out_builder.data_table->ncols(); ++i) {
+        for (size_t i = 0; i < this->out_arrs.size(); ++i) {
             const std::shared_ptr<array_info>& arr = this->out_arrs[i];
             const std::shared_ptr<DictionaryBuilder>& dict_builder =
                 dict_builders[i];
@@ -842,13 +842,11 @@ bool AsyncShuffleRecvState::recvDone(
                 this->finalize_receive_array(arr, dict_builder, lens, metrics));
         }
 
-        std::shared_ptr<table_info> out_table =
-            std::make_shared<table_info>(out_table_arrs);
-        out_builder.ReserveTable(out_table);
-        out_builder.UnsafeAppendBatch(out_table);
+        out_table = std::make_shared<table_info>(out_table_arrs);
     }
-    return flag;
+    return std::make_pair(flag, out_table);
 }
+
 std::shared_ptr<array_info> AsyncShuffleSendState::addArray(
     const std::shared_ptr<array_info>& in_arr, const mpi_comm_info& comm_info,
     const mpi_str_comm_info& str_comm_info) {
@@ -1029,4 +1027,18 @@ void AsyncShuffleRecvState::PostLensRecv(MPI_Status& status,
 
     MPI_Irecv(this->recv_lens.data(), this->recv_lens.size(), MPI_UINT64_T,
               status.MPI_SOURCE, 0, shuffle_comm, &this->lens_request);
+}
+
+void consume_completed_recvs(
+    std::vector<AsyncShuffleRecvState>& recv_states,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    IncrementalShuffleMetrics& metrics, TableBuildBuffer& out_builder) {
+    std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
+        auto [done, table] = s.recvDone(dict_builders, metrics);
+        if (done) {
+            out_builder.ReserveTable(table);
+            out_builder.UnsafeAppendBatch(table);
+        }
+        return done;
+    });
 }
