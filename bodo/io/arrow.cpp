@@ -5,7 +5,6 @@
 
 #include <Python.h>
 #include <arrow/filesystem/filesystem.h>
-#include <cpython/funcobject.h>
 #include <object.h>
 #include <pytypedefs.h>
 #include "../libs/_bodo_common.h"
