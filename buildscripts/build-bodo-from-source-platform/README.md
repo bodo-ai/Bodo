@@ -30,7 +30,7 @@
 1. Activate the environment: `conda activate DEV`
 1. Remove `mpi` and `mpich` on all nodes for the DEV environment. `psh conda remove mpi mpich --force --yes`
 1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
-1. Build Bodo: `BODO_SKIP_CPP_TESTS=1 psh pip install --no-deps --no-build-isolation -ve .`
+1. Build Bodo: `BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 psh pip install --no-deps --no-build-isolation -ve .`
 1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
 1. Build Iceberg Connector: `cd iceberg && psh python setup.py develop && cd ..`
 1. Install bodo-platform-utils for bodosqlwrapper use: `cd bodo-platform-image/bodo-platform-utils/ && psh pip install -ve . && cd ../..`
@@ -53,7 +53,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 
 1. Checkout the branch (only required once): `psh git checkout working-branch`.
 1. Pull latest changes (do this after every push): `psh git pull`.
-1. Re-build: `BODO_SKIP_CPP_TESTS=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python setup.py develop && cd ..`.
+1. Re-build: `BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python setup.py develop && cd ..`.
 
 ## Using Bodo/BodoSQL
 
