@@ -272,16 +272,17 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 /**
  *   SORT VALUES
  *
- * Sorts the input table by the first n_key_t columns.
+ * Sorts the input table by the first n_key_t columns. Returns a list of indices
+ * into the input table that can be used to retrieve the sorted table. See
+ * sort_values_table_local for a method that returns a sorted table.
  *
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */
-std::shared_ptr<table_info> sort_values_table_local(
+bodo::vector<int64_t> sort_values_table_local_get_indices(
     std::shared_ptr<table_info> in_table, int64_t n_key_t,
-    const int64_t* vect_ascending, const int64_t* na_position,
-    const int64_t* dead_keys, bool is_parallel, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
+    const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
@@ -330,6 +331,25 @@ std::shared_ptr<table_info> sort_values_table_local(
         gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
     }
 
+    return ListIdx;
+}
+
+/**
+ *   SORT VALUES
+ *
+ * Sorts the input table by the first n_key_t columns.
+ *
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
+ */
+std::shared_ptr<table_info> sort_values_table_local(
+    std::shared_ptr<table_info> in_table, int64_t n_key,
+    const int64_t* vect_ascending, const int64_t* na_position,
+    const int64_t* dead_keys, bool is_parallel, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    auto ListIdx = sort_values_table_local_get_indices(
+        in_table, n_key, vect_ascending, na_position, is_parallel, pool, mm);
+
     std::shared_ptr<table_info> ret_table;
     if (dead_keys == nullptr) {
         ret_table = RetrieveTable(std::move(in_table), ListIdx, -1, false, pool,
@@ -337,7 +357,7 @@ std::shared_ptr<table_info> sort_values_table_local(
     } else {
         uint64_t n_cols = in_table->ncols();
         std::vector<uint64_t> colInds;
-        for (uint64_t i = 0; i < n_key; i++) {
+        for (int64_t i = 0; i < n_key; i++) {
             if (dead_keys[i]) {
                 // If this is the last reference to this
                 // table, we can safely release reference (and potentially

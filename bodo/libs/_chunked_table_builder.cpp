@@ -3,7 +3,7 @@
 
 #include "_dict_builder.h"
 #include "_query_profile_collector.h"
-#include "_table_builder.h"
+#include "_table_builder_utils.h"
 #include "arrow/util/bit_util.h"
 
 /* --------------------------- Helper Functions --------------------------- */
@@ -593,9 +593,9 @@ void ChunkedTableArrayBuilder::Reset() {
 
 /* ------------------------------------------------------------------------ */
 
-/* ------------------------- ChunkedTableBuilder -------------------------- */
+/* --------------------- AbstractChunkedTableBuilder ---------------------- */
 
-ChunkedTableBuilder::ChunkedTableBuilder(
+AbstractChunkedTableBuilder::AbstractChunkedTableBuilder(
     const std::shared_ptr<bodo::Schema>& schema,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_,
@@ -606,6 +606,7 @@ ChunkedTableBuilder::ChunkedTableBuilder(
           max_resize_count_for_variable_size_dtypes_),
       pool(pool),
       mm(mm) {
+    assert(chunk_size > 0);
     this->active_chunk_array_builders.reserve(active_chunk->ncols());
     for (size_t i = 0; i < active_chunk->ncols(); i++) {
         // Set the dictionary to the one from the dict builder
@@ -638,7 +639,7 @@ get_dict_builders_from_chunked_table_array_builders(
     return dict_builders;
 }
 
-void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
+void AbstractChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     // NOP in the empty chunk case
     if (this->active_chunk_size == 0) {
         return;
@@ -655,9 +656,7 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders =
         get_dict_builders_from_chunked_table_array_builders(
             this->active_chunk_array_builders);
-    // Unpin the chunk and add it to the list of finalized chunks:
-    this->active_chunk->unpin();
-    this->chunks.emplace_back(std::move(this->active_chunk));
+    this->PushActiveChunk();
     // Reset state for active chunk:
     this->active_chunk = std::move(new_active_chunk);
     this->active_chunk_size = 0;
@@ -672,7 +671,7 @@ void ChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     }
 }
 
-void ChunkedTableBuilder::AppendBatch(
+void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::vector<bool>& append_rows, const size_t num_append_rows,
     const int64_t in_table_start_offset) {
@@ -693,7 +692,7 @@ void ChunkedTableBuilder::AppendBatch(
     this->AppendBatch(in_table, idxs);
 }
 
-void ChunkedTableBuilder::AppendBatch(
+void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::vector<bool>& append_rows, const int64_t in_table_start_offset) {
     // Calculate number of rows to append
@@ -703,7 +702,7 @@ void ChunkedTableBuilder::AppendBatch(
                       in_table_start_offset);
 }
 
-void ChunkedTableBuilder::AppendBatch(
+void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::unique_ptr<uint8_t[]>& append_rows, const size_t num_append_rows,
     const int64_t in_table_start_offset) {
@@ -721,7 +720,7 @@ void ChunkedTableBuilder::AppendBatch(
     this->AppendBatch(in_table, idxs);
 }
 
-void ChunkedTableBuilder::AppendBatch(
+void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::unique_ptr<uint8_t[]>& append_rows,
     const int64_t in_table_start_offset) {
@@ -738,7 +737,7 @@ void ChunkedTableBuilder::AppendBatch(
                       in_table_start_offset);
 }
 
-void ChunkedTableBuilder::AppendBatch(
+void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table) {
     // Build all indices vector
     std::vector<int64_t> idxs;
@@ -751,9 +750,17 @@ void ChunkedTableBuilder::AppendBatch(
     this->AppendBatch(in_table, idxs);
 }
 
-void ChunkedTableBuilder::AppendBatch(
+void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
     const std::span<const int64_t> idxs) {
+    std::vector<uint64_t> columns(in_table->columns.size());
+    std::iota(columns.begin(), columns.end(), 0);
+    AppendBatch(in_table, idxs, columns);
+}
+
+void AbstractChunkedTableBuilder::AppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::span<const int64_t> idxs, const std::span<const uint64_t> cols) {
 #ifndef NUM_ROWS_CAN_APPEND_COL
 #define NUM_ROWS_CAN_APPEND_COL(ARR_TYPE)                                    \
     batch_length =                                                           \
@@ -778,8 +785,9 @@ void ChunkedTableBuilder::AppendBatch(
         size_t batch_length = n_rows - curr_row;
         // Determine a consistent batch end across all columns. This value will
         // be the min of any column.
-        for (size_t i_col = 0; i_col < in_table->ncols(); i_col++) {
-            std::shared_ptr<array_info>& in_arr = in_table->columns[i_col];
+        for (size_t i_col = 0; i_col < cols.size(); i_col++) {
+            std::shared_ptr<array_info>& in_arr =
+                in_table->columns[cols[i_col]];
             if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                 NUM_ROWS_CAN_APPEND_COL(bodo_array_type::NULLABLE_INT_BOOL);
             } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
@@ -1210,7 +1218,8 @@ void ChunkedTableBuilder::AppendBatch(
             }
             if (!found_match) {
                 throw std::runtime_error(
-                    "ChunkedTableBuilder::AppendBatch: Could not append "
+                    "AbstractChunkedTableBuilder::AppendBatch: Could not "
+                    "append "
                     "column " +
                     std::to_string(i_col));
             }
@@ -1234,7 +1243,7 @@ void ChunkedTableBuilder::AppendBatch(
 #undef APPEND_ROWS_COL
 }
 
-void ChunkedTableBuilder::AppendJoinOutput(
+void AbstractChunkedTableBuilder::AppendJoinOutput(
     std::shared_ptr<table_info> build_table,
     std::shared_ptr<table_info> probe_table,
     const std::span<const int64_t> build_idxs,
@@ -1243,13 +1252,15 @@ void ChunkedTableBuilder::AppendJoinOutput(
     const std::vector<uint64_t>& probe_kept_cols) {
     if (build_idxs.size() != probe_idxs.size()) {
         throw std::runtime_error(
-            "ChunkedTableBuilder::AppendJoinOutput: Length of build_idxs and "
+            "AbstractChunkedTableBuilder::AppendJoinOutput: Length of "
+            "build_idxs and "
             "probe_idxs does not match!");
     }
     if ((build_kept_cols.size() + probe_kept_cols.size()) !=
         this->active_chunk_array_builders.size()) {
         throw std::runtime_error(
-            "ChunkedTableBuilder::AppendJoinOutput: build_kept_cols.size() + "
+            "AbstractChunkedTableBuilder::AppendJoinOutput: "
+            "build_kept_cols.size() + "
             "probe_kept_cols.size()) != "
             "this->active_chunk_array_builders.size()");
     }
@@ -1672,7 +1683,7 @@ void ChunkedTableBuilder::AppendJoinOutput(
 #undef APPEND_ROWS_COL
 }
 
-void ChunkedTableBuilder::Finalize(bool shrink_to_fit) {
+void AbstractChunkedTableBuilder::Finalize(bool shrink_to_fit) {
     // Finalize the active chunk:
     if (this->active_chunk_size > 0) {
         // Call Finalize on all the array builders of the active
@@ -1680,9 +1691,7 @@ void ChunkedTableBuilder::Finalize(bool shrink_to_fit) {
         for (auto& builder : this->active_chunk_array_builders) {
             builder.Finalize(shrink_to_fit);
         }
-        // Unpin the chunk and add it to the list of finalized chunks:
-        this->active_chunk->unpin();
-        this->chunks.emplace_back(std::move(this->active_chunk));
+        this->PushActiveChunk();
     }
     // Reset state for active chunk:
     this->active_chunk = nullptr;
@@ -1690,22 +1699,19 @@ void ChunkedTableBuilder::Finalize(bool shrink_to_fit) {
     this->active_chunk_array_builders.clear();
 }
 
-std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
-    bool force_return) {
+std::tuple<std::shared_ptr<table_info>, int64_t>
+AbstractChunkedTableBuilder::PopChunk(bool force_return) {
     // If there's no finalized chunks available and force_return =
     // true, then finalize the active chunk.
-    if ((this->chunks.size() == 0) && force_return) {
+    if ((this->NumReadyChunks() == 0) && force_return) {
         this->FinalizeActiveChunk();
     }
 
     // If there's a finalized chunk available, pop and return that.
     // Note that FinalizeActiveChunk would have been a NOP if the
     // active_chunk was empty, so we still need this check.
-    if (this->chunks.size() > 0) {
-        std::shared_ptr<table_info> chunk = this->chunks.front();
-        // Pin the chunk before returning it
-        chunk->pin();
-        this->chunks.pop_front();
+    if (this->NumReadyChunks() > 0) {
+        std::shared_ptr<table_info> chunk = this->PopFront();
         size_t chunk_nrows = chunk->nrows();
         if (this->dummy_output_chunk->ncols() == 0) {
             // In the all columns dead case, chunk->nrows() will be
@@ -1720,8 +1726,8 @@ std::tuple<std::shared_ptr<table_info>, int64_t> ChunkedTableBuilder::PopChunk(
     return std::tuple(this->dummy_output_chunk, 0);
 }
 
-void ChunkedTableBuilder::Reset() {
-    this->chunks.clear();
+void AbstractChunkedTableBuilder::Reset() {
+    this->ResetInternal();
     for (size_t i = 0; i < this->active_chunk_array_builders.size(); i++) {
         this->active_chunk_array_builders[i].Reset();
     }
@@ -1731,9 +1737,11 @@ void ChunkedTableBuilder::Reset() {
     this->max_reached_size = 0;
 }
 
-bool ChunkedTableBuilder::empty() const { return this->total_remaining == 0; }
+bool AbstractChunkedTableBuilder::empty() const {
+    return this->total_remaining == 0;
+}
 
-void ChunkedTableBuilder::UnifyDictionariesAndAppend(
+void AbstractChunkedTableBuilder::UnifyDictionariesAndAppend(
     const std::shared_ptr<table_info>& in_table,
     const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
@@ -1752,3 +1760,21 @@ void ChunkedTableBuilder::UnifyDictionariesAndAppend(
 }
 /* ------------------------------------------------------------------------
  */
+
+void ChunkedTableBuilder::PushActiveChunk() {
+    // Unpin the chunk and add it to the list of finalized chunks:
+    this->active_chunk->unpin();
+    this->chunks.emplace_back(std::move(this->active_chunk));
+}
+
+size_t ChunkedTableBuilder::NumReadyChunks() { return this->chunks.size(); }
+
+std::shared_ptr<table_info> ChunkedTableBuilder::PopFront() {
+    std::shared_ptr<table_info> chunk = this->chunks.front();
+    // Pin the chunk before returning it
+    chunk->pin();
+    this->chunks.pop_front();
+    return chunk;
+}
+
+void ChunkedTableBuilder::ResetInternal() { this->chunks.clear(); }

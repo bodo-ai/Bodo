@@ -71,6 +71,13 @@ table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
                                        int64_t* out_n_rows, table_info* bounds,
                                        bool parallel);
 
+bodo::vector<int64_t> sort_values_table_local_get_indices(
+    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
 std::shared_ptr<table_info> sort_values_table_local(
     std::shared_ptr<table_info> in_table, int64_t n_key_t,
     const int64_t* vect_ascending, const int64_t* na_position,

@@ -356,6 +356,7 @@ set(sources_list
   "bodo/io/snowflake_reader.cpp"
   "bodo/io/timestamptz_parser.cpp"
   "bodo/libs/_array.cpp"
+  "bodo/libs/_array_build_buffer.cpp"
   "bodo/libs/_array_hash.cpp"
   "bodo/libs/_array_operations.cpp"
   "bodo/libs/_array_utils.cpp"

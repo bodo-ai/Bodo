@@ -23,9 +23,10 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
+        auto schema = std::make_shared<bodo::Schema>();
         // uint64_t pool_size = 0;
-        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
-                                          dead_keys, 2, 1);
+        SortedChunkedTableBuilder builder(schema, {}, 1, vect_ascending,
+                                          na_position, dead_keys, 2, 1);
 
         auto res = builder.Finalize();
         bodo::tests::check(res.size() == 0);
@@ -37,11 +38,13 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
+            nullptr};
+        SortedChunkedTableBuilder builder(table->schema(), dict_builders, 1,
+                                          vect_ascending, na_position,
                                           dead_keys, 2, 3);
         builder.UpdateChunkSize(3);
         builder.AppendChunk(table);
-        builder.InitCTB(table->schema());
         auto res = builder.Finalize();
         bodo::tests::check(res.size() == 2);
 
@@ -70,13 +73,15 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{0};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
+            nullptr};
+        SortedChunkedTableBuilder builder(table_0->schema(), dict_builders, 1,
+                                          vect_ascending, na_position,
                                           dead_keys, 2, 5);
 
         builder.AppendChunk(table_0);
         builder.UpdateChunkSize(5);
         builder.AppendChunk(table_1);
-        builder.InitCTB(table_1->schema());
         auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 2);
 
@@ -121,14 +126,16 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+        std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
+            nullptr, nullptr, nullptr};
+        SortedChunkedTableBuilder builder(table_0->schema(), dict_builders, 1,
+                                          vect_ascending, na_position,
                                           dead_keys, 2, 3);
 
+        builder.UpdateChunkSize(3);
         builder.AppendChunk(table_2);
         builder.AppendChunk(table_1);
-        builder.UpdateChunkSize(3);
         builder.AppendChunk(table_0);
-        builder.InitCTB(table_0->schema());
 
         auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 4);
@@ -195,14 +202,16 @@ bodo::tests::suite external_sort_tests([] {
         // Test with nulls at the front
         {
             std::vector<int64_t> na_position{0};
-            SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
+                nullptr};
+            SortedChunkedTableBuilder builder(table_0->schema(), dict_builders,
+                                              1, vect_ascending, na_position,
                                               dead_keys, 2, 3);
 
             builder.AppendChunk(table_2);
             builder.AppendChunk(table_1);
             builder.UpdateChunkSize(3);
             builder.AppendChunk(table_0);
-            builder.InitCTB(table_0->schema());
 
             auto res = builder.Finalize();
             bodo::tests::check(res.size() >= 4);
@@ -232,14 +241,16 @@ bodo::tests::suite external_sort_tests([] {
         // Test with nulls at the back
         {
             std::vector<int64_t> na_position{1};
-            SortedChunkedTableBuilder builder(1, vect_ascending, na_position,
+            std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
+                nullptr};
+            SortedChunkedTableBuilder builder(table_0->schema(), dict_builders,
+                                              1, vect_ascending, na_position,
                                               dead_keys, 2, 3);
 
             builder.AppendChunk(table_2);
             builder.AppendChunk(table_1);
             builder.UpdateChunkSize(3);
             builder.AppendChunk(table_0);
-            builder.InitCTB(table_0->schema());
 
             auto res = builder.Finalize();
             bodo::tests::check(res.size() >= 4);
@@ -288,11 +299,10 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               10);
-        state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+        state.FinalizeBuild();
 
-        auto res = state.GetParallelSortBounds(state.builder.input_chunks);
+        auto res = state.bounds_;
         if (myrank == 0) {
             bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
 
@@ -342,11 +352,9 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               10);
-        state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
-
-        auto res = state.GetParallelSortBounds(state.builder.input_chunks);
+        state.builder.FinalizeActiveChunk();
+        auto res = state.GetParallelSortBounds(state.builder.chunks);
         if (myrank == 0) {
             bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
 
@@ -405,10 +413,8 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(),
                               chunk_size);
-        state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, false, true);
-        state.GlobalSort();
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+        state.FinalizeBuild();
 
         int index = 0;
 
@@ -463,10 +469,8 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(),
                               chunk_size);
-        state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
-        state.GlobalSort();
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+        state.FinalizeBuild();
 
         std::pair<int, int> range{};
         std::vector<std::pair<int, int>> gather(n_pes);
@@ -547,11 +551,8 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               chunk_size);
-        state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
-
-        state.GlobalSort();
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+        state.FinalizeBuild();
 
         std::vector<std::shared_ptr<table_info>> tables;
         bool done = false;
@@ -638,12 +639,8 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               chunk_size);
-        state.phase = StreamSortPhase::BUILD;
         state.ConsumeBatch(table, true, true);
-        state.builder.chunk_size = chunk_size;
-
-        state.GlobalSort();
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+        state.FinalizeBuild();
 
         // Collect all output tables
         bool done = false;
@@ -711,7 +708,6 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), schema_table->schema(),
                               true, chunk_size);
-        state.phase = StreamSortPhase::BUILD;
         int index = 0;
         while (index < n_elem) {
             std::vector<int64_t> local_data;
@@ -728,8 +724,7 @@ bodo::tests::suite external_sort_tests([] {
                 {"A"}, {false}, {}, std::move(local_data));
             state.ConsumeBatch(table, true, index >= n_elem);
         }
-        state.GlobalSort();
-        state.phase = StreamSortPhase::PRODUCE_OUTPUT;
+        state.FinalizeBuild();
 
         // Collect all output tables
         bool done = false;
