@@ -18,6 +18,7 @@
 #include <numeric>
 #include <stdexcept>
 #include "../libs/_bodo_to_arrow.h"
+#include "../libs/_io_cpu_thread_pool.h"
 #include "arrow_compat.h"
 #include "arrow_reader.h"
 #include "iceberg_helpers.h"
@@ -365,13 +366,16 @@ namespace arrow_py_compat {
  * @param use_threads
  * @param batch_readahead
  * @param fragment_readahead
+ * @param cpu_executor The executor to use for CPU intensive operations like
+ * decoding, decompression, applying filters, etc.
  * @return std::shared_ptr<::arrow::dataset::ScanOptions>
  */
 static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
     std::shared_ptr<arrow::dataset::Dataset> dataset,
     arrow::compute::Expression expr_filter,
     const std::vector<std::string>& column_names, int64_t batch_size,
-    bool use_threads, int32_t batch_readahead, int32_t fragment_readahead) {
+    bool use_threads, int32_t batch_readahead, int32_t fragment_readahead,
+    arrow::internal::Executor* cpu_executor) {
     std::shared_ptr<arrow::dataset::ScannerBuilder> builder =
         std::make_shared<arrow::dataset::ScannerBuilder>(dataset);
 
@@ -401,6 +405,11 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
         builder->GetScanOptions(), "Error during GetScanOptions",
         std::shared_ptr<::arrow::dataset::ScanOptions> scan_options);
 
+#ifdef USE_BODO_ARROW_FORK
+    scan_options->exec_context = arrow::compute::ExecContext(
+        bodo::BufferPool::DefaultPtr(), cpu_executor);
+#endif
+
     return scan_options;
 }
 
@@ -421,6 +430,8 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
  * @param use_threads
  * @param batch_readahead
  * @param fragment_readahead
+ * @param cpu_executor The executor to use for CPU intensive operations like
+ * decoding, decompression, applying filters, etc.
  * @return std::shared_ptr<::arrow::dataset::Scanner>
  */
 std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
@@ -429,7 +440,9 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
     int64_t batch_size = arrow::dataset::kDefaultBatchSize,
     bool use_threads = true,
     int32_t batch_readahead = arrow::dataset::kDefaultBatchReadahead,
-    int32_t fragment_readahead = arrow::dataset::kDefaultFragmentReadahead) {
+    int32_t fragment_readahead = arrow::dataset::kDefaultFragmentReadahead,
+    arrow::internal::Executor* cpu_executor =
+        arrow::internal::GetCpuThreadPool()) {
     ensure_pa_wrappers_imported();
     // Unwrap Python objects into C++
     auto unwrap_expr_res = arrow::py::unwrap_expression(expr_filter_py);
@@ -446,7 +459,8 @@ std::shared_ptr<::arrow::dataset::Scanner> scanner_from_py_dataset(
 
     std::shared_ptr<::arrow::dataset::ScanOptions> scan_options =
         make_scan_options(dataset, expr_filter, column_names, batch_size,
-                          use_threads, batch_readahead, fragment_readahead);
+                          use_threads, batch_readahead, fragment_readahead,
+                          cpu_executor);
 
     std::shared_ptr<arrow::dataset::ScannerBuilder> scanner_builder =
         std::make_shared<arrow::dataset::ScannerBuilder>(dataset, scan_options);
@@ -593,7 +607,21 @@ class IcebergParquetReader : public ArrowReader {
           table_name(_table_name),
           iceberg_filter_str(_iceberg_filter_str),
           expr_filter_f_str(_expr_filter_f_str),
-          filter_scalars(_filter_scalars) {}
+          filter_scalars(_filter_scalars) {
+#ifdef USE_BODO_ARROW_FORK
+        // Unless explicitly disabled, use our own SingleThreadedCpuThreadPool
+        // for streaming read.
+        char* use_st_pool_env_ =
+            std::getenv("BODO_STREAM_ICEBERG_READER_DISABLE_ST_THREAD_POOL");
+        bool use_st_pool =
+            (batch_size != -1) &&
+            !(use_st_pool_env_ && (std::strcmp(use_st_pool_env_, "1") == 0));
+        if (use_st_pool) {
+            this->st_cpu_executor_.emplace(
+                bodo::SingleThreadedCpuThreadPool::Default());
+        }
+#endif
+    }
 
     virtual ~IcebergParquetReader() {
         // When an unsupported schema evolution is detected in
@@ -1280,7 +1308,8 @@ class IcebergParquetReader : public ArrowReader {
                                            : arrow::dataset::kDefaultBatchSize,
                     /*use_threads*/ true,
                     arrow::dataset::kDefaultBatchReadahead,
-                    arrow::dataset::kDefaultFragmentReadahead));
+                    arrow::dataset::kDefaultFragmentReadahead,
+                    this->cpu_executor()));
         }
         this->iceberg_reader_metrics.create_scanners_time += end_timer(start);
 
@@ -1421,6 +1450,19 @@ class IcebergParquetReader : public ArrowReader {
     const char* database_schema;
     const char* table_name;
 
+    /// @brief Executor to use for CPU bound tasks.
+    arrow::internal::Executor* cpu_executor() const {
+        if (this->st_cpu_executor_.has_value()) {
+            return this->st_cpu_executor_.value().get();
+        } else {
+            return ::arrow::internal::GetCpuThreadPool();
+        }
+    }
+
+    // CPU Thread Pool
+    std::optional<std::shared_ptr<bodo::SingleThreadedCpuThreadPool>>
+        st_cpu_executor_ = std::nullopt;
+
     // Average number of files that each rank will read.
     double avg_num_pieces = 0;
 
@@ -1492,6 +1534,11 @@ class IcebergParquetReader : public ArrowReader {
      * the user should call this function again to get the next batch.
      */
     std::tuple<bool, std::shared_ptr<arrow::RecordBatch>> get_next_batch() {
+        if (this->st_cpu_executor_.has_value()) {
+            // Resume our single threaded executor so that tasks required for
+            // producing the next batch can be executed.
+            this->st_cpu_executor_.value()->ResumeExecutingTasks();
+        }
         // Create the next reader:
         if (this->curr_reader == nullptr) {
             if (this->next_scanner_idx < this->scanners.size()) {
@@ -1518,6 +1565,11 @@ class IcebergParquetReader : public ArrowReader {
             // prompt the next invocation to create a reader from the
             // next scanner.
             this->curr_reader = nullptr;
+        }
+        if (this->st_cpu_executor_.has_value()) {
+            // Pause our single threaded executor so that the worker thread
+            // doesn't interfere with the rest of the pipeline.
+            this->st_cpu_executor_.value()->WaitForIdle();
         }
         return {false, batch};
     }
