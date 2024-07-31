@@ -6,7 +6,6 @@
 #include <Python.h>
 #include <arrow/filesystem/filesystem.h>
 #include <object.h>
-#include <pytypedefs.h>
 #include "../libs/_bodo_common.h"
 #include "../libs/_theta_sketches.h"
 #include "_s3_reader.h"
