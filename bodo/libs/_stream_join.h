@@ -770,6 +770,7 @@ class JoinState {
 
     virtual void FinalizeBuild() {
         if (!this->build_input_finalized) {
+            this->build_input_finalized = true;
             // Report metrics to the QueryProfileCollector
             std::vector<MetricBase> metrics;
             this->ReportBuildStageMetrics(metrics);
@@ -778,12 +779,12 @@ class JoinState {
                     this->op_id, QUERY_PROFILE_BUILD_STAGE_ID),
                 std::move(metrics));
         }
-        this->build_input_finalized = true;
     }
 
     virtual void FinalizeProbe() {
         this->output_buffer->Finalize(/*shrink_to_fit*/ true);
         if (!this->probe_input_finalized) {
+            this->probe_input_finalized = true;
             // Report metrics to the QueryProfileCollector
             std::vector<MetricBase> metrics;
             this->ReportProbeStageMetrics(metrics);
@@ -792,7 +793,6 @@ class JoinState {
                     this->op_id, QUERY_PROFILE_PROBE_STAGE_ID),
                 std::move(metrics));
         }
-        this->probe_input_finalized = true;
     }
 
     virtual void InitOutputBuffer(const std::vector<uint64_t>& build_kept_cols,
