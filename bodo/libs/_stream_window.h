@@ -64,7 +64,7 @@ class WindowState {
     bool build_input_finalized = false;
 
     // Whether we should print debug information to verify sort path is taken
-    bool debug_window;
+    bool debug_window = false;
 
     // TODO: Replace with window metrics.
     GroupbyMetrics metrics;

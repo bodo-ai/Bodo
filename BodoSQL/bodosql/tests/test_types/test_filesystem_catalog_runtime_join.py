@@ -756,3 +756,62 @@ def test_interval_join_rtjf(memory_leak_check, iceberg_database):
             stream,
             "Runtime join filter expression: ((ds.field('{ACCTNMBR}') < 10010) & (ds.field('{ACCTNMBR}') >= 10001))",
         )
+
+
+def test_interval_join_rtjf_multi_column(memory_leak_check, iceberg_database):
+    """
+    Adds a test for Runtime Join Filter support for joins created with
+    interval syntax and additional columns on the build side to ensure a remapping.
+    """
+    table_names = ["BANK_ACCOUNTS_TABLE"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    db_schema, warehouse_loc = iceberg_database(table_names)
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+
+    df = pd.DataFrame(
+        {
+            "NAME1": ["A"] * 5,
+            "KEY1": [10001, 10002, 10003, 10005, 10007],
+            "NAME2": ["B"] * 5,
+            "KEY2": [10004, 10004, 10006, 10008, 10010],
+        }
+    )
+
+    bc = bodosql.BodoSQLContext({"SMALL_TABLE": df}, catalog=catalog)
+
+    query = """SELECT B.ACCTNMBR, S.NAME1, S.NAME2 FROM BANK_ACCOUNTS_TABLE B inner join SMALL_TABLE S on B.ACCTNMBR >= S.KEY1 AND B.ACCTNMBR < S.KEY2"""
+    answer = pd.DataFrame(
+        {
+            "ACCTNMBR": [10001]
+            + [10002] * 2
+            + [10003] * 3
+            + [10004]
+            + [10005] * 2
+            + [10006]
+            + [10007] * 2
+            + [10008, 10009],
+            "NAME1": ["A"] * 14,
+            "NAME2": ["B"] * 14,
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=answer,
+            only_1DVar=True,
+            sort_output=True,
+            reset_index=True,
+        )
+        # Verify that the correct bounds were added to the data requested
+        # from Iceberg.
+        check_logger_msg(
+            stream,
+            "Runtime join filter expression: ((ds.field('{ACCTNMBR}') < 10010) & (ds.field('{ACCTNMBR}') >= 10001))",
+        )
