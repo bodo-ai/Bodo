@@ -47,6 +47,7 @@ import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules.Prun
 import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules.PruneRightSingleRowJoinRuleConfig
 import com.bodosql.calcite.application.logicalRules.SingleValuePruneRule
 import com.bodosql.calcite.application.logicalRules.ValuesReduceRule
+import com.bodosql.calcite.application.logicalRules.WindowDecomposeRule
 import com.bodosql.calcite.application.utils.BodoJoinConditionUtil
 import com.bodosql.calcite.prepare.MultiJoinRules.FILTER_MULTI_JOIN_MERGE
 import com.bodosql.calcite.prepare.MultiJoinRules.JOIN_TO_MULTI_JOIN
@@ -154,6 +155,12 @@ object BodoRules {
     @JvmField
     val FILTER_SETOP_TRANSPOSE_RULE: RelOptRule =
         FilterSetOpTransposeRuleNoWindow.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
+    @JvmField
+    val WINDOW_DECOMPOSE_RULE: RelOptRule =
+        WindowDecomposeRule.Config.DEFAULT
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -1054,6 +1061,7 @@ object BodoRules {
      */
     val REWRITE_RULES: List<RelOptRule> =
         listOf(
+            WINDOW_DECOMPOSE_RULE,
             FILTER_EXTRACT_CASE_RULE,
             MIN_ROW_NUMBER_FILTER_RULE,
             AGGREGATE_FILTER_TO_CASE_RULE,
