@@ -140,8 +140,7 @@ class BodoPhysicalWindow(
             group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
-                aggCall.distinct == false &&
-                    aggCall.ignoreNulls == false
+                !aggCall.distinct && !aggCall.ignoreNulls
                 when (aggCall.operator.kind) {
                     SqlKind.MIN,
                     SqlKind.MAX,
