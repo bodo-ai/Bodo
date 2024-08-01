@@ -1002,9 +1002,9 @@ def init_join_state(
     interval_build_columns = unwrap_typeref(interval_build_columns).meta
     build_indices = output_type.build_indices
     updated_interval_build_columns = []
-    for build_idx in build_indices:
+    for build_idx in interval_build_columns:
         # Before we have the expected state type the mapping won't work.
-        if build_idx < len(interval_build_columns):
+        if build_idx < len(build_indices):
             updated_interval_build_columns.append(build_indices[build_idx])
     updated_interval_build_columns_arr = np.array(
         updated_interval_build_columns, dtype=np.int64
@@ -1181,7 +1181,7 @@ def gen_join_build_consume_batch_impl(join_state, table, is_last):
         table (table_type): build table batch
         is_last (bool): is last batch locally
     Returns:
-        tuple(bool, bool): is last batch globally with possiblity of false negatives
+        tuple(bool, bool): is last batch globally with possibility of false negatives
          due to iterations between syncs, whether to request input rows from preceding
          operators
     """
