@@ -1811,7 +1811,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
     if terse:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 40,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 41,
                 "NAME": [
                     "APPLICABLE_ROLES",
                     "CLASSES",
@@ -1819,6 +1819,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "CLASS_INSTANCE_FUNCTIONS",
                     "CLASS_INSTANCE_PROCEDURES",
                     "COLUMNS",
+                    "CORTEX_SEARCH_SERVICES",
                     "CURRENT_PACKAGES_POLICY",
                     "DATABASES",
                     "ELEMENT_TYPES",
@@ -1854,14 +1855,14 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 40,
-                "KIND": ["VIEW"] * 40,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 41,
+                "KIND": ["VIEW"] * 41,
             }
         )
     else:
         return pd.DataFrame(
             {
-                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 40,
+                "CREATED_ON": ["1969-12-31 16:00:00.000 -0800"] * 41,
                 "NAME": [
                     "APPLICABLE_ROLES",
                     "CLASSES",
@@ -1869,6 +1870,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "CLASS_INSTANCE_FUNCTIONS",
                     "CLASS_INSTANCE_PROCEDURES",
                     "COLUMNS",
+                    "CORTEX_SEARCH_SERVICES",
                     "CURRENT_PACKAGES_POLICY",
                     "DATABASES",
                     "ELEMENT_TYPES",
@@ -1904,8 +1906,8 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "USAGE_PRIVILEGES",
                     "VIEWS",
                 ],
-                "RESERVED": [""] * 40,
-                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 40,
+                "RESERVED": [""] * 41,
+                "SCHEMA_NAME": ["SNOWFLAKE_SAMPLE_DATA.INFORMATION_SCHEMA"] * 41,
                 "COMMENT": [
                     "The roles that can be applied to the current user.",
                     "The BUNDLE CLASS that the current user has privileges to view.",
@@ -1913,6 +1915,7 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The functions defined in a bundle that are accessible to the current user's role.",
                     "The procedures defined in a bundle that are accessible to the current user's role.",
                     "The columns of tables defined in this database that are accessible to the current user's role.",
+                    "The Cortex Search Services defined in this database that are accessible to the current user's role.",
                     "The packages policy set on the current account",
                     "The databases that are accessible to the current user's role.",
                     "The element types of structured array types defined in this database that are accessible to the current user's role.",
@@ -1948,12 +1951,12 @@ def _show_views_snowflake_sample_data_output(terse=True):
                     "The usage privileges on sequences defined in this database that are accessible to the current user's role.",
                     "The views defined in this database that are accessible to the current user's role.",
                 ],
-                "OWNER": [""] * 40,
-                "TEXT": [""] * 40,
-                "IS_SECURE": ["false"] * 40,
-                "IS_MATERIALIZED": ["false"] * 40,
-                "OWNER_ROLE_TYPE": [""] * 40,
-                "CHANGE_TRACKING": ["OFF"] * 40,
+                "OWNER": [""] * 41,
+                "TEXT": [""] * 41,
+                "IS_SECURE": ["false"] * 41,
+                "IS_MATERIALIZED": ["false"] * 41,
+                "OWNER_ROLE_TYPE": [""] * 41,
+                "CHANGE_TRACKING": ["OFF"] * 41,
             }
         )
 
