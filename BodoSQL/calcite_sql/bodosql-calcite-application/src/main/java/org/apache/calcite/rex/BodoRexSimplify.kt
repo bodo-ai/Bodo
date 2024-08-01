@@ -31,7 +31,6 @@ import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.BodoTZInfo
 import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
-import org.apache.calcite.sql.type.SqlTypeUtil
 import org.apache.calcite.sql.type.VariantSqlType
 import org.apache.calcite.util.Bug
 import org.apache.calcite.util.DateString
@@ -1612,6 +1611,8 @@ class BodoRexSimplify(
      *    For example: '%' || ' ' || T.A || '%' || 'ing' -> CONCAT('%', ' ', T.A, '%', 'ing')
      * 2. Combines any adjacent terms that are string literals
      *    For example: CONCAT('%', ' ', T.A, '%', 'ing') -> CONCAT('% ', T.A, '%ing')
+     * 3. Converts a CONCAT call with an odd number of operands which either other operand
+     *    is a string literal to a CONCAT_WS call.
      *
      * @param e The call to a concatenation operation that is being simplified.
      * @return A simplified version of the concatenation operation with adjacent
@@ -1637,6 +1638,24 @@ class BodoRexSimplify(
         // If the entire sequence was combined, there is no need for a CONCAT call
         if (compressedArgs.size == 1) {
             return compressedArgs[0]
+        }
+        if (compressedArgs.size % 2 == 1 && compressedArgs[1] is RexLiteral) {
+            // If the number of operands is odd, check if we have the same literal at every odd index.
+            val separatorLiteral = compressedArgs[1] as RexLiteral
+            val separator = (compressedArgs[1] as RexLiteral).getValueAs(String::class.java)
+            val canConvert = compressedArgs.mapIndexedNotNull {
+                    idx, operand ->
+                if (idx % 2 == 0 || (operand is RexLiteral && operand.getValueAs(String::class.java) == separator)) { true }
+                else { null }
+            }.size == compressedArgs.size
+            if (canConvert) {
+                // Convert to just CONCAT_WS
+                val newOperands: MutableList<RexNode> = mutableListOf(separatorLiteral)
+                (0 until compressedArgs.size step 2).forEach {
+                    newOperands.add(compressedArgs[it])
+                }
+                return rexBuilder.makeCall(StringOperatorTable.CONCAT_WS, newOperands)
+            }
         }
         // If no optimizations were performed, return the original call
         if (e.operands == compressedArgs) {
