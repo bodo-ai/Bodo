@@ -416,7 +416,7 @@ static std::shared_ptr<::arrow::dataset::ScanOptions> make_scan_options(
 /**
  * @brief Create an Arrow Scanner from a PyArrow Dataset Object. This is roughly
  * what PyArrow's `Scanner.from_dataset` function
- * (https://github.com/apache/arrow/blob/apache-arrow-16.1.0/python/pyarrow/_dataset.pyx#L3491)
+ * (https://github.com/apache/arrow/blob/apache-arrow-17.0.0/python/pyarrow/_dataset.pyx#L3491)
  * does. See that function's docstring for a more detailed description of the
  * arguments.
  *

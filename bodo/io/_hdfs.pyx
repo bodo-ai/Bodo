@@ -1,4 +1,4 @@
-# Copied from https://github.com/apache/arrow/blob/apache-arrow-14.0.0/python/pyarrow/_hdfs.pyx
+# Copied from https://github.com/apache/arrow/blob/apache-arrow-17.0.0/python/pyarrow/_hdfs.pyx
 # See comment in bodo/io/__init__.py for why this is needed.
 # See our modification to this file below where it says "bodo change".
 

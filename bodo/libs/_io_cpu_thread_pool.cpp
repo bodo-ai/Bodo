@@ -22,7 +22,7 @@ namespace bodo {
 namespace arrow_compat {
 
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/thread_pool.cc#L49
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool.cc#L49
 struct Task {
     ::arrow::internal::FnOnce<void()> callable;
     ::arrow::StopToken stop_token;
@@ -30,7 +30,7 @@ struct Task {
 };
 
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/atfork_internal.h#L30
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/atfork_internal.h#L30
 struct AtForkHandler {
     using CallbackBefore = std::function<std::any()>;
     using CallbackAfter = std::function<void(std::any)>;
@@ -58,7 +58,7 @@ namespace {
 
 // Singleton state for at-fork management.
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/atfork_internal.cc#L41
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/atfork_internal.cc#L41
 struct AtForkState {
     struct RunningHandler {
         // A temporary owning copy of a handler, to make sure that a handler
@@ -153,7 +153,7 @@ struct AtForkState {
 };
 
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/atfork_internal.cc#L131
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/atfork_internal.cc#L131
 AtForkState* GetAtForkState() {
     static std::unique_ptr<AtForkState> state = []() {
         auto state = std::make_unique<AtForkState>();
@@ -178,7 +178,7 @@ AtForkState* GetAtForkState() {
 // Register the given at-fork handlers. Their intended lifetime should be
 // tracked by calling code using an owning shared_ptr.
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/atfork_internal.cc#L149
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/atfork_internal.cc#L149
 void RegisterAtFork(std::weak_ptr<AtForkHandler> weak_handler) {
     GetAtForkState()->RegisterAtFork(std::move(weak_handler));
 }
@@ -272,7 +272,7 @@ bool SingleThreadedCpuThreadPool::OwnsThisThread() {
 /**
  * @brief The loop that the worker thread will execute. Heavily modelled after
  * Arrow's WorkerLoop
- * (https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/thread_pool.cc#L424)
+ * (https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool.cc#L424)
  *
  * @param state ThreadPool state.
  */
