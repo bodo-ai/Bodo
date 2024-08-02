@@ -108,6 +108,8 @@ struct HashJoinMetrics : public JoinMetrics {
 
     // Global: Did we do a Broadcast hash join (0: false, 1: true)
     stat_t is_build_bcast_join = 0;
+    // Is the build side unique on the current rank (0: false, 1: true)
+    stat_t is_build_unique = 0;
     //  If so, time spent in allgather, etc.
     time_t build_bcast_time = 0;
     // Global: Did we use a bloom filter (0: false, 1: true)
@@ -510,6 +512,15 @@ class JoinPartition {
                           const std::vector<bool>& append_rows);
 
     /**
+     * @brief Is the build table unique for the current partition, meaning
+     * that every hash entry points to exactly 1 row. This is only
+     * meaningful once all data has been added from the build side.
+     * @return True if the data for the current partition must be unique
+     * based on the hash keys.
+     */
+    bool IsUniqueBuildPartition();
+
+    /**
      * @brief Finalize the build step for this partition.
      * This will activate the partition (if not already active), i.e.
      * transfer data from the chunked build table to the contiguous
@@ -643,7 +654,7 @@ class JoinPartition {
     // that have been added to the hash table.
     // This is only meaningful once the partition has been
     // activated (i.e. is_active = true).
-    int64_t curr_build_size = 0;
+    size_t curr_build_size = 0;
     /// Whether the partition is currently pinned.
     bool pinned_ = false;
     // Whether the 'groups' and 'groups_offsets' for this partition are already
