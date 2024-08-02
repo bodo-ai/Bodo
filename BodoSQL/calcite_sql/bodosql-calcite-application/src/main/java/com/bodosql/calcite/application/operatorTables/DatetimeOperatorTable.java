@@ -61,7 +61,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   }
 
   public static final SqlFunction DATEADD =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATEADD",
           BodoReturnTypes.dateAddReturnType("DATEADD"),
           OperandTypes.sequence(
@@ -76,7 +76,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction TIMEADD =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMEADD",
           BodoReturnTypes.dateAddReturnType("TIMEADD"),
           OperandTypes.sequence(
@@ -88,7 +88,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
-      SqlBasicFunction.create(
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATE_ADD",
           BodoReturnTypes.dateAddReturnType("DATE_ADD"),
           OperandTypes.DATETIME_INTERVAL
@@ -98,8 +98,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlBasicFunction TIMEFROMPARTS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMEFROMPARTS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMEFROMPARTS",
           BodoReturnTypes.TIME_DEFAULT_PRECISION_NULLABLE,
           argumentRange(
@@ -143,8 +143,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     return typeFactory.createTypeWithNullability(returnType, nullable);
   }
 
-  public static final SqlBasicFunction DATE_FROM_PARTS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction DATE_FROM_PARTS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATE_FROM_PARTS",
           ReturnTypes.DATE_NULLABLE,
           OperandTypes.sequence(
@@ -178,8 +178,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIMESTAMP))
           .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIME));
 
-  public static final SqlBasicFunction TIMESTAMP_FROM_PARTS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMESTAMP_FROM_PARTS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMESTAMP_FROM_PARTS",
           opBinding -> timestampConstructionOutputType(opBinding, true),
           OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
@@ -188,8 +188,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIMESTAMPFROMPARTS =
       TIMESTAMP_FROM_PARTS.withName("TIMESTAMPFROMPARTS");
 
-  public static final SqlBasicFunction TIMESTAMP_NTZ_FROM_PARTS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMESTAMP_NTZ_FROM_PARTS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMESTAMP_NTZ_FROM_PARTS",
           opBinding -> timestampConstructionOutputType(opBinding, true),
           OVERLOADED_TIMESTAMP_FROM_PARTS_OPERAND_TYPE_CHECKER,
@@ -198,8 +198,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIMESTAMPNTZFROMPARTS =
       TIMESTAMP_NTZ_FROM_PARTS.withName("TIMESTAMPNTZFROMPARTS");
 
-  public static final SqlBasicFunction TIMESTAMP_LTZ_FROM_PARTS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMESTAMP_LTZ_FROM_PARTS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMESTAMP_LTZ_FROM_PARTS",
           opBinding -> timestampConstructionOutputType(opBinding, false),
           argumentRange(
@@ -216,8 +216,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIMESTAMPLTZFROMPARTS =
       TIMESTAMP_LTZ_FROM_PARTS.withName("TIMESTAMPLTZFROMPARTS");
 
-  public static final SqlBasicFunction TIMESTAMP_TZ_FROM_PARTS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMESTAMP_TZ_FROM_PARTS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMESTAMP_TZ_FROM_PARTS",
           ReturnTypes.TIMESTAMP_TZ.andThen(SqlTypeTransforms.TO_NULLABLE),
           BodoOperandTypes.TIMESTAMP_FROM_PARTS_BASE_CHECKER.or(
@@ -228,8 +228,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction TIMESTAMPTZFROMPARTS =
       TIMESTAMP_TZ_FROM_PARTS.withName("TIMESTAMPTZFROMPARTS");
 
-  public static final SqlBasicFunction DATE_SUB =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction DATE_SUB =
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATE_SUB",
           BodoReturnTypes.dateAddReturnType("DATE_SUB"),
           OperandTypes.DATETIME_INTERVAL
@@ -238,8 +238,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction SUBDATE = DATE_SUB.withName("SUBDATE");
-  public static final SqlFunction ADDDATE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction ADDDATE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "ADDDATE",
           BodoReturnTypes.dateAddReturnType("ADDDATE"),
           // What Input Types does the function accept. This function accepts either
@@ -251,8 +251,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction DATEDIFF =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction DATEDIFF =
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATEDIFF",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -272,8 +272,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIMEDIFF =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMEDIFF =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMEDIFF",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -285,8 +285,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction STR_TO_DATE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction STR_TO_DATE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "STR_TO_DATE",
           // What Value should the return type be
           // returns null if the string doesn't match the provided format
@@ -349,8 +349,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction WEEKISO = new SqlDatePartFunction("WEEKISO", TimeUnit.WEEK);
 
-  public static final SqlFunction DAYNAME =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction DAYNAME =
+      SqlNullPolicyFunction.createAnyPolicy(
           "DAYNAME",
           // This always returns a 3 letter value.
           BodoReturnTypes.VARCHAR_3_NULLABLE,
@@ -362,8 +362,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
   public static final SqlFunction DAYOFWEEKISO =
       new SqlDatePartFunction("DAYOFWEEKISO", TimeUnit.ISODOW);
 
-  public static final SqlBasicFunction MONTHNAME =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction MONTHNAME =
+      SqlNullPolicyFunction.createAnyPolicy(
           "MONTHNAME",
           // MONTHNAME always return a 3 character month abbreviation
           BodoReturnTypes.VARCHAR_3_NULLABLE,
@@ -373,8 +373,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   public static final SqlFunction MONTH_NAME = MONTHNAME.withName("MONTH_NAME");
-  public static final SqlFunction MONTHS_BETWEEN =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction MONTHS_BETWEEN =
+      SqlNullPolicyFunction.createAnyPolicy(
           "MONTHS_BETWEEN",
           // What Value should the return type be
           ReturnTypes.DOUBLE_NULLABLE,
@@ -383,8 +383,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction ADD_MONTHS =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction ADD_MONTHS =
+      SqlNullPolicyFunction.createAnyPolicy(
           "ADD_MONTHS",
           // What Value should the return type be
           ReturnTypes.ARG0_NULLABLE,
@@ -402,8 +402,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction DATE_FORMAT =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction DATE_FORMAT =
+      SqlNullPolicyFunction.createAnyPolicy(
           "DATE_FORMAT",
           // Precision cannot be statically determined.
           BodoReturnTypes.VARCHAR_UNKNOWN_PRECISION_NULLABLE,
@@ -419,8 +419,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction MAKEDATE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction MAKEDATE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "MAKEDATE",
           // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
@@ -430,8 +430,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction WEEKDAY =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction WEEKDAY =
+      SqlNullPolicyFunction.createAnyPolicy(
           "WEEKDAY",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -440,8 +440,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction YEARWEEK =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction YEARWEEK =
+      SqlNullPolicyFunction.createAnyPolicy(
           "YEARWEEK",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -450,7 +450,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction DATE_TRUNC =
+  public static final SqlNullPolicyFunction DATE_TRUNC =
       SqlNullPolicyFunction.createAnyPolicy(
           "DATE_TRUNC",
           // What Value should the return type be
@@ -461,8 +461,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIME_SLICE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIME_SLICE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIME_SLICE",
           // What Value should the return type be
           ReturnTypes.ARG0_NULLABLE,
@@ -493,8 +493,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     }
   }
 
-  public static final SqlFunction TRUNC =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TRUNC =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TRUNC",
           opBinding -> truncReturnType(opBinding),
           // What Input Types does the function accept.
@@ -502,8 +502,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               .or(argumentRange(1, SqlTypeFamily.NUMERIC, SqlTypeFamily.INTEGER)),
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
-  public static final SqlFunction YEAROFWEEK =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction YEAROFWEEK =
+      SqlNullPolicyFunction.createAnyPolicy(
           "YEAROFWEEK",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -511,8 +511,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
-  public static final SqlFunction YEAROFWEEKISO =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction YEAROFWEEKISO =
+      SqlNullPolicyFunction.createAnyPolicy(
           "YEAROFWEEKISO",
           // What Value should the return type be
           ReturnTypes.INTEGER_NULLABLE,
@@ -521,8 +521,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction NEXT_DAY =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction NEXT_DAY =
+      SqlNullPolicyFunction.createAnyPolicy(
           "NEXT_DAY",
           // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
@@ -532,8 +532,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction PREVIOUS_DAY =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction PREVIOUS_DAY =
+      SqlNullPolicyFunction.createAnyPolicy(
           "PREVIOUS_DAY",
           // What Value should the return type be
           ReturnTypes.DATE_NULLABLE,
@@ -545,16 +545,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction DAY = new SqlDatePartFunction("DAY", TimeUnit.DAY);
 
-  public static final SqlFunction CONVERT_TIMEZONE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction CONVERT_TIMEZONE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "CONVERT_TIMEZONE",
           CONVERT_TIMEZONE_RETURN_TYPE.andThen(SqlTypeTransforms.TO_NULLABLE),
           OperandTypes.CHARACTER_CHARACTER_DATETIME.or(
               OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.DATETIME)),
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction EPOCH_SECOND =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction EPOCH_SECOND =
+      SqlNullPolicyFunction.createAnyPolicy(
           "EPOCH_SECOND",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -563,8 +563,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction EPOCH_MILLISECOND =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction EPOCH_MILLISECOND =
+      SqlNullPolicyFunction.createAnyPolicy(
           "EPOCH_MILLISECOND",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -573,8 +573,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction EPOCH_MICROSECOND =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction EPOCH_MICROSECOND =
+      SqlNullPolicyFunction.createAnyPolicy(
           "EPOCH_MICROSECOND",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -583,8 +583,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction EPOCH_NANOSECOND =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction EPOCH_NANOSECOND =
+      SqlNullPolicyFunction.createAnyPolicy(
           "EPOCH_NANOSECOND",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -593,8 +593,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIMEZONE_HOUR =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMEZONE_HOUR =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMEZONE_HOUR",
           // Note: This is the max type the SF return precision.
           // It seems like a tinyint should be possible.
@@ -604,8 +604,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  public static final SqlFunction TIMEZONE_MINUTE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction TIMEZONE_MINUTE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "TIMEZONE_MINUTE",
           // Note: This is the max type the SF return precision.
           // It seems like a tinyint should be possible.
