@@ -37,8 +37,8 @@ requirements:
     - cmake                                 # [build_platform != target_platform]
     - ninja                                 # [build_platform != target_platform]
     - numpy >=1.24,<1.27                    # [build_platform != target_platform]
-    - libarrow =16.1.0                      # [build_platform != target_platform]
-    - pyarrow =16.1.0                       # [build_platform != target_platform]
+    - libarrow =17.0.0                      # [build_platform != target_platform]
+    - pyarrow =17.0.0                       # [build_platform != target_platform]
     - numba 0.60.0
     - sccache
 
@@ -57,8 +57,8 @@ requirements:
     - numpy >=1.24,<1.27
     - pandas >=2.1,<2.2
     - fsspec >=2021.09
-    - libarrow =16.1.0
-    - pyarrow =16.1.0
+    - libarrow =17.0.0
+    - pyarrow =17.0.0
     - boost-cpp =1.85
     - libcurl ~= 8.0
     - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_* # [not win]
@@ -79,7 +79,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=2.1,<2.2
     - fsspec >=2021.09
-    - pyarrow =16.1.0
+    - pyarrow =17.0.0
     - numba =0.60.0
     - mpich 4.1.2=h* # [not win]
     - msmpi # [win]
