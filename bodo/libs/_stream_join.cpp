@@ -406,9 +406,8 @@ inline void JoinPartition::BuildHashTable() {
     // Add all the rows in the build_table_buffer that haven't
     // already been added to the hash table.
     ScopedTimer ht_insert_timer(this->metrics.build_ht_insert_time);
-    while (
-        this->curr_build_size <
-        static_cast<int64_t>(this->build_table_buffer->data_table->nrows())) {
+    while (this->curr_build_size <
+           this->build_table_buffer->data_table->nrows()) {
         size_t& group_id = (*build_hash_table_)[this->curr_build_size];
         // group_id==0 means key doesn't exist in map
         if (group_id == 0) {
@@ -567,6 +566,11 @@ void JoinPartition::AppendBuildBatch(
         this->metrics.build_appends_inactive_time += end_timer(start);
         this->metrics.build_appends_inactive_nrows += append_rows_sum;
     }
+}
+
+bool JoinPartition::IsUniqueBuildPartition() {
+    return this->build_table_buffer->data_table->nrows() ==
+           this->curr_build_size;
 }
 
 void JoinPartition::FinalizeBuild() {
@@ -1834,6 +1838,9 @@ void HashJoinState::ReportBuildStageMetrics(
     MetricBase::StatValue na_buffer_nrows =
         this->build_na_key_buffer.total_size;
     metrics_out.emplace_back(StatMetric("na_buffer_nrows", na_buffer_nrows));
+    // Determine if the hash table is unique on this rank
+    metrics_out.emplace_back(
+        StatMetric("build_unique_on_rank", this->metrics.is_build_unique));
 
     // Get and combine metrics from dict-builders
     DictBuilderMetrics key_dict_builder_metrics;
@@ -1880,6 +1887,10 @@ void HashJoinState::FinalizeBuild() {
     // Finalize the NA buffer now that we've seen all the input.
     this->build_na_key_buffer.Finalize();
 
+    // Track if the build table is unique across all partitions on
+    // this rank.
+    bool is_build_unique = true;
+
     // Finalize all the partitions and split them as needed:
     for (size_t i_part = 0; i_part < this->partitions.size(); i_part++) {
         // TODO Add logic to check if partition is too big
@@ -1905,6 +1916,8 @@ void HashJoinState::FinalizeBuild() {
                         ->groups_offsets_guard.value()
                         ->size() -
                     1;
+                is_build_unique &=
+                    this->partitions[i_part]->IsUniqueBuildPartition();
                 // The partition size is roughly the number of bytes pinned
                 // through the OperatorBufferPool at this point. All other
                 // partitions are either unfinalized (i.e. they don't have any
@@ -1993,6 +2006,7 @@ void HashJoinState::FinalizeBuild() {
     this->metrics.n_partitions = this->partitions.size();
     this->metrics.bloom_filter_enabled =
         (this->global_bloom_filter != nullptr) ? 1 : 0;
+    this->metrics.is_build_unique = is_build_unique;
 
     // We won't be making any new allocations, so we can move
     // the error threshold to 1.0 now. This is required for reducing
