@@ -1721,24 +1721,22 @@ def get_pieces_with_exact_row_counts(
 
     pieces: list[IcebergFilePiece] = []
 
+    # Determine the row counts for each file fragment in parallel.
     # Presumably the work is partitioned more or less equally among ranks,
     # and we are mostly (or just) reading metadata, so we assign four IO
-    # threads to every rank. Currently this has no effect since we're doing
-    # this sequentially.
-    # TODO Move this step to C++ and parallelize it since it's largely IO bound.
+    # threads to every rank.
+    # XXX Use a separate env var for this?
     nthreads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), 4)
     pa_orig_io_thread_count = pa.io_thread_count()
     pa.set_io_thread_count(nthreads)
     pa_orig_cpu_thread_count = pa.cpu_count()
     pa.set_cpu_count(nthreads)
     try:
-        t0 = time.monotonic()
-        for frag in pq_file_fragments:
-            file_row_count = frag.scanner(
-                schema=read_schema,
-                filter=schema_group.expr_filter,
-                use_threads=True,
-            ).count_rows()
+        t0: float = time.monotonic()
+        file_row_counts = arrow_cpp.fetch_parquet_frag_row_counts(
+            pq_file_fragments, schema_group.expr_filter, read_schema
+        )
+        for frag, file_row_count in zip(pq_file_fragments, file_row_counts):
             pieces.append(
                 IcebergFilePiece(frag.path, -1, schema_group_identifier, file_row_count)
             )
@@ -2250,7 +2248,9 @@ def get_iceberg_pq_dataset(
             num_files_global = comm.allreduce(num_files, op=MPI.SUM)
             num_row_groups_global = comm.allreduce(num_row_groups, op=MPI.SUM)
             # Use row-level read if there are very few files.
-            row_level = num_files_global < comm.Get_size()
+            # Allows for partial file reads (2 1/2 for example)
+            min_files_per_rank = float(os.environ.get("BODO_MIN_PQ_FILES_PER_RANK", 1))
+            row_level = num_files_global < int(min_files_per_rank * comm.Get_size())
 
         for (
             schema_group_identifier,
@@ -2291,6 +2291,7 @@ def get_iceberg_pq_dataset(
         ev.add_attribute("g_num_rows", g_total_rows)
         ev.add_attribute("g_num_row_groups", g_total_rgs)
         ev.add_attribute("g_row_group_size_bytes", g_total_size_bytes)
+        ev.add_attribute("g_row_level_read", row_level)
 
     # 3. Allgather the pieces on all ranks.
     t0 = time.monotonic()
