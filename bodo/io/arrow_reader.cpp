@@ -8,11 +8,14 @@
 #include <arrow/compute/api.h>
 #include <arrow/dataset/dataset.h>
 #include <arrow/dataset/file_parquet.h>
+#include <arrow/dataset/scanner.h>
 #include <arrow/io/interfaces.h>
 #include <arrow/status.h>
 #include <arrow/util/future.h>
 #include <fmt/format.h>
+#include <listobject.h>
 #include <pyerrors.h>
+#include <memory>
 #include <stdexcept>
 
 #include "../libs/_bodo_to_arrow.h"
@@ -1720,7 +1723,6 @@ void arrow_reader_del_py_entry(ArrowReader* reader) { delete reader; }
  * ParquetFileFragments
  * @param nargs: number of args, should always be 1
  */
-
 PyObject* fetch_parquet_frags_metadata(PyObject* self, PyObject* const* args,
                                        Py_ssize_t nargs) {
     arrow::py::import_pyarrow_wrappers();
@@ -1779,4 +1781,113 @@ PyObject* fetch_parquet_frags_metadata(PyObject* self, PyObject* const* args,
     }
 
     Py_RETURN_NONE;
+}
+
+/**
+ * @brief Impl for PyCFunction arrow_cpp.fetch_parquet_frag_row_counts
+ * Unwraps a python list of pyarrow ParquetFileFragments into
+ * arrow::dataset::ParquetFileFragments and dispatches an async task to fetch
+ * there metadata. Returns upon completion of all tasks
+ * @param self: unused, will be NULL
+ * @param args: list of python arguments, should always be:
+ *  - List of pyarrow.dataset.ParquetFileFragments
+ *  - A pyarrow.compute.Expression representing the filter
+ *  - A pyarrow.Schema representing the datasets / final schema
+ * @param nargs: number of args, should always be 3
+ * @return PyObject* List of row counts for each fragment
+ */
+PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
+                                        Py_ssize_t nargs) {
+    arrow::py::import_pyarrow_wrappers();
+
+    // Ensure there are 3 arguments
+    if (nargs != 3) {
+        PyErr_SetString(PyExc_TypeError,
+                        "fetch_parquet_frag_row_counts takes 3 arguments");
+        return nullptr;
+    }
+
+    // Make sure the first argument is a list
+    PyObject* frag_arg = args[0];
+    if (!PyList_Check(frag_arg)) {
+        PyErr_SetString(PyExc_TypeError, "Argument must be a list");
+        return nullptr;
+    }
+    // Convert the first argument into a list of Parquet fragments
+    std::vector<std::shared_ptr<arrow::dataset::ParquetFileFragment>> fragments;
+    for (Py_ssize_t i = 0; i < PyList_Size(frag_arg); i++) {
+        // Returns a borrowed reference, no DECREF
+        PyObject* py_frag = PyList_GET_ITEM(frag_arg, i);
+        auto res = arrow::py::unwrap_fragment(py_frag);
+        if (!res.ok()) {
+            PyErr_Format(PyExc_RuntimeError,
+                         "Failed to unwrap fragment at index %s",
+                         std::to_string(i).c_str());
+            return nullptr;
+        }
+
+        fragments.push_back(
+            std::static_pointer_cast<arrow::dataset::ParquetFileFragment>(
+                res.ValueOrDie()));
+    }
+    // Convert the second argument into a filter expression
+    PyObject* filter_arg = args[1];
+    auto filter_res = arrow::py::unwrap_expression(filter_arg);
+    if (!filter_res.ok()) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "Failed to unwrap filter expression");
+        return nullptr;
+    }
+    auto filter = filter_res.ValueOrDie();
+    // Convert the third argument into a schema
+    PyObject* schema_arg = args[2];
+    auto schema_res = arrow::py::unwrap_schema(schema_arg);
+    if (!schema_res.ok()) {
+        PyErr_SetString(PyExc_RuntimeError, "Failed to unwrap schema");
+        return nullptr;
+    }
+    auto schema = schema_res.ValueOrDie();
+
+    // Set up scanner options for each count rows
+    auto scan_options = std::make_shared<arrow::dataset::ScanOptions>();
+    scan_options->filter = filter;
+    scan_options->use_threads = true;
+    scan_options->pool = bodo::BufferPool::DefaultPtr();
+
+    std::vector<arrow::Future<int64_t>> futures;
+    for (auto& frag : fragments) {
+        auto scanner_res = std::make_shared<arrow::dataset::ScannerBuilder>(
+                               schema, frag, scan_options)
+                               ->Finish();
+        if (!scanner_res.ok()) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "Failed to construct scanner for counting rows");
+            return nullptr;
+        }
+        futures.push_back(scanner_res.ValueOrDie()->CountRowsAsync());
+    }
+
+    // Wait for all futures to finish
+    auto all_future = arrow::All(futures);
+    all_future.Wait();
+
+    auto res = all_future.MoveResult();
+    if (!res.ok()) {
+        PyErr_Format(PyExc_RuntimeError, "Failed to fetch metadata: %s",
+                     res.status().message().c_str());
+        return nullptr;
+    }
+    auto row_counts = res.ValueOrDie();
+
+    auto out_list = PyList_New(row_counts.size());
+    for (size_t i = 0; i < row_counts.size(); i++) {
+        if (!row_counts[i].ok()) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "Failed to count rows for a fragment");
+            return nullptr;
+        }
+        PyList_SET_ITEM(out_list, i,
+                        PyLong_FromLongLong(row_counts[i].ValueOrDie()));
+    }
+    return out_list;
 }

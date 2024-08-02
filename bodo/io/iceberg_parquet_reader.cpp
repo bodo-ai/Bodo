@@ -4,6 +4,10 @@
 // functionality that is specific to reading iceberg datasets (made up of
 // parquet files)
 
+#include <memory>
+#include <numeric>
+#include <stdexcept>
+
 #include <arrow/compute/expression.h>
 #include <arrow/compute/type_fwd.h>
 #include <arrow/dataset/dataset.h>
@@ -14,9 +18,7 @@
 #include <arrow/util/thread_pool.h>
 #include <fmt/format.h>
 #include <object.h>
-#include <memory>
-#include <numeric>
-#include <stdexcept>
+
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_io_cpu_thread_pool.h"
 #include "arrow_compat.h"
