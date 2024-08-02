@@ -9,7 +9,6 @@ import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.SqlSyntax;
@@ -68,8 +67,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
               .or(OperandTypes.repeat(SqlOperandCountRanges.from(2), OperandTypes.CHARACTER)),
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction SUBSTR =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction SUBSTR =
+      SqlNullPolicyFunction.createAnyPolicy(
           "SUBSTR",
           ReturnTypes.ARG0_NULLABLE_VARYING,
           OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER)
@@ -78,8 +77,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction MID = SUBSTR.withName("MID");
 
-  public static final SqlFunction INSTR =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction INSTR =
+      SqlNullPolicyFunction.createAnyPolicy(
           "INSTR",
           // What Value should the return type be
           // currently, MSQL returns 0 on failure, so I'm doing the same
@@ -111,8 +110,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlFunction STRCMP =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction STRCMP =
+      SqlNullPolicyFunction.createAnyPolicy(
           "STRCMP",
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
@@ -153,8 +152,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction UCASE =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction UCASE =
+      SqlNullPolicyFunction.createAnyPolicy(
           "UCASE",
           // What Value should the return type be
           ReturnTypes.ARG0,
@@ -167,8 +166,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction REVERSE = UCASE.withName("REVERSE");
 
-  public static final SqlBasicFunction LENGTH =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction LENGTH =
+      SqlNullPolicyFunction.createAnyPolicy(
           "LENGTH", ReturnTypes.BIGINT_NULLABLE, OperandTypes.STRING, SqlFunctionCategory.STRING);
 
   public static final SqlFunction LEN = LENGTH.withName("LEN");
@@ -183,8 +182,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
-  public static final SqlBasicFunction CHAR =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction CHAR =
+      SqlNullPolicyFunction.createAnyPolicy(
           "CHAR",
           // Char outputs a single character
           BodoReturnTypes.VARCHAR_1_NULLABLE,
@@ -224,8 +223,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
 
   public static final SqlFunction ENDSWITH = STARTSWITH.withName("ENDSWITH");
 
-  public static final SqlFunction INSERT =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction INSERT =
+      SqlNullPolicyFunction.createAnyPolicy(
           "INSERT",
           // Snowflake calculates the resulting precision
           // as 2 * arg0 + arg3. This seems like an error,
@@ -274,22 +273,18 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction LTRIM =
-      new SqlFunction(
+      SqlNullPolicyFunction.createAnyPolicy(
           "LTRIM",
-          SqlKind.OTHER,
           // Precision matches in the input.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          null,
           argumentRange(1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
           SqlFunctionCategory.STRING);
 
   public static final SqlFunction RTRIM =
-      new SqlFunction(
+      SqlNullPolicyFunction.createAnyPolicy(
           "RTRIM",
-          SqlKind.OTHER,
           // Precision matches in the input.
           ReturnTypes.ARG0_NULLABLE_VARYING,
-          null,
           argumentRange(1, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
           SqlFunctionCategory.STRING);
 

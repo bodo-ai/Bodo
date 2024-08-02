@@ -1,5 +1,6 @@
 package com.bodosql.calcite.sql.func;
 
+import com.bodosql.calcite.application.operatorTables.SqlNullPolicyFunction;
 import org.apache.calcite.sql.SqlBasicFunction;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlFunction;
@@ -103,8 +104,8 @@ public class SqlBodoOperatorTable extends ReflectiveSqlOperatorTable {
   /** The <code>TIMESTAMPDIFF</code> function. */
   public static final SqlFunction TIMESTAMP_DIFF = new BodoSqlTimestampDiffFunction();
 
-  public static final SqlFunction LAST_DAY =
-      SqlBasicFunction.create(
+  public static final SqlNullPolicyFunction LAST_DAY =
+      SqlNullPolicyFunction.createAnyPolicy(
           "LAST_DAY",
           ReturnTypes.DATE_NULLABLE,
           OperandTypes.or(
