@@ -20,6 +20,9 @@ void arrow_reader_del_py_entry(ArrowReader* reader);
 PyObject* fetch_parquet_frags_metadata(PyObject* self, PyObject* const* args,
                                        Py_ssize_t nargs);
 
+PyObject* fetch_parquet_frag_row_counts(PyObject* self, PyObject* const* args,
+                                        Py_ssize_t nargs);
+
 // --------- functions defined in parquet_reader.cpp ---------
 table_info* pq_read_py_entry(PyObject* path, bool parallel,
                              PyObject* expr_filters, PyObject* storage_options,
@@ -126,6 +129,9 @@ void arrow_filesystem_del_py_entry(numba_optional<arrow::fs::FileSystem> fs) {
 PyMethodDef fetch_frags_method_def = {"fetch_parquet_frags_metadata",
                                       (PyCFunction)fetch_parquet_frags_metadata,
                                       METH_FASTCALL, ""};
+PyMethodDef fetch_row_count_method_def = {
+    "fetch_parquet_frag_row_counts", (PyCFunction)fetch_parquet_frag_row_counts,
+    METH_FASTCALL, ""};
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;
@@ -153,6 +159,8 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
 
     PyObject_SetAttrString(m, "fetch_parquet_frags_metadata",
                            PyCFunction_New(&fetch_frags_method_def, NULL));
+    PyObject_SetAttrString(m, "fetch_parquet_frag_row_counts",
+                           PyCFunction_New(&fetch_row_count_method_def, NULL));
 
     SetAttrStringFromVoidPtr(m, arrow_filesystem_del_py_entry);
 
