@@ -367,6 +367,12 @@ no_side_effect_call_tuples = {
     ("init_groupby_state", "stream_groupby", "libs", bodo),
     ("init_grouping_sets_state", "stream_groupby", "libs", bodo),
     ("init_union_state", "stream_union", "libs", bodo),
+    ("init_window_state", "stream_window", "libs", bodo),
+    ("init_stream_sort_state", "stream_sort", "libs", bodo),
+    ("init_dict_encoding_state", "stream_dict_encoding", "libs", bodo),
+    ("init_table_builder_state", "table_builder", "libs", bodo),
+    ("iceberg_writer_init", "stream_iceberg_write", "io", bodo),
+    ("snowflake_writer_init", "snowflake_write", "io", bodo),
     # Datetime utils
     # TODO(njriasan): Move all "pure" datetime_date_ext functions
     # to the same file so can have file level DCE.
