@@ -10,7 +10,7 @@ urllib3>=1.26.9
 mpi4py==3.1.5
 requests
 cachetools>=5.3.0
-pyarrow>=16.1.0
+pyarrow==17.0.0
 jsonschema
 plotly
 igraph

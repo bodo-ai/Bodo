@@ -43,7 +43,7 @@ dependencies:
   - matplotlib<=3.8.2
 
   # IO
-  - pyarrow =16.1.0
+  - pyarrow =17.0.0
   - fsspec >=2021.09
   # IO Optional
   - boto3

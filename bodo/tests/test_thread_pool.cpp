@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
 
 // Tests for SingleThreadedCpuThreadPool. Based heavily on Arrow's test suite:
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/thread_pool_test.cc
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool_test.cc
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -22,7 +22,7 @@
 #include "arrow/status.h"
 
 // Copied from Arrow
-// (https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/testing/gtest_util.cc#L637)
+// (https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/testing/gtest_util.cc#L637)
 void AssertChildExit(int child_pid, int expected_exit_status = 0) {
 #if !defined(_WIN32)
     bodo::tests::check(child_pid > 0);
@@ -41,14 +41,14 @@ void AssertChildExit(int child_pid, int expected_exit_status = 0) {
 }
 
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/testing/gtest_util.cc#L768
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/testing/gtest_util.cc#L768
 void SleepFor(double seconds) {
     std::this_thread::sleep_for(
         std::chrono::nanoseconds(static_cast<int64_t>(seconds * 1e9)));
 }
 
 // Copied from
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/thread_pool_test.cc#L50
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool_test.cc#L50
 
 template <typename T>
 static void task_add(T x, T y, T* out) {
@@ -82,7 +82,7 @@ static T slow_add(double seconds, T x, T y) {
 
 // A class to spawn "add" tasks to a pool and check the results when done.
 // Based on
-// https://github.com/apache/arrow/blob/apache-arrow-16.1.0/cpp/src/arrow/util/thread_pool_test.cc#L85
+// https://github.com/apache/arrow/blob/apache-arrow-17.0.0/cpp/src/arrow/util/thread_pool_test.cc#L85
 
 class AddTester {
    public:

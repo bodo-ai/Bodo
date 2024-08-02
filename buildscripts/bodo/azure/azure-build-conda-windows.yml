@@ -44,8 +44,8 @@ jobs:
 
   - bash: |
       set -eo pipefail
-      conda install -y ruff conda=4.12
-      ruff .
+      conda install -y ruff=0.5.5 conda=4.12
+      ruff check .
     displayName: 'Ruff'
 
   - bash: |
