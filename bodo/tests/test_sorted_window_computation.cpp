@@ -49,9 +49,14 @@ void verify_sorted_window_output(
     std::vector<int32_t> window_offset_indices,
     std::vector<std::shared_ptr<array_info>> out_arrs,
     std::shared_ptr<array_info> expected_out, bool is_parallel = true) {
+    size_t num_columns =
+        partition_by_arrs.size() + order_by_arrs.size() + window_args.size();
+    std::vector<std::shared_ptr<DictionaryBuilder>> builders(num_columns,
+                                                             nullptr);
+
     sorted_window_computation(partition_by_arrs, order_by_arrs, window_args,
                               window_offset_indices, {window_func}, out_arrs,
-                              expected_out->length, {}, is_parallel);
+                              expected_out->length, builders, is_parallel);
 
     std::stringstream ss1;
     std::stringstream ss2;
