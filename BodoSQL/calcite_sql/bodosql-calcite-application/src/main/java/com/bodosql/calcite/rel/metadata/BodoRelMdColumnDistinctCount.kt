@@ -5,6 +5,7 @@ import com.bodosql.calcite.adapter.iceberg.IcebergToBodoPhysicalConverter
 import com.bodosql.calcite.adapter.pandas.PandasTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeTableScan
 import com.bodosql.calcite.adapter.snowflake.SnowflakeToBodoPhysicalConverter
+import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.application.utils.IsScalar
 import com.bodosql.calcite.rel.core.CachedSubPlanBase
@@ -443,6 +444,16 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         if (rex is RexInputRef) {
             return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, rex.index)
         }
+        // Base case: booleans have exactly 2 unique values (3 if nullable)
+        if (rex.type.sqlTypeName == SqlTypeName.BOOLEAN) {
+            return 2.0 + (
+                if (rex.type.isNullable) {
+                    1.0
+                } else {
+                    0.0
+                }
+            )
+        }
         if (rex is RexCall) {
             when (rex.kind) {
                 SqlKind.SAFE_CAST,
@@ -459,9 +470,14 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
                         return inferConcatDistinctiveness(rel, rex.operands, mq)
                     }
                 }
-                SqlKind.OTHER -> {
+                SqlKind.OTHER,
+                SqlKind.OTHER_FUNCTION,
+                -> {
                     if (rex.operator.name == SqlStdOperatorTable.CONCAT.name) {
                         return inferConcatDistinctiveness(rel, rex.operands, mq)
+                    }
+                    if (rex.operator.name == CondOperatorTable.IFF_FUNC.name) {
+                        return inferCaseDistinctness(rel, rex.operands, mq)
                     }
                 }
 
