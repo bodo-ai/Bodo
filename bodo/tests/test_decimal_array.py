@@ -695,6 +695,87 @@ def test_cast_decimal_to_decimal_array_error(
 
 
 @pytest.mark.parametrize(
+    "arr, answer",
+    [
+        pytest.param(
+            pd.array(
+                ["1", "50000", "20", "400", "-1"] * 3,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            pd.Series(["151260"]),
+            id="scale_0-no_null",
+        ),
+        pytest.param(
+            pd.array(
+                ["1", "50000", None, "400", None] * 3,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            pd.Series(["151203"]),
+            id="scale_0-some_null",
+        ),
+        pytest.param(
+            pd.array([None] * 500, dtype=pd.ArrowDtype(pa.decimal128(38, 0))),
+            pd.Series([None]),
+            id="scale_0-all_null",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    None if i % 2 == 0 or i // 100 < 2 else f"{i**3}.{i}"
+                    for i in range(300)
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 3)),
+            ),
+            pd.Series(["812487512.500"]),
+            id="scale_3-some_null",
+        ),
+    ],
+)
+def test_decimal_sum(arr, answer, memory_leak_check):
+    """Test pd.Series.sum() on decimals"""
+
+    def impl(arr):
+        # Wrap in a series to get the sum
+        total = pd.Series(arr).sum()
+        # Convert to a string to confirm the scale
+        asStr = bodo.libs.bodosql_array_kernels.to_char(total, is_scalar=True)
+        # Convert back to a Series to allow comparing against None
+        result = pd.Series([asStr])
+        return result
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        is_out_distributed=False,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_decimal_sum_overflow():
+    """Test error handling when pd.Series.sum() on decimals
+    fails due to overflow"""
+
+    def impl(arr):
+        return pd.Series(arr).sum()
+
+    arr = pd.array([99.9] * 100, dtype=pd.ArrowDtype(pa.decimal128(38, 36)))
+
+    with pytest.raises(
+        RuntimeError, match="Overflow detected in groupby sum of Decimal data"
+    ):
+        check_func(
+            impl,
+            (arr,),
+            py_output=-1,
+            is_out_distributed=False,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+
+@pytest.mark.parametrize(
     "arg0, arg1, answers",
     [
         pytest.param(

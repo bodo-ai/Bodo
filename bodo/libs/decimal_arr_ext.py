@@ -102,6 +102,10 @@ ll.add_symbol(
     decimal_ext.decimal_array_sign_py_entry,
 )
 ll.add_symbol(
+    "sum_decimal_array",
+    decimal_ext.sum_decimal_array_py_entry,
+)
+ll.add_symbol(
     "add_or_subtract_decimal_scalars",
     decimal_ext.add_or_subtract_decimal_scalars_py_entry,
 )
@@ -1469,6 +1473,56 @@ def _decimal_array_sign(typingctx, val_t):
         return ret
 
     return array_info_type(val_t), codegen
+
+
+@intrinsic(prefer_literal=True)
+def _sum_decimal_array(typingctx, arr_t, in_scale_t, parallel_t):
+    def codegen(context, builder, signature, args):
+        (arr, _, parallel) = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1).as_pointer(),
+                lir.IntType(1),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="sum_decimal_array"
+        )
+        is_null_pointer = cgutils.alloca_once(builder, lir.IntType(1))
+        ret = builder.call(fn, [arr, is_null_pointer, parallel])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        is_null = builder.load(is_null_pointer)
+        return context.make_tuple(builder, signature.return_type, [ret, is_null])
+
+    in_scale = get_overload_const_int(in_scale_t)
+    output_decimal_type = Decimal128Type(DECIMAL128_MAX_PRECISION, in_scale)
+    ret_type = types.Tuple([output_decimal_type, types.bool_])
+    return (ret_type(arr_t, in_scale_t, parallel_t), codegen)
+
+
+def sum_decimal_array(arr, parallel=False):  # pragma: no cover
+    pass
+
+
+@overload(sum_decimal_array)
+def overload_sum_decimal_array(arr, parallel=False):
+    """
+    Compute the sum of a decimal array.
+    """
+    from bodo.libs.array import array_to_info
+
+    in_scale = arr.dtype.scale
+
+    def impl(arr, parallel=False):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_scalar, is_null = _sum_decimal_array(arr_info, in_scale, parallel)
+        if is_null:
+            return None
+        return out_scalar
+
+    return impl
 
 
 def decimal_addition_subtraction_output_precision_scale(p1, s1, p2, s2):

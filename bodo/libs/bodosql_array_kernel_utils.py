@@ -949,7 +949,11 @@ def verify_numeric_arg(arg, f_name, a_name):  # pragma: no cover
     """
     if not (
         is_numeric_without_decimal(arg)
-        or isinstance(arg, (bodo.Decimal128Type, bodo.DecimalArrayType))
+        or isinstance(arg, bodo.Decimal128Type)
+        or (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, bodo.Decimal128Type)
+        )
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a numeric, numeric column, or null, but was {arg}"
