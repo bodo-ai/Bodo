@@ -191,7 +191,9 @@ def init_union_state(
         else output_type.out_table_type.c_array_types,
         dtype=np.int8,
     )
-    n_arrs = output_type.n_cols
+
+    # We can just pass the length of the serialized types directly, since on the C++ side we immediately deserialize.
+    n_arrs = len(arr_array_types)
 
     if all_const:
 

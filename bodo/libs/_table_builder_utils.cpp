@@ -32,9 +32,12 @@ std::unique_ptr<array_info> alloc_empty_array(
             alloc_array_item(0, std::move(struct_arr), 0, pool, mm);
         return alloc_map(0, std::move(array_item_arr));
     } else {
-        return alloc_array_top_level(0, 0, 0, datatype->array_type,
-                                     datatype->c_type, -1, 0, 0, false, false,
-                                     false, pool, mm);
+        std::unique_ptr<array_info> array_out = alloc_array_top_level(
+            0, 0, 0, datatype->array_type, datatype->c_type, -1, 0, 0, false,
+            false, false, pool, mm);
+        array_out->precision = datatype->precision;
+        array_out->scale = datatype->scale;
+        return array_out;
     }
 }
 

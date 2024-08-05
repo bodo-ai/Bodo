@@ -2,7 +2,6 @@
 #pragma once
 
 #include <complex>
-#include <memory>
 #if defined(__GNUC__)
 #define __UNUSED__ __attribute__((unused))
 #else
@@ -472,6 +471,14 @@ inline bool is_nested_arr_type(bodo_array_type::arr_type_enum typ) {
             (typ == bodo_array_type::STRUCT) || (typ == bodo_array_type::MAP));
 }
 
+/**
+ * @brief Checks decimal scale and precision is in the valid range
+ *
+ */
+inline bool is_valid_decimal128(int8_t precision, int8_t scale) {
+    return (precision > 0 && scale >= 0 && precision <= 38 && scale < 38);
+}
+
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
 
 inline std::string GetDtype_as_string(int8_t dtype) {
@@ -495,15 +502,27 @@ namespace bodo {
 struct DataType {
     const bodo_array_type::arr_type_enum array_type;
     const Bodo_CTypes::CTypeEnum c_type;
+    const int8_t precision;
+    const int8_t scale;
 
     /**
      * @brief Construct a new DataType from a bodo_array_type and CTypeEnum
      * @param array_type Type / Structure of the Array
      * @param c_type Type of the Array Elements
+     * @param precision The precision (required for DECIMAL types)
+     * @param scale The scale (required for DECIMAL types)
      */
     DataType(bodo_array_type::arr_type_enum array_type,
-             Bodo_CTypes::CTypeEnum c_type)
-        : array_type(array_type), c_type(c_type) {}
+             Bodo_CTypes::CTypeEnum c_type, int8_t precision = -1,
+             int8_t scale = -1)
+        : array_type(array_type),
+          c_type(c_type),
+          precision(precision),
+          scale(scale) {
+        // TODO: For decimal types, check if scale and precision are valid and
+        // throw some exception (this will likely cause issues due to other
+        // places where they are not being set properly.)
+    }
     // Use copy instead
     DataType(const DataType& other) = delete;
 
@@ -1203,7 +1222,8 @@ struct array_info {
             return std::make_unique<bodo::MapType>(std::move(key_type),
                                                    std::move(value_type));
         } else {
-            return std::make_unique<bodo::DataType>(arr_type, dtype);
+            return std::make_unique<bodo::DataType>(
+                arr_type, dtype, this->precision, this->scale);
         }
     }
 };

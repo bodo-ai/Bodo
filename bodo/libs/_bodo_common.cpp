@@ -2,6 +2,8 @@
 
 #include <arrow/array.h>
 #include <complex>
+#include <memory>
+#include <string>
 
 #include <fmt/format.h>
 #include "_array_utils.h"
@@ -269,7 +271,8 @@ std::unique_ptr<DataType> DataType::copy() const {
         return std::make_unique<StructType>(std::move(new_child_types));
 
     } else {
-        return std::make_unique<DataType>(this->array_type, this->c_type);
+        return std::make_unique<DataType>(this->array_type, this->c_type,
+                                          this->precision, this->scale);
     }
 }
 
@@ -301,7 +304,8 @@ std::unique_ptr<DataType> DataType::to_nullable_type() const {
              dtype == Bodo_CTypes::_BOOL)) {
             arr_type = bodo_array_type::NULLABLE_INT_BOOL;
         }
-        return std::make_unique<DataType>(arr_type, dtype);
+        return std::make_unique<DataType>(arr_type, dtype, this->precision,
+                                          this->scale);
     }
 }
 
@@ -309,6 +313,10 @@ void DataType::to_string_inner(std::string& out) {
     out += arr_type_to_str(this->array_type);
     out += "[";
     out += dtype_to_str(this->c_type);
+    // for decimals we want to add the precision and scale as well
+    if (this->c_type == Bodo_CTypes::DECIMAL) {
+        out += fmt::format("({},{})", this->precision, this->scale);
+    }
     out += "]";
 }
 
@@ -348,6 +356,13 @@ void DataType::Serialize(std::vector<int8_t>& arr_array_types,
                          std::vector<int8_t>& arr_c_types) const {
     arr_array_types.push_back(array_type);
     arr_c_types.push_back(c_type);
+    // if it is a type decimal also push back the scale and precision
+    if (c_type == Bodo_CTypes::DECIMAL) {
+        arr_array_types.push_back(precision);
+        arr_array_types.push_back(scale);
+        arr_c_types.push_back(precision);
+        arr_c_types.push_back(scale);
+    }
 }
 
 void ArrayType::Serialize(std::vector<int8_t>& arr_array_types,
@@ -406,6 +421,11 @@ static std::unique_ptr<DataType> from_byte_helper(
             from_byte_helper(arr_array_types, arr_c_types, i);
         return std::make_unique<MapType>(std::move(key_arr),
                                          std::move(value_arr));
+    } else if (c_type == Bodo_CTypes::DECIMAL) {
+        uint8_t precision = arr_c_types[i];
+        uint8_t scale = arr_c_types[i + 1];
+        i += 2;
+        return std::make_unique<DataType>(array_type, c_type, precision, scale);
     } else {
         return std::make_unique<DataType>(array_type, c_type);
     }
@@ -1113,6 +1133,8 @@ std::unique_ptr<array_info> alloc_array_like(
     } else {
         std::unique_ptr<array_info> out_arr = alloc_array_top_level(
             0, 0, 0, arr_type, dtype, -1, 0, 0, false, false, false, pool, mm);
+        out_arr->precision = in_arr->precision;
+        out_arr->scale = in_arr->scale;
         // For dict encoded columns, re-use the same dictionary if
         // reuse_dictionaries = true
         if (reuse_dictionaries && (arr_type == bodo_array_type::DICT)) {
@@ -1344,6 +1366,8 @@ std::shared_ptr<array_info> copy_array(std::shared_ptr<array_info> earr,
             earr->arr_type == bodo_array_type::STRING ? earr->array_id : -1, 0,
             earr->num_categories, earr->is_globally_replicated,
             earr->is_locally_unique, earr->is_locally_sorted);
+        farr->scale = earr->scale;
+        farr->precision = earr->precision;
     }
     // Copy buffers
     if (earr->arr_type == bodo_array_type::NUMPY ||
