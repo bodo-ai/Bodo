@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import _test_equal_guard, check_func
 
 
 @pytest.fixture(
@@ -49,15 +49,20 @@ def tuple_arr_value(request):
 @pytest.mark.slow
 def test_unbox(tuple_arr_value, memory_leak_check):
     # just unbox
+    @bodo.jit(distributed=False)
     def impl(arr_arg):
         return True
 
     # unbox and box
+    @bodo.jit(distributed=False)
     def impl2(arr_arg):
         return arr_arg
 
-    check_func(impl, (tuple_arr_value,))
-    check_func(impl2, (tuple_arr_value,))
+    assert impl(tuple_arr_value)
+    assert _test_equal_guard(impl2(tuple_arr_value), tuple_arr_value)
+    # Make sure we return actual object array instead of struct array workaround for
+    # Arrow
+    assert isinstance(impl2(tuple_arr_value)[0], tuple)
 
 
 @pytest.mark.smoke

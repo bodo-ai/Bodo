@@ -1320,7 +1320,9 @@ def _gather_output(bodo_output):
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
         if bodo.get_rank() == 0:
-            if isinstance(bodo_output_list[0], np.ndarray):
+            if isinstance(
+                bodo_output_list[0], (np.ndarray, pd.arrays.NumpyExtensionArray)
+            ):
                 bodo_output = np.concatenate(bodo_output_list)
             elif isinstance(bodo_output_list[0], pd.arrays.ArrowExtensionArray):
                 pd.concat([pd.Series(a) for a in bodo_output_list]).values
