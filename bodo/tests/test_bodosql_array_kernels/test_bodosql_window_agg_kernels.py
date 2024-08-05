@@ -1562,3 +1562,61 @@ def test_window_object_agg(value_data, value_dtype, memory_leak_check):
         only_seq=True,
         convert_columns_to_pandas=True,
     )
+
+
+@pytest.mark.parametrize(
+    "arr, lower_bound, upper_bound, answer",
+    [
+        pytest.param(
+            pd.array(
+                [None if i % 4 < 2 else f"{i}.{i%10}" for i in range(10)],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
+            ),
+            -500,
+            500,
+            pd.Series(["19.8"] * 10),
+            id="some_null-partition_wide",
+        ),
+        pytest.param(
+            pd.array([None] * 40, dtype=pd.ArrowDtype(pa.decimal128(38, 1))),
+            -500,
+            500,
+            pd.Series([None] * 40),
+            id="all_null-partition_wide",
+        ),
+        pytest.param(
+            pd.array(
+                [None if i % 4 < 2 else f"{i}.{i%10}" for i in range(10)],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
+            ),
+            -500,
+            0,
+            pd.Series(
+                [None, None, "2.2", "5.5", "5.5", "5.5", "12.1", "19.8", "19.8", "19.8"]
+            ),
+            id="some_null-prefix",
+        ),
+    ],
+)
+def test_decimal_window_sum(arr, lower_bound, upper_bound, answer, memory_leak_check):
+    def impl(arr, lower_bound, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.to_char(
+                bodo.libs.bodosql_array_kernels.windowed_sum(
+                    pd.Series(arr), lower_bound, upper_bound
+                ),
+                is_scalar=True,
+            )
+        )
+
+    check_func(
+        impl,
+        (arr, lower_bound, upper_bound),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window function with a partition
+        only_seq=True,
+        is_out_distributed=False,
+    )

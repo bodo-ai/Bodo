@@ -531,6 +531,10 @@ class DistributedPass:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 set_last_arg_to_true(self, assign.value)
 
+        if fdef == ("sum_decimal_array", "bodo.libs.decimal_arr_ext"):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                set_last_arg_to_true(self, assign.value)
+
         if fdef == ("bodosql_listagg", "bodo.libs.bodosql_listagg"):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 set_last_arg_to_true(self, assign.value)

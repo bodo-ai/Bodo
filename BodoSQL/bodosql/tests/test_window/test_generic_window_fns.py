@@ -1,4 +1,7 @@
+from decimal import Decimal
+
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import pytest_slow_unless_window
@@ -60,33 +63,70 @@ def test_numeric_window_functions(
     count_window_applies(pandas_code, window_frames[1], funcs)
 
 
-@pytest.mark.slow
-def test_two_arg_numeric_window_functions(
-    all_numeric_window_df,
-    window_frames,
-    spark_info,
-):
-    """Tests covariance functions with various combinations of window frames to
-    test correctness and fusion"""
+def test_two_arg_numeric_window_functions(memory_leak_check):
+    """Tests covariance/correlation functions with and without a partition"""
     combinations = [
-        ("COVAR_SAMP", "W3", "I64"),
-        ("COVAR_SAMP", "U8", "F64"),
-        ("COVAR_POP", "W3", "I64"),
-        ("COVAR_POP", "U8", "F64"),
-        ("CORR", "W3", "I64"),
-        ("CORR", "U8", "F64"),
+        ("COVAR_SAMP", "PARTITION BY P", "A"),
+        ("COVAR_POP", "PARTITION BY P", "B"),
+        ("CORR", "PARTITION BY P", "C"),
+        ("COVAR_SAMP", "", "D"),
+        ("COVAR_POP", "", "E"),
+        ("CORR", "", "F"),
     ]
     selects = []
-    for i in range(len(combinations)):
-        func, arg0, arg1 = combinations[i]
-        selects.append(
-            f"{func}({arg0}, {arg1}) OVER ({window_frames[0][i % len(window_frames[0])]}) AS c{i}"
-        )
-    query = f"SELECT W4, {', '.join(selects)} FROM table1"
+    for func, window, name in combinations:
+        selects.append(f"{func}(X, Y) OVER ({window}) AS {name}")
+    n_rows = 100
+    df = pd.DataFrame(
+        {
+            "IDX": range(n_rows),
+            "P": [(i**2) % 9 for i in range(n_rows)],
+            "X": pd.array(
+                [
+                    None if i % 5 == 1 or (i**2) % 9 == 7 else Decimal(f"{i}.{i%10}")
+                    for i in range(n_rows)
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
+            ),
+            "Y": pd.array(
+                [
+                    None
+                    if i % 7 == 3 or (i**2) % 9 == 7
+                    else Decimal(f"{i*i}.{i%10}")
+                    for i in range(n_rows)
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
+            ),
+        }
+    )
+    partition_answers = {
+        "A": {0: 85477.618498, 1: 79311.173718, 4: 100090.027125, 7: None},
+        "B": {0: 81761.200302, 1: 73210.314201, 4: 93834.400430, 7: None},
+        "C": {0: 0.966185, 1: 0.971490, 4: 0.972691, 7: None},
+    }
+    answer = pd.DataFrame(
+        {
+            "IDX": range(n_rows),
+            "A": pd.array(
+                [partition_answers["A"][(i**2) % 9] for i in range(n_rows)]
+            ),
+            "B": pd.array(
+                [partition_answers["B"][(i**2) % 9] for i in range(n_rows)]
+            ),
+            "C": pd.array(
+                [partition_answers["C"][(i**2) % 9] for i in range(n_rows)]
+            ),
+            "D": pd.array([85161.45263951733 for i in range(n_rows)]),
+            "E": pd.array([83523.7323964497 for i in range(n_rows)]),
+            "F": pd.array([0.9686966438205089 for i in range(n_rows)]),
+        }
+    )
+    query = f"SELECT IDX, {', '.join(selects)} FROM table1"
     pandas_code = check_query(
         query,
-        all_numeric_window_df,
-        spark_info,
+        {"TABLE1": df},
+        None,
+        expected_output=answer,
         sort_output=True,
         check_dtype=False,
         check_names=False,
@@ -94,9 +134,7 @@ def test_two_arg_numeric_window_functions(
         only_jit_1DVar=True,
     )["pandas_code"]
 
-    # Verify that fusion is working correctly. The term window_frames[1] refers
-    # to how many distinct groupby-apply calls are expected after fusion.
-    count_window_applies(pandas_code, window_frames[1], ["COVAR_SAMP", "COVAR_POP"])
+    count_window_applies(pandas_code, 2, ["COVAR_SAMP", "COVAR_POP"])
 
 
 @pytest.mark.parametrize(

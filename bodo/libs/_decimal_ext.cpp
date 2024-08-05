@@ -15,6 +15,10 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_gandiva_decimal_copy.h"
+#include "_groupby_common.h"
+#include "_groupby_do_apply_to_column.h"
+#include "_groupby_ftypes.h"
+#include "_shuffle.h"
 
 #pragma pack(1)
 struct decimal_value {
@@ -404,6 +408,67 @@ array_info* decimal_array_sign_py_entry(array_info* arr_) {
 
 int8_t decimal_scalar_sign_py_entry(arrow::Decimal128 val) {
     return val == arrow::Decimal128(0) ? 0 : val.Sign();
+}
+
+/**
+ * @brief Compute the sum of a decimal array.
+ *
+ * @param arr The input decimal array.
+ * @param[out] is_null The pointer used to indicate whether the final answer is
+ * null.
+ * @param[in] parallel Do we need a parallel merge step.
+ * @return arrow::Decimal128
+ */
+arrow::Decimal128 sum_decimal_array_py_entry(array_info* arr_raw, bool* is_null,
+                                             bool parallel) noexcept {
+    try {
+        std::shared_ptr<array_info> arr = std::shared_ptr<array_info>(arr_raw);
+
+        // Invoke the groupby codepath for the aggfunc, with every
+        // row mapping to "group 0"
+        grouping_info dummy_local_grp_info;
+        dummy_local_grp_info.num_groups = 1;
+        dummy_local_grp_info.row_to_group.resize(arr->length, 0);
+        std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+
+        std::shared_ptr<array_info> out_arr = alloc_array_top_level(
+            1, -1, -1, bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::DECIMAL,
+            -1, 0, 0, false, false, false);
+        aggfunc_output_initialize(out_arr, Bodo_FTypes::sum, true);
+        do_apply_to_column(arr, out_arr, dummy_aux_cols, dummy_local_grp_info,
+                           Bodo_FTypes::sum);
+
+        // If the code running in parallel, do a reduction on the local sum
+        // to obtain the global sum
+        if (parallel) {
+            int myrank, num_ranks;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+            std::shared_ptr<array_info> combined_arr =
+                gather_array(out_arr, true, true, 0, num_ranks, myrank);
+            // Repeat the pre-parallel procedure on the combined
+            // results.
+            grouping_info dummy_combine_grp_info;
+            dummy_combine_grp_info.num_groups = 1;
+            dummy_combine_grp_info.row_to_group.resize(num_ranks, 0);
+            std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+            aggfunc_output_initialize(out_arr, Bodo_FTypes::sum, true);
+            do_apply_to_column(combined_arr, out_arr, dummy_aux_cols,
+                               dummy_combine_grp_info, Bodo_FTypes::sum);
+        }
+
+        // Set the is_null pointer so the calling sight knows if the sum was
+        // NULL, then return the decimal value stored in the singleton output
+        // array.
+        *is_null =
+            !out_arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0);
+        return out_arr
+            ->data1<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128>()[0];
+
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
 }
 
 template <bool fast_add, bool rescale_left, bool rescale_right,
@@ -2300,6 +2365,7 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_unsafe_py_entry);
     SetAttrStringFromVoidPtr(m, cast_decimal_to_decimal_array_safe_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_array_sign_py_entry);
+    SetAttrStringFromVoidPtr(m, sum_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, decimal_scalar_sign_py_entry);
     SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_scalars_py_entry);
     SetAttrStringFromVoidPtr(m, add_or_subtract_decimal_arrays_py_entry);

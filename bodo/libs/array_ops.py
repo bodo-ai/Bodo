@@ -644,6 +644,13 @@ def array_op_sum(arr, skipna, min_count):  # pragma: no cover
 
 @overload(array_op_sum, no_unliteral=True)
 def overload_array_op_sum(arr, skipna, min_count):
+    if isinstance(arr, bodo.DecimalArrayType):
+
+        def impl(arr, skipna, min_count):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.sum_decimal_array(arr)
+
+        return impl
+
     # TODO: arr that have different underlying data type than dtype
     # like records/tuples
     if isinstance(arr.dtype, types.Integer):
