@@ -1736,6 +1736,432 @@ def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "CEIL(D1, 2)",
+            pd.array(
+                [
+                    Decimal("648.30"),
+                    Decimal("-152.58"),
+                    Decimal("-0.15"),
+                    Decimal("0.53"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="positive_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "CEIL(D1)",
+            pd.array(
+                [
+                    Decimal("649"),
+                    Decimal("-152"),
+                    Decimal("0"),
+                    Decimal("1"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="no_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "CEIL(D1, -2)",
+            pd.array(
+                [
+                    Decimal("700"),
+                    Decimal("-100"),
+                    Decimal("0"),
+                    Decimal("100"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 0)),
+            ),
+            id="negative_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("999.9999"),
+                            Decimal("-999.9999"),
+                            Decimal("99999.9999"),
+                            Decimal("-99999.999"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 4)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE CEIL(D1, 2)::VARCHAR END",
+            pd.array(
+                [
+                    "1000.00",
+                    "-999.99",
+                    "100000.00",
+                    "-99999.99",
+                    "",
+                ],
+            ),
+            id="case",
+        ),
+    ],
+)
+def test_decimal_ceil(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal CEIL with different scales.
+    """
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "FLOOR(D1, 2)",
+            pd.array(
+                [
+                    Decimal("648.29"),
+                    Decimal("-152.59"),
+                    Decimal("-0.16"),
+                    Decimal("0.52"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="positive_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "FLOOR(D1)",
+            pd.array(
+                [
+                    Decimal("648"),
+                    Decimal("-153"),
+                    Decimal("-1"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="no_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "FLOOR(D1, -2)",
+            pd.array(
+                [
+                    Decimal("600"),
+                    Decimal("-200"),
+                    Decimal("-100"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 0)),
+            ),
+            id="negative_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("999.9999"),
+                            Decimal("-999.9999"),
+                            Decimal("99999.9999"),
+                            Decimal("-99999.999"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 4)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE FLOOR(D1, 2)::VARCHAR END",
+            pd.array(
+                [
+                    "999.99",
+                    "-1000.00",
+                    "99999.99",
+                    "-100000.00",
+                    "",
+                ],
+            ),
+            id="case",
+        ),
+    ],
+)
+def test_decimal_floor(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal FLOOR with different scales.
+    """
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "TRUNC(D1, 2) :: VARCHAR",
+            pd.array(
+                [
+                    "648.29",
+                    "-152.58",
+                    "-0.15",
+                    "0.52",
+                    "0.00",
+                    None,
+                ],
+            ),
+            id="positive_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "TRUNC(D1) :: VARCHAR",
+            pd.array(
+                [
+                    "648",
+                    "-152",
+                    "0",
+                    "0",
+                    "0",
+                    None,
+                ],
+            ),
+            id="no_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("648.2935"),
+                            Decimal("-152.5826"),
+                            Decimal("-0.15122"),
+                            Decimal("0.5233"),
+                            Decimal("0"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    )
+                }
+            ),
+            "TRUNC(D1, -2) :: VARCHAR",
+            pd.array(
+                [
+                    "600",
+                    "-100",
+                    "0",
+                    "0",
+                    "0",
+                    None,
+                ],
+            ),
+            id="negative_scale",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("999.9999"),
+                            Decimal("-999.9999"),
+                            Decimal("99999.9999"),
+                            Decimal("-99999.999"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 4)),
+                    )
+                }
+            ),
+            "CASE WHEN D1 IS NULL THEN '' ELSE TRUNC(D1, 2)::VARCHAR END",
+            pd.array(
+                [
+                    "999.99",
+                    "-999.99",
+                    "99999.99",
+                    "-99999.99",
+                    "",
+                ],
+            ),
+            id="case",
+        ),
+    ],
+)
+def test_decimal_trunc(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal TRUNC with different scales.
+    """
+    query = f"SELECT {expr} AS RES FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
                     "D": pd.array(
                         [
                             Decimal("-8.0"),

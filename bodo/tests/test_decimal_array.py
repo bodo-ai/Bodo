@@ -3262,6 +3262,655 @@ def test_round_decimal_overflow(arg, round_scale):
 
 
 @pytest.mark.parametrize(
+    "arg, round_scale, answer",
+    [
+        # Scalar tests
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("648.30"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-152.58"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-0.15"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("700"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("-100"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("649"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("-152"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-close_to_zero",
+        ),
+        # Array tests
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("648.2935"),
+                    Decimal("-152.5826"),
+                    Decimal("-0.15122"),
+                    Decimal("0.5233"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("648.30"),
+                    Decimal("-152.58"),
+                    Decimal("-0.15"),
+                    Decimal("0.53"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="array-positive_scale",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("1231249024183219648.2935"),
+                    Decimal("-1234921349252.5826"),
+                    Decimal("-88888888888.15122340213482"),
+                    Decimal("99999999999.523294234123433"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            -5,
+            pd.array(
+                [
+                    Decimal("1231249024183300000"),
+                    Decimal("-1234921300000"),
+                    Decimal("-88888800000"),
+                    Decimal("100000000000"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            id="array-stress_test",
+        ),
+    ],
+)
+def test_ceil_decimal(arg, round_scale, answer, memory_leak_check):
+    """
+    Test ceil decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.ceil(
+            arr,
+            round_scale,
+        )
+
+    check_func(impl, (arg,), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "arg, round_scale",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    None,
+                    Decimal(
+                        "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                    ),
+                    Decimal("12345"),
+                    Decimal("12345"),
+                    Decimal("12345"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            -1,
+            id="array-overflow",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal(
+                    "99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                ),
+                pa.decimal128(38, 0),
+            ),
+            -1,
+            id="scalar-overflow",
+        ),
+    ],
+)
+def test_ceil_decimal_overflow(arg, round_scale):
+    """
+    Test overflow in ceiling of decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.ceil(
+            arr,
+            round_scale,
+        )
+
+    with pytest.raises(Exception, match="Number out of representable range"):
+        check_func(impl, (arg,))
+
+
+@pytest.mark.parametrize(
+    "arg, round_scale, answer",
+    [
+        # Scalar tests
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("648.29"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-152.59"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-0.16"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("600"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("-200"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("-100"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("648"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("-153"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("-1"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-close_to_zero",
+        ),
+        # Array tests
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("648.2935"),
+                    Decimal("-152.5826"),
+                    Decimal("-0.15122"),
+                    Decimal("0.5233"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("648.29"),
+                    Decimal("-152.59"),
+                    Decimal("-0.16"),
+                    Decimal("0.52"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="array-positive_scale",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("1231249024183219648.2935"),
+                    Decimal("-1234921349252.5826"),
+                    Decimal("-88888888888.15122340213482"),
+                    Decimal("-99999999999.523294234123433"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            -2,
+            pd.array(
+                [
+                    Decimal("1231249024183219600"),
+                    Decimal("-1234921349300"),
+                    Decimal("-88888888900"),
+                    Decimal("-100000000000"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            id="array-stress_test",
+        ),
+    ],
+)
+def test_floor_decimal(arg, round_scale, answer, memory_leak_check):
+    """
+    Test floor decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.floor(
+            arr,
+            round_scale,
+        )
+
+    check_func(impl, (arg,), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "arg, round_scale",
+    [
+        pytest.param(
+            pd.array(
+                [
+                    None,
+                    Decimal(
+                        "-99999 99999 99999 99999 99999 99999 99999 999".replace(
+                            " ", ""
+                        )
+                    ),
+                    Decimal("12345"),
+                    Decimal("12345"),
+                    Decimal("12345"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            -1,
+            id="array-overflow",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal(
+                    "-99999 99999 99999 99999 99999 99999 99999 999".replace(" ", "")
+                ),
+                pa.decimal128(38, 0),
+            ),
+            -1,
+            id="scalar-overflow",
+        ),
+    ],
+)
+def test_floor_decimal_overflow(arg, round_scale):
+    """
+    Test overflow in floor of decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.floor(
+            arr,
+            round_scale,
+        )
+
+    with pytest.raises(Exception, match="Number out of representable range"):
+        check_func(impl, (arg,))
+
+
+@pytest.mark.parametrize(
+    "arg, round_scale, answer",
+    [
+        # Scalar tests
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("648.29"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-152.58"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            2,
+            pa.scalar(
+                Decimal("-0.15"),
+                pa.decimal128(21, 2),
+            ),
+            id="scalar-positive_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("600"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("-100"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            -2,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-negative_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("648.2935"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("648"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-positive",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("-152"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-negative",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-0.15122"),
+                pa.decimal128(20, 5),
+            ),
+            0,
+            pa.scalar(
+                Decimal("0"),
+                pa.decimal128(21, 0),
+            ),
+            id="scalar-zero_scale-close_to_zero",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            5,
+            pa.scalar(
+                Decimal("-152.5826"),
+                pa.decimal128(20, 5),
+            ),
+            id="scalar-no-change",
+        ),
+        # Array tests
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("648.2935"),
+                    Decimal("-152.5826"),
+                    Decimal("-0.15122"),
+                    Decimal("0.5233"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+            ),
+            2,
+            pd.array(
+                [
+                    Decimal("648.29"),
+                    Decimal("-152.58"),
+                    Decimal("-0.15"),
+                    Decimal("0.52"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(21, 2)),
+            ),
+            id="array-positive_scale",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    Decimal("1231249024183219648.2935"),
+                    Decimal("-1234921349252.5826"),
+                    Decimal("-88888888888.15122340213482"),
+                    Decimal("-99999999999.523294234123433"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 18)),
+            ),
+            -2,
+            pd.array(
+                [
+                    Decimal("1231249024183219600"),
+                    Decimal("-1234921349200"),
+                    Decimal("-88888888800"),
+                    Decimal("-99999999900"),
+                    Decimal("0"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 0)),
+            ),
+            id="array-stress_test",
+        ),
+    ],
+)
+def test_trunc_decimal(arg, round_scale, answer, memory_leak_check):
+    """
+    Test floor decimals.
+    """
+
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.trunc(
+            arr,
+            round_scale,
+        )
+
+    check_func(impl, (arg,), py_output=answer)
+
+
+@pytest.mark.parametrize(
     "arg1, arg2, expected",
     [
         pytest.param(
