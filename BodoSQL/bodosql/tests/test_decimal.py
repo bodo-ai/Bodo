@@ -2701,7 +2701,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                     ),
                 }
             ),
-            "Intermediate values for MEDIAN do not fit",
+            "too large for MEDIAN operation",
             id="overflow_1",
         ),
         pytest.param(
@@ -2721,7 +2721,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
                     ),
                 }
             ),
-            "Intermediate values for MEDIAN do not fit",
+            "too large for MEDIAN operation",
             id="overflow_2",
         ),
         pytest.param(

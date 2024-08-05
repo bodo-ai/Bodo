@@ -242,7 +242,9 @@ def init_table_builder_state(
 
     arr_dtypes = output_type.arr_ctypes
     arr_array_types = output_type.arr_array_types
-    n_arrs = output_type.num_input_arrs
+
+    # We can just pass the length of the serialized types directly, since on the C++ side we immediately deserialize.
+    n_arrs = len(arr_array_types)
 
     if not is_overload_none(expected_state_type) and get_overload_const_bool(
         use_chunked_builder
