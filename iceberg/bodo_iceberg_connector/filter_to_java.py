@@ -22,6 +22,10 @@ from bodo_iceberg_connector.py4j_support import (
     get_literal_converter_class,
 )
 
+# Iceberg hard codes the limit for IN filters to 200
+# see InclusiveMetricsEvaluator in Iceberg.
+ICEBERG_IN_FILTER_LIMIT = 200
+
 
 class Filter(metaclass=abc.ABCMeta):
     """
@@ -90,9 +94,30 @@ class FilterExpr(Filter):
 
     def to_java(self):
         filter_expr_class = get_filter_expr_class()
-        return filter_expr_class(
+        individual_filter = filter_expr_class(
             self.op, convert_list_to_java([arg.to_java() for arg in self.args])
         )
+        if (
+            self.op in ("IN", "NOT IN")
+            and len(self.args[1].value) > ICEBERG_IN_FILTER_LIMIT
+        ):
+            # Iceberg doesn't check anything once the limit is reached.
+            in_args = self.args[1].value
+            min_val = min(in_args)
+            max_val = max(in_args)
+            if self.op == "IN":
+                min_filter = FilterExpr(">=", [self.args[0], Scalar(min_val)])
+                max_filter = FilterExpr("<=", [self.args[0], Scalar(max_val)])
+                bounds_filter = FilterExpr("AND", [min_filter, max_filter]).to_java()
+            else:
+                min_filter = FilterExpr("<", [self.args[0], Scalar(min_val)])
+                max_filter = FilterExpr(">", [self.args[0], Scalar(max_val)])
+                bounds_filter = FilterExpr("OR", [min_filter, max_filter]).to_java()
+            return filter_expr_class(
+                "AND", convert_list_to_java([individual_filter, bounds_filter])
+            )
+        else:
+            return individual_filter
 
 
 def convert_scalar(val):
