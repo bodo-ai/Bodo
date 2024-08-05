@@ -815,3 +815,47 @@ def test_interval_join_rtjf_multi_column(memory_leak_check, iceberg_database):
             stream,
             "Runtime join filter expression: ((ds.field('{ACCTNMBR}') < 10010) & (ds.field('{ACCTNMBR}') >= 10001))",
         )
+
+
+def test_in_prune_files_extreme(memory_leak_check, iceberg_database):
+    """Test that IN can prune all files based on NDV join filters. This
+    tests against a mixed optimization where IN won't run any pruning on files
+    after there are > 200 set entries.
+    """
+    table_names = ["BANK_ACCOUNTS_TABLE"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    db_schema, warehouse_loc = iceberg_database(table_names)
+    catalog = bodosql.FileSystemCatalog(warehouse_loc, default_schema=f'"{db_schema}"')
+
+    df = pd.DataFrame(
+        {
+            "KEY": pd.array([-i for i in range(1, 201)], dtype="Int64"),
+        }
+    )
+
+    bc = bodosql.BodoSQLContext({"SMALL_TABLE": df}, catalog=catalog)
+
+    query = """SELECT B.ACCTNMBR FROM BANK_ACCOUNTS_TABLE B inner join SMALL_TABLE S on B.ACCTNMBR = S.KEY"""
+    answer = pd.DataFrame(
+        {
+            "ACCTNMBR": pd.array([], dtype="Int64"),
+        }
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with temp_env_override({"BODO_JOIN_UNIQUE_VALUES_LIMIT": "300"}):
+        with set_logging_stream(logger, 2):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=answer,
+                only_1DVar=True,
+                sort_output=True,
+                reset_index=True,
+            )
+            # Verify that no files were loaded.
+            check_logger_msg(stream, "Reading 0 files:")
