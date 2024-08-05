@@ -71,11 +71,11 @@ Security groups must have the following rules:
 
 * Allow TCP access to `0.0.0.0/0` for these ports
 
-  * **443**: For Bodo Infrastructure access, cloud data sources etc.
+    * **443**: For Bodo Infrastructure access, cloud data sources etc.
   
-  * **2049**: For EFS access to the shared file system
+    * **2049**: For EFS access to the shared file system
   
-  * 80(optional): Needed for [Snowflake OCSP checks ](https://docs.snowflake.com/en/user-guide/ocsp#ca-site-and-ocsp-responder-hosts-used-by-snowflake)(Required for Snowflake customers)
+    * 80(optional): Needed for [Snowflake OCSP checks ](https://docs.snowflake.com/en/user-guide/ocsp#ca-site-and-ocsp-responder-hosts-used-by-snowflake)(Required for Snowflake customers)
 
 
 **Ingress(Inbound):**
@@ -108,6 +108,16 @@ If defined, the ACLs must have the following rules:
 **Ingress(Inbound):**
 
 * Allow all TCP access to the workspace security group
+
+
+### Create a VPC
+To create VPCs you can use various tools:
+
+* AWS Console
+
+* AWS CLI
+
+* [AWS CloudFormation Template](customer_managed_vpc_cft.yml)
 
 
 ### Creating a Workspace with Customer Managed VPC

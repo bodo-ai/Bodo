@@ -26,24 +26,35 @@ List of supported endpoint services:
 
 ### Configure Bodo Workspace with PrivateLink
 
-This section explains how to configure [Customer Management VPC](customer_managed_vpc.md) to use AWS Private link, 
+This section explains how to configure AWS Private link, 
 so the connection between the Bodo Platform and Bodo clusters will be made in the AWS internal network.
 
-#### Configuration
+This can be done in two ways:
 
-1. Create an interface endpoint that points to the specific Bodo Cluster Endpoint Service, depending on the region:
+#### Using Cloud Formation Template
+You can use the following CloudFormation template. You can find the template [here](aws_private_link_cft.yml)
+
+
+#### Manual Configuration
+
+1. To use AWS PrivateLink, you need to create a workspace with [Customer Managed VPC](customer_managed_vpc.md) without
+    an internet gateway or NAT gateway. 
+    Make sure that the VPC has DNS resolution and DNS hostnames enabled.
+
+2. Create an interface endpoint that points to the specific Bodo Cluster Endpoint Service, depending on the region:
 ![Bodo-Cluster-Interface-Endpoint](../../platform2-gifs/bodo-cluster-interface-endpoint.gif#center)
 
-2. Once the endpoint is available, modify the private DNS name:
+3. Once the endpoint is available, modify the private DNS name:
 ![Bodo-Cluster-Interface-Endpoint-DNS](../../platform2-gifs/bodo-cluster-interface-endpoint-dns.gif#center)
 
-3. Create an S3 gateway endpoint if it does not already exist in the VPC (required for access workspace S3 storage):
+4. Create an S3 gateway endpoint if it does not already exist in the VPC (required for access workspace S3 storage):
 ![AWS-S3-Gateway](../../platform2-gifs/s3-gateway.gif#center)
 
-4. Create an SSM interface endpoint if it does not already exist in the VPC (required for Bodo clusters to read workspace SSM parameters):
+5. Create an SSM interface endpoint if it does not already exist in the VPC (required for Bodo clusters to read workspace SSM parameters):
 ![AWS-SSM-Interface](../../platform2-gifs/ssm-interface-endpoint.gif#center)
 
 
 !!! info "Important"
-        For interface endpoints, you don't need to select all the subnets used by the workers; you just need to select at least one.
-        For the S3 gateway, you need to select all route tables associated with subnets used by Bodo clusters.
+     
+    For interface endpoints, you don't need to select all the subnets used by the workers; you just need to select at least one.
+    For the S3 gateway, you need to select all route tables associated with subnets used by Bodo clusters.
