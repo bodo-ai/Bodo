@@ -6,8 +6,10 @@
 // arrow::Decimal128 to reduce allocation overheads.
 #pragma once
 
+#include <arrow/util/basic_decimal.h>
 #include <arrow/util/decimal.h>
 #include <boost/multiprecision/cpp_int.hpp>
+#include "_basic_decimal_scalar.h"
 
 namespace decimalops {
 
@@ -323,6 +325,241 @@ inline arrow::Decimal128 Divide(const arrow::Decimal128& x,
         }
     }
     return result;
+}
+
+// ----------------------------------------------
+// Code for Ceil/Truncate/Floor for decimal128.
+// ----------------------------------------------
+
+// Helper macro to check for overflow and return 0 if it occurs.
+#define DECIMAL_OVERFLOW_IF(condition, overflow) \
+    do {                                         \
+        if (*overflow || (condition)) {          \
+            *overflow = true;                    \
+            return 0;                            \
+        }                                        \
+    } while (0)
+
+enum RoundType {
+    kRoundTypeCeil,   // +1 if +ve and trailing value is > 0, else no rounding.
+    kRoundTypeFloor,  // -1 if -ve and trailing value is < 0, else no rounding.
+    kRoundTypeTrunc,  // no rounding, truncate the trailing digits.
+    kRoundTypeHalfRoundUp,  // if +ve and trailing value is >= half of base, +1.
+                            // else if -ve and trailing value is >= half of
+                            // base, -1.
+};
+
+static inline arrow::BasicDecimal128 GetMaxValue(int32_t precision) {
+    return arrow::BasicDecimal128::GetScaleMultiplier(precision) - 1;
+}
+
+// Helper function to modify the scale and/or precision of a decimal value.
+static inline arrow::BasicDecimal128 ModifyScaleAndPrecision(
+    const BasicDecimalScalar128& x, int32_t out_precision, int32_t out_scale,
+    bool* overflow) {
+    int32_t delta_scale = out_scale - x.scale();
+    if (delta_scale >= 0) {
+        // check if multiplying by delta_scale will cause an overflow.
+        DECIMAL_OVERFLOW_IF(arrow::BasicDecimal128::Abs(x.value()) >
+                                GetMaxValue(out_precision - delta_scale),
+                            overflow);
+        return x.value().IncreaseScaleBy(delta_scale);
+    } else {
+        // Do not do any rounding, that is handled by the caller.
+        auto result = x.value().ReduceScaleBy(-delta_scale, false);
+        DECIMAL_OVERFLOW_IF(
+            arrow::BasicDecimal128::Abs(result) > GetMaxValue(out_precision),
+            overflow);
+        return result;
+    }
+}
+
+static inline int32_t ComputeRoundingDelta(const arrow::BasicDecimal128& x,
+                                           int32_t x_scale, int32_t out_scale,
+                                           RoundType type) {
+    if (type == kRoundTypeTrunc ||  // no rounding for this type.
+        out_scale >= x_scale) {     // no digits dropped, so no rounding.
+        return 0;
+    }
+
+    int32_t result = 0;
+    switch (type) {
+        case kRoundTypeHalfRoundUp: {
+            auto base =
+                arrow::BasicDecimal128::GetScaleMultiplier(x_scale - out_scale);
+            auto trailing = x % base;
+            if (trailing == 0) {
+                result = 0;
+            } else if (trailing.Abs() < base / 2) {
+                result = 0;
+            } else {
+                result = (x < 0) ? -1 : 1;
+            }
+            break;
+        }
+
+        case kRoundTypeCeil:
+            if (x < 0) {
+                // no rounding for -ve
+                result = 0;
+            } else {
+                auto base = arrow::BasicDecimal128::GetScaleMultiplier(
+                    x_scale - out_scale);
+                auto trailing = x % base;
+                result = (trailing == 0) ? 0 : 1;
+            }
+            break;
+
+        case kRoundTypeFloor:
+            if (x > 0) {
+                // no rounding for +ve
+                result = 0;
+            } else {
+                auto base = arrow::BasicDecimal128::GetScaleMultiplier(
+                    x_scale - out_scale);
+                auto trailing = x % base;
+                result = (trailing == 0) ? 0 : -1;
+            }
+            break;
+
+        case kRoundTypeTrunc:
+            break;
+    }
+    return result;
+}
+
+static inline arrow::BasicDecimal128 RoundWithPositiveScale(
+    const BasicDecimalScalar128& x, int32_t out_precision, int32_t out_scale,
+    RoundType round_type, bool* overflow) {
+    assert(out_scale >= 0);
+
+    auto scaled =
+        ModifyScaleAndPrecision(x, out_precision, out_scale, overflow);
+    if (*overflow) {
+        return 0;
+    }
+
+    auto delta =
+        ComputeRoundingDelta(x.value(), x.scale(), out_scale, round_type);
+    if (delta == 0) {
+        return scaled;
+    }
+
+    // If there is a rounding delta, the output scale must be less than the
+    // input scale. That means at least one digit is dropped after the decimal.
+    // The delta add can add utmost one digit before the decimal. So, overflow
+    // will occur only if the output precision has changed.
+    assert(x.scale() > out_scale);
+    auto result = scaled + delta;
+    DECIMAL_OVERFLOW_IF(
+        out_precision < x.precision() &&
+            arrow::BasicDecimal128::Abs(result) > GetMaxValue(out_precision),
+        overflow);
+    return result;
+}
+
+// Modify scale to drop all digits to the right of the decimal and round.
+// Then, zero out 'rounding_scale' number of digits to the left of the decimal
+// point.
+static inline BasicDecimal128 RoundWithNegativeScale(
+    const BasicDecimalScalar128& x, int32_t out_precision,
+    int32_t rounding_scale, RoundType round_type, bool* overflow) {
+    assert(rounding_scale <= 0);
+
+    // get rid of the fractional part.
+    auto scaled = ModifyScaleAndPrecision(x, out_precision, 0, overflow);
+    auto rounding_delta =
+        ComputeRoundingDelta(scaled, 0, -rounding_scale, round_type);
+
+    auto base = BasicDecimal128::GetScaleMultiplier(-rounding_scale);
+    auto delta = rounding_delta * base - (scaled % base);
+    DECIMAL_OVERFLOW_IF(
+        BasicDecimal128::Abs(scaled) >
+            GetMaxValue(out_precision) - BasicDecimal128::Abs(delta),
+        overflow);
+
+    // BODO CHANGE - match snowflake rounding behavior
+    // If we are performing ceil with positive numbers, the original impl will,
+    // for something like round(1230, -2), return 1200. But, for ceil, we
+    // should get 1300. So, we need to add `base` to the result, unless there's
+    // no change in the value before and after the rounding.
+    // The mirror case applies for floor with negative numbers.
+    BasicDecimal128 result;
+    if (x.value() >= 0 && round_type == kRoundTypeCeil &&
+        x.value() != scaled + delta) {
+        // For positive numbers:
+        DECIMAL_OVERFLOW_IF(
+            BasicDecimal128::Abs(scaled) >
+                GetMaxValue(out_precision) - BasicDecimal128::Abs(delta) - base,
+            overflow);
+        result = scaled + delta + base;
+
+    } else if (x.value() < 0 && round_type == kRoundTypeFloor &&
+               x.value() != scaled + delta) {
+        // For negative numbers:
+        DECIMAL_OVERFLOW_IF(
+            BasicDecimal128::Abs(scaled) >
+                GetMaxValue(out_precision) - BasicDecimal128::Abs(delta) + base,
+            overflow);
+
+        result = scaled + delta - base;
+
+    } else {
+        result = scaled + delta;
+    }
+    return result;
+}
+
+template <bool negative_round>
+static inline arrow::BasicDecimal128 Ceil(const BasicDecimal128& x,
+                                          int32_t in_precision,
+                                          int32_t in_scale, int32_t round_scale,
+                                          bool* overflow) {
+    BasicDecimalScalar128 x_scalar(x, in_precision, in_scale);
+    auto out_precision = std::min(in_precision + 1, 38);
+    if constexpr (negative_round) {
+        return RoundWithNegativeScale(x_scalar, out_precision, round_scale,
+                                      RoundType::kRoundTypeCeil, overflow);
+    } else {
+        return RoundWithPositiveScale(x_scalar, out_precision, round_scale,
+                                      RoundType::kRoundTypeCeil, overflow);
+    }
+}
+
+template <bool negative_round>
+static inline arrow::BasicDecimal128 Floor(const BasicDecimal128& x,
+                                           int32_t in_precision,
+                                           int32_t in_scale,
+                                           int32_t round_scale,
+                                           bool* overflow) {
+    BasicDecimalScalar128 x_scalar(x, in_precision, in_scale);
+    if constexpr (negative_round) {
+        return RoundWithNegativeScale(x_scalar, in_precision, round_scale,
+                                      RoundType::kRoundTypeFloor, overflow);
+    } else {
+        return RoundWithPositiveScale(x_scalar, in_precision, round_scale,
+                                      RoundType::kRoundTypeFloor, overflow);
+    }
+}
+
+template <bool negative_round>
+static inline arrow::BasicDecimal128 Truncate(
+    const BasicDecimal128& x, int32_t in_precision, int32_t in_scale,
+    int32_t out_precision, int32_t out_scale, int32_t rounding_scale,
+    bool* overflow) {
+    BasicDecimalScalar128 x_scalar(x, in_precision, in_scale);
+    // no-op if target scale is same as arg scale
+    if (x_scalar.scale() == out_scale && rounding_scale >= 0) {
+        return x_scalar.value();
+    }
+
+    if constexpr (negative_round) {
+        return RoundWithNegativeScale(x_scalar, out_precision, rounding_scale,
+                                      RoundType::kRoundTypeTrunc, overflow);
+    } else {
+        return RoundWithPositiveScale(x_scalar, out_precision, rounding_scale,
+                                      RoundType::kRoundTypeTrunc, overflow);
+    }
 }
 
 }  // namespace decimalops

@@ -1531,6 +1531,273 @@ array_info* round_decimal_array_py_entry(array_info* arr_, int64_t round_scale,
 }
 
 /**
+ * @brief Python entrypoint for taking the ceil or floor of a given Decimal128
+ * value.
+ *
+ * @param value The Decimal128 value
+ * @param input_p The precision of the input decimal value.
+ * @param input_s The scale of the input decimal value.
+ * @param round_scale The scale to which the value should be rounded. Negative
+ * scales indicate rounding to the left of the decimal point.
+ * @param is_ceil A boolean indicating whether to apply the ceiling (true) or
+ * floor (false) operation.
+ * @return The resulting Decimal128 value.
+ */
+arrow::Decimal128 ceil_floor_decimal_scalar_py_entry(arrow::Decimal128 value,
+                                                     int32_t input_p,
+                                                     int32_t input_s,
+                                                     int32_t round_scale,
+                                                     bool is_ceil) {
+    arrow::Decimal128 result;
+    try {
+        bool overflow = false;
+        if (is_ceil) {
+            if (round_scale < 0) {
+                result = decimalops::Ceil<true>(value, input_p, input_s,
+                                                round_scale, &overflow);
+            } else {
+                result = decimalops::Ceil<false>(value, input_p, input_s,
+                                                 round_scale, &overflow);
+            }
+        } else {
+            if (round_scale < 0) {
+                result = decimalops::Floor<true>(value, input_p, input_s,
+                                                 round_scale, &overflow);
+            } else {
+                result = decimalops::Floor<false>(value, input_p, input_s,
+                                                  round_scale, &overflow);
+            }
+        }
+        if (overflow) {
+            throw std::runtime_error("Number out of representable range");
+        }
+        return result;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Templated helper for applying the ceiling or floor operation to a
+ * decimal array.
+ *
+ * @tparam is_ceil A boolean template parameter indicating whether to apply the
+ * ceiling (true) or floor (false) operation.
+ * @tparam negative_round A boolean template parameter indicating whether to
+ * apply negative rounding.
+ * @param arr Input array
+ * @param output_p The precision of the output
+ * @param output_s The scale of the output
+ * @param round_scale The scale to which the values should be rounded. Negative
+ * scales indicate rounding to the left of the decimal point.
+ * @return Resulting array.
+ */
+template <bool is_ceil, bool negative_round>
+std::unique_ptr<array_info> ceil_floor_decimal_array(
+    const std::unique_ptr<array_info>& arr, int32_t output_p, int32_t output_s,
+    int32_t round_scale) {
+    bool overflow = false;
+    size_t len = arr->length;
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
+    out_arr->precision = output_p;
+    out_arr->scale = output_s;
+    for (size_t i = 0; i < len; i++) {
+        if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+        } else {
+            arrow::Decimal128* out_ptr =
+                out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                               arrow::Decimal128>() +
+                i;
+            const arrow::Decimal128& in_val =
+                *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                             arrow::Decimal128>() +
+                  i);
+            bool overflow_i = false;
+            if constexpr (is_ceil) {
+                *out_ptr = decimalops::Ceil<negative_round>(
+                    in_val, arr->precision, arr->scale, round_scale,
+                    &overflow_i);
+            } else {
+                *out_ptr = decimalops::Floor<negative_round>(
+                    in_val, arr->precision, arr->scale, round_scale,
+                    &overflow_i);
+            }
+            overflow |= overflow_i;
+        }
+    }
+    if (overflow) {
+        throw std::runtime_error("Number out of representable range");
+    }
+    return out_arr;
+}
+
+/**
+ * @brief Python entrypoint for applying ceil or floor to a decimal array.
+ *
+ * @param arr_ Input array
+ * @param output_p The precision of the output
+ * @param output_s The scale of the output
+ * @param round_scale The scale to which the values should be rounded. Negative
+ * scales indicate rounding to the left of the decimal point.
+ * @param is_ceil A boolean indicating whether to apply the ceiling (true) or
+ * floor (false) operation.
+ * @return Resulting array_info object with the rounded values.
+ */
+array_info* ceil_floor_decimal_array_py_entry(array_info* arr_,
+                                              int32_t output_p,
+                                              int32_t output_s,
+                                              int32_t round_scale,
+                                              bool is_ceil) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        std::unique_ptr<array_info> out_arr;
+        if (is_ceil) {
+            if (round_scale < 0) {
+                out_arr = ceil_floor_decimal_array<true, true>(
+                    arr, output_p, output_s, round_scale);
+            } else {
+                out_arr = ceil_floor_decimal_array<true, false>(
+                    arr, output_p, output_s, round_scale);
+            }
+        } else {
+            if (round_scale < 0) {
+                out_arr = ceil_floor_decimal_array<false, true>(
+                    arr, output_p, output_s, round_scale);
+            } else {
+                out_arr = ceil_floor_decimal_array<false, false>(
+                    arr, output_p, output_s, round_scale);
+            }
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
+ * @brief Python entrypoint for truncating a given Decimal128 value.
+ *
+ * @param value The Decimal128 value
+ * @param input_p The precision of the input decimal value.
+ * @param input_s The scale of the input decimal value.
+ * @param round_scale The scale to which the value should be truncated. Negative
+ * scales indicate truncating to the left of the decimal point.
+ * @param overflow A pointer to a boolean indicating overflow.
+ * @return The resulting Decimal128 value.
+ */
+arrow::Decimal128 trunc_decimal_scalar_py_entry(
+    arrow::Decimal128 value, int32_t input_p, int32_t input_s, int32_t output_p,
+    int32_t output_s, int32_t round_scale) {
+    arrow::Decimal128 result;
+    bool overflow = false;
+    try {
+        if (round_scale < 0) {
+            result =
+                decimalops::Truncate<true>(value, input_p, input_s, output_p,
+                                           output_s, round_scale, &overflow);
+        } else {
+            result =
+                decimalops::Truncate<false>(value, input_p, input_s, output_p,
+                                            output_s, round_scale, &overflow);
+        }
+        if (overflow) {
+            throw std::runtime_error("Number out of representable range");
+        }
+        return result;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Templated helper for truncating a decimal array to a given scale.
+ *
+ * @tparam negative_round A boolean template parameter indicating whether to
+ * apply negative scale truncating.
+ * @param arr Input array
+ * @param output_p The precision of the output
+ * @param output_s The scale of the output
+ * @param round_scale The scale to which the values should be truncated.
+ * Negative scales indicate truncating to the left of the decimal point.
+ * @param overflow Boolean overflow pointer.
+ * @return Resulting array.
+ */
+template <bool negative_round>
+std::unique_ptr<array_info> trunc_decimal_array(
+    const std::unique_ptr<array_info>& arr, int32_t output_p, int32_t output_s,
+    int32_t round_scale) {
+    bool overflow = false;
+    size_t len = arr->length;
+    std::unique_ptr<array_info> out_arr =
+        alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
+    out_arr->precision = output_p;
+    out_arr->scale = output_s;
+    for (size_t i = 0; i < len; i++) {
+        if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+        } else {
+            arrow::Decimal128* out_ptr =
+                out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                               arrow::Decimal128>() +
+                i;
+            const arrow::Decimal128& in_val =
+                *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                             arrow::Decimal128>() +
+                  i);
+            bool overflow_i = false;
+            *out_ptr = decimalops::Truncate<negative_round>(
+                in_val, arr->precision, arr->scale, output_p, output_s,
+                round_scale, &overflow_i);
+            overflow |= overflow_i;
+        }
+    }
+    if (overflow) {
+        throw std::runtime_error("Number out of representable range");
+    }
+    return out_arr;
+}
+
+/**
+ * @brief Python entrypoint for truncating a decimal array to a given scale.
+ *
+ * @param arr_ Input array
+ * @param output_p The precision of the output
+ * @param output_s The scale of the output
+ * @param round_scale The scale to which the values should be truncated.
+ * Negative scales indicate truncating to the left of the decimal point.
+ * @param overflow A pointer to a boolean indicating overflow.
+ * @return Resulting array_info object with the truncated values.
+ */
+array_info* trunc_decimal_array_py_entry(array_info* arr_, int32_t output_p,
+                                         int32_t output_s,
+                                         int32_t round_scale) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        std::unique_ptr<array_info> out_arr;
+        if (round_scale < 0) {
+            out_arr =
+                trunc_decimal_array<true>(arr, output_p, output_s, round_scale);
+        } else {
+            out_arr = trunc_decimal_array<false>(arr, output_p, output_s,
+                                                 round_scale);
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * Computes the absolute value of a given decimal scalar.
  *
  * @param val The decimal value for which the absolute value is to be computed.
@@ -2378,6 +2645,10 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, decimal_array_to_str_array_py_entry);
     SetAttrStringFromVoidPtr(m, round_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, round_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, ceil_floor_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, ceil_floor_decimal_array_py_entry);
+    SetAttrStringFromVoidPtr(m, trunc_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, trunc_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, abs_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, abs_decimal_scalar_py_entry);
 
