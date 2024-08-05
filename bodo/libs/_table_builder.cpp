@@ -505,36 +505,10 @@ struct TableBuilderState {
     }
 };
 
-int get_type_arr_size(int8_t* arr_array_types, int n_arrs) {
-    int type_arr_size = 0, n_col = 0;
-
-    while (n_col < n_arrs) {
-        if (arr_array_types[type_arr_size] == bodo_array_type::STRUCT) {
-            type_arr_size +=
-                get_type_arr_size(arr_array_types + type_arr_size + 2,
-                                  arr_array_types[type_arr_size + 1]) +
-                1;
-            ++n_col;
-        } else if (arr_array_types[type_arr_size] == bodo_array_type::MAP) {
-            type_arr_size +=
-                get_type_arr_size(arr_array_types + type_arr_size + 1, 2);
-            ++n_col;
-        } else if (arr_array_types[type_arr_size] !=
-                   bodo_array_type::ARRAY_ITEM) {
-            ++n_col;
-        }
-        ++type_arr_size;
-    }
-
-    return type_arr_size;
-}
-
 TableBuilderState* table_builder_state_init_py_entry(int8_t* arr_c_types,
                                                      int8_t* arr_array_types,
                                                      int n_arrs,
                                                      bool input_dics_unified) {
-    n_arrs = get_type_arr_size(arr_array_types, n_arrs);
-
     std::shared_ptr<bodo::Schema> schema = bodo::Schema::Deserialize(
         std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs),
         std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
@@ -627,8 +601,6 @@ struct ChunkedTableBuilderState {
 ChunkedTableBuilderState* chunked_table_builder_state_init_py_entry(
     int8_t* arr_c_types, int8_t* arr_array_types, int n_arrs,
     int64_t chunk_size) {
-    n_arrs = get_type_arr_size(arr_array_types, n_arrs);
-
     std::shared_ptr<bodo::Schema> schema = bodo::Schema::Deserialize(
         std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs),
         std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
