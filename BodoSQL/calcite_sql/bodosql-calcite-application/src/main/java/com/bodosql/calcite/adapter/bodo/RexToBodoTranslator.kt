@@ -1944,7 +1944,7 @@ open class RexToBodoTranslator(
                             args.add(Expr.IntegerLiteral(0))
                         }
                         assert(args.size == 2)
-                        return NumericCodeGen.getNumericFnCode(fnName, args)
+                        return NumericCodeGen.generateRoundTruncCode(fnName, args)
                     }
 
                     "ROUND" -> {
@@ -1955,7 +1955,7 @@ open class RexToBodoTranslator(
                             args.add(Expr.IntegerLiteral(0))
                         }
                         assert(args.size == 2)
-                        return NumericCodeGen.generateRoundCode(args)
+                        return NumericCodeGen.generateRoundTruncCode(fnName, args)
                     }
 
                     "LOG" -> return NumericCodeGen.generateLogFnInfo(operands)

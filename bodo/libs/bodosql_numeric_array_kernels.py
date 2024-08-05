@@ -338,9 +338,9 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
         def overload_numeric_util(arr0, arr1):
             # Only certain functions support decimals, e.g. ROUND
-            if func_name == "ROUND":
+            if func_name in {"ROUND", "TRUNC"}:
                 verify_numeric_arg(arr0, func_name, "arr0")
-                verify_int_arg(arr1, func_name, "arr1")
+                verify_int_float_arg(arr1, func_name, "arr1")
             else:
                 verify_int_float_arg(arr0, func_name, "arr0")
                 verify_int_float_arg(arr1, func_name, "arr1")
@@ -348,13 +348,22 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             # Check upfront if first arg is a decimal, in which case
             # we redirect to the decimal implementation.
             if isinstance(arr0, (bodo.Decimal128Type, bodo.DecimalArrayType)):
-                if func_name != "ROUND":
+                if func_name == "ROUND":
+
+                    def impl(arr0, arr1):  # pragma: no cover
+                        return bodo.libs.bodosql_array_kernels.round_decimal(arr0, arr1)
+
+                    return impl
+
+                elif func_name == "TRUNC":
+
+                    def impl(arr0, arr1):  # pragma: no cover
+                        return bodo.libs.bodosql_array_kernels.trunc_decimal(arr0, arr1)
+
+                    return impl
+
+                else:
                     raise_bodo_error(f"Function {func_name} unsupported for decimals")
-
-                def impl(arr0, arr1):  # pragma: no cover
-                    return bodo.libs.bodosql_array_kernels.round_decimal(arr0, arr1)
-
-                return impl
 
             arg_names = [
                 "arr0",
@@ -581,6 +590,74 @@ def overload_round_decimal(arr, round_scale):
         )
 
 
+def trunc_decimal(arr, round_scale):  # pragma: no cover
+    pass
+
+
+@overload(trunc_decimal, prefer_literal=True)
+def overload_trunc_decimal(arr, round_scale):
+    if not (
+        is_overload_none(arr)
+        or isinstance(arr, (bodo.DecimalArrayType, bodo.Decimal128Type))
+    ):  # pragma: no cover
+        raise_bodo_error("trunc_decimal: arr must be a decimal array or scalar")
+    if not (
+        # We will enforce round_scale to be a compile-time constant integer.
+        is_overload_none(round_scale)
+        or is_overload_constant_int(round_scale)
+    ):
+        raise_bodo_error("trunc_decimal: round_scale must be an integer literal")
+
+    if is_overload_none(arr):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        input_p, input_s = 38, 0
+    else:
+        input_p, input_s = arr.precision, arr.scale
+
+    if is_overload_none(round_scale):  # pragma: no cover
+        round_scale_val = 0  # Round to 0 decimal places by default
+    else:
+        round_scale_val = get_overload_const_int(round_scale)
+
+    if round_scale_val >= input_s:
+        # If the round scale is greater or equal to than the original scale,
+        # the function should have no effect and effectively be a no-op
+        def impl(arr, round_scale):  # pragma: no cover
+            return arr
+
+        return impl
+
+    else:
+        output_s = max(0, round_scale_val)
+        output_p = (input_p + 1) if input_p != 38 else 38  # To match Snowflake
+
+    # Array case
+    if isinstance(arr, bodo.DecimalArrayType):
+
+        def impl(arr, round_scale):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.trunc_decimal_array(
+                arr, round_scale, output_p, output_s
+            )
+
+        return impl
+
+    # Scalar case
+    out_dtype = bodo.DecimalArrayType(output_p, output_s)
+
+    arg_names = ["arr", "round_scale"]
+    arg_types = [arr, round_scale]
+    propagate_null = [True, True]
+    scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.trunc_decimal_scalar(arg0, {input_p}, {input_s}, {output_p}, {output_s}, arg1)"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
 @numba.generated_jit(nopython=True)
 def floor(data, precision):  # pragma: no cover
     """Handles cases where FLOOR receives optional arguments and forwards
@@ -594,10 +671,19 @@ def floor(data, precision):  # pragma: no cover
                 i,
             )
 
-    def impl(data, precision):  # pragma: no cover
-        return floor_util(data, precision)
+    if isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType)):
 
-    return impl
+        def impl(data, precision):  # pragma: no cover
+            return floor_decimal_util(data, precision)
+
+        return impl
+
+    else:
+
+        def impl(data, precision):  # pragma: no cover
+            return floor_util(data, precision)
+
+        return impl
 
 
 @numba.generated_jit(nopython=True)
@@ -613,10 +699,19 @@ def ceil(data, precision):  # pragma: no cover
                 i,
             )
 
-    def impl(data, precision):  # pragma: no cover
-        return ceil_util(data, precision)
+    if isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType)):
 
-    return impl
+        def impl(data, precision):  # pragma: no cover
+            return ceil_decimal_util(data, precision)
+
+        return impl
+
+    else:
+
+        def impl(data, precision):  # pragma: no cover
+            return ceil_util(data, precision)
+
+        return impl
 
 
 @numba.generated_jit(nopython=True)
@@ -636,8 +731,9 @@ def floor_util(data, precision):  # pragma: no cover
     arg_names = ["data", "precision"]
     arg_types = [data, precision]
     propagate_null = [True] * 2
-
-    if is_valid_int_arg(data):
+    if data == bodo.none or data == bodo.null_array_type:
+        scalar_text = "res[i] = 0"
+    elif is_valid_int_arg(data):
         data_dtype = data.dtype if is_array_typ(data) else data
         cast_expr = ""
         if data_dtype.signed:
@@ -661,6 +757,71 @@ def floor_util(data, precision):  # pragma: no cover
         scalar_text,
         out_dtype,
         extra_globals=extra_globals,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def floor_decimal_util(data, round_scale):
+    """
+    Utility function for FLOOR for decimals.
+    """
+    if not (
+        is_overload_none(data)
+        or isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType))
+    ):  # pragma: no cover
+        raise_bodo_error("floor_decimal_util: data must be a decimal array or scalar")
+    if not (
+        is_overload_none(round_scale) or is_overload_constant_int(round_scale)
+    ):  # pragma: no cover
+        raise_bodo_error("floor_decimal_util: round_scale must be an integer literal")
+
+    if is_overload_none(data):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        input_p, input_s = 38, 0
+    else:
+        input_p, input_s = data.precision, data.scale
+
+    if is_overload_none(round_scale):  # pragma: no cover
+        round_scale_val = 0
+    else:
+        round_scale_val = get_overload_const_int(round_scale)
+
+    if round_scale_val >= input_s:
+        # If the round scale is greater or equal to than the original scale,
+        # the function should have no effect and effectively be a no-op
+        def impl(data, round_scale):  # pragma: no cover
+            return data
+
+        return impl
+
+    else:
+        output_s = max(0, round_scale_val)
+        output_p = input_p
+
+    # Array case
+    if isinstance(data, bodo.DecimalArrayType):
+
+        def impl(data, round_scale):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.ceil_floor_decimal_array(
+                data, round_scale, output_p, output_s, False
+            )
+
+        return impl
+
+    # Scalar case
+    out_dtype = bodo.DecimalArrayType(output_p, output_s)
+
+    arg_names = ["data", "round_scale"]
+    arg_types = [data, round_scale]
+    propagate_null = [True, True]
+    scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.ceil_floor_decimal_scalar(arg0, {input_p}, {input_s}, {output_p}, {output_s}, arg1, False)"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
     )
 
 
@@ -698,6 +859,71 @@ def ceil_util(data, precision):  # pragma: no cover
         scalar_text,
         out_dtype,
         extra_globals=extra_globals,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def ceil_decimal_util(data, round_scale):
+    """
+    Utility function for CEIL for decimals.
+    """
+    if not (
+        is_overload_none(data)
+        or isinstance(data, (bodo.Decimal128Type, bodo.DecimalArrayType))
+    ):  # pragma: no cover
+        raise_bodo_error("ceil_decimal_util: data must be a decimal array or scalar")
+    if not (
+        is_overload_none(round_scale) or is_overload_constant_int(round_scale)
+    ):  # pragma: no cover
+        raise_bodo_error("ceil_decimal_util: round_scale must be an integer literal")
+
+    if is_overload_none(data):  # pragma: no cover
+        # Pick dummy values for precision and scale to simplify the code.
+        input_p, input_s = 38, 0
+    else:
+        input_p, input_s = data.precision, data.scale
+
+    if is_overload_none(round_scale):  # pragma: no cover
+        round_scale_val = 0
+    else:
+        round_scale_val = get_overload_const_int(round_scale)
+
+    if round_scale_val >= input_s:
+        # If the round scale is greater or equal to than the original scale,
+        # the function should have no effect and effectively be a no-op
+        def impl(data, round_scale):  # pragma: no cover
+            return data
+
+        return impl
+
+    else:
+        output_s = max(0, round_scale_val)
+        output_p = input_p + 1 if input_p != 38 else 38  # For overflow
+
+    # Array case
+    if isinstance(data, bodo.DecimalArrayType):
+
+        def impl(data, round_scale):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.ceil_floor_decimal_array(
+                data, round_scale, output_p, output_s, True
+            )
+
+        return impl
+
+    # Scalar case
+    out_dtype = bodo.DecimalArrayType(output_p, output_s)
+
+    arg_names = ["data", "round_scale"]
+    arg_types = [data, round_scale]
+    propagate_null = [True, True]
+    scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.ceil_floor_decimal_scalar(arg0, {input_p}, {input_s}, {output_p}, {output_s}, arg1, True)"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
     )
 
 

@@ -146,6 +146,22 @@ ll.add_symbol(
     decimal_ext.round_decimal_scalar_py_entry,
 )
 ll.add_symbol(
+    "ceil_floor_decimal_array",
+    decimal_ext.ceil_floor_decimal_array_py_entry,
+)
+ll.add_symbol(
+    "ceil_floor_decimal_scalar",
+    decimal_ext.ceil_floor_decimal_scalar_py_entry,
+)
+ll.add_symbol(
+    "trunc_decimal_array",
+    decimal_ext.trunc_decimal_array_py_entry,
+)
+ll.add_symbol(
+    "trunc_decimal_scalar",
+    decimal_ext.trunc_decimal_scalar_py_entry,
+)
+ll.add_symbol(
     "abs_decimal_scalar",
     decimal_ext.abs_decimal_scalar_py_entry,
 )
@@ -2516,6 +2532,348 @@ def _round_decimal_scalar(
     ret_type = types.Tuple([output_decimal_type, types.bool_])
     return (
         ret_type(val_t, round_scale_t, input_p_t, input_s_t, output_p_t, output_s_t),
+        codegen,
+    )
+
+
+def ceil_floor_decimal_scalar(
+    value, input_p, input_s, output_p, output_s, round_scale, is_ceil
+):  # pragma: no cover
+    pass
+
+
+@overload(ceil_floor_decimal_scalar, inline="always", prefer_literal=True)
+def overload_ceil_floor_decimal_scalar(
+    value, input_p, input_s, output_p, output_s, round_scale, is_ceil
+):
+    """
+    Ceil or floor a decimal scalar.
+    """
+
+    def impl(
+        value, input_p, input_s, output_p, output_s, round_scale, is_ceil
+    ):  # pragma: no cover
+        result = _ceil_floor_decimal_scalar(
+            value, input_p, input_s, output_p, output_s, round_scale, is_ceil
+        )
+        return result
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _ceil_floor_decimal_scalar(
+    typingctx,
+    value_t,
+    input_p_t,
+    input_s_t,
+    output_p_t,
+    output_s_t,
+    round_scale_t,
+    is_ceil_t,
+):
+    assert isinstance(
+        value_t, Decimal128Type
+    ), "_ceil_floor_decimal_scalar: decimal expected for value"
+
+    def codegen(context, builder, signature, args):
+        value, input_p, input_s, output_p, output_s, round_scale, is_ceil = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="ceil_floor_decimal_scalar"
+        )
+        ret = builder.call(
+            fn,
+            [value, input_p, input_s, round_scale, is_ceil],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    output_precision = get_overload_const_int(output_p_t)
+    output_scale = get_overload_const_int(output_s_t)
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    return (
+        output_decimal_type(
+            value_t,
+            input_p_t,
+            input_s_t,
+            output_p_t,
+            output_s_t,
+            round_scale_t,
+            is_ceil_t,
+        ),
+        codegen,
+    )
+
+
+def ceil_floor_decimal_array(
+    arr, round_scale, output_p, output_s, is_ceil
+):  # pragma: no cover
+    pass
+
+
+@overload(ceil_floor_decimal_array, inline="always", prefer_literal=True)
+def overload_ceil_floor_decimal_array(arr, round_scale, output_p, output_s, is_ceil):
+    """
+    Ceil or floor a decimal array.
+    """
+
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "ceil_floor_decimal_array: decimal arr expected"
+    assert isinstance(
+        round_scale, types.Integer
+    ), "ceil_floor_decimal_array: integer round_scale expected"
+    assert isinstance(
+        output_p, types.Integer
+    ), "ceil_floor_decimal_array: integer output_p expected"
+    assert isinstance(
+        output_s, types.Integer
+    ), "ceil_floor_decimal_array: integer output_s expected"
+
+    output_p_val = get_overload_const_int(output_p)
+    output_s_val = get_overload_const_int(output_s)
+    output_decimal_arr_type = DecimalArrayType(output_p_val, output_s_val)
+
+    def impl(arr, round_scale, output_p, output_s, is_ceil):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_arr_info = _ceil_floor_decimal_array(
+            arr_info, round_scale, output_p, output_s, is_ceil
+        )
+        out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
+        delete_info(out_arr_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _ceil_floor_decimal_array(
+    typingctx, arr_t, round_scale_t, output_p_t, output_s_t, is_ceil_t
+):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        arr, round_scale, output_p, output_s, is_ceil = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(1),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="ceil_floor_decimal_array"
+        )
+        ret = builder.call(
+            fn,
+            [
+                arr,
+                output_p,
+                output_s,
+                round_scale,
+                is_ceil,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        array_info_type(arr_t, round_scale_t, output_p_t, output_s_t, is_ceil_t),
+        codegen,
+    )
+
+
+def trunc_decimal_scalar(
+    value,
+    input_p,
+    input_s,
+    output_p,
+    output_s,
+    round_scale,
+):  # pragma: no cover
+    pass
+
+
+@overload(trunc_decimal_scalar, inline="always", prefer_literal=True)
+def overload_trunc_decimal_scalar(
+    value,
+    input_p,
+    input_s,
+    output_p,
+    output_s,
+    round_scale,
+):
+    """
+    Truncate a decimal scalar.
+    """
+
+    def impl(
+        value,
+        input_p,
+        input_s,
+        output_p,
+        output_s,
+        round_scale,
+    ):  # pragma: no cover
+        result = _trunc_decimal_scalar(
+            value,
+            input_p,
+            input_s,
+            output_p,
+            output_s,
+            round_scale,
+        )
+        return result
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _trunc_decimal_scalar(
+    typingctx,
+    value_t,
+    input_p_t,
+    input_s_t,
+    output_p_t,
+    output_s_t,
+    round_scale_t,
+):
+    assert isinstance(
+        value_t, Decimal128Type
+    ), "_trunc_decimal_scalar: decimal expected for value"
+
+    def codegen(context, builder, signature, args):
+        value, input_p, input_s, output_p, output_s, round_scale = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="trunc_decimal_scalar"
+        )
+        ret = builder.call(
+            fn,
+            [
+                value,
+                input_p,
+                input_s,
+                output_p,
+                output_s,
+                round_scale,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    output_precision = get_overload_const_int(output_p_t)
+    output_scale = get_overload_const_int(output_s_t)
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    return (
+        output_decimal_type(
+            value_t,
+            input_p_t,
+            input_s_t,
+            output_p_t,
+            output_s_t,
+            round_scale_t,
+        ),
+        codegen,
+    )
+
+
+def trunc_decimal_array(arr, round_scale, output_p, output_s):  # pragma: no cover
+    pass
+
+
+@overload(trunc_decimal_array, inline="always", prefer_literal=True)
+def overload_trunc_decimal_array(arr, round_scale, output_p, output_s):
+    """
+    Truncate a decimal array.
+    """
+
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "trunc_decimal_array: decimal arr expected"
+    assert isinstance(
+        round_scale, types.Integer
+    ), "trunc_decimal_array: integer round_scale expected"
+    assert isinstance(
+        output_p, types.Integer
+    ), "trunc_decimal_array: integer output_p expected"
+    assert isinstance(
+        output_s, types.Integer
+    ), "trunc_decimal_array: integer output_s expected"
+
+    output_p_val = get_overload_const_int(output_p)
+    output_s_val = get_overload_const_int(output_s)
+    output_decimal_arr_type = DecimalArrayType(output_p_val, output_s_val)
+
+    def impl(arr, round_scale, output_p, output_s):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_arr_info = _trunc_decimal_array(arr_info, round_scale, output_p, output_s)
+        out_arr = info_to_array(out_arr_info, output_decimal_arr_type)
+        delete_info(out_arr_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _trunc_decimal_array(typingctx, arr_t, round_scale_t, output_p_t, output_s_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        arr, round_scale, output_p, output_s = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="trunc_decimal_array"
+        )
+        ret = builder.call(
+            fn,
+            [
+                arr,
+                output_p,
+                output_s,
+                round_scale,
+            ],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        array_info_type(arr_t, round_scale_t, output_p_t, output_s_t),
         codegen,
     )
 

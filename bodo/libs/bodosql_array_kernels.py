@@ -273,6 +273,7 @@ broadcasted_fixed_arg_functions = {
     "translate",
     "trim",
     "trunc",
+    "trunc_decimal",
     "try_to_binary",
     "try_to_boolean",
     "try_to_date",

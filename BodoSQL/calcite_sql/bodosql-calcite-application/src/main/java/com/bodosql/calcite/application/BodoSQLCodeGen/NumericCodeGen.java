@@ -71,7 +71,16 @@ public class NumericCodeGen {
    */
   public static Expr genFloorCeilCode(String func, List<Expr> operands) {
     if (operands.size() == 2) {
-      return bodoSQLKernel(func.toLowerCase(), operands, List.of());
+      String roundScaleStr = operands.get(1).emit();
+      // Convert the second argument to an int literal instead of a call with np.int32
+      if (roundScaleStr.startsWith("np.int")) {
+        Expr constRoundScale = new Expr.Raw(roundScaleStr.split("\\(|\\)")[1]);
+        List<Expr> newOperands = new ArrayList<>(operands);
+        newOperands.set(1, constRoundScale);
+        return bodoSQLKernel(func.toLowerCase(), newOperands, List.of());
+      } else {
+        return bodoSQLKernel(func.toLowerCase(), operands, List.of());
+      }
     } else if (operands.size() == 1) {
       return bodoSQLKernel(
           func.toLowerCase(), List.of(operands.get(0), new Expr.IntegerLiteral(0)), List.of());
@@ -98,21 +107,26 @@ public class NumericCodeGen {
   }
 
   /**
-   * Helper function that handles codegen for the ROUND function. This will coerce the second
-   * argument (round_scale) to an int literal if it is a call to np.int32.
+   * Helper function that handles codegen for the ROUND and TRUNC function. This will coerce the
+   * second argument (round_scale) to an int literal if it is a call to np.int32.
    *
+   * @param fnName The name of the function
    * @param args The input expressions
    * @return The Expr corresponding to the function call (round)
    */
-  public static Expr generateRoundCode(List<Expr> args) {
+  public static Expr generateRoundTruncCode(String fnName, List<Expr> args) {
     assert args.size() == 2;
+    if (!fnName.equals("ROUND") && !fnName.equals("TRUNC") && !fnName.equals("TRUNCATE")) {
+      throw new BodoSQLCodegenException(
+          "Internal Error: Invalid function " + fnName + " for generateRoundTruncCode");
+    }
     String roundScaleStr = args.get(1).emit();
     // Convert the second argument to an int literal instead of a call with np.int32
     if (roundScaleStr.startsWith("np.int")) {
       Expr constRoundScale = new Expr.Raw(roundScaleStr.split("\\(|\\)")[1]);
       args.set(1, constRoundScale);
     }
-    return bodoSQLKernel("round", args, List.of());
+    return bodoSQLKernel(equivalentFnMap.get(fnName), args, List.of());
   }
 
   /**
