@@ -108,8 +108,19 @@ struct VHeapComparator {
     }
 };
 
+/**
+ * Some invariants maintained for correctness:
+ * PRECONDITION: Each sorted_chunks[i] is globally sorted (all of
+ * sorted_chunks[i][j] <= sorted_chunks[i][j + 1]) and also locally sorted
+ * PRECONDITION: is_last can be True only when limitoffsetflag is True
+ * If is_last is false, we will keep all top [0, limit + offset) rows as they
+ * are all potentially useful rows
+ * If is_last is true, this is the final call to MergeChunks and thus we
+ * only keep rows from [offset, limit + offset)
+ */
 std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
-    std::vector<std::deque<TableAndRange>>&& sorted_chunks) const {
+    std::vector<std::deque<TableAndRange>>&& sorted_chunks,
+    std::optional<SortLimits> sortlimit, bool is_last) {
     ChunkedTableAndRangeBuilder out_table_builder(
         n_key_t, schema, dict_builders, chunk_size,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, pool, mm);
@@ -183,7 +194,8 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
         out_table_builder.AppendBatch(table, out_idxs, col_inds);
     }
 
-    while (sorted_chunks.size() > 1) {
+    while (sorted_chunks.size() > 1 &&
+           (!sortlimit.has_value() || sortlimit.value().sum() > 0)) {
         // No queue should ever be empty - empty queues should be removed
         // entirely
         assert(std::all_of(sorted_chunks.begin(), sorted_chunks.end(),
@@ -201,36 +213,55 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
         // is larger than the smallest row from the top of the heap.
         do {
             std::vector<int64_t> row_idx;
-            // Loop through rows in the current chunk, selecting them to
-            // append while they are smaller than the first row of the next
-            // smallest chunk in the heap.
+            // Loop through rows in the current chunk, selecting them to append
+            // while they are smaller than the first row of the next smallest
+            // chunk in the heap.
             int64_t offset = min.get().offset;
             int64_t nrows = static_cast<int64_t>(min.get().table->nrows());
+            if (sortlimit.has_value()) {
+                nrows = std::min(nrows, static_cast<int64_t>(
+                                            offset + sortlimit.value().sum()));
+            }
             if (!Compare(sorted_chunks[0].front().range, RANGE_MIN,
                          min.get().range, RANGE_MAX)) {
                 // We can append the whole table from offset onwards. If the
                 // offset is 0, then we just append the entire table
-                if (offset == 0) {
+                int64_t start_index = offset + (is_last && sortlimit.has_value()
+                                                    ? sortlimit.value().offset
+                                                    : 0);
+                if (start_index == 0 &&
+                    nrows == static_cast<int64_t>(min.get().table->nrows())) {
                     // TODO(aneesh) It would be nice to do this without
                     // copying.
                     out_table_builder.AppendBatch(min.get().table);
-                } else {
-                    row_idx.resize(nrows - offset);
-                    std::iota(row_idx.begin(), row_idx.end(), offset);
+                } else if (start_index < nrows) {
+                    row_idx.resize(nrows - start_index);
+                    std::iota(row_idx.begin(), row_idx.end(), start_index);
                     out_table_builder.AppendBatch(min.get().table, row_idx);
                 }
+                if (sortlimit.has_value())
+                    sortlimit.value() -= nrows - offset;
                 offset = nrows;
             } else {
                 do {
                     // TODO(aneesh) this could be replaced by a binary
                     // search to find the first element that is largest than
                     // the next smallest chunk.
-                    row_idx.push_back(offset);
+                    if (!sortlimit.has_value())
+                        row_idx.push_back(offset);
+                    else {
+                        if (!is_last || sortlimit.value().offset == 0) {
+                            row_idx.push_back(offset);
+                        }
+                        sortlimit.value() -= 1;
+                    }
                     offset++;
                     if (offset < nrows) {
                         min.get().UpdateOffset(n_key_t, offset);
                     }
-                } while (offset < nrows && comp(sorted_chunks[0].front(), min));
+                } while (
+                    offset < nrows && comp(sorted_chunks[0].front(), min) &&
+                    (!sortlimit.has_value() || sortlimit.value().sum() > 0));
 
                 // TODO(aneesh) If row_idx contains all rows in the chunk,
                 // we might want to directly append to the output without
@@ -241,7 +272,8 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
 
             // If we have completely consumed all rows from the current
             // chunk, get the next chunk from the same sorted list.
-            if (offset >= nrows) {
+            if (offset >= nrows ||
+                (sortlimit.has_value() && sortlimit.value().sum() == 0)) {
                 min.get().table->unpin();
                 min_vec.pop_front();
                 if (!min_vec.empty()) {
@@ -251,7 +283,8 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
                     min = std::ref(min_vec.front());
                 }
             }
-        } while (!min_vec.empty() && comp(sorted_chunks[0].front(), min));
+        } while (!min_vec.empty() && comp(sorted_chunks[0].front(), min) &&
+                 (!sortlimit.has_value() || sortlimit.value().sum() > 0));
 
         if (min_vec.empty()) {
             // This vector of chunks is completely consumed, so we can
@@ -267,10 +300,29 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
 
     // Append all unconsumed rows in a chunk to the builder
     auto AppendChunkToBuilder = [&](TableAndRange& chunk) {
+        if (sortlimit.has_value() && is_last) {
+            size_t row_size =
+                chunk.table->nrows() - static_cast<size_t>(chunk.offset);
+            if (row_size <= sortlimit.value().offset) {
+                sortlimit.value() -= row_size;
+                return;
+            }
+            chunk.UpdateOffset(n_key_t,
+                               chunk.offset + sortlimit.value().offset);
+            sortlimit.value().offset = 0;
+        }
         chunk.table->pin();
-        std::vector<int64_t> row_idx(chunk.table->nrows() - chunk.offset);
-        std::iota(row_idx.begin(), row_idx.end(), chunk.offset);
-        out_table_builder.AppendBatch(chunk.table, row_idx);
+        size_t row_size =
+            chunk.table->nrows() - static_cast<size_t>(chunk.offset);
+        if (sortlimit.has_value()) {
+            row_size = std::min(sortlimit.value().sum(), row_size);
+            sortlimit.value() -= row_size;
+        }
+        if (row_size > 0) {
+            std::vector<int64_t> row_idx(row_size);
+            std::iota(row_idx.begin(), row_idx.end(), chunk.offset);
+            out_table_builder.AppendBatch(chunk.table, row_idx);
+        }
         chunk.table->unpin();
     };
 
@@ -300,14 +352,65 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
                 // TODO(aneesh) make a cleaner API for this. This is technically
                 // unsafe as it makes internal state, such as total_remaining
                 // out of sync.
-                out_table_builder.chunks.push_back(chunks.front());
+                auto& chunk = chunks.front();
+                if (!sortlimit.has_value()) {
+                    out_table_builder.chunks.push_back(chunk);
+                } else {
+                    if (chunk.table->nrows() <= sortlimit.value().offset) {
+                        sortlimit.value() -= chunk.table->nrows();
+                        if (!is_last) {
+                            out_table_builder.chunks.push_back(chunk);
+                        }
+                    } else {
+                        size_t start_index =
+                            is_last ? sortlimit.value().offset : 0;
+                        size_t end_index =
+                            std::min(sortlimit.value().sum(),
+                                     static_cast<size_t>(chunk.table->nrows()));
+                        sortlimit.value() -= end_index;
+                        if (start_index == 0 &&
+                            end_index == chunk.table->nrows())
+                            out_table_builder.chunks.push_back(chunk);
+                        else {
+                            std::vector<int64_t> index(end_index - start_index);
+                            iota(index.begin(), index.end(), start_index);
+                            out_table_builder.AppendBatch(chunk.table, index);
+                            out_table_builder.FinalizeActiveChunk();
+                        }
+                    }
+                }
                 chunks.pop_front();
             }
         } else {
             while (!chunks.empty()) {
                 auto& chunk = chunks.front();
                 chunk.table->pin();
-                out_table_builder.AppendBatch(chunk.table);
+                if (!sortlimit.has_value()) {
+                    out_table_builder.AppendBatch(chunk.table);
+                } else {
+                    if (chunk.table->nrows() <= sortlimit.value().offset) {
+                        sortlimit.value() -= chunk.table->nrows();
+                        if (!is_last) {
+                            out_table_builder.AppendBatch(chunk.table);
+                        }
+                    } else {
+                        size_t start_index =
+                            is_last ? sortlimit.value().offset : 0;
+                        size_t end_index =
+                            std::min(sortlimit.value().sum(),
+                                     static_cast<size_t>(chunk.table->nrows()));
+                        sortlimit.value() -= end_index;
+                        if (start_index == 0 &&
+                            end_index == chunk.table->nrows())
+                            out_table_builder.AppendBatch(chunk.table);
+                        else {
+                            std::vector<int64_t> index(end_index - start_index);
+                            iota(index.begin(), index.end(), start_index);
+                            out_table_builder.AppendBatch(chunk.table, index);
+                            out_table_builder.FinalizeActiveChunk();
+                        }
+                    }
+                }
                 chunk.table->unpin();
 
                 chunks.pop_front();
@@ -321,7 +424,8 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
     return out_table_builder.chunks;
 }
 
-std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
+std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize(
+    std::optional<SortLimits> sortlimit) {
     if (input_chunks.size() == 0) {
         std::deque<TableAndRange> output;
         return output;
@@ -331,6 +435,7 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
 
     // TODO Currently num_chunks is set to min(rank, 100) during initialization.
     // Should revisit this after benchmark tests
+    bool is_last = (input_chunks.size() <= num_chunks);
     while (!input_chunks.empty()) {
         std::vector<std::deque<TableAndRange>> chunks;
         // Take num_chunks chunks at a time and put them each into a vector so
@@ -342,13 +447,15 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
             input_chunks.pop_back();
         }
 
-        sorted_chunks.emplace_back(MergeChunks(std::move(chunks)));
+        sorted_chunks.emplace_back(
+            MergeChunks(std::move(chunks), sortlimit, is_last));
     }
 
     while (sorted_chunks.size() > 1) {
+        is_last = (sorted_chunks.size() <= num_chunks);
         std::vector<std::deque<TableAndRange>> next_sorted_chunks;
-        // This loop takes num_chunks vectors and merges them into 1 on
-        // every iteration.
+        // This loop takes num_chunks vectors and merges them into 1 on every
+        // iteration.
         for (size_t i = 0; i < sorted_chunks.size(); i += num_chunks) {
             std::vector<std::deque<TableAndRange>> merge_input;
             // Collect the next num_chunks vectors
@@ -359,7 +466,7 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
             }
 
             next_sorted_chunks.emplace_back(
-                MergeChunks(std::move(merge_input)));
+                MergeChunks(std::move(merge_input), sortlimit, is_last));
         }
 
         std::swap(sorted_chunks, next_sorted_chunks);
@@ -393,7 +500,8 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
                                  std::vector<int64_t>&& vect_ascending_,
                                  std::vector<int64_t>&& na_position_,
                                  std::shared_ptr<bodo::Schema> schema_,
-                                 bool parallel, size_t chunk_size)
+                                 bool parallel, int64_t limit_, int64_t offset_,
+                                 size_t chunk_size)
     : op_id(op_id),
       n_key_t(n_key_t),
       vect_ascending(vect_ascending_),
@@ -419,7 +527,14 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
       // the arguments.
       builder(schema, dict_builders, chunk_size,
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool,
-              op_mm) {}
+              op_mm) {
+    if (limit_ >= 0 && offset_ >= 0) {
+        sortlimit = std::make_optional<SortLimits>(SortLimits(
+            static_cast<size_t>(limit_), static_cast<size_t>(offset_)));
+    } else {
+        sortlimit = std::nullopt;
+    }
+}
 
 void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
                                    bool parallel, bool is_last) {
@@ -799,8 +914,38 @@ void StreamSortState::GlobalSort(
 
     metrics.communication_phase += end_timer(start_communication);
 
+    // Determine limit and offset for each rank. Globally we want [offset, limit
+    // + offset) and locally each rank occupies row from [total_rows_before,
+    // total_rows_before + number_rows) If those 2 intervals do not overlap we
+    // don't even Finalize (because all rows useless)
+    // TODO Can discard prefix / suffix data better so hopefully no ranks skip
+    // Finalize Otherwise if they overlap find local limits and overlaps
+    if (sortlimit.has_value()) {
+        size_t limit = sortlimit.value().limit;
+        size_t offset = sortlimit.value().offset;
+        size_t number_rows = 0;
+        std::vector<size_t> nrows_collect(n_pes);
+        for (auto& i : global_builder.input_chunks)
+            number_rows += static_cast<size_t>(i.table->nrows() - i.offset);
+        MPI_Allgather(&number_rows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
+                      1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
+        size_t total_rows_before = 0;
+        for (int64_t i = 0; i < myrank; i++)
+            total_rows_before += nrows_collect[i];
+        if (total_rows_before >= limit + offset ||
+            total_rows_before + number_rows <= offset || limit == 0) {
+            return;
+        }
+        size_t finalize_offset =
+            total_rows_before >= offset ? 0 : offset - total_rows_before;
+        size_t finalize_limit =
+            std::min(limit + offset - total_rows_before, number_rows) -
+            finalize_offset;
+        sortlimit = {finalize_limit, finalize_offset};
+    }
+
     time_pt start_finalize = start_timer();
-    auto out_chunks = global_builder.Finalize();
+    auto out_chunks = global_builder.Finalize(sortlimit);
     metrics.global_sort_time += end_timer(start_finalize);
 
     for (const auto& chunk : out_chunks) {
@@ -865,7 +1010,7 @@ StreamSortState* stream_sort_state_init_py_entry(
             std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
         auto* state = new StreamSortState(
             op_id, n_key_t, std::move(vect_ascending_), std::move(na_position_),
-            std::move(schema), parallel);
+            std::move(schema), parallel, limit, offset);
         return state;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

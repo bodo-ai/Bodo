@@ -7,6 +7,29 @@
 #define SORT_OPERATOR_MAX_CHUNK_NUMBER 100
 
 /**
+ * @brief A wrapper around recording limit/offset to be applied
+ * during MergeChunks.
+ * Always decrement offset because it comes before limit.
+ *
+ */
+struct SortLimits {
+    size_t limit;
+    size_t offset;
+    SortLimits(size_t limit_, size_t offset_)
+        : limit(limit_), offset(offset_) {}
+    size_t sum() const { return limit + offset; }
+    // First decrement
+    void operator-=(const size_t n) {
+        if (n <= offset) {
+            offset -= n;
+        } else {
+            limit -= n - offset;
+            offset = 0;
+        }
+    }
+};
+
+/**
  * @brief A wrapper around a sorted table_info that stores the min and max rows.
  * It is assumed that range is always pinned, and that table is usually
  * unpinned. This allows for fast sorting of chunks without unpinning.
@@ -192,8 +215,13 @@ struct SortedChunkedTableBuilder {
      * Note that in the example above the inputs appear to be vectors, but
      * inputs/output are all actually tables. The output chunks will be wrapped
      * in a TableAndRange and every table will be unpinned.
+     *
+     * @param sortlimit If it's std::nullopt then neither limit nor offset it
+     * set Othereise sortlimit.limit is how many rows to include as outputs at
+     * maximum sortlimit.offset is how many rows to skip
      */
-    std::deque<TableAndRange> Finalize();
+    std::deque<TableAndRange> Finalize(
+        std::optional<SortLimits> sortlimit = std::nullopt);
 
     // TODO(aneesh) make this a private or static method
     /**
@@ -203,9 +231,18 @@ struct SortedChunkedTableBuilder {
      *   MergeChunks([chunk_list_a, chunk_list_b])
      *     = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
      * All tables in the output will be unpinned.
+     * @param sortlimit If it's std::nullopt then neither limit nor offset it
+     * set Othereise sortlimit.limit is how many rows to include as outputs at
+     * maximum sortlimit.offset is how many rows to skip
+     * @param is_last Whether this is final iteration of Finalize
+     * For all but the last call to MergeChunks, we only keep all rows
+     * from [0, limit + offset). For the last call to MergeChunks, we
+     * only keep rows from [offset, limit + offset).
      */
     std::deque<TableAndRange> MergeChunks(
-        std::vector<std::deque<TableAndRange>>&& sorted_chunks) const;
+        std::vector<std::deque<TableAndRange>>&& sorted_chunks,
+        std::optional<SortLimits> sortlimit = std::nullopt,
+        bool is_last = false);
 };
 
 struct StreamSortMetrics {
@@ -246,6 +283,7 @@ struct StreamSortState {
 
     // Index of chunk to yield
     size_t output_idx = 0;
+    std::optional<SortLimits> sortlimit;
     // List of chunks ready to yield
     std::vector<std::shared_ptr<table_info>> output_chunks;
 
@@ -270,6 +308,7 @@ struct StreamSortState {
                     std::vector<int64_t>&& vect_ascending_,
                     std::vector<int64_t>&& na_position_,
                     std::shared_ptr<bodo::Schema> schema, bool parallel = true,
+                    int64_t limit = -1, int64_t offset = -1,
                     size_t chunk_size = 4096);
     /**
      * @brief Consume an unsorted table and use it for global sorting
