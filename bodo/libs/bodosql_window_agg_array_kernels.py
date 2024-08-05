@@ -5,6 +5,7 @@ Specifically, window/aggregation array kernels that do not concern window
 frames.
 """
 
+
 import numba
 import numpy as np
 import pandas as pd
@@ -246,26 +247,47 @@ def change_event(S):
 
 @numba.generated_jit(nopython=True)
 def windowed_sum(S, lower_bound, upper_bound):
-    verify_int_float_arg(S, "windowed_sum", S)
+    verify_numeric_arg(S, "windowed_sum", S)
     if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
 
     calculate_block = "res[i] = total"
 
-    constant_block = "constant_value = S.sum()"
-
-    setup_block = "total = 0"
-
-    enter_block = "total += elem0"
-
-    exit_block = "total -= elem0"
-
-    if isinstance(S.dtype, types.Integer):
-        out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+    if isinstance(S.dtype, bodo.Decimal128Type):
+        prec = bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION
+        scale = S.dtype.scale
+        out_dtype = bodo.DecimalArrayType(prec, scale)
         propagate_nan = False
+
+        constant_block = (
+            "constant_value = bodo.libs.decimal_arr_ext.sum_decimal_array(arr0)"
+        )
+
+        setup_block = "total = zero_decimal_val"
+
+        enter_block = "total = bodo.libs.decimal_arr_ext.add_or_subtract_decimal_scalars(total, elem0, True)"
+
+        exit_block = "total = bodo.libs.decimal_arr_ext.add_or_subtract_decimal_scalars(total, elem0, False)"
+
+        extra_globals = {"zero_decimal_val": pa.scalar(0, pa.decimal128(38, scale))}
+
     else:
-        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
-        propagate_nan = True
+        if isinstance(S.dtype, types.Integer):
+            out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+            propagate_nan = False
+        else:
+            out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            propagate_nan = True
+
+        constant_block = "constant_value = S.sum()"
+
+        setup_block = "total = 0"
+
+        enter_block = "total += elem0"
+
+        exit_block = "total -= elem0"
+
+        extra_globals = {}
 
     return gen_windowed(
         calculate_block,
@@ -275,6 +297,7 @@ def windowed_sum(S, lower_bound, upper_bound):
         enter_block=enter_block,
         exit_block=exit_block,
         propagate_nan=propagate_nan,
+        extra_globals=extra_globals,
     )
 
 
