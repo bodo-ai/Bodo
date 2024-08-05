@@ -375,6 +375,8 @@ def _numba_to_pyarrow_type(
     An additional flag `is_iceberg` is to handle the datetime type that must be
     converted to microseconds before writing to Iceberg tables.
     """
+    from bodo.libs.array import TUPLE_ARRAY_SENTINEL
+
     if isinstance(numba_type, ArrayItemArrayType):
         # Set inner field name to 'element' so we can compare without worrying about
         # different names due to pyarrow ('item', 'element', 'field0', etc.)
@@ -400,7 +402,7 @@ def _numba_to_pyarrow_type(
         fields = []
         for i, inner_type in enumerate(numba_type.data):
             pa_type, _ = _numba_to_pyarrow_type(inner_type, is_iceberg, use_dict_arr)
-            fields.append(pa.field(f"_bodo_tuple_array_field{i}", pa_type, True))
+            fields.append(pa.field(f"{TUPLE_ARRAY_SENTINEL}{i}", pa_type, True))
         dtype = pa.struct(fields)
 
     elif isinstance(numba_type, bodo.MapArrayType):

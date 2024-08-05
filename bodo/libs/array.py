@@ -1,6 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
+import warnings
 from collections import defaultdict
 
 import llvmlite.binding as ll
@@ -163,6 +164,11 @@ ll.add_symbol(
 ll.add_symbol("retrieve_table_py_entry", array_ext.retrieve_table_py_entry)
 
 
+# Sentinal for field names when converting tuple arrays to struct arrays (workaround
+# since Arrow doesn't support tuple arrays)
+TUPLE_ARRAY_SENTINEL = "_bodo_tuple_array_field"
+
+
 class LikeKernelCache(types.Opaque):
     """
     Cache for SQL Like Kernel where both the array and the pattern
@@ -249,7 +255,7 @@ def array_to_info_codegen(context, builder, sig, args):
         in_arr = tuple_array.data
         arr_type = StructArrayType(
             arr_type.data,
-            tuple(f"_bodo_tuple_array_field{i}" for i in range(len(arr_type.data))),
+            tuple(f"{TUPLE_ARRAY_SENTINEL}{i}" for i in range(len(arr_type.data))),
         )
 
     if isinstance(arr_type, MapArrayType):
@@ -1826,6 +1832,24 @@ def fix_boxed_nested_array(arr, arrow_type):
     # Bodo C++ doesn't have details like timezone which need fixed
     if new_arr.type != arrow_type:
         new_arr = pa.compute.cast(arr, arrow_type)
+
+    # Convert struct array workaround for tuple array back to object array
+    if (
+        pa.types.is_struct(new_arr.type)
+        and (new_arr.type.num_fields > 0)
+        and all(
+            new_arr.type.field(i).name.startswith(TUPLE_ARRAY_SENTINEL)
+            for i in range(new_arr.type.num_fields)
+        )
+    ):
+        warnings.warn(
+            "Returning object arrays during boxing since tuple arrays are not supported by Arrow. Use struct arrays for better performance."
+        )
+        return (
+            new_arr.to_pandas()
+            .map(lambda a: None if pd.isna(a) else tuple(a.values()))
+            .array
+        )
 
     return pd.arrays.ArrowExtensionArray(new_arr)
 
