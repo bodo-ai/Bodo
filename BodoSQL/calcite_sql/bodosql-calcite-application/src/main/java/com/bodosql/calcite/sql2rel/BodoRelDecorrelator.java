@@ -3,7 +3,11 @@ package com.bodosql.calcite.sql2rel;
 import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.application.logicalRules.BodoFilterCorrelateRule;
+import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule;
+import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
+import com.bodosql.calcite.prepare.BodoPrograms;
+import com.bodosql.calcite.prepare.BodoRules;
 import com.bodosql.calcite.rel.core.Flatten;
 import com.bodosql.calcite.tools.BodoRelBuilder;
 import java.util.ArrayList;
@@ -215,12 +219,36 @@ public class BodoRelDecorrelator extends RelDecorrelator {
             .addRuleInstance(RemoveCorrelationForSingletonValuesRule.config(this, f).toRule())
             .addRuleInstance(RemoveCorrelationForFlattenRule.config(this, f).toRule())
             .addRuleInstance(PushProjectFlattenRule.config(this, f).toRule())
+            // Single value can be a blocker to decorrelation handling.
+            .addRuleInstance(BodoRules.SINGLE_VALUE_REMOVE_RULE)
+            // Sub query expansion often creates joins with 1 row inputs,
+            // which could be a blocker to decorrelation.
+            .addRuleInstance(
+                PruneSingleRowJoinRules.PruneRightSingleRowJoinRuleConfig.DEFAULT.toRule())
+            .addRuleInstance(
+                PruneSingleRowJoinRules.PruneLeftSingleRowJoinRuleConfig.DEFAULT.toRule())
+            // Bodo Change: Add project merge and remove to handle projections from
+            // SINGLE_VALUE_REMOVE_RULE
+            .addRuleInstance(CoreRules.PROJECT_MERGE)
+            .addRuleInstance(CoreRules.PROJECT_REMOVE)
+            .addRuleInstance(BodoJoinProjectTransposeNoCSEUndoRule.Config.RIGHT_OUTER.toRule())
             .build();
 
-    HepPlanner planner = createPlanner(program);
-
-    planner.setRoot(root);
-    return planner.findBestExp();
+    // Bodo Change: Run multiple planner passes. This is done
+    // because a bug in the HEP planner may incorrectly view the
+    // optimizer as done when each rule has finished without
+    // considering the dependencies.
+    RelNode lastOptimizedPlan = root;
+    for (int i = 0; i < BodoPrograms.getMaxHepIterations(); i++) {
+      HepPlanner planner = createPlanner(program);
+      planner.setRoot(lastOptimizedPlan);
+      RelNode curOptimizedPlan = planner.findBestExp();
+      if (curOptimizedPlan.deepEquals(lastOptimizedPlan)) {
+        return lastOptimizedPlan;
+      }
+      lastOptimizedPlan = curOptimizedPlan;
+    }
+    return lastOptimizedPlan;
   }
 
   // New Function: verifies that no correlations or correlated variables remain

@@ -19,6 +19,10 @@ ChainedRelMetadataProvider.of(
             BodoRelMdRowCount(),
             BuiltInMetadata.RowCount.Handler::class.java,
         ),
+        ReflectiveRelMetadataProvider.reflectiveSource(
+            BodoRelMdMinRowCount(),
+            BuiltInMetadata.MinRowCount.Handler::class.java,
+        ),
         // Inject information about the number of ranks
         // for Bodo queries as the parallelism attribute.
         ReflectiveRelMetadataProvider.reflectiveSource(

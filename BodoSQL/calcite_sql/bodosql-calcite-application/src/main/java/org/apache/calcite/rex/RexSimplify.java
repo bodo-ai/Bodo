@@ -1716,7 +1716,11 @@ public class RexSimplify {
                             final RexLiteral literal = comparison.literal;
                             final RexLiteral prevLiteral =
                                     equalityConstantTerms.put(comparison.ref, literal);
-                            if (prevLiteral != null && !literal.equals(prevLiteral)) {
+                            // Bodo Change: literal.equals(prevLiteral) is not reliable because
+                            // it misses literals that are the same in value but only differ in type,
+                            // which is not enough to exclude the literal. To be conservative we keep
+                            // both checks and only convert to False if both fail.
+                            if (prevLiteral != null && !literal.equals(prevLiteral) && !literal.getValue().equals(prevLiteral.getValue())) {
                                 return rexBuilder.makeLiteral(false);
                             }
                         } else if (RexUtil.isReferenceOrAccess(left, true)
@@ -1787,7 +1791,11 @@ public class RexSimplify {
                 if (literal2 == null) {
                     continue;
                 }
-                if (!literal1.equals(literal2)) {
+                // Bodo Change: literal1.equals(literal2) is not reliable because
+                // it misses literals that are the same in value but only differ in type,
+                // which is not enough to exclude the literal. To be conservative we keep
+                // both checks and only convert to False if both fail.
+                if (!literal1.equals(literal2) && !literal1.getValue().equals(literal2.getValue())) {
                     // If an expression is equal to two different constants,
                     // it is not satisfiable
                     return rexBuilder.makeLiteral(false);

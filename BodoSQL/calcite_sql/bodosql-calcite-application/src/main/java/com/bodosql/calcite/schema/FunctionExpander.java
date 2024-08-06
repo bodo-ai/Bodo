@@ -35,7 +35,6 @@ public interface FunctionExpander {
       @NonNull String functionBody,
       @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
-      @NonNull List<@NonNull RexNode> arguments,
       @NonNull List<@NonNull RexNode> correlatedArguments,
       @NonNull RelDataType returnType,
       @NonNull RelOptCluster cluster);
