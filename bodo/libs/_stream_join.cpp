@@ -1965,7 +1965,7 @@ void HashJoinState::FinalizeBuild() {
         this->partitions.empty() ||
         this->partitions[0]->build_table_buffer->data_table->nrows() == 0;
     if (this->build_parallel) {
-        MPI_Allreduce(&this->global_build_empty, &local_empty_build, 1,
+        MPI_Allreduce(&local_empty_build, &this->global_build_empty, 1,
                       MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD);
     } else {
         this->global_build_empty = local_empty_build;
@@ -4426,8 +4426,7 @@ PyObject* get_runtime_join_filter_min_max_py_entrypt(JoinState* join_state,
  * @param[in] join_state: the state object containing build table information.
  * @return bool whether the build table is empty.
  */
-bool is_empty_build_table_py_entrypt(JoinState* join_state_) {
-    HashJoinState* join_state = (HashJoinState*)join_state_;
+bool is_empty_build_table_py_entrypt(JoinState* join_state) {
     return join_state->global_build_empty;
 }
 
