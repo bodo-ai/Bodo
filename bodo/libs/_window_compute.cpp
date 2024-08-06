@@ -1,7 +1,14 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_window_compute.h"
+#include <arrow/util/decimal.h>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_decimal_ext.h"
+#include "_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
@@ -2643,6 +2650,178 @@ void _sorted_window_computation(
     }
 }
 
+/**
+ * @brief Converts a sum to double so it can be used to compute an average
+ * Assumes the ::sum operation upcasts ints to int64/uint64
+ *
+ * @param sum_arr The singleton array containing the sum in it's first element
+ * @returns double the sum casted to double
+ */
+double avg_sum_to_double(std::shared_ptr<array_info> sum_arr) {
+    double sum_total;
+
+#define SUM_TYPE_CASE(dtype)                                                   \
+    case dtype: {                                                              \
+        sum_total =                                                            \
+            static_cast<double>(getv<dtype_to_type<dtype>::type>(sum_arr, 0)); \
+        break;                                                                 \
+    }
+
+    // TODO check if list of sum output types covers all relevant cases
+    switch (sum_arr->dtype) {
+        SUM_TYPE_CASE(Bodo_CTypes::FLOAT64)
+        SUM_TYPE_CASE(Bodo_CTypes::FLOAT32)
+        SUM_TYPE_CASE(Bodo_CTypes::INT64)
+        SUM_TYPE_CASE(Bodo_CTypes::UINT64)
+        default: {
+            throw std::runtime_error("Unsupported dtype for mean");
+        }
+    }
+#undef SUM_TYPE_CASE
+
+    return sum_total;
+}
+
+/**
+ * @brief Computes a single, global result after applying window_func to a
+ * column.
+ *
+ * @tparam window_func The window func to compute. Assumes the window function
+ * does not require any auxillary columns.
+ * @param in_col The input column
+ * @param out_arr The array to store
+ * @param is_parallel Whether to do parallel communication step.
+ */
+template <uint32_t window_func>
+    requires(no_aux_col<window_func>)
+void single_global_window_computation(const std::shared_ptr<array_info>& in_col,
+                                      std::shared_ptr<array_info> out_arr,
+                                      bool is_parallel) {
+    grouping_info dummy_local_grp_info;
+    dummy_local_grp_info.num_groups = 1;
+    dummy_local_grp_info.row_to_group.resize(in_col->length, 0);
+
+    std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+
+    do_apply_to_column(in_col, out_arr, dummy_aux_cols, dummy_local_grp_info,
+                       window_func);
+
+    if (is_parallel) {
+        int myrank, num_ranks;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        grouping_info dummy_combine_grp_info;
+        dummy_combine_grp_info.num_groups = 1;
+        dummy_combine_grp_info.row_to_group.resize(num_ranks, 0);
+        std::shared_ptr<array_info> combined_arr =
+            gather_array(out_arr, true, true, 0, num_ranks, myrank);
+        switch (window_func) {
+            case Bodo_FTypes::sum:
+            case Bodo_FTypes::min:
+            case Bodo_FTypes::max: {
+                // Repeat the pre-parallel procedure on the combined
+                // results.
+                std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+                aggfunc_output_initialize(out_arr, window_func, true);
+                do_apply_to_column(combined_arr, out_arr, dummy_aux_cols,
+                                   dummy_combine_grp_info, window_func);
+                break;
+            }
+            case Bodo_FTypes::count: {
+                // For count, combine the results by adding them.
+                std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+                aggfunc_output_initialize(out_arr, Bodo_FTypes::sum, true);
+                do_apply_to_column(combined_arr, out_arr, dummy_aux_cols,
+                                   dummy_combine_grp_info, Bodo_FTypes::sum);
+                break;
+            }
+            default:
+                throw std::runtime_error(
+                    "Unsupported window function for the global "
+                    "implementation");
+        }
+    }
+}
+
+/**
+ * @brief Generates a single global average using sum / count
+ *
+ * @param in_col The input column
+ * @param out_arr The array to store the ouput value
+ * @param is_parallel Whether to do parallel communication step
+ */
+template <uint32_t window_func>
+    requires(window_func == Bodo_FTypes::mean)
+void single_global_window_computation(const std::shared_ptr<array_info>& in_col,
+                                      std::shared_ptr<array_info> out_arr,
+                                      bool is_parallel) {
+    grouping_info dummy_local_grp_info;
+    dummy_local_grp_info.num_groups = 1;
+    dummy_local_grp_info.row_to_group.resize(in_col->length, 0);
+    std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+
+    // create an intermediate column to hold the result of the sum
+    auto [sum_arr_type, sum_dtype] = get_groupby_output_dtype(
+        Bodo_FTypes::sum, in_col->arr_type, in_col->dtype);
+    std::shared_ptr<array_info> sum_arr =
+        alloc_array_top_level(1, -1, -1, sum_arr_type, sum_dtype);
+    aggfunc_output_initialize(sum_arr, Bodo_FTypes::sum, true);
+
+    // create an intermediate column to hold the result of the counts
+    std::shared_ptr<array_info> count_arr = alloc_numpy(1, Bodo_CTypes::INT64);
+    aggfunc_output_initialize(count_arr, Bodo_FTypes::count, true);
+
+    // Implements avg by calculating a single sum and count value for the column
+    // and then dividing. This requires looping over the column twice. Could be
+    // done in one loop i.e. with do_apply_column and ::mean but would need to
+    // be extended to work for Decimals.
+    single_global_window_computation<Bodo_FTypes::sum>(in_col, sum_arr,
+                                                       is_parallel);
+    single_global_window_computation<Bodo_FTypes::count>(in_col, count_arr,
+                                                         is_parallel);
+
+    int64_t total_rows = getv<int64_t, bodo_array_type::NUMPY>(count_arr, 0);
+
+    if (total_rows == 0)
+        return;
+
+    // Do the division
+    if (out_arr->dtype == Bodo_CTypes::FLOAT64) {
+        getv<double>(out_arr, 0) =
+            avg_sum_to_double(sum_arr) / static_cast<double>(total_rows);
+        out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0, true);
+    } else {
+        bool overflow;
+
+        const arrow::Decimal128& total_rows_asdecimal =
+            (arrow::Decimal128)total_rows;
+        const arrow::Decimal128& sum_rows =
+            *(sum_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                             arrow::Decimal128>());
+
+        arrow::Decimal128* out_ptr =
+            out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                           arrow::Decimal128>();
+
+        // For decimal division, we add 6 to the scale (but don't go beyond 12)
+        // Note: This needs to be kept consistent with the scale/precision rule
+        // for DIVIDE in decimal_arr_ext.py
+        int32_t new_scale =
+            std::max(in_col->scale, std::min(in_col->scale + 6, 12));
+        out_arr->precision = DECIMAL128_MAX_PRECISION;
+        out_arr->scale = new_scale;
+        *out_ptr = decimalops::Divide(sum_rows, total_rows_asdecimal,
+                                      new_scale - in_col->scale, &overflow);
+
+        out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0, true);
+
+        if (overflow) {
+            throw std::runtime_error(
+                "Overflow detected when trying to compute column average.");
+        }
+    }
+}
+
 void global_window_computation(
     const std::vector<int32_t>& window_funcs,
     const std::vector<std::shared_ptr<array_info>>& window_args,
@@ -2653,65 +2832,38 @@ void global_window_computation(
     dummy_local_grp_info.num_groups = 1;
     dummy_local_grp_info.row_to_group.resize(output_rows, 0);
     for (size_t i = 0; i < window_funcs.size(); i++) {
+        int32_t offset = window_offset_indices[i];
+        const std::shared_ptr<array_info>& in_col = window_args[offset];
         switch (window_funcs[i]) {
-            case Bodo_FTypes::sum:
-            case Bodo_FTypes::count:
-            case Bodo_FTypes::min:
+            case Bodo_FTypes::count: {
+                single_global_window_computation<Bodo_FTypes::count>(
+                    in_col, out_arrs[i], is_parallel);
+                break;
+            }
+            case Bodo_FTypes::sum: {
+                single_global_window_computation<Bodo_FTypes::sum>(
+                    in_col, out_arrs[i], is_parallel);
+                break;
+            }
             case Bodo_FTypes::max: {
-                int32_t offset = window_offset_indices[i];
-                const std::shared_ptr<array_info>& in_col = window_args[offset];
-                std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
-                // Invoke the groupby codepath for the aggfunc, with every
-                // row mapping to "group 0"
-                do_apply_to_column(in_col, out_arrs[i], dummy_aux_cols,
-                                   dummy_local_grp_info, window_funcs[i]);
+                single_global_window_computation<Bodo_FTypes::max>(
+                    in_col, out_arrs[i], is_parallel);
+                break;
+            }
+            case Bodo_FTypes::min: {
+                single_global_window_computation<Bodo_FTypes::min>(
+                    in_col, out_arrs[i], is_parallel);
+                break;
+            }
+            case Bodo_FTypes::mean: {
+                single_global_window_computation<Bodo_FTypes::mean>(
+                    in_col, out_arrs[i], is_parallel);
                 break;
             }
             default:
                 throw std::runtime_error(
                     "Unsupported window function for the global "
                     "implementation");
-        }
-    }
-    if (is_parallel) {
-        int myrank, num_ranks;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-        grouping_info dummy_combine_grp_info;
-        dummy_combine_grp_info.num_groups = 1;
-        dummy_combine_grp_info.row_to_group.resize(num_ranks, 0);
-        for (size_t i = 0; i < window_funcs.size(); i++) {
-            std::shared_ptr<array_info> combined_arr =
-                gather_array(out_arrs[i], true, true, 0, num_ranks, myrank);
-            switch (window_funcs[i]) {
-                case Bodo_FTypes::sum:
-                case Bodo_FTypes::min:
-                case Bodo_FTypes::max: {
-                    // Repeat the pre-parallel procedure on the combined
-                    // results.
-                    std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
-                    aggfunc_output_initialize(out_arrs[i], window_funcs[i],
-                                              true);
-                    do_apply_to_column(combined_arr, out_arrs[i],
-                                       dummy_aux_cols, dummy_combine_grp_info,
-                                       window_funcs[i]);
-                    break;
-                }
-                case Bodo_FTypes::count: {
-                    // For count, combine the results by adding them.
-                    std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
-                    aggfunc_output_initialize(out_arrs[i], Bodo_FTypes::sum,
-                                              true);
-                    do_apply_to_column(combined_arr, out_arrs[i],
-                                       dummy_aux_cols, dummy_combine_grp_info,
-                                       Bodo_FTypes::sum);
-                    break;
-                }
-                default:
-                    throw std::runtime_error(
-                        "Unsupported window function for the global "
-                        "implementation");
-            }
         }
     }
 

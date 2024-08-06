@@ -29,6 +29,7 @@ from bodo.libs.array import (
 from bodo.libs.array import (
     table_type as cpp_table_type,
 )
+from bodo.libs.decimal_arr_ext import decimal_division_output_precision_scale
 from bodo.libs.stream_base import StreamingStateType
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
@@ -161,6 +162,7 @@ class WindowStateType(StreamingStateType):
             "max",
             "count",
             "sum",
+            "mean",
             "dense_rank",
             "row_number",
             "rank",
@@ -358,6 +360,27 @@ class WindowStateType(StreamingStateType):
         for func_idx, func_name in enumerate(self.func_names):
             if func_name in window_func_types:
                 output_type = window_func_types[func_name]
+
+                # for mean we want the output type to be float64 unless we are  in the decimal case
+                if func_name == "mean":
+                    indices = self.inputs_to_function(func_idx)
+
+                    input_index = indices[0]
+                    input_type = self.build_table_type.arr_types[input_index]
+                    in_dtype = input_type.dtype
+
+                    # Here we use the typing rules for sum + division to derive the type for mean. This differs from Snowflake behavior: Snowflake adds 3 to the scale by default. If the input scale is >34 it gives an error
+                    if isinstance(in_dtype, bodo.Decimal128Type):
+                        out_p = bodo.libs.decimal_arr_ext.DECIMAL128_MAX_PRECISION
+                        _, out_s = decimal_division_output_precision_scale(
+                            out_p, in_dtype.scale, out_p, 0
+                        )
+                        out_dtype = bodo.Decimal128Type(
+                            out_p,
+                            out_s,
+                        )
+                        output_type = dtype_to_array_type(out_dtype)
+
                 if output_type is None:
                     # None = infer from input column
                     indices = self.inputs_to_function(func_idx)

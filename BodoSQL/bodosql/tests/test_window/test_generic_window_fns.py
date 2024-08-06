@@ -521,3 +521,60 @@ def test_all_null():
         check_dtype=False,
         only_jit_1DVar=True,
     )
+
+
+@pytest.mark.parametrize(
+    "data, expected_out",
+    [
+        pytest.param(
+            pd.array(
+                [None if i**2 % 7 < 3 else float(f"{i}.{i}") for i in range(10000)]
+            ),
+            pd.array([5000.2999808540435] * 10000),
+            id="float64_arr",
+        ),
+        pytest.param(
+            pd.array(
+                [None if i**2 % 7 < 3 else Decimal(f"{i}.{i}") for i in range(10000)],
+                dtype=pd.ArrowDtype(pa.decimal128(32, 5)),
+            ),
+            pd.array(
+                [Decimal("5000.29998085404")] * 10000,
+                dtype=pd.ArrowDtype(pa.decimal128(38, 11)),
+            ),
+            id="decimal_arr",
+        ),
+    ],
+)
+def test_avg_over_blank(data, expected_out, capfd):
+    """Verifies that the correct path is taken for AVG"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    df = pd.DataFrame({"A": data})
+
+    expected_df = pd.DataFrame({"AVG": expected_out})
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = "SELECT AVG(A) OVER () FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            None,
+            expected_output=expected_df,
+            check_names=False,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
