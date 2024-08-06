@@ -203,6 +203,44 @@ def gen_simple_window_over_nothing_tests():
             id="count-string_all_null",
         )
     )
+    params.append(
+        pytest.param(
+            decimal_arr,
+            "mean",
+            pd.array(
+                [Decimal("495025972623655664187232.697686741138")] * len(decimal_arr),
+                pd.ArrowDtype(pa.decimal128(38, 12)),
+            ),
+            id="avg-decimal",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_nullable_arr,
+            "mean",
+            pd.array([49858.6676] * len(int32_nullable_arr), pd.Float64Dtype),
+            id="avg-int32_nullable",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_arr_all_null,
+            "mean",
+            pd.array(
+                [None] * len(int32_arr_all_null),
+                pd.Float64Dtype,
+            ),
+            id="avg-int32_all_null",
+        )
+    )
+    params.append(
+        pytest.param(
+            int32_numpy_arr,
+            "mean",
+            pd.array([49458.1416] * len(int32_numpy_arr), pd.Float64Dtype),
+            id="avg-int32_numpy",
+        )
+    )
     return params
 
 

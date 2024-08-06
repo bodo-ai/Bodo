@@ -1,6 +1,9 @@
 #include "_stream_window.h"
 #include "_array_operations.h"
+#include "_array_utils.h"
+#include "_bodo_common.h"
 #include "_distributed.h"
+#include "_groupby_ftypes.h"
 #include "_window_compute.h"
 
 WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
@@ -181,6 +184,7 @@ void WindowState::InferWindowOutputDataType(
         case Bodo_FTypes::sum:
         case Bodo_FTypes::count:
         case Bodo_FTypes::min:
+        case Bodo_FTypes::mean:
         case Bodo_FTypes::max: {
             int32_t in_col_offset = func_input_offsets[func_idx];
             int32_t in_col_idx = func_input_indices[in_col_offset];
@@ -414,6 +418,7 @@ void WindowState::FinalizeBuild() {
     size_t num_argument_cols = func_input_indices.size();
     std::vector<int64_t> asc(num_keys);
     std::vector<int64_t> na_pos(num_keys);
+
     // Set arbitrary values for sort properties for partition by
     // keys.
     for (size_t i = 0; i < this->n_keys; i++) {
