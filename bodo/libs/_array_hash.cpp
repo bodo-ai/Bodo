@@ -239,7 +239,6 @@ static void hash_array_string(const hashes_t& out_hashes, char* data,
                               offset_t* offsets, uint8_t* null_bitmask,
                               size_t n_rows, const uint32_t seed,
                               bool is_parallel, size_t start_row_offset = 0) {
-    tracing::Event ev("hash_array_string", is_parallel);
     offset_t start_offset = offsets[start_row_offset];
     uint32_t na_hash;
     hash_na_string<use_murmurhash>(seed, &na_hash);
@@ -1555,7 +1554,6 @@ std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
     std::vector<std::shared_ptr<array_info>> const& ref_key_arrs,
     const uint32_t seed, bool is_parallel) {
-    tracing::Event ev("coherent_hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
     coherent_hash_array(hashes, key_arrs[0], ref_key_arrs[0], n_rows, seed,
@@ -1576,7 +1574,6 @@ void hash_keys(
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes,
     size_t start_row_offset, int64_t n_rows_) {
-    tracing::Event ev("hash_keys", is_parallel);
     size_t n_rows = key_arrs[0]->length - start_row_offset;
     if (n_rows_ != -1) {
         n_rows = std::min<size_t>(n_rows_, n_rows);
