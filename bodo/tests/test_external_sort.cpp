@@ -1,6 +1,7 @@
 #include <iostream>
 #include <random>
 #include "../libs/_distributed.h"
+#include "../libs/_shuffle.h"
 #include "../libs/_stream_sort.h"
 #include "./test.hpp"
 #include "table_generator.hpp"
@@ -910,6 +911,60 @@ bodo::tests::suite external_sort_tests([] {
         for (int64_t i = 1; i < int_arr->length(); i++) {
             bodo::tests::check(int_arr->Value(i) ==
                                (int_arr->Value(i - 1) + 1));
+        }
+    });
+
+    bodo::tests::test("test_dict_encoded", [] {
+        std::vector<std::string> data(10);
+        int n_pes, myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+        char data_c = 'A' + myrank;
+        std::string data_s = " ";
+        data_s[0] = data_c;
+        std::fill(data.begin(), data.end(), data_s);
+
+        std::shared_ptr<table_info> table =
+            bodo::tests::cppToBodo({"A"}, {false}, {"A"}, std::move(data));
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true, 5);
+        state.ConsumeBatch(table, true, true);
+
+        state.FinalizeBuild();
+        // Collect all output tables
+        bool done = false;
+        std::vector<std::shared_ptr<table_info>> tables;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+            tables.push_back(res.first);
+        }
+
+        // Merge tables and get a single output array
+        auto local_sorted_table = concat_tables(std::move(tables));
+        auto result = gather_table(local_sorted_table,
+                                   local_sorted_table->ncols(), false, true);
+        if (myrank == 0) {
+            auto rescol = result->columns[0];
+            bodo::tests::check(rescol->arr_type == bodo_array_type::DICT);
+            bodo::tests::check(rescol->length ==
+                               static_cast<uint64_t>(n_pes * 10));
+            auto resdata = to_arrow(rescol->child_arrays[0]);
+            arrow::LargeStringArray* str_arr =
+                static_cast<arrow::LargeStringArray*>(resdata.get());
+            auto* indices = (dict_indices_t*)(rescol->child_arrays[1]->data1());
+            for (int i = 0; i < n_pes; i++) {
+                for (int j = 0; j < 10; j++) {
+                    dict_indices_t idx = indices[i * 10 + j];
+                    std::string expected_s = " ";
+                    expected_s[0] = 'A' + i;
+                    bodo::tests::check(std::string(str_arr->Value(idx)) ==
+                                       expected_s);
+                }
+            }
         }
     });
 
