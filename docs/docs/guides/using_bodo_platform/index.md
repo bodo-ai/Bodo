@@ -46,6 +46,11 @@ This guide explains how to interact with Bodo clusters outside of Jobs and Noteb
 
 ---
 
+## [Creating Network Configuration][network_configuration]
+This guide explains how to create a network configuration for the Bodo Cloud Platform.
+
+___
+
 ## [Configuring Customer Managed VPC][customer_managed_vpc]
 This guide explains how to configure a Customer Managed VPC for the Bodo Cloud Platform.
 

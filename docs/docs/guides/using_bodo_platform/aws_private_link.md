@@ -53,6 +53,7 @@ You can use the following CloudFormation template. You can find the template [he
 5. Create an SSM interface endpoint if it does not already exist in the VPC (required for Bodo clusters to read workspace SSM parameters):
 ![AWS-SSM-Interface](../../platform2-gifs/ssm-interface-endpoint.gif#center)
 
+5. Once you have created all the above resources, you can create a [network configuration] (network_configuration.md).
 
 !!! info "Important"
      
