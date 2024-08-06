@@ -61,6 +61,15 @@ class BodoPhysicalWindow(
     }
 
     /**
+     * Mapping of sql window operators to bodo window func names
+     * Should include all functions where the sql name is not equal to the bodo name.
+     */
+    private val sqlToBodoWindowFuncName =
+        mapOf(
+            "AVG" to "mean",
+        )
+
+    /**
      *  Returns whether the Window node can be converted to streaming window codegen. If not, the Window node must
      *  be converted back into a Project node. Currently has the following requirements:
      *
@@ -145,6 +154,7 @@ class BodoPhysicalWindow(
                     SqlKind.MIN,
                     SqlKind.MAX,
                     SqlKind.SUM,
+                    SqlKind.AVG,
                     -> true
                     SqlKind.COUNT,
                     -> aggCall.operands.size == 1
@@ -310,6 +320,17 @@ class BodoPhysicalWindow(
     }
 
     /**
+     * Helper for getting the bodo name from a SQL operator name.
+     */
+    private fun getOperatorName(sqlName: String): String {
+        return if (sqlName in sqlToBodoWindowFuncName) {
+            sqlToBodoWindowFuncName[sqlName]!!
+        } else {
+            sqlName.lowercase()
+        }
+    }
+
+    /**
      * Function to create the initial state for a streaming pipeline.
      * This should be called from emit.
      */
@@ -334,7 +355,8 @@ class BodoPhysicalWindow(
         }
         group.aggCalls.forEach {
                 aggCall ->
-            funcNames.add(Expr.StringLiteral(aggCall.operator.name.lowercase()))
+            val operatorName = getOperatorName(aggCall.operator.name)
+            funcNames.add(Expr.StringLiteral(operatorName))
             val funcArgs =
                 aggCall.operands.map {
                     // Defensive check since it should always be a RexInputRef by the

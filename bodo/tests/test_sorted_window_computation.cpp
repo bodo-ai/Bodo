@@ -1321,4 +1321,81 @@ static bodo::tests::suite tests([] {
                                     order_by_arrs, {}, {}, out_arrs,
                                     expected_out);
     });
+    bodo::tests::test("test_partitionless_avg_double", [] {
+        size_t n = 5;
+        std::shared_ptr<array_info> in_arr =
+            bodo::tests::cppToBodoArr<double>({1.0, 2.0, 3.0, 4.0, 5.0});
+
+        std::shared_ptr<array_info> expected =
+            bodo::tests::cppToBodoArr<double>(std::vector<double>(n, 3.0),
+                                              true);
+
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.push_back(
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::FLOAT64));
+        aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::mean, true);
+
+        verify_sorted_window_output(Bodo_FTypes::mean, {}, {}, {in_arr}, {0, 1},
+                                    out_arrs, expected, true);
+    });
+    bodo::tests::test("test_partitionless_avg_with_holes", [] {
+        // tests that avg works when some ranks have empty data
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        size_t n = myrank % 2 == 0 ? 0 : 3;
+
+        std::shared_ptr<array_info> in_arr =
+            alloc_nullable_array_all_nulls(n, Bodo_CTypes::FLOAT64);
+
+        std::shared_ptr<array_info> expected =
+            alloc_nullable_array_all_nulls(n, Bodo_CTypes::FLOAT64);
+
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.push_back(
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::FLOAT64));
+        aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::sum, true);
+
+        verify_sorted_window_output(Bodo_FTypes::mean, {}, {}, {in_arr}, {0, 1},
+                                    out_arrs, expected, true);
+    });
+    bodo::tests::test("test_partitionless_avg_int_numpy", [] {
+        int myrank;
+        int n_pes;
+        size_t n = 5;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+        std::shared_ptr<array_info> in_arr = const_int64_arr(n, myrank + 1);
+
+        double global_avg = (n_pes + 1) / 2.0;
+
+        std::shared_ptr<array_info> expected =
+            bodo::tests::cppToBodoArr<double>(
+                std::vector<double>(n, global_avg), true);
+
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.push_back(
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::FLOAT64));
+        aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::mean, true);
+
+        verify_sorted_window_output(Bodo_FTypes::mean, {}, {}, {in_arr}, {0, 1},
+                                    out_arrs, expected, true);
+    });
+    bodo::tests::test("test_partitionless_avg_all_null", [] {
+        size_t n = 5;
+
+        std::shared_ptr<array_info> in_arr =
+            alloc_nullable_array_all_nulls(n, Bodo_CTypes::INT32);
+
+        std::shared_ptr<array_info> expected =
+            alloc_nullable_array_all_nulls(n, Bodo_CTypes::FLOAT64);
+
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.push_back(
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::FLOAT64));
+        aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::mean, true);
+
+        verify_sorted_window_output(Bodo_FTypes::mean, {}, {}, {in_arr}, {0, 1},
+                                    out_arrs, expected, true);
+    });
 });

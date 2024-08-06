@@ -60,6 +60,17 @@ concept percent_rank = ftype == Bodo_FTypes::percent_rank;
 template <int ftype>
 concept cume_dist = ftype == Bodo_FTypes::cume_dist;
 
+// Aggregation-like window functions that can be computed without an auxillary
+// column
+template <int ftype>
+concept no_aux_col =
+    count<ftype> || ftype == Bodo_FTypes::max || ftype == Bodo_FTypes::min ||
+    ftype == Bodo_FTypes::sum || ftype == Bodo_FTypes::first ||
+    ftype == Bodo_FTypes::last || ftype == Bodo_FTypes::any_value ||
+    ftype == Bodo_FTypes::bitand_agg || ftype == Bodo_FTypes::bitor_agg ||
+    ftype == Bodo_FTypes::bitxor_agg || ftype == Bodo_FTypes::booland_agg ||
+    ftype == Bodo_FTypes::boolor_agg;
+
 // Enums to specify which type of window frame is being computer, in case
 // a window function should have different implementaitons for some of
 // the formats (e.g. min/max can accumulate a running min/max for
