@@ -597,9 +597,10 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     Py_DECREF(pd_arrow_str_arr_obj);
 
     if (is_arrow_str_arr) {
-        // pyarrow_chunked_arr = obj._data
-        PyObject* pyarrow_chunked_arr = PyObject_GetAttrString(obj, "_data");
-        CHECK(pyarrow_chunked_arr, "getting obj._data failed");
+        // pyarrow_chunked_arr = obj._pa_array
+        PyObject* pyarrow_chunked_arr =
+            PyObject_GetAttrString(obj, "_pa_array");
+        CHECK(pyarrow_chunked_arr, "getting obj._pa_array failed");
 
         // pyarrow_arr = pyarrow_chunked_arr.combine_chunks()
         PyObject* pyarrow_arr =
