@@ -500,8 +500,9 @@ public class RelDecorrelator implements ReflectiveVisitor {
     }
 
     public @Nullable Frame decorrelateRel(Values rel, boolean isCorVarDefined) {
-        // There are no inputs, so rel does not need to be changed.
-        return null;
+        // Bodo Change: Most inputs output null if the input is empty, which
+        // can prevent rules from working properly for the correlation step.
+        return decorrelateRel((RelNode) rel, isCorVarDefined);
     }
 
     public @Nullable Frame decorrelateRel(LogicalAggregate rel, boolean isCorVarDefined) {

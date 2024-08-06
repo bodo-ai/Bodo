@@ -327,7 +327,6 @@ public class BodoSqlToRelConverter extends SqlToRelConverter {
                   snowflakeScalarUdf.getBody(),
                   snowflakeScalarUdf.getFunctionPath(),
                   parameterNames,
-                  arguments,
                   correlatedArguments,
                   returnType,
                   cluster);

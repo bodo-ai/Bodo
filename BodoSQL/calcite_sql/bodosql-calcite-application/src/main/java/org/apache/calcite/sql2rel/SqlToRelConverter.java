@@ -369,10 +369,12 @@ public class SqlToRelConverter {
     this.exprConverter = new SqlNodeToRexConverterImpl(convertletTable);
     this.explainParamCount = 0;
     this.config = requireNonNull(config, "config");
+    // Bodo Change: Disable bloat because it can break correlation handling. These should
+    // all be fixed by rule based optimizations.
     this.relBuilder =
             config.getRelBuilderFactory().create(cluster,
              validator != null ? validator.getCatalogReader().unwrap(RelOptSchema.class) : null)
-        .transform(config.getRelBuilderConfigTransform());
+        .transform(config.getRelBuilderConfigTransform()).transform(b -> b.withBloat(-1));
     this.hintStrategies = config.getHintStrategyTable();
 
     cluster.setHintStrategies(this.hintStrategies);

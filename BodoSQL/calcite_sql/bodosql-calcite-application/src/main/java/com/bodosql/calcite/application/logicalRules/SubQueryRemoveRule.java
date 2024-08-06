@@ -970,10 +970,12 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
   // Helper for canPullUpSubqueryCondition on INNER joins
   private static boolean canPullUpSubqueryConditionFromInner(
       Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
-    // This functionality is currently only allowed for IN subquery conditions.
-    if (subquery.getKind() != SqlKind.IN) return false;
+    // This functionality is currently only allowed for IN or SCALAR subquery conditions.
+    if (subquery.getKind() != SqlKind.IN && subquery.getKind() != SqlKind.SCALAR_QUERY) {
+      return false;
+    }
 
-    // Create a RexVisitor that can determine if a conjunciton
+    // Create a RexVisitor that can determine if a conjunction
     // contains a query.
     ExactSubQueryFinder hunter = new ExactSubQueryFinder(subquery);
 
@@ -990,10 +992,12 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
   // Helper for canPullUpSubqueryCondition on LEFT joins
   private static boolean canPullUpSubqueryConditionFromLeft(
       Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
-    // This functionality is currently only allowed for IN subquery conditions.
-    if (subquery.getKind() != SqlKind.IN) return false;
+    // This functionality is currently only allowed for IN or SCALAR subquery conditions.
+    if (subquery.getKind() != SqlKind.IN && subquery.getKind() != SqlKind.SCALAR_QUERY) {
+      return false;
+    }
 
-    // Create a RexVisitor that can determine if a conjunciton
+    // Create a RexVisitor that can determine if a conjunction
     // contains a query.
     ExactSubQueryFinder hunter = new ExactSubQueryFinder(subquery);
     int leftFields = join.getLeft().getRowType().getFieldCount();
@@ -1025,10 +1029,12 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
   // Helper for canPullUpSubqueryCondition on RIGHT joins
   private static boolean canPullUpSubqueryConditionFromRight(
       Join join, RexSubQuery subquery, List<RexNode> conditionsToPull) {
-    // This functionality is currently only allowed for IN subquery conditions.
-    if (subquery.getKind() != SqlKind.IN) return false;
+    // This functionality is currently only allowed for IN or SCALAR subquery conditions.
+    if (subquery.getKind() != SqlKind.IN && subquery.getKind() != SqlKind.SCALAR_QUERY) {
+      return false;
+    }
 
-    // Create a RexVisitor that can determine if a conjunciton
+    // Create a RexVisitor that can determine if a conjunction
     // contains a query.
     ExactSubQueryFinder hunter = new ExactSubQueryFinder(subquery);
     int leftFields = join.getLeft().getRowType().getFieldCount();
