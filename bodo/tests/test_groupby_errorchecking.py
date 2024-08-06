@@ -1881,7 +1881,7 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
     """Test groupby.agg with unsupported types"""
 
     def impl1(df):
-        A = df.groupby("A").agg(lambda x: x.sum())
+        A = df.groupby("A").agg(lambda x: x.prod())
         return A
 
     err_msg = "is unsupported/not a valid input type"
