@@ -185,6 +185,16 @@ object BodoPrograms {
     fun preprocessor(): Program = PreprocessorProgram()
 
     /**
+     * The default HEP planner in Calcite doesn't iterate until convergence
+     * and instead may exit early. As a result, we add additional iterations
+     * checking for program changes. In case any rules can ever contradict each
+     * other, we set a limit of 25 iterations, which is arbitrary and may need
+     * to be adjusted in the future.
+     */
+    @JvmStatic
+    var maxHepIterations = 25
+
+    /**
      * General optimization program.
      *
      * This will run the set of planner rules that we use to optimize
@@ -227,7 +237,7 @@ object BodoPrograms {
             // fixing the HepPlanner, but just leaving this as-is until we're
             // able to test the VolcanoPlanner.
             var lastOptimizedPlan = rel
-            for (i in 1..25) {
+            (0 until maxHepIterations).forEach { _ ->
                 val curOptimizedPlan = run(lastOptimizedPlan, planner?.context)
                 if (curOptimizedPlan.deepEquals(lastOptimizedPlan)) {
                     return lastOptimizedPlan

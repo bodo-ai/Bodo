@@ -120,13 +120,15 @@ public class BodoJoinProjectTransposeNoCSEUndoRule
     if (includeOuter) {
       if (leftProject != null
           && joinType.generatesNullsOnLeft()
-          && !Strong.allStrong(leftProject.getProjects())) {
+          && !Strong.allStrong(leftProject.getProjects())
+          && !join.getCondition().isAlwaysTrue()) {
         return;
       }
 
       if (rightProject != null
           && joinType.generatesNullsOnRight()
-          && !Strong.allStrong(rightProject.getProjects())) {
+          && !Strong.allStrong(rightProject.getProjects())
+          && !join.getCondition().isAlwaysTrue()) {
         return;
       }
     }

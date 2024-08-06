@@ -416,7 +416,6 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
    * @param functionBody Body of the function.
    * @param functionPath Path of the function.
    * @param paramNames The name of the function parameters.
-   * @param arguments The RexNode argument inputs to the function.
    * @param correlatedArguments The arguments after replacing any input references with field
    *     accesses to a correlated variable.
    * @param returnType The expected function return type.
@@ -430,7 +429,6 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       @NonNull String functionBody,
       @NonNull ImmutableList<@NonNull String> functionPath,
       @NonNull List<@NonNull String> paramNames,
-      @NonNull List<@NonNull RexNode> arguments,
       @NonNull List<@NonNull RexNode> correlatedArguments,
       @NonNull RelDataType returnType,
       @NonNull RelOptCluster cluster) {
@@ -466,7 +464,7 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       SqlParseException secondException;
       try {
         return expandExpressionFunction(
-            functionBody, functionPath, paramNames, arguments, returnType, cluster);
+            functionBody, functionPath, paramNames, correlatedArguments, returnType, cluster);
       } catch (SqlParseException e) {
         firstException = e;
       }
@@ -545,12 +543,31 @@ public abstract class AbstractPlannerImpl implements Planner, ViewExpander, Func
       argMap.put(paramNames.get(i), arguments.get(i));
     }
     RexNode result = sqlToRelConverter.convertExpression(validatedNode, argMap);
+    final RexNode castedResult;
     // Note: We can't use rexBuilder.ensureType because it will omit matching
     // nullability for literals.
     if (result.getType().equals(returnType)) {
-      return result;
+      castedResult = result;
     } else {
-      return cluster.getRexBuilder().makeCast(returnType, result, true, false);
+      castedResult = cluster.getRexBuilder().makeCast(returnType, result, true, false);
+    }
+    // Find the correlation IDs in the argument. If there are any present we must wrap the
+    // result in a trivial sub query.
+    BodoRelOptUtil.CorrelationRexFinder finder = new BodoRelOptUtil.CorrelationRexFinder();
+    for (RexNode arg : arguments) {
+      arg.accept(finder);
+    }
+    Set<CorrelationId> correlationIds = finder.getSeenIds();
+    if (correlationIds.isEmpty()) {
+      return castedResult;
+    } else {
+      final RelBuilder relBuilder = config.getRelBuilderFactory().create(cluster, null);
+      String[] fieldNames = {"DUMMY"};
+      boolean expr = true;
+      relBuilder.values(fieldNames, expr).project(castedResult);
+      RelNode dummyRelNode = relBuilder.build();
+      RelNode prunedRelNode = removeNestedSubQueries(dummyRelNode, correlationIds);
+      return RexSubQuery.scalar(prunedRelNode);
     }
   }
 
