@@ -83,11 +83,39 @@ std::ostream& operator<<(std::ostream& os, const TableAndRange& obj) {
     return os;
 }
 
+/**
+ * @brief Helper function to unify dictionaries with the provided dict_builders.
+ * Returns a table with all dict encoded columns unified.
+ *
+ * @param in_table input table
+ * @param dict_builders dictionary builders to unify with
+ * @return table with unified dict data
+ */
+std::shared_ptr<table_info> UnifyDictionaryArrays(
+    const std::shared_ptr<table_info>& in_table,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    out_arrs.reserve(in_table->ncols());
+    for (size_t i = 0; i < in_table->ncols(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        std::shared_ptr<array_info> out_arr;
+        if (dict_builders[i] == nullptr) {
+            out_arr = in_arr;
+        } else {
+            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+        }
+        out_arrs.emplace_back(out_arr);
+    }
+
+    return std::make_shared<table_info>(out_arrs);
+}
+
 void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk) {
     if (chunk->nrows() == 0) {
         return;
     }
 
+    chunk = UnifyDictionaryArrays(chunk, dict_builders);
     auto sorted_chunk = sort_values_table_local(
         std::move(chunk), n_key_t, vect_ascending.data(), na_position.data(),
         dead_keys.data(), false);
@@ -541,12 +569,33 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
     row_info.first += table_local_memory_size(table, false);
     row_info.second += table->nrows();
 
-    // TODO(aneesh) unify dictionaries?
     time_pt start_append = start_timer();
     // Table is not sorted and we also don't want to sort it.
     // Pass in true to remain unsorted.
-    builder.AppendBatch(table);
+    builder.UnifyDictionariesAndAppend(table, dict_builders);
     metrics.local_sort_chunk_time += end_timer(start_append);
+}
+
+/**
+ * @brief make a dictionary global and unique by recursively calling
+ * make_dictionary_global_and_unique on nested data types
+ *
+ * @param dict_builder dictionary builder to be made global and unique
+ */
+void recursive_make_dict_global_and_unique(
+    std::shared_ptr<DictionaryBuilder>& dict_builder) {
+    if (dict_builder->child_dict_builders.size()) {
+        for (auto& child_builder : dict_builder->child_dict_builders) {
+            recursive_make_dict_global_and_unique(child_builder);
+        }
+        return;
+    }
+
+    std::shared_ptr<array_info> empty_dict_array =
+        create_dict_string_array(dict_builder->dict_buff->data_array,
+                                 alloc_nullable_array(0, Bodo_CTypes::INT32));
+    make_dictionary_global_and_unique(empty_dict_array, true);
+    dict_builder->UnifyDictionaryArray(empty_dict_array);
 }
 
 void StreamSortState::FinalizeBuild() {
@@ -554,6 +603,14 @@ void StreamSortState::FinalizeBuild() {
     // and fewer pin/unpin calls.
     mem_budget_bytes =
         OperatorComptroller::Default()->RequestAdditionalBudget(op_id, -1);
+
+    // Make all dictionaries global
+    for (auto& dict_builder : dict_builders) {
+        if (!dict_builder) {
+            continue;
+        }
+        recursive_make_dict_global_and_unique(dict_builder);
+    }
 
     std::unique_ptr<int64_t[]> in_info = std::make_unique<int64_t[]>(2);
     in_info[0] = row_info.first;
@@ -850,6 +907,8 @@ void StreamSortState::GlobalSort(
                 auto table_to_send =
                     std::move(rankToChunks[host_to_send_to][chunk_id]);
                 table_to_send->pin();
+                table_to_send =
+                    UnifyDictionaryArrays(table_to_send, dict_builders);
 
                 auto nrows = table_to_send->nrows();
                 auto hashes = std::make_shared<uint32_t[]>(nrows);
