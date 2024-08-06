@@ -143,7 +143,6 @@ inline std::unique_ptr<uint32_t[]> hash_keys_table(
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = nullptr,
     size_t start_row_offset = 0, int64_t num_rows = -1) {
-    tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed, is_parallel, global_dict_needed,
@@ -184,7 +183,6 @@ inline void hash_keys_table(
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
         dict_hashes = nullptr,
     size_t start_row_offset = 0, int64_t num_rows = -1) {
-    tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     hash_keys(out_hashes, key_arrs, seed, is_parallel, global_dict_needed,
@@ -194,7 +192,6 @@ inline void hash_keys_table(
 inline std::unique_ptr<uint32_t[]> coherent_hash_keys_table(
     std::shared_ptr<table_info> in_table, std::shared_ptr<table_info> ref_table,
     size_t num_keys, uint32_t seed, bool is_parallel) {
-    tracing::Event ev("coherent_hash_keys_table", is_parallel);
     std::vector<std::shared_ptr<array_info>> key_arrs(
         in_table->columns.begin(), in_table->columns.begin() + num_keys);
     std::vector<std::shared_ptr<array_info>> ref_key_arrs(
