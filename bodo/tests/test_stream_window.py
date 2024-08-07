@@ -532,7 +532,6 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
                 }
             ),
             id="percent_rank-integer",
-            marks=pytest.mark.skip("[BSE-3613]"),
         ),
         pytest.param(
             "cume_dist",
@@ -546,11 +545,10 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
             pd.DataFrame(
                 {
                     "IDX": range(1000),
-                    "OUT": [(1 + (10 * (i // 10))) / 1000 for i in range(1000)],
+                    "OUT": [((10 * (1 + (i // 10)))) / 1000 for i in range(1000)],
                 }
             ),
             id="cume_dist-integer",
-            marks=pytest.mark.skip("[BSE-3624]"),
         ),
         pytest.param(
             "dense_rank",
