@@ -2158,12 +2158,13 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
         // come before the rest of the checks Hence, just compute number of rows
         // per group here.
         // TODO: Move to a helper function to simplify this code?
+        assert(out_col->arr_type == bodo_array_type::NUMPY ||
+               out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
         for (size_t i = 0; i < in_col->length; i++) {
             int64_t i_grp = grp_info.row_to_group[i];
             if (i_grp != -1) {
-                // XXX TODO The getv calls need to be templated!
                 size_agg<int64_t, Bodo_CTypes::INT64>::apply(
-                    getv<int64_t>(out_col, i_grp), getv<int64_t>(in_col, i));
+                    getv<int64_t, bodo_array_type::NUMPY>(out_col, i_grp));
             }
         }
         return;

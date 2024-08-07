@@ -664,9 +664,8 @@ struct size_agg {
      * Aggregation function for size. Increases size
      *
      * @param[in,out] current count
-     * @param second input value.
      */
-    inline static void apply(int64_t& v1, T& v2) { v1 += 1; }
+    inline static void apply(int64_t& v1) { v1 += 1; }
 };
 
 // mean
