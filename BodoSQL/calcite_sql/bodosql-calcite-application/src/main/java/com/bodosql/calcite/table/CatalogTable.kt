@@ -49,7 +49,7 @@ open class CatalogTable(
      */
     fun getQualifiedName(): String {
         val quotedPath = ImmutableList.Builder<String>()
-        for (elem in getFullPath()) {
+        for (elem in fullPath) {
             quotedPath.add(String.format(Locale.ROOT, "\"%s\"", elem))
         }
 
@@ -83,7 +83,7 @@ open class CatalogTable(
         visitor: BodoCodeGenVisitor,
         varName: Variable,
     ): Expr {
-        return catalog.generateAppendWriteCode(visitor, varName, getFullPath())
+        return catalog.generateAppendWriteCode(visitor, varName, fullPath)
     }
 
     /**
@@ -109,7 +109,7 @@ open class CatalogTable(
      * @return The source DB location.
      */
     override fun getDBType(): String {
-        return catalog.getDBType().toUpperCase()
+        return catalog.dbType.uppercase(Locale.getDefault())
     }
 
     /**
@@ -125,7 +125,7 @@ open class CatalogTable(
         useStreaming: Boolean,
         streamingOptions: StreamingOptions,
     ): Expr {
-        return catalog.generateReadCode(getFullPath(), useStreaming, streamingOptions)
+        return catalog.generateReadCode(fullPath, useStreaming, streamingOptions)
     }
 
     /**
