@@ -998,11 +998,23 @@ def test_unsupported_one_table_join_condition_udf_calls(
         },
         catalog=test_db_snowflake_catalog,
     )
-    with pytest.raises(
-        BodoError,
-        match="Found subquery in plan that could not be expanded",
-    ):
-        impl(bc, query)
+    if outer:
+        with pytest.raises(
+            BodoError,
+            match="Found subquery in plan that could not be expanded",
+        ):
+            bodo.jit(impl)(bc, query)
+    else:
+        # Inner join is supported.
+        table = pd.DataFrame(
+            {"A": np.arange(3), "B": np.arange(9, 6, -1), "C": np.arange(5, 8)}
+        )
+        check_func(
+            impl,
+            (bc, query),
+            py_output=table,
+            check_dtype=False,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1025,7 +1037,6 @@ def test_unsupported_each_table_join_condition_udf_calls(
     one argument.
     """
 
-    @bodo.jit
     def impl(bc, query):
         return bc.sql(query)
 
@@ -1040,11 +1051,23 @@ def test_unsupported_each_table_join_condition_udf_calls(
         },
         catalog=test_db_snowflake_catalog,
     )
-    with pytest.raises(
-        BodoError,
-        match="Found subquery in plan that could not be expanded",
-    ):
-        impl(bc, query)
+    if outer:
+        with pytest.raises(
+            BodoError,
+            match="Found subquery in plan that could not be expanded",
+        ):
+            bodo.jit(impl)(bc, query)
+    else:
+        # Inner join is supported.
+        table = pd.DataFrame(
+            {"A": np.arange(8), "B": np.arange(9, 1, -1), "C": np.arange(8)}
+        )
+        check_func(
+            impl,
+            (bc, query),
+            py_output=table,
+            check_dtype=False,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1082,9 +1105,13 @@ def test_unsupported_both_tables_join_condition_udf_calls(
         },
         catalog=test_db_snowflake_catalog,
     )
+    if outer:
+        match_msg = "Found subquery in plan that could not be expanded"
+    else:
+        match_msg = "Found correlation in plan"
     with pytest.raises(
         BodoError,
-        match="Found subquery in plan that could not be expanded",
+        match=match_msg,
     ):
         impl(bc, query)
 
