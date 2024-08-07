@@ -147,8 +147,11 @@ struct VHeapComparator {
  * only keep rows from [offset, limit + offset)
  */
 std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
-    std::vector<std::deque<TableAndRange>>&& sorted_chunks,
-    std::optional<SortLimits> sortlimit, bool is_last) {
+    std::vector<std::deque<TableAndRange>>&& sorted_chunks, bool is_last) {
+    auto sortlimit = sortlimits.has_value()
+                         ? (std::make_optional(SortLimits(sortlimits->limit,
+                                                          sortlimits->offset)))
+                         : (std::nullopt);
     ChunkedTableAndRangeBuilder out_table_builder(
         n_key_t, schema, dict_builders, chunk_size,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, pool, mm);
@@ -452,8 +455,38 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
     return out_table_builder.chunks;
 }
 
-std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize(
-    std::optional<SortLimits> sortlimit) {
+std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
+    // Since data are partitioned, we need to tranfer Global limit / offset
+    // to local limit offset. We need to know row counts for each rank to
+    // determine that.
+    if (sortlimits.has_value() && parallel) {
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        size_t limit = sortlimits->limit;
+        size_t offset = sortlimits->offset;
+        size_t number_rows = 0;
+        std::vector<size_t> nrows_collect(n_pes);
+        for (auto& i : input_chunks)
+            number_rows += static_cast<size_t>(i.table->nrows() - i.offset);
+        MPI_Allgather(&number_rows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
+                      1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
+        size_t total_rows_before = 0;
+        for (int64_t i = 0; i < myrank; i++)
+            total_rows_before += nrows_collect[i];
+        if (total_rows_before >= limit + offset ||
+            total_rows_before + number_rows <= offset || limit == 0) {
+            std::deque<TableAndRange> output;
+            return output;
+        }
+        size_t finalize_offset =
+            total_rows_before >= offset ? 0 : offset - total_rows_before;
+        size_t finalize_limit =
+            std::min(limit + offset - total_rows_before, number_rows) -
+            finalize_offset;
+        sortlimits = SortLimits(finalize_limit, finalize_offset);
+    }
+
     if (input_chunks.size() == 0) {
         std::deque<TableAndRange> output;
         return output;
@@ -475,8 +508,7 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize(
             input_chunks.pop_back();
         }
 
-        sorted_chunks.emplace_back(
-            MergeChunks(std::move(chunks), sortlimit, is_last));
+        sorted_chunks.emplace_back(MergeChunks(std::move(chunks), is_last));
     }
 
     while (sorted_chunks.size() > 1) {
@@ -494,7 +526,7 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize(
             }
 
             next_sorted_chunks.emplace_back(
-                MergeChunks(std::move(merge_input), sortlimit, is_last));
+                MergeChunks(std::move(merge_input), is_last));
         }
 
         std::swap(sorted_chunks, next_sorted_chunks);
@@ -528,8 +560,7 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
                                  std::vector<int64_t>&& vect_ascending_,
                                  std::vector<int64_t>&& na_position_,
                                  std::shared_ptr<bodo::Schema> schema_,
-                                 bool parallel, int64_t limit_, int64_t offset_,
-                                 size_t chunk_size)
+                                 bool parallel, size_t chunk_size)
     : op_id(op_id),
       n_key_t(n_key_t),
       vect_ascending(vect_ascending_),
@@ -555,17 +586,19 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
       // the arguments.
       builder(schema, dict_builders, chunk_size,
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool,
-              op_mm) {
-    if (limit_ >= 0 && offset_ >= 0) {
-        sortlimit = std::make_optional<SortLimits>(SortLimits(
-            static_cast<size_t>(limit_), static_cast<size_t>(offset_)));
-    } else {
-        sortlimit = std::nullopt;
-    }
-}
+              op_mm) {}
+
+StreamSortLimitOffsetState::StreamSortLimitOffsetState(
+    int64_t op_id, int64_t n_key_t, std::vector<int64_t>&& vect_ascending_,
+    std::vector<int64_t>&& na_position_, std::shared_ptr<bodo::Schema> schema,
+    bool parallel, int64_t limit, int64_t offset, size_t chunk_size)
+    : StreamSortState(op_id, n_key_t, std::move(vect_ascending_),
+                      std::move(na_position_), std::move(schema), parallel,
+                      chunk_size),
+      sortlimit(static_cast<size_t>(limit), static_cast<size_t>(offset)) {}
 
 void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
-                                   bool parallel, bool is_last) {
+                                   bool is_last) {
     row_info.first += table_local_memory_size(table, false);
     row_info.second += table->nrows();
 
@@ -616,9 +649,12 @@ void StreamSortState::FinalizeBuild() {
     in_info[0] = row_info.first;
     in_info[1] = row_info.second;
     std::unique_ptr<int64_t[]> sum_row_info = std::make_unique<int64_t[]>(2);
-    MPI_Allreduce(in_info.get(), sum_row_info.get(), 2, MPI_LONG_LONG_INT,
-                  MPI_SUM, MPI_COMM_WORLD);
-    int64_t bytes_per_row = row_info.first / row_info.second;
+    if (parallel) {
+        MPI_Allreduce(in_info.get(), sum_row_info.get(), 2, MPI_LONG_LONG_INT,
+                      MPI_SUM, MPI_COMM_WORLD);
+    }
+    int64_t bytes_per_row = parallel ? (sum_row_info[0], sum_row_info[1])
+                                     : (row_info.first / row_info.second);
 
     chunk_size =
         GetChunkSize(bytes_per_row, mem_budget_bytes, num_chunks, chunk_size);
@@ -640,7 +676,7 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
                       MPI_COMM_WORLD);
     }
 
-    int n_pes, myrank;
+    int n_pes{1}, myrank{1};
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     // Compute samples from the locally sorted table.
@@ -839,13 +875,26 @@ construct_table_to_send(
 
 void StreamSortState::GlobalSort(
     std::deque<std::shared_ptr<table_info>>&& local_chunks) {
+    if (!parallel) {
+        SortedChunkedTableBuilder global_builder = GetGlobalBuilder();
+        for (auto& chunk : local_chunks) {
+            global_builder.AppendChunk(std::move(chunk));
+        }
+        time_pt start_finalize = start_timer();
+        auto out_chunks = global_builder.Finalize();
+        metrics.global_sort_time += end_timer(start_finalize);
+
+        for (const auto& chunk : out_chunks) {
+            output_chunks.push_back(std::move(chunk.table));
+        }
+        return;
+    }
+
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    SortedChunkedTableBuilder global_builder(
-        schema, dict_builders, n_key_t, vect_ascending, na_position, dead_keys,
-        num_chunks, chunk_size, mem_budget_bytes, op_pool, op_mm);
+    SortedChunkedTableBuilder global_builder = GetGlobalBuilder();
 
     std::shared_ptr<table_info> bounds = GetParallelSortBounds(local_chunks);
     time_pt start_partition = start_timer();
@@ -973,38 +1022,8 @@ void StreamSortState::GlobalSort(
 
     metrics.communication_phase += end_timer(start_communication);
 
-    // Determine limit and offset for each rank. Globally we want [offset, limit
-    // + offset) and locally each rank occupies row from [total_rows_before,
-    // total_rows_before + number_rows) If those 2 intervals do not overlap we
-    // don't even Finalize (because all rows useless)
-    // TODO Can discard prefix / suffix data better so hopefully no ranks skip
-    // Finalize Otherwise if they overlap find local limits and overlaps
-    if (sortlimit.has_value()) {
-        size_t limit = sortlimit.value().limit;
-        size_t offset = sortlimit.value().offset;
-        size_t number_rows = 0;
-        std::vector<size_t> nrows_collect(n_pes);
-        for (auto& i : global_builder.input_chunks)
-            number_rows += static_cast<size_t>(i.table->nrows() - i.offset);
-        MPI_Allgather(&number_rows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
-                      1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
-        size_t total_rows_before = 0;
-        for (int64_t i = 0; i < myrank; i++)
-            total_rows_before += nrows_collect[i];
-        if (total_rows_before >= limit + offset ||
-            total_rows_before + number_rows <= offset || limit == 0) {
-            return;
-        }
-        size_t finalize_offset =
-            total_rows_before >= offset ? 0 : offset - total_rows_before;
-        size_t finalize_limit =
-            std::min(limit + offset - total_rows_before, number_rows) -
-            finalize_offset;
-        sortlimit = {finalize_limit, finalize_offset};
-    }
-
     time_pt start_finalize = start_timer();
-    auto out_chunks = global_builder.Finalize(sortlimit);
+    auto out_chunks = global_builder.Finalize();
     metrics.global_sort_time += end_timer(start_finalize);
 
     for (const auto& chunk : out_chunks) {
@@ -1067,7 +1086,16 @@ StreamSortState* stream_sort_state_init_py_entry(
         std::shared_ptr<bodo::Schema> schema = bodo::Schema::Deserialize(
             std::vector<int8_t>(arr_array_types, arr_array_types + n_arrs),
             std::vector<int8_t>(arr_c_types, arr_c_types + n_arrs));
-        auto* state = new StreamSortState(
+        // No limit and offset. Use usual StreamSortState
+        if (limit == -1 || offset == -1) {
+            auto* state = new StreamSortState(
+                op_id, n_key_t, std::move(vect_ascending_),
+                std::move(na_position_), std::move(schema), parallel);
+            return state;
+        }
+        // Either limit or offset is set. Use the subclass
+        // StreamSortLimitOffsetStata
+        auto* state = new StreamSortLimitOffsetState(
             op_id, n_key_t, std::move(vect_ascending_), std::move(na_position_),
             std::move(schema), parallel, limit, offset);
         return state;
@@ -1082,7 +1110,7 @@ bool stream_sort_build_consume_batch_py_entry(StreamSortState* state,
                                               bool is_last) {
     try {
         std::shared_ptr<table_info> table(in_table);
-        state->ConsumeBatch(table, state->parallel, is_last);
+        state->ConsumeBatch(table, is_last);
         if (is_last) {
             state->FinalizeBuild();
         }
