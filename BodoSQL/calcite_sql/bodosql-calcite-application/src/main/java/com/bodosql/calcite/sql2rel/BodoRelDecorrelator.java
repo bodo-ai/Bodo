@@ -230,7 +230,6 @@ public class BodoRelDecorrelator extends RelDecorrelator {
             // Bodo Change: Add project merge and remove to handle projections from
             // SINGLE_VALUE_REMOVE_RULE
             .addRuleInstance(CoreRules.PROJECT_MERGE)
-            .addRuleInstance(CoreRules.PROJECT_REMOVE)
             .addRuleInstance(BodoJoinProjectTransposeNoCSEUndoRule.Config.RIGHT_OUTER.toRule())
             .build();
 
