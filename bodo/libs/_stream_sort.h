@@ -133,6 +133,8 @@ struct SortedChunkedTableBuilder {
     const std::vector<int64_t>& na_position;
     const std::vector<int64_t>& dead_keys;
 
+    bool parallel = true;
+
     // Number of rows per chunk
     size_t chunk_size;
     // Maximum number of chunks that will be pinned simultaneously during
@@ -141,6 +143,8 @@ struct SortedChunkedTableBuilder {
 
     // Total amount of memory budget. If 0, an unlimited budget will be assumed
     uint64_t mem_budget_bytes;
+
+    std::optional<SortLimits> sortlimits = std::nullopt;
 
     /**
      * Comparator for creating a heap of TableAndRange objects sorted by the
@@ -171,6 +175,7 @@ struct SortedChunkedTableBuilder {
         const std::vector<int64_t>& na_position,
         const std::vector<int64_t>& dead_keys, size_t num_chunks_,
         size_t chunk_size = 4096, uint64_t mem_budget_bytes = 0,
+        int64_t limit = -1, int64_t offset = -1, bool parallel_ = true,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager())
@@ -179,13 +184,17 @@ struct SortedChunkedTableBuilder {
           vect_ascending(vect_ascending),
           na_position(na_position),
           dead_keys(dead_keys),
+          parallel(parallel_),
           chunk_size(chunk_size),
           num_chunks(num_chunks_),
           mem_budget_bytes(mem_budget_bytes),
           comp(*this),
           dict_builders(dict_builders_),
           pool(pool),
-          mm(mm) {}
+          mm(mm) {
+        if (limit >= 0)
+            sortlimits = std::make_optional(SortLimits(limit, offset));
+    }
 
     // Return true if table1[row1] < table2[row2]
     bool Compare(std::shared_ptr<table_info> table1, size_t row1,
@@ -220,10 +229,8 @@ struct SortedChunkedTableBuilder {
      * set Othereise sortlimit.limit is how many rows to include as outputs at
      * maximum sortlimit.offset is how many rows to skip
      */
-    std::deque<TableAndRange> Finalize(
-        std::optional<SortLimits> sortlimit = std::nullopt);
+    std::deque<TableAndRange> Finalize();
 
-    // TODO(aneesh) make this a private or static method
     /**
      * Merge a list of sorted lists to produce a single sorted list. E.g.
      *   chunk_list_a = [[1, 3, 5], [7, 9, 11]]
@@ -239,10 +246,9 @@ struct SortedChunkedTableBuilder {
      * from [0, limit + offset). For the last call to MergeChunks, we
      * only keep rows from [offset, limit + offset).
      */
+    // TODO(aneesh) make this a private or static method
     std::deque<TableAndRange> MergeChunks(
-        std::vector<std::deque<TableAndRange>>&& sorted_chunks,
-        std::optional<SortLimits> sortlimit = std::nullopt,
-        bool is_last = false);
+        std::vector<std::deque<TableAndRange>>&& sorted_chunks, bool is_last);
 };
 
 struct StreamSortMetrics {
@@ -283,7 +289,6 @@ struct StreamSortState {
 
     // Index of chunk to yield
     size_t output_idx = 0;
-    std::optional<SortLimits> sortlimit;
     // List of chunks ready to yield
     std::vector<std::shared_ptr<table_info>> output_chunks;
 
@@ -308,7 +313,6 @@ struct StreamSortState {
                     std::vector<int64_t>&& vect_ascending_,
                     std::vector<int64_t>&& na_position_,
                     std::shared_ptr<bodo::Schema> schema, bool parallel = true,
-                    int64_t limit = -1, int64_t offset = -1,
                     size_t chunk_size = 4096);
     /**
      * @brief Consume an unsorted table and use it for global sorting
@@ -320,8 +324,7 @@ struct StreamSortState {
      * state will see.
      * @return boolean indicating if the consume phase is complete
      */
-    void ConsumeBatch(std::shared_ptr<table_info> table, bool parallel,
-                      bool is_last);
+    void ConsumeBatch(std::shared_ptr<table_info> table, bool is_last);
 
     /**
      * @brief call after ConsumeBatch is called with is_last set to true to
@@ -365,6 +368,34 @@ struct StreamSortState {
         std::shared_ptr<table_info> bounds,
         std::deque<std::shared_ptr<table_info>>&& local_chunks);
 
+    virtual SortedChunkedTableBuilder GetGlobalBuilder() {
+        return SortedChunkedTableBuilder(
+            schema, dict_builders, n_key_t, vect_ascending, na_position,
+            dead_keys, num_chunks, chunk_size, mem_budget_bytes, -1, -1,
+            parallel, op_pool, op_mm);
+    }
+
     // Report all metrics
     void ReportMetrics();
+    virtual ~StreamSortState() = default;
+};
+
+struct StreamSortLimitOffsetState : StreamSortState {
+    SortLimits sortlimit;
+
+    StreamSortLimitOffsetState(int64_t op_id, int64_t n_key_t,
+                               std::vector<int64_t>&& vect_ascending_,
+                               std::vector<int64_t>&& na_position_,
+                               std::shared_ptr<bodo::Schema> schema,
+                               bool parallel = true, int64_t limit = -1,
+                               int64_t offset = -1, size_t chunk_size = 4096);
+
+    SortedChunkedTableBuilder GetGlobalBuilder() override {
+        return SortedChunkedTableBuilder(
+            schema, dict_builders, n_key_t, vect_ascending, na_position,
+            dead_keys, num_chunks, chunk_size, mem_budget_bytes,
+            sortlimit.limit, sortlimit.offset, parallel, op_pool, op_mm);
+    }
+
+    ~StreamSortLimitOffsetState() override = default;
 };
