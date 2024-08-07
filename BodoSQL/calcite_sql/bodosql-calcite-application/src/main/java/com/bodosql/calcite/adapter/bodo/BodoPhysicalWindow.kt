@@ -132,6 +132,8 @@ class BodoPhysicalWindow(
                     SqlKind.ROW_NUMBER,
                     SqlKind.RANK,
                     SqlKind.DENSE_RANK,
+                    SqlKind.PERCENT_RANK,
+                    SqlKind.CUME_DIST,
                     -> true
                     else -> false
                 }
