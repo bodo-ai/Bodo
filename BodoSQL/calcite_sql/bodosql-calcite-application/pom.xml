@@ -616,6 +616,7 @@
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/validate/implicit/TypeCoercionImpl.class</exclude>
+                                        <exclude>org/apache/calcite/sql/type/ArraySqlType.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ReturnTypes$1.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ReturnTypes$2.class</exclude>
                                         <exclude>org/apache/calcite/sql/type/ReturnTypes$3.class</exclude>
