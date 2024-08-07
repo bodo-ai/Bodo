@@ -74,13 +74,14 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> dead_keys;
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
             nullptr};
-        SortedChunkedTableBuilder builder(table->schema(), dict_builders, 1,
-                                          vect_ascending, na_position,
-                                          dead_keys, 2, 3);
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        SortedChunkedTableBuilder builder(
+            table->schema(), dict_builders, 1, vect_ascending, na_position,
+            dead_keys, 2, 3, 0, 4, myrank * 5 + 1);
         builder.UpdateChunkSize(3);
         builder.AppendChunk(table);
-        auto res =
-            builder.Finalize(std::make_optional<SortLimits>(SortLimits(4, 1)));
+        auto res = builder.Finalize();
         bodo::tests::check(res.size() == 2);
 
         std::vector<std::shared_ptr<array_info>> arrays;
@@ -150,15 +151,16 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> dead_keys;
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
             nullptr};
-        SortedChunkedTableBuilder builder(table_0->schema(), dict_builders, 1,
-                                          vect_ascending, na_position,
-                                          dead_keys, 2, 5);
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        SortedChunkedTableBuilder builder(
+            table_0->schema(), dict_builders, 1, vect_ascending, na_position,
+            dead_keys, 2, 5, 0, 6, myrank * 10 + 2);
 
         builder.AppendChunk(table_0);
         builder.UpdateChunkSize(5);
         builder.AppendChunk(table_1);
-        auto res =
-            builder.Finalize(std::make_optional<SortLimits>(SortLimits(6, 2)));
+        auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 2);
 
         std::vector<std::shared_ptr<array_info>> arrays;
@@ -268,19 +270,23 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
             nullptr, nullptr, nullptr};
-        SortedChunkedTableBuilder builder(table_0->schema(), dict_builders, 1,
-                                          vect_ascending, na_position,
-                                          dead_keys, 2, 3);
+        // Each rank has 10 rows, and we want each rank to output rows [7, 10)
+        // Since limit / offset logic moves inside Finalize, need some different
+        // inputs per rank to maintain correctness.
+        SortedChunkedTableBuilder builder(
+            table_0->schema(), dict_builders, 1, vect_ascending, na_position,
+            dead_keys, 2, 3, 0, 3, myrank * 11 + 7);
 
         builder.AppendChunk(table_2);
         builder.AppendChunk(table_1);
         builder.UpdateChunkSize(3);
         builder.AppendChunk(table_0);
 
-        auto res =
-            builder.Finalize(std::make_optional<SortLimits>(SortLimits(3, 7)));
+        auto res = builder.Finalize();
         bodo::tests::check(res.size() >= 1);
 
         std::vector<std::shared_ptr<table_info>> tables;
@@ -301,7 +307,7 @@ bodo::tests::suite external_sort_tests([] {
         bodo::tests::check(c_arr->length() == 3);
 
         // Extract the idx'th element from each of the column arrays and pack
-        // // them into a tuple
+        // them into a tuple
         auto getRow = [&](int64_t idx) {
             return std::make_tuple(a_arr->Value(idx), b_arr->Value(idx),
                                    c_arr->Value(idx));
@@ -432,9 +438,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, -1,
-                              -1, 10);
-        state.ConsumeBatch(table, true, true);
+                              std::move(na_position), table->schema(), true,
+                              10);
+        state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
         auto res = state.bounds_;
@@ -485,9 +491,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, -1,
-                              -1, 10);
-        state.ConsumeBatch(table, true, true);
+                              std::move(na_position), table->schema(), true,
+                              10);
+        state.ConsumeBatch(table, true);
         state.builder.FinalizeActiveChunk();
         auto res = state.GetParallelSortBounds(state.builder.chunks);
         if (myrank == 0) {
@@ -550,43 +556,82 @@ bodo::tests::suite external_sort_tests([] {
                 bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(data));
             sort(all_data.begin(), all_data.end());
 
-            StreamSortState state(0, 1, std::move(vect_ascending),
-                                  std::move(na_position), table->schema(), true,
-                                  limitoffset[trial].first,
-                                  limitoffset[trial].second, chunk_size);
-            state.ConsumeBatch(table, false, true);
-            state.FinalizeBuild();
+            if (limitoffset[trial].second == -1) {
+                StreamSortState state(0, 1, std::move(vect_ascending),
+                                      std::move(na_position), table->schema(),
+                                      false, chunk_size);
+                state.ConsumeBatch(table, true);
+                state.FinalizeBuild();
 
-            int index =
-                limitoffset[trial].second == -1 ? 0 : limitoffset[trial].second;
+                int index = 0;
 
-            bool done = false;
-            while (!done) {
-                auto res = state.GetOutput();
-                done = res.second;
+                bool done = false;
+                while (!done) {
+                    auto res = state.GetOutput();
+                    done = res.second;
 
-                auto output = res.first;
-                auto arrow_arr = to_arrow(output->columns[0]);
-                arrow::Int64Array* int_arr =
-                    static_cast<arrow::Int64Array*>(arrow_arr.get());
+                    auto output = res.first;
+                    auto arrow_arr = to_arrow(output->columns[0]);
+                    arrow::Int64Array* int_arr =
+                        static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-                if (!done) {
-                    for (int i = 0; i < int_arr->length(); i++) {
-                        bodo::tests::check(index < (int64_t)all_data.size() &&
-                                           all_data[index++] ==
-                                               int_arr->Value(i));
+                    if (!done) {
+                        for (int i = 0; i < int_arr->length(); i++) {
+                            bodo::tests::check(
+                                index < (int64_t)all_data.size() &&
+                                all_data[index++] == int_arr->Value(i));
+                        }
+                    } else {
+                        if (limitoffset[trial].first == -1)
+                            bodo::tests::check(index == static_cast<int64_t>(
+                                                            n_elems_per_host));
+                        else
+                            bodo::tests::check(
+                                index == std::min(limitoffset[trial].first +
+                                                      limitoffset[trial].second,
+                                                  static_cast<int64_t>(
+                                                      n_elems_per_host)));
+                        bodo::tests::check(int_arr->length() == 0);
                     }
-                } else {
-                    if (limitoffset[trial].first == -1)
-                        bodo::tests::check(
-                            index == static_cast<int64_t>(n_elems_per_host));
-                    else
-                        bodo::tests::check(
-                            index ==
-                            std::min(limitoffset[trial].first +
-                                         limitoffset[trial].second,
-                                     static_cast<int64_t>(n_elems_per_host)));
-                    bodo::tests::check(int_arr->length() == 0);
+                }
+            } else {
+                StreamSortLimitOffsetState state(
+                    0, 1, std::move(vect_ascending), std::move(na_position),
+                    table->schema(), false, limitoffset[trial].first,
+                    limitoffset[trial].second, chunk_size);
+                state.ConsumeBatch(table, true);
+                state.FinalizeBuild();
+
+                int index = limitoffset[trial].second;
+
+                bool done = false;
+                while (!done) {
+                    auto res = state.GetOutput();
+                    done = res.second;
+
+                    auto output = res.first;
+                    auto arrow_arr = to_arrow(output->columns[0]);
+                    arrow::Int64Array* int_arr =
+                        static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+                    if (!done) {
+                        for (int i = 0; i < int_arr->length(); i++) {
+                            bodo::tests::check(
+                                index < (int64_t)all_data.size() &&
+                                all_data[index++] == int_arr->Value(i));
+                        }
+                    } else {
+                        if (limitoffset[trial].first == -1)
+                            bodo::tests::check(index == static_cast<int64_t>(
+                                                            n_elems_per_host));
+                        else
+                            bodo::tests::check(
+                                index == std::min(limitoffset[trial].first +
+                                                      limitoffset[trial].second,
+                                                  static_cast<int64_t>(
+                                                      n_elems_per_host)));
+                        bodo::tests::check(int_arr->length() == 0);
+                    }
                 }
             }
         }
@@ -618,9 +663,9 @@ bodo::tests::suite external_sort_tests([] {
         sort(all_data.begin(), all_data.end());
 
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, -1,
-                              -1, chunk_size);
-        state.ConsumeBatch(table, true, true);
+                              std::move(na_position), table->schema(), true,
+                              chunk_size);
+        state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
         std::pair<int, int> range{};
@@ -700,9 +745,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, -1,
-                              -1, chunk_size);
-        state.ConsumeBatch(table, true, true);
+                              std::move(na_position), table->schema(), true,
+                              chunk_size);
+        state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
         std::vector<std::shared_ptr<table_info>> tables;
@@ -788,9 +833,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, -1,
-                              -1, chunk_size);
-        state.ConsumeBatch(table, true, true);
+                              std::move(na_position), table->schema(), true,
+                              chunk_size);
+        state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
         // Collect all output tables
@@ -858,7 +903,7 @@ bodo::tests::suite external_sort_tests([] {
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(schema_data));
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), schema_table->schema(),
-                              true, -1, -1, chunk_size);
+                              true, chunk_size);
         int index = 0;
         while (index < n_elem) {
             std::vector<int64_t> local_data;
@@ -873,7 +918,7 @@ bodo::tests::suite external_sort_tests([] {
 
             std::shared_ptr<table_info> table = bodo::tests::cppToBodo(
                 {"A"}, {false}, {}, std::move(local_data));
-            state.ConsumeBatch(table, true, index >= n_elem);
+            state.ConsumeBatch(table, index >= n_elem);
         }
         state.FinalizeBuild();
 
@@ -931,7 +976,7 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true, 5);
-        state.ConsumeBatch(table, true, true);
+        state.ConsumeBatch(table, true);
 
         state.FinalizeBuild();
         // Collect all output tables
@@ -999,7 +1044,7 @@ bodo::tests::suite external_sort_tests([] {
             std::vector<int64_t> schema_data{};
             std::shared_ptr<table_info> schema_table = bodo::tests::cppToBodo(
                 {"A"}, {false}, {}, std::move(schema_data));
-            StreamSortState state(
+            StreamSortLimitOffsetState state(
                 0, 1, std::move(vect_ascending), std::move(na_position),
                 schema_table->schema(), true, limit, offset, chunk_size);
             int index = 0;
@@ -1016,7 +1061,7 @@ bodo::tests::suite external_sort_tests([] {
 
                 std::shared_ptr<table_info> table = bodo::tests::cppToBodo(
                     {"A"}, {false}, {}, std::move(local_data));
-                state.ConsumeBatch(table, true, index >= n_elem);
+                state.ConsumeBatch(table, index >= n_elem);
             }
             state.FinalizeBuild();
 
