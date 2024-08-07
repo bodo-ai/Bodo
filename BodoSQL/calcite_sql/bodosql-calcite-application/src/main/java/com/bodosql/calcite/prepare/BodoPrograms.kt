@@ -576,7 +576,7 @@ object BodoPrograms {
     private class FilterPushdownPass : Program by HepOptimizerProgram(
         Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES),
         mapOf(
-            Pair(com.bodosql.calcite.prepare.BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES, 100),
+            Pair(BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES, 100),
             Pair(
                 JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
                 100,
