@@ -5080,14 +5080,14 @@ public class SqlToRelConverter {
 
     assert notMatchedCaseNodes.getKey().size() == call.getNotMatchedCallList().size();
 
-    //Take the input to the mergeSourceRel. We will construct a new projection on top of this join.
-    LogicalJoin join = (LogicalJoin) mergeSourceRel.getInput(0);
-    // Push the join to the relbuilder
-    relBuilder.push(join);
+    //Take the input to the mergeSourceRel. We will construct a new projection on top of this input.
+    RelNode firstInput = mergeSourceRel.getInput(0);
+    // Push the firstInput to the relbuilder
+    relBuilder.push(firstInput);
 
 
     // The "matched" flag should always be after the columns from the source and dest table
-    RexNode matchedFlag = relBuilder.getRexBuilder().makeInputRef(join,
+    RexNode matchedFlag = relBuilder.getRexBuilder().makeInputRef(firstInput,
         numDestColsIncludingRowIdCol + numSourceCols);
 
     // Note that we need to use IS_NULL/NOT_NULL instead of boolean logic assuming NULL is false.
@@ -5104,7 +5104,7 @@ public class SqlToRelConverter {
     //Arguments to the case statement that returns True if the current row is an delete
     List<RexNode> deleteCaseNodes = new ArrayList<>();
 
-    //If the row is not matched in the join, it cannot be an update or a delete
+    //If the row is not matched in the firstInput, it cannot be an update or a delete
     updateCaseNodes.add(isNotMatched);
     updateCaseNodes.add(relBuilder.getRexBuilder().makeLiteral(false));
     deleteCaseNodes.add(isNotMatched);
