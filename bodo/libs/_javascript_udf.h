@@ -62,8 +62,7 @@ struct JavaScriptFunction {
     // This is a global function so we can call it from any context, contains
     // the passed in body
     v8::Global<v8::Function> v8_func;
-    // The event to be used for tracing
-    tracing::ResumableEvent tracing_event;
+
     static std::unique_ptr<JavaScriptFunction> create(
         std::string _body, std::vector<std::string> _arg_names,
         std::unique_ptr<bodo::DataType> _return_type);

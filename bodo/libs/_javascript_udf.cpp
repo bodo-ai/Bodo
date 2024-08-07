@@ -93,8 +93,7 @@ JavaScriptFunction::JavaScriptFunction(
     : return_type(std::move(_return_type)),
       arg_names(_arg_names),
       context(v8_platform_isolate_instance->isolate,
-              v8::Context::New(v8_platform_isolate_instance->isolate)),
-      tracing_event("JavaScript UDF") {
+              v8::Context::New(v8_platform_isolate_instance->isolate)) {
     v8::Local<v8::Context> local_context =
         context.Get(v8_platform_isolate_instance->isolate);
 
@@ -490,7 +489,6 @@ void execute_javascript_udf_body(
 std::shared_ptr<array_info> execute_javascript_udf(
     JavaScriptFunction *func,
     const std::vector<std::shared_ptr<array_info>> &args) {
-    auto tracingEvent(func->tracing_event.iteration());
     v8::Isolate::Scope isolate_scope(v8_platform_isolate_instance->isolate);
     // Create the handle scope and set the active context
     v8::HandleScope handle_scope(v8_platform_isolate_instance->isolate);

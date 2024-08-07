@@ -113,45 +113,4 @@ class Event {
     bool finalized = false;
 };
 
-/**
- * Simple c++ wrapper around bodo.utils.tracing.ResumableEvent
- */
-class ResumableEvent : public Event {
-   public:
-    ResumableEvent(const std::string& name, bool is_parallel = true,
-                   bool sync = true)
-        : Event(name, "ResumableEvent", is_parallel, sync) {}
-
-    void start_iteration() {
-        if (event_py)
-            PyObject_CallMethod(event_py, "start_iteration", "");
-    }
-
-    void end_iteration() {
-        if (event_py)
-            PyObject_CallMethod(event_py, "end_iteration", "");
-    }
-
-    // Simple RAII context manager to time an iteration
-    class Iteration {
-       public:
-        void finalize() {
-            if (!finalized) {
-                event.end_iteration();
-                finalized = true;
-            }
-        }
-        ~Iteration() { finalize(); }
-
-       private:
-        bool finalized = false;
-        Iteration(ResumableEvent& ev) : event(ev) { ev.start_iteration(); }
-
-        ResumableEvent& event;
-        friend class ResumableEvent;
-    };
-
-    Iteration iteration() { return Iteration(*this); }
-};
-
 }  // namespace tracing
