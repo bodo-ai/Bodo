@@ -708,56 +708,94 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
     )
 
 
-def test_partitionless_rank_fns(memory_leak_check):
+@pytest.mark.parametrize(
+    "window_func, expected_df",
+    [
+        pytest.param(
+            "ROW_NUMBER()",
+            pd.DataFrame(
+                {
+                    "IDX": list(range(25)),
+                    "VAL": list(range(1, 26)),
+                }
+            ),
+            id="row_number",
+        ),
+        pytest.param(
+            "RANK()",
+            pd.DataFrame(
+                {"IDX": list(range(25)), "VAL": [1 + 5 * (i // 5) for i in range(25)]}
+            ),
+            id="rank",
+        ),
+        pytest.param(
+            "DENSE_RANK()",
+            pd.DataFrame(
+                {"IDX": list(range(25)), "VAL": [1 + (i // 5) for i in range(25)]}
+            ),
+            id="dense_rank",
+        ),
+        pytest.param(
+            "PERCENT_RANK()",
+            pd.DataFrame(
+                {
+                    "IDX": list(range(25)),
+                    "VAL": [(5 * (i // 5)) / 24 for i in range(25)],
+                }
+            ),
+            id="percent_rank",
+        ),
+        pytest.param(
+            "CUME_DIST()",
+            pd.DataFrame(
+                {
+                    "IDX": list(range(25)),
+                    "VAL": [5 * (1 + (i // 5)) / 25 for i in range(25)],
+                }
+            ),
+            id="cume_rank",
+        ),
+    ],
+)
+def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_check):
     """
     Tests executing the RANK family of functions with the streaming
     window code when there are no partition columns.
     """
-    query = """
-    (
-        SELECT 
-            'A' AS FID,
-            IDX,
-            ROW_NUMBER() OVER (ORDER BY O1, O2) AS VAL
-        FROM TABLE1
-    ) UNION ALL (
-        SELECT 
-            'B' AS FID,
-            IDX,
-            RANK() OVER (ORDER BY O1) AS VAL
-        FROM TABLE1
-    ) UNION ALL (
-        SELECT 
-            'C' AS FID,
-            IDX,
-            DENSE_RANK() OVER (ORDER BY O1) AS VAL
-        FROM TABLE1
-    )
-    """
+    query = f"SELECT IDX, {window_func} OVER (ORDER BY O1) AS VAL FROM TABLE1"
+
     in_df = pd.DataFrame(
         {
             "IDX": range(25),
             "O1": [i // 5 for i in range(25)],
-            "O2": [i % 5 for i in range(25)],
         }
     )
-    out_df = pd.DataFrame(
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    comm = MPI.COMM_WORLD
+
+    with temp_env_override(
         {
-            "FID": ["A"] * 25 + ["B"] * 25 + ["C"] * 25,
-            "IDX": list(range(25)) * 3,
-            "VAL": list(range(1, 26))
-            + [1 + 5 * (i // 5) for i in range(25)]
-            + [1 + (i // 5) for i in range(25)],
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
         }
-    )
-    check_query(
-        query,
-        {"TABLE1": in_df},
-        None,
-        expected_output=out_df,
-        check_dtype=False,
-        check_names=False,
-    )
+    ):
+        check_query(
+            query,
+            {"TABLE1": in_df},
+            None,
+            expected_output=expected_df,
+            check_dtype=False,
+            check_names=False,
+        )
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
 
 
 @pytest.mark.parametrize(
