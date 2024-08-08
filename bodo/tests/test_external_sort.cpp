@@ -959,60 +959,6 @@ bodo::tests::suite external_sort_tests([] {
         }
     });
 
-    bodo::tests::test("test_dict_encoded", [] {
-        std::vector<std::string> data(10);
-        int n_pes, myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-
-        char data_c = 'A' + myrank;
-        std::string data_s = " ";
-        data_s[0] = data_c;
-        std::fill(data.begin(), data.end(), data_s);
-
-        std::shared_ptr<table_info> table =
-            bodo::tests::cppToBodo({"A"}, {false}, {"A"}, std::move(data));
-        std::vector<int64_t> vect_ascending{1};
-        std::vector<int64_t> na_position{0};
-        StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, 5);
-        state.ConsumeBatch(table, true);
-
-        state.FinalizeBuild();
-        // Collect all output tables
-        bool done = false;
-        std::vector<std::shared_ptr<table_info>> tables;
-        while (!done) {
-            auto res = state.GetOutput();
-            done = res.second;
-            tables.push_back(res.first);
-        }
-
-        // Merge tables and get a single output array
-        auto local_sorted_table = concat_tables(std::move(tables));
-        auto result = gather_table(local_sorted_table,
-                                   local_sorted_table->ncols(), false, true);
-        if (myrank == 0) {
-            auto rescol = result->columns[0];
-            bodo::tests::check(rescol->arr_type == bodo_array_type::DICT);
-            bodo::tests::check(rescol->length ==
-                               static_cast<uint64_t>(n_pes * 10));
-            auto resdata = to_arrow(rescol->child_arrays[0]);
-            arrow::LargeStringArray* str_arr =
-                static_cast<arrow::LargeStringArray*>(resdata.get());
-            auto* indices = (dict_indices_t*)(rescol->child_arrays[1]->data1());
-            for (int i = 0; i < n_pes; i++) {
-                for (int j = 0; j < 10; j++) {
-                    dict_indices_t idx = indices[i * 10 + j];
-                    std::string expected_s = " ";
-                    expected_s[0] = 'A' + i;
-                    bodo::tests::check(std::string(str_arr->Value(idx)) ==
-                                       expected_s);
-                }
-            }
-        }
-    });
-
     // 100 elements in total. Each rank, each call to ConsumeBatch will take the
     // next array of length [5, 10]
     bodo::tests::test("test_parallel_stress", [] {
@@ -1107,6 +1053,115 @@ bodo::tests::suite external_sort_tests([] {
                 bodo::tests::check(
                     end ==
                     std::min(static_cast<int64_t>(limit + offset), n_elem));
+        }
+    });
+
+    bodo::tests::test("test_dict_encoded", [] {
+        std::vector<std::string> data(10);
+        int n_pes, myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+        char data_c = 'A' + myrank;
+        std::string data_s = " ";
+        data_s[0] = data_c;
+        std::fill(data.begin(), data.end(), data_s);
+
+        std::shared_ptr<table_info> table =
+            bodo::tests::cppToBodo({"A"}, {false}, {"A"}, std::move(data));
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true, 5);
+        state.ConsumeBatch(table, true);
+
+        state.FinalizeBuild();
+        // Collect all output tables
+        bool done = false;
+        std::vector<std::shared_ptr<table_info>> tables;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+            tables.push_back(res.first);
+        }
+
+        // Merge tables and get a single output array
+        auto local_sorted_table = concat_tables(std::move(tables));
+        auto result = gather_table(local_sorted_table,
+                                   local_sorted_table->ncols(), false, true);
+        if (myrank == 0) {
+            auto rescol = result->columns[0];
+            bodo::tests::check(rescol->arr_type == bodo_array_type::DICT);
+            bodo::tests::check(rescol->length ==
+                               static_cast<uint64_t>(n_pes * 10));
+            auto resdata = to_arrow(rescol->child_arrays[0]);
+            arrow::LargeStringArray* str_arr =
+                static_cast<arrow::LargeStringArray*>(resdata.get());
+            auto* indices = (dict_indices_t*)(rescol->child_arrays[1]->data1());
+            for (int i = 0; i < n_pes; i++) {
+                for (int j = 0; j < 10; j++) {
+                    dict_indices_t idx = indices[i * 10 + j];
+                    std::string expected_s = " ";
+                    expected_s[0] = 'A' + i;
+                    bodo::tests::check(std::string(str_arr->Value(idx)) ==
+                                       expected_s);
+                }
+            }
+        }
+    });
+
+    bodo::tests::test("test_dict_encoded_nested", [] {
+        int n_pes, myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+
+        const size_t n_elems = 10;
+        auto dict_arr = alloc_dict_string_array(n_elems, 1, 1, 0);
+        ((char*)dict_arr->child_arrays[0]->data1())[0] = 'A' + myrank;
+        ((offset_t*)dict_arr->child_arrays[0]->data2())[0] = 0;
+        ((offset_t*)dict_arr->child_arrays[0]->data2())[1] = 1;
+        for (size_t i = 0; i < n_elems; i++) {
+            ((dict_indices_t*)dict_arr->child_arrays[1]->data1())[i] = 0;
+            SetBitTo((uint8_t*)dict_arr->null_bitmask(), i, 1);
+        }
+
+        auto list_arr = alloc_array_item(1, std::move(dict_arr), 0);
+        ((offset_t*)list_arr->data1())[0] = 0;
+        ((offset_t*)list_arr->data1())[1] = 10;
+
+        std::vector<std::shared_ptr<array_info>> columns{std::move(list_arr)};
+        std::shared_ptr<table_info> table =
+            std::make_shared<table_info>(std::move(columns));
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        StreamSortState state(0, 1, std::move(vect_ascending),
+                              std::move(na_position), table->schema(), true, 5);
+        state.ConsumeBatch(table, true);
+
+        state.FinalizeBuild();
+        // Collect all output tables
+        bool done = false;
+        std::vector<std::shared_ptr<table_info>> tables;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+            tables.push_back(res.first);
+        }
+
+        // Merge tables and get a single output array
+        auto local_sorted_table = concat_tables(std::move(tables));
+        auto result = gather_table(local_sorted_table,
+                                   local_sorted_table->ncols(), false, true);
+
+        if (myrank == 0) {
+            // Assert that we have all the child elements from all ranks
+            bodo::tests::check(result->columns[0]->child_arrays[0]->length ==
+                               static_cast<uint64_t>(n_pes * 10));
+            // Check that there's one elements in the dictionary per rank
+            bodo::tests::check(
+                result->columns[0]->child_arrays[0]->child_arrays[0]->length ==
+                static_cast<uint64_t>(n_pes));
         }
     });
 });

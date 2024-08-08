@@ -1679,6 +1679,8 @@ struct table_info {
     int id;
     uint64_t _nrows = 0;
     table_info() {}
+    explicit table_info(std::vector<std::shared_ptr<array_info>>&& _columns)
+        : columns(std::move(_columns)) {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns)
         : columns(_columns) {}
     explicit table_info(std::vector<std::shared_ptr<array_info>>& _columns,
