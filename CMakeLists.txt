@@ -467,6 +467,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_timestamptz_parser.cpp"
     "bodo/tests/test_nested_array.cpp"
     "bodo/tests/test_stream_shuffle.cpp"
+    "bodo/tests/test_stream_groupby_shuffle.cpp"
     "bodo/tests/test_timestamptz_array.cpp"
     "bodo/tests/test_query_profile_collector.cpp"
     "bodo/tests/test_theta_sketches.cpp"

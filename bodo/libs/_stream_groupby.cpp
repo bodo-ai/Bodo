@@ -1527,7 +1527,7 @@ std::shared_ptr<table_info> GroupbyPartition::Finalize() {
 #pragma region  // GroupbyIncrementalShuffleMetrics
 
 void GroupbyIncrementalShuffleMetrics::add_to_metrics(
-    std::vector<MetricBase>& metrics) {
+    std::vector<MetricBase>& metrics, bool accumulate_before_update) {
     metrics.emplace_back(StatMetric("shuffle_n_ht_resets", this->n_ht_reset));
     metrics.emplace_back(
         StatMetric("shuffle_peak_ht_size_bytes", this->peak_ht_size_bytes));
@@ -1558,6 +1558,29 @@ void GroupbyIncrementalShuffleMetrics::add_to_metrics(
     metrics.emplace_back(TimerMetric(
         "shuffle_local_reduction_mrnf_hll_time",
         this->local_reduction_mrnf_metrics.grouping_metrics.hll_time));
+    if (!accumulate_before_update) {
+        metrics.emplace_back(StatMetric("shuffle_n_possible_ht_reductions",
+                                        this->n_possible_shuffle_reductions));
+        metrics.emplace_back(
+            StatMetric("shuffle_n_ht_reductions", this->n_shuffle_reductions));
+        metrics.emplace_back(TimerMetric("shuffle_update_logical_ht_time",
+                                         this->shuffle_update_logical_ht_time));
+        metrics.emplace_back(TimerMetric("shuffle_combine_input_time",
+                                         this->shuffle_combine_input_time));
+        metrics.emplace_back(
+            StatMetric("shuffle_update_logical_ht_and_combine_nrows",
+                       this->shuffle_update_logical_ht_and_combine_nrows));
+        metrics.emplace_back(
+            TimerMetric("shuffle_hll_time", this->shuffle_hll_time));
+        metrics.emplace_back(StatMetric("shuffle_n_pre_reduction_buffer_reset",
+                                        this->n_pre_reduction_buffer_reset));
+        metrics.emplace_back(StatMetric("shuffle_n_pre_reduction_hashes_reset",
+                                        this->n_pre_reduction_hashes_reset));
+        // Note: We need to keep the name distinct from the
+        // IncrementalShuffleBuffer name.
+        metrics.emplace_back(TimerMetric("shuffle_agg_buffer_append_time",
+                                         this->shuffle_agg_buffer_append_time));
+    }
 }
 
 #pragma endregion  // GroupbyIncrementalShuffleMetrics
@@ -1566,28 +1589,190 @@ void GroupbyIncrementalShuffleMetrics::add_to_metrics(
 /* -------------------- GroupbyIncrementalShuffleState -------------------- */
 #pragma region  // GroupbyIncrementalShuffleState
 
+#define DEFAULT_AGG_REDUCTION_THRESHOLD 0.85
+
 GroupbyIncrementalShuffleState::GroupbyIncrementalShuffleState(
     const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
     const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
     const uint64_t mrnf_n_sort_cols_, const uint64_t n_keys_,
     const uint64_t& curr_iter_, int64_t& sync_freq_, int64_t op_id_,
-    const bool nunique_only_, const AggregationType agg_type_)
+    const bool nunique_only_, const AggregationType agg_type_,
+    const std::vector<int32_t>& f_running_value_offsets_,
+    const bool accumulate_before_update_)
     : IncrementalShuffleState(shuffle_table_schema_, dict_builders_, n_keys_,
                               curr_iter_, sync_freq_, op_id_),
       hash_table(std::make_unique<shuffle_hash_table_t>(
           0, HashGroupbyTable<false>(nullptr, this),
           KeyEqualGroupbyTable<false>(nullptr, this, this->n_keys))),
+      pre_reduction_table_buffer(std::make_unique<TableBuildBuffer>(
+          this->schema, this->dict_builders)),
       col_sets(col_sets_),
       mrnf_n_sort_cols(mrnf_n_sort_cols_),
       nunique_only(nunique_only_),
-      agg_type(agg_type_) {}
+      agg_type(agg_type_),
+      f_running_value_offsets(f_running_value_offsets_),
+      accumulate_before_update(accumulate_before_update_) {
+    running_reduction_hll = hll::HyperLogLog(HLL_SIZE);
+    double agg_reduction_threshold = DEFAULT_AGG_REDUCTION_THRESHOLD;
+    char* agg_reduction_threshold_env_ =
+        std::getenv("BODO_STREAM_GROUPBY_SHUFFLE_REDUCTION_THRESHOLD");
+    if (agg_reduction_threshold_env_) {
+        agg_reduction_threshold = std::stod(agg_reduction_threshold_env_);
+        if (agg_reduction_threshold < 0.0) {
+            agg_reduction_threshold = 0.0;
+        } else if (agg_reduction_threshold > 1.0) {
+            agg_reduction_threshold = 1.0;
+        }
+    }
+    this->agg_reduction_threshold = agg_reduction_threshold;
+}
+
+#undef DEFAULT_AGG_REDUCTION_THRESHOLD
 
 void GroupbyIncrementalShuffleState::Finalize() {
     this->hash_table.reset();
     this->groupby_hashes.resize(0);
     this->groupby_hashes.shrink_to_fit();
     IncrementalShuffleState::Finalize();
+}
+
+void GroupbyIncrementalShuffleState::UpdateGroupsAndCombine(
+    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<uint32_t[]>& batch_hashes_groupby) {
+    // set state batch input
+    this->in_table = in_table;
+    this->in_table_hashes = batch_hashes_groupby;
+    time_pt start = start_timer();
+    // Reserve space in buffers for potential new groups.
+    // Note that if any of the running values are strings, they always
+    // go through the accumulate path.
+    this->table_buffer->ReserveTable(in_table);
+
+    // Fill row group numbers in grouping_info to reuse existing
+    // infrastructure.
+    // We set group=-1 for rows that don't belong to the current buffer
+    // (e.g. row belongs to shuffle buffer but we are processing local
+    // buffer) for them to be ignored in combine step later.
+    grouping_info shuffle_grp_info;
+    shuffle_grp_info.row_to_group.resize(in_table->nrows(), -1);
+
+    // Get current size of the buffers to know starting offset of new
+    // keys which need output data column initialization.
+    // update_groups_helper will update this->shuffle_next_group in place,
+    // so we need to cache it beforehand.
+    int64_t shuffle_init_start_row = this->next_group;
+
+    // Add new groups and get group mappings for input batch
+    for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
+        update_groups_helper(*(this->table_buffer), this->groupby_hashes,
+                             *(this->hash_table), this->next_group,
+                             this->n_keys, shuffle_grp_info, in_table,
+                             batch_hashes_groupby, i_row);
+    }
+    size_t row_count = in_table->nrows();
+    this->metrics.shuffle_update_logical_ht_time += end_timer(start);
+    start = start_timer();
+    // Combine existing (and new) keys using the input batch
+    combine_input_table_helper(
+        in_table, shuffle_grp_info, this->table_buffer->data_table,
+        this->f_running_value_offsets, this->col_sets, shuffle_init_start_row);
+    this->metrics.shuffle_combine_input_time += end_timer(start);
+    this->metrics.shuffle_update_logical_ht_and_combine_nrows += row_count;
+
+    int64_t new_groups = this->next_group - shuffle_init_start_row;
+    this->UpdateAppendBatchSize(in_table->nrows(), new_groups);
+
+    // Reset temporary references
+    this->in_table.reset();
+    this->in_table_hashes.reset();
+}
+
+bool GroupbyIncrementalShuffleState::ShouldShuffleAfterProcessing(
+    bool is_last) {
+    if (this->accumulate_before_update) {
+        // Just look at the default buffer handling.
+        return IncrementalShuffleState::ShouldShuffleAfterProcessing(is_last);
+    } else {
+        // Check if we need to do a reduction before shuffling.
+        bool must_shuffle =
+            is_last &&
+            (this->table_buffer->data_table->nrows() > 0 ||
+             this->pre_reduction_table_buffer->data_table->nrows() > 0);
+        int64_t hash_table_size = table_local_memory_size(
+            this->table_buffer->data_table, /*include_dict_size*/ false);
+        int64_t pre_reduction_table_size = table_local_memory_size(
+            this->pre_reduction_table_buffer->data_table,
+            /*include_dict_size*/ false);
+        bool exceed_table_size = (hash_table_size + pre_reduction_table_size) >=
+                                 this->shuffle_threshold;
+        bool should_shuffle = must_shuffle || exceed_table_size;
+        if (should_shuffle &&
+            this->pre_reduction_table_buffer->data_table->nrows() > 0) {
+            // Indicate that we checked if we should insert into the hash table.
+            this->metrics.n_possible_shuffle_reductions++;
+            time_pt start = start_timer();
+            // We need to check if we should perform a local reduction
+            // on the data. To do this we check a running HLL.
+            this->running_reduction_hll.addAll(this->pre_reduction_hashes);
+            double hll_estimate = this->running_reduction_hll.estimate();
+            this->metrics.shuffle_hll_time += end_timer(start);
+            // Only look at the estimated new unique values from the
+            // pre-reduction table.
+            double insert_estimate =
+                hll_estimate - this->table_buffer->data_table->nrows();
+            double expected_uniqueness =
+                insert_estimate /
+                this->pre_reduction_table_buffer->data_table->nrows();
+            bool insert_into_hash_table =
+                expected_uniqueness < this->agg_reduction_threshold;
+            // Decide if we should insert into the hash table.
+            if (insert_into_hash_table) {
+                // Indicate that we have decided to insert into the hash table.
+                this->metrics.n_shuffle_reductions++;
+                // Copy hashes to be API compliant with our hash table.
+                // TODO: Remove.
+                std::shared_ptr<uint32_t[]> hashes =
+                    std::make_shared<uint32_t[]>(
+                        this->pre_reduction_hashes.size());
+                memcpy(hashes.get(), this->pre_reduction_hashes.data(),
+                       sizeof(uint32_t) * this->pre_reduction_hashes.size());
+                this->UpdateGroupsAndCombine(
+                    this->pre_reduction_table_buffer->data_table, hashes);
+                // Recompute should_shuffle since we are inserting into the hash
+                // table.
+                should_shuffle =
+                    IncrementalShuffleState::ShouldShuffleAfterProcessing(
+                        is_last);
+            } else {
+                // We need to combine the tables.
+                if (this->table_buffer->data_table->nrows() == 0) {
+                    // Swap the tables if the hash table is empty to avoid
+                    // an unnecessary copy.
+                    std::swap(this->table_buffer,
+                              this->pre_reduction_table_buffer);
+                } else {
+                    time_pt start = start_timer();
+                    this->table_buffer->ReserveTable(
+                        this->pre_reduction_table_buffer->data_table);
+                    this->table_buffer->UnsafeAppendBatch(
+                        this->pre_reduction_table_buffer->data_table);
+                    this->metrics.shuffle_agg_buffer_append_time +=
+                        end_timer(start);
+                }
+            }
+            this->pre_reduction_table_buffer->Reset();
+            this->pre_reduction_hashes.resize(0);
+            if (should_shuffle) {
+                // Reset the HLL only when we are emptying the hash table.
+                // We maintain the HLL information across multiple reductions
+                // so we can look at uniqueness information across both the
+                // hash table and the pre-reduction table.
+                this->running_reduction_hll.clear();
+            }
+        }
+        return should_shuffle;
+    }
 }
 
 std::tuple<
@@ -1692,6 +1877,30 @@ void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
         this->groupby_hashes.shrink_to_fit();
         this->metrics.n_hashes_reset++;
     }
+    if (!this->accumulate_before_update) {
+        // Check if we need to reset our pre-reduction buffers.
+        size_t pre_reduction_hashes_size =
+            this->pre_reduction_hashes.get_allocator().size();
+        if (pre_reduction_hashes_size > MAX_SHUFFLE_TABLE_SIZE) {
+            // If the hashes vector is too large, reallocate it to the
+            // maximum size
+            this->pre_reduction_hashes.resize(MAX_SHUFFLE_TABLE_SIZE /
+                                              sizeof(uint32_t));
+            this->groupby_hashes.shrink_to_fit();
+            this->metrics.n_pre_reduction_hashes_reset++;
+        }
+        size_t capacity = this->pre_reduction_table_buffer->EstimatedSize();
+        int64_t buffer_used_size = table_local_memory_size(
+            this->pre_reduction_table_buffer->data_table, false);
+        if (capacity >
+                (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * this->shuffle_threshold) &&
+            (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) > buffer_used_size) {
+            this->pre_reduction_table_buffer.reset(
+                new TableBuildBuffer(this->schema, this->dict_builders));
+            this->metrics.n_pre_reduction_buffer_reset++;
+        }
+    }
+
     this->next_group = 0;
     this->hash_table->clear();
     this->groupby_hashes.resize(0);
@@ -2721,7 +2930,8 @@ GroupbyState::GroupbyState(
     this->shuffle_state = std::make_unique<GroupbyIncrementalShuffleState>(
         build_table_schema, this->build_table_dict_builders, this->col_sets,
         this->mrnf_sort_cols_to_keep.size(), this->n_keys, this->build_iter,
-        this->sync_iter, op_id_, this->nunique_only, this->agg_type);
+        this->sync_iter, op_id_, this->nunique_only, this->agg_type,
+        this->f_running_value_offsets, this->accumulate_before_update);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
         0, 0, build_table_schema, std::move(separate_out_cols_schema),
@@ -3069,63 +3279,23 @@ void GroupbyState::UpdateGroupsAndCombine(
 
 void GroupbyState::UpdateShuffleGroupsAndCombine(
     const std::shared_ptr<table_info>& in_table,
-    const std::shared_ptr<uint32_t[]>& partitioning_hashes,
     const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
-    const std::vector<bool>& not_append_rows) {
-    // set state batch input
-    this->shuffle_state->in_table = in_table;
-    this->shuffle_state->in_table_hashes = batch_hashes_groupby;
+    const std::vector<bool>& append_rows) {
+    // Just insert into the buffer. We check about the hash table later.
     time_pt start = start_timer();
-    // Reserve space in buffers for potential new groups.
-    // Note that if any of the running values are strings, they always
-    // go through the accumulate path.
-    this->shuffle_state->table_buffer->ReserveTable(in_table);
-
-    // Fill row group numbers in grouping_info to reuse existing
-    // infrastructure.
-    // We set group=-1 for rows that don't belong to the current buffer
-    // (e.g. row belongs to shuffle buffer but we are processing local
-    // buffer) for them to be ignored in combine step later.
-    grouping_info shuffle_grp_info;
-    shuffle_grp_info.row_to_group.resize(in_table->nrows(), -1);
-
-    // Get current size of the buffers to know starting offset of new
-    // keys which need output data column initialization.
-    // update_groups_helper will update this->shuffle_next_group in place,
-    // so we need to cache it beforehand.
-    int64_t shuffle_init_start_row = this->shuffle_state->next_group;
-
-    // Add new groups and get group mappings for input batch
-    size_t row_count = 0;
+    this->shuffle_state->pre_reduction_table_buffer->ReserveTable(in_table);
+    this->shuffle_state->pre_reduction_table_buffer->UnsafeAppendBatch(
+        in_table, append_rows);
+    // Insert the hashes.
+    // TODO: Preallocate the hashes to the max size?
     for (size_t i_row = 0; i_row < in_table->nrows(); i_row++) {
-        if (!not_append_rows[i_row]) {  // double-negative to avoid
-                                        // recomputation
-            update_groups_helper(*(this->shuffle_state->table_buffer),
-                                 this->shuffle_state->groupby_hashes,
-                                 *(this->shuffle_state->hash_table),
-                                 this->shuffle_state->next_group, this->n_keys,
-                                 shuffle_grp_info, in_table,
-                                 batch_hashes_groupby, i_row);
-            row_count++;
+        if (append_rows[i_row]) {
+            this->shuffle_state->pre_reduction_hashes.push_back(
+                batch_hashes_groupby[i_row]);
         }
     }
-    this->metrics.shuffle_update_logical_ht_time += end_timer(start);
-    start = start_timer();
-    // Combine existing (and new) keys using the input batch
-    combine_input_table_helper(in_table, shuffle_grp_info,
-                               this->shuffle_state->table_buffer->data_table,
-                               this->f_running_value_offsets, this->col_sets,
-                               shuffle_init_start_row);
-    this->metrics.shuffle_combine_input_time += end_timer(start);
-    this->metrics.shuffle_update_logical_ht_and_combine_nrows += row_count;
-
-    int64_t new_groups =
-        this->shuffle_state->next_group - shuffle_init_start_row;
-    this->shuffle_state->UpdateAppendBatchSize(in_table->nrows(), new_groups);
-
-    // Reset temporary references
-    this->shuffle_state->in_table.reset();
-    this->shuffle_state->in_table_hashes.reset();
+    this->shuffle_state->metrics.shuffle_agg_buffer_append_time +=
+        end_timer(start);
 }
 
 void GroupbyState::AppendBuildBatchHelper(
@@ -3584,16 +3754,6 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
                                          this->metrics.combine_input_time));
         metrics.emplace_back(StatMetric("combine_input_nrows",
                                         this->metrics.combine_input_nrows));
-        metrics.emplace_back(
-            TimerMetric("shuffle_update_logical_ht_time",
-                        this->metrics.shuffle_update_logical_ht_time));
-        metrics.emplace_back(
-            TimerMetric("shuffle_combine_input_time",
-                        this->metrics.shuffle_combine_input_time));
-        metrics.emplace_back(StatMetric(
-            "shuffle_update_logical_ht_and_combine_nrows",
-            this->metrics.shuffle_update_logical_ht_and_combine_nrows));
-
     } else {
         metrics.emplace_back(TimerMetric("appends_active_time",
                                          this->metrics.appends_active_time));
@@ -4130,10 +4290,10 @@ bool groupby_agg_build_consume_batch(GroupbyState* groupby_state,
                                           batch_hashes_groupby,
                                           append_row_to_build_table);
 
+    append_row_to_build_table.flip();
     // Do the same for the shuffle groups:
-    groupby_state->UpdateShuffleGroupsAndCombine(
-        in_table, batch_hashes_partition, batch_hashes_groupby,
-        append_row_to_build_table);
+    groupby_state->UpdateShuffleGroupsAndCombine(in_table, batch_hashes_groupby,
+                                                 append_row_to_build_table);
 
     // Reset the bitmask for the next iteration:
     append_row_to_build_table.resize(0);

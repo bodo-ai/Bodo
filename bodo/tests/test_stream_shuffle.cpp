@@ -170,9 +170,11 @@ static bodo::tests::suite tests([] {
             );
         auto schema = bodo::Schema::Deserialize(arr_arr_types, arr_c_types);
         std::vector<std::shared_ptr<BasicColSet>> col_sets = {col_set};
+        std::vector<int32_t> dummy_f_running_value_offsets;
         GroupbyIncrementalShuffleState state = GroupbyIncrementalShuffleState(
             std::make_shared<bodo::Schema>(*schema), dict_builders, col_sets, 1,
-            1, curr_iter, sync_freq, 0, false, AggregationType::MRNF);
+            1, curr_iter, sync_freq, 0, false, AggregationType::MRNF,
+            dummy_f_running_value_offsets, false);
         state.Initialize(nullptr, true, MPI_COMM_WORLD);
         // Table with only 1 unique key, should perform local reduction
         auto table = bodo::tests::cppToBodo({"A", "B"}, {true, true}, {},
