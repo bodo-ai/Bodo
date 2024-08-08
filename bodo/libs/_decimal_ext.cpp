@@ -1854,6 +1854,98 @@ array_info* abs_decimal_array_py_entry(array_info* arr_) {
 }
 
 /**
+ * @brief Take the factorial of a decimal scalar.
+ *
+ * @param val Input decimal
+ * @param input_s Scale of the input
+ * @return arrow::Decimal128 Result of the factorial
+ */
+arrow::Decimal128 factorial_decimal_scalar(arrow::Decimal128 val,
+                                           int64_t input_s) {
+    // First, round the value to an integer
+    arrow::Decimal128 rounded_val = arrow::Decimal128(0);
+    bool overflow = false;
+    round_decimal_scalar<false, false>(val, 0, input_s, &overflow,
+                                       &rounded_val);
+    // Check if within bounds
+    if (overflow || rounded_val > arrow::Decimal128(33)) {
+        std::string err_msg =
+            "Factorial input " + val.ToString(input_s) + " is too large";
+        throw std::runtime_error(err_msg);
+    } else if (rounded_val < arrow::Decimal128(0)) {
+        std::string err_msg =
+            "Factorial input " + val.ToString(input_s) + " is negative";
+        throw std::runtime_error(err_msg);
+    }
+    int rounded_val_int = rounded_val.ToInteger<int>().ValueOrDie();
+    // Look up factorial value in table
+    assert(rounded_val_int >= 0 && rounded_val_int <= 33);
+    boost::multiprecision::int256_t factorial_val_int =
+        decimalops::factorial_table[rounded_val_int];
+    // Convert back to decimal
+    arrow::Decimal128 factorial_val =
+        decimalops::ConvertToDecimal128(factorial_val_int, nullptr);
+
+    return factorial_val;
+}
+
+/**
+ * @brief Python entry point for taking the factorial of a decimal scalar.
+ *
+ * @param val Input decimal
+ * @param input_s Scale of the input
+ * @return arrow::Decimal128 Result of the factorial
+ */
+arrow::Decimal128 factorial_decimal_scalar_py_entry(arrow::Decimal128 val,
+                                                    int64_t input_s) {
+    try {
+        return factorial_decimal_scalar(val, input_s);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return arrow::Decimal128(0);
+    }
+}
+
+/**
+ * @brief Python entry point for taking the factorial of a decimal array.
+ *
+ * @param arr_ Input decimal array
+ * @return array_info* of the result
+ */
+array_info* factorial_decimal_array_py_entry(array_info* arr_) {
+    try {
+        std::unique_ptr<array_info> arr = std::unique_ptr<array_info>(arr_);
+        assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+               arr->dtype == Bodo_CTypes::DECIMAL);
+        size_t len = arr->length;
+        std::unique_ptr<array_info> out_arr =
+            alloc_nullable_array_no_nulls(len, Bodo_CTypes::DECIMAL);
+        out_arr->precision = 37;
+        out_arr->scale = 0;
+        for (size_t i = 0; i < len; i++) {
+            if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
+            } else {
+                arrow::Decimal128* out_ptr =
+                    out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                   arrow::Decimal128>() +
+                    i;
+                const arrow::Decimal128& in_val =
+                    *(arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
+                                 arrow::Decimal128>() +
+                      i);
+                *out_ptr = factorial_decimal_scalar(in_val, arr->scale);
+            }
+        }
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+/**
  * @brief Convert decimal value to int64 (unsafe cast)
  *
  * @param val input decimal value
@@ -2651,6 +2743,8 @@ PyMODINIT_FUNC PyInit_decimal_ext(void) {
     SetAttrStringFromVoidPtr(m, trunc_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, abs_decimal_array_py_entry);
     SetAttrStringFromVoidPtr(m, abs_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, factorial_decimal_scalar_py_entry);
+    SetAttrStringFromVoidPtr(m, factorial_decimal_array_py_entry);
 
     return m;
 }

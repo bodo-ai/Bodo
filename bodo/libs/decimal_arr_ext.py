@@ -169,6 +169,14 @@ ll.add_symbol(
     "abs_decimal_array",
     decimal_ext.abs_decimal_array_py_entry,
 )
+ll.add_symbol(
+    "factorial_decimal_scalar",
+    decimal_ext.factorial_decimal_scalar_py_entry,
+)
+ll.add_symbol(
+    "factorial_decimal_array",
+    decimal_ext.factorial_decimal_array_py_entry,
+)
 
 
 ll.add_symbol(
@@ -2994,6 +3002,105 @@ class DecimalArrayType(types.ArrayCompatible):
     @property
     def dtype(self):
         return Decimal128Type(self.precision, self.scale)
+
+
+def factorial_decimal_scalar(val):  # pragma: no cover
+    pass
+
+
+@overload(factorial_decimal_scalar)
+def overload_factorial_decimal_scalar(val):
+    """
+    Calculate the factorial of a decimal scalar.
+    """
+    assert isinstance(val, Decimal128Type), "factorial_decimal_scalar: decimal expected"
+    input_s = val.scale
+
+    def impl(val):  # pragma: no cover
+        return _factorial_decimal_scalar(val, input_s)
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _factorial_decimal_scalar(typingctx, val_t, input_s):
+    assert isinstance(
+        val_t, Decimal128Type
+    ), "_factorial_decimal_scalar: decimal expected"
+
+    def codegen(context, builder, signature, args):
+        val, input_s = args
+        fnty = lir.FunctionType(
+            lir.IntType(128),
+            [
+                lir.IntType(128),
+                lir.IntType(64),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="factorial_decimal_scalar"
+        )
+        ret = builder.call(
+            fn,
+            [val, input_s],
+        )
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    output_precision = 37
+    output_scale = 0
+    output_decimal_type = Decimal128Type(output_precision, output_scale)
+    return (output_decimal_type(val_t, input_s), codegen)
+
+
+def factorial_decimal_array(arr):  # pragma: no cover
+    pass
+
+
+@overload(factorial_decimal_array)
+def overload_factorial_decimal_array(arr):
+    """
+    Calculate the factorial of a decimal array.
+    """
+    assert isinstance(
+        arr, DecimalArrayType
+    ), "factorial_decimal_array: decimal array expected"
+    from bodo.libs.array import array_to_info, delete_info, info_to_array
+
+    out_precision = 37
+    out_scale = 0
+    out_type = DecimalArrayType(out_precision, out_scale)
+
+    def impl(arr):  # pragma: no cover
+        arr_info = array_to_info(arr)
+        out_arr_info = _factorial_decimal_array(arr_info)
+        out_arr = info_to_array(out_arr_info, out_type)
+        delete_info(out_arr_info)
+        return out_arr
+
+    return impl
+
+
+@intrinsic(prefer_literal=True)
+def _factorial_decimal_array(typingctx, arr_t):
+    from bodo.libs.array import array_info_type
+
+    def codegen(context, builder, signature, args):
+        (arr,) = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn = cgutils.get_or_insert_function(
+            builder.module, fnty, name="factorial_decimal_array"
+        )
+        ret = builder.call(fn, [arr])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (array_info_type(arr_t), codegen)
 
 
 # store data and nulls as regular numpy arrays without payload machinery

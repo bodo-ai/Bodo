@@ -186,7 +186,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
       SqlNullPolicyFunction.createAnyPolicy(
           "FACTORIAL",
           ReturnTypes.BIGINT_NULLABLE,
-          OperandTypes.INTEGER,
+          OperandTypes.EXACT_NUMERIC,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction SQUARE =
