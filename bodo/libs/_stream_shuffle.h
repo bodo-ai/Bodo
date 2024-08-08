@@ -823,6 +823,24 @@ class IncrementalShuffleState {
      */
     bool BuffersFull();
 
+    /**
+     * @brief Determine if our shuffle buffers exceed the shuffle size after
+     * doing any operator specific processing to reduce the shuffle data. The
+     * base class just checks the shuffle size based on the current shuffle
+     * buffer size, but subclasses my introduce additional compute to check if
+     * we can reduce the amount of data we are shuffling.
+     * @param is_last Have we reached the last iteration and therefore must
+     * shuffle if there is any data.
+     * @return If our buffers exceed the shuffle size threshold after
+     * processing.
+     */
+    virtual bool ShouldShuffleAfterProcessing(bool is_last) {
+        return (is_last && (this->table_buffer->data_table->nrows() > 0)) ||
+               (table_local_memory_size(this->table_buffer->data_table,
+                                        /*include_dict_size*/ false) >=
+                this->shuffle_threshold);
+    }
+
    protected:
     /**
      * @brief Helper function for ShuffleIfRequired. In this base class,
@@ -873,6 +891,8 @@ class IncrementalShuffleState {
 
     /// @brief Number of shuffle keys.
     const uint64_t n_keys;
+    /// @brief Threshold to use to decide when we should shuffle.
+    const int64_t shuffle_threshold = DEFAULT_SHUFFLE_THRESHOLD;
 
    private:
     /// @brief Reference to the iteration counter of the parent operator /
@@ -894,8 +914,6 @@ class IncrementalShuffleState {
     /// @brief Number of syncs after which we should re-evaluate the sync
     /// frequency.
     int64_t sync_update_freq = DEFAULT_SYNC_UPDATE_FREQ;
-    /// @brief Threshold to use to decide when we should shuffle.
-    const int64_t shuffle_threshold = DEFAULT_SHUFFLE_THRESHOLD;
     /// @brief Print information about the shuffle state during initialization,
     /// during every shuffle and after sync frequency is updated.
     bool debug_mode = false;
