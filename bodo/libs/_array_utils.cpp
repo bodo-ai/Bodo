@@ -2478,12 +2478,6 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
     }
 }
 
-// Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
-// time). 30 is extremely slow. 20 seems to be about as fast as 10 and
-// more accurate. With 20 it is pretty fast, faster than calculating
-// the hashes with our MurmurHash3_x64_32, and uses 1 MB of memory
-#define HLL_SIZE 20
-
 size_t get_nunique_hashes(const std::shared_ptr</*const*/ uint32_t[]>& hashes,
                           const size_t len, bool is_parallel) {
     tracing::Event ev("get_nunique_hashes", is_parallel);

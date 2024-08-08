@@ -108,7 +108,17 @@ class HyperLogLog {
 
     void add(uint32_t hash) {
         uint32_t index = hash >> (32 - b_);
-        uint8_t rank = _GET_CLZ((hash << b_), 32 - b_);
+        uint32_t value = hash << b_;
+        uint8_t rank;
+        // Avoid undefined behavior:
+        // https://stackoverflow.com/questions/49580083/builtin-clz-returns-incorrect-value-for-input-zero
+        if (value == 0) {
+            // Logically if this were defined there would be 32 builtin 0s, so
+            // we would always select (32 - b_) + 1
+            rank = 33 - b_;
+        } else {
+            rank = _GET_CLZ(value, 32 - b_);
+        }
         if (rank > M_[index]) {
             M_[index] = rank;
         }
@@ -118,6 +128,12 @@ class HyperLogLog {
                 const size_t len) {
         for (size_t i = 0; i < len; i++) {
             add(hashes[i]);
+        }
+    }
+
+    void addAll(const bodo::vector<uint32_t>& hashes) {
+        for (uint32_t hash : hashes) {
+            add(hash);
         }
     }
 
@@ -286,7 +302,17 @@ class HyperLogLogHIP : public HyperLogLog {
      */
     void add(uint32_t hash) {
         uint32_t index = hash >> (32 - b_);
-        uint8_t rank = _GET_CLZ((hash << b_), 32 - b_);
+        uint32_t value = hash << b_;
+        uint8_t rank;
+        // Avoid undefined behavior:
+        // https://stackoverflow.com/questions/49580083/builtin-clz-returns-incorrect-value-for-input-zero
+        if (value == 0) {
+            // Logically if this were defined there would be 32 builtin 0s, so
+            // we would always select (32 - b_) + 1
+            rank = 33 - b_;
+        } else {
+            rank = _GET_CLZ(value, 32 - b_);
+        }
         rank = rank == 0 ? register_limit_ : std::min(register_limit_, rank);
         const uint8_t old = M_[index];
         if (rank > old) {

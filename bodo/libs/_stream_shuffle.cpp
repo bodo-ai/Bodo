@@ -98,10 +98,10 @@ IncrementalShuffleState::IncrementalShuffleState(
       table_buffer(std::make_unique<TableBuildBuffer>(this->schema,
                                                       this->dict_builders)),
       n_keys(n_keys_),
+      shuffle_threshold(get_shuffle_threshold()),
       curr_iter(curr_iter_),
       row_bytes_guesstimate(get_row_bytes(this->schema)),
-      parent_op_id(parent_op_id_),
-      shuffle_threshold(get_shuffle_threshold()) {
+      parent_op_id(parent_op_id_) {
     MPI_Comm_size(MPI_COMM_WORLD, &(this->n_pes));
     if (char* debug_env_ = std::getenv("BODO_DEBUG_STREAM_SHUFFLE")) {
         this->debug_mode = !std::strcmp(debug_env_, "1");
@@ -663,11 +663,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
                   [](AsyncShuffleSendState& s) { return s.sendDone(); });
     this->metrics.shuffle_send_finalization_time += end_timer(start);
 
-    bool shuffle_now =
-        (is_last && (this->table_buffer->data_table->nrows() > 0)) ||
-        (table_local_memory_size(this->table_buffer->data_table,
-                                 /*include_dict_size*/ false) >=
-         this->shuffle_threshold);
+    bool shuffle_now = this->ShouldShuffleAfterProcessing(is_last);
     if (!shuffle_now) {
         return new_data;
     }
@@ -707,7 +703,7 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
     start = start_timer();
 
     this->metrics.total_sent_nrows += shuffle_table->nrows();
-    // TODO Make this exact by getting the size of the send_arr from the
+    // TODO: Make this exact by getting the size of the send_arr from the
     // intermediate arrays created during shuffle_table_kernel.
     int64_t shuffle_table_size = table_local_memory_size(shuffle_table, false);
     if ((shuffle_table_size > 0) && (shuffle_table->nrows() > 0)) {

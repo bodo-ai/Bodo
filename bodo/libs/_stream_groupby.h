@@ -218,14 +218,6 @@ struct GroupbyMetrics {
     time_t finalize_activate_pin_chunk_time = 0;
     stat_t finalize_activate_pin_chunk_n_chunks = 0;
 
-    /// UpdateShuffleGroupsAndCombine
-
-    // This is the time spent in the ReserveTable and the update_groups_helper
-    // loop.
-    time_t shuffle_update_logical_ht_time = 0;
-    time_t shuffle_combine_input_time = 0;
-    stat_t shuffle_update_logical_ht_and_combine_nrows = 0;
-
     /// NOTE: We don't track any metrics for the ProduceOutput stage.
     /// Essentially all the time (already tracked by codegen) can be attributed
     /// to disk IO during the PopChunk calls.
@@ -557,6 +549,15 @@ class GroupbyIncrementalShuffleMetrics {
     stat_t n_hashes_reset = 0;
     stat_t peak_hashes_size_bytes = 0;
 
+    // Stats related to dynamically determining if we want to insert into
+    // the hash table before shuffling.
+    stat_t n_possible_shuffle_reductions = 0;
+    stat_t n_shuffle_reductions = 0;
+    stat_t n_pre_reduction_hashes_reset = 0;
+    stat_t n_pre_reduction_buffer_reset = 0;
+    // Time spent appending to the shuffle buffer in the aggregate path.
+    time_t shuffle_agg_buffer_append_time = 0;
+
     /// Local reduction stats
 
     // Time spent in additional hashing in the nunique-only case
@@ -572,6 +573,17 @@ class GroupbyIncrementalShuffleMetrics {
     stat_t local_reduction_output_nrows = 0;
     time_t local_reduction_time = 0;  // Overall
 
+    /// UpdateGroupsAndCombine
+
+    // This is the time spent in the ReserveTable and the update_groups_helper
+    // loop.
+    time_t shuffle_update_logical_ht_time = 0;
+    time_t shuffle_combine_input_time = 0;
+    stat_t shuffle_update_logical_ht_and_combine_nrows = 0;
+
+    // Time spent running HLL estimations + insertions
+    time_t shuffle_hll_time = 0;
+
     // Local reduction time breakdown for the MRNF case:
     GroupbyMetrics::AggUpdateMetrics local_reduction_mrnf_metrics;
 
@@ -580,8 +592,11 @@ class GroupbyIncrementalShuffleMetrics {
      * GroupBy.
      *
      * @param metrics Vector of metrics to append to.
+     * @param accumulate_before_update Whether we are in the
+     * accumulate-before-update for generating the metrics.
      */
-    void add_to_metrics(std::vector<MetricBase>& metrics);
+    void add_to_metrics(std::vector<MetricBase>& metrics,
+                        const bool accumulate_before_update);
 };
 
 /**
@@ -627,6 +642,8 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      * @param nunique_only_ Whether this is the nunique-only accumulate input
      * case.
      * @param agg_type_ Is this MRNF, WINDOW, or regular Aggregation?
+     * @param f_running_value_offsets_ Running value offsets for the Groupby.
+     * This gives access for updating the hash table.
      */
     GroupbyIncrementalShuffleState(
         const std::shared_ptr<bodo::Schema> shuffle_table_schema_,
@@ -634,7 +651,9 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
         const std::vector<std::shared_ptr<BasicColSet>>& col_sets_,
         const uint64_t mrnf_n_sort_cols_, const uint64_t n_keys_,
         const uint64_t& curr_iter_, int64_t& sync_freq_, int64_t op_id_,
-        const bool nunique_only_, const AggregationType agg_type_);
+        const bool nunique_only_, const AggregationType agg_type_,
+        const std::vector<int32_t>& f_running_value_offsets_,
+        const bool accumulate_before_update_);
 
     virtual ~GroupbyIncrementalShuffleState() = default;
 
@@ -654,7 +673,7 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
      */
     void ExportMetrics(std::vector<MetricBase>& metrics) override {
         IncrementalShuffleState::ExportMetrics(metrics);
-        this->metrics.add_to_metrics(metrics);
+        this->metrics.add_to_metrics(metrics, this->accumulate_before_update);
     }
 
     /**
@@ -667,9 +686,33 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
         this->metrics = GroupbyIncrementalShuffleMetrics();
     }
 
+    /**
+     * @brief Determine if our shuffle buffers exceed the shuffle size after
+     * doing any reduction on the data in the accumulate path. To avoid wasted
+     * compute we determine if we are doing a reduction based on a running HLL
+     * value.
+     * @param is_last Have we reached the last iteration and therefore must
+     * shuffle if there is any data.
+     * @return If our buffers exceed the shuffle size threshold after
+     * processing.
+     */
+    bool ShouldShuffleAfterProcessing(bool is_last) override;
+
     friend class GroupbyState;
 
    protected:
+    /// Metrics
+    GroupbyIncrementalShuffleMetrics metrics;
+    /// @brief Shuffle data buffer for data that we may reduce before shuffling,
+    /// but has not yet been inserted into the hash table.
+    std::unique_ptr<TableBuildBuffer> pre_reduction_table_buffer;
+    bodo::vector<uint32_t> pre_reduction_hashes;
+
+    /// @brief Threshold for what percentage of rows must be predicated to be
+    /// unique before we skip doing a local reduction on shuffle. This is only
+    /// considered for the incremental aggregation code path.
+    double agg_reduction_threshold;
+
     /**
      * @brief Helper for ShuffleIfRequired. This is the same implementation as
      * the base class, except for the nunique-only and mrnf only cases. In the
@@ -714,8 +757,26 @@ class GroupbyIncrementalShuffleState : public IncrementalShuffleState {
     const bool nunique_only = false;
     /// Whether this is the mrnf-only case.
     const AggregationType agg_type = AggregationType::AGGREGATE;
-    /// Metrics
-    GroupbyIncrementalShuffleMetrics metrics;
+
+    hll::HyperLogLog running_reduction_hll;
+
+    /// @brief State shared with the Groupby State for updating the hash table.
+    const std::vector<int32_t>& f_running_value_offsets;
+    const bool accumulate_before_update;
+
+    /**
+     * @brief Update the groups in the hash table buffer and combine with values
+     * from the input batch.
+     *
+     * NOTE: Only used in the aggregating code path (i.e.
+     * accumulate_before_update = false)
+     *
+     * @param in_table Input batch to update and combine using.
+     * @param batch_hashes_groupby Groupby hashes for the input batch records.
+     */
+    void UpdateGroupsAndCombine(
+        const std::shared_ptr<table_info>& in_table,
+        const std::shared_ptr<uint32_t[]>& batch_hashes_groupby);
 };
 
 /**
@@ -1181,23 +1242,20 @@ class GroupbyState {
 
     /**
      * @brief Update the groups in the shuffle buffer and combine with values
-     * from the input batch.
+     * from the input batch. Depending on the function this may not actually
+     * insert into the hash table while it waits to do a HLL estimate.
      *
      * NOTE: Only used in the aggregating code path (i.e.
      * accumulate_before_update = false)
      *
      * @param in_table Input batch to update and combine using.
-     * @param partitioning_hashes Partitioning hashes for the records.
      * @param batch_hashes_groupby Groupby hashes for the input batch records.
-     * @param not_append_rows Flipped bitmask specifying the rows to use. We use
-     * a flipped bitmask for practical reasons based on how this function is
-     * used. This allows us to avoid doing a .flip() on an existing bitmask.
+     * @param append_rows Bitmask specifying the rows to use.
      */
     void UpdateShuffleGroupsAndCombine(
         const std::shared_ptr<table_info>& in_table,
-        const std::shared_ptr<uint32_t[]>& partitioning_hashes,
         const std::shared_ptr<uint32_t[]>& batch_hashes_groupby,
-        const std::vector<bool>& not_append_rows);
+        const std::vector<bool>& append_rows);
 
     /**
      * @brief Append the input batch to the build_tables of the partitions. The

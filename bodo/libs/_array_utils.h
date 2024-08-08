@@ -10,6 +10,12 @@
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
 
+// Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
+// time). 30 is extremely slow. 20 seems to be about as fast as 10 and
+// more accurate. With 20 it is pretty fast, faster than calculating
+// the hashes with our MurmurHash3_x64_32, and uses 1 MB of memory
+#define HLL_SIZE 20
+
 // convert Array dtype to C type using a trait class
 // similar to:
 // https://github.com/rapidsai/cudf/blob/c4a1389bca6f2fd521bd5e768eda7407aa3e66b5/cpp/include/cudf/utilities/type_dispatcher.hpp#L141
