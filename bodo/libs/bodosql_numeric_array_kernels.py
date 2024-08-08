@@ -288,7 +288,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
         def overload_numeric_util(arr):
             # These functions support decimal types natively
-            if func_name in {"ABS", "SIGN"}:
+            if func_name in {"ABS", "SIGN", "FACTORIAL"}:
                 verify_numeric_arg(arr, func_name, "arr")
                 if isinstance(arr, (bodo.Decimal128Type, bodo.DecimalArrayType)):
                     # Return decimal version of implementations
@@ -304,6 +304,15 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
                         def impl(arr):  # pragma: no cover
                             return bodo.libs.bodosql_array_kernels.sign_decimal(arr)
+
+                        return impl
+
+                    if func_name == "FACTORIAL":
+
+                        def impl(arr):  # pragma: no cover
+                            return bodo.libs.bodosql_array_kernels.factorial_decimal(
+                                arr
+                            )
 
                         return impl
             else:
@@ -434,6 +443,25 @@ def abs_decimal(arr):
 
         def impl(arr):
             return bodo.libs.decimal_arr_ext.abs_decimal_scalar(arr)
+
+        return impl
+
+
+@numba.generated_jit(nopython=True)
+def factorial_decimal(arr):
+    if isinstance(arr, bodo.DecimalArrayType):
+        # Array case
+
+        def impl(arr):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.factorial_decimal_array(arr)
+
+        return impl
+
+    else:
+        # Scalar case
+
+        def impl(arr):  # pragma: no cover
+            return bodo.libs.decimal_arr_ext.factorial_decimal_scalar(arr)
 
         return impl
 

@@ -3335,3 +3335,104 @@ def test_decimal_abs(df, expr, answer, memory_leak_check):
         )
     finally:
         bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, expr, answer",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("2.4"),
+                            None,
+                            Decimal("-0.12"),
+                            Decimal("5"),
+                            Decimal("6.7"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "FACTORIAL(D1)",
+            pd.array(
+                [
+                    Decimal("2"),
+                    None,
+                    Decimal("1"),
+                    Decimal("120"),
+                    Decimal("5040"),
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(37, 0)),
+            ),
+            id="array",
+        ),
+        # Float test here
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            2.4,
+                            None,
+                            -0.12,
+                            5,
+                            6.7,
+                        ],
+                        dtype=np.float64,
+                    ),
+                }
+            ),
+            "FACTORIAL(D1)",
+            pd.array(
+                [
+                    2,
+                    None,
+                    1,
+                    120,
+                    5040,
+                ],
+            ),
+            id="array-float",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "D1": pd.array(
+                        [
+                            Decimal("2.4"),
+                            None,
+                            Decimal("-0.12"),
+                            Decimal("5"),
+                            Decimal("6.7"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            "(CASE WHEN D1 IS NULL THEN '' ELSE FACTORIAL(D1)::VARCHAR END)",
+            pd.array(["2", "", "1", "120", "5040"]),
+            id="case",
+        ),
+    ],
+)
+def test_decimal_factorial(df, expr, answer, memory_leak_check):
+    """
+    Tests the correctness of decimal conversion to string.
+    """
+    query = f"SELECT {expr} AS res FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": answer}),
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = False

@@ -30,6 +30,43 @@ static std::array<boost::multiprecision::int256_t, kMaxLargeScale + 1>
         return values;
     })();
 
+// Compute the factorial table once.
+static const boost::multiprecision::int256_t factorial_table[] = {
+    boost::multiprecision::int256_t(1),
+    boost::multiprecision::int256_t(1),
+    boost::multiprecision::int256_t(2),
+    boost::multiprecision::int256_t(6),
+    boost::multiprecision::int256_t(24),
+    boost::multiprecision::int256_t(120),
+    boost::multiprecision::int256_t(720),
+    boost::multiprecision::int256_t(5040),
+    boost::multiprecision::int256_t(40320),
+    boost::multiprecision::int256_t(362880),
+    boost::multiprecision::int256_t(3628800),
+    boost::multiprecision::int256_t(39916800),
+    boost::multiprecision::int256_t(479001600),
+    boost::multiprecision::int256_t(6227020800),
+    boost::multiprecision::int256_t(87178291200),
+    boost::multiprecision::int256_t(1307674368000),
+    boost::multiprecision::int256_t(20922789888000),
+    boost::multiprecision::int256_t(355687428096000),
+    boost::multiprecision::int256_t(6402373705728000),
+    boost::multiprecision::int256_t(121645100408832000),
+    boost::multiprecision::int256_t(2432902008176640000),
+    boost::multiprecision::int256_t("51090942171709440000"),
+    boost::multiprecision::int256_t("1124000727777607680000"),
+    boost::multiprecision::int256_t("25852016738884976640000"),
+    boost::multiprecision::int256_t("620448401733239439360000"),
+    boost::multiprecision::int256_t("15511210043330985984000000"),
+    boost::multiprecision::int256_t("403291461126605635584000000"),
+    boost::multiprecision::int256_t("10888869450418352160768000000"),
+    boost::multiprecision::int256_t("304888344611713860501504000000"),
+    boost::multiprecision::int256_t("8841761993739701954543616000000"),
+    boost::multiprecision::int256_t("265252859812191058636308480000000"),
+    boost::multiprecision::int256_t("8222838654177922817725562880000000"),
+    boost::multiprecision::int256_t("263130836933693530167218012160000000"),
+    boost::multiprecision::int256_t("8683317618811886495518194401280000000")};
+
 static inline boost::multiprecision::int256_t GetScaleMultiplier(
     int scale) noexcept {
     return kLargeScaleMultipliers[scale];

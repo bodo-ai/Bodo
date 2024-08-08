@@ -135,6 +135,7 @@ broadcasted_fixed_arg_functions = {
     "equal_null",
     "exp",
     "factorial",
+    "factorial_decimal",
     "floor",
     "format",
     "from_days",
