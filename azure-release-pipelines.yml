@@ -254,12 +254,14 @@ stages:
           NP: 2
           PYTEST_MARKER: ""
 
+# Comment out till OOM issue is resolved.
+# Tests already run on AWS CI
 # Java Unit Tests
-- stage: Test_BodoSQL_Maven
-  displayName: 'Test BodoSQL Maven Unit Tests'
-  dependsOn: []
-  jobs:
+# - stage: Test_BodoSQL_Maven
+#   displayName: 'Test BodoSQL Maven Unit Tests'
+#   dependsOn: []
+#   jobs:
 
-  - template: buildscripts/bodosql/azure/azure-test-mvn-linux.yml
-    parameters:
-      name: BODOSQL_maven_unit_tests
+#   - template: buildscripts/bodosql/azure/azure-test-mvn-linux.yml
+#     parameters:
+#       name: BODOSQL_maven_unit_tests

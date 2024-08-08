@@ -5,6 +5,7 @@ Test correctness of SQL join queries on BodoSQL
 
 import copy
 import io
+import os
 from datetime import date
 
 import numba
@@ -710,6 +711,9 @@ def test_join_invalid_condition(memory_leak_check):
         )
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" in os.environ, reason="Assertion fails on Azure only [BSE-3585]"
+)
 def test_join_broadcast_hint(memory_leak_check, capfd):
     """
     Test that providing a broadcast hint for a join provides
