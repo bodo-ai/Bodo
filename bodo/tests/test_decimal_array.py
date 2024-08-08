@@ -6001,3 +6001,132 @@ def test_decimal_abs(val, expected, memory_leak_check):
         return bodo.libs.bodosql_array_kernels.abs_decimal(val)
 
     check_func(impl, (val,), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "val, expected",
+    [
+        pytest.param(
+            pa.scalar(Decimal("1.0"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal("1"), pa.decimal128(37, 0)),
+            id="one",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("6.4"), pa.decimal128(38, 37)),
+            pa.scalar(Decimal("720"), pa.decimal128(37, 0)),
+            id="rounded",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("12.3"), pa.decimal128(15, 5)),
+            pa.scalar(Decimal("479001600"), pa.decimal128(37, 0)),
+            id="large-rounded",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("-0.34"), pa.decimal128(10, 3)),
+            pa.scalar(Decimal("1.0"), pa.decimal128(37, 0)),
+            id="zero-rounded",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "2",
+                    None,
+                    "3",
+                    "5",
+                    "11",
+                    "18",
+                    "25",
+                    "33",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 10)),
+            ),
+            pd.array(
+                [
+                    "1",
+                    "2",
+                    None,
+                    "6",
+                    "120",
+                    "39916800",
+                    "6402373705728000",
+                    "15511210043330985984000000",
+                    "8683317618811886495518194401280000000",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(37, 0)),
+            ),
+            id="array",
+        ),
+    ],
+)
+def test_decimal_factorial(val, expected, memory_leak_check):
+    """
+    Test computing the factorial of a decimal scalar or array.
+    """
+
+    def impl(val):
+        return bodo.libs.bodosql_array_kernels.factorial(val)
+
+    check_func(impl, (val,), py_output=expected)
+
+
+@pytest.mark.parametrize(
+    "val, error_msg",
+    [
+        pytest.param(
+            pa.scalar(Decimal("-1"), pa.decimal128(10, 3)),
+            "is negative",
+            id="negative",
+        ),
+        pytest.param(
+            pa.scalar(Decimal("35"), pa.decimal128(10, 3)),
+            "is too large",
+            id="too_large",
+        ),
+        pytest.param(
+            pa.scalar(
+                Decimal("99999999999999999999999999999999999999"), pa.decimal128(38, 0)
+            ),
+            "is too large",
+            id="max_precision",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "-3",
+                    "2",
+                    None,
+                    "3",
+                    "5",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 10)),
+            ),
+            "is negative",
+            id="array-negative",
+        ),
+        pytest.param(
+            pd.array(
+                [
+                    "353",
+                    "2",
+                    None,
+                    "3",
+                    "5",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 10)),
+            ),
+            "is too large",
+            id="array-positive",
+        ),
+    ],
+)
+def test_decimal_factorial_error(val, error_msg):
+    """
+    Test errors during computing the factorial of a decimal scalar or array.
+    """
+
+    def impl(val):
+        return bodo.libs.bodosql_array_kernels.factorial(val)
+
+    with pytest.raises(Exception, match=error_msg):
+        check_func(impl, (val,))
