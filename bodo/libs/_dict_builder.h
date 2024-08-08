@@ -148,11 +148,15 @@ struct DictionaryBuilder {
      * It is guaranteed that the output array will be locally unique.
      *
      * @param in_arr input array
+     * @param use_cache whether or not cached transpose maps should be used
+     * @param unify_empty if true empty arrays will be given the
+     * builder's dictionary otherwise they will be ignored
      * @return std::shared_ptr<array_info> input array with its dictionary
      * replaced and indices transposed
      */
     std::shared_ptr<array_info> UnifyDictionaryArray(
-        const std::shared_ptr<array_info>& in_arr, bool use_cache = true);
+        const std::shared_ptr<array_info>& in_arr, bool use_cache = true,
+        bool unify_empty = false);
 
     /**
      * @brief Transform the input array by replacing its dictionary with the

@@ -93,7 +93,8 @@ std::ostream& operator<<(std::ostream& os, const TableAndRange& obj) {
  */
 std::shared_ptr<table_info> UnifyDictionaryArrays(
     const std::shared_ptr<table_info>& in_table,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    bool unify_empty = false) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(in_table->ncols());
     for (size_t i = 0; i < in_table->ncols(); i++) {
@@ -102,7 +103,8 @@ std::shared_ptr<table_info> UnifyDictionaryArrays(
         if (dict_builders[i] == nullptr) {
             out_arr = in_arr;
         } else {
-            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr);
+            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr, true,
+                                                             unify_empty);
         }
         out_arrs.emplace_back(out_arr);
     }
@@ -603,8 +605,6 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
     row_info.second += table->nrows();
 
     time_pt start_append = start_timer();
-    // Table is not sorted and we also don't want to sort it.
-    // Pass in true to remain unsorted.
     builder.UnifyDictionariesAndAppend(table, dict_builders);
     metrics.local_sort_chunk_time += end_timer(start_append);
 }
@@ -644,6 +644,8 @@ void StreamSortState::FinalizeBuild() {
         }
         recursive_make_dict_global_and_unique(dict_builder);
     }
+    dummy_output_chunk =
+        UnifyDictionaryArrays(dummy_output_chunk, dict_builders, true);
 
     std::unique_ptr<int64_t[]> in_info = std::make_unique<int64_t[]>(2);
     in_info[0] = row_info.first;
@@ -732,6 +734,7 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
     bounds_ = compute_bounds_from_samples(
         std::move(all_samples), dummy_output_chunk, n_key_t,
         vect_ascending.data(), na_position.data(), myrank, n_pes, parallel);
+
     return bounds_;
 }
 
@@ -956,8 +959,6 @@ void StreamSortState::GlobalSort(
                 auto table_to_send =
                     std::move(rankToChunks[host_to_send_to][chunk_id]);
                 table_to_send->pin();
-                table_to_send =
-                    UnifyDictionaryArrays(table_to_send, dict_builders);
 
                 auto nrows = table_to_send->nrows();
                 auto hashes = std::make_shared<uint32_t[]>(nrows);
@@ -1001,6 +1002,7 @@ void StreamSortState::GlobalSort(
             auto [done, table] =
                 s.recvDone(dict_builders, metrics.ishuffle_metrics);
             if (done && table->nrows()) {
+                table = UnifyDictionaryArrays(table, dict_builders);
                 time_pt start_append = start_timer();
                 global_builder.AppendChunk(std::move(table));
                 metrics.global_append_chunk_time += end_timer(start_append);
