@@ -405,10 +405,10 @@ DictionaryBuilder::DictionaryBuilder(
     this->dict_str_to_ind = std::make_shared<bodo::unord_map_container<
         std::string, dict_indices_t, string_hash, std::equal_to<>>>();
 }
-
 // TODO: Template this based on the type of the array
 std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
-    const std::shared_ptr<array_info>& in_arr, bool use_cache) {
+    const std::shared_ptr<array_info>& in_arr, bool use_cache,
+    bool unify_empty) {
     // Unify child arrays for nested arrays
     if (this->child_dict_builders.size() > 0) {
         assert(in_arr->arr_type == bodo_array_type::ARRAY_ITEM ||
@@ -426,7 +426,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 unified_children.emplace_back(child_arr);
             } else {
                 unified_children.emplace_back(
-                    child_builder->UnifyDictionaryArray(child_arr));
+                    child_builder->UnifyDictionaryArray(child_arr, use_cache,
+                                                        unify_empty));
             }
         }
 
@@ -506,6 +507,10 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
     bool empty_arr = batch_dict->array_id == 0;
     // An empty array is automatically unified with all arrays
     if (empty_arr) {
+        if (unify_empty) {
+            return create_dict_string_array(this->dict_buff->data_array,
+                                            std::move(in_arr->child_arrays[1]));
+        }
         // Note: dict_buff->data_array is always unique.
         // Since the dictionaries match, we can set
         // is_locally_unique = True for the input.
