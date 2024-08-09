@@ -47,7 +47,6 @@ import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.TimestampWithTimeZoneString;
 import org.apache.calcite.util.Util;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
 import org.checkerframework.checker.initialization.qual.UnknownInitialization;
@@ -68,6 +67,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TimeZone;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.rel.type.RelDataTypeImpl.NON_NULLABLE_SUFFIX;
@@ -233,9 +234,9 @@ public class RexLiteral extends RexNode {
     this.value = value;
     this.type = requireNonNull(type, "type");
     this.typeName = requireNonNull(typeName, "typeName");
-    Preconditions.checkArgument(valueMatchesType(value, typeName, true));
-    Preconditions.checkArgument((value == null) == type.isNullable());
-    Preconditions.checkArgument(typeName != SqlTypeName.ANY);
+    checkArgument(valueMatchesType(value, typeName, true));
+    checkArgument((value == null) == type.isNullable());
+    checkArgument(typeName != SqlTypeName.ANY);
     this.digest = computeDigest(RexDigestIncludeType.OPTIONAL);
   }
 
@@ -396,6 +397,7 @@ public class RexLiteral extends RexNode {
       // an integer literal surrounded by a cast function.
       return false;
     case OTHER:
+      // BODO CHANGE:
       // Literal of type OTHER (VARIANT) is not legal.
       // Cast "(True as VARIANT)" remains a boolean literal
       // surrounded by a cast function
@@ -418,6 +420,7 @@ public class RexLiteral extends RexNode {
       return SqlTypeName.DECIMAL;
     case REAL:
     case FLOAT:
+    case DOUBLE:
       return SqlTypeName.DOUBLE;
     case VARBINARY:
       return SqlTypeName.BINARY;
@@ -552,6 +555,7 @@ public class RexLiteral extends RexNode {
    * as HOUR TO SECOND. Adds MILLISECOND if the end is SECOND, to deal with
    * fractional seconds. */
   private static List<TimeUnit> getTimeUnits(SqlIntervalQualifier qualifier) {
+    // Bodo Change: Handle null start and end units
     final TimeUnit start = qualifier.getStartUnit() == null ? qualifier.getEndUnit() : qualifier.getStartUnit();
     final TimeUnit end = qualifier.getEndUnit() == null ? qualifier.getStartUnit() : qualifier.getEndUnit();
     final ImmutableList<TimeUnit> list =
@@ -563,6 +567,7 @@ public class RexLiteral extends RexNode {
   }
 
   private String intervalString(BigDecimal v) {
+    // Bodo Change: Replace typename with interval qualifier
     final List<TimeUnit> timeUnits = getTimeUnits(type.getIntervalQualifier());
     final StringBuilder b = new StringBuilder();
     for (TimeUnit timeUnit : timeUnits) {
@@ -665,6 +670,7 @@ public class RexLiteral extends RexNode {
       sb.append(value.toString());
       break;
     case DOUBLE:
+    case FLOAT:
       assert value instanceof BigDecimal;
       sb.append(Util.toScientificNotation((BigDecimal) value));
       break;
@@ -811,7 +817,7 @@ public class RexLiteral extends RexNode {
       return null;
     }
 
-    // We don't have a type system yet so use the default
+    // Bodo Change: We don't have a type system yet so use the default
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
 
     switch (typeName) {
@@ -829,6 +835,8 @@ public class RexLiteral extends RexNode {
       return new RexLiteral(b, type, typeName);
     case DECIMAL:
     case DOUBLE:
+    case REAL:
+    case FLOAT:
       BigDecimal d = new BigDecimal(literal);
       return new RexLiteral(d, type, typeName);
     case BINARY:
@@ -846,15 +854,18 @@ public class RexLiteral extends RexNode {
     case INTERVAL_MINUTE:
     case INTERVAL_MINUTE_SECOND:
     case INTERVAL_SECOND:
-      long millis =
+      // Bodo Change: Compute nanoseconds instead of milliseconds
+      // Bodo Change: Include the type system
+      long nanos =
           SqlParserUtil.intervalToNanos(
               literal,
               castNonNull(type.getIntervalQualifier()),
               typeSystem);
-      return new RexLiteral(BigDecimal.valueOf(millis), type, typeName);
+      return new RexLiteral(BigDecimal.valueOf(nanos), type, typeName);
     case INTERVAL_YEAR:
     case INTERVAL_YEAR_MONTH:
     case INTERVAL_MONTH:
+      // Bodo Change: Include the type system
       long months =
           SqlParserUtil.intervalToMonths(
               literal,
@@ -1123,10 +1134,10 @@ public class RexLiteral extends RexNode {
       }
       break;
     case TIME_TZ:
-        if (clazz == Integer.class) {
-          return clazz.cast(((TimeWithTimeZoneString) value).getLocalTimeString().getMillisOfDay());
-        }
-        break;
+      if (clazz == Integer.class) {
+        return clazz.cast(((TimeWithTimeZoneString) value).getLocalTimeString().getMillisOfDay());
+      }
+      break;
     case TIMESTAMP:
       if (clazz == Long.class) {
         // Milliseconds since 1970-01-01 00:00:00
@@ -1134,6 +1145,16 @@ public class RexLiteral extends RexNode {
       } else if (clazz == Calendar.class) {
         // Note: Nanos are ignored
         return clazz.cast(((TimestampString) value).toCalendar());
+      }
+      break;
+    case TIMESTAMP_TZ:
+      if (clazz == Long.class) {
+        return clazz.cast(((TimestampWithTimeZoneString) value)
+            .getLocalTimestampString()
+            .getMillisSinceEpoch());
+      } else if (clazz == Calendar.class) {
+        TimestampWithTimeZoneString ts = (TimestampWithTimeZoneString) value;
+        return clazz.cast(ts.getLocalTimestampString().toCalendar(ts.getTimeZone()));
       }
       break;
     case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
@@ -1145,16 +1166,6 @@ public class RexLiteral extends RexNode {
         return clazz.cast(((TimestampString) value).toCalendar());
       }
       break;
-    case TIMESTAMP_TZ:
-        if (clazz == Long.class) {
-          return clazz.cast(((TimestampWithTimeZoneString) value)
-                  .getLocalTimestampString()
-                  .getMillisSinceEpoch());
-        } else if (clazz == Calendar.class) {
-          TimestampWithTimeZoneString ts = (TimestampWithTimeZoneString) value;
-          return clazz.cast(ts.getLocalTimestampString().toCalendar(ts.getTimeZone()));
-        }
-        break;
     case INTERVAL_YEAR:
     case INTERVAL_YEAR_MONTH:
     case INTERVAL_MONTH:

@@ -97,6 +97,7 @@ public class SqlAdvisorValidator extends SqlValidatorImpl {
     }
   }
 
+  // Bodo Change: Include SqlTableIdentifierWithID
   /**
    * Resolves a SqlTableIdentifierWithID to a fully-qualified name.
    *
@@ -122,6 +123,7 @@ public class SqlAdvisorValidator extends SqlValidatorImpl {
     return expr;
   }
 
+  // Bodo Change: Add selectItemIdx to the signature.
   @Override public SqlNode expandSelectExpr(SqlNode expr,
       SelectScope scope, SqlSelect select, Integer selectItemIdx) {
     // Disable expansion. It doesn't help us come up with better hints.
@@ -207,7 +209,7 @@ public class SqlAdvisorValidator extends SqlValidatorImpl {
 
   @Override protected void validateNamespace(final SqlValidatorNamespace namespace,
       RelDataType targetRowType) {
-    // Only attempt to validate each namespace once. Otherwise if
+    // Only attempt to validate each namespace once. Otherwise, if
     // validation fails, we may end up cycling.
     if (activeNamespaces.add(namespace)) {
       super.validateNamespace(namespace, targetRowType);

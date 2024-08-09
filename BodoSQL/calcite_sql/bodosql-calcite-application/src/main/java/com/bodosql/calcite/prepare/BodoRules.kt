@@ -43,8 +43,6 @@ import com.bodosql.calcite.application.logicalRules.MinRowNumberFilterRule
 import com.bodosql.calcite.application.logicalRules.PartialJoinConditionIntoChildrenRule
 import com.bodosql.calcite.application.logicalRules.ProjectFilterProjectColumnEliminationRule
 import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
-import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules.PruneLeftSingleRowJoinRuleConfig
-import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules.PruneRightSingleRowJoinRuleConfig
 import com.bodosql.calcite.application.logicalRules.SingleValuePruneRule
 import com.bodosql.calcite.application.logicalRules.ValuesReduceRule
 import com.bodosql.calcite.application.logicalRules.WindowDecomposeRule
@@ -466,18 +464,6 @@ object BodoRules {
     @JvmField
     val PRUNE_EMPTY_UNION_RULE: RelOptRule =
         PruneEmptyRules.UnionEmptyPruneRuleConfig.DEFAULT
-            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-            .toRule()
-
-    @JvmField
-    val LEFT_PRUNE_SINGLE_ROW_JOIN_RULE: RelOptRule =
-        PruneLeftSingleRowJoinRuleConfig.DEFAULT
-            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
-            .toRule()
-
-    @JvmField
-    val RIGHT_PRUNE_SINGLE_ROW_JOIN_RULE: RelOptRule =
-        PruneRightSingleRowJoinRuleConfig.DEFAULT
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
@@ -1299,8 +1285,6 @@ object BodoRules {
             PRUNE_EMPTY_AGGREGATE_RULE,
             PRUNE_EMPTY_SORT_RULE,
             PRUNE_EMPTY_UNION_RULE,
-            LEFT_PRUNE_SINGLE_ROW_JOIN_RULE,
-            RIGHT_PRUNE_SINGLE_ROW_JOIN_RULE,
             PROJECT_VALUES_REDUCE_RULE,
             JOIN_REORDER_CONDITION_RULE,
             FILTER_REORDER_CONDITION_RULE,

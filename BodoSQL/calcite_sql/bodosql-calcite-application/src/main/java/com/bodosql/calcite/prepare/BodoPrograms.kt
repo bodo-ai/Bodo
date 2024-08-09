@@ -49,6 +49,7 @@ import org.apache.calcite.rel.logical.LogicalSort
 import org.apache.calcite.rel.logical.LogicalTableFunctionScan
 import org.apache.calcite.rel.logical.LogicalUnion
 import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider
+import org.apache.calcite.rel.rules.SingleValuesOptimizationRules
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCall
 import org.apache.calcite.rex.RexExecutorImpl
@@ -311,6 +312,10 @@ object BodoPrograms {
             JoinExtractOverRule.Config.DEFAULT.toRule(),
             ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
             SINGLE_VALUE_REMOVE_RULE,
+            SingleValuesOptimizationRules.JOIN_LEFT_INSTANCE,
+            SingleValuesOptimizationRules.JOIN_RIGHT_INSTANCE,
+            SingleValuesOptimizationRules.JOIN_LEFT_PROJECT_INSTANCE,
+            SingleValuesOptimizationRules.JOIN_RIGHT_PROJECT_INSTANCE,
         ),
     )
 

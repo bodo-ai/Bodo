@@ -4,7 +4,6 @@ import static java.util.Objects.requireNonNull;
 
 import com.bodosql.calcite.application.logicalRules.BodoFilterCorrelateRule;
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule;
-import com.bodosql.calcite.application.logicalRules.PruneSingleRowJoinRules;
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.prepare.BodoPrograms;
 import com.bodosql.calcite.prepare.BodoRules;
@@ -33,6 +32,7 @@ import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
 import org.apache.calcite.rel.rules.FilterProjectTransposeRule;
+import org.apache.calcite.rel.rules.SingleValuesOptimizationRules;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
@@ -223,10 +223,10 @@ public class BodoRelDecorrelator extends RelDecorrelator {
             .addRuleInstance(BodoRules.SINGLE_VALUE_REMOVE_RULE)
             // Sub query expansion often creates joins with 1 row inputs,
             // which could be a blocker to decorrelation.
-            .addRuleInstance(
-                PruneSingleRowJoinRules.PruneRightSingleRowJoinRuleConfig.DEFAULT.toRule())
-            .addRuleInstance(
-                PruneSingleRowJoinRules.PruneLeftSingleRowJoinRuleConfig.DEFAULT.toRule())
+            .addRuleInstance(SingleValuesOptimizationRules.JOIN_LEFT_INSTANCE)
+            .addRuleInstance(SingleValuesOptimizationRules.JOIN_RIGHT_INSTANCE)
+            .addRuleInstance(SingleValuesOptimizationRules.JOIN_LEFT_PROJECT_INSTANCE)
+            .addRuleInstance(SingleValuesOptimizationRules.JOIN_RIGHT_PROJECT_INSTANCE)
             // Bodo Change: Add project merge and remove to handle projections from
             // SINGLE_VALUE_REMOVE_RULE
             .addRuleInstance(CoreRules.PROJECT_MERGE)

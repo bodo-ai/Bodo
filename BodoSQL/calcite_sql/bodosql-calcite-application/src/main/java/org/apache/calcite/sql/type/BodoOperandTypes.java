@@ -2,6 +2,7 @@ package org.apache.calcite.sql.type;
 
 
 
+import com.amazonaws.services.dynamodbv2.xspec.L;
 import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils;
 import com.bodosql.calcite.application.operatorTables.VariantOperandChecker;
 
@@ -16,6 +17,7 @@ import org.apache.calcite.util.Pair;
 import java.util.List;
 
 import static com.bodosql.calcite.application.operatorTables.OperatorTableUtils.argumentRange;
+import static org.apache.calcite.sql.type.OperandTypes.family;
 
 public class BodoOperandTypes {
 
@@ -64,11 +66,11 @@ public class BodoOperandTypes {
   }
   public static final SqlSingleOperandTypeChecker DATETIME_INTERVAL_SYMBOL = new DateTimePartOperandTypeChecker();
   public static final SqlSingleOperandTypeChecker DATE_NUMERIC =
-      OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.NUMERIC);
+      family(SqlTypeFamily.DATE, SqlTypeFamily.NUMERIC);
   public static final SqlSingleOperandTypeChecker INTEGER_DATE =
-      OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.DATE);
+      family(SqlTypeFamily.INTEGER, SqlTypeFamily.DATE);
   public static final SqlSingleOperandTypeChecker DATE_DATE =
-      OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.DATE);
+      family(SqlTypeFamily.DATE, SqlTypeFamily.DATE);
 
   public static final SqlSingleOperandTypeChecker PLUS_OPERATOR =
       OperandTypes.or(OperandTypes.NUMERIC_NUMERIC, OperandTypes.INTERVAL_SAME_SAME, OperandTypes.DATETIME_INTERVAL,
@@ -80,13 +82,13 @@ public class BodoOperandTypes {
           DATE_DATE
       );
 
-  public static final SqlSingleOperandTypeChecker CHARACTER_CHARACTER = OperandTypes.family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
+  public static final SqlSingleOperandTypeChecker CHARACTER_CHARACTER = family(SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER);
 
 
   public static final SqlSingleOperandTypeChecker ARRAY_OR_MAP =
-          OperandTypes.family(SqlTypeFamily.ARRAY)
-                  .or(OperandTypes.family(SqlTypeFamily.MAP))
-                  .or(OperandTypes.family(SqlTypeFamily.ANY));
+          family(SqlTypeFamily.ARRAY)
+                  .or(family(SqlTypeFamily.MAP))
+                  .or(family(SqlTypeFamily.ANY));
 
   /**
    * Creates an operand checker from a sequence of single-operand checkers.
@@ -116,14 +118,14 @@ public class BodoOperandTypes {
   // The optional additional signatures for a TIMESTAMP_FROM_PARTS function based
   // on extracting the date from the first argument with the time from the second argument.
   public static SqlOperandTypeChecker TIMESTAMP_FROM_PARTS_DATE_TIME_COMPOSITION =
-          OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIME)
-          .or(OperandTypes.family(SqlTypeFamily.DATE, SqlTypeFamily.TIMESTAMP))
-          .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIMESTAMP))
-          .or(OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIME));
+          family(SqlTypeFamily.DATE, SqlTypeFamily.TIME)
+          .or(family(SqlTypeFamily.DATE, SqlTypeFamily.TIMESTAMP))
+          .or(family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIMESTAMP))
+          .or(family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.TIME));
 
   // The extra signature for a TIMESTAMP_FROM_PARTS function including the TIMEZONE string argument
   public static SqlOperandTypeChecker TIMESTAMP_FROM_PARTS_TZ_CHECKER =
-          OperandTypes.family(
+          family(
                   SqlTypeFamily.NUMERIC,
                   SqlTypeFamily.NUMERIC,
                   SqlTypeFamily.NUMERIC,
@@ -145,5 +147,11 @@ public class BodoOperandTypes {
                   Pair.of(OperandTypes.POSITIVE_INTEGER_LITERAL, "POSITIVE INTEGER LITERAL")));
 
 
-
+  public static final SqlOperandTypeChecker NUMERIC_EXACT_NUMERIC =
+          OperandTypes.sequence(
+                  (operator, name) -> operator.getName() + "(<NUMERIC>, <EXACT_NUMERIC>)",
+                  family(SqlTypeFamily.NUMERIC),
+                  // Only 32-bit integer allowed for the second argument
+                  family(SqlTypeFamily.EXACT_NUMERIC)
+          );
 }
