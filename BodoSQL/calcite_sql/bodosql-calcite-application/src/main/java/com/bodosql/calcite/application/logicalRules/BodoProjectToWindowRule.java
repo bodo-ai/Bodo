@@ -16,10 +16,11 @@
  */
 package com.bodosql.calcite.application.logicalRules;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.bodosql.calcite.application.utils.BodoSQLStyleImmutable;
 import com.bodosql.calcite.rel.logical.BodoLogicalProject;
 import com.bodosql.calcite.rel.logical.BodoLogicalWindow;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -271,7 +272,7 @@ public abstract class BodoProjectToWindowRule extends RelRule<BodoProjectToWindo
             RelBuilder relBuilder,
             RelNode input,
             RexProgram program) {
-          Preconditions.checkArgument(
+          checkArgument(
               program.getCondition() == null, "WindowedAggregateRel cannot accept a condition");
           // BODO CHANGE: convert the output to a BodoLogicalWindow
           RelNode result = LogicalWindow.create(cluster, traitSet, relBuilder, input, program);

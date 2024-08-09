@@ -26,12 +26,12 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 
-import com.google.common.base.Preconditions;
-
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.List;
 import java.util.Objects;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 /**
  * Definition of the SQL <code>ALL</code> and <code>SOME</code>operators.
@@ -58,10 +58,11 @@ public class SqlQuantifyOperator extends SqlInOperator {
    *   <code>&gt;</code>, <code>&ge;</code>,
    *   <code>=</code> or <code>&lt;&gt;</code>.
    */
+  // Bodo Change: Make public
   public SqlQuantifyOperator(SqlKind kind, SqlKind comparisonKind) {
     super(comparisonKind.sql + " " + kind, kind);
     this.comparisonKind = Objects.requireNonNull(comparisonKind, "comparisonKind");
-    Preconditions.checkArgument(comparisonKind == SqlKind.EQUALS
+    checkArgument(comparisonKind == SqlKind.EQUALS
         || comparisonKind == SqlKind.NOT_EQUALS
         || comparisonKind == SqlKind.LESS_THAN_OR_EQUAL
         || comparisonKind == SqlKind.LESS_THAN
@@ -69,12 +70,13 @@ public class SqlQuantifyOperator extends SqlInOperator {
         || comparisonKind == SqlKind.GREATER_THAN
         // Bodo Change: Include SqlKind.NULL_EQUALS
         || comparisonKind == SqlKind.NULL_EQUALS);
-    Preconditions.checkArgument(kind == SqlKind.SOME
+    checkArgument(kind == SqlKind.SOME
         || kind == SqlKind.ALL);
   }
 
+
   @Override public RelDataType deriveType(SqlValidator validator,
-                                          SqlValidatorScope scope, SqlCall call) {
+      SqlValidatorScope scope, SqlCall call) {
     final List<SqlNode> operands = call.getOperandList();
     assert operands.size() == 2;
 
@@ -95,7 +97,7 @@ public class SqlQuantifyOperator extends SqlInOperator {
    * returns type of call, otherwise it returns null.
    */
   public @Nullable RelDataType tryDeriveTypeForCollection(SqlValidator validator,
-                                                          SqlValidatorScope scope, SqlCall call) {
+      SqlValidatorScope scope, SqlCall call) {
     final SqlNode left = call.operand(0);
     final SqlNode right = call.operand(1);
     if (right instanceof SqlNodeList && ((SqlNodeList) right).size() == 1) {
@@ -104,10 +106,10 @@ public class SqlQuantifyOperator extends SqlInOperator {
         final RelDataType componentRightType = Objects.requireNonNull(rightType.getComponentType());
         final RelDataType leftType = validator.deriveType(scope, left);
         if (SqlTypeUtil.sameNamedType(componentRightType, leftType)
-                || SqlTypeUtil.isNull(leftType) || SqlTypeUtil.isNull(componentRightType)) {
+            || SqlTypeUtil.isNull(leftType) || SqlTypeUtil.isNull(componentRightType)) {
           return validator.getTypeFactory().createTypeWithNullability(
-                  validator.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN),
-                  rightType.isNullable() || componentRightType.isNullable() || leftType.isNullable());
+              validator.getTypeFactory().createSqlType(SqlTypeName.BOOLEAN),
+              rightType.isNullable() || componentRightType.isNullable() || leftType.isNullable());
         }
       }
     }

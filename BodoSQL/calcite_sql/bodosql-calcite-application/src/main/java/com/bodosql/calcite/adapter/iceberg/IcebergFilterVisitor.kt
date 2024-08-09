@@ -11,6 +11,8 @@ import org.apache.calcite.rex.RexCorrelVariable
 import org.apache.calcite.rex.RexDynamicParam
 import org.apache.calcite.rex.RexFieldAccess
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLambda
+import org.apache.calcite.rex.RexLambdaRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
@@ -295,31 +297,31 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ct
     }
 
     // ------ It's impossible at codegen for a filter to contain any of the following ------
-    override fun visitLocalRef(var1: RexLocalRef): Expr? {
+    override fun visitLocalRef(var1: RexLocalRef): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexLocalRef")
     }
 
-    override fun visitOver(var1: RexOver): Expr? {
+    override fun visitOver(var1: RexOver): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexLocalRef")
     }
 
-    override fun visitCorrelVariable(var1: RexCorrelVariable): Expr? {
+    override fun visitCorrelVariable(var1: RexCorrelVariable): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexCorrelVariable")
     }
 
-    override fun visitDynamicParam(var1: RexDynamicParam): Expr? {
+    override fun visitDynamicParam(var1: RexDynamicParam): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexDynamicParam")
     }
 
-    override fun visitRangeRef(var1: RexRangeRef): Expr? {
+    override fun visitRangeRef(var1: RexRangeRef): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexRangeRef")
     }
 
-    override fun visitFieldAccess(var1: RexFieldAccess): Expr? {
+    override fun visitFieldAccess(var1: RexFieldAccess): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexFieldAccess")
     }
 
-    override fun visitSubQuery(var1: RexSubQuery): Expr? {
+    override fun visitSubQuery(var1: RexSubQuery): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexSubQuery")
     }
 
@@ -327,7 +329,15 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ct
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexTableInputRef")
     }
 
-    override fun visitPatternFieldRef(p0: RexPatternFieldRef?): Expr {
+    override fun visitPatternFieldRef(p0: RexPatternFieldRef): Expr {
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexPatternFieldRef")
+    }
+
+    override fun visitLambda(var1: RexLambda): Expr {
+        throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a Lambda")
+    }
+
+    override fun visitLambdaRef(var1: RexLambdaRef): Expr {
+        throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a LambdaRef")
     }
 }

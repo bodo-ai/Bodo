@@ -28,6 +28,10 @@ class BodoLogicalWindow(
         return BodoLogicalWindow(cluster, traitSet, hints, inputs[0], constants, rowType, groups, inputsToKeep)
     }
 
+    override fun copy(constants: MutableList<RexLiteral>): BodoLogicalWindow {
+        return BodoLogicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
+    }
+
     companion object {
         @JvmStatic
         fun create(

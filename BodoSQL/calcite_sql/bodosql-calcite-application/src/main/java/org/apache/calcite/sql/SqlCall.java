@@ -115,6 +115,7 @@ public abstract class SqlCall extends SqlNode {
         getOperandList());
   }
 
+  // Bodo Change: Override deepCopy
   @Override public SqlCall deepCopy(@Nullable SqlParserPos pos) {
     List<@Nullable SqlNode> newOperandList = new ArrayList<>();
     //See above comment, operand list is nullable, but it isn't typed as such
@@ -145,7 +146,7 @@ public abstract class SqlCall extends SqlNode {
     final SqlDialect dialect = writer.getDialect();
     if (leftPrec > operator.getLeftPrec()
         || (operator.getRightPrec() <= rightPrec && (rightPrec != 0))
-        || (writer.isAlwaysUseParentheses() && isA(SqlKind.EXPRESSION))) {
+        || writer.isAlwaysUseParentheses() && isA(SqlKind.EXPRESSION)) {
       final SqlWriter.Frame frame = writer.startList("(", ")");
       dialect.unparseCall(writer, this, 0, 0);
       writer.endList(frame);
@@ -197,7 +198,7 @@ public abstract class SqlCall extends SqlNode {
     }
     SqlCall that = (SqlCall) node;
 
-    // Automatically fail if the function is not deterministic
+    // Bodo Change: Automatically fail if the function is not deterministic
     if (!this.getOperator().isDeterministic()) {
       return litmus.fail("{} != {} (non-deterministic function)", this, node);
     }
@@ -217,7 +218,7 @@ public abstract class SqlCall extends SqlNode {
    * Returns a string describing the actual argument types of a call, e.g.
    * "SUBSTR(VARCHAR(12), NUMBER(3,2), INTEGER)".
    */
-  protected String getCallSignature(
+  public String getCallSignature(
       SqlValidator validator,
       @Nullable SqlValidatorScope scope) {
     List<String> signatureList = new ArrayList<>();

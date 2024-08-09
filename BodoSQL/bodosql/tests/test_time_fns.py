@@ -70,54 +70,62 @@ def test_time_box_array_unbox(precision, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "unit, test_fn_type, answer",
+    "unit, test_fn_type, answer, error_msg",
     [
         pytest.param(
             "hour",
             "DATE_PART",
             pd.Series([12, 1, 9, 20, 23]),
+            None,
             id="valid-hour-date_part",
         ),
         pytest.param(
             "minute",
             "MINUTE",
             pd.Series([30, 2, 59, 45, 50]),
+            None,
             id="valid-minute-regular",
         ),
         pytest.param(
             "second",
             "DATE_PART",
             pd.Series([15, 3, 0, 1, 59]),
+            None,
             id="valid-second-date_part",
         ),
         pytest.param(
             "millisecond",
             "EXTRACT",
             pd.Series([0, 4, 100, 123, 500]),
+            None,
             id="valid-millisecond-extract",
         ),
         pytest.param(
             "microsecond",
             "MICROSECOND",
             pd.Series([0, 0, 250, 456, 0]),
+            None,
             id="valid-microsecond-regular",
         ),
         pytest.param(
             "nanosecond",
             "EXTRACT",
             pd.Series([0, 0, 0, 789, 999]),
+            None,
             id="valid-nanosecond-extract",
         ),
         pytest.param(
             "day",
             "DATE_PART",
             None,
+            r"Cannot extract unit",
             id="invalid-day-date_part",
         ),
         pytest.param(
             "dayofyear",
             "DAYOFYEAR",
             None,
+            r"Cannot extract unit",
             id="invalid-dayofyear-regular",
             marks=pytest.mark.slow,
         ),
@@ -125,6 +133,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "dow",
             "EXTRACT",
             None,
+            r"Cannot apply 'EXTRACT' to arguments of type",
             id="invalid-dow-extract",
             marks=pytest.mark.slow,
         ),
@@ -132,6 +141,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "week",
             "WEEK",
             None,
+            r"Cannot extract unit",
             id="invalid-week-regular",
             marks=pytest.mark.slow,
         ),
@@ -139,6 +149,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "weekiso",
             "DATE_PART",
             None,
+            r"Cannot extract unit",
             id="invalid-weekiso-date_part",
             marks=pytest.mark.slow,
         ),
@@ -146,6 +157,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "month",
             "EXTRACT",
             None,
+            r"Cannot apply 'EXTRACT' to arguments of type",
             id="invalid-month-extract",
             marks=pytest.mark.slow,
         ),
@@ -153,6 +165,7 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "quarter",
             "DATE_PART",
             None,
+            r"Cannot extract unit",
             id="invalid-quarter-date_part",
             marks=pytest.mark.slow,
         ),
@@ -160,12 +173,13 @@ def test_time_box_array_unbox(precision, memory_leak_check):
             "year",
             "YEAR",
             None,
+            r"Cannot extract unit",
             id="invalid-year-regular",
             marks=pytest.mark.slow,
         ),
     ],
 )
-def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
+def test_time_extract(unit, answer, test_fn_type, error_msg, memory_leak_check):
     """Tests EXTRACT and EXTRACT-like functions on time data, checking that
     values larger than HOUR raise an exception"""
     if test_fn_type == "EXTRACT":
@@ -191,9 +205,7 @@ def test_time_extract(unit, answer, test_fn_type, memory_leak_check):
     }
     if answer is None:
         bc = BodoSQLContext(ctx)
-        with pytest.raises(
-            Exception, match=r"Cannot extract unit \w+ from TIME values"
-        ):
+        with pytest.raises(Exception, match=error_msg):
             bc.sql(query)
     else:
         expected_output = pd.DataFrame({"U": answer})

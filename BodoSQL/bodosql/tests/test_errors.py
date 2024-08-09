@@ -572,7 +572,7 @@ def test_row_fn(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK or ROW_NUMBER functions",
+        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK, ROW_NUMBER or PERCENTILE_CONT/DISC functions",
     ):
         impl(df)
 
@@ -593,7 +593,7 @@ def test_row_fn_jit(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
     with pytest.raises(
         BodoError,
-        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK or ROW_NUMBER functions",
+        match=r"ROW/RANGE not allowed with RANK, DENSE_RANK, ROW_NUMBER or PERCENTILE_CONT/DISC functions",
     ):
         impl(df)
 

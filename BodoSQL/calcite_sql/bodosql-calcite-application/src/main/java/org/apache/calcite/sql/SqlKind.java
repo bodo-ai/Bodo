@@ -432,6 +432,9 @@ public enum SqlKind {
   /** {@code CASE} expression. */
   CASE,
 
+  /** {@code LAMBDA} expression. */
+  LAMBDA,
+
   /** {@code INTERVAL} expression. */
   INTERVAL,
 
@@ -657,6 +660,12 @@ public enum SqlKind {
    */
   LOCAL_REF,
 
+  /** Reference to lambda expression parameter.
+   *
+   * <p>(Only used at the RexNode level.)
+   */
+  LAMBDA_REF,
+
   /**
    * Reference to correlation variable.
    *
@@ -802,6 +811,9 @@ public enum SqlKind {
   /** {@code MAP_VALUES} function (Spark semantics). */
   MAP_VALUES,
 
+  /** {@code MAP_CONTAINS_KEY} function (Spark semantics). */
+  MAP_CONTAINS_KEY,
+
   /** {@code MAP_FROM_ARRAYS} function (Spark semantics). */
   MAP_FROM_ARRAYS,
 
@@ -828,6 +840,15 @@ public enum SqlKind {
 
   /** {@code SUBSTR} function (PostgreSQL semantics). */
   SUBSTR_POSTGRESQL,
+
+  /** {@code CHAR_LENGTH} function. */
+  CHAR_LENGTH,
+
+  /** {@code ENDS_WITH} function. */
+  ENDS_WITH,
+
+  /** {@code STARTS_WITH} function. */
+  STARTS_WITH,
 
   /** Call to a function using JDBC function syntax. */
   JDBC_FN,

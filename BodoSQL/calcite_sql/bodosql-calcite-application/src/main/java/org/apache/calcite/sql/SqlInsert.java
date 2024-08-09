@@ -199,7 +199,7 @@ public class SqlInsert extends SqlCall {
   }
 
   @Override public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-    writer.startList(SqlWriter.FrameTypeEnum.SELECT);
+    final SqlWriter.Frame frame = writer.startList(SqlWriter.FrameTypeEnum.SELECT);
     StringBuilder initialString = new StringBuilder(isUpsert() ? "UPSERT" : "INSERT");
     initialString.append(isOverwrite() ? " OVERWRITE " : " ");
     initialString.append("INTO");
@@ -212,6 +212,7 @@ public class SqlInsert extends SqlCall {
     }
     writer.newlineAndIndent();
     source.unparse(writer, 0, 0);
+    writer.endList(frame);
   }
 
   @Override public void validate(SqlValidator validator, SqlValidatorScope scope) {

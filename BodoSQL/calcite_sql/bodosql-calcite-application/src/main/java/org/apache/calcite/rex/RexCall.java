@@ -16,9 +16,6 @@
  */
 package org.apache.calcite.rex;
 
-import com.google.common.collect.ImmutableList;
-import java.util.ArrayList;
-import java.util.List;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.SqlKind;
@@ -29,7 +26,13 @@ import org.apache.calcite.sql.type.SqlTypeUtil;
 import org.apache.calcite.util.Litmus;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Sarg;
+
+import com.google.common.collect.ImmutableList;
+
 import org.checkerframework.checker.nullness.qual.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
@@ -179,6 +182,7 @@ public class RexCall extends RexNode {
   }
 
   private boolean digestWithType() {
+    // Bodo Change: Also include SAFE_CAST
     return isA(SqlKind.CAST)
         || isA(SqlKind.SAFE_CAST)
         || isA(SqlKind.NEW_SPECIFICATION);
@@ -250,6 +254,10 @@ public class RexCall extends RexNode {
     return operands;
   }
 
+  public int operandCount() {
+    return operands.size();
+  }
+
   public SqlOperator getOperator() {
     return op;
   }
@@ -284,7 +292,7 @@ public class RexCall extends RexNode {
       return false;
     }
     RexCall rexCall = (RexCall) o;
-    // Nondeterministic function calls are not equal
+    // Bodo Change: Nondeterministic function calls are not equal
     if (!this.getOperator().isDeterministic()
         || !rexCall.getOperator().isDeterministic()) {
       return false;

@@ -49,6 +49,8 @@ import org.apache.calcite.rex.RexCorrelVariable
 import org.apache.calcite.rex.RexDynamicParam
 import org.apache.calcite.rex.RexFieldAccess
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLambda
+import org.apache.calcite.rex.RexLambdaRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexNode
@@ -1671,7 +1673,7 @@ open class RexToBodoTranslator(
                     operands,
                 )
             }
-
+            SqlKind.CHAR_LENGTH -> return visitStringFunc(fnOperation, operands, isSingleRow)
             SqlKind.OTHER, SqlKind.OTHER_FUNCTION -> {
                 when (fnName) {
                     "CEIL", "FLOOR" -> return NumericCodeGen.genFloorCeilCode(fnName, operands)
@@ -2145,7 +2147,7 @@ open class RexToBodoTranslator(
                     "OBJECT_INSERT" -> return visitObjectInsert(operands, argScalars)
                     "IS_ARRAY", "IS_OBJECT" -> return visitVariantFunc(fnName, operands)
                     "REGEXP_LIKE", "REGEXP_COUNT", "REGEXP_REPLACE", "REGEXP_SUBSTR", "REGEXP_INSTR",
-                    "ASCII", "CHAR", "CHAR_LENGTH", "LENGTH", "REVERSE", "LOWER", "UPPER", "SPACE",
+                    "ASCII", "CHAR", "LENGTH", "REVERSE", "LOWER", "UPPER", "SPACE",
                     "RTRIMMED_LENGTH", "FORMAT", "REPEAT", "STRCMP", "RIGHT", "LEFT", "CONTAINS", "INSTR",
                     "STARTSWITH", "ENDSWITH", "RPAD", "LPAD", "SPLIT_PART", "SUBSTRING_INDEX", "TRANSLATE3",
                     "REPLACE", "SUBSTRING", "INSERT", "CHARINDEX", "STRTOK", "STRTOK_TO_ARRAY", "SPLIT",
@@ -2282,6 +2284,14 @@ open class RexToBodoTranslator(
 
     override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): Expr {
         return visitInputRef(fieldRef)
+    }
+
+    override fun visitLambda(var1: RexLambda): Expr {
+        throw unsupportedNode("RexLambda")
+    }
+
+    override fun visitLambdaRef(var1: RexLambdaRef): Expr {
+        throw unsupportedNode("RexLambdaRef")
     }
 
     private fun unsupportedNode(nodeType: String): BodoSQLCodegenException {

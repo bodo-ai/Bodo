@@ -3,7 +3,6 @@ package org.apache.calcite.sql.type;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils;
 import com.bodosql.calcite.rel.type.BodoTypeFactoryImpl;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -16,6 +15,7 @@ import org.apache.calcite.sql.SqlOperatorBinding;
 import com.bodosql.calcite.rel.type.BodoRelDataTypeFactory;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
+import static com.google.common.base.Preconditions.checkArgument;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -522,8 +522,7 @@ public class BodoReturnTypes {
                 && !containsNullType
                 && !(SqlTypeUtil.inCharOrBinaryFamilies(argType0)
                 && SqlTypeUtil.inCharOrBinaryFamilies(argType1))) {
-            Preconditions.checkArgument(
-                    SqlTypeUtil.sameNamedType(argType0, argType1));
+            checkArgument(SqlTypeUtil.sameNamedType(argType0, argType1));
         }
 
         SqlCollation pickedCollation = null;

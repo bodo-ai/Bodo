@@ -326,7 +326,10 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
 
     /** The {@code RAND([seed])} function, which yields a random double,
      * optionally with seed. */
-    public static final SqlRandFunction RAND = new SqlRandFunction();
+    public static final SqlBasicFunction RAND = SqlBasicFunction
+      .create("RAND", ReturnTypes.DOUBLE,
+          OperandTypes.NILADIC.or(OperandTypes.NUMERIC), SqlFunctionCategory.NUMERIC)
+      .withDynamic(true);
 
     /**
      * Internal integer arithmetic division operator, '<code>/INT</code>'. This
@@ -1682,10 +1685,9 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlFunction POSITION = new SqlPositionFunction("POSITION");
 
     public static final SqlBasicFunction CHAR_LENGTH =
-            SqlBasicFunction.create("CHAR_LENGTH",
+            SqlBasicFunction.create(SqlKind.CHAR_LENGTH,
                     ReturnTypes.INTEGER_NULLABLE,
-                    OperandTypes.CHARACTER,
-                    SqlFunctionCategory.NUMERIC);
+                    OperandTypes.CHARACTER);
 
     /** Alias for {@link #CHAR_LENGTH}. */
     public static final SqlFunction CHARACTER_LENGTH =
@@ -1844,11 +1846,12 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
-    /** The {@code ROUND(numeric [, numeric])} function. */
+    // Bodo Change: Allow decimal + int64 for round
+    /** The {@code ROUND(numeric [, integer])} function. */
     public static final SqlFunction ROUND =
             SqlBasicFunction.create("ROUND",
                     ReturnTypes.ARG0_NULLABLE,
-                    OperandTypes.NUMERIC_OPTIONAL_INTEGER,
+                    OperandTypes.NUMERIC.or(BodoOperandTypes.NUMERIC_EXACT_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code SIGN(numeric)} function. */
@@ -1872,11 +1875,12 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     OperandTypes.family(SqlTypeFamily.APPROXIMATE_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
-    /** The {@code TRUNCATE(numeric [, numeric])} function. */
+    // Bodo Change: Allow decimal + int64 for truncate
+    /** The {@code TRUNCATE(numeric [, integer])} function. */
     public static final SqlBasicFunction TRUNCATE =
             SqlBasicFunction.create("TRUNCATE",
                     ReturnTypes.ARG0_NULLABLE,
-                    OperandTypes.NUMERIC_OPTIONAL_INTEGER,
+                    OperandTypes.NUMERIC.or(BodoOperandTypes.NUMERIC_EXACT_NUMERIC),
                     SqlFunctionCategory.NUMERIC);
 
     /** The {@code PI} function. */
@@ -2173,7 +2177,7 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
      */
     public static final SqlFunction ELEMENT =
             SqlBasicFunction.create("ELEMENT",
-                    ReturnTypes.MULTISET_ELEMENT_NULLABLE,
+                    ReturnTypes.MULTISET_ELEMENT_FORCE_NULLABLE,
                     OperandTypes.COLLECTION);
 
     /**
@@ -2334,7 +2338,8 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                             OperandTypes.UNIT_INTERVAL_NUMERIC_LITERAL)
                     .withFunctionType(SqlFunctionCategory.SYSTEM)
                     .withGroupOrder(Optionality.MANDATORY)
-                    .withPercentile(true);
+                    .withPercentile(true)
+                    .withAllowsFraming(false);
 
     /**
      * {@code PERCENTILE_DISC} inverse distribution aggregate function.

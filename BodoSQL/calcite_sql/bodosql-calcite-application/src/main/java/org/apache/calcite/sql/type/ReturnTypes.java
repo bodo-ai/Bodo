@@ -35,11 +35,11 @@ import org.apache.calcite.sql.validate.SqlValidatorNamespace;
 import org.apache.calcite.util.Glossary;
 import org.apache.calcite.util.Util;
 
-import com.google.common.base.Preconditions;
-
 import java.util.AbstractList;
 import java.util.List;
 import java.util.function.UnaryOperator;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCharset;
 import static org.apache.calcite.sql.type.NonNullableAccessors.getCollation;
@@ -405,6 +405,13 @@ public abstract class ReturnTypes {
       DOUBLE.andThen(SqlTypeTransforms.TO_NULLABLE);
 
   /**
+   * Type-inference strategy whereby the result type of a call is a nullable
+   * Double.
+   */
+  public static final SqlReturnTypeInference DOUBLE_FORCE_NULLABLE =
+      DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE);
+
+  /**
    * Type-inference strategy whereby the result type of a call is a Char.
    */
   public static final SqlReturnTypeInference CHAR =
@@ -551,12 +558,12 @@ public abstract class ReturnTypes {
    */
   public static final SqlReturnTypeInference ARG0_EXCEPT_INTEGER = opBinding ->  {
     RelDataTypeFactory typeFactory = opBinding.getTypeFactory();
-    SqlTypeName op = opBinding.getOperandType(0).getSqlTypeName();
-    if (SqlTypeName.INT_TYPES.contains(op)) {
+    RelDataType opType = opBinding.getOperandType(0);
+    if (SqlTypeName.INT_TYPES.contains(opType.getSqlTypeName())) {
       return typeFactory.createTypeWithNullability(
-          typeFactory.createSqlType(SqlTypeName.DOUBLE), true);
+          typeFactory.createSqlType(SqlTypeName.DOUBLE), false);
     } else {
-      return typeFactory.createTypeWithNullability(typeFactory.createSqlType(op), true);
+      return opType;
     }
   };
 
@@ -582,13 +589,13 @@ public abstract class ReturnTypes {
                 RelDataType type =
                     opBinding.getOperandType(index)
                         .getComponentType();
-                assert type != null;
+                if (type == null) {
+                  return opBinding.getTypeFactory().createSqlType(SqlTypeName.NULL);
+                }
                 return type;
               }
 
-              @Override public int size() {
-                return opBinding.getOperandCount();
-              }
+              @Override public int size() { return opBinding.getOperandCount(); }
             });
     RelDataType biggestElementType =
         LEAST_RESTRICTIVE.inferReturnType(newBinding);
@@ -623,10 +630,11 @@ public abstract class ReturnTypes {
       ARG0.andThen(SqlTypeTransforms.TO_MULTISET);
 
   /**
-   * Returns the element type of a MULTISET.
+   * Returns the element type of a MULTISET, with nullability enforced.
    */
-  public static final SqlReturnTypeInference MULTISET_ELEMENT_NULLABLE =
-      MULTISET.andThen(SqlTypeTransforms.TO_COLLECTION_ELEMENT_TYPE);
+  public static final SqlReturnTypeInference MULTISET_ELEMENT_FORCE_NULLABLE =
+      MULTISET.andThen(SqlTypeTransforms.TO_COLLECTION_ELEMENT_TYPE)
+          .andThen(SqlTypeTransforms.FORCE_NULLABLE);
 
   /**
    * Same as {@link #MULTISET} but returns with nullability if any of the
@@ -960,8 +968,7 @@ public abstract class ReturnTypes {
             && !containsNullType
             && !(SqlTypeUtil.inCharOrBinaryFamilies(argType0)
             && SqlTypeUtil.inCharOrBinaryFamilies(argType1))) {
-          Preconditions.checkArgument(
-              SqlTypeUtil.sameNamedType(argType0, argType1));
+          checkArgument(SqlTypeUtil.sameNamedType(argType0, argType1));
         }
         SqlCollation pickedCollation = null;
         if (!containsAnyType
