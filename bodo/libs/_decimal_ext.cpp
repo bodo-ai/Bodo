@@ -533,64 +533,76 @@ inline void add_or_subtract_decimal_scalars(const arrow::Decimal128& d1,
  * @param[out] overflow Overflow flag
  * @return arrow::Decimal128
  */
+arrow::Decimal128 add_or_subtract_decimal_scalars_util(
+    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
+    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
+    bool do_addition, bool* overflow) {
+    bool fast_add = out_precision < decimalops::kMaxPrecision;
+    arrow::Decimal128 result;
+    if (do_addition) {
+        if (fast_add) {
+            if (s1 < s2) {
+                add_or_subtract_decimal_scalars<true, true, false, true>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else if (s2 < s1) {
+                add_or_subtract_decimal_scalars<true, false, true, true>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else {
+                add_or_subtract_decimal_scalars<true, false, false, true>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            }
+        } else {
+            if (s1 < s2) {
+                add_or_subtract_decimal_scalars<false, true, false, true>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else if (s2 < s1) {
+                add_or_subtract_decimal_scalars<false, false, true, true>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else {
+                add_or_subtract_decimal_scalars<false, false, false, true>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            }
+        }
+    } else {
+        if (fast_add) {
+            if (s1 < s2) {
+                add_or_subtract_decimal_scalars<true, true, false, false>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else if (s2 < s1) {
+                add_or_subtract_decimal_scalars<true, false, true, false>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else {
+                add_or_subtract_decimal_scalars<true, false, false, false>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            }
+        } else {
+            if (s1 < s2) {
+                add_or_subtract_decimal_scalars<false, true, false, false>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else if (s2 < s1) {
+                add_or_subtract_decimal_scalars<false, false, true, false>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            } else {
+                add_or_subtract_decimal_scalars<false, false, false, false>(
+                    v1, v2, s1, s2, out_scale, overflow, &result);
+            }
+        }
+    }
+
+    return result;
+}
+
+/**
+ * @brief Python entrypoint for addition and subtraction of decimal scalars.
+ */
 arrow::Decimal128 add_or_subtract_decimal_scalars_py_entry(
     arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
     int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
     bool do_addition, bool* overflow) noexcept {
     try {
-        bool fast_add = out_precision < decimalops::kMaxPrecision;
-        arrow::Decimal128 result;
-        if (do_addition) {
-            if (fast_add) {
-                if (s1 < s2) {
-                    add_or_subtract_decimal_scalars<true, true, false, true>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else if (s2 < s1) {
-                    add_or_subtract_decimal_scalars<true, false, true, true>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else {
-                    add_or_subtract_decimal_scalars<true, false, false, true>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                }
-            } else {
-                if (s1 < s2) {
-                    add_or_subtract_decimal_scalars<false, true, false, true>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else if (s2 < s1) {
-                    add_or_subtract_decimal_scalars<false, false, true, true>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else {
-                    add_or_subtract_decimal_scalars<false, false, false, true>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                }
-            }
-        } else {
-            if (fast_add) {
-                if (s1 < s2) {
-                    add_or_subtract_decimal_scalars<true, true, false, false>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else if (s2 < s1) {
-                    add_or_subtract_decimal_scalars<true, false, true, false>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else {
-                    add_or_subtract_decimal_scalars<true, false, false, false>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                }
-            } else {
-                if (s1 < s2) {
-                    add_or_subtract_decimal_scalars<false, true, false, false>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else if (s2 < s1) {
-                    add_or_subtract_decimal_scalars<false, false, true, false>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                } else {
-                    add_or_subtract_decimal_scalars<false, false, false, false>(
-                        v1, v2, s1, s2, out_scale, overflow, &result);
-                }
-            }
-        }
-
-        return result;
+        return add_or_subtract_decimal_scalars_util(v1, p1, s1, v2, p2, s2,
+                                                    out_precision, out_scale,
+                                                    do_addition, overflow);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return arrow::Decimal128(0);
@@ -800,30 +812,40 @@ array_info* add_or_subtract_decimal_arrays_py_entry(
  * @param[out] overflow Overflow flag
  * @return arrow::Decimal128
  */
+arrow::Decimal128 multiply_decimal_scalars_util(
+    arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
+    int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
+    bool* overflow) {
+    arrow::Decimal128 result;
+    bool fast_multiply = out_precision < decimalops::kMaxPrecision;
+    int32_t delta_scale = s1 + s2 - out_scale;
+    bool rescale = delta_scale != 0;
+    if (fast_multiply && rescale) {
+        decimalops::Multiply<true, true>(v1, v2, out_scale, delta_scale,
+                                         overflow, &result);
+    } else if (fast_multiply) {
+        decimalops::Multiply<true, false>(v1, v2, out_scale, delta_scale,
+                                          overflow, &result);
+    } else if (rescale) {
+        decimalops::Multiply<false, true>(v1, v2, out_scale, delta_scale,
+                                          overflow, &result);
+    } else {
+        decimalops::Multiply<false, false>(v1, v2, out_scale, delta_scale,
+                                           overflow, &result);
+    }
+    return result;
+}
+
+/**
+ * @brief Python entry point to multiply two decimal scalars.
+ */
 arrow::Decimal128 multiply_decimal_scalars_py_entry(
     arrow::Decimal128 v1, int64_t p1, int64_t s1, arrow::Decimal128 v2,
     int64_t p2, int64_t s2, int64_t out_precision, int64_t out_scale,
     bool* overflow) noexcept {
     try {
-        arrow::Decimal128 result;
-        bool fast_multiply = out_precision < decimalops::kMaxPrecision;
-        int32_t delta_scale = s1 + s2 - out_scale;
-        bool rescale = delta_scale != 0;
-        if (fast_multiply && rescale) {
-            decimalops::Multiply<true, true>(v1, v2, out_scale, delta_scale,
-                                             overflow, &result);
-        } else if (fast_multiply) {
-            decimalops::Multiply<true, false>(v1, v2, out_scale, delta_scale,
-                                              overflow, &result);
-        } else if (rescale) {
-            decimalops::Multiply<false, true>(v1, v2, out_scale, delta_scale,
-                                              overflow, &result);
-        } else {
-            decimalops::Multiply<false, false>(v1, v2, out_scale, delta_scale,
-                                               overflow, &result);
-        }
-        return result;
-
+        return multiply_decimal_scalars_util(
+            v1, p1, s1, v2, p2, s2, out_precision, out_scale, overflow);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return arrow::Decimal128(0);

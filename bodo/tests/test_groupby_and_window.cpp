@@ -1022,36 +1022,42 @@ static bodo::tests::suite tests([] {
     });
 
     bodo::tests::test("test_groupby_ordinal_fns", [] {
-#define TEST_ORDINAL_GROUPBY_FN(arr_type, dtype)                               \
-    {                                                                          \
-        size_t n = 10;                                                         \
-        std::shared_ptr<array_info> in_col =                                   \
-            make_all_null_arr<arr_type, dtype>(n);                             \
-        std::shared_ptr<array_info> perc_col =                                 \
-            make_result_output<bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64,   \
-                               empty_return_enum::ONE>(n);                     \
-        auto perc_disc_col_set =                                               \
-            new PercentileColSet(in_col, perc_col, false, true);               \
-        auto perc_cont_col_set =                                               \
-            new PercentileColSet(in_col, perc_col, false, true);               \
-        auto median_col_set = new MedianColSet(in_col, true, true);            \
-        TEST_GROUPBY_FN(perc_disc_col_set, n,                                  \
-                        bodo_array_type::NULLABLE_INT_BOOL,                    \
-                        Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT); \
-        TEST_GROUPBY_FN(perc_cont_col_set, n,                                  \
-                        bodo_array_type::NULLABLE_INT_BOOL,                    \
-                        Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT); \
-        /* Test decimal median separately because it has a different return    \
-         * type. */                                                            \
-        if (dtype == Bodo_CTypes::DECIMAL) {                                   \
-            TEST_GROUPBY_FN(                                                   \
-                median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,         \
-                Bodo_CTypes::DECIMAL, empty_return_enum::NULL_OUTPUT);         \
-        } else {                                                               \
-            TEST_GROUPBY_FN(                                                   \
-                median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,         \
-                Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT);         \
-        }                                                                      \
+#define TEST_ORDINAL_GROUPBY_FN(arr_type, dtype)                             \
+    {                                                                        \
+        size_t n = 10;                                                       \
+        std::shared_ptr<array_info> in_col =                                 \
+            make_all_null_arr<arr_type, dtype>(n);                           \
+        std::shared_ptr<array_info> perc_col =                               \
+            make_result_output<bodo_array_type::NUMPY, Bodo_CTypes::FLOAT64, \
+                               empty_return_enum::ONE>(n);                   \
+        auto perc_disc_col_set =                                             \
+            new PercentileColSet(in_col, perc_col, false, true);             \
+        auto perc_cont_col_set =                                             \
+            new PercentileColSet(in_col, perc_col, false, true);             \
+        auto median_col_set = new MedianColSet(in_col, true, true);          \
+        /* Test decimal percentile/median separately                         \
+         * because it has a different return type. */                        \
+        if (dtype == Bodo_CTypes::DECIMAL) {                                 \
+            TEST_GROUPBY_FN(                                                 \
+                perc_disc_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,    \
+                Bodo_CTypes::DECIMAL, empty_return_enum::NULL_OUTPUT);       \
+            TEST_GROUPBY_FN(                                                 \
+                perc_cont_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,    \
+                Bodo_CTypes::DECIMAL, empty_return_enum::NULL_OUTPUT);       \
+            TEST_GROUPBY_FN(                                                 \
+                median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,       \
+                Bodo_CTypes::DECIMAL, empty_return_enum::NULL_OUTPUT);       \
+        } else {                                                             \
+            TEST_GROUPBY_FN(                                                 \
+                perc_disc_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,    \
+                Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT);       \
+            TEST_GROUPBY_FN(                                                 \
+                perc_cont_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,    \
+                Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT);       \
+            TEST_GROUPBY_FN(                                                 \
+                median_col_set, n, bodo_array_type::NULLABLE_INT_BOOL,       \
+                Bodo_CTypes::FLOAT64, empty_return_enum::NULL_OUTPUT);       \
+        }                                                                    \
     }
         TEST_ORDINAL_GROUPBY_FN(bodo_array_type::NULLABLE_INT_BOOL,
                                 Bodo_CTypes::INT8);
