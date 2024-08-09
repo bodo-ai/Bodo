@@ -3108,6 +3108,372 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "df, percentile, expected",
+    [
+        # 10-row group
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 10,
+                    "B": pd.array(
+                        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.1,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["1.90000000"],
+                }
+            ),
+            id="ten-row-group",
+        ),
+        # 20-row group
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 20,
+                    "B": pd.array(
+                        [str(i) for i in range(1, 21)],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.1,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["2.90000000"],
+                }
+            ),
+            id="twenty-row-group",
+        ),
+        # 15-row group
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 15,
+                    "B": pd.array(
+                        [str(i) for i in range(1, 16)],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.1,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["2.40000000"],
+                }
+            ),
+            id="fifteen-row-group",
+        ),
+        # 17-row group
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 17,
+                    "B": pd.array(
+                        [str(i) for i in range(1, 18)],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.1,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["2.60000000"],
+                }
+            ),
+            id="seventeen-row-group",
+        ),
+        # Large numbers
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 1],
+                    "B": pd.array(
+                        ["-1234123432.25242", "93573485693832.9573493"],
+                        dtype=pd.ArrowDtype(pa.decimal128(38, 10)),
+                    ),
+                }
+            ),
+            0.385,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["36025033006214.8533411805000"],
+                }
+            ),
+            id="large-numbers",
+        ),
+        # exact selections
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 11,
+                    "B": pd.array(
+                        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["0.00000000"],
+                }
+            ),
+            id="exact-first",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 11,
+                    "B": pd.array(
+                        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.4,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["4.00000000"],
+                }
+            ),
+            id="exact-middle",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 11,
+                    "B": pd.array(
+                        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            1,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["10.00000000"],
+                }
+            ),
+            id="exact-last",
+        ),
+        # Multiple groups
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        1,
+                        2,
+                        2,
+                        2,
+                        3,
+                        3,
+                        3,
+                        3,
+                        3,
+                    ],
+                    "B": pd.array(
+                        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            0.37,
+            pd.DataFrame(
+                {
+                    0: [1, 2, 3],
+                    1: ["1.37000", "3.74000", "7.48000"],
+                }
+            ),
+            id="multiple-groups",
+        ),
+    ],
+)
+def test_decimal_percentile_cont(
+    df, percentile, expected, spark_info, memory_leak_check
+):
+    query = f"SELECT A, (PERCENTILE_CONT({percentile}) WITHIN GROUP (ORDER BY B))::VARCHAR AS C FROM TABLE1 GROUP BY A"
+
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, percentile, expected",
+    [
+        # exact selections
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 11,
+                    "B": pd.array(
+                        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["0.00000"],
+                }
+            ),
+            id="exact-first",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 11,
+                    "B": pd.array(
+                        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.4,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["4.00000"],
+                }
+            ),
+            id="exact-middle",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 11,
+                    "B": pd.array(
+                        ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            1,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["10.00000"],
+                }
+            ),
+            id="exact-last",
+        ),
+        # 10-row group
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 10,
+                    "B": pd.array(
+                        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.18,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["2.00000"],
+                }
+            ),
+            id="ten-row-group",
+        ),
+        # 15-row group
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1] * 15,
+                    "B": pd.array(
+                        [str(i) for i in range(1, 16)],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 5)),
+                    ),
+                }
+            ),
+            0.24,
+            pd.DataFrame(
+                {
+                    0: [1],
+                    1: ["4.00000"],
+                }
+            ),
+            id="fifteen-row-group",
+        ),
+        # Multiple groups
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        1,
+                        1,
+                        2,
+                        2,
+                        2,
+                        3,
+                        3,
+                        3,
+                        3,
+                        3,
+                    ],
+                    "B": pd.array(
+                        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                        dtype=pd.ArrowDtype(pa.decimal128(10, 2)),
+                    ),
+                }
+            ),
+            0.62,
+            pd.DataFrame(
+                {
+                    0: [1, 2, 3],
+                    1: ["2.00", "4.00", "9.00"],
+                }
+            ),
+            id="multiple-groups",
+        ),
+    ],
+)
+def test_decimal_percentile_disc(
+    df, percentile, expected, spark_info, memory_leak_check
+):
+    query = f"SELECT A, (PERCENTILE_DISC({percentile}) WITHIN GROUP (ORDER BY B))::VARCHAR AS C FROM TABLE1 GROUP BY A"
+
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            expected_output=expected,
+        )
+    finally:
+        bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
     "arr, error_msg",
     [
         pytest.param(
