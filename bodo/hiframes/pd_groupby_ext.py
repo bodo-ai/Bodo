@@ -391,10 +391,12 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
         else:
             # Nullable:
             return dtype_to_array_type(out_dtype, convert_nullable=True), "ok"
-    elif func_name == "median" and isinstance(in_dtype, Decimal128Type):
-        # These functions have a dedicated decimal implementation.
-        # MEDIAN:
 
+    # These functions have a dedicated decimal implementation.
+    elif func_name in {"median", "percentile_cont"} and isinstance(
+        in_dtype, Decimal128Type
+    ):
+        # MEDIAN / PERCENTILE_CONT
         # For median, the input precision and scale are increased by 3,
         # while precision remains capped at 38.
         # This means that an input scale of 36 or more is invalid.
@@ -406,6 +408,11 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
                 f"Input scale of {in_dtype.precision} too large for MEDIAN operation"
             )
         return bodo.DecimalArrayType(new_precision, new_scale), "ok"
+    elif func_name == "percentile_disc" and isinstance(in_dtype, Decimal128Type):
+        # PERCENTILE_DISC
+        # Maintain the same precision and scale as the input.
+        return bodo.DecimalArrayType(in_dtype.precision, in_dtype.scale), "ok"
+
     elif (
         func_name
         in {

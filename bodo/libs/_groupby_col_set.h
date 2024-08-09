@@ -1059,6 +1059,13 @@ class PercentileColSet : public BasicColSet {
 
     virtual ~PercentileColSet();
 
+    void alloc_update_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        const bool alloc_out_if_no_combine = true,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
+
     void update(const std::vector<grouping_info>& grp_infos,
                 bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
                 std::shared_ptr<::arrow::MemoryManager> mm =
@@ -1085,7 +1092,7 @@ class PercentileColSet : public BasicColSet {
     }
 
    private:
-    const double percentile;
+    double percentile;
     const bool interpolate;
 };
 

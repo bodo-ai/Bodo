@@ -4,12 +4,30 @@
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_decimal_ext.h"
 #include "_distributed.h"
 #include "_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_hashing.h"
 #include "_shuffle.h"
+
+// Really should be defined in something like _decimal_ext.h,
+// but there seem to be many other files that redefine CHECK_ARROW.
+#ifndef CHECK_ARROW
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in decimal utilities: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
+    }
+#endif
+
+#ifndef CHECK_ARROW_AND_ASSIGN
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+#endif
 
 /**
  * The file contains the aggregate functions that are used
@@ -620,6 +638,158 @@ void percentile_computation_util(
     }
 }
 
+void percentile_computation_decimal_util(
+    std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
+    double percentile, bool interpolate, grouping_info const& grp_info,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr()) {
+    using T = typename arrow::Decimal128;
+    const bodo_array_type::arr_type_enum ArrayType =
+        bodo_array_type::NULLABLE_INT_BOOL;
+    const Bodo_CTypes::CTypeEnum DType = Bodo_CTypes::DECIMAL;
+    // Iterate across each group to find its percentile value
+    for (size_t igrp = 0; igrp < grp_info.num_groups; igrp++) {
+        // Set up a vector that will contain all of the values from the current
+        // group as a Decimal128.
+        bodo::vector<arrow::Decimal128> vect(pool);
+        for (int64_t i = grp_info.group_to_first_row[igrp]; i != -1;
+             i = grp_info.next_row_in_group[i]) {
+            if (!is_null_at<ArrayType, T, DType>(*arr, i)) {
+                T val = get_arr_item<ArrayType, T, DType>(*arr, i);
+                vect.emplace_back(val);
+            }
+        }
+        // If there were no non-null entries, output null.
+        if (vect.size() == 0) {
+            set_to_null<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128,
+                        Bodo_CTypes::DECIMAL>(*out_arr, igrp);
+            continue;
+        }
+        arrow::Decimal128 valReturn = arrow::Decimal128(0);
+        size_t len = vect.size();
+        if (interpolate) {
+            // Algorithm for PERCENTILE_CONT
+
+            // Calculate the index in the array that corresponds to
+            // the desired percentile. Cast to int64_t to round down.
+            double k_approx = (len - 1) * percentile;
+            int64_t k_exact = (int64_t)k_approx;
+            if (k_approx == k_exact) {
+                // If rounding down does not change the value, then
+                // k_exact is the exact index we want. Obtain
+                // the k_exact-largest element by using std::nth
+                // element to partially sort about that index.
+                std::nth_element(vect.begin(), vect.begin() + k_exact,
+                                 vect.end());
+                valReturn = vect[k_exact];
+                auto res = valReturn.Rescale(arr->scale, out_arr->scale);
+                CHECK_ARROW_AND_ASSIGN(
+                    res, "Overflow in intermediate value calculation",
+                    valReturn)
+            } else {
+                // Otherwise, we want a weighted average of the
+                // values at k_exact and the next index.  Obtain
+                // the k_exact-largest element by using std::nth
+                // element to partially sort about that index.
+                std::nth_element(vect.begin(), vect.begin() + k_exact,
+                                 vect.end());
+                arrow::Decimal128 v1 = vect[k_exact];
+                // Then, find the minimum of the remaining elements
+                arrow::Decimal128 v2 =
+                    *std::min_element(vect.begin() + k_exact + 1, vect.end());
+                // Linearly interpolate between v1 and v2 where
+                // the weight is based on how close k_approx is
+                // to k_exact vs k_exact + 1. E.g. if k_exact
+                // is 12 and k_approx = 12.25, then the formula
+                // is v1 + 0.25 * (v2 - v1) = 0.75*v1 + 0.25*v2
+
+                // We first convert the interpolation factor into a Decimal128.
+                arrow::Decimal128 interpolation_factor;
+                auto conversion_result = arrow::Decimal128::FromReal(
+                    k_approx - k_exact, arr->precision, arr->scale);
+                CHECK_ARROW_AND_ASSIGN(conversion_result,
+                                       "failed to convert float to decimal",
+                                       interpolation_factor)
+
+                // Compute valReturn = v1 + (interpolation_factor) * (v2 - v1)
+
+                // From here on out, we need to do some intermediate
+                // calculations that involve manipulating the precision and
+                // scale such that the output precision matches Snowflake's
+                // implementation.
+
+                bool overflow = false;
+
+                // Do addition with normal addition precision/scale rules.
+                auto diff = add_or_subtract_decimal_scalars_util(
+                    v2, arr->precision, arr->scale, v1, arr->precision,
+                    arr->scale, std::min(arr->precision + 1, 38), arr->scale,
+                    false, &overflow);
+                if (overflow) {
+                    throw std::runtime_error(
+                        "Overflow in intermediate value calculation");
+                }
+
+                // Let delta = (interpolation_factor) * (v2 - v1).
+                // The scale and precision of delta will need to follow the
+                // multiplication rules, which will result in a higher scale
+                // than desired.
+                int delta_leading = (arr->precision - arr->scale) * 2;
+                int delta_scale =
+                    std::min(arr->scale * 2, std::max(arr->scale, 12));
+                int delta_precision = std::min(delta_leading + delta_scale, 38);
+                auto delta = multiply_decimal_scalars_util(
+                    diff, std::min(arr->precision + 1, 38), arr->scale,
+                    interpolation_factor, arr->precision, arr->scale,
+                    delta_precision, delta_scale, &overflow);
+                if (overflow) {
+                    throw std::runtime_error(
+                        "Overflow in intermediate value calculation");
+                }
+
+                // Thus, we need to truncate delta to the desired scale.
+                // Cut off delta to out_arr->precision, out_arr->scale
+                delta = decimalops::Truncate<false>(
+                    delta, std::min(delta_scale + 3, 38), delta_scale,
+                    out_arr->precision, out_arr->scale, out_arr->scale,
+                    &overflow);
+
+                // Finally, we can perform addition with the desired precision
+                // and scale.
+                auto finalValue = add_or_subtract_decimal_scalars_util(
+                    v1, arr->precision, arr->scale, delta, out_arr->precision,
+                    out_arr->scale, out_arr->precision, out_arr->scale, true,
+                    &overflow);
+                if (overflow) {
+                    throw std::runtime_error(
+                        "Overflow in intermediate value calculation");
+                }
+
+                valReturn = finalValue;
+            }
+        } else {
+            // Algorithm for PERCENTILE_DISC
+
+            // Calculate the index in the array that corresponds to
+            // the desired percentile. Cast to int64_t to round down.
+            double k_approx = len * percentile;
+            int64_t k_exact = (int64_t)k_approx;
+            // The following formula will choose the ordinal formula
+            // corresponding to the first location whose cumulative distribution
+            // is >= percentile.
+            int64_t k_select = (k_approx == k_exact) ? (k_exact - 1) : k_exact;
+            if (k_select < 0)
+                k_select = 0;
+            std::nth_element(vect.begin(), vect.begin() + k_select, vect.end());
+            valReturn = vect[k_select];
+        }
+        // Store the answer in the output array
+        set_non_null<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128,
+                     Bodo_CTypes::DECIMAL>(*out_arr, igrp);
+        set_arr_item<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128,
+                     Bodo_CTypes::DECIMAL>(*out_arr, igrp, valReturn);
+    }
+}
+
 template <bodo_array_type::arr_type_enum ArrayType>
 void percentile_computation_dtype_helper(
     std::shared_ptr<array_info> arr, std::shared_ptr<array_info> out_arr,
@@ -677,8 +847,9 @@ void percentile_computation_dtype_helper(
             break;
         }
         case Bodo_CTypes::DECIMAL: {
-            percentile_computation_util<ArrayType, Bodo_CTypes::DECIMAL>(
-                arr, out_arr, percentile, interpolate, grp_info, pool);
+            // Specialized decimal implementation
+            percentile_computation_decimal_util(arr, out_arr, percentile,
+                                                interpolate, grp_info, pool);
             break;
         }
         default: {
@@ -1739,3 +1910,6 @@ void nunique_computation(std::shared_ptr<array_info> arr,
             GetArrType_as_string(arr->arr_type));
     }
 }
+
+#undef CHECK_ARROW
+#undef CHECK_ARROW_AND_ASSIGN

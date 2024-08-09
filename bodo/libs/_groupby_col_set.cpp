@@ -1555,9 +1555,42 @@ PercentileColSet::PercentileColSet(std::shared_ptr<array_info> in_col,
                                    bool _interpolate, bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::percentile_disc, false, use_sql_rules),
       percentile(getv<double>(percentile_col, 0)),
-      interpolate(_interpolate) {}
+      interpolate(_interpolate) {
+    if (percentile_col->dtype == Bodo_CTypes::INT32 &&
+        getv<int>(percentile_col, 0) == 1) {
+        // The percentile 1 should be coerced to 1.0.
+        this->percentile = 1.0;
+    }
+}
 
 PercentileColSet::~PercentileColSet() {}
+
+void PercentileColSet::alloc_update_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    const bool alloc_out_if_no_combine, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    this->alloc_running_value_columns(num_groups, out_cols, pool,
+                                      std::move(mm));
+    this->update_cols = out_cols;
+    if (this->in_col->dtype == Bodo_CTypes::DECIMAL && this->interpolate) {
+        // For decimal, compute the scale and precision of the output array
+        // The input precision and scale are increased by 3, capped at 38.
+        // This means that an input scale of 36 or more is invalid.
+
+        // Note we only want to readjust if we are interpolating.
+        // PERCENTILE_DISC does not require this adjustment.
+        int new_scale = this->in_col->scale + 3;
+        int new_precision = std::min(38, this->in_col->precision + 3);
+        if (new_scale > 37) {
+            std::string err_msg = "Scale " +
+                                  std::to_string(this->in_col->scale) +
+                                  " is too large for PERCENTILE operation";
+            throw std::runtime_error(err_msg);
+        }
+        this->update_cols[0]->scale = new_scale;
+        this->update_cols[0]->precision = new_precision;
+    }
+}
 
 void PercentileColSet::update(const std::vector<grouping_info>& grp_infos,
                               bodo::IBufferPool* const pool,
