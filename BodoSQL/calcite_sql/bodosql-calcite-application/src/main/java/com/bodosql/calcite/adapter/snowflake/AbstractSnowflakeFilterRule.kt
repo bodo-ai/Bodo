@@ -126,6 +126,7 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     SqlKind.GREATEST,
                     // Other functions
                     SqlKind.IN,
+                    SqlKind.CHAR_LENGTH,
                 )
 
             // Note that several of these functions also have their SqlKind in
@@ -166,7 +167,6 @@ abstract class AbstractSnowflakeFilterRule protected constructor(config: Config)
                     CastingOperatorTable.TO_VARCHAR.name,
                     SqlStdOperatorTable.SUBSTRING.name,
                     StringOperatorTable.SUBSTR.name,
-                    SqlStdOperatorTable.CHAR_LENGTH.name,
                     // This handles ||
                     SqlStdOperatorTable.CONCAT.name,
                     SqlStdOperatorTable.ABS.name,

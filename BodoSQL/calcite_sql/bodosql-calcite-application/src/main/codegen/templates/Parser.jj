@@ -84,6 +84,7 @@ import org.apache.calcite.sql.SqlJsonQueryWrapperBehavior;
 import org.apache.calcite.sql.SqlJsonValueEmptyOrErrorBehavior;
 import org.apache.calcite.sql.SqlJsonValueReturning;
 import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlLambda;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlMatchRecognize;
 import org.apache.calcite.sql.SqlMerge;
@@ -1101,6 +1102,9 @@ void AddArg0(List<SqlNode> list, ExprContext exprContext) :
     (
         e = Default()
     |
+        LOOKAHEAD((SimpleIdentifierOrList() | <LPAREN> <RPAREN>) <LAMBDA>)
+        e = LambdaExpression()
+    |
         LOOKAHEAD(3)
         e = TableParam()
     |
@@ -1130,6 +1134,9 @@ void AddArg(List<SqlNode> list, ExprContext exprContext) :
     )
     (
         e = Default()
+    |
+        LOOKAHEAD((SimpleIdentifierOrList() | <LPAREN> <RPAREN>) <LAMBDA>)
+        e = LambdaExpression()
     |
         e = Expression(exprContext)
     |
@@ -2525,12 +2532,20 @@ SqlNode TableRef3(ExprContext exprContext, boolean lateral, boolean assumeLatera
 {
     (
         LOOKAHEAD(2)
-        tableName = CompoundTableIdentifier()
-        ( tableRef = TableHints(tableName) | { tableRef = tableName; } )
-        [ tableRef = ExtendTable(tableRef) ]
-        tableRef = Over(tableRef)
-        [ tableRef = Snapshot(tableRef) ]
-        [ tableRef = MatchRecognize(tableRef) ]
+        tableName = CompoundTableIdentifier() { s = span(); }
+        (
+            // Table call syntax like FROM a.b() instead of FROM TABLE(a.b())
+            // Three tokens needed to disambiguate EXTEND syntax from CALCITE-493.
+            // Example: "FROM EventLog(lastGCTime TIME)".
+            LOOKAHEAD(3)
+            tableRef = ImplicitTableFunctionCallArgs(tableName)
+        |
+            ( tableRef = TableHints(tableName) | { tableRef = tableName; } )
+            [ tableRef = ExtendTable(tableRef) ]
+            tableRef = Over(tableRef)
+            [ tableRef = Snapshot(tableRef) ]
+            [ tableRef = MatchRecognize(tableRef) ]
+        )
     |
         // Bodo Change: Allow parenthesized table names
         LOOKAHEAD(5)
@@ -2771,6 +2786,38 @@ void AddCompoundIdentifierType(List<SqlNode> list, List<SqlNode> extendList) :
             extendList.add(type.withNullable(nullable, getPos()));
         }
         list.add(name);
+    }
+}
+
+SqlNode ImplicitTableFunctionCallArgs(SqlIdentifier name) :
+{
+    final List<SqlNode> tableFuncArgs = new ArrayList<SqlNode>();
+    final SqlNode call;
+    final Span s;
+}
+{
+    // Table call syntax like FROM a.b() instead of FROM TABLE(a.b())
+    // We've already parsed the name, so we don't use NamedRoutineCall.
+    { s = span(); }
+    <LPAREN>
+    [
+        AddArg0(tableFuncArgs, ExprContext.ACCEPT_CURSOR)
+        (
+            <COMMA> {
+                // a comma-list can't appear where only a query is expected
+                checkNonQueryExpression(ExprContext.ACCEPT_CURSOR);
+            }
+            AddArg(tableFuncArgs, ExprContext.ACCEPT_CURSOR)
+        )*
+    ]
+    <RPAREN>
+    {
+        final SqlParserPos pos = s.end(this);
+        call = createCall(name, pos,
+            SqlFunctionCategory.USER_DEFINED_TABLE_FUNCTION, null,
+            tableFuncArgs);
+        return SqlStdOperatorTable.COLLECTION_TABLE.createCall(pos,
+            call);
     }
 }
 
@@ -4441,6 +4488,43 @@ SqlNode Expression3(ExprContext exprContext) :
     }
 }
 
+/**
+ * Parses a lambda expression.
+ */
+SqlNode LambdaExpression() :
+{
+    final SqlNodeList parameters;
+    final SqlNode expression;
+    final Span s;
+}
+{
+    parameters = SimpleIdentifierOrListOrEmpty()
+    <LAMBDA> { s = span(); }
+    expression = Expression(ExprContext.ACCEPT_NON_QUERY)
+    {
+        return new SqlLambda(s.end(this), parameters, expression);
+    }
+}
+
+/**
+ * List of simple identifiers in parentheses or empty parentheses or one simple identifier.
+ * <ul>Examples:
+ * <li>{@code ()}
+ * <li>{@code DEPTNO}
+ * <li>{@code (EMPNO, DEPTNO)}
+ * </ul>
+ */
+SqlNodeList SimpleIdentifierOrListOrEmpty() :
+{
+    SqlNodeList list;
+}
+{
+    LOOKAHEAD(2)
+    <LPAREN> <RPAREN> { return SqlNodeList.EMPTY; }
+|
+    list = SimpleIdentifierOrList() { return list; }
+}
+
 SqlOperator periodOperator() :
 {
 }
@@ -5514,7 +5598,6 @@ SqlCall ArrayLiteral() :
 SqlNode MapConstructor() :
 {
     SqlNodeList args;
-    SqlNode e;
     final Span s;
 }
 {
@@ -6900,6 +6983,7 @@ SqlNode BuiltinFunctionCall() :
     final SqlNode node;
     final SqlLiteral style; // mssql convert 'style' operand
     final SqlFunction f;
+    final SqlNode format;
 }
 {
     //~ FUNCTIONS WITH SPECIAL SYNTAX ---------------------------------------
@@ -6916,6 +7000,7 @@ SqlNode BuiltinFunctionCall() :
         |
             <INTERVAL> e = IntervalQualifier() { args.add(e); }
         )
+        [ <FORMAT> format = StringLiteral() { args.add(format); } ]
         <RPAREN> {
             return f.createCall(s.end(this), args);
         }
@@ -7471,6 +7556,12 @@ List<SqlNode> JsonNameAndValue() :
     }
     (
         <VALUE>
+    |
+        <COMMA> {
+            if (kvMode) {
+                throw SqlUtil.newContextException(getPos(), RESOURCE.illegalComma());
+            }
+        }
     |
         <COLON> {
             if (kvMode) {
@@ -9653,6 +9744,7 @@ void NonReservedKeyWord2of3() :
 |   < NULLEQ: "<=>" >
 |   < PLUS: "+" >
 |   < MINUS: "-" >
+|   < LAMBDA: "->" >
 |   < STAR: "*" >
 |   < SLASH: "/" >
 |   < PERCENT_REMAINDER: "%" >

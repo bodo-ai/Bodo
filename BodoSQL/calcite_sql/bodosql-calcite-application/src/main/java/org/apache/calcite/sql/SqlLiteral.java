@@ -204,11 +204,12 @@ public class SqlLiteral extends SqlNode {
       return value == null;
     case DECIMAL:
     case DOUBLE:
+    case FLOAT:
+    case REAL:
       return value instanceof BigDecimal;
     case DATE:
       return value instanceof DateString;
     case TIME:
-      return value instanceof TimeString;
     case TIME_WITH_LOCAL_TIME_ZONE:
       return value instanceof TimeString;
     case TIME_TZ:
@@ -255,6 +256,7 @@ public class SqlLiteral extends SqlNode {
     return new SqlLiteral(value, typeName, pos);
   }
 
+  // Bodo Change: Override deepCopy
   @Override public SqlNode deepCopy(@Nullable SqlParserPos pos) {
     if (pos == null) {
       pos = this.pos;
@@ -302,6 +304,7 @@ public class SqlLiteral extends SqlNode {
    * @throws AssertionError if the value type is not supported
    */
   public <T extends Object> T getValueAs(Class<T> clazz) {
+    // Bodo Change: Include typeSystem
     return getValueAs(clazz, new BodoSQLRelDataTypeSystem());
   }
   public <T extends Object> T getValueAs(Class<T> clazz, RelDataTypeSystem typeSystem) {
@@ -373,9 +376,11 @@ public class SqlLiteral extends SqlNode {
           (SqlIntervalLiteral.IntervalValue) value;
       qualifier = valMonth.getIntervalQualifier();
       if (clazz == Long.class) {
+        // Bodo Change: Include typeSystem
         return clazz.cast(valMonth.getSign()
             * SqlParserUtil.intervalToMonths(valMonth, typeSystem));
       } else if (clazz == BigDecimal.class) {
+        // Bodo Change: Include typeSystem
         return clazz.cast(BigDecimal.valueOf(getValueAs(Long.class, typeSystem)));
       } else if (clazz == TimeUnitRange.class) {
         return clazz.cast(qualifier.timeUnitRange);
@@ -399,8 +404,10 @@ public class SqlLiteral extends SqlNode {
           (SqlIntervalLiteral.IntervalValue) value;
       qualifier = valTime.getIntervalQualifier();
       if (clazz == Long.class) {
+        // Bodo Change: Include typeSystem and compute as nanoseconds
         return clazz.cast(getValueAs(BigDecimal.class, typeSystem).longValue());
       } else if (clazz == BigDecimal.class) {
+        // Bodo Change: Include typeSystem and compute with nanoseconds
         long timeInNanos = valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
         BigDecimal factor = BigDecimal.ONE.scaleByPowerOfTen(6);
         BigDecimal timeInMillis = null;
@@ -477,7 +484,7 @@ public class SqlLiteral extends SqlNode {
    */
   public static @Nullable Comparable value(SqlNode node)
       throws IllegalArgumentException {
-    // We don't have typeSystem information so we use the default.
+    // Bodo Change: We don't have typeSystem information so we use the default.
     RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
     if (node instanceof SqlLiteral) {
       final SqlLiteral literal = (SqlLiteral) node;
@@ -493,10 +500,12 @@ public class SqlLiteral extends SqlNode {
       case INTERVAL_YEAR_MONTH:
         final SqlIntervalLiteral.IntervalValue valMonth =
             literal.getValueAs(SqlIntervalLiteral.IntervalValue.class);
+        // Bodo Change: Include typeSystem
         return valMonth.getSign() * SqlParserUtil.intervalToMonths(valMonth, typeSystem);
       case INTERVAL_DAY_TIME:
         final SqlIntervalLiteral.IntervalValue valTime =
             literal.getValueAs(SqlIntervalLiteral.IntervalValue.class);
+        // Bodo Change: Include typeSystem
         return valTime.getSign() * SqlParserUtil.intervalToNanos(valTime, typeSystem);
       default:
         break;
@@ -923,9 +932,9 @@ public class SqlLiteral extends SqlNode {
 
   /** Creates a TIMESTAMP WITH TIME ZONE literal. */
   public static SqlTimestampTzLiteral createTimestamp(
-          TimestampWithTimeZoneString ts,
-          int precision,
-          SqlParserPos pos) {
+      TimestampWithTimeZoneString ts,
+      int precision,
+      SqlParserPos pos) {
     return new SqlTimestampTzLiteral(ts, precision, pos);
   }
 
@@ -945,9 +954,9 @@ public class SqlLiteral extends SqlNode {
   }
 
   public static SqlTimeTzLiteral createTime(
-          TimeWithTimeZoneString t,
-          int precision,
-          SqlParserPos pos) {
+      TimeWithTimeZoneString t,
+      int precision,
+      SqlParserPos pos) {
     return new SqlTimeTzLiteral(t, precision, pos);
   }
 
@@ -985,6 +994,7 @@ public class SqlLiteral extends SqlNode {
     int prec;
     int scale;
 
+    // We expect that s is already trimmed
     int i = s.indexOf('.');
     if ((i >= 0) && ((s.length() - 1) != i)) {
       value = SqlParserUtil.parseDecimal(s);
@@ -999,6 +1009,10 @@ public class SqlLiteral extends SqlNode {
       value = SqlParserUtil.parseInteger(s);
       scale = 0;
       prec = s.length();
+    }
+    if (value.compareTo(BigDecimal.ZERO) < 0) {
+      // The '-' sign should not be counted
+      prec--;
     }
     return new SqlNumericLiteral(
         value,

@@ -21,7 +21,6 @@ import org.apache.calcite.sql.type.BodoSqlTypeUtil
 import org.apache.calcite.sql.type.SqlTypeName
 import java.math.BigDecimal
 import java.util.Locale
-import kotlin.collections.ArrayList
 
 class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     /**
@@ -30,8 +29,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     private fun unparseSqlIntervalLiteralInner(
         writer: SqlWriter,
         literal: SqlIntervalLiteral,
-        leftPrec: Int,
-        rightPrec: Int,
     ) {
         val interval = literal.getValueAs(IntervalValue::class.java)
         if (interval.intervalQualifier.startUnit != TimeUnit.SECOND) {
@@ -65,7 +62,7 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         // literal and the interval qualifier be
         // wrapped in quotes.
         writer.print("'")
-        unparseSqlIntervalLiteralInner(writer, literal, leftPrec, rightPrec)
+        unparseSqlIntervalLiteralInner(writer, literal)
         writer.print("'")
     }
 
@@ -100,6 +97,28 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
             }
         }
         buf.append("'")
+    }
+
+    /**
+     * Override the default string literal to always use unicode escapes for non-ascii
+     * characters.
+     */
+    override fun quoteStringLiteral(
+        buf: StringBuilder,
+        charsetName: String?,
+        value: String,
+    ) {
+        if (containsNonAscii(value) && charsetName == null) {
+            quoteStringLiteralUnicode(buf, value)
+        } else {
+            if (charsetName != null) {
+                buf.append("_")
+                buf.append(charsetName)
+            }
+            buf.append(literalQuoteString)
+            buf.append(value.replace(literalEndQuoteString, literalEscapedQuote))
+            buf.append(literalEndQuoteString)
+        }
     }
 
     /** Returns SqlNode for type in "cast(column as type)", which might be
@@ -168,8 +187,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     private fun unParseTrim(
         writer: SqlWriter,
         call: SqlCall,
-        leftPrec: Int,
-        rightPrec: Int,
     ) {
         assert(call.operandCount() == 3) { "Trim has incorrect number of operands" }
         assert(call.operandList.get(0) is SqlLiteral && (call.operandList.get(0) as SqlLiteral).value is SqlTrimFunction.Flag) {
@@ -190,8 +207,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     private fun unParseSubstring(
         writer: SqlWriter,
         call: SqlCall,
-        leftPrec: Int,
-        rightPrec: Int,
     ) {
         // Calcite syntax is SUBSTRING(`STRING_COLUMN` FROM 2 FOR 10)
         // Snowflake syntax is SUBSTRING(`STRING_COLUMN`, 2, 10)
@@ -202,8 +217,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     private fun unParseLenAlias(
         writer: SqlWriter,
         call: SqlCall,
-        leftPrec: Int,
-        rightPrec: Int,
     ) {
         genericFunctionUnParse(writer, "LENGTH", call.operandList)
     }
@@ -211,8 +224,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     private fun unParseNanosecond(
         writer: SqlWriter,
         call: SqlCall,
-        leftPrec: Int,
-        rightPrec: Int,
     ) {
         // Calcite doesn't have a NanoSecond function, so need to convert
         // back into DATE_PART.
@@ -226,8 +237,6 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     private fun unParseCombineIntervals(
         writer: SqlWriter,
         call: SqlCall,
-        leftPrec: Int,
-        rightPrec: Int,
     ) {
         // COMBINE_INTERVAL calls are inserted by the parser as an abstraction to deal with INTERVAL literals with commas (multiple values),
         // which isn't well-supported by calcite. However, interval addition isn't allowed in snowflake for all interval types,
@@ -255,10 +264,10 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
         intervals.add(node as SqlIntervalLiteral)
 
         // Write out all the intervals in the correct order and add commas between each
-        unparseSqlIntervalLiteralInner(writer, intervals[intervals.size - 1], leftPrec, rightPrec)
+        unparseSqlIntervalLiteralInner(writer, intervals[intervals.size - 1])
         for (i in (intervals.size - 2) downTo 0) {
             writer.print(", ")
-            unparseSqlIntervalLiteralInner(writer, intervals[i], leftPrec, rightPrec)
+            unparseSqlIntervalLiteralInner(writer, intervals[i])
         }
         writer.print("'")
     }
@@ -307,14 +316,14 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
                     leftPrec,
                     rightPrec,
                 )
-            SqlKind.TRIM -> unParseTrim(writer, call, leftPrec, rightPrec)
+            SqlKind.TRIM -> unParseTrim(writer, call)
+            SqlKind.CHAR_LENGTH -> unParseLenAlias(writer, call)
             SqlKind.OTHER, SqlKind.OTHER_FUNCTION -> {
                 when (call.operator.name) {
-                    "SUBSTR" -> unParseSubstring(writer, call, leftPrec, rightPrec)
-                    "SUBSTRING" -> unParseSubstring(writer, call, leftPrec, rightPrec)
-                    "CHAR_LENGTH" -> unParseLenAlias(writer, call, leftPrec, rightPrec)
-                    "NANOSECOND" -> unParseNanosecond(writer, call, leftPrec, rightPrec)
-                    "COMBINE_INTERVALS" -> unParseCombineIntervals(writer, call, leftPrec, rightPrec)
+                    "SUBSTR" -> unParseSubstring(writer, call)
+                    "SUBSTRING" -> unParseSubstring(writer, call)
+                    "NANOSECOND" -> unParseNanosecond(writer, call)
+                    "COMBINE_INTERVALS" -> unParseCombineIntervals(writer, call)
                     else -> super.unparseCall(writer, call, leftPrec, rightPrec)
                 }
             }

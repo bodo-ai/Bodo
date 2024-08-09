@@ -60,6 +60,10 @@ class BodoPhysicalWindow(
         return BodoPhysicalWindow(cluster, traitSet, hints, inputs[0], constants, rowType, groups, inputsToKeep)
     }
 
+    override fun copy(constants: MutableList<RexLiteral>): BodoPhysicalWindow {
+        return BodoPhysicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
+    }
+
     /**
      * Mapping of sql window operators to bodo window func names
      * Should include all functions where the sql name is not equal to the bodo name.

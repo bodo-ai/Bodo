@@ -19,6 +19,7 @@ package org.apache.calcite.rel.metadata;
 import org.apache.calcite.plan.RelOptPredicateList;
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelShuttleImpl;
 import org.apache.calcite.rel.SingleRel;
 import org.apache.calcite.rel.convert.Converter;
 import org.apache.calcite.rel.core.Aggregate;
@@ -37,6 +38,7 @@ import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.core.Values;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexCall;
@@ -44,13 +46,20 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexProgram;
+import org.apache.calcite.rex.RexSlot;
+import org.apache.calcite.rex.RexSubQuery;
+import org.apache.calcite.rex.RexUtil;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Util;
 
+import org.apache.commons.lang3.mutable.MutableBoolean;
+
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -59,6 +68,7 @@ import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * RelMdColumnUniqueness supplies a default implementation of
@@ -69,6 +79,15 @@ public class RelMdColumnUniqueness
   public static final RelMetadataProvider SOURCE =
       ReflectiveRelMetadataProvider.reflectiveSource(
           new RelMdColumnUniqueness(), BuiltInMetadata.ColumnUniqueness.Handler.class);
+
+  /**
+   * The set of aggregate functions A such that if x is unique then A(x) will also be unique.
+   * An aggregate function with this property is called 'passthrough'. This quality is not
+   * guaranteed in the presence of an OVER clause. NOTE: if a multi-argument function is added,
+   * methods that use this Set must be enhanced to select the appropriate column to pass through.
+   */
+  static final Set<SqlKind> PASSTHROUGH_AGGREGATIONS =
+      ImmutableSet.of(SqlKind.MIN, SqlKind.MAX, SqlKind.ANY_VALUE);
 
   //~ Constructors -----------------------------------------------------------
 
@@ -153,6 +172,10 @@ public class RelMdColumnUniqueness
 
   public @Nullable Boolean areColumnsUnique(Sort rel, RelMetadataQuery mq,
       ImmutableBitSet columns, boolean ignoreNulls) {
+    Double maxRowCount = mq.getMaxRowCount(rel);
+    if (maxRowCount != null && maxRowCount <= 1.0d) {
+      return true;
+    }
     columns = decorateWithConstantColumnsFromPredicates(columns, rel, mq);
     return mq.areColumnsUnique(rel.getInput(), columns, ignoreNulls);
   }
@@ -178,11 +201,13 @@ public class RelMdColumnUniqueness
       return mq.areColumnsUnique(rel.getLeft(), columns, ignoreNulls);
     case LEFT:
     case INNER:
+      final int leftColumnCount = rel.getLeft().getRowType().getFieldCount();
+      // Divide up the input column mask into column masks for the left and
+      // right sides of the join
       final Pair<ImmutableBitSet, ImmutableBitSet> leftAndRightColumns =
-          splitLeftAndRightColumns(rel.getLeft().getRowType().getFieldCount(),
-              columns);
-      final ImmutableBitSet leftColumns = leftAndRightColumns.left;
-      final ImmutableBitSet rightColumns = leftAndRightColumns.right;
+        splitLeftAndRightColumns(leftColumnCount, columns);
+      ImmutableBitSet leftColumns = leftAndRightColumns.left;
+      ImmutableBitSet rightColumns = leftAndRightColumns.right;
       final RelNode left = rel.getLeft();
       final RelNode right = rel.getRight();
 
@@ -268,10 +293,6 @@ public class RelMdColumnUniqueness
       }
     }
 
-    // If no columns can affect uniqueness, then return unknown
-    if (childColumns.cardinality() == 0) {
-      return null;
-    }
 
     return mq.areColumnsUnique(rel.getInput(), childColumns.build(),
         ignoreNulls);
@@ -280,9 +301,6 @@ public class RelMdColumnUniqueness
   public @Nullable Boolean areColumnsUnique(Join rel, RelMetadataQuery mq,
       ImmutableBitSet columns, boolean ignoreNulls) {
     columns = decorateWithConstantColumnsFromPredicates(columns, rel, mq);
-    if (columns.cardinality() == 0) {
-      return false;
-    }
 
     final RelNode left = rel.getLeft();
     final RelNode right = rel.getRight();
@@ -292,21 +310,31 @@ public class RelMdColumnUniqueness
       return mq.areColumnsUnique(left, columns, ignoreNulls);
     }
 
-    int numLeftCols = rel.getLeft().getRowType().getFieldCount();
-
+    final int leftColumnCount = rel.getLeft().getRowType().getFieldCount();
     // Divide up the input column mask into column masks for the left and
     // right sides of the join
     final Pair<ImmutableBitSet, ImmutableBitSet> leftAndRightColumns =
-        splitLeftAndRightColumns(numLeftCols,
-            columns);
-    final ImmutableBitSet initLeftColumns = leftAndRightColumns.left;
-    final ImmutableBitSet initRightColumns = leftAndRightColumns.right;
+            splitLeftAndRightColumns(leftColumnCount, columns);
+    ImmutableBitSet leftColumns = leftAndRightColumns.left;
+    ImmutableBitSet rightColumns = leftAndRightColumns.right;
 
     // for FULL OUTER JOIN if columns contain column from both inputs it is not
     // guaranteed that the result will be unique
     if (!ignoreNulls && rel.getJoinType() == JoinRelType.FULL
-        && initLeftColumns.cardinality() > 0 && initRightColumns.cardinality() > 0) {
+        && leftColumns.cardinality() > 0 && rightColumns.cardinality() > 0) {
       return false;
+    }
+
+    final JoinInfo joinInfo = rel.analyzeCondition();
+
+    // Joining with a singleton constrains the keys on the other table
+    final Double rightMaxRowCount = mq.getMaxRowCount(right);
+    if (rightMaxRowCount != null && rightMaxRowCount <= 1.0) {
+      leftColumns = leftColumns.union(joinInfo.leftSet());
+    }
+    final Double leftMaxRowCount = mq.getMaxRowCount(left);
+    if (leftMaxRowCount != null && leftMaxRowCount <= 1.0) {
+      rightColumns = rightColumns.union(joinInfo.rightSet());
     }
 
     // If we have an inner join on either side, we may be able to determine
@@ -316,8 +344,8 @@ public class RelMdColumnUniqueness
     // side we can include the other side.
     boolean isOuterLeft = rel.getJoinType().generatesNullsOnRight();
     boolean isOuterRight = rel.getJoinType().generatesNullsOnLeft();
-    ImmutableBitSet combinedLeftBits = initLeftColumns;
-    ImmutableBitSet combinedRightBits = initRightColumns;
+    ImmutableBitSet combinedLeftBits = leftColumns;
+    ImmutableBitSet combinedRightBits = rightColumns;
     boolean bitAdded = true;
     while (bitAdded) {
       BitSet addedLeftCols = new BitSet();
@@ -327,7 +355,7 @@ public class RelMdColumnUniqueness
       for (RexCall equals: equalities) {
         Integer arg0 = ((RexInputRef) equals.getOperands().get(0)).getIndex();
         Integer arg1 = ((RexInputRef) equals.getOperands().get(1)).getIndex();
-        if (arg0 < numLeftCols && arg1 < numLeftCols) {
+        if (arg0 < leftColumnCount && arg1 < leftColumnCount) {
           // Both columns are in the left table.
           if (!isOuterLeft) {
             // An outer join may not have the columns equal
@@ -341,12 +369,12 @@ public class RelMdColumnUniqueness
               unmatchedEqualities.add(equals);
             }
           }
-        } else if (arg0 >= numLeftCols && arg1 >= numLeftCols) {
+        } else if (arg0 >= leftColumnCount && arg1 >= leftColumnCount) {
           // Both columns are in the right table.
           if (!isOuterRight) {
             // An outer join may not have the columns equal
-            arg0 = arg0 - numLeftCols;
-            arg1 = arg1 - numLeftCols;
+            arg0 = arg0 - leftColumnCount;
+            arg1 = arg1 - leftColumnCount;
             boolean foundArg0 = combinedRightBits.get(arg0);
             boolean foundArg1 = combinedRightBits.get(arg1);
             if ((foundArg0 && !foundArg1) || (!foundArg0 && foundArg1)) {
@@ -361,14 +389,14 @@ public class RelMdColumnUniqueness
           // Left and right are in different tables
           Integer leftArg;
           Integer rightArg;
-          if (arg0 < numLeftCols) {
+          if (arg0 < leftColumnCount) {
             // arg0 -> Left, arg1 -> Right
             leftArg = arg0;
-            rightArg = arg1 - numLeftCols;
+            rightArg = arg1 - leftColumnCount;
           } else {
             // arg0 -> Right, arg1 -> Left
             leftArg = arg1;
-            rightArg = arg0 - numLeftCols;
+            rightArg = arg0 - leftColumnCount;
           }
           boolean foundLeft = combinedLeftBits.get(leftArg);
           boolean foundRight = combinedRightBits.get(rightArg);
@@ -391,8 +419,8 @@ public class RelMdColumnUniqueness
       combinedLeftBits = combinedLeftBits.union(addedLeftCols);
       combinedRightBits = combinedRightBits.union(addedRightCols);
     }
-    final ImmutableBitSet leftColumns = combinedLeftBits;
-    final ImmutableBitSet rightColumns = combinedRightBits;
+    leftColumns = combinedLeftBits;
+    rightColumns = combinedRightBits;
 
     // If the original column mask contains columns from both the left and
     // right hand side, then the columns are unique if and only if they're
@@ -414,7 +442,6 @@ public class RelMdColumnUniqueness
     // the columns are unique for the entire join if they're unique for
     // the corresponding join input, provided that input is not null
     // generating.
-    final JoinInfo joinInfo = rel.analyzeCondition();
     if (leftColumns.cardinality() > 0) {
       if (rel.getJoinType().generatesNullsOnLeft()) {
         return false;
@@ -437,7 +464,7 @@ public class RelMdColumnUniqueness
       return leftJoinColsUnique && rightUnique;
     }
 
-    throw new AssertionError();
+    return false;
   }
 
   /**
@@ -475,6 +502,10 @@ public class RelMdColumnUniqueness
 
   public @Nullable Boolean areColumnsUnique(Aggregate rel, RelMetadataQuery mq,
       ImmutableBitSet columns, boolean ignoreNulls) {
+    Double maxRowCount = mq.getMaxRowCount(rel);
+    if (maxRowCount != null && maxRowCount <= 1.0d) {
+      return true;
+    }
     if (Aggregate.isSimple(rel) || ignoreNulls) {
       columns = decorateWithConstantColumnsFromPredicates(columns, rel, mq);
       // group by keys form a unique key
@@ -484,6 +515,22 @@ public class RelMdColumnUniqueness
         return true;
       } else if (!Aggregate.isSimple(rel)) {
         return false;
+      }
+
+      if (Aggregate.isSimple(rel)) {
+        // Map columns to input columns
+        ImmutableBitSet inputCols = ImmutableBitSet.builder()
+            .addAll(columns.intersect(rel.getGroupSet()))
+            .addAll(columns.toList()
+                .stream()
+                .map(col -> col - rel.getGroupSet().length())
+                .filter(col -> col >= 0)
+                .map(col -> rel.getAggCallList().get(col))
+                .filter(call -> PASSTHROUGH_AGGREGATIONS.contains(call.getAggregation().getKind()))
+                .map(call -> call.getArgList().get(0))
+                .collect(Collectors.toSet()))
+            .build();
+        return mq.areColumnsUnique(rel.getInput(), inputCols, ignoreNulls);
       }
 
       final ImmutableBitSet commonKeys = columns.intersect(groupKey);
@@ -502,10 +549,10 @@ public class RelMdColumnUniqueness
 
   public Boolean areColumnsUnique(Values rel, RelMetadataQuery mq,
       ImmutableBitSet columns, boolean ignoreNulls) {
-    columns = decorateWithConstantColumnsFromPredicates(columns, rel, mq);
     if (rel.tuples.size() < 2) {
       return true;
     }
+    columns = decorateWithConstantColumnsFromPredicates(columns, rel, mq);
     final Set<List<Comparable>> set = new HashSet<>();
     final List<Comparable> values = new ArrayList<>(columns.cardinality());
     for (ImmutableList<RexLiteral> tuple : rel.tuples) {
@@ -600,17 +647,74 @@ public class RelMdColumnUniqueness
       ImmutableBitSet checkingColumns, RelNode rel, RelMetadataQuery mq) {
     final RelOptPredicateList predicates = mq.getPulledUpPredicates(rel);
     if (!RelOptPredicateList.isEmpty(predicates)) {
-      final Set<Integer> constantIndexes = new HashSet<>();
-      predicates.constantMap.keySet().forEach(rex -> {
-        if (rex instanceof RexInputRef) {
-          constantIndexes.add(((RexInputRef) rex).getIndex());
-        }
-      });
+      ImmutableBitSet constantIndexes = getConstantColumnSet(predicates);
       if (!constantIndexes.isEmpty()) {
         return checkingColumns.union(ImmutableBitSet.of(constantIndexes));
       }
     }
     // If no constant columns deduced, return the original "checkingColumns".
     return checkingColumns;
+  }
+
+  /**
+   * Returns the set of columns that are set to a constant literal or a scalar query (as
+   * in a correlated subquery). Examples of constants are {@code x} in the following:
+   * <pre>SELECT x FROM table WHERE x = 5</pre>
+   * and
+   * <pre>SELECT x, y FROM table WHERE x = (SELECT MAX(x) FROM table)</pre>
+   *
+   * <p>NOTE: Subqueries that reference correlating variables are not considered constant:
+   * <pre>SELECT x, y FROM table A WHERE x = (SELECT MAX(x) FROM table B WHERE A.y = B.y)</pre>
+   */
+  static ImmutableBitSet getConstantColumnSet(RelOptPredicateList relOptPredicateList) {
+    ImmutableBitSet.Builder builder = ImmutableBitSet.builder();
+    relOptPredicateList.constantMap.keySet()
+        .stream()
+        .filter(RexInputRef.class::isInstance)
+        .map(RexInputRef.class::cast)
+        .map(RexSlot::getIndex)
+        .forEach(builder::set);
+
+    relOptPredicateList.pulledUpPredicates.forEach(rex -> {
+      if (rex.getKind() == SqlKind.EQUALS
+          || rex.getKind() == SqlKind.IS_NOT_DISTINCT_FROM) {
+        List<RexNode> ops = ((RexCall) rex).getOperands();
+        RexNode op0 = ops.get(0);
+        RexNode op1 = ops.get(1);
+        addInputRefIfOtherConstant(builder, op0, op1);
+        addInputRefIfOtherConstant(builder, op1, op0);
+      }
+    });
+
+    return builder.build();
+  }
+
+  private static void addInputRefIfOtherConstant(ImmutableBitSet.Builder builder, RexNode inputRef,
+      RexNode other) {
+    if (inputRef instanceof RexInputRef
+        && (other.getKind() == SqlKind.LITERAL || isConstantScalarQuery(other))) {
+      builder.set(((RexInputRef) inputRef).getIndex());
+    }
+  }
+
+  /**
+   * Returns whether the supplied {@link RexNode} is a constant scalar subquery - one that does not
+   * reference any correlating variables.
+   */
+  private static boolean isConstantScalarQuery(RexNode rexNode) {
+    if (rexNode.getKind() == SqlKind.SCALAR_QUERY) {
+      MutableBoolean hasCorrelatingVars = new MutableBoolean(false);
+      ((RexSubQuery) rexNode).rel.accept(new RelShuttleImpl() {
+        @Override public RelNode visit(final LogicalFilter filter) {
+          if (RexUtil.containsCorrelation(filter.getCondition())) {
+            hasCorrelatingVars.setTrue();
+            return filter;
+          }
+          return super.visit(filter);
+        }
+      });
+      return hasCorrelatingVars.isFalse();
+    }
+    return false;
   }
 }

@@ -55,7 +55,6 @@ import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.TimestampWithTimeZoneString;
 import org.apache.calcite.util.Util;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableRangeSet;
 import com.google.common.collect.Range;
@@ -80,6 +79,7 @@ import java.util.Objects;
 import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verifyNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 
@@ -355,7 +355,7 @@ public class RexBuilder {
                               boolean indicator, List<AggregateCall> aggCalls,
                               Map<AggregateCall, RexNode> aggCallMapping,
                               final @Nullable List<RelDataType> aggArgTypes) {
-        Preconditions.checkArgument(!indicator,
+        checkArgument(!indicator,
                 "indicator is deprecated, use GROUPING function instead");
         return addAggCall(aggCall, groupCount, aggCalls,
                 aggCallMapping, aggArgTypes);
@@ -426,7 +426,7 @@ public class RexBuilder {
                             makeNullLiteral(type));
         }
         if (!allowPartial) {
-            Preconditions.checkArgument(rows, "DISALLOW PARTIAL over RANGE");
+            checkArgument(rows, "DISALLOW PARTIAL over RANGE");
             final RelDataType bigintType =
                     typeFactory.createSqlType(SqlTypeName.BIGINT);
             // todo: read bound
@@ -535,7 +535,7 @@ public class RexBuilder {
     public RexNode makeCast(
             RelDataType type,
             RexNode exp) {
-        return makeCast(type, exp, false, false);
+        return makeCast(type, exp, false, false, constantNull);
     }
 
     @Deprecated // to be removed before 2.0
@@ -543,7 +543,7 @@ public class RexBuilder {
             RelDataType type,
             RexNode exp,
             boolean matchNullability) {
-        return makeCast(type, exp, matchNullability, false);
+        return makeCast(type, exp, matchNullability, false, constantNull);
     }
 
     /**
@@ -566,6 +566,32 @@ public class RexBuilder {
             RexNode exp,
             boolean matchNullability,
             boolean safe) {
+        return makeCast(type, exp, matchNullability, safe, constantNull);
+    }
+
+
+    /**
+     * Creates a call to the CAST operator, expanding if possible, and optionally
+     * also preserving nullability, and optionally in safe mode.
+     *
+     * <p>Tries to expand the cast, and therefore the result may be something
+     * other than a {@link RexCall} to the CAST operator, such as a
+     * {@link RexLiteral}.
+     *
+     * @param type Type to cast to
+     * @param exp  Expression being cast
+     * @param matchNullability Whether to ensure the result has the same
+     * nullability as {@code type}
+     * @param safe Whether to return NULL if cast fails
+     * @param format Type Format to cast into
+     * @return Call to CAST operator
+     */
+    public RexNode makeCast(
+        RelDataType type,
+        RexNode exp,
+        boolean matchNullability,
+        boolean safe,
+        RexLiteral format) {
         final SqlTypeName sqlType = type.getSqlTypeName();
         if (exp instanceof RexLiteral) {
             RexLiteral literal = (RexLiteral) exp;
@@ -601,6 +627,7 @@ public class RexBuilder {
                             case INTEGER:
                             case SMALLINT:
                             case TINYINT:
+                            case DOUBLE:
                             case FLOAT:
                             case REAL:
                             case DECIMAL:
@@ -633,7 +660,7 @@ public class RexBuilder {
                 if (type.isNullable()
                         && !literal2.getType().isNullable()
                         && matchNullability) {
-                    return makeAbstractCast(type, literal2, safe);
+                    return makeAbstractCast(type, literal2, safe, format);
                 }
                 return literal2;
             }
@@ -647,7 +674,7 @@ public class RexBuilder {
                 && SqlTypeUtil.isExactNumeric(type)) {
             return makeCastBooleanToExact(type, exp);
         }
-        return makeAbstractCast(type, exp, safe);
+        return makeAbstractCast(type, exp, safe, format);
     }
 
     /** Returns the lowest granularity unit for the given unit.
@@ -832,10 +859,29 @@ public class RexBuilder {
      * @return Call to CAST operator
      */
     public RexNode makeAbstractCast(RelDataType type, RexNode exp, boolean safe) {
-        SqlOperator operator =
+        final SqlOperator operator =
                 safe ? SqlLibraryOperators.SAFE_CAST
                         : SqlStdOperatorTable.CAST;
         return new RexCall(type, operator, ImmutableList.of(exp));
+    }
+
+    /**
+     * Creates a call to CAST or SAFE_CAST operator with a FORMAT clause.
+     *
+     * @param type Type to cast to
+     * @param exp  Expression being cast
+     * @param safe Whether to return NULL if cast fails
+     * @param format Conversion format for target type
+     * @return Call to CAST operator
+     */
+    public RexNode makeAbstractCast(RelDataType type, RexNode exp, boolean safe, RexLiteral format) {
+        final SqlOperator operator =
+            safe ? SqlLibraryOperators.SAFE_CAST
+                : SqlStdOperatorTable.CAST;
+        if (format.isNull()) {
+        return new RexCall(type, operator, ImmutableList.of(exp));
+        }
+        return new RexCall(type, operator, ImmutableList.of(exp, format));
     }
 
     /**
@@ -1025,6 +1071,7 @@ public class RexBuilder {
                 assert o instanceof TimeWithTimeZoneString;
                 p = type.getPrecision();
                 if (p == RelDataType.PRECISION_NOT_SPECIFIED) {
+                    // Bodo Change: Default to max precision
                     p = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
                 }
                 o = ((TimeWithTimeZoneString) o).round(p);
@@ -1042,6 +1089,7 @@ public class RexBuilder {
                 assert o instanceof TimestampWithTimeZoneString;
                 p = type.getPrecision();
                 if (p == RelDataType.PRECISION_NOT_SPECIFIED) {
+                    // Bodo Change: Default to max precision
                     p = BodoSQLRelDataTypeSystem.MAX_DATETIME_PRECISION;
                 }
                 o = ((TimestampWithTimeZoneString) o).round(p);
@@ -1810,6 +1858,17 @@ public class RexBuilder {
         }
     }
 
+    /**
+     * Creates a lambda expression.
+     *
+     * @param expr expression of the lambda
+     * @param parameters parameters of the lambda
+     * @return RexNode representing the lambda
+     */
+    public RexNode makeLambdaCall(RexNode expr, List<RexLambdaRef> parameters) {
+        return new RexLambda(parameters, expr);
+    }
+
     /** Converts the type of a value to comply with
      * {@link org.apache.calcite.rex.RexLiteral#valueMatchesType}.
      *
@@ -1849,13 +1908,13 @@ public class RexBuilder {
                         o.getClass().getCanonicalName(),
                         type.getSqlTypeName());
                 return new BigDecimal(((Number) o).longValue());
-            case FLOAT:
+            case REAL:
                 if (o instanceof BigDecimal) {
                     return o;
                 }
                 return new BigDecimal(((Number) o).doubleValue(), MathContext.DECIMAL32)
                         .stripTrailingZeros();
-            case REAL:
+            case FLOAT:
             case DOUBLE:
                 if (o instanceof BigDecimal) {
                     return o;
@@ -1880,6 +1939,14 @@ public class RexBuilder {
                     return TimeString.fromCalendarFields((Calendar) o);
                 } else {
                     return TimeString.fromMillisOfDay((Integer) o);
+                }
+            case TIME_TZ:
+                if (o instanceof TimeWithTimeZoneString) {
+                    return o;
+                } else if (o instanceof Calendar) {
+                    return TimeWithTimeZoneString.fromCalendarFields((Calendar) o);
+                } else {
+                    throw new AssertionError("Value does not contain time zone");
                 }
             case TIME_WITH_LOCAL_TIME_ZONE:
                 if (o instanceof TimeString) {
@@ -1914,6 +1981,14 @@ public class RexBuilder {
                     return o;
                 } else {
                     return TimestampString.fromMillisSinceEpoch((Long) o);
+                }
+            case TIMESTAMP_TZ:
+                if (o instanceof TimestampWithTimeZoneString) {
+                    return o;
+                } else if (o instanceof Calendar) {
+                    return TimestampWithTimeZoneString.fromCalendarFields((Calendar) o);
+                } else {
+                    throw new AssertionError("Value does not contain time zone");
                 }
             default:
                 return o;

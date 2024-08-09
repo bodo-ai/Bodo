@@ -63,6 +63,10 @@ open class WindowBase(
         return planner.makeCost(rows = rows, cpu = rows * groupsCost)
     }
 
+    override fun copy(constants: MutableList<RexLiteral>): WindowBase {
+        throw UnsupportedOperationException("Copy must be implemented by WindowBase subclasses")
+    }
+
     // Returns the number of input columns
     private fun getNumInputReferences(): Int {
         return input.rowType.fieldCount
@@ -116,7 +120,7 @@ open class WindowBase(
                         aggCall.operator as SqlAggFunction,
                         aggCall.getOperands(),
                         partitionKeys,
-                        ImmutableList.copyOf<RexFieldCollation>(orderKeys),
+                        ImmutableList.copyOf(orderKeys),
                         group.lowerBound,
                         group.upperBound,
                         group.isRows,
@@ -154,19 +158,6 @@ open class WindowBase(
             return RexFieldCollation(ref, sortInfo)
         }
 
-        // Converts a RexFieldCollation used for storing the order keys in a RexOver to a
-        // RelFieldCollation used for doing the same in a Window.Group.
-        @JvmStatic
-        fun rexFieldCollationToRelFieldCollation(rfc: RexFieldCollation): RelFieldCollation {
-            val idx =
-                if (rfc.left is RexInputRef) {
-                    (rfc.left as RexInputRef).index
-                } else {
-                    throw Exception("Unable to convert $rfc to RelFieldCollation")
-                }
-            return RelFieldCollation(idx, rfc.direction, rfc.nullDirection)
-        }
-
         // Convert a ImmutableBitSet used for storing the partition keys in a Window.Group to a
         // list of RexNodes used for doing the same in a RexOver. Takes in the rel node
         // that the references refer to.
@@ -178,21 +169,6 @@ open class WindowBase(
             return keys.toList().map {
                 RexInputRef(it, rel.rowType.fieldList[it].type)
             }
-        }
-
-        // Convert a list of RexNodes used for storing the partition keys in a Window.Group to
-        // an ImmutableBitSet used for doing the same in a Window.Group.
-        @JvmStatic
-        fun inputRefsToKeyBitSet(exprs: List<RexNode>): ImmutableBitSet {
-            val asIntList: MutableList<Int> = mutableListOf()
-            exprs.forEach {
-                if (it is RexInputRef) {
-                    asIntList.add(it.index)
-                } else {
-                    throw Exception("Invalid column reference $it")
-                }
-            }
-            return ImmutableBitSet.of(asIntList)
         }
     }
 }

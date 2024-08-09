@@ -1442,6 +1442,13 @@ public class RexSimplify {
             return false;
         }
 
+        @Override public Boolean visitLambda(RexLambda lambda) {
+            return lambda.getExpression().accept(this);
+        }
+
+        @Override public Boolean visitLambdaRef(RexLambdaRef lambdaRef) {
+            return true;
+        }
     }
 
     /** Analyzes a given {@link RexNode} and decides whenever it is safe to
@@ -2321,8 +2328,10 @@ public class RexSimplify {
                 // Bodo Change: Remove calls to the executor to simplify literals.
                 // These don't match our rules.
                 // final List<RexNode> reducedValues = new ArrayList<>();
-                // final RexNode simplifiedExpr =
-                //     rexBuilder.makeCast(e.getType(), operand, safe, safe);
+                // final RexNode simplifiedExpr = e.operandCount() == 2
+                //    ? rexBuilder.makeCast(e.getType(), operand, safe, safe,
+                //    (RexLiteral) e.getOperands().get(1))
+                //    : rexBuilder.makeCast(e.getType(), operand, safe, safe);
                 // executor.reduce(rexBuilder, ImmutableList.of(simplifiedExpr), reducedValues);
                 // return requireNonNull(
                 //
@@ -2331,7 +2340,10 @@ public class RexSimplify {
                 if (operand == e.getOperands().get(0)) {
                     return e;
                 } else {
-                    return rexBuilder.makeCast(e.getType(), operand, safe, safe);
+                    return e.operands.size() > 1
+                        ? rexBuilder.makeCast(e.getType(), operand, safe, safe,
+                        (RexLiteral) e.getOperands().get(1))
+                        : rexBuilder.makeCast(e.getType(), operand, safe, safe);
                 }
         }
     }

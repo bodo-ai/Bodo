@@ -7,6 +7,8 @@ import org.apache.calcite.rex.RexCorrelVariable
 import org.apache.calcite.rex.RexDynamicParam
 import org.apache.calcite.rex.RexFieldAccess
 import org.apache.calcite.rex.RexInputRef
+import org.apache.calcite.rex.RexLambda
+import org.apache.calcite.rex.RexLambdaRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexLocalRef
 import org.apache.calcite.rex.RexOver
@@ -22,6 +24,10 @@ object RexCostEstimator : RexVisitor<Cost> {
     override fun visitInputRef(inputRef: RexInputRef): Cost = Cost()
 
     override fun visitLocalRef(localRef: RexLocalRef): Cost = throw UnsupportedOperationException()
+
+    override fun visitLambda(var1: RexLambda): Cost = throw UnsupportedOperationException()
+
+    override fun visitLambdaRef(var1: RexLambdaRef): Cost = throw UnsupportedOperationException()
 
     override fun visitLiteral(literal: RexLiteral): Cost {
         // Literals are a bit strange. They can produce a memory cost,
