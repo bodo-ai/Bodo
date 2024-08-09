@@ -801,3 +801,107 @@ def test_partitionless_rank_family(
         reset_index=True,
         sort_output=True,
     )
+
+
+def test_size_over_nothing(memory_leak_check):
+    """
+    Tests the streaming window code for `COUNT(*) OVER ()`
+    """
+    func_name = "size"
+
+    kept_cols = bodo.utils.typing.MetaType((0, 1))
+    col_meta = bodo.utils.typing.ColNamesMetaType(("win",))
+    output_col_order = bodo.utils.typing.MetaType((2,))
+    empty_global = bodo.utils.typing.MetaType(())
+    kept_indices = bodo.utils.typing.MetaType(
+        (
+            0,
+            1,
+        )
+    )
+    func_names = bodo.utils.typing.MetaType((func_name,))
+    func_input_indices = bodo.utils.typing.MetaType(((),))
+
+    def impl(in_df):
+        in_table = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(in_df),
+            (),
+            kept_cols,
+            2,
+        )
+        window_state = bodo.libs.stream_window.init_window_state(
+            4001,
+            empty_global,
+            empty_global,
+            empty_global,
+            empty_global,
+            func_names,
+            func_input_indices,
+            kept_indices,
+            True,
+            2,
+        )
+        iteration = 0
+        local_len = bodo.hiframes.table.local_len(in_table)
+        is_last_1 = False
+        is_last_2 = False
+        while not (is_last_2):
+            table_section = bodo.hiframes.table.table_local_filter(
+                in_table, slice((iteration * 4096), ((iteration + 1) * 4096))
+            )
+            is_last_1 = (iteration * 4096) >= local_len
+            (
+                is_last_2,
+                _,
+            ) = bodo.libs.stream_window.window_build_consume_batch(
+                window_state, table_section, is_last_1
+            )
+            iteration = iteration + 1
+        is_last_3 = False
+        table_builder_state = bodo.libs.table_builder.init_table_builder_state(5001)
+        while not (is_last_3):
+            (
+                window_output_batch,
+                is_last_3,
+            ) = bodo.libs.stream_window.window_produce_output_batch(window_state, True)
+            bodo.libs.table_builder.table_builder_append(
+                table_builder_state, window_output_batch
+            )
+        bodo.libs.stream_window.delete_window_state(window_state)
+        window_output = bodo.libs.table_builder.table_builder_finalize(
+            table_builder_state
+        )
+        out_table = bodo.hiframes.table.table_subset(
+            window_output, output_col_order, False
+        )
+
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return out_df
+
+    data = [None] * 10
+
+    in_df = pd.DataFrame(
+        {
+            "idx": [str(i) for i in range(len(data))],
+            "data": pd.array(data, dtype=pd.Int32Dtype),
+        }
+    )
+    out_df = pd.DataFrame(
+        {
+            "win": [len(in_df)] * len(data),
+        }
+    )
+
+    check_func(
+        impl,
+        (in_df,),
+        py_output=out_df,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=True,
+    )

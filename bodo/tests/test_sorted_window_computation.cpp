@@ -1,5 +1,6 @@
 #include <mpi.h>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <sstream>
 #include <tuple>
@@ -1396,6 +1397,28 @@ static bodo::tests::suite tests([] {
         aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::mean, true);
 
         verify_sorted_window_output(Bodo_FTypes::mean, {}, {}, {in_arr}, {0, 1},
+                                    out_arrs, expected, true);
+    });
+    bodo::tests::test("test_size", [] {
+        // tests count(*) over () where rank r has r + 1 rows.
+        int myrank;
+        int n_pes;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        size_t n_rows = myrank + 1;
+
+        // sum ( 1, 2, ..., n )
+        size_t expected_val = ((n_pes + 1) * n_pes) / 2;
+
+        std::shared_ptr<array_info> expected =
+            bodo::tests::cppToBodoArr<uint64_t>(
+                std::vector<uint64_t>(n_rows, expected_val));
+
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        out_arrs.push_back(alloc_numpy(1, Bodo_CTypes::UINT64));
+        aggfunc_output_initialize(out_arrs[0], Bodo_FTypes::size, true);
+
+        verify_sorted_window_output(Bodo_FTypes::size, {}, {}, {}, {0, 0},
                                     out_arrs, expected, true);
     });
 });
