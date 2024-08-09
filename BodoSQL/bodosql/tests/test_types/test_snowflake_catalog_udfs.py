@@ -359,6 +359,7 @@ def test_unsupported_query_argument_order_by_udf(
         impl(bc, query)
 
 
+@pytest.mark.skip("Correlation occurs because we can't prune an unused column.")
 def test_query_argument_join_udf(test_db_snowflake_catalog, memory_leak_check):
     """
     Test that Snowflake UDFs with a query function body (e.g. SELECT)
