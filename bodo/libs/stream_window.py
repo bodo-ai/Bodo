@@ -168,6 +168,7 @@ class WindowStateType(StreamingStateType):
             "rank",
             "percent_rank",
             "cume_dist",
+            "size",
         }
 
     @staticmethod

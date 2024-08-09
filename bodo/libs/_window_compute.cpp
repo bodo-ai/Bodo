@@ -2692,7 +2692,7 @@ double avg_sum_to_double(std::shared_ptr<array_info> sum_arr) {
  * @param out_arr The array to store
  * @param is_parallel Whether to do parallel communication step.
  */
-template <uint32_t window_func>
+template <Bodo_FTypes::FTypeEnum window_func>
     requires(no_aux_col<window_func>)
 void single_global_window_computation(const std::shared_ptr<array_info>& in_col,
                                       std::shared_ptr<array_info> out_arr,
@@ -2750,8 +2750,8 @@ void single_global_window_computation(const std::shared_ptr<array_info>& in_col,
  * @param out_arr The array to store the ouput value
  * @param is_parallel Whether to do parallel communication step
  */
-template <uint32_t window_func>
-    requires(window_func == Bodo_FTypes::mean)
+template <Bodo_FTypes::FTypeEnum window_func>
+    requires(mean<window_func>)
 void single_global_window_computation(const std::shared_ptr<array_info>& in_col,
                                       std::shared_ptr<array_info> out_arr,
                                       bool is_parallel) {
@@ -2822,40 +2822,75 @@ void single_global_window_computation(const std::shared_ptr<array_info>& in_col,
     }
 }
 
+/**
+ * @brief Special case of single_global_window_computation where we have no
+ * input columns The only supported function in this path is count (e.g.
+ * count(*) over ()) so the out_arr is populated with row count.
+ *
+ * @param output_rows The number of rows locally.
+ * @param out_arr The singleton array containing the globally computed row count
+ * @param is_parallel Whether to sum the row counts across ranks.
+ */
+template <Bodo_FTypes::FTypeEnum window_func>
+    requires(size<window_func>)
+void single_global_window_computation(size_t output_rows,
+                                      std::shared_ptr<array_info> out_arr,
+                                      bool is_parallel) {
+    size_t total_rows = output_rows;
+    if (is_parallel) {
+        MPI_Allreduce(MPI_IN_PLACE, &total_rows, 1, MPI_UINT64_T, MPI_SUM,
+                      MPI_COMM_WORLD);
+    }
+    getv<uint64_t>(out_arr, 0) = total_rows;
+}
+
 void global_window_computation(
     const std::vector<int32_t>& window_funcs,
     const std::vector<std::shared_ptr<array_info>>& window_args,
     const std::vector<int32_t>& window_offset_indices,
     std::vector<std::shared_ptr<array_info>>& out_arrs, size_t output_rows,
     bool is_parallel) {
-    grouping_info dummy_local_grp_info;
-    dummy_local_grp_info.num_groups = 1;
-    dummy_local_grp_info.row_to_group.resize(output_rows, 0);
     for (size_t i = 0; i < window_funcs.size(); i++) {
-        int32_t offset = window_offset_indices[i];
-        const std::shared_ptr<array_info>& in_col = window_args[offset];
         switch (window_funcs[i]) {
+            case Bodo_FTypes::size: {
+                // count(*) case the "input column" is essentially just the
+                // row count
+                single_global_window_computation<Bodo_FTypes::size>(
+                    output_rows, out_arrs[i], is_parallel);
+
+                break;
+            }
             case Bodo_FTypes::count: {
+                int32_t offset = window_offset_indices[i];
+                const std::shared_ptr<array_info>& in_col = window_args[offset];
                 single_global_window_computation<Bodo_FTypes::count>(
                     in_col, out_arrs[i], is_parallel);
                 break;
             }
             case Bodo_FTypes::sum: {
+                int32_t offset = window_offset_indices[i];
+                const std::shared_ptr<array_info>& in_col = window_args[offset];
                 single_global_window_computation<Bodo_FTypes::sum>(
                     in_col, out_arrs[i], is_parallel);
                 break;
             }
             case Bodo_FTypes::max: {
+                int32_t offset = window_offset_indices[i];
+                const std::shared_ptr<array_info>& in_col = window_args[offset];
                 single_global_window_computation<Bodo_FTypes::max>(
                     in_col, out_arrs[i], is_parallel);
                 break;
             }
             case Bodo_FTypes::min: {
+                int32_t offset = window_offset_indices[i];
+                const std::shared_ptr<array_info>& in_col = window_args[offset];
                 single_global_window_computation<Bodo_FTypes::min>(
                     in_col, out_arrs[i], is_parallel);
                 break;
             }
             case Bodo_FTypes::mean: {
+                int32_t offset = window_offset_indices[i];
+                const std::shared_ptr<array_info>& in_col = window_args[offset];
                 single_global_window_computation<Bodo_FTypes::mean>(
                     in_col, out_arrs[i], is_parallel);
                 break;

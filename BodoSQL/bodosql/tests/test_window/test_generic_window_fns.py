@@ -578,3 +578,47 @@ def test_avg_over_blank(data, expected_out, capfd):
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
 
     assert assert_success
+
+
+def test_countstar_over_blank(capfd):
+    """Checks that count(*) over () works properly and takes the correct codepath"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([None, 1, 2, 4, None, None, 2], dtype=pd.Int32Dtype),
+            "B": pd.array([None] * 7, dtype=pd.StringDtype),
+            "C": pd.array(
+                [1.2, 2.1, None, None, 3.2, None, 4.2], dtype=pd.Float32Dtype
+            ),
+        }
+    )
+
+    expected_df = pd.DataFrame(
+        {"ROW_COUNT": pd.array([len(df)] * len(df), dtype="uint64")}
+    )
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = "SELECT COUNT(*) OVER () FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            None,
+            expected_output=expected_df,
+            check_names=False,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
