@@ -89,15 +89,24 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction DIV0 =
+  public static final SqlNullPolicyFunction DIV0 =
       SqlNullPolicyFunction.createAnyPolicy(
           "DIV0",
           // What Value should the return type be
-          ReturnTypes.DOUBLE_NULLABLE,
+          ReturnTypes.QUOTIENT_NULLABLE,
           // What Input Types does the function accept. This function accepts two numerics
           // arguments
           OperandTypes.NUMERIC_NUMERIC,
           // What group of functions does this fall into?
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction DIV0NULL =
+      SqlNullPolicyFunction.createNoPolicy(
+          "DIV0NULL",
+          ReturnTypes.QUOTIENT_NULLABLE
+              .andThen(SqlTypeTransforms.TO_NOT_NULLABLE)
+              .andThen(SqlTypeTransforms.ARG0_NULLABLE),
+          OperandTypes.NUMERIC_NUMERIC,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction HAVERSINE =
@@ -237,6 +246,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           SNOWFLAKE_CEIL,
           SNOWFLAKE_FLOOR,
           DIV0,
+          DIV0NULL,
           HAVERSINE,
           LOG,
           LOG2,
