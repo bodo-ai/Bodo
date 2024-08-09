@@ -74,9 +74,11 @@ static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
  */
 template <typename T, typename hashes_t, bool use_murmurhash = false>
     requires(!std::floating_point<T> && hashes_arr_type<hashes_t>)
-static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
-                             const uint32_t seed, uint8_t* null_bitmask,
+static void hash_array_inner(const hashes_t& out_hashes, void* data_,
+                             size_t n_rows, const uint32_t seed,
+                             uint8_t* null_bitmask,
                              size_t start_row_offset = 0) {
+    T* data = static_cast<T*>(data_);
     if (null_bitmask) {
         uint32_t na_hash;
         hash_na_val<use_murmurhash>(seed, &na_hash);
@@ -125,9 +127,11 @@ static inline Py_hash_t Npy_HashDouble(PyObject* __UNUSED__(identity),
 // https://stackoverflow.com/questions/4238122/hash-function-for-floats
 template <typename T, typename hashes_t, bool use_murmurhash = false>
     requires(std::floating_point<T> && hashes_arr_type<hashes_t>)
-static void hash_array_inner(const hashes_t& out_hashes, T* data, size_t n_rows,
-                             const uint32_t seed, uint8_t* null_bitmask,
+static void hash_array_inner(const hashes_t& out_hashes, void* data_,
+                             size_t n_rows, const uint32_t seed,
+                             uint8_t* null_bitmask,
                              size_t start_row_offset = 0) {
+    T* data = static_cast<T*>(data_);
     if (null_bitmask) {
         uint32_t na_hash;
         hash_na_val<use_murmurhash>(seed, &na_hash);
@@ -213,15 +217,223 @@ static void hash_na_string(const uint32_t seed, uint32_t* hash_value) {
         hash_string_32(&val_c, 1, seed, hash_value);
     }
 }
+
+/**
+ * Computation of the hashes for the case of struct column.
+ *
+ * @tparam use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
+ * Default: false
+ * @param out_hashes: The hashes on output.
+ * @param array: the array to hash (assumed to be of type STRUCT)
+ * @param n_rows: Number of rows to hash starting from start_row_offset, i.e. we
+ * will hash rows at indices [start_row_offset, start_row_offset + n_rows - 1].
+ * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
+ * @param start_row_offset Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
+ * @param combine if true combine with hashes already in out_hashes otherwise
+ * overwrite out_hashes
+ */
+template <typename hashes_t, bool use_murmurhash = false>
+    requires(hashes_arr_type<hashes_t>)
+static void hash_array_struct(
+    const hashes_t& out_hashes, std::shared_ptr<array_info> array,
+    size_t n_rows, const uint32_t seed, bool is_parallel,
+    bool global_dict_needed,
+    std::shared_ptr<bodo::vector<uint32_t>> dict_hashes,
+    size_t start_row_offset, bool combine = false) {
+    uint32_t na_hash;
+    hash_na_string<use_murmurhash>(seed, &na_hash);
+
+    auto null_bitmask =
+        (uint8_t*)array->null_bitmask<bodo_array_type::STRUCT>();
+
+    // Create a new buffer for holding the output so that we can overwrite all
+    // the hashed nulls later - technically this is only needed for the
+    // combine=true case, since in the combine=false case we could just
+    // overwrite the values in out_hashes directly. For combine=true, we need
+    // to combine the existing value of out_hashes[i] with either na_hash or
+    // hashes[i] depending on whether or not the corresponding row is NULL.
+    // TODO(aneesh) avoid allocating an extra buffer when possible, or consider
+    // allocating smaller buffers and doing a chunk of rows at at time
+    std::unique_ptr<uint32_t[]> hashes = std::make_unique<uint32_t[]>(n_rows);
+
+    // Hash all child arrays and combine them together
+    if (array->child_arrays.empty()) {
+        for (size_t i = 0; i < n_rows; i++) {
+            hashes[i] = na_hash;
+        }
+    } else {
+        hash_array(hashes, array->child_arrays[0], n_rows, seed, is_parallel,
+                   global_dict_needed, dict_hashes, start_row_offset);
+        for (size_t i = 1; i < array->child_arrays.size(); i++) {
+            hash_array_combine(hashes, array->child_arrays[i], n_rows, seed,
+                               is_parallel, global_dict_needed, dict_hashes,
+                               start_row_offset);
+        }
+    }
+
+    for (size_t i = 0; i < n_rows; i++) {
+        if (!GetBit(null_bitmask, start_row_offset + i)) {
+            hashes[i] = na_hash;
+        }
+
+        if (combine) {
+            hash_combine_boost(out_hashes[i], hashes[i]);
+        } else {
+            out_hashes[i] = hashes[i];
+        }
+    }
+}
+
+/**
+ * Computation of the hashes for the case of map column.
+ *
+ * @tparam use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
+ * Default: false
+ * @param out_hashes: The hashes on output.
+ * @param array: the array to hash (assumed to be of type MAP)
+ * @param n_rows: Number of rows to hash starting from start_row_offset, i.e. we
+ * will hash rows at indices [start_row_offset, start_row_offset + n_rows - 1].
+ * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
+ * @param start_row_offset Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
+ * @param combine if true combine with hashes already in out_hashes otherwise
+ * overwrite out_hashes
+ */
+template <typename hashes_t, bool use_murmurhash = false>
+    requires(hashes_arr_type<hashes_t>)
+static void hash_array_map(const hashes_t& out_hashes,
+                           std::shared_ptr<array_info> array, size_t n_rows,
+                           const uint32_t seed, bool is_parallel,
+                           bool global_dict_needed,
+                           std::shared_ptr<bodo::vector<uint32_t>> dict_hashes,
+                           size_t start_row_offset, bool combine = false) {
+    // Map is stored as a list of structs of key, value pairs
+    auto data = array->child_arrays[0];
+    auto offsets = (offset_t*)array->child_arrays[0]->data1();
+    auto null_bitmask =
+        (uint8_t*)data->null_bitmask<bodo_array_type::ARRAY_ITEM>();
+
+    uint32_t na_hash;
+    hash_na_string<use_murmurhash>(seed, &na_hash);
+
+    // Combine each lists' hashes into a single value
+    for (size_t i = 0; i < n_rows; i++) {
+        if (is_na(null_bitmask, start_row_offset + i)) {
+            if (combine) {
+                hash_combine_boost(out_hashes[i], na_hash);
+            } else {
+                out_hashes[i] = na_hash;
+            }
+            continue;
+        }
+        offset_t start_offset = offsets[start_row_offset + i];
+        offset_t length = offsets[start_row_offset + i + 1] - start_offset;
+        auto inner_hashes = std::make_unique<uint32_t[]>(length);
+        hash_array<std::unique_ptr<uint32_t[]>, use_murmurhash>(
+            inner_hashes, data->child_arrays[0], length, seed, is_parallel,
+            global_dict_needed, dict_hashes, start_offset);
+        uint32_t hash = 0;
+        // xor all hashes together so that it's independant of order
+        for (size_t j = 0; j < length; j++) {
+            hash ^= inner_hashes[j];
+        }
+
+        if (combine) {
+            hash_combine_boost(out_hashes[i], hash);
+        } else {
+            out_hashes[i] = hash;
+        }
+    }
+}
+
+/**
+ * Computation of the hashes for the case of array item column.
+ *
+ * @tparam use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
+ * Default: false
+ * @param out_hashes: The hashes on output.
+ * @param array: the array to hash (assumed to be of type ARRAY_ITEM)
+ * @param n_rows: Number of rows to hash starting from start_row_offset, i.e. we
+ * will hash rows at indices [start_row_offset, start_row_offset + n_rows - 1].
+ * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
+ * @param start_row_offset Index of the first row to hash. Defaults to 0. This
+ * is useful in streaming hash join when we want to compute hashes incrementally
+ * on the tables.
+ * @param combine if true combine with hashes already in out_hashes otherwise
+ * overwrite out_hashes
+ */
+template <typename hashes_t, bool use_murmurhash = false>
+    requires(hashes_arr_type<hashes_t>)
+static void hash_array_item(const hashes_t& out_hashes,
+                            std::shared_ptr<array_info> array, size_t n_rows,
+                            const uint32_t seed, bool is_parallel,
+                            bool global_dict_needed,
+                            std::shared_ptr<bodo::vector<uint32_t>> dict_hashes,
+                            size_t start_row_offset, bool combine = false) {
+    auto data = array->child_arrays[0];
+    auto offsets = (offset_t*)array->data1<bodo_array_type::ARRAY_ITEM>();
+    auto null_bitmask =
+        (uint8_t*)array->null_bitmask<bodo_array_type::ARRAY_ITEM>();
+
+    uint32_t na_hash;
+    hash_na_string<use_murmurhash>(seed, &na_hash);
+
+    // Define some value for hashing the empty list. Here we just invoke
+    // hash_na_string but set the seed to be `na_hash` - this is to get some
+    // unique value that isn't the same as the hash for null.
+    uint32_t empty_list_hash;
+    hash_na_string<use_murmurhash>(na_hash, &empty_list_hash);
+
+    // Combine each lists' hashes into a single value
+    for (size_t i = 0; i < n_rows; i++) {
+        if (is_na(null_bitmask, start_row_offset + i)) {
+            if (combine) {
+                hash_combine_boost(out_hashes[i], na_hash);
+            } else {
+                out_hashes[i] = na_hash;
+            }
+            continue;
+        }
+        offset_t start_offset = offsets[start_row_offset + i];
+        offset_t end_offset = offsets[start_row_offset + i + 1];
+        offset_t length = end_offset - start_offset;
+        if (length == 0) {
+            if (combine) {
+                hash_combine_boost(out_hashes[i], empty_list_hash);
+            } else {
+                out_hashes[i] = empty_list_hash;
+            }
+            continue;
+        }
+        // Hash all elements in the list at row i
+        auto inner_hashes = std::make_unique<uint32_t[]>(length);
+        hash_array<std::unique_ptr<uint32_t[]>, use_murmurhash>(
+            inner_hashes, data, length, seed, is_parallel, global_dict_needed,
+            dict_hashes, start_offset);
+        if (combine) {
+            hash_combine_boost(out_hashes[i], inner_hashes[0]);
+        } else {
+            out_hashes[i] = inner_hashes[0];
+        }
+        for (offset_t j = 1; j < length; j++) {
+            hash_combine_boost(out_hashes[i], inner_hashes[j]);
+        }
+    }
+}
+
 /**
  * Computation of the hashes for the case of strings array column. Covers STRING
  *
  * @tparam use_murmurhash: use murmurhash3_x86_32 hashes (used by Iceberg).
  * Default: false
  * @param out_hashes: The hashes on output.
- * @param data: the strings
- * @param offsets: the offsets (that separates the strings)
- * @param null_bitmap: the bitmap array for the values.
+ * @param array: the array to hash (assumed to be of type STRING)
  * @param n_rows: Number of rows to hash starting from start_row_offset, i.e. we
  * will hash rows at indices [start_row_offset, start_row_offset + n_rows - 1].
  * @param seed: the seed of the computation.
@@ -235,10 +447,14 @@ static void hash_na_string(const uint32_t seed, uint32_t* hash_value) {
  */
 template <typename hashes_t, bool use_murmurhash = false>
     requires(hashes_arr_type<hashes_t>)
-static void hash_array_string(const hashes_t& out_hashes, char* data,
-                              offset_t* offsets, uint8_t* null_bitmask,
-                              size_t n_rows, const uint32_t seed,
-                              bool is_parallel, size_t start_row_offset = 0) {
+static void hash_array_string(const hashes_t& out_hashes,
+                              std::shared_ptr<array_info> array, size_t n_rows,
+                              const uint32_t seed, bool is_parallel,
+                              size_t start_row_offset = 0) {
+    auto data = (char*)array->data1<bodo_array_type::STRING>();
+    auto offsets = (offset_t*)array->data2<bodo_array_type::STRING>();
+    auto null_bitmask =
+        (uint8_t*)array->null_bitmask<bodo_array_type::STRING>();
     offset_t start_offset = offsets[start_row_offset];
     uint32_t na_hash;
     hash_na_string<use_murmurhash>(seed, &na_hash);
@@ -398,190 +614,6 @@ void apply_arrow_numeric_hash(
     }
 }
 
-/** It is the recursive algorithm for computing the hash.
- * It is done sequentially in order to consider entries one by one.
- * The use of *list_offsets* on input is warranted since when we go deeper
- * with the LIST type, this creates some different list_offsets to use.
- *
- * @param out_hashes: the hashes on input/output
- * @param list_offsets: the list of offsets (of length n_rows+1)
- * @param n_rows: the number of rows in input
- * @param start_row_offset: where to start hashing input_array
- * @param input_array: the input array put in argument.
- */
-template <typename hashes_t>
-    requires(hashes_arr_type<hashes_t>)
-void hash_arrow_array(const hashes_t& out_hashes,
-                      const std::span<const offset_t> list_offsets,
-                      size_t const& n_rows,
-                      std::shared_ptr<arrow::Array> const& input_array,
-                      size_t start_row_offset) {
-#if OFFSET_BITWIDTH == 32
-    if (input_array->type_id() == arrow::Type::LIST) {
-        auto list_array =
-            std::dynamic_pointer_cast<arrow::ListArray>(input_array);
-#else
-    if (input_array->type_id() == arrow::Type::LARGE_LIST) {
-        auto list_array =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(input_array);
-#endif
-        apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, list_array);
-        bodo::vector<offset_t> list_offsets_out(n_rows + 1);
-        for (size_t i_row = 0; i_row <= n_rows; i_row++)
-            list_offsets_out[i_row] =
-                list_array->value_offset(list_offsets[i_row]);
-        hash_arrow_array(out_hashes, list_offsets_out, n_rows,
-                         list_array->values(), start_row_offset);
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
-    } else if (input_array->type_id() == arrow::Type::STRUCT) {
-        auto struct_array =
-            std::dynamic_pointer_cast<arrow::StructArray>(input_array);
-        auto struct_type =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_array->type());
-        for (int i_field = 0; i_field < struct_type->num_fields(); i_field++)
-            hash_arrow_array(out_hashes, list_offsets, n_rows,
-                             struct_array->field(i_field), start_row_offset);
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
-    } else if (input_array->type_id() == arrow::Type::MAP) {
-        auto map_array =
-            std::dynamic_pointer_cast<arrow::MapArray>(input_array);
-        apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, map_array);
-
-        size_t nkeys = map_array->value_offset(list_offsets[n_rows]) -
-                       map_array->value_offset(list_offsets[0]);
-        auto sort_indices = arrow::UInt64Builder();
-        auto reserve_res = sort_indices.Reserve(nkeys);
-        if (!reserve_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "hash_arrow_array: Unable to reserve sort_indices");
-        }
-
-        // For every row, get the relevant slice of the child arrays, get the
-        // sort indices, shift them by the row offset, and append to the sort
-        // indices array.
-        bodo::vector<offset_t> list_offsets_out(n_rows + 1);
-        list_offsets_out[n_rows] = nkeys;
-        for (size_t i_row = 0; i_row < n_rows; i_row++) {
-            // Get the sort indices of the relevant slice of the keys
-            offset_t row_offset = map_array->value_offset(list_offsets[i_row]);
-            list_offsets_out[i_row] =
-                row_offset - map_array->value_offset(start_row_offset);
-            auto slice_sort_indices = get_sort_indices_of_slice_arrow(
-                map_array->keys(), row_offset,
-                map_array->value_offset(list_offsets[i_row + 1]));
-            // Shift the sort indices by the row offset
-            auto offset_slice_sort_indices_res = arrow::compute::Add(
-                slice_sort_indices, arrow::Int32Scalar(row_offset));
-            if (!offset_slice_sort_indices_res.ok()) [[unlikely]] {
-                throw std::runtime_error(
-                    "hash_arrow_array: Unable to offset sort_indices");
-            }
-            auto offset_slice_sort_indices =
-                offset_slice_sort_indices_res.ValueOrDie().array();
-            // Append the sort indices to the sort indices array
-            auto append_res = sort_indices.AppendArraySlice(
-                *offset_slice_sort_indices, 0, slice_sort_indices->length);
-            if (!append_res.ok()) [[unlikely]] {
-                throw std::runtime_error(
-                    "hash_arrow_array: Unable to append sort_indices");
-            }
-        }
-        // Finish the sort indices array
-        auto sort_indices_array_res = sort_indices.Finish();
-        if (!sort_indices_array_res.ok()) [[unlikely]] {
-            throw std::runtime_error(
-                "hash_arrow_array: Unable to finish sort_indices");
-        }
-        auto sort_indices_array = sort_indices_array_res.ValueOrDie();
-        // Get the sorted keys
-        auto sorted_keys_res =
-            arrow::compute::Take(map_array->keys(), sort_indices_array);
-        if (!sorted_keys_res.ok()) [[unlikely]] {
-            throw std::runtime_error("hash_arrow_array: Unable to sort array");
-        }
-        auto sorted_keys = sorted_keys_res.ValueOrDie().make_array();
-        // Get the sorted values
-        auto sorted_vals_res =
-            arrow::compute::Take(map_array->items(), sort_indices_array);
-        if (!sorted_vals_res.ok()) [[unlikely]] {
-            throw std::runtime_error("hash_arrow_array: Unable to sort array");
-        }
-        auto sorted_vals = sorted_vals_res.ValueOrDie().make_array();
-        // Hash the sorted keys and values
-        hash_arrow_array(out_hashes, list_offsets_out, n_rows, sorted_keys,
-                         start_row_offset);
-        hash_arrow_array(out_hashes, list_offsets_out, n_rows, sorted_vals,
-                         start_row_offset);
-        // Hash the null bitmask
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, input_array);
-
-#if OFFSET_BITWIDTH == 32
-    } else if (input_array->type_id() == arrow::Type::STRING) {
-        auto str_array =
-            std::dynamic_pointer_cast<arrow::StringArray>(input_array);
-#else
-    } else if (input_array->type_id() == arrow::Type::LARGE_STRING) {
-        auto str_array =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(input_array);
-#endif
-        apply_arrow_offset_hash(out_hashes, list_offsets, n_rows, str_array);
-        apply_arrow_string_hashes(out_hashes, list_offsets, n_rows, str_array);
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows, str_array);
-    } else if (input_array->type_id() == arrow::Type::DICTIONARY) {
-        // TODO: this is only needed to handle hash_array_combine incorrectly
-        // handling nested types. This should be removed and proper support for
-        // hashing nested arrays should be implemented instead.
-        std::shared_ptr<arrow::DictionaryArray> dict_array =
-            std::dynamic_pointer_cast<arrow::DictionaryArray>(input_array);
-        auto dictionary = dict_array->dictionary();
-        std::shared_ptr<uint32_t[]> dict_hashes =
-            bodo::make_shared_arr<uint32_t>(dictionary->length(),
-                                            bodo::BufferPool::DefaultPtr());
-        std::vector<offset_t> dict_offsets(dictionary->length() + 1);
-        std::iota(dict_offsets.begin(), dict_offsets.end(), 0);
-        hash_arrow_array(dict_hashes, dict_offsets, dictionary->length(),
-                         dictionary, 0);
-
-        // Define a hash value for nulls
-        uint32_t null_hash = 0;
-        char val_c = 1;
-        hash_string_32(&val_c, 1, 0, &null_hash);
-
-        auto indices = dict_array->indices();
-        for (size_t i_row = 0; i_row < n_rows; i_row++) {
-            for (offset_t idx = list_offsets[i_row];
-                 idx < list_offsets[i_row + 1]; idx++) {
-                // TODO: make hash combine consistent with the string case
-                // (hash_string_32)
-                if (indices->IsNull(idx)) {
-                    hash_combine_boost(out_hashes[i_row], null_hash);
-                } else {
-                    // Note that GetValueIndex is not recommended for performant
-                    // code, but this codepath should be removed in general
-                    hash_combine_boost(
-                        out_hashes[i_row],
-                        dict_hashes[dict_array->GetValueIndex(idx)]);
-                }
-            }
-        }
-    } else if (arrow::is_primitive(*input_array->type()) ||
-               input_array->type_id() == arrow::Type::DECIMAL128) {
-        // Casting DECIMAL128 Arrays to PrimitiveArray succeeds, but arrow
-        // doesn't return true for is_primitive(DECIMAL128) - we might not be
-        // getting a good quality hash function this way though, and we may want
-        // to revisit this with a bespoke hash for decimal128.
-        auto primitive_array =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
-        apply_arrow_numeric_hash(out_hashes, list_offsets, n_rows,
-                                 primitive_array);
-        apply_arrow_bitmask_hash(out_hashes, list_offsets, n_rows,
-                                 primitive_array);
-    } else {
-        throw std::runtime_error("hash_arrow_array: Unsupported array type: " +
-                                 input_array->type()->ToString());
-    }
-}
-
 /**
  * Top function for the computation of the hashes. It calls all the other hash
  * functions.
@@ -616,165 +648,171 @@ void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
-    if (array->arr_type == bodo_array_type::STRUCT ||
-        array->arr_type == bodo_array_type::ARRAY_ITEM ||
-        array->arr_type == bodo_array_type::MAP) {
-        bodo::vector<offset_t> list_offsets(n_rows + 1);
-        for (offset_t i = 0; i <= n_rows; i++)
-            list_offsets[i] = i + start_row_offset;
-        for (offset_t i = 0; i < n_rows; i++)
-            out_hashes[i] = seed;
-        if (use_murmurhash) {
-            throw std::runtime_error(
-                "_array_hash::hash_array: MurmurHash not supported for Arrow "
-                "arrays.");
+    switch (array->arr_type) {
+        case bodo_array_type::STRUCT: {
+            return hash_array_struct(out_hashes, array, n_rows, seed,
+                                     is_parallel, global_dict_needed,
+                                     dict_hashes, start_row_offset);
         }
-        return hash_arrow_array(out_hashes, list_offsets, n_rows,
-                                to_arrow(array), start_row_offset);
-    }
-    if (array->arr_type == bodo_array_type::STRING) {
-        return hash_array_string<hashes_t, use_murmurhash>(
-            out_hashes, (char*)array->data1<bodo_array_type::STRING>(),
-            (offset_t*)array->data2<bodo_array_type::STRING>(),
-            (uint8_t*)array->null_bitmask<bodo_array_type::STRING>(), n_rows,
-            seed, is_parallel, start_row_offset);
-    }
-    if (array->arr_type == bodo_array_type::DICT) {
-        // Use provided dictionary indices if specified, otherwise hash indices
-        if (dict_hashes != nullptr) {
-            if (use_murmurhash) {
+        case bodo_array_type::MAP: {
+            return hash_array_map(out_hashes, array, n_rows, seed, is_parallel,
+                                  global_dict_needed, dict_hashes,
+                                  start_row_offset);
+        }
+        case bodo_array_type::ARRAY_ITEM: {
+            return hash_array_item(out_hashes, array, n_rows, seed, is_parallel,
+                                   global_dict_needed, dict_hashes,
+                                   start_row_offset);
+        }
+        case bodo_array_type::STRING: {
+            return hash_array_string<hashes_t, use_murmurhash>(
+                out_hashes, array, n_rows, seed, is_parallel, start_row_offset);
+        }
+        case bodo_array_type::DICT: {
+            // Use provided dictionary indices if specified, otherwise hash
+            // indices
+            if (dict_hashes != nullptr) {
+                if (use_murmurhash) {
+                    throw std::runtime_error(
+                        "hash_array: use_murmurhash=true not supported when "
+                        "dictionary hashes are provided");
+                }
+                uint32_t na_hash;
+                hash_na_val<use_murmurhash>(seed, &na_hash);
+                uint8_t* null_bitmask =
+                    (uint8_t*)array->child_arrays[1]
+                        ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+                dict_indices_t* dict_inds =
+                    (dict_indices_t*)array->child_arrays[1]
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+                for (size_t i = 0; i < n_rows; i++) {
+                    out_hashes[i] =
+                        GetBit(null_bitmask, start_row_offset + i)
+                            ? (*dict_hashes)[dict_inds[start_row_offset + i]]
+                            : na_hash;
+                }
+                return;
+            }
+            std::shared_ptr<array_info>& dict = array->child_arrays[0];
+            if ((dict->is_globally_replicated && dict->is_locally_unique) ||
+                !is_parallel || !global_dict_needed) {
+                // in this case we can just hash the indices since the
+                // dictionary is synchronized across ranks or is only needed for
+                // a local operation where hashing based on local dictionary
+                // won't affect correctness or performance
+                return hash_array_inner<dict_indices_t, hashes_t,
+                                        use_murmurhash>(
+                    out_hashes,
+                    array->child_arrays[1]
+                        ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    n_rows, seed,
+                    (uint8_t*)array->child_arrays[1]
+                        ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
+                    start_row_offset);
+            } else {
+                // 3 options:
+                // - Convert to global dictionary now
+                // - Require the conversion to have happened before calling this
+                // function
+                // - Access the strings to get globally consistent hashes (this
+                // is not efficient
+                //   if we are going to end up converting to global dictionary
+                //   as part of the operation that called hash_array())
                 throw std::runtime_error(
-                    "hash_array: use_murmurhash=true not supported when "
-                    "dictionary hashes are provided");
+                    "hashing dictionary array requires global dictionary "
+                    "with unique values in this context");
             }
-            uint32_t na_hash;
-            hash_na_val<use_murmurhash>(seed, &na_hash);
-            uint8_t* null_bitmask =
-                (uint8_t*)array->child_arrays[1]
-                    ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
-            dict_indices_t* dict_inds =
-                (dict_indices_t*)array->child_arrays[1]
-                    ->data1<bodo_array_type::NULLABLE_INT_BOOL>();
-            for (size_t i = 0; i < n_rows; i++) {
-                out_hashes[i] =
-                    GetBit(null_bitmask, start_row_offset + i)
-                        ? (*dict_hashes)[dict_inds[start_row_offset + i]]
-                        : na_hash;
-            }
-            return;
         }
-        std::shared_ptr<array_info>& dict = array->child_arrays[0];
-        if ((dict->is_globally_replicated && dict->is_locally_unique) ||
-            !is_parallel || !global_dict_needed) {
-            // in this case we can just hash the indices since the dictionary is
-            // synchronized across ranks or is only needed for a local
-            // operation where hashing based on local dictionary won't affect
-            // correctness or performance
-            return hash_array_inner<dict_indices_t, hashes_t, use_murmurhash>(
-                out_hashes,
-                (dict_indices_t*)array->child_arrays[1]
-                    ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
-                n_rows, seed,
-                (uint8_t*)array->child_arrays[1]
-                    ->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
-                start_row_offset);
-        } else {
-            // 3 options:
-            // - Convert to global dictionary now
-            // - Require the conversion to have happened before calling this
-            // function
-            // - Access the strings to get globally consistent hashes (this is
-            // not efficient
-            //   if we are going to end up converting to global dictionary as
-            //   part of the operation that called hash_array())
-            throw std::runtime_error(
-                "hashing dictionary array requires global dictionary "
-                "with unique values in this context");
-        }
-    }
-    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
-        array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array_inner_nullable_boolean<hashes_t, use_murmurhash>(
-            out_hashes,
-            (uint8_t*)array->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
-            n_rows, seed,
-            (uint8_t*)array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
-            start_row_offset);
-    }
+        default:
+            // All other arrays are handled below
+            break;
+    };
 
-    if (array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array_inner<bool, hashes_t, use_murmurhash>(
-            out_hashes, (bool*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
+    auto* null_bitmask = (uint8_t*)array->null_bitmask();
+    void* data1 = (void*)array->data1();
+    switch (array->dtype) {
+        case Bodo_CTypes::_BOOL: {
+            if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                return hash_array_inner_nullable_boolean<hashes_t,
+                                                         use_murmurhash>(
+                    out_hashes, (uint8_t*)data1, n_rows, seed, null_bitmask,
+                    start_row_offset);
+            }
+            return hash_array_inner<bool, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::INT8: {
+            return hash_array_inner<int8_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::UINT8: {
+            return hash_array_inner<uint8_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::INT16: {
+            return hash_array_inner<int16_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::UINT16: {
+            return hash_array_inner<uint16_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::INT32:
+        case Bodo_CTypes::DATE: {
+            return hash_array_inner<int32_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::UINT32: {
+            return hash_array_inner<uint32_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::INT64: {
+            return hash_array_inner<int64_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::DECIMAL: {
+            return hash_array_inner<__int128, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::UINT64: {
+            return hash_array_inner<uint64_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        // TODO: [BE-4106] Split Time into Time32 and Time64
+        // NOTE: TimestampTZ hash only on data1 (ignores the offset buffer
+        // since values in data1 is already normalized in UTC values)
+        case Bodo_CTypes::DATETIME:
+        case Bodo_CTypes::TIME:
+        case Bodo_CTypes::TIMESTAMPTZ:
+        case Bodo_CTypes::TIMEDELTA: {
+            return hash_array_inner<int64_t, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::FLOAT32: {
+            return hash_array_inner<float, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        case Bodo_CTypes::FLOAT64: {
+            return hash_array_inner<double, hashes_t, use_murmurhash>(
+                out_hashes, data1, n_rows, seed, null_bitmask,
+                start_row_offset);
+        }
+        default:
+            Bodo_PyErr_SetString(PyExc_RuntimeError,
+                                 "Invalid data type for hash");
     }
-    if (array->dtype == Bodo_CTypes::INT8) {
-        return hash_array_inner<int8_t, hashes_t, use_murmurhash>(
-            out_hashes, (int8_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::UINT8) {
-        return hash_array_inner<uint8_t, hashes_t, use_murmurhash>(
-            out_hashes, (uint8_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::INT16) {
-        return hash_array_inner<int16_t, hashes_t, use_murmurhash>(
-            out_hashes, (int16_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::UINT16) {
-        return hash_array_inner<uint16_t, hashes_t, use_murmurhash>(
-            out_hashes, (uint16_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::INT32 ||
-        array->dtype == Bodo_CTypes::DATE) {
-        return hash_array_inner<int32_t, hashes_t, use_murmurhash>(
-            out_hashes, (int32_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::UINT32) {
-        return hash_array_inner<uint32_t, hashes_t, use_murmurhash>(
-            out_hashes, (uint32_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::INT64) {
-        return hash_array_inner<int64_t, hashes_t, use_murmurhash>(
-            out_hashes, (int64_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::DECIMAL) {
-        return hash_array_inner<__int128, hashes_t, use_murmurhash>(
-            out_hashes, (__int128*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::UINT64) {
-        return hash_array_inner<uint64_t, hashes_t, use_murmurhash>(
-            out_hashes, (uint64_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    // TODO: [BE-4106] Split Time into Time32 and Time64
-    // NOTE: TimestampTZ hash only on data1 (ignores the offset buffer since
-    // values in data1 is already normalized in UTC values)
-    if (array->dtype == Bodo_CTypes::DATETIME ||
-        array->dtype == Bodo_CTypes::TIME ||
-        array->dtype == Bodo_CTypes::TIMESTAMPTZ ||
-        array->dtype == Bodo_CTypes::TIMEDELTA) {
-        return hash_array_inner<int64_t, hashes_t, use_murmurhash>(
-            out_hashes, (int64_t*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::FLOAT32) {
-        return hash_array_inner<float, hashes_t, use_murmurhash>(
-            out_hashes, (float*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    if (array->dtype == Bodo_CTypes::FLOAT64) {
-        return hash_array_inner<double, hashes_t, use_murmurhash>(
-            out_hashes, (double*)array->data1(), n_rows, seed,
-            (uint8_t*)array->null_bitmask(), start_row_offset);
-    }
-    Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
 
 // Explicitly initialize the required templates for loader to be able to
@@ -904,10 +942,14 @@ static void hash_array_combine_inner_nullable_boolean(
 
 template <typename hashes_t>
     requires(hashes_arr_type<hashes_t>)
-static void hash_array_combine_string(const hashes_t& out_hashes, char* data,
-                                      offset_t* offsets, uint8_t* null_bitmask,
+static void hash_array_combine_string(const hashes_t& out_hashes,
+                                      std::shared_ptr<array_info> array,
                                       size_t n_rows, const uint32_t seed,
                                       size_t start_row_offset = 0) {
+    auto data = (char*)array->data1<bodo_array_type::STRING>();
+    auto offsets = (offset_t*)array->data2<bodo_array_type::STRING>();
+    auto null_bitmask =
+        (uint8_t*)array->null_bitmask<bodo_array_type::STRING>();
     offset_t start_offset = offsets[start_row_offset];
     uint32_t na_hash;
     hash_na_string(seed, &na_hash);
@@ -938,23 +980,25 @@ void hash_array_combine(const hashes_t& out_hashes,
                         size_t start_row_offset) {
     // dispatch to proper function
     // TODO: general dispatcher
-    if (array->arr_type == bodo_array_type::STRUCT ||
-        array->arr_type == bodo_array_type::ARRAY_ITEM ||
-        array->arr_type == bodo_array_type::MAP) {
-        // TODO: stop using arrow hash
-        bodo::vector<offset_t> list_offsets(n_rows + 1);
-        for (offset_t i = 0; i <= n_rows; i++) {
-            list_offsets[i] = i + start_row_offset;
-        }
-        return hash_arrow_array(out_hashes, list_offsets, n_rows,
-                                to_arrow(array), start_row_offset);
+    if (array->arr_type == bodo_array_type::STRUCT) {
+        return hash_array_struct(out_hashes, array, n_rows, seed, is_parallel,
+                                 global_dict_needed, dict_hashes,
+                                 start_row_offset,
+                                 /* combine */ true);
+    }
+    if (array->arr_type == bodo_array_type::MAP) {
+        return hash_array_map(out_hashes, array, n_rows, seed, is_parallel,
+                              global_dict_needed, dict_hashes, start_row_offset,
+                              /* combine */ true);
+    }
+    if (array->arr_type == bodo_array_type::ARRAY_ITEM) {
+        return hash_array_item(out_hashes, array, n_rows, seed, is_parallel,
+                               global_dict_needed, dict_hashes,
+                               start_row_offset, /* combine */ true);
     }
     if (array->arr_type == bodo_array_type::STRING) {
-        return hash_array_combine_string(
-            out_hashes, (char*)array->data1<bodo_array_type::STRING>(),
-            (offset_t*)array->data2<bodo_array_type::STRING>(),
-            (uint8_t*)array->null_bitmask<bodo_array_type::STRING>(), n_rows,
-            seed, start_row_offset);
+        return hash_array_combine_string(out_hashes, array, n_rows, seed,
+                                         start_row_offset);
     }
     if (array->arr_type == bodo_array_type::DICT) {
         // Use provided dictionary indices if specified, otherwise hash indices
