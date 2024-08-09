@@ -4,8 +4,11 @@ Test that various numeric builtin functions are properly supported in BODOSQL
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -766,6 +769,146 @@ def test_div0_scalars(spark_info):
         ctx,
         spark_info,
         expected_output=output,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "df, ans",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array([10.0, 12, None, 32, 24, None, 8, None, 14, 28]),
+                    "B": pd.array([1.0, -12, 4, 0, None, 0, -8, 0, None, 0]),
+                }
+            ),
+            pd.array([10.0, -1.0, None, 0.0, 0.0, None, -1.0, None, 0.0, 0.0]),
+            id="floats",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            Decimal("-1.2345"),
+                            Decimal("-5.6789"),
+                            Decimal("-2.9999"),
+                            Decimal("-313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    ),
+                    "B": pd.array(
+                        [
+                            Decimal("2.57"),
+                            Decimal("0"),
+                            None,
+                            Decimal("5.25"),
+                            Decimal("0"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    ),
+                }
+            ),
+            pd.array(
+                [
+                    Decimal("-0.480350194553"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("-59.659458304762"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 14)),
+            ),
+            id="decimals",
+        ),
+    ],
+)
+def test_div0null_cols(df, ans, request):
+    # Skip decimal test as it is not supported for COALESCE
+    if request.node.callspec.id == "decimals":
+        pytest.skip("[BSE-3740] Decimal type not supported for COALESCE")
+
+    ctx = {"TABLE1": df}
+    query = "SELECT DIV0NULL(A, B) AS RES FROM table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=pd.DataFrame({"RES": ans}),
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "df, ans",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array([10.0, 12, None, 32, 24, None, 8, None, 14, 28]),
+                    "B": pd.array([1.0, -12, 4, 0, None, 0, -8, 0, None, 0]),
+                }
+            ),
+            pd.array([13.0, 15.0, None, 35.0, 0.0, None, 11.0, None, 0.0, 31.0]),
+            id="floats",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            Decimal("-1.2345"),
+                            Decimal("-5.6789"),
+                            Decimal("-2.9999"),
+                            Decimal("-313.2121561"),
+                            None,
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    ),
+                    "B": pd.array(
+                        [
+                            Decimal("2.57"),
+                            Decimal("0"),
+                            None,
+                            Decimal("5.25"),
+                            Decimal("0"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(13, 7)),
+                    ),
+                }
+            ),
+            pd.array(
+                [
+                    Decimal("1.7655"),
+                    Decimal("0"),
+                    Decimal("0"),
+                    Decimal("-310.2121561"),
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(38, 14)),
+            ),
+            id="decimals",
+        ),
+    ],
+)
+def test_div0null_scalars(df, ans, request):
+    # Skip decimal test as it is not supported for COALESCE
+    if request.node.callspec.id == "decimals":
+        pytest.skip("[BSE-3740] Decimal type not supported for COALESCE")
+
+    ctx = {"TABLE1": df}
+    query = "SELECT CASE WHEN B IS NULL THEN DIV0NULL(A+3, B) ELSE DIV0NULL(A+3, 1) END AS RES FROM table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=pd.DataFrame({"RES": ans}),
         check_dtype=False,
         check_names=False,
         sort_output=False,
