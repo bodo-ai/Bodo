@@ -157,9 +157,8 @@ class BodoPhysicalWindow(
                     SqlKind.MAX,
                     SqlKind.SUM,
                     SqlKind.AVG,
-                    -> true
                     SqlKind.COUNT,
-                    -> aggCall.operands.size == 1
+                    -> true
                     else -> false
                 }
             }
@@ -322,14 +321,17 @@ class BodoPhysicalWindow(
     }
 
     /**
-     * Helper for getting the bodo name from a SQL operator name.
+     * Helper for getting the bodo name from an AggCall.
      */
-    private fun getOperatorName(sqlName: String): String {
-        return if (sqlName in sqlToBodoWindowFuncName) {
-            sqlToBodoWindowFuncName[sqlName]!!
-        } else {
-            sqlName.lowercase()
+    private fun getOperatorName(aggCall: Window.RexWinAggCall): String {
+        val sqlName = aggCall.operator.name
+        // COUNT is a special case where if it has zero arguments it is actually "size"
+        if (sqlName == "COUNT" && aggCall.operands.size == 0) {
+            return "size"
+        } else if (sqlName in sqlToBodoWindowFuncName) {
+            return sqlToBodoWindowFuncName[sqlName]!!
         }
+        return sqlName.lowercase()
     }
 
     /**
@@ -357,7 +359,7 @@ class BodoPhysicalWindow(
         }
         group.aggCalls.forEach {
                 aggCall ->
-            val operatorName = getOperatorName(aggCall.operator.name)
+            val operatorName = getOperatorName(aggCall)
             funcNames.add(Expr.StringLiteral(operatorName))
             val funcArgs =
                 aggCall.operands.map {

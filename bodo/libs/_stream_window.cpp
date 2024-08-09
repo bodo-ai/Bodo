@@ -132,6 +132,7 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
         input_cols[i] =
             this->build_table_buffer->data_table->columns[i + n_keys];
     }
+
     for (size_t func_idx = 0; func_idx < window_ftypes.size(); func_idx++) {
         InferWindowOutputDataType(func_idx, output_schema);
         size_t out_idx = output_schema->column_types.size() - 1;
@@ -178,11 +179,12 @@ void WindowState::InferWindowOutputDataType(
         case Bodo_FTypes::rank:
         case Bodo_FTypes::row_number:
         case Bodo_FTypes::cume_dist:
-        case Bodo_FTypes::percent_rank: {
+        case Bodo_FTypes::percent_rank:
+        case Bodo_FTypes::size:
+        case Bodo_FTypes::count: {
             break;
         }
         case Bodo_FTypes::sum:
-        case Bodo_FTypes::count:
         case Bodo_FTypes::min:
         case Bodo_FTypes::mean:
         case Bodo_FTypes::max: {
