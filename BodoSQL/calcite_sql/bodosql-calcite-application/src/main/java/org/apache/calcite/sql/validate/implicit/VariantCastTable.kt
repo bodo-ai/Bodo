@@ -543,6 +543,7 @@ internal class VariantCastTable {
             SqlStdOperatorTable.COT to anyArgDoubleCast,
             SqlStdOperatorTable.DEGREES to anyArgDoubleCast,
             NumericOperatorTable.DIV0 to anyArgDoubleCast,
+            NumericOperatorTable.DIV0NULL to anyArgDoubleCast,
             SqlStdOperatorTable.EXP to anyArgDoubleCast,
             NumericOperatorTable.HAVERSINE to anyArgDoubleCast,
             SqlStdOperatorTable.LN to anyArgDoubleCast,

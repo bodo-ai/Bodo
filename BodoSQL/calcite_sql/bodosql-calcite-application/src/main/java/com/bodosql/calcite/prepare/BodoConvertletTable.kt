@@ -6,6 +6,7 @@ import com.bodosql.calcite.application.operatorTables.CastingOperatorTable
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
 import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils
 import com.bodosql.calcite.application.operatorTables.DatetimeOperatorTable
+import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.bodosql.calcite.application.operatorTables.StringOperatorTable
 import com.bodosql.calcite.sql.func.SqlBodoOperatorTable
 import com.bodosql.calcite.sql.func.SqlLikeQuantifyOperator
@@ -242,7 +243,6 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                 } else {
                     super.get(call)
                 }
-
             SqlKind.OTHER_FUNCTION -> {
                 if (CONVERSION_FUNCTIONS.contains(call.operator.name) || TRY_CONVERSION_FUNCTIONS.contains(call.operator.name)) {
                     ConversionFunctionConverter
@@ -250,6 +250,7 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
                     when (call.operator.name) {
                         "TRUNC" -> DateTruncConverter
                         "NULLIFZERO" -> NullIfZeroConverter
+                        "DIV0NULL" -> DivZeroNullConverter
                         else -> super.get(call)
                     }
                 }
@@ -297,6 +298,23 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             // NULL returned in the "then" branch
             val nullValue = cx.rexBuilder.makeNullLiteral(arg0.type)
             return cx.rexBuilder.makeCall(CondOperatorTable.IFF_FUNC, listOf(equalityCheck, nullValue, arg0))
+        }
+    }
+
+    private object DivZeroNullConverter : SqlRexConvertlet {
+        override fun convertCall(
+            cx: SqlRexContext,
+            call: SqlCall,
+        ): RexNode {
+            // Convert DIV0NULL(x, y) into DIV0(x, COALESCE(y, 0))
+            val originalOperands = call.operandList.map { op -> cx.convertExpression(op) }
+            val arg0 = originalOperands[0]
+            val arg1 = originalOperands[1]
+
+            val literalZero = cx.rexBuilder.makeZeroLiteral(arg1.type)
+
+            val coalesce = cx.rexBuilder.makeCall(SqlStdOperatorTable.COALESCE, listOf(arg1, literalZero))
+            return cx.rexBuilder.makeCall(NumericOperatorTable.DIV0, listOf(arg0, coalesce))
         }
     }
 
