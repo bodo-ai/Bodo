@@ -739,9 +739,9 @@ void update_local_dictionary_remove_duplicates(
         std::make_unique<uint32_t[]>(local_dict_len);
     std::unique_ptr<uint32_t[]> hashes_global_dict =
         std::make_unique<uint32_t[]>(global_dict_len);
-    hash_array(hashes_local_dict, local_dictionary, local_dict_len, hash_seed,
-               false, /*global_dict_needed=*/false);
-    hash_array(hashes_global_dict, global_dictionary, global_dict_len,
+    hash_array(hashes_local_dict.get(), local_dictionary, local_dict_len,
+               hash_seed, false, /*global_dict_needed=*/false);
+    hash_array(hashes_global_dict.get(), global_dictionary, global_dict_len,
                hash_seed, false, /*global_dict_needed=*/false);
 
     HashDict hash_fct{global_dict_len, hashes_global_dict, hashes_local_dict};

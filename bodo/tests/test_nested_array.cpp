@@ -502,24 +502,24 @@ static bodo::tests::suite tests([] {
         uint32_t hashes2_buf[5];
         std::shared_ptr<uint32_t[]> hashes2 =
             std::shared_ptr<uint32_t[]>(hashes2_buf, [](uint32_t *) {});
-        hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), arr1, 5, 0, false, false);
+        hash_array(hashes2.get(), arr2, 5, 0, false, false);
         bodo::tests::check(
             memcmp(hashes1.get(), hashes2.get(), 5 * sizeof(uint32_t)) == 0);
 
         // Change arr1 to have a different value
         // arr1 = [[1], [1,2,3,4], [5,6], [], [7,8,9]]
         getv<int64_t>(arr1->child_arrays[0], 0) = 1;
-        hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), arr1, 5, 0, false, false);
+        hash_array(hashes2.get(), arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {false, true, true, true, true});
         getv<int64_t>(arr1->child_arrays[0], 0) = 0;
 
         // Change arr1 to have a different offset
         // arr1 = [[0], [1,2,3], [4, 5,6], [], [7,8,9]]
         ((offset_t *)arr1->buffers[0]->mutable_data())[2] = 4;
-        hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), arr1, 5, 0, false, false);
+        hash_array(hashes2.get(), arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, false, false, true, true});
         ((offset_t *)arr1->buffers[0]->mutable_data())[2] = 5;
 
@@ -530,8 +530,8 @@ static bodo::tests::suite tests([] {
         getv<int64_t>(arr1->child_arrays[0], 2) = 3;
         getv<int64_t>(arr1->child_arrays[0], 3) = 2;
         getv<int64_t>(arr1->child_arrays[0], 4) = 1;
-        hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), arr1, 5, 0, false, false);
+        hash_array(hashes2.get(), arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, false, true, true, true});
         getv<int64_t>(arr1->child_arrays[0], 1) = 1;
         getv<int64_t>(arr1->child_arrays[0], 2) = 2;
@@ -541,14 +541,14 @@ static bodo::tests::suite tests([] {
         // Set a value to null and ensure it is not equal
         // arr1 = [[0], [1,2,3,4], [5,6], null, [7,8,9]]
         arr1->set_null_bit(3, 0);
-        hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), arr1, 5, 0, false, false);
+        hash_array(hashes2.get(), arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, true, true, false, true});
         arr1->set_null_bit(3, 1);
 
         // Check arrays compared from different start_row_offsets hash the same
-        hash_array(hashes1, arr1, 5, 0, false, false);
-        hash_array(hashes2, arr1, 4, 0, false, false, {}, 1);
+        hash_array(hashes1.get(), arr1, 5, 0, false, false);
+        hash_array(hashes2.get(), arr1, 4, 0, false, false, {}, 1);
         bodo::tests::check(hashes1[1] == hashes2[0]);
     });
     bodo::tests::test("test_struct_array_hashing", [] {
@@ -564,8 +564,8 @@ static bodo::tests::suite tests([] {
         uint32_t hashes2_buf[10];
         std::shared_ptr<uint32_t[]> hashes2 =
             std::shared_ptr<uint32_t[]>(hashes2_buf, [](uint32_t *) {});
-        hash_array(hashes1, struct_arr1, 10, 0, false, false);
-        hash_array(hashes2, struct_arr2, 10, 0, false, false);
+        hash_array(hashes1.get(), struct_arr1, 10, 0, false, false);
+        hash_array(hashes2.get(), struct_arr2, 10, 0, false, false);
 
         bodo::tests::check(
             memcmp(hashes1.get(), hashes2.get(), 10 * sizeof(uint32_t)) == 0);
@@ -579,8 +579,8 @@ static bodo::tests::suite tests([] {
         b_data1[1] = -1;
         a_data1[2] = 0;
         b_data1[2] = 1;
-        hash_array(hashes1, struct_arr1, 10, 0, false, false);
-        hash_array(hashes2, struct_arr2, 10, 0, false, false);
+        hash_array(hashes1.get(), struct_arr1, 10, 0, false, false);
+        hash_array(hashes2.get(), struct_arr2, 10, 0, false, false);
         check_hashes_helper(
             hashes1, hashes2,
             {false, false, false, true, true, true, true, true, true, true});
@@ -592,8 +592,8 @@ static bodo::tests::suite tests([] {
         // Set a value to null and ensure it is not equal
         // struct_arr1 = [{"a":-1, "b":0}, null, {"a":0, "b":1} ...]
         struct_arr1->set_null_bit(1, 0);
-        hash_array(hashes1, struct_arr1, 10, 0, false, false);
-        hash_array(hashes2, struct_arr2, 10, 0, false, false);
+        hash_array(hashes1.get(), struct_arr1, 10, 0, false, false);
+        hash_array(hashes2.get(), struct_arr2, 10, 0, false, false);
         check_hashes_helper(
             hashes1, hashes2,
             {true, false, true, true, true, true, true, true, true, true});
@@ -601,15 +601,15 @@ static bodo::tests::suite tests([] {
 
         // Check structs with different numbers of fields hashes are different
         auto struct_arr3 = get_sample_struct(1);
-        hash_array(hashes1, struct_arr2, 10, 0, false, false);
-        hash_array(hashes2, struct_arr3, 10, 0, false, false);
+        hash_array(hashes1.get(), struct_arr2, 10, 0, false, false);
+        hash_array(hashes2.get(), struct_arr3, 10, 0, false, false);
         check_hashes_helper(hashes1, hashes2,
                             {false, false, false, false, false, false, false,
                              false, false, false});
 
         // Check structs compared from different start_row_offsets hash the same
-        hash_array(hashes1, struct_arr1, 10, 0, false, false);
-        hash_array(hashes2, struct_arr1, 9, 0, false, false, {}, 1);
+        hash_array(hashes1.get(), struct_arr1, 10, 0, false, false);
+        hash_array(hashes2.get(), struct_arr1, 9, 0, false, false, {}, 1);
         bodo::tests::check(hashes1[1] == hashes2[0]);
     });
     bodo::tests::test("test_map_array_hashing", [] {
@@ -623,8 +623,8 @@ static bodo::tests::suite tests([] {
         uint32_t hashes2_buf[5];
         std::shared_ptr<uint32_t[]> hashes2 =
             std::shared_ptr<uint32_t[]>(hashes2_buf, [](uint32_t *) {});
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         bodo::tests::check(
             memcmp(hashes1.get(), hashes2.get(), 5 * sizeof(uint32_t)) == 0);
 
@@ -644,8 +644,8 @@ static bodo::tests::suite tests([] {
         value_data1[1] = 2;
         value_data1[2] = 1;
 
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         bodo::tests::check(
             memcmp(hashes1.get(), hashes2.get(), 5 * sizeof(uint32_t)) == 0);
         key_data1[1] = '1';
@@ -657,16 +657,16 @@ static bodo::tests::suite tests([] {
         // map_arr = [[{'1':0}, {'2':2, '1':1}, {'3':3, '4':4, '5':5, '6':6},
         // {}, {'7':7, '8':8, '9':9}]]
         key_data1[0] = '1';
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {false, true, true, true, true});
         key_data1[0] = '0';
         // Change a value and make sure the hashes are different
         // map_arr = [[{'0':1}, {'2':2, '1':1}, {'3':3, '4':4, '5':5, '6':6},
         // {}, {'7':7, '8':8, '9':9}]]
         value_data1[0] = 1;
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {false, true, true, true, true});
         value_data1[0] = 0;
 
@@ -675,8 +675,8 @@ static bodo::tests::suite tests([] {
         // {}, {'7':7, '8':8, '9':9}]]
         ((offset_t *)map_arr->child_arrays[0]->buffers[0]->mutable_data())[2] =
             4;
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, false, false, true, true});
         ((offset_t *)map_arr->child_arrays[0]->buffers[0]->mutable_data())[2] =
             5;
@@ -685,14 +685,14 @@ static bodo::tests::suite tests([] {
         // map_arr = [[{'0':0}, {'2':2, '1':1, '3':3, '4':4}, {'5':5, '6':6},
         // null, {'7':7, '8':8, '9':9}]]
         map_arr->set_null_bit(3, 0);
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 5, 0, false, false);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 5, 0, false, false);
         check_hashes_helper(hashes1, hashes2, {true, true, true, false, true});
         map_arr->set_null_bit(3, 1);
 
         // Check that two values with different start offsets hash the same
-        hash_array(hashes1, map_arr, 5, 0, false, false);
-        hash_array(hashes2, map_arr2, 4, 0, false, false, {}, 1);
+        hash_array(hashes1.get(), map_arr, 5, 0, false, false);
+        hash_array(hashes2.get(), map_arr2, 4, 0, false, false, {}, 1);
         bodo::tests::check(hashes1[1] == hashes2[0]);
     });
     bodo::tests::test("test_nested_is_na_equal", [] {

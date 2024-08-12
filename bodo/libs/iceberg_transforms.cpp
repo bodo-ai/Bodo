@@ -227,8 +227,8 @@ std::shared_ptr<array_info> array_transform_bucket_N(
         // Calculate hashes on the dict
         std::unique_ptr<uint32_t[]> dict_hashes =
             std::make_unique<uint32_t[]>(in_arr->child_arrays[0]->length);
-        hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
-            dict_hashes, in_arr->child_arrays[0],
+        hash_array</*use_murmurhash*/ true>(
+            dict_hashes.get(), in_arr->child_arrays[0],
             in_arr->child_arrays[0]->length, 0, is_parallel, false);
         // Iterate over the elements and assign hash from the dict
         for (uint64_t i = 0; i < nRow; i++) {
@@ -270,8 +270,8 @@ std::shared_ptr<array_info> array_transform_bucket_N(
             memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
                    us_array->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
                    n_bytes);
-            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
-                hashes, us_array, nRow, 0, is_parallel, false);
+            hash_array</*use_murmurhash*/ true>(hashes.get(), us_array, nRow, 0,
+                                                is_parallel, false);
         } else if (in_arr->dtype == Bodo_CTypes::DATE) {
             // Based on
             // https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements,
@@ -281,8 +281,8 @@ std::shared_ptr<array_info> array_transform_bucket_N(
             std::shared_ptr<array_info> i64_array(
                 convert_date_to_int64(in_arr));
             assert(i64_array->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
-            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
-                hashes, i64_array, nRow, 0, is_parallel, false);
+            hash_array</*use_murmurhash*/ true>(hashes.get(), i64_array, nRow,
+                                                0, is_parallel, false);
             // DATE arrays are always NULLABLE_INT_BOOL arrays, so we can copy
             // over the null_bitmask as is.
             memcpy(out_arr->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>(),
@@ -312,11 +312,11 @@ std::shared_ptr<array_info> array_transform_bucket_N(
             for (uint64_t i = 0; i < nRow; i++) {
                 int64_arr->at<int64_t>(i) = (int64_t)in_arr->at<int32_t>(i);
             }
-            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
-                hashes, int64_arr, nRow, 0, is_parallel, false);
+            hash_array</*use_murmurhash*/ true>(hashes.get(), int64_arr, nRow,
+                                                0, is_parallel, false);
         } else {
-            hash_array<std::unique_ptr<uint32_t[]>, /*use_murmurhash*/ true>(
-                hashes, in_arr, nRow, 0, is_parallel, false);
+            hash_array</*use_murmurhash*/ true>(hashes.get(), in_arr, nRow, 0,
+                                                is_parallel, false);
             if (in_arr->null_bitmask()) {
                 // Copy the null bitmask if it exists for the arr type
                 memcpy(
