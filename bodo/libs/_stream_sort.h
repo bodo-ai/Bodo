@@ -6,6 +6,8 @@
 
 #define SORT_OPERATOR_MAX_CHUNK_NUMBER 100
 
+#define SORT_SMALL_LIMIT_OFFSET_CAP 16384
+
 /**
  * @brief A wrapper around recording limit/offset to be applied
  * during MergeChunks.
@@ -144,6 +146,7 @@ struct SortedChunkedTableBuilder {
     // Total amount of memory budget. If 0, an unlimited budget will be assumed
     uint64_t mem_budget_bytes;
 
+    // Whether we apply limit/offset during Finalize / MergeChunks
     std::optional<SortLimits> sortlimits = std::nullopt;
 
     /**
@@ -192,6 +195,7 @@ struct SortedChunkedTableBuilder {
           dict_builders(dict_builders_),
           pool(pool),
           mm(mm) {
+        // Either both limit and offset are -1, or they are both >= 0
         if (limit >= 0)
             sortlimits = std::make_optional(SortLimits(limit, offset));
     }
@@ -247,8 +251,9 @@ struct SortedChunkedTableBuilder {
      * only keep rows from [offset, limit + offset).
      */
     // TODO(aneesh) make this a private or static method
+    template <bool is_last>
     std::deque<TableAndRange> MergeChunks(
-        std::vector<std::deque<TableAndRange>>&& sorted_chunks, bool is_last);
+        std::vector<std::deque<TableAndRange>>&& sorted_chunks);
 };
 
 struct StreamSortMetrics {
@@ -324,7 +329,7 @@ struct StreamSortState {
      * state will see.
      * @return boolean indicating if the consume phase is complete
      */
-    void ConsumeBatch(std::shared_ptr<table_info> table, bool is_last);
+    virtual void ConsumeBatch(std::shared_ptr<table_info> table, bool is_last);
 
     /**
      * @brief call after ConsumeBatch is called with is_last set to true to
@@ -352,7 +357,8 @@ struct StreamSortState {
     /**
      * Sort all chunks across all ranks
      */
-    void GlobalSort(std::deque<std::shared_ptr<table_info>>&& local_chunks);
+    virtual void GlobalSort(
+        std::deque<std::shared_ptr<table_info>>&& local_chunks);
 
     /**
      * Get bounds for parallel sorting based on the chunks consumed so far.
@@ -368,6 +374,17 @@ struct StreamSortState {
         std::shared_ptr<table_info> bounds,
         std::deque<std::shared_ptr<table_info>>&& local_chunks);
 
+    // Chunk of code for non-parallel part of GlobalSort
+    // Made a separate function to reduce duplicated code
+    void GlobalSort_NonParallel(
+        std::deque<std::shared_ptr<table_info>>&& local_chunks);
+
+    // Chunks of code for partitioning + async communication part of GlobalSort
+    // Made a separate function to reduce duplicated code
+    SortedChunkedTableBuilder GlobalSort_Partition(
+        std::deque<std::shared_ptr<table_info>>&& local_chunks);
+
+    // Helper function that gets override in child class to pass in limit/offset
     virtual SortedChunkedTableBuilder GetGlobalBuilder() {
         return SortedChunkedTableBuilder(
             schema, dict_builders, n_key_t, vect_ascending, na_position,
@@ -381,21 +398,40 @@ struct StreamSortState {
 };
 
 struct StreamSortLimitOffsetState : StreamSortState {
+    bool limit_small_flag = false;
     SortLimits sortlimit;
+    SortedChunkedTableBuilder top_k;
 
     StreamSortLimitOffsetState(int64_t op_id, int64_t n_key_t,
                                std::vector<int64_t>&& vect_ascending_,
                                std::vector<int64_t>&& na_position_,
                                std::shared_ptr<bodo::Schema> schema,
                                bool parallel = true, int64_t limit = -1,
-                               int64_t offset = -1, size_t chunk_size = 4096);
+                               int64_t offset = -1, size_t chunk_size = 4096,
+                               bool enable_small_limit_optimization = false);
 
+    // Override base class to pass in limit / offset
     SortedChunkedTableBuilder GetGlobalBuilder() override {
         return SortedChunkedTableBuilder(
             schema, dict_builders, n_key_t, vect_ascending, na_position,
             dead_keys, num_chunks, chunk_size, mem_budget_bytes,
             sortlimit.limit, sortlimit.offset, parallel, op_pool, op_mm);
     }
+
+    // Override base class that adds limit / offset related logic
+    void GlobalSort(
+        std::deque<std::shared_ptr<table_info>>&& local_chunks) override;
+
+    // Override base class to maintain a heap of at most limit + offset elements
+    void ConsumeBatch(std::shared_ptr<table_info> table, bool is_last) override;
+
+    // Compute local limit based on global limit after partitioning
+    void ComputeLocalLimit(SortedChunkedTableBuilder& global_builder);
+
+    // Separate logic for when limit + offset is small. Send all data to rank 0
+    // and sort everything on rank 0
+    // TODO: scatter data from rank 0 to all rank
+    void SmallLimitOptim();
 
     ~StreamSortLimitOffsetState() override = default;
 };
