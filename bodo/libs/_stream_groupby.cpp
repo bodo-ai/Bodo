@@ -122,7 +122,7 @@ std::vector<grouping_info> get_grouping_infos_for_update_table(
     std::shared_ptr<uint32_t[]> batch_hashes_groupby =
         bodo::make_shared_arr<uint32_t>(in_table->nrows(), pool);
     // Compute and fill hashes into allocated memory.
-    hash_keys_table(batch_hashes_groupby, in_table, n_keys,
+    hash_keys_table(batch_hashes_groupby.get(), in_table, n_keys,
                     SEED_HASH_GROUPBY_SHUFFLE, false);
     metrics.hashing_time += end_timer(start);
     metrics.hashing_nrows += in_table->nrows();
@@ -1799,7 +1799,7 @@ GroupbyIncrementalShuffleState::GetShuffleTableAndHashes() {
                         sizeof(uint32_t) * shuffle_nrows);
             for (size_t col = this->n_keys; col < shuffle_table->ncols();
                  col++) {
-                hash_array_combine(key_value_hashes,
+                hash_array_combine(key_value_hashes.get(),
                                    shuffle_table->columns[col], shuffle_nrows,
                                    SEED_HASH_PARTITION,
                                    /*global_dict_needed=*/false,

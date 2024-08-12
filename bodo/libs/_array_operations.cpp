@@ -41,13 +41,15 @@ static void array_isin_kernel(std::shared_ptr<array_info> out_arr,
     int64_t len_values = in_values->length;
     std::unique_ptr<uint32_t[]> hashes_values =
         std::make_unique<uint32_t[]>(len_values);
-    hash_array(hashes_values, in_values, (size_t)len_values, seed, is_parallel,
+    hash_array(hashes_values.get(), in_values, (size_t)len_values, seed,
+               is_parallel,
                /*global_dict_needed=*/false);
 
     int64_t len_in_arr = in_arr->length;
     std::unique_ptr<uint32_t[]> hashes_in_arr =
         std::make_unique<uint32_t[]>(len_in_arr);
-    hash_array(hashes_in_arr, in_arr, (size_t)len_in_arr, seed, is_parallel,
+    hash_array(hashes_in_arr.get(), in_arr, (size_t)len_in_arr, seed,
+               is_parallel,
                /*global_dict_needed=*/false);
 
     std::function<bool(int64_t, int64_t)> equal_fct =

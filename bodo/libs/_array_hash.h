@@ -14,26 +14,8 @@
 #define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
-/// @brief For the hash arrays, both shared_ptrs and unique_ptrs are fine since
-/// we're just populating values into an array. This "concept" allows us to
-/// template the hashing code to be compatible with both. This provides greater
-/// flexibility to the rest of the code base.
-template <typename T>
-struct is_hashes_arr_type : std::false_type {};
-
-template <>
-struct is_hashes_arr_type<std::shared_ptr<uint32_t[]>> : std::true_type {};
-
-template <>
-struct is_hashes_arr_type<std::unique_ptr<uint32_t[]>> : std::true_type {};
-
-template <typename T>
-concept hashes_arr_type = is_hashes_arr_type<T>::value;
-
-template <typename hashes_t>
-    requires(hashes_arr_type<hashes_t>)
 void hash_array_combine(
-    const hashes_t& out_hashes, std::shared_ptr<array_info> array,
+    uint32_t* const out_hashes, std::shared_ptr<array_info> array,
     size_t n_rows, const uint32_t seed, bool global_dict_needed,
     bool is_parallel,
     std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
@@ -90,10 +72,8 @@ std::unique_ptr<uint32_t[]> hash_keys(
  * on the tables.
  * @param num_rows: Number of rows to hash. Defaults to -1, which means all rows
  */
-template <typename hashes_t>
-    requires(hashes_arr_type<hashes_t>)
 void hash_keys(
-    const hashes_t& out_hashes,
+    uint32_t* const out_hashes,
     std::vector<std::shared_ptr<array_info>> const& key_arrs,
     const uint32_t seed, bool is_parallel, bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
@@ -105,9 +85,8 @@ std::unique_ptr<uint32_t[]> coherent_hash_keys(
     std::vector<std::shared_ptr<array_info>> const& ref_key_arrs,
     const uint32_t seed, bool is_parallel);
 
-template <typename hashes_t, bool use_murmurhash = false>
-    requires(hashes_arr_type<hashes_t>)
-void hash_array(const hashes_t& out_hashes, std::shared_ptr<array_info> array,
+template <bool use_murmurhash = false>
+void hash_array(uint32_t* const out_hashes, std::shared_ptr<array_info> array,
                 size_t n_rows, const uint32_t seed, bool is_parallel,
                 bool global_dict_needed,
                 std::shared_ptr<bodo::vector<uint32_t>> dict_hashes = nullptr,
@@ -174,10 +153,8 @@ inline std::unique_ptr<uint32_t[]> hash_keys_table(
  * on the tables.
  * @param num_rows: Number of rows to hash. Defaults to -1, which means all rows
  */
-template <typename hashes_t>
-    requires(hashes_arr_type<hashes_t>)
 inline void hash_keys_table(
-    const hashes_t& out_hashes, std::shared_ptr<table_info> in_table,
+    uint32_t* const out_hashes, std::shared_ptr<table_info> in_table,
     size_t num_keys, uint32_t seed, bool is_parallel,
     bool global_dict_needed = true,
     std::shared_ptr<bodo::vector<std::shared_ptr<bodo::vector<uint32_t>>>>
