@@ -1,4 +1,3 @@
-#include <iostream>
 #include <random>
 #include "../libs/_distributed.h"
 #include "../libs/_shuffle.h"
@@ -74,11 +73,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> dead_keys;
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
             nullptr};
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        SortedChunkedTableBuilder builder(
-            table->schema(), dict_builders, 1, vect_ascending, na_position,
-            dead_keys, 2, 3, 0, 4, myrank * 5 + 1);
+        SortedChunkedTableBuilder builder(table->schema(), dict_builders, 1,
+                                          vect_ascending, na_position,
+                                          dead_keys, 2, 3, 0, 4, 1);
         builder.UpdateChunkSize(3);
         builder.AppendChunk(table);
         auto res = builder.Finalize();
@@ -151,11 +148,9 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> dead_keys;
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
             nullptr};
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        SortedChunkedTableBuilder builder(
-            table_0->schema(), dict_builders, 1, vect_ascending, na_position,
-            dead_keys, 2, 5, 0, 6, myrank * 10 + 2);
+        SortedChunkedTableBuilder builder(table_0->schema(), dict_builders, 1,
+                                          vect_ascending, na_position,
+                                          dead_keys, 2, 5, 0, 6, 2);
 
         builder.AppendChunk(table_0);
         builder.UpdateChunkSize(5);
@@ -270,16 +265,14 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         std::vector<int64_t> dead_keys;
-        int myrank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders = {
             nullptr, nullptr, nullptr};
         // Each rank has 10 rows, and we want each rank to output rows [7, 10)
         // Since limit / offset logic moves inside Finalize, need some different
         // inputs per rank to maintain correctness.
-        SortedChunkedTableBuilder builder(
-            table_0->schema(), dict_builders, 1, vect_ascending, na_position,
-            dead_keys, 2, 3, 0, 3, myrank * 11 + 7);
+        SortedChunkedTableBuilder builder(table_0->schema(), dict_builders, 1,
+                                          vect_ascending, na_position,
+                                          dead_keys, 2, 3, 0, 3, 7);
 
         builder.AppendChunk(table_2);
         builder.AppendChunk(table_1);
@@ -968,17 +961,20 @@ bodo::tests::suite external_sort_tests([] {
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
+        const int64_t n_elem = 100;
+        std::vector<int64_t> global_data(n_elem);
+
+        // Create an array with numbers from 0 to n_elem
+        std::iota(global_data.begin(), global_data.end(), 0);
+        unsort_vector(global_data);
+
+        bool test_small_limit_optim = true;
+
         // test all combination of limit & offset from (0, 0) to (101, 101)
         const int trial_num = 10404;
         for (int trial = 0; trial < trial_num; trial++) {
             size_t limit = (size_t)trial / 102;
             size_t offset = (size_t)trial % 102;
-            const int64_t n_elem = 100;
-            std::vector<int64_t> global_data(n_elem);
-
-            // Create an array with numbers from 0 to n_elem
-            std::iota(global_data.begin(), global_data.end(), 0);
-            unsort_vector(global_data);
 
             const int seed = 5678;
             std::mt19937 gen(seed);
@@ -992,7 +988,8 @@ bodo::tests::suite external_sort_tests([] {
                 {"A"}, {false}, {}, std::move(schema_data));
             StreamSortLimitOffsetState state(
                 0, 1, std::move(vect_ascending), std::move(na_position),
-                schema_table->schema(), true, limit, offset, chunk_size);
+                schema_table->schema(), true, limit, offset, chunk_size,
+                test_small_limit_optim);
             int index = 0;
             while (index < n_elem) {
                 std::vector<int64_t> local_data;
@@ -1009,8 +1006,8 @@ bodo::tests::suite external_sort_tests([] {
                     {"A"}, {false}, {}, std::move(local_data));
                 state.ConsumeBatch(table, index >= n_elem);
             }
-            state.FinalizeBuild();
 
+            state.FinalizeBuild();
             // Collect all output tables
             bool done = false;
             std::vector<std::shared_ptr<table_info>> tables;

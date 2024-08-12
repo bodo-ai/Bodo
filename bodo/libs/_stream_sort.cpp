@@ -77,9 +77,11 @@ bool SortedChunkedTableBuilder::Compare(std::shared_ptr<table_info> table1,
                                  na_position.data());
 }
 
+// For debugging purposes only
 std::ostream& operator<<(std::ostream& os, const TableAndRange& obj) {
-    obj.table->pin();
-    os << "# row: " << obj.table->columns[0]->length << std::endl;
+    os << "Offset: " << obj.offset << ' ';
+    os << "rows: " << obj.table->nrows() << std::endl;
+    DEBUG_PrintColumn(os, obj.table->columns[0]);
     return os;
 }
 
@@ -148,8 +150,9 @@ struct VHeapComparator {
  * If is_last is true, this is the final call to MergeChunks and thus we
  * only keep rows from [offset, limit + offset)
  */
+template <bool is_last>
 std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
-    std::vector<std::deque<TableAndRange>>&& sorted_chunks, bool is_last) {
+    std::vector<std::deque<TableAndRange>>&& sorted_chunks) {
     auto sortlimit = sortlimits.has_value()
                          ? (std::make_optional(SortLimits(sortlimits->limit,
                                                           sortlimits->offset)))
@@ -157,7 +160,6 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
     ChunkedTableAndRangeBuilder out_table_builder(
         n_key_t, schema, dict_builders, chunk_size,
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, pool, mm);
-
     VHeapComparator vcomp(comp);
     std::make_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
 
@@ -176,7 +178,10 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
     // will do a copy of the data. Since the sort is effectively implemented as
     // a RetrieveTable call, we know that we will need at most twice the size of
     // the table.
-    if (static_cast<uint64_t>(total_bytes) < mem_budget_bytes / 2) {
+    // TODO: Optimize this in-memory case.
+    // https://github.com/Bodo-inc/Bodo/pull/8156#discussion_r1706300054
+    if (!sortlimit &&
+        static_cast<uint64_t>(total_bytes) < mem_budget_bytes / 2) {
         // This is an optimization for when the table fits in memory where we
         // concat all the chunks into a single table and sort the combined
         // table. This avoids the extra overhead incurred by the MergeChunks
@@ -458,37 +463,6 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
 }
 
 std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
-    // Since data are partitioned, we need to tranfer Global limit / offset
-    // to local limit offset. We need to know row counts for each rank to
-    // determine that.
-    if (sortlimits.has_value() && parallel) {
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        size_t limit = sortlimits->limit;
-        size_t offset = sortlimits->offset;
-        size_t number_rows = 0;
-        std::vector<size_t> nrows_collect(n_pes);
-        for (auto& i : input_chunks)
-            number_rows += static_cast<size_t>(i.table->nrows() - i.offset);
-        MPI_Allgather(&number_rows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
-                      1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
-        size_t total_rows_before = 0;
-        for (int64_t i = 0; i < myrank; i++)
-            total_rows_before += nrows_collect[i];
-        if (total_rows_before >= limit + offset ||
-            total_rows_before + number_rows <= offset || limit == 0) {
-            std::deque<TableAndRange> output;
-            return output;
-        }
-        size_t finalize_offset =
-            total_rows_before >= offset ? 0 : offset - total_rows_before;
-        size_t finalize_limit =
-            std::min(limit + offset - total_rows_before, number_rows) -
-            finalize_offset;
-        sortlimits = SortLimits(finalize_limit, finalize_offset);
-    }
-
     if (input_chunks.size() == 0) {
         std::deque<TableAndRange> output;
         return output;
@@ -510,7 +484,11 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
             input_chunks.pop_back();
         }
 
-        sorted_chunks.emplace_back(MergeChunks(std::move(chunks), is_last));
+        if (is_last) {
+            sorted_chunks.emplace_back(MergeChunks<true>(std::move(chunks)));
+        } else {
+            sorted_chunks.emplace_back(MergeChunks<false>(std::move(chunks)));
+        }
     }
 
     while (sorted_chunks.size() > 1) {
@@ -527,8 +505,13 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
                 merge_input.emplace_back(std::move(sorted_chunks[j]));
             }
 
-            next_sorted_chunks.emplace_back(
-                MergeChunks(std::move(merge_input), is_last));
+            if (is_last) {
+                next_sorted_chunks.emplace_back(
+                    MergeChunks<true>(std::move(merge_input)));
+            } else {
+                next_sorted_chunks.emplace_back(
+                    MergeChunks<false>(std::move(merge_input)));
+            }
         }
 
         std::swap(sorted_chunks, next_sorted_chunks);
@@ -592,12 +575,19 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
 
 StreamSortLimitOffsetState::StreamSortLimitOffsetState(
     int64_t op_id, int64_t n_key_t, std::vector<int64_t>&& vect_ascending_,
-    std::vector<int64_t>&& na_position_, std::shared_ptr<bodo::Schema> schema,
-    bool parallel, int64_t limit, int64_t offset, size_t chunk_size)
+    std::vector<int64_t>&& na_position_, std::shared_ptr<bodo::Schema> schema_,
+    bool parallel, int64_t limit, int64_t offset, size_t chunk_size,
+    bool enable_small_limit_optimization)
     : StreamSortState(op_id, n_key_t, std::move(vect_ascending_),
-                      std::move(na_position_), std::move(schema), parallel,
+                      std::move(na_position_), std::move(schema_), parallel,
                       chunk_size),
-      sortlimit(static_cast<size_t>(limit), static_cast<size_t>(offset)) {}
+      sortlimit(static_cast<size_t>(limit), static_cast<size_t>(offset)),
+      top_k(schema, dict_builders, n_key_t, vect_ascending, na_position,
+            dead_keys, num_chunks, chunk_size, mem_budget_bytes,
+            sortlimit.limit + sortlimit.offset, 0, parallel, op_pool, op_mm) {
+    limit_small_flag = (sortlimit.sum() <= SORT_SMALL_LIMIT_OFFSET_CAP &&
+                        enable_small_limit_optimization);
+}
 
 void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
                                    bool is_last) {
@@ -605,7 +595,27 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
     row_info.second += table->nrows();
 
     time_pt start_append = start_timer();
+
     builder.UnifyDictionariesAndAppend(table, dict_builders);
+    metrics.local_sort_chunk_time += end_timer(start_append);
+}
+
+void StreamSortLimitOffsetState::ConsumeBatch(std::shared_ptr<table_info> table,
+                                              bool is_last) {
+    row_info.first += table_local_memory_size(table, false);
+    row_info.second += table->nrows();
+
+    time_pt start_append = start_timer();
+
+    if (!limit_small_flag) {
+        builder.UnifyDictionariesAndAppend(table, dict_builders);
+    } else {
+        // Maintain a heap of at most limit + offset elements when limit/offset
+        // is small
+        table = UnifyDictionaryArrays(table, dict_builders);
+        top_k.AppendChunk(table);
+        top_k.input_chunks = top_k.Finalize();
+    }
     metrics.local_sort_chunk_time += end_timer(start_append);
 }
 
@@ -655,7 +665,7 @@ void StreamSortState::FinalizeBuild() {
         MPI_Allreduce(in_info.get(), sum_row_info.get(), 2, MPI_LONG_LONG_INT,
                       MPI_SUM, MPI_COMM_WORLD);
     }
-    int64_t bytes_per_row = parallel ? (sum_row_info[0], sum_row_info[1])
+    int64_t bytes_per_row = parallel ? (sum_row_info[0] / sum_row_info[1])
                                      : (row_info.first / row_info.second);
 
     chunk_size =
@@ -876,23 +886,136 @@ construct_table_to_send(
     return std::make_pair(std::move(table_to_send), std::move(hashes));
 }
 
-void StreamSortState::GlobalSort(
-    std::deque<std::shared_ptr<table_info>>&& local_chunks) {
-    if (!parallel) {
-        SortedChunkedTableBuilder global_builder = GetGlobalBuilder();
-        for (auto& chunk : local_chunks) {
-            global_builder.AppendChunk(std::move(chunk));
-        }
-        time_pt start_finalize = start_timer();
-        auto out_chunks = global_builder.Finalize();
-        metrics.global_sort_time += end_timer(start_finalize);
+void StreamSortLimitOffsetState::SmallLimitOptim() {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-        for (const auto& chunk : out_chunks) {
-            output_chunks.push_back(std::move(chunk.table));
+    std::vector<std::shared_ptr<table_info>> chunks;
+    auto local_chunks = top_k.input_chunks;
+
+    // Every rank concat local tables and send to rank 0 in 1 batch
+    auto local_concat_tables = dummy_output_chunk;
+    if (local_chunks.size() > 0) {
+        std::vector<std::shared_ptr<table_info>> local_collected_tables;
+        local_collected_tables.reserve(local_chunks.size());
+        for (auto& i : local_chunks) {
+            i.table->pin();
+            local_collected_tables.push_back(std::move(i.table));
         }
-        return;
+        local_concat_tables = concat_tables(local_collected_tables);
     }
 
+    SortedChunkedTableBuilder global_builder(
+        schema, dict_builders, n_key_t, vect_ascending, na_position, dead_keys,
+        num_chunks, chunk_size, mem_budget_bytes, sortlimit.limit,
+        sortlimit.offset, parallel, op_pool, op_mm);
+
+    // Send all data to rank 0 synchronously
+    time_pt start_communication = start_timer();
+    std::vector<std::shared_ptr<table_info>> collected_tables;
+    // TODO (Aneesh) We should extend concat_tables to take a dict_builder.
+    local_concat_tables =
+        UnifyDictionaryArrays(local_concat_tables, dict_builders);
+    auto collected_table =
+        gather_table(local_concat_tables, -1, false, parallel, 0);
+    metrics.communication_phase += end_timer(start_communication);
+    time_pt start_finalize = start_timer();
+
+    if (myrank == 0) {
+        time_pt start_append = start_timer();
+        collected_tables.push_back(std::move(collected_table));
+        metrics.global_append_chunk_time += end_timer(start_append);
+        auto concatenated_tables = concat_tables(collected_tables);
+        auto indices = sort_values_table_local_get_indices(
+            concatenated_tables, n_key_t, vect_ascending.data(),
+            na_position.data(), false);
+        uint64_t n_cols = concatenated_tables->ncols();
+        std::vector<uint64_t> col_inds;
+        for (int64_t i = 0; i < n_key_t; i++) {
+            if (!dead_keys.empty() && dead_keys[i]) {
+                // If this is the last reference to this
+                // table, we can safely release reference (and potentially
+                // memory if any) for the dead keys at this point.
+                reset_col_if_last_table_ref(concatenated_tables, i);
+            } else {
+                col_inds.push_back(i);
+            }
+        }
+        for (uint64_t i = n_key_t; i < n_cols; i++) {
+            col_inds.push_back(i);
+        }
+
+        ChunkedTableBuilder out_table_builder(
+            schema, dict_builders, chunk_size,
+            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool, op_mm);
+
+        bodo::vector<int64_t> offset_indices;
+        for (size_t i = sortlimit.offset; i < sortlimit.sum(); i++) {
+            if (i >= indices.size()) {
+                break;
+            }
+            offset_indices.push_back(indices[i]);
+        }
+        out_table_builder.AppendBatch(concatenated_tables, offset_indices,
+                                      col_inds);
+
+        out_table_builder.FinalizeActiveChunk();
+        for (auto chunk : out_table_builder.chunks) {
+            output_chunks.push_back(chunk);
+        }
+    }
+    metrics.global_sort_time += end_timer(start_finalize);
+}
+
+void StreamSortLimitOffsetState::ComputeLocalLimit(
+    SortedChunkedTableBuilder& global_builder) {
+    int n_pes, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    size_t limit = sortlimit.limit;
+    size_t offset = sortlimit.offset;
+    size_t number_rows = 0;
+    std::vector<size_t> nrows_collect(n_pes);
+    for (auto& i : global_builder.input_chunks)
+        number_rows += static_cast<size_t>(i.table->nrows() - i.offset);
+    MPI_Allgather(&number_rows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(), 1,
+                  MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
+    size_t total_rows_before = 0;
+    for (int64_t i = 0; i < myrank; i++) {
+        total_rows_before += nrows_collect[i];
+    }
+    if (total_rows_before >= limit + offset ||
+        total_rows_before + number_rows <= offset || limit == 0) {
+        global_builder.sortlimits = SortLimits(0, 0);
+        return;
+    }
+    size_t finalize_offset =
+        total_rows_before >= offset ? 0 : offset - total_rows_before;
+    size_t finalize_limit =
+        std::min(limit + offset - total_rows_before, number_rows) -
+        finalize_offset;
+    global_builder.sortlimits = SortLimits(finalize_limit, finalize_offset);
+    return;
+}
+
+void StreamSortState::GlobalSort_NonParallel(
+    std::deque<std::shared_ptr<table_info>>&& local_chunks) {
+    SortedChunkedTableBuilder global_builder = GetGlobalBuilder();
+    for (auto& chunk : local_chunks) {
+        global_builder.AppendChunk(std::move(chunk));
+    }
+    time_pt start_finalize = start_timer();
+    auto out_chunks = global_builder.Finalize();
+    metrics.global_sort_time += end_timer(start_finalize);
+
+    for (const auto& chunk : out_chunks) {
+        output_chunks.push_back(std::move(chunk.table));
+    }
+}
+
+SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
+    std::deque<std::shared_ptr<table_info>>&& local_chunks) {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -1023,11 +1146,45 @@ void StreamSortState::GlobalSort(
     }
 
     metrics.communication_phase += end_timer(start_communication);
+    return global_builder;
+}
 
+void StreamSortState::GlobalSort(
+    std::deque<std::shared_ptr<table_info>>&& local_chunks) {
+    if (!parallel) {
+        GlobalSort_NonParallel(std::move(local_chunks));
+        return;
+    }
+    auto global_builder = GlobalSort_Partition(std::move(local_chunks));
     time_pt start_finalize = start_timer();
     auto out_chunks = global_builder.Finalize();
     metrics.global_sort_time += end_timer(start_finalize);
+    for (const auto& chunk : out_chunks) {
+        output_chunks.push_back(std::move(chunk.table));
+    }
+}
 
+void StreamSortLimitOffsetState::GlobalSort(
+    std::deque<std::shared_ptr<table_info>>&& local_chunks) {
+    if (sortlimit.limit == 0) {
+        return;
+    }
+
+    if (limit_small_flag) {
+        SmallLimitOptim();
+        return;
+    }
+
+    if (!parallel) {
+        GlobalSort_NonParallel(std::move(local_chunks));
+        return;
+    }
+
+    auto global_builder = GlobalSort_Partition(std::move(local_chunks));
+    ComputeLocalLimit(global_builder);
+    time_pt start_finalize = start_timer();
+    auto out_chunks = global_builder.Finalize();
+    metrics.global_sort_time += end_timer(start_finalize);
     for (const auto& chunk : out_chunks) {
         output_chunks.push_back(std::move(chunk.table));
     }

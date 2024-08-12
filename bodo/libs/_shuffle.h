@@ -184,6 +184,8 @@ std::shared_ptr<table_info> broadcast_table(
  * @param is_parallel : whether tracing should be parallel
  * @param mpi_root : root rank for gathering (where data is gathered to)
  * @return the table obtained by concatenating the tables on the node mpi_root
+ * If all_gather is false on all ranks != mpi_root will return an empty
+ * table_info with uninitialized array_info
  */
 std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                          int64_t n_cols, bool all_gather,
