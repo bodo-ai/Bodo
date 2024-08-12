@@ -38,6 +38,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.libs import decimal_ext
 from bodo.utils.typing import (
+    assert_bodo_error,
     get_overload_const_bool,
     is_overload_constant_bool,
     raise_bodo_error,
@@ -266,8 +267,8 @@ register_model(Decimal128Type)(models.IntegerModel)
 def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
     """cast int128 to decimal128"""
     assert val == int128_type
-    assert is_overload_constant_int(precision_tp)
-    assert is_overload_constant_int(scale_tp)
+    assert_bodo_error(is_overload_constant_int(precision_tp))
+    assert_bodo_error(is_overload_constant_int(scale_tp))
 
     def codegen(context, builder, signature, args):
         return args[0]
@@ -349,8 +350,8 @@ def _str_to_decimal_scalar(typingctx, val, precision_tp, scale_tp):
     (Decimal128Type, bool) where the bool indicates if the value
     errored in parsing or fitting in the final decimal value."""
     assert val == bodo.string_type or is_overload_constant_str(val)
-    assert is_overload_constant_int(precision_tp)
-    assert is_overload_constant_int(scale_tp)
+    assert_bodo_error(is_overload_constant_int(precision_tp))
+    assert_bodo_error(is_overload_constant_int(scale_tp))
 
     def codegen(context, builder, signature, args):
         val, precision, scale = args
@@ -1215,8 +1216,8 @@ def _cast_decimal_to_decimal_scalar_unsafe(typingctx, val_t, precision_t, scale_
     """
 
     assert isinstance(val_t, Decimal128Type)
-    assert is_overload_constant_int(precision_t)
-    assert is_overload_constant_int(scale_t)
+    assert_bodo_error(is_overload_constant_int(precision_t))
+    assert_bodo_error(is_overload_constant_int(scale_t))
     precision = get_overload_const_int(precision_t)
     scale = get_overload_const_int(scale_t)
     shift_amount = scale - val_t.scale
@@ -1249,8 +1250,8 @@ def _cast_decimal_to_decimal_scalar_safe(typingctx, val_t, precision_t, scale_t)
     """
 
     assert isinstance(val_t, Decimal128Type)
-    assert is_overload_constant_int(precision_t)
-    assert is_overload_constant_int(scale_t)
+    assert_bodo_error(is_overload_constant_int(precision_t))
+    assert_bodo_error(is_overload_constant_int(scale_t))
     scale = get_overload_const_int(scale_t)
     precision = get_overload_const_int(precision_t)
     shift_amount = scale - val_t.scale
@@ -1377,8 +1378,8 @@ def _cast_float_to_decimal_scalar(typingctx, val_t, precision_t, scale_t):
     """
 
     assert val_t == types.float64
-    assert is_overload_constant_int(precision_t)
-    assert is_overload_constant_int(scale_t)
+    assert_bodo_error(is_overload_constant_int(precision_t))
+    assert_bodo_error(is_overload_constant_int(scale_t))
     scale = get_overload_const_int(scale_t)
     precision = get_overload_const_int(precision_t)
 
@@ -1601,9 +1602,9 @@ def _add_or_subtract_decimal_scalars(
 ):
     assert isinstance(d1_t, Decimal128Type)
     assert isinstance(d2_t, Decimal128Type)
-    assert is_overload_constant_int(precision_t)
-    assert is_overload_constant_int(scale_t)
-    assert is_overload_constant_bool(do_addition_t)
+    assert_bodo_error(is_overload_constant_int(precision_t))
+    assert_bodo_error(is_overload_constant_int(scale_t))
+    assert_bodo_error(is_overload_constant_bool(do_addition_t))
     output_precision = get_overload_const_int(precision_t)
     output_scale = get_overload_const_int(scale_t)
     d1_precision = d1_t.precision
@@ -1826,8 +1827,8 @@ def overload_multiply_decimal_scalars(d1, d2):
 def _multiply_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t):
     assert isinstance(d1_t, Decimal128Type)
     assert isinstance(d2_t, Decimal128Type)
-    assert is_overload_constant_int(precision_t)
-    assert is_overload_constant_int(scale_t)
+    assert_bodo_error(is_overload_constant_int(precision_t))
+    assert_bodo_error(is_overload_constant_int(scale_t))
     output_precision = get_overload_const_int(precision_t)
     output_scale = get_overload_const_int(scale_t)
     d1_precision = d1_t.precision
@@ -2017,12 +2018,14 @@ def overload_modulo_decimal_scalars(d1, d2):
 def _modulo_decimal_scalars(typingctx, d1_t, d2_t, out_precision_t, out_scale_t):
     assert isinstance(d1_t, Decimal128Type), "_modulo_decimal_scalars: decimal expected"
     assert isinstance(d2_t, Decimal128Type), "_modulo_decimal_scalars: decimal expected"
-    assert is_overload_constant_int(
-        out_precision_t
-    ), "_modulo_decimal_scalars: constant precision expected"
-    assert is_overload_constant_int(
-        out_scale_t
-    ), "_modulo_decimal_scalars: constant scale expected"
+    assert_bodo_error(
+        is_overload_constant_int(out_precision_t),
+        "_modulo_decimal_scalars: constant precision expected",
+    )
+    assert_bodo_error(
+        is_overload_constant_int(out_scale_t),
+        "_modulo_decimal_scalars: constant scale expected",
+    )
     output_precision = get_overload_const_int(out_precision_t)
     output_scale = get_overload_const_int(out_scale_t)
     d1_precision = d1_t.precision
@@ -2201,12 +2204,14 @@ def overload_divide_decimal_scalars(d1, d2, do_div0=False):
 def _divide_decimal_scalars(typingctx, d1_t, d2_t, precision_t, scale_t, do_div0):
     assert isinstance(d1_t, Decimal128Type), "_divide_decimal_scalars: decimal expected"
     assert isinstance(d2_t, Decimal128Type), "_divide_decimal_scalars: decimal expected"
-    assert is_overload_constant_int(
-        precision_t
-    ), "_divide_decimal_scalars: constant precision expected"
-    assert is_overload_constant_int(
-        scale_t
-    ), "_divide_decimal_scalars: constant scale expected"
+    assert_bodo_error(
+        is_overload_constant_int(precision_t),
+        "_divide_decimal_scalars: constant precision expected",
+    )
+    assert_bodo_error(
+        is_overload_constant_int(scale_t),
+        "_divide_decimal_scalars: constant scale expected",
+    )
     output_precision = get_overload_const_int(precision_t)
     output_scale = get_overload_const_int(scale_t)
     d1_precision = d1_t.precision
@@ -2505,10 +2510,10 @@ def _round_decimal_scalar(
     assert isinstance(
         round_scale_t, types.Integer
     ), "_round_decimal_scalar: integer expected"
-    assert is_overload_constant_int(output_p_t)
-    assert is_overload_constant_int(output_s_t)
-    assert is_overload_constant_int(input_p_t)
-    assert is_overload_constant_int(input_s_t)
+    assert_bodo_error(is_overload_constant_int(output_p_t))
+    assert_bodo_error(is_overload_constant_int(output_s_t))
+    assert_bodo_error(is_overload_constant_int(input_p_t))
+    assert_bodo_error(is_overload_constant_int(input_s_t))
 
     def codegen(context, builder, signature, args):
         val, round_scale, input_p, input_s, output_p, output_s = args
@@ -3132,8 +3137,8 @@ def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None
     """Create a DecimalArray with provided data and null bitmap values."""
     assert data == types.Array(int128_type, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")
-    assert is_overload_constant_int(precision_tp)
-    assert is_overload_constant_int(scale_tp)
+    assert_bodo_error(is_overload_constant_int(precision_tp))
+    assert_bodo_error(is_overload_constant_int(scale_tp))
 
     def codegen(context, builder, signature, args):
         data_val, bitmap_val, _, _ = args

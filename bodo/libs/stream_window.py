@@ -674,7 +674,58 @@ def init_window_state(
     pass
 
 
-@overload(init_window_state, no_unliteral=True)
+@infer_global(init_window_state)
+class InitWindowStateInfer(AbstractTemplate):
+    """Typer for init_window_state that returns state type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(init_window_state)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        expected_state_type = unwrap_typeref(folded_args[11])
+        (
+            partition_indices,
+            order_by_indices,
+            is_ascending,
+            nulls_last,
+            func_names,
+            func_input_indices,
+            kept_input_indices,
+            _,
+            n_inputs,
+        ) = folded_args[1:10]
+        if is_overload_none(expected_state_type):
+            partition_indices_tuple = unwrap_typeref(partition_indices).meta
+            order_by_indices_tuple = unwrap_typeref(order_by_indices).meta
+            is_ascending_tuple = unwrap_typeref(is_ascending).meta
+            nulls_last_tuple = unwrap_typeref(nulls_last).meta
+            func_names_tuple = unwrap_typeref(func_names).meta
+            func_input_tuple = unwrap_typeref(func_input_indices).meta
+            kept_input_indices_tuple = unwrap_typeref(kept_input_indices).meta
+            output_type = WindowStateType(
+                partition_indices_tuple,
+                order_by_indices_tuple,
+                is_ascending_tuple,
+                nulls_last_tuple,
+                func_names_tuple,
+                func_input_tuple,
+                kept_input_indices_tuple,
+                get_overload_const_int(n_inputs),
+            )
+        else:
+            output_type = expected_state_type
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+InitWindowStateInfer._no_unliteral = True
+
+
+@lower_builtin(init_window_state, types.VarArg(types.Any))
+def lower_init_window_state(context, builder, sig, args):
+    """lower init_window_state() using overload_init_window_state"""
+    impl = overload_init_window_state(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def overload_init_window_state(
     operator_id,
     partition_indices,
@@ -690,27 +741,7 @@ def overload_init_window_state(
     expected_state_type=None,
     parallel=False,
 ):
-    expected_state_type: pt.Optional[WindowStateType] = unwrap_typeref(expected_state_type)  # type: ignore
-    if is_overload_none(expected_state_type):
-        partition_indices_tuple = unwrap_typeref(partition_indices).meta
-        order_by_indices_tuple = unwrap_typeref(order_by_indices).meta
-        is_ascending_tuple = unwrap_typeref(is_ascending).meta
-        nulls_last_tuple = unwrap_typeref(nulls_last).meta
-        func_names_tuple = unwrap_typeref(func_names).meta
-        func_input_tuple = unwrap_typeref(func_input_indices).meta
-        kept_input_indices_tuple = unwrap_typeref(kept_input_indices).meta
-        output_type = WindowStateType(
-            partition_indices_tuple,
-            order_by_indices_tuple,
-            is_ascending_tuple,
-            nulls_last_tuple,
-            func_names_tuple,
-            func_input_tuple,
-            kept_input_indices_tuple,
-            get_overload_const_int(n_inputs),
-        )
-    else:
-        output_type = expected_state_type
+    output_type: WindowStateType = unwrap_typeref(expected_state_type)  # type: ignore
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
@@ -1032,6 +1063,10 @@ class GroupbyProduceOutputInfer(AbstractTemplate):
         window_state = get_call_expr_arg(
             "window_produce_output_batch", args, kws, 0, "window_state"
         )
+        if window_state.build_table_type == types.unknown:
+            raise numba.NumbaError(
+                "window_produce_output_batch: unknown table type in streaming state type"
+            )
         out_table_type = window_state.out_table_type
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types((out_table_type, types.bool_))

@@ -2761,13 +2761,11 @@ def test_all_to_all(val0, val1, val2, val3):
 
 @pytest.mark.slow
 def test_barrier_error():
-    import numba
-
     def f():
         bodo.barrier("foo")
 
     with pytest.raises(
-        numba.core.errors.TypingError,
+        TypeError,
         match=r"too many positional arguments",
     ):
         bodo.jit(f)()

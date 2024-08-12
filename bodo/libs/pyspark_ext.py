@@ -41,6 +41,7 @@ from bodo.hiframes.pd_dataframe_ext import (
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
+    assert_bodo_error,
     check_unsupported_args,
     dtype_to_array_type,
     get_overload_const_list,
@@ -728,7 +729,7 @@ register_model(ExprType)(models.OpaqueModel)
 @intrinsic(prefer_literal=True)
 def init_col_from_name(typingctx, col=None):
     """create Column object from column name"""
-    assert is_overload_constant_str(col)
+    assert_bodo_error(is_overload_constant_str(col))
     col_str = get_overload_const_str(col)
     col_type = ColumnType(ExprType("col", (col_str,)))
 

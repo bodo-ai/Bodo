@@ -45,6 +45,7 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    assert_bodo_error,
     decode_if_dict_array,
     get_overload_const_int,
     is_list_like_index_type,
@@ -611,7 +612,7 @@ def get_table_data_codegen(context, builder, table_arg, col_ind, table_type):
 def get_table_data(typingctx, table_type, ind_typ):
     """get data array of table (using the original array index)"""
     assert isinstance(table_type, TableType)
-    assert is_overload_constant_int(ind_typ)
+    assert_bodo_error(is_overload_constant_int(ind_typ))
     col_ind = get_overload_const_int(ind_typ)
     arr_type = table_type.arr_types[col_ind]
 
@@ -1158,7 +1159,7 @@ def init_table_from_lists(typingctx, tuple_of_lists_type, table_type):
 def get_table_block(typingctx, table_type, blk_type):
     """get array list for a type block of table"""
     assert isinstance(table_type, TableType), "table type expected"
-    assert is_overload_constant_int(blk_type)
+    assert_bodo_error(is_overload_constant_int(blk_type))
     blk = get_overload_const_int(blk_type)
     arr_type = None
     for t, b in table_type.type_to_blk.items():
@@ -1309,7 +1310,7 @@ def set_table_block(typingctx, table_type, arr_list_type, blk_type):
     """set table block and return a new table object"""
     assert isinstance(table_type, TableType), "table type expected"
     assert isinstance(arr_list_type, types.List), "list type expected"
-    assert is_overload_constant_int(blk_type), "blk should be const int"
+    assert_bodo_error(is_overload_constant_int(blk_type), "blk should be const int")
     blk = get_overload_const_int(blk_type)
 
     def codegen(context, builder, sig, args):

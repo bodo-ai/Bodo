@@ -3,7 +3,7 @@
 Support for streaming union.
 """
 from functools import cached_property
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numba
 import numpy as np
@@ -162,22 +162,51 @@ class UnionStateType(StreamingStateType):
 register_model(UnionStateType)(models.OpaqueModel)
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_union_state(
     operator_id,
     all=False,
     expected_state_typeref=None,
     parallel=False,
 ):
-    expected_state_type: Optional[UnionStateType] = unwrap_typeref(expected_state_typeref)  # type: ignore
+    pass
 
+
+@infer_global(init_union_state)
+class InitUnionStateInfer(AbstractTemplate):
+    """Typer for init_union_state that returns state type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(init_union_state)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        expected_state_type = unwrap_typeref(folded_args[2])
+        all_const = get_overload_const_bool(folded_args[1])
+        if is_overload_none(expected_state_type):
+            output_type = UnionStateType(all=all_const)
+        else:
+            output_type: UnionStateType = expected_state_type  # type: ignore
+            assert output_type.all == all_const
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+InitUnionStateInfer._no_unliteral = True
+
+
+@lower_builtin(init_union_state, types.VarArg(types.Any))
+def lower_init_union_state(context, builder, sig, args):
+    """lower init_union_state() using gen_init_union_state_impl"""
+    impl = gen_init_union_state_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_init_union_state_impl(
+    operator_id,
+    all=False,
+    expected_state_typeref=None,
+    parallel=False,
+):
+    output_type: UnionStateType = unwrap_typeref(expected_state_typeref)  # type: ignore
     all_const = get_overload_const_bool(all)
-
-    if is_overload_none(expected_state_type):
-        output_type = UnionStateType(all=all_const)
-    else:
-        output_type: UnionStateType = expected_state_type  # type: ignore
-        assert output_type.all == all_const
+    assert output_type.all == all_const
 
     arr_dtypes = np.array(
         []
@@ -468,6 +497,10 @@ class UnionProduceOutputInfer(AbstractTemplate):
         union_state = get_call_expr_arg(
             "union_produce_batch", args, kws, 0, "union_state"
         )
+        if any(t == types.unknown for t in union_state.in_table_types):
+            raise numba.NumbaError(
+                "union_produce_batch: unknown table type in streaming union state type"
+            )
         out_table_type = union_state.out_table_type
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types((out_table_type, types.bool_))

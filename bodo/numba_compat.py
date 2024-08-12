@@ -1102,7 +1102,10 @@ def get_call_type2(self, context, args, kws):
             # TODO: Disable Python traceback.
             # Message
             # a temporary solution.
-            if "missing a required argument" in literal_e.msg:
+            if (
+                hasattr(literal_e, "msg")
+                and "missing a required argument" in literal_e.msg
+            ):
                 msg = "missing a required argument"
             else:
                 msg = "Compilation error for "
@@ -1112,7 +1115,9 @@ def get_call_type2(self, context, args, kws):
                 elif isinstance(self.this, bodo.hiframes.pd_series_ext.SeriesType):
                     msg += "Series."
                 msg += f"{self.typing_key[1]}().{bodo_typing_error_info}"
-            raise errors.TypingError(msg, loc=literal_e.loc)
+            raise errors.TypingError(
+                msg, loc=literal_e.loc if hasattr(literal_e, "msg") else None
+            )
     return out
 
 
@@ -1809,7 +1814,7 @@ class SetBuiltin(AbstractTemplate):
             # set(iterable)
             (iterable,) = args
             if isinstance(iterable, types.IterableType):
-                dtype = iterable.iterator_type.yield_type
+                dtype = types.unliteral(iterable.iterator_type.yield_type)
                 if (
                     isinstance(dtype, types.Hashable)
                     or dtype == numba.core.types.unicode_type
@@ -1822,6 +1827,7 @@ class SetBuiltin(AbstractTemplate):
 
 # replacing types.Set.__init__ to support string dtype
 def Set__init__(self, dtype, reflected=False):
+    dtype = types.unliteral(dtype)
     assert (
         isinstance(dtype, (types.Hashable, types.Undefined))
         or dtype == numba.core.types.unicode_type
@@ -5296,9 +5302,12 @@ def unify_pairs(self, first, second):
         return first
 
     if isinstance(first, types.Literal) or isinstance(second, types.Literal):
-        first = types.unliteral(first)
-        second = types.unliteral(second)
-        return self.unify_pairs(first, second)
+        first_lit = types.unliteral(first)
+        second_lit = types.unliteral(second)
+        # Avoid recursion if literal type is the same (e.g. function literals)
+        # See test_groupby.py::test_groupby_agg_const_dict
+        if first_lit != first or second_lit != second:
+            return self.unify_pairs(first_lit, second_lit)
 
     # Cannot unify
     return None
@@ -6389,3 +6398,112 @@ if _check_numba_change:  # pragma: no cover
         warnings.warn("numba.core.ir_utils.fill_callee_prologue has changed")
 
 ######### End changes to enable adding an objmode warning #########
+
+
+def generic(self, args, kws):
+    from numba.core.typing.npydecl import NumpyRulesInplaceArrayOperator
+
+    # Type the inplace operator as if an explicit output was passed,
+    # to handle type resolution correctly.
+    # (for example int8[:] += int16[:] should use an int8[:] output,
+    #  not int16[:])
+    lhs, rhs = args
+    if not isinstance(lhs, types.ArrayCompatible):
+        return
+    args = args + (lhs,)
+    sig = super(NumpyRulesInplaceArrayOperator, self).generic(args, kws)
+    # Bodo change: avoid assert error below if sig is None, needed for Numba new_style
+    # error handling
+    if sig is None:
+        return None
+    # Strip off the fake explicit output
+    assert len(sig.args) == 3
+    real_sig = signature(sig.return_type, *sig.args[:2])
+    return real_sig
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator.generic
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "e4d322ef5a4b98c63f2dc9080a8f8c4a02fed68edaecf9d8a0d1475aafb9c1ed"
+    ):
+        warnings.warn(
+            "numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator.generic has changed"
+        )
+
+numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator.generic = generic
+
+
+def generic(self, args, kws):
+    # Bodo change: check for 2-arg case to avoid error in Numba new_style error handling
+    if len(args) != 1 or kws:
+        raise errors.NumbaAssertionError("multiple args and kws not supported")
+
+    [arg] = args
+
+    if isinstance(arg, types.Integer):
+        return signature(arg, arg)
+    if isinstance(arg, (types.Float, types.Boolean)):
+        return signature(types.intp, arg)
+    if isinstance(arg, types.NPDatetime):
+        if arg.unit == "ns":
+            return signature(types.int64, arg)
+        else:
+            raise errors.NumbaTypeError(
+                f"Only datetime64[ns] can be converted, but got datetime64[{arg.unit}]"
+            )
+    if isinstance(arg, types.NPTimedelta):
+        return signature(types.int64, arg)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.builtins.Int.generic)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "23c51842905dea3a3516e54944223d76a4fe5e0719fd09a2c99e027952f2a8cb"
+    ):
+        warnings.warn("numba.core.typing.builtins.Int.generic has changed")
+
+numba.core.typing.builtins.Int.generic = generic
+
+
+def _sequence_of_arrays(
+    context, func_name, arrays, dim_chooser=numba.core.typing.npydecl._homogeneous_dims
+):
+    if (
+        not isinstance(arrays, types.BaseTuple)
+        or not len(arrays)
+        or not all(isinstance(a, types.Array) for a in arrays)
+    ):
+        # Bodo change: raise NumbaError to allow typing to continue
+        raise numba.NumbaTypeError(
+            "%s(): expecting a non-empty tuple of arrays, "
+            "got %s" % (func_name, arrays)
+        )
+
+    ndim = dim_chooser(context, func_name, arrays)
+
+    dtype = context.unify_types(*(a.dtype for a in arrays))
+    if dtype is None:
+        # Bodo change: raise NumbaError to allow typing to continue
+        raise numba.NumbaTypeError(
+            "%s(): input arrays must have " "compatible dtypes" % func_name
+        )
+
+    return dtype, ndim
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.npydecl._sequence_of_arrays)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5e56ef05b3d09d20f9bd73e1f9fd198c453ab61c126e40754c285f631433c519"
+    ):
+        warnings.warn("numba.core.typing.npydecl._sequence_of_arrays")
+
+
+numba.core.typing.npydecl._sequence_of_arrays = _sequence_of_arrays
+numba.np.arrayobj._sequence_of_arrays = _sequence_of_arrays

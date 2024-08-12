@@ -123,7 +123,7 @@ def test_groupby_drop_duplicates(memory_leak_check):
     kept_cols = bodo.utils.typing.MetaType((0, 1))
     batch_size = 3
     fnames = bodo.utils.typing.MetaType(())
-    f_in_offsets = bodo.utils.typing.MetaType((0))
+    f_in_offsets = bodo.utils.typing.MetaType((0,))
     f_in_cols = bodo.utils.typing.MetaType(())
 
     def test_groupby(df):

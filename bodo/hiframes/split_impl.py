@@ -319,9 +319,12 @@ def box_str_arr_split_view(typ, val, c):
     return out_arr
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
-    assert num_items_t == types.intp and num_offsets_t == types.intp
+    assert (
+        types.unliteral(num_items_t) == types.intp
+        and types.unliteral(num_offsets_t) == types.intp
+    )
 
     def codegen(context, builder, sig, args):
         num_items, num_offsets, data_ptr = args
