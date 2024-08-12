@@ -654,6 +654,16 @@ def get_overload_const(val):
     return NOT_CONSTANT
 
 
+def assert_bodo_error(cond, msg=""):
+    """Assertion that raises BodoError instead of regular AssertionError to avoid
+    early compiler termination by Numba and allow iterative typing to continue.
+    For example, using this for checking for constants allows typing pass to try to
+    force the value to be constant.
+    """
+    if not cond:
+        raise BodoError(msg)
+
+
 def element_type(val):
     """Return the element type of a scalar or array"""
     if isinstance(val, (types.List, types.ArrayCompatible)):
@@ -940,9 +950,10 @@ def get_overload_const_func(val, func_ir):
         func = val.literal_value
         # Handle functions that are currently make_function expressions from BodoSQL
         if isinstance(func, ir.Expr) and func.op == "make_function":
-            assert (
-                func_ir is not None
-            ), "Function expression is make_function but there is no existing IR"
+            assert_bodo_error(
+                func_ir is not None,
+                "Function expression is make_function but there is no existing IR",
+            )
             func = numba.core.ir_utils.convert_code_obj_to_function(func, func_ir)
         return func
     if isinstance(val, types.Dispatcher):
@@ -1475,7 +1486,7 @@ def get_literal_value(t):
     # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
     if isinstance(t, types.TypeRef):
         t = t.instance_type
-    assert is_literal_type(t)
+    assert_bodo_error(is_literal_type(t))
     if t == types.none:
         return None
     if isinstance(t, types.Literal):
@@ -2758,6 +2769,8 @@ class CasePlaceholderTyper(AbstractTemplate):
     def generic(self, args, kws):
         # last argument is the output array type provided by BodoSQL
         output_type = unwrap_typeref(args[-1])
+        # Typing pass handles unknown output type for this
+        assert_bodo_error(output_type != types.unknown)
         return signature(output_type, *args)
 
 

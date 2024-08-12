@@ -226,8 +226,42 @@ def _init_chunked_table_builder_state(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_table_builder_state(
+    operator_id,
+    expected_state_type=None,
+    use_chunked_builder=False,
+    input_dicts_unified=False,
+):
+    pass
+
+
+@infer_global(init_table_builder_state)
+class InitTableBuilderStateInfer(AbstractTemplate):
+    """Typer for init_table_builder_state that returns table builder state type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(init_table_builder_state)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        expected_state_type = unwrap_typeref(folded_args[1])
+        if is_overload_none(expected_state_type):
+            output_type = TableBuilderStateType()
+        else:
+            output_type = expected_state_type
+
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+InitTableBuilderStateInfer._no_unliteral = True
+
+
+@lower_builtin(init_table_builder_state, types.VarArg(types.Any))
+def lower_init_table_builder_state(context, builder, sig, args):
+    """lower init_table_builder_state() using gen_init_table_builder_state_impl"""
+    impl = gen_init_table_builder_state_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_init_table_builder_state_impl(
     operator_id,
     expected_state_type=None,
     use_chunked_builder=False,
@@ -440,8 +474,39 @@ def _table_builder_finalize(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_builder_finalize(builder_state):
+    pass
+
+
+@infer_global(table_builder_finalize)
+class TableBuilderFinalizeInfer(AbstractTemplate):
+    """Typer for table_builder_finalize that returns table type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_builder_finalize)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        builder_state = unwrap_typeref(folded_args[0])
+        if builder_state._build_table_type == types.unknown:
+            raise numba.NumbaError(
+                "table_builder_finalize: unknown table type in table builder"
+            )
+
+        return signature(builder_state.build_table_type, *folded_args).replace(
+            pysig=pysig
+        )
+
+
+TableBuilderFinalizeInfer._no_unliteral = True
+
+
+@lower_builtin(table_builder_finalize, types.VarArg(types.Any))
+def lower_table_builder_finalize(context, builder, sig, args):
+    """lower table_builder_finalize() using gen_table_builder_finalize_impl"""
+    impl = gen_table_builder_finalize_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_table_builder_finalize_impl(builder_state):
     """
     Finalize the builder and output a python table
     (Only implemented for non-chunked
@@ -510,8 +575,39 @@ def _chunked_table_builder_pop_chunk(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_builder_pop_chunk(builder_state, produce_output=True):
+    pass
+
+
+@infer_global(table_builder_pop_chunk)
+class TableBuilderPopChunkInfer(AbstractTemplate):
+    """Typer for table_builder_pop_chunk that returns table type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_builder_pop_chunk)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        builder_state = folded_args[0]
+        if builder_state._build_table_type == types.unknown:
+            raise numba.NumbaError(
+                "table_builder_pop_chunk: unknown table type in table builder"
+            )
+        output_type = types.BaseTuple.from_types(
+            (builder_state.build_table_type, types.bool_)
+        )
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+TableBuilderPopChunkInfer._no_unliteral = True
+
+
+@lower_builtin(table_builder_pop_chunk, types.VarArg(types.Any))
+def lower_table_builder_pop_chunk(context, builder, sig, args):
+    """lower table_builder_pop_chunk() using gen_table_builder_pop_chunk_impl below"""
+    impl = gen_table_builder_pop_chunk_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_table_builder_pop_chunk_impl(builder_state, produce_output=True):
     """Return a chunk of data from the builder (Only implemented for chunked table builder)
 
     Returns a tuple of a (possibly empty) chunk of data from the builder and a boolean indicating if the
@@ -628,8 +724,37 @@ def _table_builder_get_data(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def table_builder_get_data(builder_state):
+    pass
+
+
+@infer_global(table_builder_get_data)
+class TableBuilderGetDataInfer(AbstractTemplate):
+    """Typer for table_builder_get_data that returns table type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(table_builder_get_data)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        builder_state = folded_args[0]
+        if builder_state._build_table_type == types.unknown:
+            raise numba.NumbaError(
+                "table_builder_get_data: unknown table type in table builder"
+            )
+        output_type = builder_state.build_table_type
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+TableBuilderGetDataInfer._no_unliteral = True
+
+
+@lower_builtin(table_builder_get_data, types.VarArg(types.Any))
+def lower_table_builder_get_data(context, builder, sig, args):
+    """lower table_builder_get_data() using gen_table_builder_get_data_impl below"""
+    impl = gen_table_builder_get_data_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_table_builder_get_data_impl(builder_state):
     """Get builder data as a Python table without finalizing or affecting state"""
     out_table_type = builder_state.build_table_type
 

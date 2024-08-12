@@ -30,6 +30,7 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     MetaType,
     get_overload_const_list,
+    is_overload_none,
     unwrap_typeref,
 )
 
@@ -205,7 +206,6 @@ def _init_stream_sort_state(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_stream_sort_state(
     operator_id,
     limit,
@@ -217,18 +217,55 @@ def init_stream_sort_state(
     expected_state_type=None,
     parallel=False,
 ):
+    pass
+
+
+@infer_global(init_stream_sort_state)
+class InitSortStateInfer(AbstractTemplate):
+    """Typer for init_stream_sort_state that returns sort state type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(init_stream_sort_state)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        expected_state_type = unwrap_typeref(folded_args[7])
+        if is_overload_none(expected_state_type):
+            output_type = SortStateType()
+        else:
+            output_type = expected_state_type
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+InitSortStateInfer._no_unliteral = True
+
+
+@lower_builtin(init_stream_sort_state, types.VarArg(types.Any))
+def lower_init_stream_sort_state(context, builder, sig, args):
+    """lower init_stream_sort_state() using gen_init_stream_sort_state_impl"""
+    impl = gen_init_stream_sort_state_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_init_stream_sort_state_impl(
+    operator_id,
+    limit,
+    offset,
+    by,
+    asc_cols,
+    na_position,
+    col_names,
+    expected_state_type=None,
+    parallel=False,
+):
     """Initialize the C++ TableBuilderState pointer"""
-    if expected_state_type:
-        output_type = unwrap_typeref(expected_state_type)
-        n_table_cols = output_type.num_input_arrs
-    else:
-        output_type = SortStateType()
-        n_table_cols = 0
+    output_type = unwrap_typeref(expected_state_type)
+    n_table_cols = output_type.num_input_arrs
 
     asc_cols_ = get_overload_const_list(asc_cols)
     asc_cols_ = [int(asc) for asc in asc_cols_]
     na_position_ = get_overload_const_list(na_position)
     na_position_ = [int(pos == "first") for pos in na_position_]
+    vect_asc = np.array(asc_cols_, np.int64)
+    na_pos = np.array(na_position_, np.int64)
 
     arr_ctypes = output_type.arr_ctypes
     arr_array_types = output_type.arr_array_types
@@ -244,8 +281,6 @@ def init_stream_sort_state(
         expected_state_type=None,
         parallel=False,
     ):  # pragma: no cover
-        vect_asc = np.array(asc_cols_, np.int64)
-        na_pos = np.array(na_position_, np.int64)
         return _init_stream_sort_state(
             output_type,
             operator_id,
@@ -422,6 +457,10 @@ class SortFinalizeInfer(AbstractTemplate):
         sort_state = get_call_expr_arg(
             "produce_output_batch", args, kws, 0, "sort_state"
         )
+        if sort_state._build_table_type == types.unknown:
+            raise numba.NumbaError(
+                "produce_output_batch: unknown table type in streaming sort state type"
+            )
 
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types(
