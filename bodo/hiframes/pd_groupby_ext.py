@@ -58,6 +58,7 @@ from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
+    assert_bodo_error,
     check_unsupported_args,
     create_unsupported_overload,
     dtype_to_array_type,
@@ -995,9 +996,10 @@ def handle_extended_named_agg_input_cols(
     assert (
         len(args) == 3
     ), "Internal error in handle_extended_named_agg_input_cols: args length does not equal 3"
-    assert is_literal_type(
-        args[0]
-    ), "Internal error in handle_extended_named_agg_input_cols: data column name is not a literal value"
+    assert_bodo_error(
+        is_literal_type(args[0]),
+        "Internal error in handle_extended_named_agg_input_cols: data column name is not a literal value",
+    )
     assert (
         get_literal_value(args[0]) == data_col_name
     ), f"Internal error in handle_extended_named_agg_input_cols: data column name mismatch: {data_col_name} and {get_literal_value(args[0])}"
@@ -2164,6 +2166,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
         # output
         if single_row_output:
             if isinstance(f_return_type, HeterogeneousSeriesType):
+                assert_bodo_error(f_return_type.const_info is not None)
                 _, index_vals = f_return_type.const_info
                 # Heterogenous Series should always return a Nullable Tuple in the output type,
                 if isinstance(

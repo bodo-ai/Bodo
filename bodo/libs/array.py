@@ -3391,12 +3391,12 @@ _get_replace_regex = types.ExternalFunction(
 )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _get_replace_regex_dict_state(
     typingctx, arr_info_t, pattern_t, replace_t, dict_encoding_state_t, func_id_t
 ):
     assert arr_info_t == array_info_type
-    assert func_id_t == types.int64, "func_id must be an int64"
+    assert isinstance(func_id_t, types.Integer), "func_id must be an integer"
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -3417,7 +3417,7 @@ def _get_replace_regex_dict_state(
         return ret
 
     sig = array_info_type(
-        arr_info_t, types.voidptr, types.voidptr, dict_encoding_state_t, func_id_t
+        arr_info_t, types.voidptr, types.voidptr, dict_encoding_state_t, types.int64
     )
     return sig, codegen
 

@@ -40,6 +40,7 @@ from bodo.utils.indexing import (
 )
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     is_iterable_type,
     is_list_like_index_type,
     is_overload_none,
@@ -601,9 +602,10 @@ def impl_ctor_time(context, builder, sig, args):  # pragma: no cover
 def cast_int_to_time(typingctx, val, precision):
     """Cast int value to Time"""
     assert types.unliteral(val) == types.int64, "val must be int64"
-    assert isinstance(
-        precision, types.IntegerLiteral
-    ), "precision must be an integer literal"
+    assert_bodo_error(
+        isinstance(precision, types.IntegerLiteral),
+        "precision must be an integer literal",
+    )
 
     def codegen(context, builder, signature, args):
         return args[0]

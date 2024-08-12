@@ -56,6 +56,7 @@ from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoArrayIterator,
     BodoError,
+    assert_bodo_error,
     get_overload_const_int,
     is_list_like_index_type,
     is_overload_constant_int,
@@ -2599,9 +2600,10 @@ def overload_str_arr_min_max_seq(arr, min_or_max):
     """String array min/max sequential implementation"""
     # TODO: optimize for dictionary-encoded case
     assert is_str_arr_type(arr), "str_arr_min_max: string array expected"
-    assert is_overload_constant_int(
-        min_or_max
-    ), "str_arr_min_max: min_or_max should be constant int"
+    assert_bodo_error(
+        is_overload_constant_int(min_or_max),
+        "str_arr_min_max: min_or_max should be constant int",
+    )
 
     min_or_max = get_overload_const_int(min_or_max)
     min_max_func = max if min_or_max == MinOrMax.Max.value else min
@@ -2630,9 +2632,10 @@ def overload_str_arr_min_max(arr, min_or_max, parallel=False):
     """String array min/max implementation"""
     # TODO: optimize for dictionary-encoded case
     assert is_str_arr_type(arr), "str_arr_min_max: string array expected"
-    assert is_overload_constant_int(
-        min_or_max
-    ), "str_arr_min_max: min_or_max should be constant int"
+    assert_bodo_error(
+        is_overload_constant_int(min_or_max),
+        "str_arr_min_max: min_or_max should be constant int",
+    )
 
     def impl_str_arr_min_max(arr, min_or_max, parallel=False):  # pragma: no cover
         s = str_arr_min_max_seq(arr, min_or_max)

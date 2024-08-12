@@ -82,6 +82,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     ColNamesMetaType,
+    assert_bodo_error,
     check_unsupported_args,
     create_unsupported_overload,
     decode_if_dict_array,
@@ -105,6 +106,7 @@ from bodo.utils.typing import (
     is_overload_bool,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_list,
     is_overload_constant_str,
     is_overload_false,
     is_overload_int,
@@ -1618,7 +1620,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_colu
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     """set column data of a dataframe inplace"""
     check_runtime_cols_unsupported(df_typ, "set_dataframe_data")
-    assert is_overload_constant_int(c_ind_typ)
+    assert_bodo_error(is_overload_constant_int(c_ind_typ))
     col_ind = get_overload_const_int(c_ind_typ)
 
     # make sure dataframe column data type is not changed (avoids lowering error)
@@ -1711,7 +1713,7 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t=None):
     return a new df.
     """
     check_runtime_cols_unsupported(df_type, "set_df_column_with_reflect")
-    assert is_literal_type(cname_type), "constant column name expected"
+    assert_bodo_error(is_literal_type(cname_type), "constant column name expected")
     col_name = get_literal_value(cname_type)
     n_cols = len(df_type.columns)
     new_n_cols = n_cols
@@ -3843,6 +3845,7 @@ def to_parquet_overload(
         )
 
     if not is_overload_none(partition_cols):
+        assert_bodo_error(is_overload_constant_list(partition_cols))
         partition_cols = get_overload_const_list(partition_cols)
         part_col_idxs = []
         for part_col_name in partition_cols:
@@ -5207,9 +5210,7 @@ def handle_inplace_df_type_change(inplace, _bodo_transformed, func_name):
         and (is_overload_true(inplace) or not is_overload_constant_bool(inplace))
     ):
         bodo.transforms.typing_pass.typing_transform_required = True
-        raise Exception(
-            "DataFrame.{}(): transform necessary for inplace".format(func_name)
-        )
+        raise BodoError(f"DataFrame.{func_name}(): transform necessary for inplace")
 
 
 def union_dataframes(df_tup, drop_duplicates, output_colnames):  # pragma: no cover

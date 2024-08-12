@@ -31,6 +31,8 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import (
     BodoError,
+    NotConstant,
+    assert_bodo_error,
     get_overload_const,
     get_overload_const_str,
     is_overload_constant_str,
@@ -214,7 +216,9 @@ def unbox_bodosql_context(typ, val, c):
 @intrinsic(prefer_literal=True)
 def init_sql_context(typingctx, names_type, dataframes_type, catalog, default_tz):
     """Create a BodoSQLContext given table names and dataframes."""
-    table_names = tuple(get_overload_const(names_type))
+    table_names = get_overload_const(names_type)
+    assert_bodo_error(not isinstance(table_names, NotConstant))
+    table_names = tuple(table_names)
     n_tables = len(names_type.types)
     assert len(dataframes_type.types) == n_tables
     # Cannot estimate row counts in compiled code at this time.

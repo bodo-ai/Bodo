@@ -19,6 +19,7 @@ from bodo.libs.pd_datetime_arr_ext import (
 )
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     get_overload_const_int,
     get_overload_const_str,
     is_overload_constant_int,
@@ -3418,9 +3419,10 @@ def dayofweek_util(arr, week_start):
         int (scalar/series): the days of the week of the data values
     """
     verify_datetime_arg_allow_tz(arr, "dayofweek", "arr")
-    assert is_overload_constant_int(
-        week_start
-    ), "Invalid week_start parameter! Must be an integer"
+    assert_bodo_error(
+        is_overload_constant_int(week_start),
+        "Invalid week_start parameter! Must be an integer",
+    )
 
     week_start_val = get_overload_const_int(week_start)
     if week_start_val < 0 or week_start_val > 7:
@@ -3863,13 +3865,15 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
     """
     verify_datetime_arg_allow_tz(arr, "weekofyear", "arr", allow_timestamp_tz=True)
 
-    assert is_overload_constant_int(
-        week_start
-    ), "Invalid week_start parameter! Must be an integer"
+    assert_bodo_error(
+        is_overload_constant_int(week_start),
+        "Invalid week_start parameter! Must be an integer",
+    )
 
-    assert is_overload_constant_int(
-        week_of_year_policy
-    ), "Invalid week_of_year_policy parameter! Must be an integer"
+    assert_bodo_error(
+        is_overload_constant_int(week_of_year_policy),
+        "Invalid week_of_year_policy parameter! Must be an integer",
+    )
 
     week_start_val = get_overload_const_int(week_start)
     if week_start_val < 0 or week_start_val > 7:
@@ -3965,13 +3969,15 @@ def yearofweek_util(arr, week_start, week_of_year_policy):
 
     verify_datetime_arg_allow_tz(arr, "yearofweek", "arr")
 
-    assert is_overload_constant_int(
-        week_start
-    ), "Invalid week_start parameter! Must be an integer"
+    assert_bodo_error(
+        is_overload_constant_int(week_start),
+        "Invalid week_start parameter! Must be an integer",
+    )
 
-    assert is_overload_constant_int(
-        week_of_year_policy
-    ), "Invalid week_of_year_policy parameter! Must be an integer"
+    assert_bodo_error(
+        is_overload_constant_int(week_of_year_policy),
+        "Invalid week_of_year_policy parameter! Must be an integer",
+    )
 
     week_start_val = get_overload_const_int(week_start)
     if week_start_val < 0 or week_start_val > 7:
@@ -4152,12 +4158,15 @@ def time_slice_util(arr, slice_length, date_time_part, start_or_end, start_day):
     verify_int_arg(slice_length, "time_slice", "slice_length")
     verify_string_arg(start_or_end, "time_slice", "start_or_end")
 
-    assert is_overload_constant_str(
-        date_time_part
-    ), "date_time_part must be a string literal!"
+    assert_bodo_error(
+        is_overload_constant_str(date_time_part),
+        "date_time_part must be a string literal!",
+    )
     datetime_part = get_overload_const_str(date_time_part)
 
-    assert is_overload_constant_int(start_day), "start_day must be an integer!"
+    assert_bodo_error(
+        is_overload_constant_int(start_day), "start_day must be an integer!"
+    )
     # Map 0 - 7 to 0 - 6
     day_index = max(0, get_overload_const_int(start_day) - 1)
 

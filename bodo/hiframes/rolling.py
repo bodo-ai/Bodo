@@ -14,6 +14,7 @@ import bodo
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     decode_if_dict_array,
     get_overload_const_func,
     get_overload_const_str,
@@ -85,7 +86,9 @@ def lower_rolling_corr_dummy(context, builder, sig, args):
 def overload_rolling_fixed(
     arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
-    assert is_overload_constant_bool(raw), "raw argument should be constant bool"
+    assert_bodo_error(
+        is_overload_constant_bool(raw), "raw argument should be constant bool"
+    )
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
@@ -93,7 +96,7 @@ def overload_rolling_fixed(
             arr, index_arr, win, minp, center, parallel, func, raw
         )  # pragma: no cover
 
-    assert is_overload_constant_str(fname)
+    assert_bodo_error(is_overload_constant_str(fname))
     func_name = get_overload_const_str(fname)
 
     if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
@@ -136,7 +139,7 @@ def overload_rolling_fixed(
 def overload_rolling_variable(
     arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
@@ -144,7 +147,7 @@ def overload_rolling_variable(
             arr, on_arr, index_arr, win, minp, center, parallel, func, raw
         )  # pragma: no cover
 
-    assert is_overload_constant_str(fname)
+    assert_bodo_error(is_overload_constant_str(fname))
     func_name = get_overload_const_str(fname)
 
     if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
@@ -327,7 +330,7 @@ def roll_fixed_apply(
 def overload_roll_fixed_apply(
     in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     return roll_fixed_apply_impl
 
 
@@ -457,7 +460,7 @@ def overload_recv_right_compute(
     kernel_func,
     raw,
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
 
         def impl(
@@ -542,7 +545,7 @@ def overload_recv_left_compute(
     kernel_func,
     raw,
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
 
         def impl(
@@ -601,7 +604,7 @@ def roll_fixed_apply_seq(
 def overload_roll_fixed_apply_seq(
     in_arr, index_arr, win, minp, center, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+    assert_bodo_error(is_overload_constant_bool(raw), "'raw' should be constant bool")
 
     def roll_fixed_apply_seq_impl(
         in_arr, index_arr, win, minp, center, kernel_func, raw=True
@@ -632,7 +635,7 @@ def apply_func(kernel_func, data, index_arr, start, end, raw):  # pragma: no cov
 
 @overload(apply_func, no_unliteral=True)
 def overload_apply_func(kernel_func, data, index_arr, start, end, raw):
-    assert is_overload_constant_bool(raw), "'raw' should be constant bool"
+    assert_bodo_error(is_overload_constant_bool(raw), "'raw' should be constant bool")
     if is_overload_true(raw):
         return lambda kernel_func, data, index_arr, start, end, raw: kernel_func(
             data
@@ -869,7 +872,7 @@ def roll_variable_apply(
 def overload_roll_variable_apply(
     in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     return roll_variable_apply_impl
 
 
@@ -1002,7 +1005,7 @@ def overload_recv_left_var_compute(
     kernel_func,
     raw,
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
 
         def impl(
@@ -1063,7 +1066,7 @@ def roll_variable_apply_seq(
 def overload_roll_variable_apply_seq(
     in_arr, on_arr, index_arr, win, minp, start, end, kernel_func, raw
 ):
-    assert is_overload_constant_bool(raw)
+    assert_bodo_error(is_overload_constant_bool(raw))
     if is_overload_true(raw):
         return roll_variable_apply_seq_impl
 

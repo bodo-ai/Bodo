@@ -66,6 +66,7 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
+    assert_bodo_error,
     check_unsupported_args,
     decode_if_dict_array,
     element_type,
@@ -2405,7 +2406,9 @@ def accum_func_overload(A, func_name, parallel=False):
         array: output array of cumulative operation
     """
 
-    assert is_overload_constant_str(func_name), "accum_func: func_name should be const"
+    assert_bodo_error(
+        is_overload_constant_str(func_name), "accum_func: func_name should be const"
+    )
     fname = get_overload_const_str(func_name)
     assert fname in (
         "cumsum",

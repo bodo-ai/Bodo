@@ -182,9 +182,6 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
-# TODO[BSE-3626]: update to new_style and remove this
-os.environ["NUMBA_CAPTURED_ERRORS"] = "old_style"
-
 
 # NOTE: 'pandas_compat' has to be imported first in bodo package to make sure all Numba
 # patches are applied before Bodo's use.

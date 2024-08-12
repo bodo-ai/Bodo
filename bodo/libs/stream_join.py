@@ -16,7 +16,7 @@ from numba.core.typing.templates import (
     infer_global,
     signature,
 )
-from numba.extending import intrinsic, lower_builtin, models, overload, register_model
+from numba.extending import intrinsic, lower_builtin, models, register_model
 
 import bodo
 from bodo.ext import stream_join_cpp
@@ -80,6 +80,19 @@ ll.add_symbol(
 ll.add_symbol(
     "runtime_join_filter_py_entry", stream_join_cpp.runtime_join_filter_py_entry
 )
+
+# Iterative type inference approach for streaming states:
+# 1) init functions return state type with unknown table types to allow type inference
+# to continue.
+# 2) Functions that require table type for their output types throw NumbaError to
+# restart type inference.
+# 3) Functions that do not need table type simply return their output types.
+# 4) Typing and lowering should be separated to make sure invalid code doesn't get
+# compiled recursively before iterative type inference is done and state type is
+# finalized.
+
+# See here about the new Numba error handling:
+# https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-old-style-numba-captured-errors
 
 
 class JoinStateType(StreamingStateType):
@@ -945,7 +958,6 @@ def _init_join_state(
     return sig, codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
 def init_join_state(
     operator_id,
     build_key_inds,
@@ -967,7 +979,21 @@ def init_join_state(
     build_parallel=False,
     probe_parallel=False,
 ):
-    expected_state_type = unwrap_typeref(expected_state_type)
+    pass
+
+
+def _get_init_join_state_type(
+    expected_state_type,
+    build_key_inds,
+    probe_key_inds,
+    build_colnames,
+    probe_colnames,
+    build_outer,
+    probe_outer,
+):
+    """Helper for init_join_state output typing that returns state type with unknown
+    table types when expected state type is not provided.
+    """
     if is_overload_none(expected_state_type):
         build_keys = unwrap_typeref(build_key_inds).meta
         probe_keys = unwrap_typeref(probe_key_inds).meta
@@ -992,6 +1018,70 @@ def init_join_state(
         )
     else:
         output_type = expected_state_type
+
+    return output_type
+
+
+@infer_global(init_join_state)
+class InitJoinStateInfer(AbstractTemplate):
+    """Typer for init_join_state that returns join state type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(init_join_state)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        expected_state_type = unwrap_typeref(folded_args[10])
+        (
+            build_key_inds,
+            probe_key_inds,
+            build_colnames,
+            probe_colnames,
+            build_outer,
+            probe_outer,
+        ) = folded_args[1:7]
+        output_type = _get_init_join_state_type(
+            expected_state_type,
+            build_key_inds,
+            probe_key_inds,
+            build_colnames,
+            probe_colnames,
+            build_outer,
+            probe_outer,
+        )
+        return signature(output_type, *folded_args).replace(pysig=pysig)
+
+
+InitJoinStateInfer._no_unliteral = True
+
+
+@lower_builtin(init_join_state, types.VarArg(types.Any))
+def lower_init_join_state(context, builder, sig, args):
+    """lower init_join_state() using gen_init_join_state_impl"""
+    impl = gen_init_join_state_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_init_join_state_impl(
+    operator_id,
+    build_key_inds,
+    probe_key_inds,
+    build_colnames,
+    probe_colnames,
+    build_outer,
+    probe_outer,
+    interval_build_columns,
+    force_broadcast,
+    op_pool_size_bytes=-1,
+    expected_state_type=None,
+    # The non-equality portion of the join condition. If None then
+    # the join is a pure hash join. Otherwise this is a string similar
+    # to the query string accepted by merge.
+    non_equi_condition=None,
+    # Note: build_parallel and probe_parallel are set automatically
+    # by the compiler and should not be set by the user.
+    build_parallel=False,
+    probe_parallel=False,
+):
+    output_type = unwrap_typeref(expected_state_type)
 
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
@@ -1307,17 +1397,15 @@ def runtime_join_filter(
     pass
 
 
-@overload(runtime_join_filter, no_unliteral=True)
-def overload_runtime_join_filter(
-    join_states, table, join_keys_idxs, process_col_bitmasks
+def _get_runtime_join_filter_info(
+    join_states, input_table_t, join_keys_idxs, process_col_bitmasks
 ):
+    """Compute typing information for runtime join filter to use during typing and
+    lowering codegen.
+    """
     num_filters = len(join_states)
+    n_cols = len(input_table_t.arr_types)
 
-    if any([join_state.probe_outer for join_state in join_states]):
-        raise BodoError("Cannot apply runtime join filter in the probe_outer case!")
-
-    n_cols = len(table.arr_types)
-    input_table_t = table
     join_key_idxs_lists = tuple(
         list(unwrap_typeref(join_key_idxs).meta) for join_key_idxs in join_keys_idxs
     )
@@ -1349,33 +1437,14 @@ def overload_runtime_join_filter(
 
     cast_table_types = []
 
-    # count the number of variable length columns to determine if cost of
-    # materializing the table is high enough to justify bitmasks
-    num_var_type_columns = 0
-    for arr_type in input_table_t.arr_types:
-        if (
-            arr_type == bodo.string_array_type
-            or arr_type == bodo.binary_array_type
-            or isinstance(
-                arr_type,
-                (
-                    bodo.MapArrayType,
-                    bodo.ArrayItemArrayType,
-                ),
-            )
-        ):
-            num_var_type_columns += 1
-
-    # whether to materialize after every filter or wait until the end
-    materialize_after_each_filter = num_var_type_columns < int(
-        bodo.runtime_join_filters_copy_threshold
-    )
-
     # Cast the key columns to the correct types (e.g. int32 to int64).
     # The output type will be the type after the cast to avoid
     # casting back to the original type. This is fine since we would
     # do this cast at some point anyway.
     for i in range(num_filters):
+        # NOTE: key_types may not be available during type inference, so we just assume
+        # no cast is necessary and return the input table type to allow type inference
+        # to continue.
         join_key_types = join_states[i].key_types
         if join_key_types == []:
             cast_table_types.append(input_table_t)
@@ -1422,10 +1491,111 @@ def overload_runtime_join_filter(
             cast_table_types.append(bodo.TableType(tuple(cast_arr_types)))
         cast_table_types_tuple = tuple(cast_table_types)
 
+    return (
+        cast_table_types_tuple,
+        can_apply_bloom_filters,
+        can_apply_col_filters,
+        join_key_idxs_lists,
+    )
+
+
+@infer_global(runtime_join_filter)
+class RuntimeJoinFilterInfer(AbstractTemplate):
+    """Typer for runtime_join_filter that returns output table type"""
+
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(runtime_join_filter)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        join_states, table, join_keys_idxs, process_col_bitmasks = folded_args
+        # NOTE: join state table types may not be available during type inference, but
+        # we return input types without casting to allow type inference to continue.
+        # Otherwise, type inference may not reach probe calls to type join states
+        # properly. This is correct since type inference will refine the types later.
+
+        (
+            cast_table_types_tuple,
+            can_apply_bloom_filters,
+            can_apply_col_filters,
+            _,
+        ) = _get_runtime_join_filter_info(
+            join_states, table, join_keys_idxs, process_col_bitmasks
+        )
+
+        # Return input type if no filter can be applied
+        if (not any(can_apply_bloom_filters)) and (not any(can_apply_col_filters)):
+            return signature(table, *folded_args).replace(pysig=pysig)
+
+        # the index of the last table created
+        curr_table_idx = -1
+        # assume at least one filter can be applied (so cpp_table is always defined)
+        num_filters = len(join_states)
+        for i in range(num_filters):
+            if can_apply_bloom_filters[i] or can_apply_col_filters[i]:
+                curr_table_idx = i
+
+        return signature(cast_table_types_tuple[curr_table_idx], *folded_args).replace(
+            pysig=pysig
+        )
+
+
+RuntimeJoinFilterInfer._no_unliteral = True
+
+
+@lower_builtin(runtime_join_filter, types.VarArg(types.Any))
+def lower_runtime_join_filter(context, builder, sig, args):
+    """lower runtime_join_filter() using overload_runtime_join_filter"""
+    impl = overload_runtime_join_filter(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def overload_runtime_join_filter(
+    join_states, table, join_keys_idxs, process_col_bitmasks
+):
+    num_filters = len(join_states)
+
+    if any(join_state.probe_outer for join_state in join_states):
+        raise BodoError("Cannot apply runtime join filter in the probe_outer case!")
+
+    n_cols = len(table.arr_types)
+    input_table_t = table
+
+    # count the number of variable length columns to determine if cost of
+    # materializing the table is high enough to justify bitmasks
+    num_var_type_columns = 0
+    for arr_type in input_table_t.arr_types:
+        if (
+            arr_type == bodo.string_array_type
+            or arr_type == bodo.binary_array_type
+            or isinstance(
+                arr_type,
+                (
+                    bodo.MapArrayType,
+                    bodo.ArrayItemArrayType,
+                ),
+            )
+        ):
+            num_var_type_columns += 1
+
+    # whether to materialize after every filter or wait until the end
+    materialize_after_each_filter = num_var_type_columns < int(
+        bodo.runtime_join_filters_copy_threshold
+    )
+
+    (
+        cast_table_types_tuple,
+        can_apply_bloom_filters,
+        can_apply_col_filters,
+        join_key_idxs_lists,
+    ) = _get_runtime_join_filter_info(
+        join_states, input_table_t, join_keys_idxs, process_col_bitmasks
+    )
+
     # If no filter can be applied, just return a NOP implementation
     # (that will get optimized out) to avoid function call overheads.
     if (not any(can_apply_bloom_filters)) and (not any(can_apply_col_filters)):
-        return lambda join_states, table, join_keys_idxs, process_col_bitmasks: table
+        return (
+            lambda join_states, table, join_keys_idxs, process_col_bitmasks: table
+        )  # pragma: no cover
 
     col_inds_t = MetaType(tuple(range(n_cols)))
     col_ind_arr = np.arange(n_cols)
@@ -1700,6 +1870,14 @@ class JoinProbeConsumeBatchInfer(AbstractTemplate):
         join_state = get_call_expr_arg(
             "join_probe_consume_batch", args, kws, 0, "join_state"
         )
+        if (
+            join_state.build_table_type == types.unknown
+            or join_state.probe_table_type == types.unknown
+        ):
+            raise numba.NumbaError(
+                "join_probe_consume_batch: unknown table type in streaming join state type"
+            )
+
         out_table_type = join_state.output_type
         # Output is (out_table, out_is_last, request_input)
         output_type = types.BaseTuple.from_types(
