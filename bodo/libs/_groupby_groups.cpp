@@ -147,7 +147,8 @@ void get_group_info(std::vector<std::shared_ptr<table_info>>& tables,
 
     if (!hashes) {
         hashes = bodo::make_shared_arr<uint32_t>(table->nrows(), pool);
-        hash_keys(hashes, key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
+        hash_keys(hashes.get(), key_cols, SEED_HASH_GROUPBY_SHUFFLE,
+                  is_parallel);
         nunique_hashes =
             get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
@@ -378,7 +379,8 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
     // groups.
     if (tables.size() > 1 || !hashes) {
         hashes = bodo::make_shared_arr<uint32_t>(table->nrows(), pool);
-        hash_keys(hashes, key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
+        hash_keys(hashes.get(), key_cols, SEED_HASH_GROUPBY_SHUFFLE,
+                  is_parallel);
         nunique_hashes =
             get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
@@ -445,7 +447,8 @@ void get_group_info_iterate(std::vector<std::shared_ptr<table_info>>& tables,
         key_cols = std::vector<std::shared_ptr<array_info>>(
             table->columns.begin(), table->columns.begin() + n_keys);
         hashes = bodo::make_shared_arr<uint32_t>(table->nrows(), pool);
-        hash_keys(hashes, key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
+        hash_keys(hashes.get(), key_cols, SEED_HASH_GROUPBY_SHUFFLE,
+                  is_parallel);
         grp_infos.emplace_back(pool);
         grouping_info& grp_info = grp_infos.back();
         grp_info.row_to_group.resize(table->nrows());

@@ -89,7 +89,7 @@ bodo::tests::suite timestamptz_array_tests([] {
             std::make_unique<uint32_t[]>(len);
         std::unique_ptr<uint32_t[]> out_hashes =
             std::make_unique<uint32_t[]>(len);
-        hash_array(out_hashes, arr, len, 0, false, false);
+        hash_array(out_hashes.get(), arr, len, 0, false, false);
         for (int i = 0; i < len; i++) {
             int64_t val = (int64_t)((int64_t*)arr->data1())[i];
             hash_inner_32<int64_t>(&val, 0, &res_hashes[i]);
@@ -105,7 +105,7 @@ bodo::tests::suite timestamptz_array_tests([] {
             std::make_unique<uint32_t[]>(len);
         std::unique_ptr<uint32_t[]> out_hashes =
             std::make_unique<uint32_t[]>(len);
-        hash_array_combine(out_hashes, arr, len, 0, false, false);
+        hash_array_combine(out_hashes.get(), arr, len, 0, false, false);
         uint32_t hash = 0;
         for (int i = 0; i < len; i++) {
             int64_t val = (int64_t)((int64_t*)arr->data1())[i];
