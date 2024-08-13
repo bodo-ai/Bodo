@@ -1366,41 +1366,6 @@ public class RelBuilder {
     return groupKey_(nodes, Util.transform(groupSets, this::fields));
   }
 
-  @Deprecated // to be removed before 2.0
-  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
-      RexNode filter, @Nullable String alias, RexNode... operands) {
-    return aggregateCall(aggFunction, distinct, false, false, filter, null,
-        ImmutableList.of(), alias, ImmutableList.of(),
-        ImmutableList.copyOf(operands));
-  }
-
-  @Deprecated // to be removed before 2.0
-  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
-      boolean approximate, RexNode filter, @Nullable String alias,
-      RexNode... operands) {
-    return aggregateCall(aggFunction, distinct, approximate, false, filter,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
-        ImmutableList.copyOf(operands));
-  }
-
-  @Deprecated // to be removed before 2.0
-  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
-      RexNode filter, @Nullable String alias,
-      Iterable<? extends RexNode> operands) {
-    return aggregateCall(aggFunction, distinct, false, false, filter, null,
-        ImmutableList.of(), alias, ImmutableList.of(),
-        ImmutableList.copyOf(operands));
-  }
-
-  @Deprecated // to be removed before 2.0
-  public AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
-      boolean approximate, RexNode filter, @Nullable String alias,
-      Iterable<? extends RexNode> operands) {
-    return aggregateCall(aggFunction, distinct, approximate, false, filter,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
-        ImmutableList.copyOf(operands));
-  }
-
   /** Creates a call to an aggregate function.
    *
    * <p>To add other operands, apply
@@ -1412,7 +1377,7 @@ public class RelBuilder {
   public AggCall aggregateCall(SqlAggFunction aggFunction,
       Iterable<? extends RexNode> operands) {
     return aggregateCall(aggFunction, false, false, false, null, null,
-        ImmutableList.of(), null, ImmutableList.of(),
+        RelCollations.EMPTY, null, ImmutableList.of(),
         ImmutableList.copyOf(operands));
   }
 
@@ -1427,7 +1392,7 @@ public class RelBuilder {
   public AggCall aggregateCall(SqlAggFunction aggFunction,
       RexNode... operands) {
     return aggregateCall(aggFunction, false, false, false, null, null,
-        ImmutableList.of(), null, ImmutableList.of(),
+        RelCollations.EMPTY, null, ImmutableList.of(),
         ImmutableList.copyOf(operands));
   }
 
@@ -1437,7 +1402,7 @@ public class RelBuilder {
     return aggregateCall(a.getAggregation(), a.isDistinct(), a.isApproximate(),
         a.ignoreNulls(), a.filterArg < 0 ? null : field(a.filterArg),
         a.distinctKeys == null ? null : fields(a.distinctKeys),
-        fields(a.collation), a.name, ImmutableList.copyOf(a.rexList),
+        a.collation, a.name, ImmutableList.copyOf(a.rexList),
         fields(a.getArgList()));
   }
 
@@ -1449,7 +1414,7 @@ public class RelBuilder {
         a.filterArg < 0 ? null : field(Mappings.apply(mapping, a.filterArg)),
         a.distinctKeys == null ? null
             : fields(Mappings.apply(mapping, a.distinctKeys)),
-        fields(RexUtil.apply(mapping, a.collation)), a.name,
+        RexUtil.apply(mapping, a.collation), a.name,
         ImmutableList.copyOf(a.rexList),
         fields(Mappings.apply2(mapping, a.getArgList())));
   }
@@ -1458,10 +1423,10 @@ public class RelBuilder {
   protected AggCall aggregateCall(SqlAggFunction aggFunction, boolean distinct,
       boolean approximate, boolean ignoreNulls, @Nullable RexNode filter,
       @Nullable ImmutableList<RexNode> distinctKeys,
-      ImmutableList<RexNode> orderKeys, @Nullable String alias,
+      RelCollation collation, @Nullable String alias,
       ImmutableList<RexNode> preOperands, ImmutableList<RexNode> operands) {
     return new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-        filter, alias, preOperands, operands, distinctKeys, orderKeys);
+        filter, alias, preOperands, operands, distinctKeys, collation);
   }
 
   /** Creates a call to the {@code COUNT} aggregate function. */
@@ -1479,7 +1444,7 @@ public class RelBuilder {
   public AggCall count(boolean distinct, @Nullable String alias,
       RexNode... operands) {
     return aggregateCall(SqlStdOperatorTable.COUNT, distinct, false, false, null,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
         ImmutableList.copyOf(operands));
   }
 
@@ -1488,7 +1453,7 @@ public class RelBuilder {
   public AggCall count(boolean distinct, @Nullable String alias,
       Iterable<? extends RexNode> operands) {
     return aggregateCall(SqlStdOperatorTable.COUNT, distinct, false, false, null,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
         ImmutableList.copyOf(operands));
   }
 
@@ -1507,7 +1472,7 @@ public class RelBuilder {
   public AggCall sum(boolean distinct, @Nullable String alias,
       RexNode operand) {
     return aggregateCall(SqlStdOperatorTable.SUM, distinct, false, false, null,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
         ImmutableList.of(operand));
   }
 
@@ -1521,7 +1486,7 @@ public class RelBuilder {
   public AggCall avg(boolean distinct, @Nullable String alias,
       RexNode operand) {
     return aggregateCall(SqlStdOperatorTable.AVG, distinct, false, false, null,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
         ImmutableList.of(operand));
   }
 
@@ -1534,7 +1499,7 @@ public class RelBuilder {
    * optionally with an alias. */
   public AggCall min(@Nullable String alias, RexNode operand) {
     return aggregateCall(SqlStdOperatorTable.MIN, false, false, false, null,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
         ImmutableList.of(operand));
   }
 
@@ -1547,7 +1512,7 @@ public class RelBuilder {
   /** Creates a call to the {@code MAX} aggregate function. */
   public AggCall max(@Nullable String alias, RexNode operand) {
     return aggregateCall(SqlStdOperatorTable.MAX, false, false, false, null,
-        null, ImmutableList.of(), alias, ImmutableList.of(),
+        null, RelCollations.EMPTY, alias, ImmutableList.of(),
         ImmutableList.of(operand));
   }
 
@@ -3986,6 +3951,12 @@ public class RelBuilder {
       return sort(ImmutableList.copyOf(orderKeys));
     }
 
+    // Bodo Change: Add an explicit collation API
+    /** Returns a copy of this AggCall that sorts its input value with
+     * the {@code collation} before aggregating, as in SQL's
+     * {@code WITHIN GROUP} clause. */
+    AggCall sort(RelCollation collation);
+
     /** Returns a copy of this AggCall with the given pre-operands.
      *
      * <p>Pre-operands apply at the start of aggregation and are constant for
@@ -4145,14 +4116,16 @@ public class RelBuilder {
     private final ImmutableList<RexNode> preOperands; // may be empty
     private final ImmutableList<RexNode> operands; // may be empty
     private final @Nullable ImmutableList<RexNode> distinctKeys; // may be empty or null
-    private final ImmutableList<RexNode> orderKeys; // may be empty
+
+    // Bodo Change: Replace orderKeys with the more general collation.
+    private final RelCollation collation; // may be empty Collation
 
     AggCallImpl(SqlAggFunction aggFunction, boolean distinct,
         boolean approximate, boolean ignoreNulls, @Nullable RexNode filter,
         @Nullable String alias, ImmutableList<RexNode> preOperands,
         ImmutableList<RexNode> operands,
         @Nullable ImmutableList<RexNode> distinctKeys,
-        ImmutableList<RexNode> orderKeys) {
+        RelCollation collation) {
       this.aggFunction = requireNonNull(aggFunction, "aggFunction");
       // If the aggregate function ignores DISTINCT,
       // make the DISTINCT flag FALSE.
@@ -4164,7 +4137,7 @@ public class RelBuilder {
       this.preOperands = requireNonNull(preOperands, "preOperands");
       this.operands = requireNonNull(operands, "operands");
       this.distinctKeys = distinctKeys;
-      this.orderKeys = requireNonNull(orderKeys, "orderKeys");
+      this.collation = requireNonNull(collation, "collation");
       if (filter != null) {
         if (filter.getType().getSqlTypeName() != SqlTypeName.BOOLEAN) {
           throw RESOURCE.filterMustBeBoolean().ex();
@@ -4213,10 +4186,9 @@ public class RelBuilder {
       return alias;
     }
     @Override public AggregateCall aggregateCall() {
-      // Use dummy values for collation and type. This method only promises to
+      // Use dummy values for type. This method only promises to
       // return a call that is "approximately equivalent ... and is good for
       // deriving field names", so dummy values are good enough.
-      final RelCollation collation = RelCollations.EMPTY;
       final RelDataType type =
           getTypeFactory().createSqlType(SqlTypeName.BOOLEAN);
       return AggregateCall.create(aggFunction, distinct, approximate,
@@ -4242,13 +4214,6 @@ public class RelBuilder {
               ? null
               : ImmutableBitSet.of(
                   registrar.registerExpressions(this.distinctKeys));
-      final RelCollation collation =
-          RelCollations.of(this.orderKeys
-              .stream()
-              .map(orderKey ->
-                  collation(orderKey, RelFieldCollation.Direction.ASCENDING,
-                      null, Collections.emptyList()))
-              .collect(Collectors.toList()));
       if (aggFunction instanceof SqlCountAggFunction && !distinct) {
         args = args.stream()
             .filter(r::fieldIsNullable)
@@ -4268,7 +4233,6 @@ public class RelBuilder {
       if (distinctKeys != null) {
         registrar.registerExpressions(distinctKeys);
       }
-      registrar.registerExpressions(orderKeys);
     }
 
     @Override public AggCall preOperands(
@@ -4278,7 +4242,7 @@ public class RelBuilder {
       return preOperandList.equals(this.preOperands)
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperandList, operands, distinctKeys, orderKeys);
+              filter, alias, preOperandList, operands, distinctKeys, collation);
     }
 
     @Override public OverCall over() {
@@ -4288,14 +4252,25 @@ public class RelBuilder {
     @Override public AggCall sort(Iterable<RexNode> orderKeys) {
       final ImmutableList<RexNode> orderKeyList =
           ImmutableList.copyOf(orderKeys);
-      return orderKeyList.equals(this.orderKeys)
-          ? this
-          : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperands, operands, distinctKeys, orderKeyList);
+      final RelCollation collation =
+        RelCollations.of(orderKeyList
+                .stream()
+                .map(orderKey ->
+                        collation(orderKey, RelFieldCollation.Direction.ASCENDING,
+                                null, Collections.emptyList()))
+                .collect(Collectors.toList()));
+      return sort(collation);
     }
 
     @Override public AggCall sort(RexNode... orderKeys) {
       return sort(ImmutableList.copyOf(orderKeys));
+    }
+
+    @Override public AggCall sort(RelCollation collation) {
+      return collation.equals(this.collation)
+          ? this
+          : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
+          filter, alias, preOperands, operands, distinctKeys, collation);
     }
     @Override public AggCall unique(@Nullable Iterable<RexNode> distinctKeys) {
       final @Nullable ImmutableList<RexNode> distinctKeyList =
@@ -4303,42 +4278,42 @@ public class RelBuilder {
       return Objects.equals(distinctKeyList, this.distinctKeys)
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperands, operands, distinctKeyList, orderKeys);
+              filter, alias, preOperands, operands, distinctKeyList, collation);
     }
 
     @Override public AggCall approximate(boolean approximate) {
       return approximate == this.approximate
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperands, operands, distinctKeys, orderKeys);
+              filter, alias, preOperands, operands, distinctKeys, collation);
     }
 
     @Override public AggCall filter(@Nullable RexNode condition) {
       return Objects.equals(condition, this.filter)
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              condition, alias, preOperands, operands, distinctKeys, orderKeys);
+              condition, alias, preOperands, operands, distinctKeys, collation);
     }
 
     @Override public AggCall as(@Nullable String alias) {
       return Objects.equals(alias, this.alias)
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperands, operands, distinctKeys, orderKeys);
+              filter, alias, preOperands, operands, distinctKeys, collation);
     }
 
     @Override public AggCall distinct(boolean distinct) {
       return distinct == this.distinct
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperands, operands, distinctKeys, orderKeys);
+              filter, alias, preOperands, operands, distinctKeys, collation);
     }
 
     @Override public AggCall ignoreNulls(boolean ignoreNulls) {
       return ignoreNulls == this.ignoreNulls
           ? this
           : new AggCallImpl(aggFunction, distinct, approximate, ignoreNulls,
-              filter, alias, preOperands, operands, distinctKeys, orderKeys);
+              filter, alias, preOperands, operands, distinctKeys, collation);
     }
   }
 
@@ -4395,6 +4370,8 @@ public class RelBuilder {
     @Override public AggCall sort(RexNode... orderKeys) {
       throw new UnsupportedOperationException();
     }
+
+    @Override public AggCall sort(RelCollation collation) { throw new UnsupportedOperationException(); }
 
     @Override public AggCall unique(@Nullable Iterable<RexNode> distinctKeys) {
       throw new UnsupportedOperationException();

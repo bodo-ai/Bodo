@@ -691,7 +691,15 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     for (AggregateCall aggCall : aggregate.getAggCallList()) {
       if (fieldsUsed.get(j)) {
         mapping.set(j, groupCount + newAggCallList.size());
-        newAggCallList.add(relBuilder.aggregateCall(aggCall, inputMapping));
+        // Bodo Change: Ensure the collation is updated.
+        RelBuilder.AggCall newAggCall =
+            relBuilder
+                .aggregateCall(aggCall, inputMapping)
+                .distinct(aggCall.isDistinct())
+                .approximate(aggCall.isApproximate())
+                .ignoreNulls(aggCall.ignoreNulls())
+                .sort(RexUtil.apply(inputMapping, aggCall.collation));
+        newAggCallList.add(newAggCall);
       }
       ++j;
     }
