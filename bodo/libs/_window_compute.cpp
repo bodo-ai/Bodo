@@ -243,31 +243,6 @@ void row_number_computation(std::shared_ptr<array_info> out_arr,
     }
 }
 
-/**
- * Returns whether two rows of keys have different values. If either
- * index is less than 0 then the two rows are considered different.
- *
- * @param[in] keys1: The first set of keys used to compare equality.
- * @param idx1: The index of the first row.
- * @param[in] keys2: The second set of keys used to compare equality.
- * @param idx2: The index of the second row.
- */
-template <bodo_array_type::arr_type_enum ArrType>
-inline bool distinct_from_other_row(
-    const std::vector<std::shared_ptr<array_info>>& keys1, int64_t idx1,
-    const std::vector<std::shared_ptr<array_info>>& keys2, int64_t idx2) {
-    if (idx1 < 0 || idx2 < 0) {
-        return true;
-    }
-    assert(keys1.size() == keys2.size());
-    for (size_t i = 0; i < keys1.size(); i++) {
-        if (!TestEqualColumn<ArrType>(keys1[i], idx1, keys2[i], idx2, true)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 /** Returns whether the current row of orderby keys is distinct from
  * the previous row when performing a rank computation. The templated
  * argument ArrType should only ever be non-unknown if all of the

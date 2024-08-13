@@ -1373,6 +1373,67 @@ template <bodo_array_type::arr_type_enum ArrType>
 concept array_item_array =
     ArrType == bodo_array_type::arr_type_enum::ARRAY_ITEM;
 
+template <bodo_array_type::arr_type_enum ArrType>
+concept map_array = ArrType == bodo_array_type::arr_type_enum::MAP;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept struct_array = ArrType == bodo_array_type::arr_type_enum::STRUCT;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept interval_array = ArrType == bodo_array_type::arr_type_enum::INTERVAL;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept categorical_array =
+    ArrType == bodo_array_type::arr_type_enum::CATEGORICAL;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept timestamptz_array =
+    ArrType == bodo_array_type::arr_type_enum::TIMESTAMPTZ;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept unknown_array = ArrType == bodo_array_type::arr_type_enum::UNKNOWN;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept valid_window_array_type =
+    numpy_array<ArrType> || nullable_array<ArrType> ||
+    string_or_dict<ArrType> || array_item_array<ArrType> ||
+    struct_array<ArrType> || map_array<ArrType> || timestamptz_array<ArrType> ||
+    unknown_array<ArrType>;
+
+template <bodo_array_type::arr_type_enum ArrType>
+concept valid_array_type =
+    numpy_array<ArrType> || nullable_array<ArrType> ||
+    string_or_dict<ArrType> || array_item_array<ArrType> ||
+    struct_array<ArrType> || map_array<ArrType> || timestamptz_array<ArrType> ||
+    interval_array<ArrType> || categorical_array<ArrType> ||
+    unknown_array<ArrType>;
+
+/**
+ * Returns whether two rows of keys have different values. If either
+ * index is less than 0 then the two rows are considered different.
+ *
+ * @param[in] keys1: The first set of keys used to compare equality.
+ * @param idx1: The index of the first row.
+ * @param[in] keys2: The second set of keys used to compare equality.
+ * @param idx2: The index of the second row.
+ */
+template <bodo_array_type::arr_type_enum ArrType>
+    requires(valid_array_type<ArrType>)
+inline bool distinct_from_other_row(
+    const std::vector<std::shared_ptr<array_info>>& keys1, int64_t idx1,
+    const std::vector<std::shared_ptr<array_info>>& keys2, int64_t idx2) {
+    if (idx1 < 0 || idx2 < 0) {
+        return true;
+    }
+    assert(keys1.size() == keys2.size());
+    for (size_t i = 0; i < keys1.size(); i++) {
+        if (!TestEqualColumn<ArrType>(keys1[i], idx1, keys2[i], idx2, true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /**
  * @brief Retrieves an item from an array.
  *

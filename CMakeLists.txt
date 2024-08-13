@@ -406,6 +406,7 @@ set(sources_list
   "bodo/libs/_listagg.cpp"
   "bodo/libs/_operator_pool.cpp"
   "bodo/libs/_window_aggfuncs.cpp"
+  "bodo/libs/_window_calculator.cpp"
   "bodo/libs/_window_compute.cpp"
   "bodo/libs/_stream_dict_encoding.cpp"
   "bodo/libs/_stream_shuffle.cpp"
