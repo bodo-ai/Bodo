@@ -28,7 +28,7 @@ class IncrementalShuffleStateTest : public IncrementalShuffleState {
     void ResetAfterShuffle() { IncrementalShuffleState::ResetAfterShuffle(); }
 };
 
-std::shared_ptr<table_info> test_shuffle(std::unique_ptr<table_info> table) {
+std::shared_ptr<table_info> test_shuffle(std::shared_ptr<table_info> table) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     std::unique_ptr<bodo::Schema> schema = table->schema();

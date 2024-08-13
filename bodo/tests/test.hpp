@@ -193,6 +193,11 @@ void check(
     bool x, const char *message,
     const std::source_location location = std::source_location::current());
 
+/** @brief Variant of check that ensures all ranks pass.
+ */
+void check_parallel(bool x, const std::source_location location =
+                                std::source_location::current());
+
 /// @brief Helper function to check if an exception was thrown by input callable
 /// @param f Callable function to check if exception was raised in
 /// @param expected_msg_start The expected start of the exception message

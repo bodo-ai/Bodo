@@ -4,6 +4,7 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_groupby_ftypes.h"
+#include "_window_calculator.h"
 #include "_window_compute.h"
 
 WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
@@ -412,6 +413,26 @@ void WindowState::ReportOutputMetrics() {
     }
 }
 
+/**
+ * Takes in a collection of table infos, a collection of column indices, and
+ * returns the common array type if there is one, or UNKNOWN otherwise.
+ */
+bodo_array_type::arr_type_enum get_common_arr_type(
+    std::vector<std::shared_ptr<table_info>> chunks,
+    std::vector<int32_t> col_indices) {
+    if (col_indices.empty()) {
+        return bodo_array_type::UNKNOWN;
+    }
+    bodo_array_type::arr_type_enum first_arr_type =
+        chunks[0]->columns[col_indices[0]]->arr_type;
+    for (int32_t col_idx : col_indices) {
+        if (chunks[0]->columns[col_idx]->arr_type != first_arr_type) {
+            return bodo_array_type::UNKNOWN;
+        }
+    }
+    return first_arr_type;
+}
+
 void WindowState::FinalizeBuild() {
     time_pt start_finalize = start_timer();
     // We first sort the entire table and then compute any functions.
@@ -448,57 +469,110 @@ void WindowState::FinalizeBuild() {
         // Clear the build table to minimize memory.
         this->build_table_buffer.reset();
     }
-    // Compute the window function results.
-    std::vector<std::shared_ptr<array_info>> partition_by_cols(this->n_keys);
-    std::vector<std::shared_ptr<array_info>> order_by_cols(num_order_by_keys);
-    std::vector<std::shared_ptr<array_info>> argument_cols(num_argument_cols);
-    for (size_t i = 0; i < this->n_keys; i++) {
-        partition_by_cols[i] = sorted_table->columns[i];
-    }
-    for (size_t i = 0; i < num_order_by_keys; i++) {
-        order_by_cols[i] = sorted_table->columns[i + this->n_keys];
-    }
-    for (size_t i = 0; i < num_argument_cols; i++) {
-        argument_cols[i] = sorted_table->columns[func_input_indices[i]];
+
+    std::vector<int32_t> partition_indices(this->n_keys);
+    for (size_t col_idx = 0; col_idx < this->n_keys; col_idx++) {
+        partition_indices.push_back(col_idx);
     }
 
-    // Allocate the output arrays, only allocating a single row if there are no
-    // partition/order terms (since the array is used to store the singleton
-    // unique answer).
-    std::vector<std::shared_ptr<array_info>> out_arrs;
-    size_t input_size = sorted_table->columns[0]->length;
-    size_t alloc_size = (skip_sorting) ? 1 : input_size;
-    for (size_t fn_idx = 0; fn_idx < this->window_ftypes.size(); fn_idx++) {
-        AllocWindowOutputColumn(fn_idx, alloc_size, out_arrs);
+    std::vector<int32_t> order_indices(num_order_by_keys);
+    for (size_t col_idx = this->n_keys;
+         col_idx < this->n_keys + num_order_by_keys; col_idx++) {
+        order_indices.push_back(col_idx);
+    }
+    size_t n_funcs = window_ftypes.size();
+    std::vector<std::vector<int32_t>> input_indices(n_funcs);
+    for (size_t func_idx = 0; func_idx < n_funcs; func_idx++) {
+        auto start = static_cast<size_t>(func_input_offsets[func_idx]);
+        auto stop = static_cast<size_t>(func_input_offsets[func_idx + 1]);
+        std::vector<int32_t>& indices = input_indices[func_idx];
+        for (size_t offset = start; offset < stop; offset++) {
+            indices.push_back(func_input_indices[offset]);
+        }
     }
 
-    sorted_window_computation(partition_by_cols, order_by_cols, argument_cols,
-                              func_input_offsets, this->window_ftypes, out_arrs,
-                              input_size, this->build_table_dict_builders,
-                              this->parallel);
-    window_timer.finalize();
-    // Append the table to the output buffer.
+    std::vector<int32_t> keep_indices;
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         this->partition_by_cols_to_keep, this->order_by_cols_to_keep,
         this->input_cols_to_keep, sorted_table->ncols());
-    std::vector<std::shared_ptr<array_info>> cols_to_keep;
     for (size_t i = 0; i < sorted_table->ncols(); i++) {
         if (cols_to_keep_bitmask[i]) {
-            cols_to_keep.push_back(sorted_table->columns[i]);
+            keep_indices.push_back(i);
         }
     }
-    for (const std::shared_ptr<array_info>& window_col : out_arrs) {
-        cols_to_keep.push_back(window_col);
-    }
-    std::shared_ptr<table_info> data_table_w_cols_to_keep =
-        std::make_shared<table_info>(cols_to_keep);
+    if (supports_calculator_computation(partition_indices, order_indices,
+                                        window_ftypes)) {
+        bodo_array_type::arr_type_enum partition_arr_type =
+            get_common_arr_type({sorted_table}, partition_indices);
+        bodo_array_type::arr_type_enum order_arr_type =
+            get_common_arr_type({sorted_table}, partition_indices);
+        std::vector<std::shared_ptr<table_info>> out_chunks;
+        compute_window_functions_via_calculators(
+            build_table_schema, {sorted_table}, partition_indices,
+            order_indices, keep_indices, input_indices, window_ftypes,
+            this->build_table_dict_builders, partition_arr_type, order_arr_type,
+            out_chunks, this->parallel);
+        for (auto& out_chunk : out_chunks) {
+            out_chunk->pin();
+            // Unify the dictionaries. This should be append only because the
+            // output state dict builders should be empty right now.
+            std::shared_ptr<table_info> dict_unified_table =
+                this->UnifyDictionaryArrays(std::move(out_chunk),
+                                            this->output_state->dict_builders);
+            this->output_state->buffer.AppendBatch(dict_unified_table);
+        }
+    } else {
+        // Compute the window function results.
+        std::vector<std::shared_ptr<array_info>> partition_by_cols(
+            this->n_keys);
+        std::vector<std::shared_ptr<array_info>> order_by_cols(
+            num_order_by_keys);
+        std::vector<std::shared_ptr<array_info>> argument_cols(
+            num_argument_cols);
+        for (size_t i = 0; i < this->n_keys; i++) {
+            partition_by_cols[i] = sorted_table->columns[i];
+        }
+        for (size_t i = 0; i < num_order_by_keys; i++) {
+            order_by_cols[i] = sorted_table->columns[i + this->n_keys];
+        }
+        for (size_t i = 0; i < num_argument_cols; i++) {
+            argument_cols[i] = sorted_table->columns[func_input_indices[i]];
+        }
 
-    // Unify the dictionaries. This should be append only because the output
-    // state dict builders should be empty right now.
-    std::shared_ptr<table_info> dict_unified_table =
-        this->UnifyDictionaryArrays(std::move(data_table_w_cols_to_keep),
-                                    this->output_state->dict_builders);
-    this->output_state->buffer.AppendBatch(dict_unified_table);
+        // Allocate the output arrays, only allocating a single row if there are
+        // no partition/order terms (since the array is used to store the
+        // singleton unique answer).
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        size_t input_size = sorted_table->columns[0]->length;
+        size_t alloc_size = (skip_sorting) ? 1 : input_size;
+        for (size_t fn_idx = 0; fn_idx < this->window_ftypes.size(); fn_idx++) {
+            AllocWindowOutputColumn(fn_idx, alloc_size, out_arrs);
+        }
+
+        sorted_window_computation(
+            partition_by_cols, order_by_cols, argument_cols, func_input_offsets,
+            this->window_ftypes, out_arrs, input_size,
+            this->build_table_dict_builders, this->parallel);
+        window_timer.finalize();
+        // Append the table to the output buffer.
+        std::vector<std::shared_ptr<array_info>> cols_to_keep;
+        for (size_t col_idx : keep_indices) {
+            cols_to_keep.push_back(sorted_table->columns[col_idx]);
+        }
+        for (const std::shared_ptr<array_info>& window_col : out_arrs) {
+            cols_to_keep.push_back(window_col);
+        }
+        std::shared_ptr<table_info> data_table_w_cols_to_keep =
+            std::make_shared<table_info>(cols_to_keep);
+
+        // Unify the dictionaries. This should be append only because the output
+        // state dict builders should be empty right now.
+        std::shared_ptr<table_info> dict_unified_table =
+            this->UnifyDictionaryArrays(std::move(data_table_w_cols_to_keep),
+                                        this->output_state->dict_builders);
+        this->output_state->buffer.AppendBatch(dict_unified_table);
+    }
+
     this->output_state->Finalize();
     this->build_input_finalized = true;
     this->metrics.finalize_time += end_timer(start_finalize);

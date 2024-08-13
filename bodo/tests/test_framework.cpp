@@ -1,6 +1,7 @@
 #include <sstream>
 #include "../libs/_bodo_common.h"
 #include "./test.hpp"
+#include "mpi.h"
 
 /// Python CAPI type that is constructed for each test case.
 ///
@@ -250,4 +251,18 @@ void bodo::tests::check_exception(std::function<void()> f,
                   << std::endl;
         throw std::runtime_error("check_exception failure");
     }
+}
+
+void bodo::tests::check_parallel(bool b, std::source_location loc) {
+    bool global_b = b;
+    MPI_Allreduce(&b, &global_b, 1, MPI_UNSIGNED_CHAR, MPI_LAND,
+                  MPI_COMM_WORLD);
+    if (global_b) {
+        return;
+    }
+    std::stringstream error;
+    error << "Assertion failed at " << loc.file_name() << ":" << loc.line()
+          << "," << loc.column();
+
+    check(global_b, error.str().c_str(), loc);
 }
