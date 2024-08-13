@@ -955,3 +955,39 @@ SELECT {window_func} OVER (PARTITION BY B ORDER BY A) FROM TABLE1
     )
 
     assert assert_success
+
+
+def test_row_number_intense(spark_info, memory_leak_check):
+    """
+    Tests ROW_NUMBER on a larger set of data with a lot of skew between the partition sizes.
+    """
+    query = "SELECT P1, P2, O1, O2, ROW_NUMBER() OVER (PARTITION BY P1, P2 ORDER BY O1 ASC NULLS LAST, O2 ASC NULLS LAST) FROM TABLE1"
+    n_rows = 1_000_000
+    p1 = []
+    p2 = []
+    o1 = []
+    o2 = []
+    strings = ["A", "L", "P", "A", "B", "E", "T", None]
+    for i in range(n_rows):
+        p1.append(i % 2)
+        p2.append(np.int64(np.log10(i + 1)))
+        o1.append(strings[i % 8])
+        o2.append(i)
+
+    ctx = {
+        "TABLE1": pd.DataFrame(
+            {
+                "P1": pd.array(p1, dtype=pd.Int32Dtype()),
+                "P2": pd.array(p2, dtype=pd.Int32Dtype()),
+                "O1": o1,
+                "O2": o2,
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+    )

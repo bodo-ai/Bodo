@@ -2,6 +2,7 @@
 
 #include <string>
 #include "../io/arrow_reader.h"
+#include "../libs/_bodo_to_arrow.h"
 #include "../libs/_table_builder.h"
 #include "./test.hpp"
 #include "arrow/builder.h"
@@ -172,14 +173,17 @@ namespace tests {
  * must match the order in which the variadic arguments are passed in.
  * @param is_nullable see TableBuilder::TableBuilder
  * @param str_as_dict_cols see TableBuilder::TableBuilder
+ * @param pool: a buffer pool to deal with allocations.
+ * @param mm: a memory manager to deal with allocations.
  * @param input_column first input vector to be used as the data for a column
  * @param input_columns optional variadic list of the remaining columns
  * @return
  **/
 template <typename T, typename... Ts>
-std::unique_ptr<table_info> cppToBodo(
+std::shared_ptr<table_info> cppToBodo(
     const std::vector<std::string>& names, const std::vector<bool>& is_nullable,
     const std::set<std::string>& str_as_dict_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm,
     const std::vector<T>& input_column,
     const std::vector<Ts>&... input_columns) {
     // This method will first collect all of (input_column, input_columns...)
@@ -194,25 +198,76 @@ std::unique_ptr<table_info> cppToBodo(
     auto schema = arrow::schema(std::move(fields));
     auto arrow_table = arrow::Table::Make(schema, arrays);
 
-    std::vector<int> selected_fields;
-    for (size_t i = 0; i < arrays.size(); i++) {
-        selected_fields.push_back(i);
+    std::shared_ptr<arrow::RecordBatch> batch =
+        arrow_table->CombineChunksToBatch().ValueOrDie();
+    std::shared_ptr<table_info> bodo_table =
+        arrow_recordbatch_to_bodo(batch, input_column.size());
+
+    // Adjust the schema to replace the desired columns with dictionary encoded
+    // columns, and nullable with numpy.
+    const std::shared_ptr<bodo::Schema>& old_bodo_schema = bodo_table->schema();
+    std::shared_ptr<bodo::Schema> new_bodo_schema =
+        std::make_shared<bodo::Schema>();
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    for (size_t col_idx = 0; col_idx < old_bodo_schema->column_types.size();
+         col_idx++) {
+        std::unique_ptr<DataType> new_type =
+            old_bodo_schema->column_types[col_idx]->copy();
+        if (new_type->array_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            !is_nullable[col_idx]) {
+            new_type = std::make_unique<DataType>(bodo_array_type::NUMPY,
+                                                  new_type->c_type);
+            // A distastfeful but effective way to transform the array type so
+            // we can/ insert into the table build buffer.
+            bodo_table->columns[col_idx]->arr_type = bodo_array_type::NUMPY;
+        } else if (str_as_dict_cols.count(schema->field(col_idx)->name()) > 0) {
+            new_type = std::make_unique<DataType>(bodo_array_type::DICT,
+                                                  Bodo_CTypes::STRING);
+        }
+        new_bodo_schema->append_column(new_type->copy());
+        dict_builders.push_back(
+            create_dict_builder_for_array(new_type->copy(), true));
     }
-    TableBuilder builder(schema, selected_fields, input_column.size(),
-                         is_nullable, str_as_dict_cols, true);
-    builder.append(std::move(arrow_table));
 
-    // Check that the append added all expected rows
-    bodo::tests::check(builder.get_rem_rows() == 0,
-                       "Unexpected remaining rows");
+    for (auto& it : bodo_table->columns) {
+        dict_builders.push_back(create_dict_builder_for_array(it, true));
+    }
+    TableBuildBuffer builder(new_bodo_schema, dict_builders, pool, mm);
+    builder.UnifyTablesAndAppend(bodo_table, dict_builders);
 
-    auto* table = builder.get_table();
+    std::shared_ptr<table_info> table = builder.data_table;
 
     bodo::tests::check(table->ncols() == names.size(),
                        "Incorrect final number of columns");
     bodo::tests::check(table->nrows() == input_column.size(),
                        "Incorrect final number of rows");
-    return std::unique_ptr<table_info>(table);
+
+    return table;
+}
+
+/**
+ * @brief Construct a Bodo Table from a variadic list of C++ vectors.
+ * @tparam T inner type of input_column, should be automatically inferred in
+ * most cases.
+ * @tparam Ts... parameter pack for variadic arguments, should be automatically
+ * inferred in most cases.
+ * @param names list of column names to use in the table. The order of names
+ * must match the order in which the variadic arguments are passed in.
+ * @param is_nullable see TableBuilder::TableBuilder
+ * @param str_as_dict_cols see TableBuilder::TableBuilder
+ * @param input_column first input vector to be used as the data for a column
+ * @param input_columns optional variadic list of the remaining columns
+ * @return
+ **/
+template <typename T, typename... Ts>
+std::shared_ptr<table_info> cppToBodo(
+    const std::vector<std::string>& names, const std::vector<bool>& is_nullable,
+    const std::set<std::string>& str_as_dict_cols,
+    const std::vector<T>& input_column,
+    const std::vector<Ts>&... input_columns) {
+    return cppToBodo(
+        names, is_nullable, str_as_dict_cols, bodo::BufferPool::DefaultPtr(),
+        bodo::default_buffer_memory_manager(), input_column, input_columns...);
 }
 
 /**
@@ -224,10 +279,13 @@ std::unique_ptr<table_info> cppToBodo(
  * @return
  **/
 template <typename T = int64_t>
-std::shared_ptr<array_info> cppToBodoArr(std::vector<T> vec,
-                                         bool is_nullable = false) {
+std::shared_ptr<array_info> cppToBodoArr(
+    std::vector<T> vec, bool is_nullable = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
     std::shared_ptr<table_info> vec_as_table =
-        cppToBodo({"A"}, {is_nullable}, {}, std::move(vec));
+        cppToBodo({"A"}, {is_nullable}, {}, pool, mm, std::move(vec));
     return vec_as_table->columns[0];
 }
 
