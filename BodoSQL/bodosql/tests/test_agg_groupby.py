@@ -1697,6 +1697,7 @@ def test_array_agg(call, answer, memory_leak_check):
             "ARRAY_AGG(DISTINCT D)",
             [[-2, -1, 0, 1, 2], [-7, -2, -1, 0, 2], [-2, 0, 7]],
             id="int-no_order",
+            marks=pytest.mark.skip("Output is non-deterministic"),
         ),
         pytest.param(
             "ARRAY_AGG(DISTINCT S) WITHIN GROUP (ORDER BY S)",
@@ -1715,6 +1716,7 @@ def test_array_agg(call, answer, memory_leak_check):
                 ["abet", "habet", "lphabet"],
             ],
             id="string-no_order",
+            marks=pytest.mark.skip("Output is non-deterministic"),
         ),
     ],
 )

@@ -339,7 +339,7 @@ class GroupbyStateType(StreamingStateType):
         key_indices = self.key_inds
         mrnf_sort_col_types = self.mrnf_sort_col_types
         mrnf_sort_col_indices = self.mrnf_sort_col_inds
-        table = self.build_table_type
+        table = self.key_casted_table_type
         return self._derive_input_type(
             key_types, key_indices, mrnf_sort_col_types, mrnf_sort_col_indices, table
         )
