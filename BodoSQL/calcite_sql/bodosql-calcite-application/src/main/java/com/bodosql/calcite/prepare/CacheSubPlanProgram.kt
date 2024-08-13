@@ -21,6 +21,8 @@ import org.apache.calcite.plan.RelOptPlanner
 import org.apache.calcite.plan.RelOptPredicateList
 import org.apache.calcite.plan.RelOptUtil
 import org.apache.calcite.plan.RelTraitSet
+import org.apache.calcite.rel.RelCollation
+import org.apache.calcite.rel.RelCollations
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.RelShuttleImpl
 import org.apache.calcite.rel.RelVisitor
@@ -668,7 +670,14 @@ class CacheSubPlanProgram : Program {
                 val indices = it.first.keptColumns
                 agg.aggCallList.forEach { aggCall ->
                     val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
-                    val aggCall = buildEquivalentAggCall(aggCall, newArgs)
+                    val newCollation =
+                        RelCollations.of(
+                            aggCall.collation.fieldCollations.map {
+                                    fieldCollation ->
+                                fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
+                            },
+                        )
+                    val aggCall = buildEquivalentAggCall(aggCall, newArgs, newCollation)
                     val aggCallString = aggCall.toString()
                     if (!aggCallsMap.contains(aggCallString)) {
                         val newIdx = aggCallsMap.size
@@ -710,7 +719,14 @@ class CacheSubPlanProgram : Program {
                         agg.aggCallList.withIndex().forEach { callInfo ->
                             val (colIdx, aggCall) = callInfo
                             val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
-                            val newAggCall = buildEquivalentAggCall(aggCall, newArgs)
+                            val newCollation =
+                                RelCollations.of(
+                                    aggCall.collation.fieldCollations.map {
+                                            fieldCollation ->
+                                        fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
+                                    },
+                                )
+                            val newAggCall = buildEquivalentAggCall(aggCall, newArgs, newCollation)
                             val newAggIdx = aggCallsMap[newAggCall.toString()]!!.second
                             newIndices[colIdx + agg.groupSet.cardinality()] =
                                 groupKeys.cardinality() + newAggIdx
@@ -752,7 +768,14 @@ class CacheSubPlanProgram : Program {
                                 throw IllegalStateException("Internal Error: Unsupported aggregate function for partial aggregation")
                             }
                             val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
-                            val newAggCall = buildEquivalentAggCall(aggCall, newArgs)
+                            val newCollation =
+                                RelCollations.of(
+                                    aggCall.collation.fieldCollations.map {
+                                            fieldCollation ->
+                                        fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
+                                    },
+                                )
+                            val newAggCall = buildEquivalentAggCall(aggCall, newArgs, newCollation)
                             val newAggIdx = aggCallsMap[newAggCall.toString()]!!.second
                             // Must be exactly 1 argument to allow partial aggregation
                             val arg = aggCall.argList[0]
@@ -805,11 +828,13 @@ class CacheSubPlanProgram : Program {
         private fun buildEquivalentAggCall(
             aggCall: AggregateCall,
             newArgs: List<RexNode>,
+            newCollation: RelCollation,
         ): AggCall {
-            return relBuilder.aggregateCall(
-                aggCall.aggregation,
-                newArgs,
-            ).distinct(aggCall.isDistinct).approximate(aggCall.isApproximate).ignoreNulls(aggCall.ignoreNulls())
+            return relBuilder.aggregateCall(aggCall.aggregation, newArgs)
+                .distinct(aggCall.isDistinct)
+                .approximate(aggCall.isApproximate)
+                .ignoreNulls(aggCall.ignoreNulls())
+                .sort(newCollation)
         }
 
         /**

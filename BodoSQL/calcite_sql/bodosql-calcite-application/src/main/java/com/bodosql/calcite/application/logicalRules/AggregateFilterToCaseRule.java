@@ -169,7 +169,8 @@ public class AggregateFilterToCaseRule extends RelRule<AggregateFilterToCaseRule
               .aggregateCall(agg.getAggregation(), newArgs)
               .distinct(agg.isDistinct())
               .approximate(agg.isApproximate())
-              .ignoreNulls(agg.ignoreNulls());
+              .ignoreNulls(agg.ignoreNulls())
+              .sort(agg.collation);
       if (keepFilter) {
         newAggCall =
             newAggCall.filter(builder.field(argumentCache.get(Pair.of(agg.filterArg, -1))));

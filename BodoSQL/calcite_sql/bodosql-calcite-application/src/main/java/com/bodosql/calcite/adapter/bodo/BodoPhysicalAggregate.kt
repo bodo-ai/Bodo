@@ -269,16 +269,17 @@ class BodoPhysicalAggregate(
                             filteredAggregateCallList,
                             tableColumns,
                         )
+                    val groupSetList = groupSet.toList()
                     val keptFields =
                         this.getRowType().fieldList.withIndex().filter {
-                            curGroup.contains(it.index) || (
+                            (it.index < groupSetList.size && curGroup.contains(groupSetList[it.index])) || (
                                 it.index >= groupingVariables.size &&
                                     aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
                             )
                         }.map { it.value.type }
                     val keptNames =
                         this.getRowType().fieldNames.withIndex().filter {
-                            curGroup.contains(it.index) || (
+                            (it.index < groupSetList.size && curGroup.contains(groupSetList[it.index])) || (
                                 it.index >= groupingVariables.size &&
                                     aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
                             )

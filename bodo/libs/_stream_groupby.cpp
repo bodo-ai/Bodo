@@ -4888,7 +4888,8 @@ int64_t get_grouping_value(const std::vector<bool>& live_keys,
  * (Bodo_CTypes ints).
  * @param build_arr_array_types The array types of the build table columns
  * (bodo_array_type ints).
- * @param n_build_arrs The number of build table columns.
+ * @param n_build_arrs The length of build_arr_c_types and
+ * build_arr_array_types.
  * @param grouping_sets_data The grouping sets data.
  * @param grouping_sets_offsets The grouping sets offsets. Groupby i uses the
  * values between grouping_sets_offsets[i] and grouping_sets_offsets[i+1]
@@ -4914,12 +4915,23 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
     int32_t* f_in_cols, int n_funcs, uint64_t n_keys, int64_t output_batch_size,
     bool parallel, int64_t sync_iter) {
     try {
+        // Generate the total schema for being able to fetch subsets.
+        std::unique_ptr<bodo::Schema> total_schema = bodo::Schema::Deserialize(
+            std::vector<int8_t>(build_arr_array_types,
+                                build_arr_array_types + n_build_arrs),
+            std::vector<int8_t>(build_arr_c_types,
+                                build_arr_c_types + n_build_arrs));
+        // Determine the number of build columns because decimal arrays
+        // can require additional entries.
+        size_t n_build_columns = total_schema->ncols();
+        std::vector<std::unique_ptr<bodo::DataType>> key_types;
+        for (uint64_t i = 0; i < n_keys; i++) {
+            key_types.push_back(total_schema->column_types[i]->copy());
+        }
         // Generate the general keys schema for remapping the output from
         // grouping sets.
-        std::unique_ptr<bodo::Schema> keys_schema = bodo::Schema::Deserialize(
-            std::vector<int8_t>(build_arr_array_types,
-                                build_arr_array_types + n_keys),
-            std::vector<int8_t>(build_arr_c_types, build_arr_c_types + n_keys));
+        std::unique_ptr<bodo::Schema> keys_schema =
+            std::make_unique<bodo::Schema>(std::move(key_types));
         // Generate the key dictionary builders for all group by states.
         std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders(
             n_keys);
@@ -4972,13 +4984,13 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
         std::vector<std::vector<int64_t>> total_grouping_values;
         for (int i = 0; i < n_grouping_sets; i++) {
             // Compute the bitmask for which keys need to be dropped.
-            std::vector<bool> kept_columns(n_build_arrs, false);
+            std::vector<bool> kept_columns(n_build_columns, false);
             for (int64_t j = grouping_sets_offsets[i];
                  j < grouping_sets_offsets[i + 1]; j++) {
                 kept_columns[grouping_sets_data[j]] = true;
             }
-            for (uint64_t j = n_keys; j < static_cast<uint64_t>(n_build_arrs);
-                 j++) {
+            for (uint64_t j = n_keys;
+                 j < static_cast<uint64_t>(n_build_columns); j++) {
                 kept_columns[j] = true;
             }
             // Remap each function to the correct columns to avoid extra keys.
@@ -4992,14 +5004,12 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                                              num_skipped_keys);
             }
             // Remap the build information to skip any extra keys.
-            std::vector<int8_t> remapped_build_arr_c_types;
-            std::vector<int8_t> remapped_build_arr_array_types;
             std::vector<int64_t> kept_input_column_idxs;
-            for (int j = 0; j < n_build_arrs; j++) {
+            std::vector<std::unique_ptr<bodo::DataType>> kept_column_types;
+            for (size_t j = 0; j < n_build_columns; j++) {
                 if (kept_columns[j]) {
-                    remapped_build_arr_c_types.push_back(build_arr_c_types[j]);
-                    remapped_build_arr_array_types.push_back(
-                        build_arr_array_types[j]);
+                    kept_column_types.push_back(
+                        total_schema->column_types[j]->copy());
                     kept_input_column_idxs.push_back(j);
                 }
             }
@@ -5038,8 +5048,7 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                     sub_operator_id);
             // Create the groupby state.
             groupby_states.push_back(std::make_unique<GroupbyState>(
-                bodo::Schema::Deserialize(remapped_build_arr_array_types,
-                                          remapped_build_arr_c_types),
+                std::make_unique<bodo::Schema>(std::move(kept_column_types)),
                 ftypes_vector, window_ftypes, f_in_offsets_vector,
                 remapped_f_in_cols, num_grouping_keys, mrnf_sort_asc_vec,
                 mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
