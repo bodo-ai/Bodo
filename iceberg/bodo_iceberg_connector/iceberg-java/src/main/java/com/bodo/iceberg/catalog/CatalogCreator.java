@@ -37,6 +37,8 @@ public class CatalogCreator {
       conf.set(entry.getKey(), entry.getValue());
     }
 
+    CatalogCreator.configureAzureAuth(conf);
+
     // Catalog URI (without parameters)
     String uriStr = uriBuilder.removeQuery().build().toString();
     params.put(CatalogProperties.URI, uriStr);
@@ -81,5 +83,28 @@ public class CatalogCreator {
     // schema
     // Downsides: Does not refresh if another program modifies the Catalog
     return CachingCatalog.wrap(catalog);
+  }
+
+  /**
+   * Configure Hadoop Azure authentication for the given Configuration object.
+   *
+   * @param conf Configuration object to configure Azure authentication for
+   */
+  private static void configureAzureAuth(Configuration conf) {
+    String accountName = System.getenv("AZURE_STORAGE_ACCOUNT_NAME");
+    String accountKey = System.getenv("AZURE_STORAGE_ACCOUNT_KEY");
+    if (accountName != null && accountKey != null) {
+      conf.set("fs.azure.account.key." + accountName + ".dfs.core.windows.net", accountKey);
+    } else if (System.getenv("BODO_PLATFORM_CLOUD_PROVIDER") != null
+        && System.getenv("BODO_PLATFORM_CLOUD_PROVIDER").equals("AZURE")) {
+      // We're on the platform in an Azure workspace, try to use the identity
+      conf.set("fs.azure.account.auth.type", "OAuth");
+      conf.set(
+          "fs.azure.account.oauth.provider.type",
+          "org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider");
+      conf.set("fs.azure.account.oauth2.msi.tenant", "");
+      conf.set("fs.azure.account.oauth2.client.id", "");
+      conf.set("fs.azure.account.oauth2.msi.endpoint", "");
+    }
   }
 }

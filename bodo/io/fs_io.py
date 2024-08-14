@@ -446,6 +446,16 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
 
     def get_attr(opt_key: str, env_key: str) -> str | None:
         opt_val = storage_options.get(opt_key) if storage_options else None
+        if (
+            opt_val is not None
+            and os.environ.get(env_key) is not None
+            and opt_val != os.environ.get(env_key)
+        ):
+            warnings.warn(
+                BodoWarning(
+                    f"abfs_get_fs: Both {opt_key} in storage_options and {env_key} in environment variables are set. The value in storage_options will be used ({opt_val})."
+                )
+            )
         return opt_val or os.environ.get(env_key)
 
     # account_name is always required, until PyArrow or we support
@@ -467,6 +477,24 @@ def abfs_get_fs(storage_options: dict[str, str] | None):  # pragma: no cover
     # Note, Azure validates credentials at use-time instead of at
     # initialization
     return AzureFileSystem(account_name, account_key=account_key)
+
+
+"""
+Based on https://github.com/apache/arrow/blob/ab432b1362208696e60824b45a5599a4e91e6301/cpp/src/arrow/filesystem/azurefs.cc#L68
+"""
+
+
+def azure_storage_account_from_path(path: str) -> str | None:
+    parsed = urlparse(path)
+    host = parsed.hostname
+    if host is None:
+        return None
+
+    if host.endswith(".blob.core.windows.net"):
+        return host[: len(host) - len(".blob.core.windows.net")]
+    if host.endswith(".dfs.core.windows.net"):
+        return host[: len(host) - len(".dfs.core.windows.net")]
+    return parsed.username
 
 
 def directory_of_files_common_filter(fname):
