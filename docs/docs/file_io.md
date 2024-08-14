@@ -677,9 +677,25 @@ cause errors in Bodo programs.
 
 
 #### Setting up HDFS/ADLS Credentials
-***Setting up HDFS/ADLS Credentials***
+There are 3 supported methods for authenticating to HDFS/ADLS:
 
-Hadoop Filesystem sources its credentials from the first available
+- Environment Variables
+- Azure Identities
+- core-site.xml
+
+##### Environment Variables
+To authenticate with environment variables set `AZURE_STORAGE_ACCOUNT_NAME` to the name of the Azure storage
+account to be accessed and `AZURE_STORAGE_ACCOUNT_KEY` to the key for the storage account.
+
+##### Azure Identities
+To authenticate with Azure Identites assign an identity to your Azure VM and ensure it has the 
+Storage Blob Data Contributor role for the storage account to access. This is only supported on Bodo Platform.
+
+##### core-site.xml
+!!! note
+    core-site.xml authentication is not supported on Bodo Platform, instead use the environment variables or Azure Identities.
+
+To authenticate with a core-site.xml file Hadoop Filesystem sources its credentials from the first available
 `core-site.xml` file on the `CLASSPATH`. When Hadoop is set up (including
 on Bodo Platform), this file is usually created at
 `$HADOOP_HOME/etc/hadoop/core-site.xml` automatically.
@@ -724,7 +740,7 @@ etl_job()
 ```
 
 
-There are several authorization methods for reading from or writing to ADLS Storage Containers, all of which
+There are several authorization methods for reading from or writing to ADLS Storage Containers using a core-site.xml file, all of which
 require slightly different core-site configurations. Here are some examples:
 
 - Using an ADLS Access Key

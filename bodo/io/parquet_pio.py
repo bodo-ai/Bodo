@@ -40,6 +40,7 @@ from bodo.hiframes.pd_categorical_ext import (
 )
 from bodo.io.fs_io import (
     abfs_get_fs,
+    azure_storage_account_from_path,
     get_hdfs_fs,
     get_s3_fs_from_path,
     validate_gcsfs_installed,
@@ -516,6 +517,16 @@ def getfs(
 
         return PyFileSystem(FSSpecHandler(fsspec.filesystem("http")))
     elif protocol in {"abfs", "abfss"} and bodo.enable_azure_fs:  # pragma: no cover
+        if not storage_options:
+            storage_options = {}
+        if "account_name" not in storage_options:
+            # Extract the storage account from the path, assumes all files are in the same storage account
+            account_name = azure_storage_account_from_path(
+                fpath if not isinstance(fpath, list) else fpath[0]
+            )
+            if account_name is not None:
+                storage_options["account_name"] = account_name
+
         return abfs_get_fs(storage_options)
     elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
         return (
