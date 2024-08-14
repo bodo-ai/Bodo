@@ -504,7 +504,7 @@ void WindowState::FinalizeBuild() {
         bodo_array_type::arr_type_enum partition_arr_type =
             get_common_arr_type({sorted_table}, partition_indices);
         bodo_array_type::arr_type_enum order_arr_type =
-            get_common_arr_type({sorted_table}, partition_indices);
+            get_common_arr_type({sorted_table}, order_indices);
         std::vector<std::shared_ptr<table_info>> out_chunks;
         compute_window_functions_via_calculators(
             build_table_schema, {sorted_table}, partition_indices,
