@@ -377,10 +377,10 @@ class RowNumberWindowCalculator : public BaseWindowCalculator<OrderByArrType> {
 void fill_numeric_array_with_value(const std::shared_ptr<array_info> &arr,
                                    const std::shared_ptr<array_info> &value_arr,
                                    size_t start, size_t end) {
-    assert(arr->array_type == bodo_array_type::NULLABLE_INT_BOOL ||
-           arr->array_type == bodo_array_type::NUMPY);
-    assert(value_arr->array_type == bodo_array_type::NULLABLE_INT_BOOL ||
-           value_arr->array_type == bodo_array_type::NUMPY);
+    assert(arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+           arr->arr_type == bodo_array_type::NUMPY);
+    assert(value_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+           value_arr->arr_type == bodo_array_type::NUMPY);
     assert(arr->dtype == value_arr->dtype);
 #define FILL_DTYPE_CASE(dtype)                                                 \
     case dtype: {                                                              \
