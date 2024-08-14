@@ -3,6 +3,8 @@
 #include <iostream>
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_groupby_common.h"
+#include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
 #include "_memory.h"
 #include "_shuffle.h"
@@ -362,6 +364,434 @@ class RowNumberWindowCalculator : public BaseWindowCalculator<OrderByArrType> {
 };
 
 /**
+ * @brief Copies over valuess from a singleton array into a range of rows
+ * from a numeric array. Does not copy over nulls, and if the output
+ * is nullable it flips all the null bits to true.
+ * @param[out] arr: the array that the values are written into. Must be
+ * a numeric array.
+ * @param[in] value_arr: the singleton array containing the value to write into
+ * arr. Must be a numeric array with the same dtype as arr.
+ * @param[in] start: the begining of the rows off arr that are overwritten.
+ * @param[in] end: the ending of the rows off arr that are overwritten.
+ */
+void fill_numeric_array_with_value(const std::shared_ptr<array_info> &arr,
+                                   const std::shared_ptr<array_info> &value_arr,
+                                   size_t start, size_t end) {
+    assert(arr->array_type == bodo_array_type::NULLABLE_INT_BOOL ||
+           arr->array_type == bodo_array_type::NUMPY);
+    assert(value_arr->array_type == bodo_array_type::NULLABLE_INT_BOOL ||
+           value_arr->array_type == bodo_array_type::NUMPY);
+    assert(arr->dtype == value_arr->dtype);
+#define FILL_DTYPE_CASE(dtype)                                                 \
+    case dtype: {                                                              \
+        using T = typename dtype_to_type<dtype>::type;                         \
+        T val = value_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, T>()[0];  \
+        T *write_buffer = arr->data1<bodo_array_type::NULLABLE_INT_BOOL, T>(); \
+        std::fill(write_buffer + start, write_buffer + end, val);              \
+        break;                                                                 \
+    }
+    switch (arr->dtype) {
+        FILL_DTYPE_CASE(Bodo_CTypes::INT8);
+        FILL_DTYPE_CASE(Bodo_CTypes::INT16);
+        FILL_DTYPE_CASE(Bodo_CTypes::INT32);
+        FILL_DTYPE_CASE(Bodo_CTypes::INT64);
+        FILL_DTYPE_CASE(Bodo_CTypes::UINT8);
+        FILL_DTYPE_CASE(Bodo_CTypes::UINT16);
+        FILL_DTYPE_CASE(Bodo_CTypes::UINT32);
+        FILL_DTYPE_CASE(Bodo_CTypes::UINT64);
+        FILL_DTYPE_CASE(Bodo_CTypes::INT128);
+        FILL_DTYPE_CASE(Bodo_CTypes::DECIMAL);
+        FILL_DTYPE_CASE(Bodo_CTypes::FLOAT32);
+        FILL_DTYPE_CASE(Bodo_CTypes::FLOAT64);
+        FILL_DTYPE_CASE(Bodo_CTypes::DATE);
+        FILL_DTYPE_CASE(Bodo_CTypes::DATETIME);
+        FILL_DTYPE_CASE(Bodo_CTypes::TIME);
+        FILL_DTYPE_CASE(Bodo_CTypes::TIMEDELTA);
+        default: {
+            throw std::runtime_error(
+                "fill_numeric_array_with_value: unsupported dtype " +
+                (GetDtype_as_string(arr->dtype)));
+        }
+    }
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        for (size_t row = start; row < end; row++) {
+            arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row, true);
+        }
+    }
+}
+
+template <bodo_array_type::arr_type_enum OrderByArrType>
+    requires(valid_window_array_type<OrderByArrType>)
+class SimpleAggregationWindowCalculator
+    : public BaseWindowCalculator<OrderByArrType> {
+   public:
+    SimpleAggregationWindowCalculator(
+        std::shared_ptr<bodo::Schema> _schema,
+        std::vector<std::shared_ptr<table_info>> _chunks,
+        std::vector<int32_t> _order_col_indices,
+        std::vector<int32_t> _input_col_indices,
+        std::vector<std::shared_ptr<DictionaryBuilder>> _builders,
+        bool _is_empty, Bodo_FTypes::FTypeEnum _ftype,
+        bodo::IBufferPool *const _pool,
+        std::shared_ptr<::arrow::MemoryManager> _mm)
+        : BaseWindowCalculator<OrderByArrType>(
+              _schema, _chunks, _order_col_indices, _input_col_indices,
+              _builders, _is_empty, _pool, _mm),
+          ftype(_ftype) {
+        // Identify the index of the column from _chunks that is the target
+        // of the aggregation function.
+        if (this->input_col_indices.size() == 1) {
+            agg_column = this->input_col_indices[0];
+        } else {
+            throw std::runtime_error(
+                "SimpleAggregationWindowCalculator: expected 1 input column, "
+                "received " +
+                std::to_string(this->input_col_indices.size()));
+        }
+
+        // Identify the corresponding output dtype
+        std::unique_ptr<bodo::DataType> dtype =
+            this->schema->column_types[agg_column]->copy();
+        std::tie(this->out_arr_type, this->out_dtype) =
+            get_groupby_output_dtype(this->ftype, dtype->array_type,
+                                     dtype->c_type);
+
+        // For each input chunk, create a corresponding output chunk with the
+        // same number of rows to store the aggregation values.
+        for (size_t chunk_idx = 0; chunk_idx < this->chunks.size();
+             chunk_idx++) {
+            size_t n_rows = this->chunks[chunk_idx]->nrows();
+            std::shared_ptr<array_info> out_chunk = alloc_array_top_level(
+                n_rows, 0, 0, out_arr_type, out_dtype, -1, 0, 0, false, false,
+                false, this->pool, this->mm);
+            aggfunc_output_initialize(out_chunk, ftype, true);
+            out_chunk->unpin();
+            agg_chunks.push_back(out_chunk);
+        }
+    }
+
+    void ComputePartition(size_t partition_start_chunk,
+                          size_t partition_start_row,
+                          size_t partition_end_chunk, size_t partition_end_row,
+                          bool is_last) {
+        if (this->is_empty) {
+            return;
+        }
+
+        // Have a singleton array to store the aggregation value from the entire
+        // partition.
+        std::shared_ptr<array_info> curr_agg =
+            alloc_array_top_level(1, 0, 0, this->out_arr_type, out_dtype, -1, 0,
+                                  0, false, false, false, this->pool, this->mm);
+        aggfunc_output_initialize(curr_agg, ftype, true);
+
+        // Iterate across all of the chunks from partition_start_chunk to
+        // partition_end_chunk, inclusive, and aggregate accordingly.
+        for (size_t chunk_idx = partition_start_chunk;
+             chunk_idx <= partition_end_chunk; chunk_idx++) {
+            std::shared_ptr<array_info> in_chunk =
+                this->chunks[chunk_idx]->columns[agg_column];
+            std::shared_ptr<array_info> agg_chunk = agg_chunks[chunk_idx];
+            in_chunk->pin();
+            agg_chunk->pin();
+
+            // Identify the range of rows to iterate across. If we are in
+            // the first chunk, start at partition_start_row. If we are in the
+            // last chunk, end on partition_end_row.
+            size_t last_row = agg_chunk->length - 1;
+            size_t start_row =
+                (chunk_idx == partition_start_chunk) ? partition_start_row : 0;
+            size_t end_row = (chunk_idx == partition_end_chunk)
+                                 ? partition_end_row
+                                 : last_row;
+            std::shared_ptr<array_info> rows_to_aggregate;
+
+            // If we are iterating across the entire chunk, we call the groupby
+            // kernel for the aggregation on the entire chunk.
+            if (start_row == 0 && end_row == last_row) {
+                rows_to_aggregate = in_chunk;
+            } else {
+                std::vector<int64_t> idxs;
+                for (size_t row = start_row; row <= end_row; row++) {
+                    idxs.push_back(static_cast<int64_t>(row));
+                }
+                rows_to_aggregate = RetrieveArray_SingleColumn(in_chunk, idxs);
+            }
+
+            // Create a dummy group info mapping everything to row 0;
+            grouping_info dummy_grp_info;
+            dummy_grp_info.num_groups = 1;
+            dummy_grp_info.row_to_group.resize(rows_to_aggregate->length, 0);
+            std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+            do_apply_to_column(rows_to_aggregate, curr_agg, dummy_aux_cols,
+                               dummy_grp_info, ftype);
+
+            in_chunk->unpin();
+            agg_chunk->unpin();
+        }
+
+        // Iterate across the same chunks to update the corresponding rows to
+        // use the aggregate value calculated in the previous loop. If the
+        // aggregation value is null, we do nothing since the output should have
+        // been pre-allocated as NULL if this was possible.
+        if (curr_agg->arr_type == bodo_array_type::NUMPY ||
+            curr_agg->get_null_bit(0)) {
+            for (size_t chunk_idx = partition_start_chunk;
+                 chunk_idx <= partition_end_chunk; chunk_idx++) {
+                std::shared_ptr<array_info> agg_chunk = agg_chunks[chunk_idx];
+                agg_chunk->pin();
+
+                // Identify the range of rows to iterate across. If we are in
+                // the first chunk, start at partition_start_row. If we are in
+                // the last chunk, end on partition_end_row.
+                size_t last_row = agg_chunk->length - 1;
+                size_t start_row = (chunk_idx == partition_start_chunk)
+                                       ? partition_start_row
+                                       : 0;
+                size_t end_row = (chunk_idx == partition_end_chunk)
+                                     ? partition_end_row
+                                     : last_row;
+
+                fill_numeric_array_with_value(agg_chunk, curr_agg, start_row,
+                                              end_row + 1);
+
+                agg_chunk->unpin();
+            }
+        }
+
+        // If this is the first partition, store the current aggregate value for
+        // communication across ranks.
+        std::vector<int64_t> idxs(1, 0);
+        if (partition_start_chunk == 0 && partition_start_row == 0) {
+            first_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
+        }
+        // If this is the last partition, store the current aggregate value for
+        // communication across ranks.
+        if (is_last) {
+            last_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
+        }
+    }
+
+    virtual size_t NumAuxillaryColumns() { return 1; }
+
+    virtual void GetFirstRowInfo(
+        std::vector<std::shared_ptr<array_info>> &out_cols) {
+        if (this->is_empty) {
+            // If empty, just create an empty array witht he correct dtype.
+            out_cols.push_back(alloc_array_top_level(
+                0, 0, 0, this->out_arr_type, out_dtype, -1, 0, 0, false, false,
+                false, this->pool, this->mm));
+            return;
+        }
+        out_cols.push_back(first_agg);
+    }
+
+    virtual void GetLastRowInfo(
+        std::vector<std::shared_ptr<array_info>> &out_cols) {
+        if (this->is_empty) {
+            GetFirstRowInfo(out_cols);
+        } else {
+            out_cols.push_back(last_agg);
+        }
+    }
+
+    /**
+     * Arguments used by this implementation:
+     * - first_boundary_info: used to send agg values from following ranks
+     * - last_boundary_info: used to send agg values from previous ranks
+     * - rank_idx: used to determine which rows in first/last boundary info are
+     * the current rank.
+     * - func_offset: used to infer which column of first/last boundary info
+     * contains the agg values from previous/following ranks.
+     * - start_partition: used as the start of previous ranks to aggregate.
+     * - first_partition_chunk_end: used to determine up to which chunk to
+     * update with the aggregation values from previous ranks.
+     * - first_partition_row_end: used to determine up to which row in
+     *   first_partition_chunk_end to update.
+     * - end_partition: used as the end of following ranks to aggregate.
+     * - last_partition_chunk_start: used to determine starting from which chunk
+     * to update with the aggregation values from following ranks.
+     * - last_partition_row_start: used to determine starting from which row in
+     *   last_partition_chunk_start to update.
+     */
+    void UpdateBoundaryInfo(std::shared_ptr<table_info> &first_boundary_info,
+                            std::shared_ptr<table_info> &last_boundary_info,
+                            size_t rank_idx, size_t func_offset,
+                            size_t start_partition, size_t start_order,
+                            size_t end_partition, size_t end_order,
+                            size_t first_partition_chunk_end,
+                            size_t first_partition_row_end,
+                            size_t last_partition_chunk_start,
+                            size_t last_partition_row_start) {
+        if (this->is_empty) {
+            return;
+        }
+
+        std::shared_ptr<array_info> &first_aggs =
+            first_boundary_info->columns[func_offset];
+        std::shared_ptr<array_info> &last_aggs =
+            last_boundary_info->columns[func_offset];
+
+        // Fetch the aggregation values from all preceding ranks that end with
+        // the same partition as the start of the current rank.
+        std::vector<int64_t> last_part_rank_idxs;
+        for (size_t rank = start_partition; rank < rank_idx; rank++) {
+            last_part_rank_idxs.push_back(rank);
+        }
+        std::shared_ptr<array_info> preceding_aggs =
+            RetrieveArray_SingleColumn(last_aggs, last_part_rank_idxs);
+
+        // Fetch the aggregation values from all following ranks that start with
+        // the same partition as the end of the current rank.
+        std::vector<int64_t> first_part_rank_idxs;
+        for (size_t rank = rank_idx + 1; rank <= end_partition; rank++) {
+            first_part_rank_idxs.push_back(rank);
+        }
+        std::shared_ptr<array_info> following_aggs =
+            RetrieveArray_SingleColumn(first_aggs, first_part_rank_idxs);
+
+        // Create a dummy group info mapping everything to row 0
+        grouping_info dummy_grp_info;
+        dummy_grp_info.num_groups = 1;
+        uint64_t n_rows = 1ULL;
+        n_rows = std::max(preceding_aggs->length, n_rows);
+        n_rows = std::max(following_aggs->length, n_rows);
+        dummy_grp_info.row_to_group.resize(n_rows, 0);
+        std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
+
+        // True if the current rank is all one partition
+        if (last_partition_chunk_start == 0 && last_partition_row_start == 0) {
+            std::shared_ptr<array_info> partition_agg = alloc_array_top_level(
+                1, 0, 0, this->out_arr_type, out_dtype, -1, 0, 0, false, false,
+                false, this->pool, this->mm);
+            aggfunc_output_initialize(partition_agg, ftype, true);
+
+            // Aggregate the values to get the entire aggregate of the current
+            // partition.
+            do_apply_to_column(preceding_aggs, partition_agg, dummy_aux_cols,
+                               dummy_grp_info, ftype);
+            do_apply_to_column(first_agg, partition_agg, dummy_aux_cols,
+                               dummy_grp_info, ftype);
+            do_apply_to_column(following_aggs, partition_agg, dummy_aux_cols,
+                               dummy_grp_info, ftype);
+
+            // If the result is non-null, override every row in the current
+            // chunk with that value.
+            if (partition_agg->arr_type == bodo_array_type::NUMPY ||
+                partition_agg->get_null_bit(0)) {
+                for (size_t chunk_idx = 0; chunk_idx < agg_chunks.size();
+                     chunk_idx++) {
+                    std::shared_ptr<array_info> agg_chunk =
+                        agg_chunks[chunk_idx];
+                    agg_chunk->pin();
+                    fill_numeric_array_with_value(agg_chunk, partition_agg, 0,
+                                                  agg_chunk->length);
+                    agg_chunk->unpin();
+                }
+            }
+        } else {
+            // Otherwise, we need to deal with the first partition & last
+            // partition seperately
+
+            if (preceding_aggs->length > 0) {
+                // Get the aggregate of the first partition on the current rank
+                // plus all preceding ranks that end in the same partition.
+                std::shared_ptr<array_info> first_part_agg =
+                    alloc_array_top_level(1, 0, 0, this->out_arr_type,
+                                          out_dtype, -1, 0, 0, false, false,
+                                          false, this->pool, this->mm);
+                aggfunc_output_initialize(first_part_agg, this->ftype, true);
+                do_apply_to_column(preceding_aggs, first_part_agg,
+                                   dummy_aux_cols, dummy_grp_info, ftype);
+                do_apply_to_column(first_agg, first_part_agg, dummy_aux_cols,
+                                   dummy_grp_info, ftype);
+
+                // If the result is non-null, override every row in the first
+                // partition with that value.
+                if (first_part_agg->arr_type == bodo_array_type::NUMPY ||
+                    first_part_agg->get_null_bit(0)) {
+                    for (size_t chunk_idx = 0;
+                         chunk_idx <= first_partition_chunk_end; chunk_idx++) {
+                        std::shared_ptr<array_info> agg_chunk =
+                            agg_chunks[chunk_idx];
+                        agg_chunk->pin();
+                        size_t last_row =
+                            (chunk_idx == first_partition_chunk_end)
+                                ? (first_partition_row_end + 1)
+                                : (agg_chunk->length);
+                        fill_numeric_array_with_value(agg_chunk, first_part_agg,
+                                                      0, last_row);
+                        agg_chunk->unpin();
+                    }
+                }
+            }
+
+            if (following_aggs->length > 0) {
+                // Get the aggregate of the last partition on the current rank
+                // plus all following ranks that start with the same partition.
+                std::shared_ptr<array_info> last_part_agg =
+                    alloc_array_top_level(1, 0, 0, this->out_arr_type,
+                                          out_dtype, -1, 0, 0, false, false,
+                                          false, this->pool, this->mm);
+                aggfunc_output_initialize(last_part_agg, ftype, true);
+                do_apply_to_column(last_agg, last_part_agg, dummy_aux_cols,
+                                   dummy_grp_info, ftype);
+                do_apply_to_column(following_aggs, last_part_agg,
+                                   dummy_aux_cols, dummy_grp_info, ftype);
+
+                // If the result is non-null, override every row in the last
+                // partition with that value.
+                if (last_part_agg->arr_type == bodo_array_type::NUMPY ||
+                    last_part_agg->get_null_bit(0)) {
+                    for (size_t chunk_idx = last_partition_chunk_start;
+                         chunk_idx < agg_chunks.size(); chunk_idx++) {
+                        std::shared_ptr<array_info> agg_chunk =
+                            agg_chunks[chunk_idx];
+                        agg_chunk->pin();
+                        size_t first_row =
+                            (chunk_idx == last_partition_chunk_start)
+                                ? last_partition_row_start
+                                : 0;
+                        fill_numeric_array_with_value(agg_chunk, last_part_agg,
+                                                      first_row,
+                                                      agg_chunk->length);
+                        agg_chunk->unpin();
+                    }
+                }
+            }
+        }
+    }
+
+    virtual std::shared_ptr<array_info> ProduceOutputBatch(size_t chunk_idx) {
+        // Produce the requested section from agg_cunks.
+        return agg_chunks[chunk_idx];
+    }
+
+   private:
+    // Which type of aggregation is being done.
+    Bodo_FTypes::FTypeEnum ftype;
+
+    // The index of the column that is being aggregated
+    int32_t agg_column;
+
+    // The array/data type of the final array after being aggregated
+    bodo_array_type::arr_type_enum out_arr_type;
+    Bodo_CTypes::CTypeEnum out_dtype;
+
+    // The first aggregation value from the current rank, which is to be
+    // passed onto previous ranks.
+    std::shared_ptr<array_info> first_agg;
+
+    // The last aggregation value from the current rank, which is to be
+    // passed onto subsequent ranks.
+    std::shared_ptr<array_info> last_agg;
+
+    // The chunks of data used to store the aggregated data on the
+    // current rank, which becomes the output data.
+    std::vector<std::shared_ptr<array_info>> agg_chunks;
+};
+
+/**
  * The orchestration class that handles a collection of window
  * functions being computed together.
  *
@@ -437,6 +867,16 @@ class WindowCollectionComputer {
                         _schema, _chunks, _order_col_indices,
                         input_col_indices[func_idx], _builders, this->is_empty,
                         _pool, _mm);
+                    break;
+                }
+                case Bodo_FTypes::sum: {
+                    calculator =
+                        new SimpleAggregationWindowCalculator<OrderByArrType>(
+                            _schema, _chunks, _order_col_indices,
+                            input_col_indices[func_idx], _builders,
+                            this->is_empty,
+                            (Bodo_FTypes::FTypeEnum)window_funcs[func_idx],
+                            _pool, _mm);
                     break;
                 }
                 default: {

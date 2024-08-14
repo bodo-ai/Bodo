@@ -2569,7 +2569,9 @@ void _sorted_window_computation(
             }
             default:
                 throw std::runtime_error(
-                    "Unsupported window function for the sort implementation");
+                    "Unsupported window function for the sort "
+                    "implementation: " +
+                    get_name_for_Bodo_FTypes(window_funcs[i]));
         }
     }
     // Handle any neighbor communication for window functions.

@@ -140,7 +140,6 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
         output_dict_builders[output_index++] = create_dict_builder_for_array(
             output_schema->column_types[out_idx]->copy(), false);
     }
-
     this->output_state = std::make_shared<GroupbyOutputState>(
         std::move(output_schema), std::move(output_dict_builders),
         /*chunk_size*/ this->output_batch_size,
