@@ -11,7 +11,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/precache_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_LARGE
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables: {}
     identifier: linux_PRECACHE
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
@@ -19,7 +19,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -30,7 +30,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -41,7 +41,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -52,7 +52,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -63,7 +63,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -74,7 +74,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -85,7 +85,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -96,7 +96,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -107,7 +107,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -118,7 +118,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -129,7 +129,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -140,7 +140,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -151,7 +151,7 @@ batch:
     - linux_PRECACHE
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:6.16
       variables:
         NP: 2
         NUMBER_GROUPS_SPLIT: 1
