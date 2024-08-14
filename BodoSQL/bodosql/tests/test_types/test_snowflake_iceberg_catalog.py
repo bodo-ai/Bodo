@@ -605,7 +605,7 @@ def create_core_site():
             f.write(CORE_SITE_SPEC)
 
 
-def test_azure_basic_read(create_core_site, memory_leak_check):
+def test_azure_basic_read(memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake in SQL with
     Azure. ICEBERG_TPCH_REGION is created by converting the Snowflake

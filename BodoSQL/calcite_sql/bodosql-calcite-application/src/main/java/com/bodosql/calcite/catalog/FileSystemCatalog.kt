@@ -418,7 +418,33 @@ class FileSystemCatalog(
                 throw RuntimeException("FileSystemCatalog Error: Connection string must be provided.")
             }
             // Hadoop wants s3a:// instead of s3://
-            return if (connStr.startsWith("s3://")) connStr.replace("s3://", "s3a://") else connStr
+            return if (connStr.startsWith("s3://")) connStr.replace("s3://", "s3a://") else formatAzurePath(connStr)
+        }
+
+        @JvmStatic
+        /**
+         * Format the Azure path to be compatible with Hadoop.
+         * Use adls gen2 instead of blob storage.
+         * @param location The location to format.
+         * @return The formatted location.
+         */
+        private fun formatAzurePath(location: String): String {
+            if (location.startsWith("wasbs://") || location.startsWith("wasb://")) {
+                var optimizedLocation = location
+                if (location.startsWith("wasbs://")) {
+                    optimizedLocation =
+                        optimizedLocation
+                            .replace("wasbs://", "abfss://")
+                            .replace("blob.core.windows.net", "dfs.core.windows.net")
+                } else if (location.startsWith("wasb://")) {
+                    optimizedLocation =
+                        optimizedLocation
+                            .replace("wasb://", "abfs://")
+                            .replace("blob.core.windows.net", "dfs.core.windows.net")
+                }
+                return optimizedLocation
+            }
+            return location
         }
 
         /**
@@ -434,6 +460,21 @@ class FileSystemCatalog(
                 "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider," +
                     "com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
             )
+
+            // Configure Azure Storage authentication, use the account name and key if provided
+            // otherwise try to use the vm identity
+            val accountName = System.getenv("AZURE_STORAGE_ACCOUNT_NAME")
+            val accountKey = System.getenv("AZURE_STORAGE_ACCOUNT_KEY")
+            if (accountName != null && accountKey != null) {
+                conf["fs.azure.account.key.$accountName..core.windows.net"] = accountKey
+            } else if (System.getenv("BODO_PLATFORM_CLOUD_PROVIDER") != null && System.getenv("BODO_PLATFORM_CLOUD_PROVIDER") == "AZURE") {
+                // We're on the platform in an Azure workspace, try to use the identity
+                conf.set("fs.azure.account.auth.type", "OAuth")
+                conf.set("fs.azure.account.oauth.provider.type", "org.apache.hadoop.fs.azurebfs.oauth2.MsiTokenProvider")
+                conf.set("fs.azure.account.oauth2.msi.tenant", "")
+                conf.set("fs.azure.account.oauth2.client.id", "")
+                conf.set("fs.azure.account.oauth2.msi.endpoint", "")
+            }
             return conf
         }
 
