@@ -869,7 +869,7 @@ def test_multiple_filter_join(
         # from Snowflake.
         check_logger_msg(
             stream,
-            'Runtime join filter query: SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP") as TEMP) WHERE TRUE AND ($1 >= 449) AND ($1 <= 199589) AND ($2 >= 33) AND ($2 <= 9990)',
+            'Runtime join filter query: SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "SNOWFLAKE_SAMPLE_DATA"."TPCH_SF1"."PARTSUPP" GROUP BY "PS_PARTKEY", "PS_SUPPKEY") as TEMP) WHERE TRUE AND ($1 >= 449) AND ($1 <= 199589) AND ($2 >= 33) AND ($2 <= 9990)',
         )
 
 
