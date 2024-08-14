@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -521,6 +522,70 @@ def test_all_null():
         check_dtype=False,
         only_jit_1DVar=True,
     )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "IDX": range(7000),
+                    "P": [str(i)[:2] for i in range(7000)],
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i % 128 for i in range(7000)],
+                        dtype=pd.Int8Dtype(),
+                    ),
+                }
+            ),
+            id="uint8",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "IDX": range(9876),
+                    "P": [int(np.tan(i)) for i in range(9876)],
+                    "S": pd.array(
+                        [np.tan(i) for i in range(9876)], dtype=pd.Float64Dtype()
+                    ),
+                }
+            ),
+            id="float64",
+        ),
+    ],
+)
+def test_simple_sum(df, spark_info, capfd):
+    """Verifies that the correct path is taken for SUM"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = "SELECT IDX, SUM(S) OVER (PARTITION BY P) as W FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            # None,
+            # expected_output=answer,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
 
 
 @pytest.mark.parametrize(

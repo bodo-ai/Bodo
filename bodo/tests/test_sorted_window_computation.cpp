@@ -1261,6 +1261,699 @@ static bodo::tests::suite tests([] {
             }
         });
 
+    bodo::tests::test(
+        "calculate_single_function-sum-single_chunk-single_rank", [] {
+            // Ensure we spill on unpin to verify the correctness of the
+            // pinning/unpinning behavior.
+            bodo::BufferPoolOptions options;
+            options.spill_on_unpin = true;
+            bodo::BufferPool pool = bodo::BufferPool(options);
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                buffer_memory_manager(&pool);
+
+            std::vector<std::shared_ptr<table_info>> in_chunks;
+            std::vector<int32_t> partition_col_indices;
+            std::vector<int32_t> order_col_indices;
+            std::vector<int32_t> keep_indices;
+            std::vector<std::vector<int32_t>> input_col_indices;
+            std::vector<int32_t> window_funcs;
+            std::vector<std::shared_ptr<table_info>> expected_out_chunks;
+
+            partition_col_indices.push_back(0);
+            keep_indices.push_back(0);
+            keep_indices.push_back(1);
+            input_col_indices.push_back({1});
+            window_funcs.push_back(Bodo_FTypes::sum);
+
+            std::shared_ptr<array_info> partition =
+                bodo::tests::cppToBodoArr({1, 1, 1, 2, 2, 3, 4, 5, 5, 5, 5, 5});
+            std::shared_ptr<array_info> input = bodo::tests::cppToBodoArr(
+                {1, -1, 3, 4, 5, -1, 7, 8, 9, 10, 11, 12}, true);
+            input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(1, false);
+            input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(5, false);
+            std::shared_ptr<array_info> sum = bodo::tests::cppToBodoArr(
+                {4, 4, 4, 9, 9, -1, 7, 50, 50, 50, 50, 50}, true);
+            sum->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(5, false);
+
+            std::vector<std::shared_ptr<array_info>> chunk_cols = {partition,
+                                                                   input};
+            std::shared_ptr<table_info> chunk =
+                std::make_shared<table_info>(table_info(chunk_cols));
+            in_chunks.push_back(chunk);
+
+            std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                partition, input, sum};
+            std::shared_ptr<table_info> out_chunk =
+                std::make_shared<table_info>(table_info(out_chunk_cols));
+            expected_out_chunks.push_back(out_chunk);
+
+            verify_window_calculators(
+                in_chunks, partition_col_indices, order_col_indices,
+                keep_indices, input_col_indices, window_funcs,
+                bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                expected_out_chunks, false, &pool, mm);
+        });
+
+    bodo::tests::test(
+        "calculate_single_function-sum-multi_chunk-single_rank", [] {
+            // Ensure we spill on unpin to verify the correctness of the
+            // pinning/unpinning behavior.
+            bodo::BufferPoolOptions options;
+            options.spill_on_unpin = true;
+            bodo::BufferPool pool = bodo::BufferPool(options);
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                buffer_memory_manager(&pool);
+
+            std::vector<std::shared_ptr<table_info>> in_chunks;
+            std::vector<int32_t> partition_col_indices;
+            std::vector<int32_t> order_col_indices;
+            std::vector<int32_t> keep_indices;
+            std::vector<std::vector<int32_t>> input_col_indices;
+            std::vector<int32_t> window_funcs;
+            std::vector<std::shared_ptr<table_info>> expected_out_chunks;
+
+            partition_col_indices.push_back(0);
+            keep_indices.push_back(0);
+            keep_indices.push_back(1);
+            input_col_indices.push_back({1});
+            window_funcs.push_back(Bodo_FTypes::sum);
+
+            // Chunk 0: two partitions
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({1, 1, 1, 2, 2, 2});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({1, 2, 3, 4, 5, 6}, true);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({6, 6, 6, 15, 15, 15}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 1: two partitions (first overlaps with chunk 0)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({2, 2, 2, 3, 3, 3});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({-1, -1, -1, 7, 8, 9}, true);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(1,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(2,
+                                                                        false);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({15, 15, 15, 45, 45, 45}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 2: one partition (overlaps with chunks 1)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({3, 3, 3, 3});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({-1, -1, -1, -1}, true);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(1,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(2,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(3,
+                                                                        false);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({45, 45, 45, 45}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 3: one partition (overlaps with chunks 1/2)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({3, 3, 3});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({10, 11, -1}, true);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(2,
+                                                                        false);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({45, 45, 45}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 4: two partition (first overlaps with chunks 1/2/3)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({3, 3, 4, 4});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({-1, -1, -1, 11}, true);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(1,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(2,
+                                                                        false);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(3,
+                                                                        false);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({45, 45, -1, -1}, true);
+                sum->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(2, false);
+                sum->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(3, false);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 5: one partition (overlaps with chunks 4)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({4});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({-1}, true);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0,
+                                                                        false);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({-1}, true);
+                sum->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0, false);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 6: one partition (overlaps with chunks 5)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr({4});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr({-1}, true);
+                input->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0,
+                                                                        false);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({-1}, true);
+                sum->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0, false);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            verify_window_calculators(
+                in_chunks, partition_col_indices, order_col_indices,
+                keep_indices, input_col_indices, window_funcs,
+                bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                expected_out_chunks, false, &pool, mm);
+        });
+
+    bodo::tests::test(
+        "calculate_single_function-sum-single_chunk-multi_rank-single_"
+        "partition",
+        [] {
+            // Ensure we spill on unpin to verify the correctness of the
+            // pinning/unpinning behavior.
+            bodo::BufferPoolOptions options;
+            options.spill_on_unpin = true;
+            bodo::BufferPool pool = bodo::BufferPool(options);
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                buffer_memory_manager(&pool);
+
+            int myrank, num_ranks;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+            int64_t total_rows = static_cast<int64_t>(num_ranks * 4);
+            int64_t total_sum = (total_rows * (total_rows + 1)) / 2;
+
+            std::vector<std::shared_ptr<table_info>> in_chunks;
+            std::vector<int32_t> partition_col_indices;
+            std::vector<int32_t> order_col_indices;
+            std::vector<int32_t> keep_indices;
+            std::vector<std::vector<int32_t>> input_col_indices;
+            std::vector<int32_t> window_funcs;
+            std::vector<std::shared_ptr<table_info>> expected_out_chunks;
+
+            partition_col_indices.push_back(0);
+            keep_indices.push_back(0);
+            keep_indices.push_back(1);
+            input_col_indices.push_back({1});
+            window_funcs.push_back(Bodo_FTypes::sum);
+
+            std::shared_ptr<array_info> partition =
+                bodo::tests::cppToBodoArr<std::string>({"A", "A", "A", "A"});
+            std::shared_ptr<array_info> input = bodo::tests::cppToBodoArr<int>(
+                {1 + (4 * myrank), 2 + (4 * myrank), 3 + (4 * myrank),
+                 4 + (4 * myrank)},
+                true);
+            std::shared_ptr<array_info> sum = bodo::tests::cppToBodoArr(
+                {total_sum, total_sum, total_sum, total_sum}, true);
+
+            std::vector<std::shared_ptr<array_info>> chunk_cols = {partition,
+                                                                   input};
+            std::shared_ptr<table_info> chunk =
+                std::make_shared<table_info>(table_info(chunk_cols));
+            in_chunks.push_back(chunk);
+
+            std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                partition, input, sum};
+            std::shared_ptr<table_info> out_chunk =
+                std::make_shared<table_info>(table_info(out_chunk_cols));
+            expected_out_chunks.push_back(out_chunk);
+
+            verify_window_calculators(
+                in_chunks, partition_col_indices, order_col_indices,
+                keep_indices, input_col_indices, window_funcs,
+                bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                expected_out_chunks, true, &pool, mm);
+        });
+
+    bodo::tests::test(
+        "calculate_single_function-sum-multi_chunk-multi_rank-multi_"
+        "partition",
+        [] {
+            // Ensure we spill on unpin to verify the correctness of the
+            // pinning/unpinning behavior.
+            bodo::BufferPoolOptions options;
+            options.spill_on_unpin = true;
+            bodo::BufferPool pool = bodo::BufferPool(options);
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                buffer_memory_manager(&pool);
+
+            int myrank, num_ranks;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+            std::vector<std::shared_ptr<table_info>> in_chunks;
+            std::vector<int32_t> partition_col_indices;
+            std::vector<int32_t> order_col_indices;
+            std::vector<int32_t> keep_indices;
+            std::vector<std::vector<int32_t>> input_col_indices;
+            std::vector<int32_t> window_funcs;
+            std::vector<std::shared_ptr<table_info>> expected_out_chunks;
+
+            partition_col_indices.push_back(0);
+            keep_indices.push_back(0);
+            keep_indices.push_back(1);
+            input_col_indices.push_back({1});
+            window_funcs.push_back(Bodo_FTypes::sum);
+
+            int64_t first_sum = 0;
+            int64_t second_sum = 0;
+
+            if (myrank > 0) {
+                first_sum += static_cast<int>(-1 + (4 * myrank));
+                first_sum += static_cast<int>(0 + (4 * myrank));
+            }
+            first_sum += static_cast<int>(1 + (4 * myrank));
+            first_sum += static_cast<int>(2 + (4 * myrank));
+            second_sum += static_cast<int>(3 + (4 * myrank));
+            second_sum += static_cast<int>(4 + (4 * myrank));
+            if (myrank < (num_ranks - 1)) {
+                second_sum += static_cast<int>(5 + (4 * myrank));
+                second_sum += static_cast<int>(6 + (4 * myrank));
+            }
+
+            // Chunk 0: first partition (overlaps with previous rank)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr<int>({myrank});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr<int>({1 + (4 * myrank)}, true);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({first_sum}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 1: first partition (overlaps with previous rank) and
+            // second partition (overlaps with next rank)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr<int>({myrank, myrank + 1});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr<int>(
+                        {2 + (4 * myrank), 3 + (4 * myrank)}, true);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({first_sum, second_sum}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            // Chunk 2: second partition (overlaps with next rank)
+            {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr<int>({myrank + 1});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr<int>({4 + (4 * myrank)}, true);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({second_sum}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+            }
+
+            verify_window_calculators(
+                in_chunks, partition_col_indices, order_col_indices,
+                keep_indices, input_col_indices, window_funcs,
+                bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                expected_out_chunks, true, &pool, mm);
+        });
+
+    bodo::tests::test(
+        "calculate_single_function-sum-multi_chunk-multi_rank-multi_"
+        "partition-holes",
+        [] {
+            // Ensure we spill on unpin to verify the correctness of the
+            // pinning/unpinning behavior.
+            bodo::BufferPoolOptions options;
+            options.spill_on_unpin = true;
+            bodo::BufferPool pool = bodo::BufferPool(options);
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                buffer_memory_manager(&pool);
+
+            int myrank, num_ranks;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+            std::vector<std::shared_ptr<table_info>> in_chunks;
+            std::vector<int32_t> partition_col_indices;
+            std::vector<int32_t> order_col_indices;
+            std::vector<int32_t> keep_indices;
+            std::vector<std::vector<int32_t>> input_col_indices;
+            std::vector<int32_t> window_funcs;
+            std::vector<std::shared_ptr<table_info>> expected_out_chunks;
+
+            partition_col_indices.push_back(0);
+            keep_indices.push_back(0);
+            keep_indices.push_back(1);
+            input_col_indices.push_back({1});
+            window_funcs.push_back(Bodo_FTypes::sum);
+
+            // If the current rank is an even-numbered rank, it has
+            // two chunks with no data.
+            if (myrank % 2 == 0) {
+                std::shared_ptr<array_info> partition =
+                    bodo::tests::cppToBodoArr<int>({1});
+                std::shared_ptr<array_info> input =
+                    bodo::tests::cppToBodoArr<int>({}, true);
+                std::shared_ptr<array_info> sum =
+                    bodo::tests::cppToBodoArr({}, true);
+
+                std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                    partition, input};
+                std::shared_ptr<table_info> chunk =
+                    std::make_shared<table_info>(table_info(chunk_cols));
+                in_chunks.push_back(chunk);
+                in_chunks.push_back(chunk);
+
+                std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                    partition, input, sum};
+                std::shared_ptr<table_info> out_chunk =
+                    std::make_shared<table_info>(table_info(out_chunk_cols));
+                expected_out_chunks.push_back(out_chunk);
+                expected_out_chunks.push_back(out_chunk);
+            } else {
+                int64_t first_sum = 0;
+                int64_t second_sum = 0;
+
+                if (myrank > 2) {
+                    first_sum += static_cast<int>(-1 + (4 * myrank));
+                    first_sum += static_cast<int>(0 + (4 * myrank));
+                }
+                first_sum += static_cast<int>(1 + (4 * myrank));
+                first_sum += static_cast<int>(2 + (4 * myrank));
+                second_sum += static_cast<int>(3 + (4 * myrank));
+                second_sum += static_cast<int>(4 + (4 * myrank));
+                if (myrank < (num_ranks - 2)) {
+                    second_sum += static_cast<int>(5 + (4 * myrank));
+                    second_sum += static_cast<int>(6 + (4 * myrank));
+                }
+
+                // Chunk 0: first partition (overlaps with previous rank)
+                {
+                    std::shared_ptr<array_info> partition =
+                        bodo::tests::cppToBodoArr<int>({myrank});
+                    std::shared_ptr<array_info> input =
+                        bodo::tests::cppToBodoArr<int>({1 + (4 * myrank)},
+                                                       true);
+                    std::shared_ptr<array_info> sum =
+                        bodo::tests::cppToBodoArr({first_sum}, true);
+
+                    std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                        partition, input};
+                    std::shared_ptr<table_info> chunk =
+                        std::make_shared<table_info>(table_info(chunk_cols));
+                    in_chunks.push_back(chunk);
+
+                    std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                        partition, input, sum};
+                    std::shared_ptr<table_info> out_chunk =
+                        std::make_shared<table_info>(
+                            table_info(out_chunk_cols));
+                    expected_out_chunks.push_back(out_chunk);
+                }
+
+                // Chunk 1: first partition (overlaps with previous rank) and
+                // second partition (overlaps with next rank)
+                {
+                    std::shared_ptr<array_info> partition =
+                        bodo::tests::cppToBodoArr<int>({myrank, myrank + 2});
+                    std::shared_ptr<array_info> input =
+                        bodo::tests::cppToBodoArr<int>(
+                            {2 + (4 * myrank), 3 + (4 * myrank)}, true);
+                    std::shared_ptr<array_info> sum = bodo::tests::cppToBodoArr(
+                        {first_sum, second_sum}, true);
+
+                    std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                        partition, input};
+                    std::shared_ptr<table_info> chunk =
+                        std::make_shared<table_info>(table_info(chunk_cols));
+                    in_chunks.push_back(chunk);
+
+                    std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                        partition, input, sum};
+                    std::shared_ptr<table_info> out_chunk =
+                        std::make_shared<table_info>(
+                            table_info(out_chunk_cols));
+                    expected_out_chunks.push_back(out_chunk);
+                }
+
+                // Chunk 2: second partition (overlaps with next rank)
+                {
+                    std::shared_ptr<array_info> partition =
+                        bodo::tests::cppToBodoArr<int>({myrank + 2});
+                    std::shared_ptr<array_info> input =
+                        bodo::tests::cppToBodoArr<int>({4 + (4 * myrank)},
+                                                       true);
+                    std::shared_ptr<array_info> sum =
+                        bodo::tests::cppToBodoArr({second_sum}, true);
+
+                    std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                        partition, input};
+                    std::shared_ptr<table_info> chunk =
+                        std::make_shared<table_info>(table_info(chunk_cols));
+                    in_chunks.push_back(chunk);
+
+                    std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                        partition, input, sum};
+                    std::shared_ptr<table_info> out_chunk =
+                        std::make_shared<table_info>(
+                            table_info(out_chunk_cols));
+                    expected_out_chunks.push_back(out_chunk);
+                }
+
+                verify_window_calculators(
+                    in_chunks, partition_col_indices, order_col_indices,
+                    keep_indices, input_col_indices, window_funcs,
+                    bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                    expected_out_chunks, true, &pool, mm);
+            }
+        });
+
+    bodo::tests::test(
+        "calculate_single_function-sum-multi_chunk-multi_rank-two_partitions",
+        [] {
+            // Ensure we spill on unpin to verify the correctness of the
+            // pinning/unpinning behavior.
+            bodo::BufferPoolOptions options;
+            options.spill_on_unpin = true;
+            bodo::BufferPool pool = bodo::BufferPool(options);
+            std::shared_ptr<::arrow::MemoryManager> mm =
+                buffer_memory_manager(&pool);
+
+            int myrank, num_ranks;
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+            int local_rows = 4;
+            int total_rows = num_ranks * local_rows;
+            int total_sum = (total_rows * (total_rows - 1)) / 2;
+
+            std::vector<int32_t> partition_col_indices;
+            std::vector<int32_t> order_col_indices;
+            std::vector<int32_t> keep_indices;
+            std::vector<std::vector<int32_t>> input_col_indices;
+            std::vector<int32_t> window_funcs;
+
+            partition_col_indices.push_back(0);
+            keep_indices.push_back(0);
+            keep_indices.push_back(1);
+            input_col_indices.push_back({1});
+            window_funcs.push_back(Bodo_FTypes::sum);
+
+            // Iterate over every possible position for the cutoff between the
+            // two partitions.
+            for (int partition_cutoff = 1; partition_cutoff < total_rows;
+                 partition_cutoff++) {
+                std::vector<std::shared_ptr<table_info>> in_chunks;
+                std::vector<std::shared_ptr<table_info>> expected_out_chunks;
+
+                // Calculate the values of the sum of rows to the left vs right
+                // of the cutoff.
+                int prefix_sum =
+                    (partition_cutoff * (partition_cutoff - 1)) / 2;
+                int suffix_sum = total_sum - prefix_sum;
+
+                // Generate `local_rows` chunks on this rank, each with 2
+                // values: NULL and the global chunk idx including previous
+                // ranks. The partition depends on the chunk idx relative to the
+                // partition cutoff.
+                for (int local_idx = 0; local_idx < local_rows; local_idx++) {
+                    int global_row = local_idx + (local_rows * myrank);
+                    int partition_val;
+                    int sum_val;
+                    if (global_row < partition_cutoff) {
+                        partition_val = -1;
+                        sum_val = prefix_sum;
+                    } else {
+                        partition_val = 1;
+                        sum_val = suffix_sum;
+                    }
+                    std::shared_ptr<array_info> partition =
+                        bodo::tests::cppToBodoArr<int>(
+                            {partition_val, partition_val});
+                    std::shared_ptr<array_info> input =
+                        bodo::tests::cppToBodoArr<int>({global_row, -1}, true);
+                    input->set_null_bit(1, false);
+                    std::shared_ptr<array_info> sum =
+                        bodo::tests::cppToBodoArr({sum_val, sum_val}, true);
+
+                    std::vector<std::shared_ptr<array_info>> chunk_cols = {
+                        partition, input};
+                    std::shared_ptr<table_info> chunk =
+                        std::make_shared<table_info>(table_info(chunk_cols));
+                    in_chunks.push_back(chunk);
+
+                    std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
+                        partition, input, sum};
+                    std::shared_ptr<table_info> out_chunk =
+                        std::make_shared<table_info>(
+                            table_info(out_chunk_cols));
+                    expected_out_chunks.push_back(out_chunk);
+                }
+
+                verify_window_calculators(
+                    in_chunks, partition_col_indices, order_col_indices,
+                    keep_indices, input_col_indices, window_funcs,
+                    bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                    expected_out_chunks, true, &pool, mm);
+            }
+        });
+
     bodo::tests::test("partitionless_sum_unsigned", [] {
         int myrank, num_ranks;
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
