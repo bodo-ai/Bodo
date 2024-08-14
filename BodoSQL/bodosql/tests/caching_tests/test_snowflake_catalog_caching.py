@@ -241,5 +241,5 @@ def test_snowflake_runtime_join_filter_caching(is_cached):
         # from Snowflake.
         check_logger_msg(
             stream,
-            'SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "TEST_DB"."TPCH_SF1"."PARTSUPP" WHERE "PS_PARTKEY" IS NOT NULL) as TEMP) WHERE TRUE AND ($1 >= 1977) AND ($1 <= 195380)',
+            'Runtime join filter query: SELECT * FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM (SELECT "PS_PARTKEY", "PS_SUPPKEY" FROM "TEST_DB"."TPCH_SF1"."PARTSUPP" WHERE "PS_PARTKEY" IS NOT NULL GROUP BY "PS_PARTKEY", "PS_SUPPKEY") as TEMP) WHERE TRUE AND ($1 >= 1977) AND ($1 <= 195380)',
         )
