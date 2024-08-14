@@ -7159,8 +7159,10 @@ public class SqlToRelConverter {
 
         return histogramCall;
       } else {
-        boolean needSum0 = aggOp == SqlStdOperatorTable.SUM
-            && type.isNullable();
+        // BODO CHANGE: disable rewriting SUM to SUM0.
+        boolean needSum0 = false;
+        // boolean needSum0 = aggOp == SqlStdOperatorTable.SUM
+        //    && type.isNullable();
         SqlAggFunction aggOpToUse =
             needSum0 ? SqlStdOperatorTable.SUM0
                 : aggOp;

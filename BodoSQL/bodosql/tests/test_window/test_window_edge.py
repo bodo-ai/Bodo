@@ -77,10 +77,9 @@ def test_window_no_order(uint8_window_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.slow
 def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
-    """Tests when the window clause does not have a rows specification"""
-    query = "SELECT W4, SUM(A) OVER (PARTITION BY W1 ORDER BY W4) FROM table1"
+    """Tests when the window clause does not have order/rows specification"""
+    query = "SELECT W4, SUM(A) OVER (PARTITION BY W1) FROM table1"
     check_query(
         query,
         uint8_window_df,
@@ -207,7 +206,6 @@ def test_tz_aware_partition_by(spark_info):
     )
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "calculation, window",
     [
