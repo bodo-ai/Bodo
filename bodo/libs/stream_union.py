@@ -497,7 +497,9 @@ class UnionProduceOutputInfer(AbstractTemplate):
         union_state = get_call_expr_arg(
             "union_produce_batch", args, kws, 0, "union_state"
         )
-        if any(t == types.unknown for t in union_state.in_table_types):
+        if (len(union_state.in_table_types) == 0) or any(
+            t == types.unknown for t in union_state.in_table_types
+        ):
             raise numba.NumbaError(
                 "union_produce_batch: unknown table type in streaming union state type"
             )
