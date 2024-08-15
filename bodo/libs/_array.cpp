@@ -1219,7 +1219,7 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     SetAttrStringFromVoidPtr(m, drop_duplicates_table_py_entry);
     SetAttrStringFromVoidPtr(m, union_tables);
     SetAttrStringFromVoidPtr(m, concat_tables_py_entry);
-    SetAttrStringFromVoidPtr(m, groupby_and_aggregate);
+    SetAttrStringFromVoidPtr(m, groupby_and_aggregate_py_entry);
     SetAttrStringFromVoidPtr(m, drop_duplicates_local_dictionary_py_entry);
     SetAttrStringFromVoidPtr(m, get_groupby_labels_py_entry);
     SetAttrStringFromVoidPtr(m, array_isin_py_entry);

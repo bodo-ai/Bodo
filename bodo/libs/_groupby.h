@@ -130,7 +130,7 @@ struct grouping_info {
  * shuffle_table is done on keys [0, 1].
  * @param use_sql_rules: whether to use SQL rules for group by or Pandas.
  */
-table_info* groupby_and_aggregate(
+table_info* groupby_and_aggregate_py_entry(
     table_info* in_table, int64_t num_keys, int8_t* ncols_per_func,
     int8_t* n_window_calls_per_func, int64_t num_funcs, bool input_has_index,
     int* ftypes, int* func_offsets, int* udf_nredvars, bool is_parallel,
@@ -138,7 +138,7 @@ table_info* groupby_and_aggregate(
     int64_t head_n, bool return_key, bool return_index, bool key_dropna,
     void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* udf_dummy_table, int64_t* n_out_rows, bool* window_ascending,
-    bool* window_na_position, void** window_args,
+    bool* window_na_position, table_info* window_args_,
     int8_t* n_window_args_per_func, int* n_input_cols_per_func,
     bool maintain_input_size, int64_t n_shuffle_keys, bool use_sql_rules);
 

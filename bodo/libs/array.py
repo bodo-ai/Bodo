@@ -137,7 +137,7 @@ ll.add_symbol(
     "shuffle_renormalization_group_py_entrypt",
     array_ext.shuffle_renormalization_group_py_entrypt,
 )
-ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
+ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate_py_entry)
 ll.add_symbol(
     "drop_duplicates_local_dictionary_py_entry",
     array_ext.drop_duplicates_local_dictionary_py_entry,
@@ -3310,7 +3310,7 @@ def groupby_and_aggregate(
             types.voidptr,
             types.voidptr,  # window_ascending
             types.voidptr,  # window_na_position
-            types.voidptr,  # window_args
+            window_args_t,  # window_args
             types.voidptr,  # n_window_args_per_func
             types.voidptr,  # n_input_cols_per_func
             types.boolean,  # maintain_input_size

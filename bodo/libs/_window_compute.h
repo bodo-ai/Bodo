@@ -88,8 +88,9 @@ void window_computation(
     std::vector<int64_t> window_funcs,
     std::vector<std::shared_ptr<array_info>> out_arrs,
     grouping_info const& grp_info, const std::vector<bool>& asc_vect,
-    const std::vector<bool>& na_pos_vect, const std::vector<void*>& window_args,
-    int n_input_cols, bool is_parallel, bool use_sql_rules,
+    const std::vector<bool>& na_pos_vect,
+    const std::shared_ptr<table_info> window_args, int n_input_cols,
+    bool is_parallel, bool use_sql_rules,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
