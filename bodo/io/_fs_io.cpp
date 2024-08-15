@@ -5,19 +5,39 @@
 #include <sstream>
 #include <string>
 
+#include <arrow/filesystem/azurefs.h>
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/localfs.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/io/api.h>
 #include <arrow/result.h>
+#include <arrow/util/uri.h>
 
 #include "../libs/_bodo_common.h"
 #include "_fs_io.h"
+#include "arrow_compat.h"
 #include "mpi.h"
+
+// Helper to ensure that the pyarrow wrappers have been imported.
+// We use a static variable to make sure we only do the import once.
+static bool imported_pyarrow_wrappers = false;
+static void ensure_pa_wrappers_imported() {
+#define CHECK(expr, msg)                                        \
+    if (expr) {                                                 \
+        throw std::runtime_error(std::string("fs_io: ") + msg); \
+    }
+    if (imported_pyarrow_wrappers) {
+        return;
+    }
+    CHECK(arrow::py::import_pyarrow_wrappers(),
+          "importing pyarrow_wrappers failed!");
+    imported_pyarrow_wrappers = true;
+
+#undef CHECK
+}
 
 // if expr is not true, form an err msg and raise a
 // runtime_error with it
-#undef CHECK
 #define CHECK(expr, msg, file_type)                                  \
     if (!(expr)) {                                                   \
         std::string err_msg =                                        \
@@ -79,15 +99,16 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs_option,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name) {
+                         std::string *orig_path, std::string *path_name,
+                         bool force_hdfs) {
     *path_name = std::string(_path_name);
 
     if (strncmp(_path_name, "s3://", 5) == 0) {
         *fs_option = Bodo_Fs::s3;
         *path_name = std::string(_path_name + 5);  // remove s3://
-    } else if (strncmp(_path_name, "abfs://", 7) == 0 ||
-               strncmp(_path_name, "abfss://", 8) == 0) {
-        *fs_option = Bodo_Fs::hdfs;
+    } else if ((strncmp(_path_name, "abfs://", 7) == 0 ||
+                strncmp(_path_name, "abfss://", 8) == 0)) {
+        *fs_option = force_hdfs ? Bodo_Fs::hdfs : Bodo_Fs::abfs;
     } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
         *fs_option = Bodo_Fs::hdfs;
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
@@ -310,93 +331,140 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                     std::shared_ptr<::arrow::io::OutputStream> *out_stream,
                     const std::string &bucket_region) {
     PyObject *f_mod = nullptr;
-    if (fs_option == Bodo_Fs::posix) {
-        if (file_type == "csv") {
-            // csv does not need to open_outstream for posix
-            // in fact, this function, open_outstream,
-            // should never be called in such case
+    switch (fs_option) {
+        case Bodo_Fs::posix: {
+            if (file_type == "csv") {
+                // csv does not need to open_outstream for posix
+                // in fact, this function, open_outstream,
+                // should never be called in such case
+                return;
+            }
+            if (is_parallel) {
+                // assumes that the directory has already been created
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;  // append file name to output path
+                posix_open_file_outstream(file_type, out_path.string(),
+                                          out_stream);
+            } else {
+                posix_open_file_outstream(file_type, fname, out_stream);
+            }
             return;
-        }
-        if (is_parallel) {
-            // assumes that the directory has already been created
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;  // append file name to output path
-            posix_open_file_outstream(file_type, out_path.string(), out_stream);
-        } else {
-            posix_open_file_outstream(file_type, fname, out_stream);
-        }
-        return;
-    } else if (fs_option == Bodo_Fs::s3) {
-        // get s3_get_fs function
-        PyObject *s3_func_obj = nullptr;
-        import_fs_module(fs_option, file_type, f_mod);
-        get_get_fs_pyobject(fs_option, file_type, f_mod, s3_func_obj);
-        s3_get_fs_t s3_get_fs =
-            (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, NULL);
+        } break;
+        case Bodo_Fs::s3: {
+            // get s3_get_fs function
+            PyObject *s3_func_obj = nullptr;
+            import_fs_module(fs_option, file_type, f_mod);
+            get_get_fs_pyobject(fs_option, file_type, f_mod, s3_func_obj);
+            s3_get_fs_t s3_get_fs =
+                (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, NULL);
 
-        s3_get_fs(&s3_fs, bucket_region, false);
-        if (is_parallel) {
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;  // append file name to output path
-            open_file_outstream(fs_option, file_type, out_path.string(), s3_fs,
-                                NULL, out_stream);
-        } else {
-            open_file_outstream(fs_option, file_type, fname, s3_fs, NULL,
-                                out_stream);
-        }
-
-        Py_DECREF(f_mod);
-        Py_DECREF(s3_func_obj);
-        return;
-    } else if (fs_option == Bodo_Fs::hdfs) {
-        // get hdfs_get_fs function
-        PyObject *hdfs_func_obj = nullptr;
-        import_fs_module(fs_option, file_type, f_mod);
-        get_get_fs_pyobject(fs_option, file_type, f_mod, hdfs_func_obj);
-        hdfs_get_fs_t hdfs_get_fs =
-            (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
-
-        std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
-        arrow::Status status;
-        // TODO: Do I need to make this Buffer Pool aware?
-        std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
-        hdfs_get_fs(orig_path, &hdfs_fs);
-        if (is_parallel) {
-            // assumes that the directory has already been created
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;
-            open_file_outstream(fs_option, file_type, out_path.string(), NULL,
-                                hdfs_fs, out_stream);
-        } else {
-            open_file_outstream(fs_option, file_type, fname, NULL, hdfs_fs,
-                                out_stream);
-        }
-
-        Py_DECREF(f_mod);
-        Py_DECREF(hdfs_func_obj);
-        return;
-    } else if (fs_option == Bodo_Fs::gcs) {
-        PyObject *gcs_func_obj = nullptr;
-        import_fs_module(fs_option, file_type, f_mod);
-        get_get_fs_pyobject(fs_option, file_type, f_mod, gcs_func_obj);
-        gcs_get_fs_t gcs_get_fs =
-            (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, NULL);
-        std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
-        gcs_get_fs(&fs);
-        if (is_parallel) {
-            std::filesystem::path out_path(dirname);
-            out_path /= fname;
-            open_file_outstream_gcs(fs_option, file_type, out_path.string(), fs,
+            s3_get_fs(&s3_fs, bucket_region, false);
+            if (is_parallel) {
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;  // append file name to output path
+                open_file_outstream(fs_option, file_type, out_path.string(),
+                                    s3_fs, NULL, out_stream);
+            } else {
+                open_file_outstream(fs_option, file_type, fname, s3_fs, NULL,
                                     out_stream);
-        } else {
-            open_file_outstream_gcs(fs_option, file_type, fname, fs,
-                                    out_stream);
-        }
+            }
 
-        Py_DECREF(f_mod);
-        Py_DECREF(gcs_func_obj);
-    } else {
-        throw std::runtime_error("open output stream: unrecognized filesystem");
+            Py_DECREF(f_mod);
+            Py_DECREF(s3_func_obj);
+            return;
+        } break;
+        case Bodo_Fs::hdfs: {
+            // get hdfs_get_fs function
+            PyObject *hdfs_func_obj = nullptr;
+            import_fs_module(fs_option, file_type, f_mod);
+            get_get_fs_pyobject(fs_option, file_type, f_mod, hdfs_func_obj);
+            hdfs_get_fs_t hdfs_get_fs =
+                (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
+
+            std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
+            arrow::Status status;
+            // TODO: Do I need to make this Buffer Pool aware?
+            std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
+            hdfs_get_fs(orig_path, &hdfs_fs);
+            if (is_parallel) {
+                // assumes that the directory has already been created
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;
+                open_file_outstream(fs_option, file_type, out_path.string(),
+                                    NULL, hdfs_fs, out_stream);
+            } else {
+                open_file_outstream(fs_option, file_type, fname, NULL, hdfs_fs,
+                                    out_stream);
+            }
+
+            Py_DECREF(f_mod);
+            Py_DECREF(hdfs_func_obj);
+            return;
+        } break;
+        case Bodo_Fs::abfs: {
+            ensure_pa_wrappers_imported();
+
+            std::string path =
+                is_parallel ? (std::filesystem::path(dirname) / fname).string()
+                            : fname;
+            arrow::fs::AzureOptions opts;
+            arrow::Result<arrow::fs::AzureOptions> opts_res =
+                arrow::fs::AzureOptions::FromUri(path, &path);
+            CHECK_ARROW_AND_ASSIGN(opts_res, "AzureOptions::FromUri", opts,
+                                   file_type);
+
+            PyObject *fs_io_mod = PyImport_ImportModule("bodo.io.fs_io");
+            PyObject *abfs_get_fs =
+                PyObject_GetAttrString(fs_io_mod, "abfs_get_fs");
+            PyObject *storage_options = PyDict_New();
+            if (opts.account_name != "") {
+                PyObject *storage_account_py_str =
+                    PyUnicode_FromString(opts.account_name.c_str());
+                PyDict_SetItemString(storage_options, "account_name",
+                                     storage_account_py_str);
+                Py_DECREF(storage_account_py_str);
+            }
+            PyObject *fs_pyobject =
+                PyObject_CallFunction(abfs_get_fs, "O", storage_options);
+            std::shared_ptr<::arrow::fs::FileSystem> fs;
+            CHECK_ARROW_AND_ASSIGN(arrow::py::unwrap_filesystem(fs_pyobject),
+                                   "AzureFileSystem::unwrap_filesystem", fs,
+                                   file_type);
+
+            Py_DECREF(fs_pyobject);
+            Py_DECREF(storage_options);
+            Py_DECREF(abfs_get_fs);
+            Py_DECREF(fs_io_mod);
+            arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+                fs->OpenOutputStream(path);
+            CHECK_ARROW_AND_ASSIGN(result, "AzureFileSystem::OpenOutputStream",
+                                   *out_stream, file_type)
+        } break;
+        case Bodo_Fs::gcs: {
+            PyObject *gcs_func_obj = nullptr;
+            import_fs_module(fs_option, file_type, f_mod);
+            get_get_fs_pyobject(fs_option, file_type, f_mod, gcs_func_obj);
+            gcs_get_fs_t gcs_get_fs =
+                (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, NULL);
+            std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
+            gcs_get_fs(&fs);
+            if (is_parallel) {
+                std::filesystem::path out_path(dirname);
+                out_path /= fname;
+                open_file_outstream_gcs(fs_option, file_type, out_path.string(),
+                                        fs, out_stream);
+            } else {
+                open_file_outstream_gcs(fs_option, file_type, fname, fs,
+                                        out_stream);
+            }
+
+            Py_DECREF(f_mod);
+            Py_DECREF(gcs_func_obj);
+        } break;
+        default: {
+            throw std::runtime_error(
+                "open output stream: unrecognized filesystem");
+        }
     }
 }
 

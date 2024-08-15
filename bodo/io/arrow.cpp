@@ -91,7 +91,8 @@ int64_t pq_write_py_entry(const char* _path_name, table_info* table,
                           const char* idx_name, const char* bucket_region,
                           int64_t row_group_size, const char* prefix,
                           bool convert_timedelta_to_int64, const char* tz,
-                          bool downcast_time_ns_to_us, bool create_dir);
+                          bool downcast_time_ns_to_us, bool create_dir,
+                          bool force_hdfs);
 
 void pq_write_create_dir_py_entry(const char* _path_name);
 

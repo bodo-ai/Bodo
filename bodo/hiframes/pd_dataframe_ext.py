@@ -4637,6 +4637,7 @@ def to_sql_overload(
         "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
         "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
         "                True,\n"  # Create directory
+        "                True,\n"  # Use HDFS for abfs paths until arrow AzureFileSystem supports SAS tokens
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
         # If needed, upload local parquet to internal stage using objmode PUT

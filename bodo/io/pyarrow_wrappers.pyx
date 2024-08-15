@@ -7,6 +7,9 @@ from pyarrow.includes.libarrow_dataset cimport CDataset, CFragment
 from pyarrow._compute cimport Expression
 from pyarrow.includes.libarrow cimport CExpression
 
+from pyarrow._fs cimport FileSystem
+from pyarrow.includes.libarrow_fs cimport CFileSystem
+
 cdef api bint pyarrow_is_expression(object expression):
     return isinstance(expression, Expression)
 
@@ -59,3 +62,21 @@ cdef api object pyarrow_wrap_fragment(const shared_ptr[CFragment]& cfrag):
     cdef Fragment frag = Fragment.__new__(Fragment)
     frag.init(cfrag)
     return frag 
+
+
+cdef api bint pyarrow_is_filesystem(object filesystem):
+    return isinstance(filesystem, FileSystem)
+
+cdef api shared_ptr[CFileSystem] pyarrow_unwrap_filesystem(object filesystem):
+    cdef FileSystem f
+    if pyarrow_is_filesystem(filesystem):
+        f = <FileSystem>(filesystem)
+        return f.unwrap()
+
+    return shared_ptr[CFileSystem]()
+
+
+cdef api object pyarrow_wrap_filesystem(const shared_ptr[CFileSystem]& cfilesystem):
+    cdef FileSystem filesystem = FileSystem.__new__(FileSystem)
+    filesystem.init(cfilesystem)
+    return filesystem 

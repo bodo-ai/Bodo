@@ -561,50 +561,6 @@ def test_dynamic_scalar_filter_pushdown(memory_leak_check):
             )
 
 
-@pytest.fixture(scope="session")
-def create_core_site():
-    # Initialize the temporary directory where the core-site file
-    # will be written
-    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
-
-    storage_account_name = os.environ["AZURE_STORAGE_ACCOUNT_NAME"]
-    access_key = os.environ["AZURE_STORAGE_ACCOUNT_KEY"]
-
-    # Define the core-site for your regular ADLS/HDFS read/write
-    # operations
-    CORE_SITE_SPEC = f"""
-    <configuration>
-        <property>
-            <name>fs.abfs.impl</name>
-            <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
-        </property>
-        <property>
-            <name>fs.abfss.impl</name>
-            <value>org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem</value>
-        </property>
-        <property>
-            <name>fs.azure.account.auth.type.{storage_account_name}.dfs.core.windows.net</name>
-            <value>SharedKey</value>
-        </property>
-        <property>
-            <name>fs.azure.account.key.{storage_account_name}.dfs.core.windows.net</name>
-            <value>{access_key}</value>
-            <description> The ADLS storage account access key itself.</description>
-        </property>
-        <property>
-            <name>hadoop.tmp.dir</name>
-            <value>/tmp</value>
-        </property>
-        </configuration>
-    """
-
-    # Write it to the temporary core-site file
-    # Do it on one rank on every node to avoid filesystem conflicts.
-    if bodo.get_rank() in bodo.get_nodes_first_ranks():
-        with open(bodo.HDFS_CORE_SITE_LOC, "w") as f:
-            f.write(CORE_SITE_SPEC)
-
-
 def test_azure_basic_read(memory_leak_check):
     """
     Test reading an Iceberg table from Snowflake in SQL with
@@ -642,7 +598,7 @@ def test_azure_basic_read(memory_leak_check):
     )
 
 
-def test_azure_basic_write(create_core_site, memory_leak_check):
+def test_azure_basic_write(memory_leak_check):
     """
     Test writing an Iceberg table from Snowflake in SQL with
     Azure.
