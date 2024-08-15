@@ -2744,7 +2744,7 @@ def test_decimal_to_float_functions(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3802,3 +3802,139 @@ def test_decimal_factorial(df, expr, answer, memory_leak_check):
         )
     finally:
         bodo.bodo_use_decimal = False
+
+
+@pytest.mark.parametrize(
+    "df, ans",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            Decimal("40.7127"),
+                            Decimal("99.88"),
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("-97.45"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                    "B": pd.array(
+                        [
+                            Decimal("-74.0059"),
+                            Decimal("123.45"),
+                            Decimal("44.984"),
+                            Decimal("65.321"),
+                            Decimal("45.67"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                    "C": pd.array(
+                        [
+                            Decimal("34.0500"),
+                            Decimal("-32.56"),
+                            None,
+                            Decimal("-135.5243"),
+                            Decimal("200.45"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                    "D": pd.array(
+                        [
+                            Decimal("-118.2500"),
+                            Decimal("190"),
+                            Decimal("2.34"),
+                            Decimal("-180.66"),
+                            Decimal("350.5"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            # Numbers from Snowflake
+            # SELECT HAVERSINE(40.712,-74.005, 34.0500, -118.250); ...
+            pd.array(
+                [
+                    3936.465802926,
+                    14010.290778799,
+                    None,
+                    11100.369881961,
+                    7275.318467481,
+                ],
+            ),
+            id="all-decimal",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.array(
+                        [
+                            Decimal("40.7127"),
+                            Decimal("99.88"),
+                            Decimal("512.67"),
+                            Decimal("35.5233"),
+                            Decimal("-97.45"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                    "B": pd.array(
+                        [1.15, 342.93, 1234.5, -12.5, 143.5],
+                        dtype=pd.Float64Dtype(),
+                    ),
+                    "C": pd.array(
+                        [
+                            -118.2500,
+                            190,
+                            2.34,
+                            -180.66,
+                            350.5,
+                        ],
+                        dtype=pd.Float64Dtype(),
+                    ),
+                    "D": pd.array(
+                        [
+                            Decimal("34.0500"),
+                            Decimal("-32.56"),
+                            None,
+                            Decimal("-135.5243"),
+                            Decimal("200.45"),
+                        ],
+                        dtype=pd.ArrowDtype(pa.decimal128(20, 10)),
+                    ),
+                }
+            ),
+            pd.array(
+                [
+                    16806.072534259,
+                    10059.991237631,
+                    None,
+                    7032.187957063,
+                    9408.354442329,
+                ],
+            ),
+            id="mix-float-decimal",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_haversine_decimal(df, ans, memory_leak_check):
+    """
+    Test correctness of haverine with decimal input
+    """
+    query = "SELECT HAVERSINE(A, B, C, D) AS res FROM TABLE1"
+    ctx = {"TABLE1": df}
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            expected_output=pd.DataFrame({"RES": ans}),
+            rtol=1e-04,
+            sort_output=False,
+            check_dtype=False,
+        )
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
