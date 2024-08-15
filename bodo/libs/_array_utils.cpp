@@ -4,6 +4,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
+#include "_stream_join.h"
 
 #include <arrow/array/array_nested.h>
 #include <arrow/compute/cast.h>
@@ -2548,21 +2549,24 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
  */
 std::shared_ptr<table_info> concat_tables(
     const std::vector<std::shared_ptr<table_info>>& table_chunks) {
-    // get number of total rows for TableBuilder
-    int64_t n_total_rows = 0;
-    for (std::shared_ptr<table_info> table : table_chunks) {
-        n_total_rows += table->nrows();
-    }
     assert(table_chunks.size() > 0);
-    TableBuilder table_builder(table_chunks[0], n_total_rows);
-    for (std::shared_ptr<table_info> table : table_chunks) {
-        table_builder.append(bodo_table_to_arrow(table));
+
+    auto schema = table_chunks[0]->schema();
+    // TODO(aneesh) take dict_builders as an optional parameter
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+    for (auto& col : schema->column_types) {
+        // Note that none of the columns are "keys" from the perspective of the
+        // dictionary builder, which is referring to keys for hashing/join
+        dict_builders.emplace_back(
+            create_dict_builder_for_array(col->copy(), false));
     }
 
-    std::shared_ptr<table_info> out_table =
-        std::shared_ptr<table_info>(table_builder.get_table());
+    TableBuildBuffer table_builder(std::move(schema), dict_builders);
+    for (auto& table : table_chunks) {
+        table_builder.UnifyTablesAndAppend(table, dict_builders);
+    }
 
-    return out_table;
+    return table_builder.data_table;
 }
 
 std::shared_ptr<array_info> concat_arrays(

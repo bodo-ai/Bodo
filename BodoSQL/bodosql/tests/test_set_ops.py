@@ -375,7 +375,7 @@ def test_union_string_restrictions(
     query = (
         f"(SELECT A, B, C FROM table1 WHERE LENGTH(A) = 5) {union_cmds} "
         f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {union_cmds} "
-        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) {union_cmds} "
+        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B, A LIMIT 2) {union_cmds} "
         f"(SELECT C, B, A FROM table1)"
     )
     check_query(
@@ -392,7 +392,8 @@ def test_intersect_string_restrictions(
     """
     query = (
         f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {intersect_cmds} "
-        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) {intersect_cmds} "
+        # Note that we need the order by "A" in this test to break ties.
+        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B, A LIMIT 2) {intersect_cmds} "
         f"(SELECT B, C, A FROM table1)"
     )
     check_query(
@@ -408,7 +409,7 @@ def test_except_string_restrictions(
     """
     query = (
         f"(SELECT CASE WHEN LENGTH(B) > 4 THEN B END, C, A FROM table1 ORDER BY C) {except_cmds} "
-        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B LIMIT 2) "
+        f"(SELECT B, C, A FROM table1 WHERE LENGTH(A) = 5 AND LENGTH(B) > 3 ORDER BY B, A LIMIT 2) "
     )
     check_query(
         query, bodosql_string_types, spark_info, check_names=False, check_dtype=False

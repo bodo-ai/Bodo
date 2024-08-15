@@ -1,5 +1,6 @@
 #pragma once
 #include "_bodo_common.h"
+#include "_dict_builder.h"
 
 /// Helper functions
 
@@ -11,13 +12,16 @@
  * @param pool IBufferPool to use for allocating the underlying data
  * buffers.
  * @param mm MemoryManager for the 'pool'.
+ * @param dict builder dictionary buiders to use for populating dictionary typed
+ * arrays
  * @return std::shared_ptr<table_info> allocated table
  */
 std::shared_ptr<table_info> alloc_table(
     const std::shared_ptr<bodo::Schema>& schema,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
-        bodo::default_buffer_memory_manager());
+        bodo::default_buffer_memory_manager(),
+    std::vector<std::shared_ptr<DictionaryBuilder>>* dict_builders = nullptr);
 
 /**
  * @brief Allocate an empty table with the same schema

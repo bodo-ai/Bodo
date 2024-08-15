@@ -304,7 +304,8 @@ void TableBuildBuffer::UnsafeAppendBatch(
                     assert(false);
                     break;
             }
-        } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+        } else if (in_arr->arr_type == bodo_array_type::NUMPY ||
+                   in_arr->arr_type == bodo_array_type::CATEGORICAL) {
             switch (in_arr->dtype) {
                 case Bodo_CTypes::INT8:
                     APPEND_BATCH(bodo_array_type::NUMPY, Bodo_CTypes::INT8);

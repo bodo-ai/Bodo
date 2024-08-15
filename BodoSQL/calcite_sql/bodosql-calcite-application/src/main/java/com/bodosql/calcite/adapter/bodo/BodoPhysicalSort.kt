@@ -260,7 +260,7 @@ class BodoPhysicalSort(
     override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
         val typeSystem = cluster.typeFactory.typeSystem
         if (typeSystem is BodoSQLRelDataTypeSystem) {
-            if (typeSystem.enableStreamingSort) {
+            if (typeSystem.enableStreamingSort && this.getCollation().fieldCollations.size > 0) {
                 return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
             }
         }

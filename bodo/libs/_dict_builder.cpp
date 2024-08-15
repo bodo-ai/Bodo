@@ -5,8 +5,10 @@
 #include <memory>
 
 #include "_array_hash.h"
+#include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_query_profile_collector.h"
+#include "_shuffle.h"
 #include "_table_builder.h"
 
 /* -------------------------- DictBuilderMetrics -------------------------- */
@@ -426,8 +428,7 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
                 unified_children.emplace_back(child_arr);
             } else {
                 unified_children.emplace_back(
-                    child_builder->UnifyDictionaryArray(child_arr, use_cache,
-                                                        unify_empty));
+                    child_builder->UnifyDictionaryArray(child_arr, use_cache));
             }
         }
 
@@ -737,4 +738,276 @@ void set_array_dict_from_array(std::shared_ptr<array_info>& out_arr,
     if (out_arr->arr_type == bodo_array_type::DICT) {
         out_arr->child_arrays[0] = in_arr->child_arrays[0];
     }
+}
+
+/**
+ * @brief Updates a dictionary array to drop any duplicates from its
+ * dictionary. If we gather_global_dict then we first unify the dictionaries
+ * on all ranks to become consistent. We also drop the nulls in the
+ * dictionary. The null bit of the elements in the indices array that were
+ * pointing to nulls in the dictionary, are set to false to indicate null
+ * instead.
+ *
+ * @param dict_array Dictionary array to update.
+ * @param gather_global_dict Should we gather the dictionaries across all
+ * ranks?
+ * @param sort_dictionary Should we sort the dictionary?
+ */
+void update_local_dictionary_remove_duplicates(
+    std::shared_ptr<array_info> dict_array, bool gather_global_dict,
+    bool sort_dictionary,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager()) {
+    std::shared_ptr<array_info> local_dictionary = dict_array->child_arrays[0];
+    std::shared_ptr<array_info> global_dictionary;
+    // If we don't have a global dictionary with unique values
+    // then we need to drop duplicates on the local data and then
+    // gather. If we already the global dictionary but there are duplicates
+    // then we can just skip the gather step. Here we assume that
+    // is_globally_replicated will be synchronized across all ranks
+    // for the string array.
+
+    // table containing a single column with the dictionary values (not
+    // indices/codes)
+    std::shared_ptr<table_info> in_dictionary_table =
+        std::make_shared<table_info>();
+    in_dictionary_table->columns.push_back(local_dictionary);
+    // get distributed global dictionary
+
+    // We always want to drop the NAs from the dictionary itself. We will
+    // handle the indices pointing to the null during the re-assignment.
+    std::shared_ptr<table_info> dist_dictionary_table =
+        drop_duplicates_table(in_dictionary_table, gather_global_dict, 1, 0,
+                              /*dropna=*/true, false, pool, mm);
+    in_dictionary_table.reset();
+
+    // replicate the global dictionary on all ranks
+    // allgather
+    std::shared_ptr<table_info> global_dictionary_table;
+    if (gather_global_dict) {
+        // TODO: add pool/mm support in gather_table
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, which doesn't run in parallel.
+        global_dictionary_table =
+            gather_table(dist_dictionary_table, 1, true, gather_global_dict);
+        dist_dictionary_table.reset();
+    } else {
+        global_dictionary_table = dist_dictionary_table;
+    }
+    global_dictionary = global_dictionary_table->columns[0];
+    global_dictionary_table.reset();
+
+    // Sort dictionary locally
+    // XXX Should we always sort?
+    if (sort_dictionary) {
+        // TODO: add pool/mm support in sort_values_array_local
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, which doesn't need sorting.
+        // sort_values_array_local decrefs the input array_info (but doesn't
+        // delete it). It returns a new array_info.
+        global_dictionary =
+            sort_values_array_local(global_dictionary, false, 1, 1);
+    }
+
+    // XXX this doesn't propagate to Python
+    dict_array->child_arrays[0] = global_dictionary;
+    // If we didn't gather data, then the dictionary should propagate
+    // if it was already global.
+    if (gather_global_dict) {
+        global_dictionary->is_globally_replicated = true;
+    } else {
+        global_dictionary->is_globally_replicated =
+            local_dictionary->is_globally_replicated;
+    }
+    global_dictionary->is_locally_unique = true;
+
+    // -------------
+    // calculate mapping from old (local) indices to global ones
+    const uint32_t hash_seed = SEED_HASH_JOIN;
+    const size_t local_dict_len = static_cast<size_t>(local_dictionary->length);
+    const size_t global_dict_len =
+        static_cast<size_t>(global_dictionary->length);
+    // TODO: add pool/mm support for hashes
+    // NOTE: pool/mm were added for streaming groupby mode
+    // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+    // duplicates, where the number of dict elements is small (limited by
+    // batch size). Therefore, tracking memory of hashes isn't necessary.
+    std::unique_ptr<uint32_t[]> hashes_local_dict =
+        std::make_unique<uint32_t[]>(local_dict_len);
+    std::unique_ptr<uint32_t[]> hashes_global_dict =
+        std::make_unique<uint32_t[]>(global_dict_len);
+    hash_array(hashes_local_dict.get(), local_dictionary, local_dict_len,
+               hash_seed, false, /*global_dict_needed=*/false);
+    hash_array(hashes_global_dict.get(), global_dictionary, global_dict_len,
+               hash_seed, false, /*global_dict_needed=*/false);
+
+    HashDict hash_fct{global_dict_len, hashes_global_dict, hashes_local_dict};
+    KeyEqualDict equal_fct{global_dict_len, global_dictionary,
+                           local_dictionary /*, is_na_equal*/};
+    // dict_value_to_global_index will map a dictionary value (string) to
+    // its index in the global dictionary array. We don't want strings as
+    // keys of the hash map because that would be inefficient in terms of
+    // storage and string copies. Instead, we will use the global and local
+    // dictionary indices as keys, and use these indices to refer to the
+    // strings. Because the index space of global and local dictionaries
+    // overlap, to have the hash map distinguish between them, indices
+    // referring to the local dictionary are incremented by
+    // 'global_dict_len' before accessing the map. For example: global
+    // dictionary: ["ABC", "CC", "D"]. Keys that refer to these strings: [0,
+    // 1, 2] local dictionary: ["CC", "D"]. Keys that refer to these
+    // strings: [3, 4] Also see HashDict and KeyEqualDict to see how keys
+    // are mapped to get the hashes and to compare values
+
+    bodo::unord_map_container<size_t, dict_indices_t, HashDict, KeyEqualDict>
+        dict_value_to_global_index({}, hash_fct, equal_fct, pool);
+    dict_value_to_global_index.reserve(global_dict_len);
+
+    dict_indices_t next_index = 1;
+    for (size_t i = 0; i < global_dict_len; i++) {
+        dict_indices_t& index = dict_value_to_global_index[i];
+        if (index == 0) {
+            index = next_index++;
+        }
+    }
+
+    bodo::vector<dict_indices_t> local_to_global_index(local_dict_len, pool);
+    for (size_t i = 0; i < local_dict_len; i++) {
+        // if val is not in new_map, inserts it and returns next code
+        dict_indices_t index = dict_value_to_global_index[i + global_dict_len];
+        local_to_global_index[i] = index - 1;
+    }
+    dict_value_to_global_index.clear();
+    dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
+    hashes_local_dict.reset();
+    hashes_global_dict.reset();
+    local_dictionary.reset();
+
+    // --------------
+    // remap old (local) indices to global ones
+
+    // TODO? if there is only one reference to dict_array remaining, I can
+    // modify indices in place, otherwise I have to allocate a new array if
+    // I am not changing the dictionary of the input array in Python side
+    bool inplace =
+        (dict_array->child_arrays[1]->buffers[0]->getMeminfo()->refct == 1);
+    if (!inplace) {
+        // TODO: add pool/mm support for copy_array
+        // NOTE: pool/mm were added for streaming groupby mode
+        // (https://bodo.atlassian.net/browse/BSE-1139) for dropping dict
+        // duplicates, where the number of dict elements is small (limited by
+        // batch size). Therefore, tracking memory of indices in copy isn't
+        // necessary.
+        std::shared_ptr<array_info> dict_indices =
+            copy_array(dict_array->child_arrays[1]);
+        dict_array->child_arrays[1] = dict_indices;
+    }
+
+    uint8_t* null_bitmask = (uint8_t*)dict_array->null_bitmask();
+    for (size_t i = 0; i < dict_array->child_arrays[1]->length; i++) {
+        if (GetBit(null_bitmask, i)) {
+            dict_indices_t& index =
+                dict_array->child_arrays[1]
+                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(i);
+            if (local_to_global_index[index] < 0) {
+                // This has to be an NA since all values in local dictionary
+                // (except NA) _must_ be in the global/deduplicated
+                // dictionary, and therefore have an index >= 0.
+                SetBitTo(null_bitmask, i, false);
+                // Set index to 0 to avoid any indexing issues later on.
+                index = 0;
+            } else {
+                index = local_to_global_index[index];
+            }
+        }
+    }
+}
+
+void drop_duplicates_local_dictionary(
+    std::shared_ptr<array_info> dict_array, bool sort_dictionary_if_modified,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    if (dict_array->child_arrays[0]->is_locally_unique) {
+        return;
+    }
+    update_local_dictionary_remove_duplicates(std::move(dict_array), false,
+                                              sort_dictionary_if_modified, pool,
+                                              std::move(mm));
+}
+
+array_info* drop_duplicates_local_dictionary_py_entry(
+    array_info* dict_array, bool sort_dictionary_if_modified) {
+    try {
+        std::shared_ptr<array_info> dict_arr =
+            std::shared_ptr<array_info>(dict_array);
+        drop_duplicates_local_dictionary(dict_arr, sort_dictionary_if_modified);
+        // return a new array_info* to Python to own
+        return new array_info(*dict_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
+void convert_local_dictionary_to_global(std::shared_ptr<array_info> dict_array,
+                                        bool is_parallel,
+                                        bool sort_dictionary_if_modified) {
+    if (!is_parallel || dict_array->child_arrays[0]->is_globally_replicated) {
+        // If data is replicated we just return and rely on other kernels
+        // to avoid checking for global. This is because some C++ functions
+        // use is_parallel=False to implement certain steps of the
+        // is_parallel=True implementation.
+        return;
+    }
+    update_local_dictionary_remove_duplicates(std::move(dict_array), true,
+                                              sort_dictionary_if_modified);
+}
+
+void make_dictionary_global_and_unique(std::shared_ptr<array_info> dict_array,
+                                       bool is_parallel,
+                                       bool sort_dictionary_if_modified) {
+    convert_local_dictionary_to_global(dict_array, is_parallel,
+                                       sort_dictionary_if_modified);
+    drop_duplicates_local_dictionary(std::move(dict_array),
+                                     sort_dictionary_if_modified);
+}
+
+void recursive_make_array_global_and_unique(std::shared_ptr<array_info>& array,
+                                            bool parallel) {
+    switch (array->arr_type) {
+        case bodo_array_type::ARRAY_ITEM:
+        case bodo_array_type::MAP:
+        case bodo_array_type::STRUCT: {
+            for (auto& child : array->child_arrays) {
+                recursive_make_array_global_and_unique(child, parallel);
+            }
+            break;
+        }
+        case bodo_array_type::DICT: {
+            make_dictionary_global_and_unique(array, parallel);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void recursive_make_dict_global_and_unique(
+    std::shared_ptr<DictionaryBuilder>& dict_builder) {
+    if (!dict_builder) {
+        return;
+    }
+    if (!dict_builder->child_dict_builders.empty()) {
+        for (auto& child_builder : dict_builder->child_dict_builders) {
+            recursive_make_dict_global_and_unique(child_builder);
+        }
+        return;
+    }
+
+    std::shared_ptr<array_info> empty_dict_array =
+        create_dict_string_array(dict_builder->dict_buff->data_array,
+                                 alloc_nullable_array(0, Bodo_CTypes::INT32));
+    make_dictionary_global_and_unique(empty_dict_array, true);
+    dict_builder->UnifyDictionaryArray(empty_dict_array);
 }

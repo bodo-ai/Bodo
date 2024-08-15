@@ -4,9 +4,9 @@
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_dict_builder.h"
 #include "_groupby_common.h"
 #include "_groupby_hashing.h"
-#include "_shuffle.h"
 
 /**
  * @brief Perform mode operation on an array and store the result in out_arr.

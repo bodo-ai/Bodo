@@ -1,8 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_hash.h"
-#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_dict_builder.h"
 #include "_distributed.h"
 #include "_join.h"
 #include "_join_hashing.h"

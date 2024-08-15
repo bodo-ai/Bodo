@@ -299,10 +299,12 @@ struct StreamSortState {
 
     // Type of input table
     std::shared_ptr<bodo::Schema> schema;
+
+    // Dictionary builders
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+
     // Empty table created with the same schema as the input
     std::shared_ptr<table_info> dummy_output_chunk;
-
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
 
     int64_t chunk_size;
     // builder will create a sorted list from the chunks passed to consume batch

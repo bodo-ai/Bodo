@@ -127,10 +127,10 @@ runtime_join_filters_copy_threshold = os.environ.get(
 )
 # TODO(aneesh) remove this flag once streaming sort is fully implemented
 # Flag used to enable streaming sort
-enable_streaming_sort = os.environ.get("BODO_ENABLE_STREAMING_SORT", "0") != "0"
+enable_streaming_sort = os.environ.get("BODO_ENABLE_STREAMING_SORT", "1") != "0"
 # Flag used to enable streaming sort
 enable_streaming_sort_limit_offset = (
-    os.environ.get("BODO_ENABLE_STREAMING_SORT_LIMIT_OFFSET", "0") != "0"
+    os.environ.get("BODO_ENABLE_STREAMING_SORT_LIMIT_OFFSET", "1") != "0"
 )
 # Flag used to enable creating theta sketches for columns when writing with Iceberg
 enable_theta_sketches = os.environ.get("BODO_ENABLE_THETA_SKETCHES", "1") != "0"

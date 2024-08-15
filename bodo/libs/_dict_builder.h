@@ -320,3 +320,86 @@ void set_array_dict_from_builder(
  */
 void set_array_dict_from_array(std::shared_ptr<array_info>& out_arr,
                                const std::shared_ptr<array_info>& in_arr);
+
+/**
+ * @brief Update dictionary encoded array to drop any duplicates in its
+ * local copy of the dictionary. If the dictionary is already global then
+ * this maintains the global dictionary because the operations are
+ * deterministic.
+ *
+ * @param dict_array The dictionary array whose dictionary needs updating.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we
+ * need to gather the data? Note: The output should not assume the data is
+ * sorted.
+ */
+void drop_duplicates_local_dictionary(
+    std::shared_ptr<array_info> dict_array,
+    bool sort_dictionary_if_modified = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
+ * @brief Python wrapper for drop_duplicates_local_dictionary
+ *
+ * @param dict_array The dictionary array whose dictionary needs updating.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we
+ * need to gather the data? Note: The output should not assume the data is
+ * sorted.
+ * @return updated dictionary array (same as input since updated inplace, just a
+ * new reference for Python)
+ */
+array_info* drop_duplicates_local_dictionary_py_entry(
+    array_info* dict_array, bool sort_dictionary_if_modified = false);
+
+/**
+ * @brief Update a dictionary encoded array to gather all dictionary values onto
+ * each rank. If the dictionary is updated then we also drop duplicates and may
+ * sort the dictionary.
+ *
+ * @param dict_array The dictionary array whose dictionary needs updating.
+ * @param is_parallel Is the input distributed? If so we must gather the
+ * dictionary from all ranks. If not we just mark the dictionary as global.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we
+ * modify the dictionary? Note: The output should not assume the data is sorted.
+ */
+void convert_local_dictionary_to_global(
+    std::shared_ptr<array_info> dict_array, bool is_parallel,
+    bool sort_dictionary_if_modified = false);
+
+/**
+ * @brief Update a dictionary encoded array to gather all dictionary values onto
+ * each rank and then drop any duplicates. If the dictionary is updated then we
+ * may optionally sort the dictionary. Note that the dictionary will NOT be
+ * replicated, but will be guaranteed to contain the same keys across all hosts
+ * (but in different orders)
+ *
+ * @param dict_array
+ * @param is_parallel
+ * @param sort_dictionary_if_modified
+ */
+void make_dictionary_global_and_unique(
+    std::shared_ptr<array_info> dict_array, bool is_parallel,
+    bool sort_dictionary_if_modified = false);
+
+/**
+ * @brief call make_dictionary_global_and_unique, recursing on child arrays for
+ * nested data types. Note that the dictionary will NOT be replicated, but will
+ * be guaranteed to contain the same keys across all hosts (but in different
+ * orders)
+ *
+ * @param dict_array
+ * @param is_parallel
+ * @param sort_dictionary_if_modified
+ */
+void recursive_make_array_global_and_unique(std::shared_ptr<array_info>& array,
+                                            bool parallel);
+
+/**
+ * @brief make a dictionary builder global and unique by recursively calling
+ * make_dictionary_global_and_unique on nested data types
+ *
+ * @param dict_builder dictionary builder to be made global and unique
+ */
+void recursive_make_dict_global_and_unique(
+    std::shared_ptr<DictionaryBuilder>& dict_builder);
