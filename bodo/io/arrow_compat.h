@@ -1,6 +1,7 @@
 #pragma once
 #include <arrow/compute/expression.h>
 #include <arrow/dataset/dataset.h>
+#include <arrow/filesystem/filesystem.h>
 #include <arrow/python/pyarrow.h>
 
 namespace arrow::py {
@@ -40,6 +41,7 @@ int import_pyarrow_wrappers();
 DECLARE_WRAP_FUNCTIONS(dataset, std::shared_ptr<arrow::dataset::Dataset>);
 DECLARE_WRAP_FUNCTIONS(fragment, std::shared_ptr<arrow::dataset::Fragment>);
 DECLARE_WRAP_FUNCTIONS(expression, arrow::compute::Expression);
+DECLARE_WRAP_FUNCTIONS(filesystem, std::shared_ptr<arrow::fs::FileSystem>);
 }  // namespace py
 
 }  // namespace arrow

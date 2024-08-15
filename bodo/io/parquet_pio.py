@@ -1759,6 +1759,7 @@ def parquet_write_table_cpp(
     timestamp_tz,
     downcast_time_ns_to_us,
     create_dir,
+    force_hdfs=False,
 ):
     """
     Call C++ parquet write function
@@ -1788,6 +1789,7 @@ def parquet_write_table_cpp(
                 lir.IntType(8).as_pointer(),  # tz
                 lir.IntType(1),  # downcast_time_ns_to_us
                 lir.IntType(1),  # create_dir
+                lir.IntType(1),  # force_hdfs
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -1819,6 +1821,7 @@ def parquet_write_table_cpp(
             types.voidptr,  # tz
             types.boolean,  # downcast_time_ns_to_us
             types.boolean,  # create dir
+            types.boolean,  # force_hdfs
         ),
         codegen,
     )

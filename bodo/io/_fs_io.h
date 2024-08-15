@@ -13,7 +13,7 @@
 #include "_bodo_file_reader.h"
 
 struct Bodo_Fs {
-    enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3 };
+    enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3, abfs = 4 };
 };
 
 // TODO gcs reader
@@ -56,12 +56,16 @@ std::string gen_pieces_file_name(int myrank, int num_ranks,
  * @param fname: name of file to write (exclude prefix, excludes path)
  * @param orig_path: name of file to write (include prefix & path)
  * @param path_name: name of file to write (exclude prefix, include path)
+* @param force_hdfs: Force HDFS filesystem type for abfs paths, needed for
+Snowflake Write until
+* arrow AzureFileSystem suports SAS tokens
  */
 void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          const std::string &prefix, const std::string &suffix,
                          int myrank, int num_ranks, Bodo_Fs::FsEnum *fs,
                          std::string *dirname, std::string *fname,
-                         std::string *orig_path, std::string *path_name);
+                         std::string *orig_path, std::string *path_name,
+                         bool force_hdfs = false);
 
 /**
  * @brief Determine the arrow file system to use based on the file path.
