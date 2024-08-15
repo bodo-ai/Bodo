@@ -1563,10 +1563,12 @@ def test_iceberg_metrics_collection(
     assert "limit_nrows" in init_metrics_dict
     assert "create_dict_encoding_from_strings" in init_metrics_dict
     assert "n_str_as_dict_cols" in init_metrics_dict
-    assert "get_ds_exact_row_counts_time" in init_metrics_dict
-    assert "get_ds_exact_row_counts_recreated_frags" in init_metrics_dict
     assert "force_row_level" in init_metrics_dict
     assert "row_level" in init_metrics_dict
+    assert "get_ds_exact_row_counts_time" in init_metrics_dict
+    assert "get_ds_file_frags_creation_time" in init_metrics_dict
+    assert "get_ds_get_row_counts_nrgs" in init_metrics_dict
+    assert "get_ds_get_row_counts_total_bytes" in init_metrics_dict
 
     for k in [
         "get_ds_time",
@@ -1575,18 +1577,13 @@ def test_iceberg_metrics_collection(
         "local_rows_to_read",
         "local_n_pieces_to_read_from",
         "get_ds_file_list_time",
+        "get_ds_file_to_schema_time_us",
         "get_ds_get_fs_time",
         "get_ds_n_files_analyzed",
-        "get_ds_file_frags_creation_time",
-        "get_ds_file_frags_fetch_md_time",
         "get_ds_get_sg_id_time",
         "get_ds_sort_by_sg_id_time",
         "get_ds_nunique_sgs_seen",
-        "get_ds_rg_filtering_time",
-        "get_ds_schema_validation_time",
-        "get_ds_get_row_counts_nrgs",
         "get_ds_get_row_counts_nrows",
-        "get_ds_get_row_counts_total_bytes",
         "get_ds_pieces_allgather_time",
         "get_ds_sort_all_pieces_time",
         "get_ds_assemble_ds_time",
@@ -1597,8 +1594,8 @@ def test_iceberg_metrics_collection(
         "init_arrow_reader_total_time",
         "distribute_pieces_or_rows_time",
     ]:
-        assert k in init_metrics_dict, k
-        assert init_metrics_dict[k] > 0
+        assert k in init_metrics_dict, f"Metric {k} is missing"
+        assert init_metrics_dict[k] > 0, f"Metric {k} is {init_metrics_dict[k]}, not >0"
 
     for k in [
         "get_batch_time",

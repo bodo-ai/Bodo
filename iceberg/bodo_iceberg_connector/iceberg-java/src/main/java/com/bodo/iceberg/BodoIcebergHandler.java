@@ -7,7 +7,6 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,9 +17,7 @@ import javax.annotation.Nullable;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BlobMetadata;
 import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.DeleteFiles;
-import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
@@ -33,14 +30,11 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StatisticsFile;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
-import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
@@ -127,8 +121,7 @@ public class BodoIcebergHandler {
     // TableMetadata.newTableMetadata().
     // - This creates a 'freshSchema' using this code:
     AtomicInteger lastColumnId = new AtomicInteger(0);
-    Schema freshSchema = TypeUtil.assignFreshIds(bodoSchema, lastColumnId::incrementAndGet);
-    return freshSchema;
+    return TypeUtil.assignFreshIds(bodoSchema, lastColumnId::incrementAndGet);
   }
 
   /**
@@ -152,31 +145,10 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public List<BodoParquetInfo> getParquetInfo(FilterExpr filters) throws IOException {
-    Expression filter = filters.toExpr();
-    TableScan scan = catalog.loadTable(id).newScan().filter(filter);
-    List<BodoParquetInfo> parquetPaths = new ArrayList<>();
-
-    try (CloseableIterable<FileScanTask> fileTasks = scan.planFiles()) {
-      for (FileScanTask fileTask : fileTasks) {
-        // Set to null by default to save memory while we don't support deletes.
-        List<String> deletes = null;
-        // Check for any delete files.
-        List<DeleteFile> deleteFiles = fileTask.deletes();
-        if (!deleteFiles.isEmpty()) {
-          deletes = new LinkedList<>();
-          for (DeleteFile deleteFile : deleteFiles) {
-            deletes.add(deleteFile.path().toString());
-          }
-        }
-
-        parquetPaths.add(
-            new BodoParquetInfo(
-                fileTask.file().path().toString(), fileTask.start(), fileTask.length(), deletes));
-      }
-    }
-
-    return parquetPaths;
+  public Triple<
+          List<BodoParquetInfo>, Map<Integer, org.apache.arrow.vector.types.pojo.Schema>, Long>
+      getParquetInfo(FilterExpr filters) throws IOException {
+    return FileHandler.getParquetInfo(catalog.loadTable(id), filters);
   }
 
   /**

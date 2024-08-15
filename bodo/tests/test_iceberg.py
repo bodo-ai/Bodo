@@ -3295,12 +3295,15 @@ def test_merge_into_cow_write_api(
         snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
             conn, db_schema, table_name
         )
-        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
-            conn,
-            db_schema,
-            table_name,
-            None,
-        )[1]
+        old_fnames = [
+            x.orig_path
+            for x in bodo_iceberg_connector.get_bodo_parquet_info(
+                conn,
+                db_schema,
+                table_name,
+                None,
+            )[0]
+        ]
 
         # Write new file into warehouse location
         new_fname = "new_file.parquet"
@@ -3324,12 +3327,15 @@ def test_merge_into_cow_write_api(
         assert success, "MERGE INTO Commit Operation Failed"
 
         # See if the reported files to read is only the new file
-        new_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
-            conn,
-            db_schema,
-            table_name,
-            None,
-        )[1]
+        new_fnames = [
+            x.orig_path
+            for x in bodo_iceberg_connector.get_bodo_parquet_info(
+                conn,
+                db_schema,
+                table_name,
+                None,
+            )[0]
+        ]
 
         assert len(new_fnames) == 1 and new_fnames[0] == os.path.join(
             db_schema, table_name, "data", new_fname
@@ -3383,12 +3389,15 @@ def test_merge_into_cow_write_api_partitioned(
         snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
             conn, db_schema, table_name
         )
-        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
-            conn,
-            db_schema,
-            table_name,
-            None,
-        )[1]
+        old_fnames = [
+            x.orig_path
+            for x in bodo_iceberg_connector.get_bodo_parquet_info(
+                conn,
+                db_schema,
+                table_name,
+                None,
+            )[0]
+        ]
 
         # Write new partitioned files into warehouse location
         new_paths = []
@@ -3424,12 +3433,15 @@ def test_merge_into_cow_write_api_partitioned(
         assert success, "MERGE INTO Commit Operation Failed"
 
         # See if the reported files to read is only the new file
-        out_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
-            conn,
-            db_schema,
-            table_name,
-            None,
-        )[1]
+        out_fnames = [
+            x.orig_path
+            for x in bodo_iceberg_connector.get_bodo_parquet_info(
+                conn,
+                db_schema,
+                table_name,
+                None,
+            )[0]
+        ]
 
         assert set(out_fnames) == set(
             os.path.join(db_schema, table_name, "data", path) for path in new_paths
@@ -3475,12 +3487,15 @@ def test_merge_into_cow_write_api_snapshot_check(
         snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
             conn, db_schema, table_name
         )
-        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
-            conn,
-            db_schema,
-            table_name,
-            None,
-        )[1]
+        old_fnames = [
+            x.orig_path
+            for x in bodo_iceberg_connector.get_bodo_parquet_info(
+                conn,
+                db_schema,
+                table_name,
+                None,
+            )[0]
+        ]
 
         # Write new file into warehouse location
         new_fname = "new_file.parquet"

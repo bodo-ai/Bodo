@@ -3,85 +3,38 @@ API used to translate Java BodoParquetInfo objects into
 Python Objects usable inside Bodo.
 """
 import os
-from collections import namedtuple
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
+import pyarrow as pa
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import FilterExpr
 from bodo_iceberg_connector.py4j_support import get_java_table_handler
-
-# Named Tuple for Parquet info
-BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
+from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
 
 
-def bodo_connector_get_parquet_file_list(
-    conn_str: str, db_name: str, table: str, filters: Optional[FilterExpr]
-) -> Tuple[List[str], List[str]]:
-    """
-    Gets the list of files for use by Bodo. The port value here
-    is set and controlled by a default value for the bodo_iceberg_connector
-    package.
-    Here we return two lists:
-        List 1: The Iceberg paths that have been cleaned up. Here we standardize the s3
-        filepath and remove any "file:" header. In addition we convert files not on s3
-        to their absolute path
-        List 2: The Iceberg paths exactly as given. These may have various headers and
-        are generally relative paths.
-        For example if the absolute path was /Users/bodo/iceberg_db/my_table/part01.pq
-        and the iceberg directory is iceberg_db, then the path in list 1 would be
-        /Users/bodo/iceberg_db/my_table/part01.pq and the path in list 2 would be
-        iceberg_db/my_table/part01.pq.
-    """
-    pq_infos, warehouse_loc = get_bodo_parquet_info(conn_str, db_name, table, filters)
+@dataclass
+class IcebergParquetInfo:
+    """Named Tuple for Parquet info"""
 
-    if warehouse_loc is not None:
-        warehouse_loc = warehouse_loc.replace("s3a://", "s3://").removeprefix("file:")
-
-    # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
-    # a full path
-    # Replace Hadoop S3A URI scheme with regular S3 Scheme
-    file_paths = [x.filepath for x in pq_infos]
-
-    sanitized_paths = []
-    for path in file_paths:
-        if _has_uri_scheme(path):
-            res = (
-                path.replace("s3a://", "s3://")
-                .replace("wasbs://", "abfss://")
-                .replace("wasb://", "abfs://")
-                .replace("blob.core.windows.net", "dfs.core.windows.net")
-                .removeprefix("file:")
-            )
-        elif warehouse_loc is not None:
-            res = os.path.join(warehouse_loc, path)
-        else:
-            res = path
-        sanitized_paths.append(res)
-
-    return sanitized_paths, file_paths
-
-
-def bodo_connector_get_parquet_info(
-    warehouse, schema, table, filters: Optional[FilterExpr]
-):
-    """
-    Gets the BodoIcebergParquetInfo for use by Bodo. The port value here
-    is set and controlled by a default value for the bodo_iceberg_connector
-    package.
-    """
-    out, _ = get_bodo_parquet_info(warehouse, schema, table, filters)
-    return out
+    # Original path of the parquet file from Iceberg metadata
+    orig_path: str
+    # Standardized path to the parquet file for Bodo use
+    standard_path: str
+    # Number of rows in the parquet file from Iceberg metadata
+    row_count: int
+    # Iceberg Schema ID the parquet file was written with
+    schema_id: int
 
 
 def get_bodo_parquet_info(
-    conn_str: str, db_name: str, table: str, filters: Optional[FilterExpr]
-):
+    conn_str: str, db_name: str, table: str, filters: FilterExpr | None
+) -> tuple[list[IcebergParquetInfo], dict[int, pa.Schema], int]:
     """
-    Returns the BodoIcebergParquetInfo for a table.
+    Returns the IcebergParquetInfo for a table.
     Port is unused and kept in case we opt to switch back to py4j
     """
 
@@ -97,19 +50,73 @@ def get_bodo_parquet_info(
 
         filters = FilterExpr.default() if filters is None else filters
         filter_expr = filters.to_java()
-        java_parquet_infos = get_java_parquet_info(
-            bodo_iceberg_table_reader, filter_expr
-        )
+        java_out = bodo_iceberg_table_reader.getParquetInfo(filter_expr)
+        java_parquet_infos = java_out.getFirst()
+        java_all_schemas = java_out.getSecond()
+        get_file_to_schema_us = java_out.getThird() // 1000
 
     except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 
-    return java_to_python(java_parquet_infos), warehouse_loc
+    return (
+        java_pq_info_to_python(java_parquet_infos, warehouse_loc),
+        {
+            item.getKey(): arrow_schema_j2py(item.getValue())
+            for item in java_all_schemas.entrySet()
+        },
+        get_file_to_schema_us,
+    )
 
 
-def get_java_parquet_info(bodo_iceberg_table_reader, filter_expr):
-    """Returns the parquet info as a Java object"""
-    return bodo_iceberg_table_reader.getParquetInfo(filter_expr)
+def java_pq_info_to_python(
+    java_parquet_infos, warehouse_loc: str | None
+) -> list[IcebergParquetInfo]:
+    """
+    Converts an Iterable of Java BodoParquetInfo objects
+    to an equivalent list of IcebergParquetInfo.
+    """
+    pq_infos = []
+    for java_pq_info in java_parquet_infos:
+        if bool(java_pq_info.hasDeleteFile()):
+            raise RuntimeError(
+                "Iceberg Dataset contains DeleteFiles, which is not yet supported by Bodo"
+            )
+        orig_path = str(java_pq_info.getFilepath())
+        pq_infos.append(
+            IcebergParquetInfo(
+                orig_path,
+                standardize_path(orig_path, warehouse_loc),
+                int(java_pq_info.getRowCount()),
+                int(java_pq_info.getSchemaID()),
+            )
+        )
+    return pq_infos
+
+
+def standardize_path(path: str, warehouse_loc: str | None) -> str:
+    if warehouse_loc is not None:
+        warehouse_loc = warehouse_loc.replace("s3a://", "s3://").removeprefix("file:")
+
+    if _has_uri_scheme(path):
+        return (
+            path.replace("s3a://", "s3://")
+            .replace("wasbs://", "abfss://")
+            .replace("wasb://", "abfs://")
+            .replace("blob.core.windows.net", "dfs.core.windows.net")
+            .removeprefix("file:")
+        )
+    elif warehouse_loc is not None:
+        return os.path.join(warehouse_loc, path)
+    else:
+        return path
+
+
+def _has_uri_scheme(path: str):
+    """return True of path has a URI scheme, e.g. file://, s3://, etc."""
+    try:
+        return urlparse(path).scheme != ""
+    except:
+        return False
 
 
 def bodo_connector_get_total_num_pq_files_in_table(
@@ -129,40 +136,7 @@ def bodo_connector_get_total_num_pq_files_in_table(
             table,
         )
 
-        return get_java_total_num_pq_files_in_table(bodo_iceberg_table_reader)
+        return bodo_iceberg_table_reader.getNumParquetFiles()
 
     except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
-
-
-def get_java_total_num_pq_files_in_table(bodo_iceberg_table_reader):
-    return bodo_iceberg_table_reader.getNumParquetFiles()
-
-
-def java_to_python(java_parquet_infos) -> List[BodoIcebergParquetInfo]:
-    """
-    Converts an Iterable of Java BodoParquetInfo objects
-    to an equivalent list of Named Tuples.
-    """
-    pq_infos = []
-    for java_pq_info in java_parquet_infos:
-        if bool(java_pq_info.hasDeleteFile()):
-            raise RuntimeError(
-                "Iceberg Dataset contains DeleteFiles, which is not yet supported by Bodo"
-            )
-        pq_infos.append(
-            BodoIcebergParquetInfo(
-                str(java_pq_info.getFilepath()),
-                int(java_pq_info.getStart()),
-                int(java_pq_info.getLength()),
-            )
-        )
-    return pq_infos
-
-
-def _has_uri_scheme(path: str):
-    """return True of path has a URI scheme, e.g. file://, s3://, etc."""
-    try:
-        return urlparse(path).scheme != ""
-    except:
-        return False
