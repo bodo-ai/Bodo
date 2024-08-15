@@ -1005,6 +1005,7 @@ class BodoSQLContext:
                     "pd": pd,
                     "datetime": datetime,
                     "bif": bodo.ir.filter,
+                    "np": np,
                 },
                 locs,
             )

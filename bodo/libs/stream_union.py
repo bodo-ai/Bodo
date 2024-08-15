@@ -274,6 +274,7 @@ def gen_init_union_state_impl(
                 mrnf_n_sort_keys,
                 mrnf_part_cols_to_keep.ctypes,
                 mrnf_sort_cols_to_keep.ctypes,
+                None,  # window_args
                 -1,  # op_pool_size_bytes
                 output_type,
                 parallel,

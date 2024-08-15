@@ -787,14 +787,58 @@ void conditional_change_event_computation(
     }
 }
 
+/**
+ * @brief Get the window frame args from window args table.
+ *
+ * @param window_args The table of scalar window args containing the frame
+ * bounds.
+ * @param window_arg_offset The current index into the window scalar arguments
+ * table.
+ * @return std::tuple<int64_t*, int64_t*> The lo and hi bounds for the frame.
+ */
+std::tuple<int64_t*, int64_t*> get_window_frame_args(
+    std::shared_ptr<table_info> window_args, int64_t& window_arg_offset) {
+    int64_t* frame_lo;
+    int64_t* frame_hi;
+
+    // if either of the bounds is "None" the null bit will be set and we will
+    // pass in a nullptr
+    std::shared_ptr<array_info> frame_lo_col =
+        window_args->columns[window_arg_offset];
+    if (frame_lo_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        bool frame_lo_null =
+            frame_lo_col->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0);
+        frame_lo = frame_lo_null ? &(getv<int64_t>(frame_lo_col, 0)) : nullptr;
+    } else {
+        // arr_type == NUMPY
+        frame_lo = &(getv<int64_t>(frame_lo_col, 0));
+    }
+    window_arg_offset = window_arg_offset + 1;
+
+    std::shared_ptr<array_info> frame_hi_col =
+        window_args->columns[window_arg_offset];
+    if (frame_hi_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        bool frame_hi_null =
+            frame_hi_col->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(0);
+        frame_hi = frame_hi_null ? &(getv<int64_t>(frame_hi_col, 0)) : nullptr;
+    } else {
+        // arr_type == NUMPY
+        frame_hi = &(getv<int64_t>(frame_hi_col, 0));
+    }
+
+    window_arg_offset = window_arg_offset + 1;
+
+    return std::make_tuple(frame_lo, frame_hi);
+}
+
 void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                         std::vector<int64_t> window_funcs,
                         std::vector<std::shared_ptr<array_info>> out_arrs,
                         grouping_info const& grp_info,
                         const std::vector<bool>& asc_vect,
                         const std::vector<bool>& na_pos_vect,
-                        const std::vector<void*>& window_args, int n_input_cols,
-                        bool is_parallel, bool use_sql_rules,
+                        const std::shared_ptr<table_info> window_args,
+                        int n_input_cols, bool is_parallel, bool use_sql_rules,
                         bodo::IBufferPool* const pool,
                         std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t window_arg_offset = 0;
@@ -834,8 +878,6 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
             break;
         }
     }
-    int64_t* frame_lo;
-    int64_t* frame_hi;
     // For each window function call, compute the answer using the
     // sorted table to lookup the rows in the original ordering
     // that are to be modified
@@ -899,9 +941,10 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                 break;
             }
             case Bodo_FTypes::ntile: {
-                ntile_computation(out_arrs[i], iter_table->columns[0],
-                                  iter_table->columns[idx_col],
-                                  *((int64_t*)window_args[window_arg_offset]));
+                ntile_computation(
+                    out_arrs[i], iter_table->columns[0],
+                    iter_table->columns[idx_col],
+                    getv<int64_t>(window_args->columns[window_arg_offset], 0));
                 window_arg_offset++;
                 break;
             }
@@ -924,10 +967,8 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
             // Size has no column argument so the output column
             // is used as a dummy value
             case Bodo_FTypes::size: {
-                frame_lo = (int64_t*)window_args[window_arg_offset];
-                window_arg_offset++;
-                frame_hi = (int64_t*)window_args[window_arg_offset];
-                window_arg_offset++;
+                auto [frame_lo, frame_hi] =
+                    get_window_frame_args(window_args, window_arg_offset);
                 window_frame_computation(out_arrs[i], out_arrs[i],
                                          iter_table->columns[0],
                                          iter_table->columns[idx_col], frame_lo,
@@ -944,10 +985,9 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
             case Bodo_FTypes::std:
             case Bodo_FTypes::std_pop:
             case Bodo_FTypes::mean: {
-                frame_lo = (int64_t*)window_args[window_arg_offset];
-                window_arg_offset++;
-                frame_hi = (int64_t*)window_args[window_arg_offset];
-                window_arg_offset++;
+                auto [frame_lo, frame_hi] =
+                    get_window_frame_args(window_args, window_arg_offset);
+
                 window_frame_computation(input_arrs[window_col_offset],
                                          out_arrs[i], iter_table->columns[0],
                                          iter_table->columns[idx_col], frame_lo,

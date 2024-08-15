@@ -991,3 +991,84 @@ def test_row_number_intense(spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
     )
+
+
+@pytest.mark.parametrize(
+    "n_bins",
+    [
+        pytest.param(
+            1,
+            id="nbins_1",
+        ),
+        pytest.param(
+            3,
+            id="nbins_3",
+        ),
+        pytest.param(
+            17,
+            id="nbins_17",
+        ),
+        pytest.param(
+            255,
+            id="nbins_255",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            1026,
+            id="nbins_1026",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            5005,
+            id="nbins_5005",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            10010,
+            id="nbins_10010",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_ntile(capfd, spark_info, n_bins):
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    comm = MPI.COMM_WORLD
+
+    in_df = pd.DataFrame(
+        {
+            "ID": list(range(10010)),
+            "A": [1] * 5005 + [2] * 5005,
+            "B": [i for i in range(5004)] + [None] + [i for i in range(5004)] + [None],
+            "C": ["socks", "shoes", None, "shirt", None] * 2002,
+        }
+    )
+
+    query = f"SELECT ID, C, NTILE({n_bins}) OVER (PARTITION BY A ORDER BY B ASC NULLS LAST) FROM TABLE1"
+    expected_log_message = "[DEBUG] GroupbyState::FinalizeBuild:"
+
+    # Randomize the order of the input data
+    rng = np.random.default_rng(42)
+    perm = rng.permutation(len(in_df))
+    in_df = in_df.iloc[perm, :]
+
+    # checks that we are using stream groupby
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": in_df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+        )
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success

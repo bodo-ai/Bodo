@@ -581,6 +581,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                 "pd": pd,
                 "datetime": datetime,
                 "bif": bodo.ir.filter,
+                "np": np,
             },
             locs,
         )

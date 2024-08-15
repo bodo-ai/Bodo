@@ -69,6 +69,7 @@ class WindowStateType(StreamingStateType):
     kept_input_indices: pt.Tuple[int, ...]
     kept_input_indices_set: pt.Set[int]
     func_input_indices: pt.Tuple[pt.Tuple[int, ...], ...]
+    window_args: pt.Tuple[pt.Tuple[int, ...], ...]
     build_table_type: pt.Union[bodo.hiframes.table.TableType, types.unknown]
 
     def __init__(
@@ -81,6 +82,7 @@ class WindowStateType(StreamingStateType):
         func_input_indices,
         kept_input_indices,
         n_inputs,
+        window_args,
         build_table_type=types.unknown,
     ):
         error_on_unsupported_streaming_arrays(build_table_type)
@@ -96,9 +98,10 @@ class WindowStateType(StreamingStateType):
         self.kept_input_indices_set = set(kept_input_indices)
         self.func_input_indices = func_input_indices
         self.n_inputs = n_inputs
+        self.window_args = window_args
         self.build_table_type = build_table_type
         super().__init__(
-            name=f"WindowStateType({partition_indices=}, {order_by_indices=}, {is_ascending=}, {nulls_last=}, {func_names=}, {func_input_indices=}, {kept_input_indices=}, {n_inputs=}, {build_table_type=})"
+            name=f"WindowStateType({partition_indices=}, {order_by_indices=}, {is_ascending=}, {nulls_last=}, {func_names=}, {func_input_indices=}, {kept_input_indices=}, {n_inputs=}, {window_args=}, {build_table_type=})"
         )
 
     def translate_indices(self, indices: pt.List[int]) -> pt.List[int]:
@@ -140,6 +143,7 @@ class WindowStateType(StreamingStateType):
             self.kept_input_indices,
             self.build_table_type,
             self.n_inputs,
+            self.window_args,
         )
 
     @cached_property
@@ -667,6 +671,7 @@ def init_window_state(
     kept_input_indices,
     allow_work_stealing,
     n_inputs,
+    window_args,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
@@ -681,7 +686,7 @@ class InitWindowStateInfer(AbstractTemplate):
     def generic(self, args, kws):
         pysig = numba.core.utils.pysignature(init_window_state)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
-        expected_state_type = unwrap_typeref(folded_args[11])
+        expected_state_type = unwrap_typeref(folded_args[12])
         (
             partition_indices,
             order_by_indices,
@@ -692,7 +697,8 @@ class InitWindowStateInfer(AbstractTemplate):
             kept_input_indices,
             _,
             n_inputs,
-        ) = folded_args[1:10]
+            window_args,
+        ) = folded_args[1:11]
         if is_overload_none(expected_state_type):
             partition_indices_tuple = unwrap_typeref(partition_indices).meta
             order_by_indices_tuple = unwrap_typeref(order_by_indices).meta
@@ -701,6 +707,7 @@ class InitWindowStateInfer(AbstractTemplate):
             func_names_tuple = unwrap_typeref(func_names).meta
             func_input_tuple = unwrap_typeref(func_input_indices).meta
             kept_input_indices_tuple = unwrap_typeref(kept_input_indices).meta
+            window_args = unwrap_typeref(window_args).meta
             output_type = WindowStateType(
                 partition_indices_tuple,
                 order_by_indices_tuple,
@@ -710,6 +717,7 @@ class InitWindowStateInfer(AbstractTemplate):
                 func_input_tuple,
                 kept_input_indices_tuple,
                 get_overload_const_int(n_inputs),
+                window_args,
             )
         else:
             output_type = expected_state_type
@@ -737,6 +745,7 @@ def overload_init_window_state(
     kept_input_indices,
     allow_work_stealing,
     n_inputs,
+    window_args,
     op_pool_size_bytes=-1,
     expected_state_type=None,
     parallel=False,
@@ -772,6 +781,16 @@ def overload_init_window_state(
         func_input_offsets_list.append(len(func_input_indices_list))
     func_input_indices_arr = np.array(func_input_indices_list, np.int32)
     func_input_offsets_arr = np.array(func_input_offsets_list, np.int32)
+    window_args_list = []
+    for window_args in output_type.window_args:
+        # TODO: verify number of scalar arguments for each window function
+        # NOTE: Adds None for funcs with no args so that it compiles
+        if len(window_args) == 0:
+            window_args_list.append(None)
+        else:
+            window_args_list.extend(window_args)
+
+    window_args_tuple = tuple(window_args_list)
 
     if output_type.is_sort_impl:
         # The internal C++ window state object is just for sort implementations
@@ -787,6 +806,7 @@ def overload_init_window_state(
             kept_input_indices,
             allow_work_stealing,
             n_inputs,
+            window_args,
             op_pool_size_bytes=-1,
             expected_state_type=None,
             parallel=False,
@@ -832,10 +852,22 @@ def overload_init_window_state(
             kept_input_indices,
             allow_work_stealing,
             n_inputs,
+            window_args,  # list of tuples containing scalar window args
             op_pool_size_bytes=-1,
             expected_state_type=None,
             parallel=False,
         ):  # pragma: no cover
+            window_args_arr_list = []
+            for window_arg in window_args_tuple:
+                window_arg_arr = bodo.utils.conversion.coerce_scalar_to_array(
+                    window_arg, 1, types.unknown
+                )
+                window_arg_info = bodo.libs.array.array_to_info(window_arg_arr)
+                window_args_arr_list.append(window_arg_info)
+            window_args_table = bodo.libs.array.arr_info_list_to_table(
+                window_args_arr_list
+            )
+
             output_val = bodo.libs.stream_groupby._init_groupby_state(
                 operator_id,
                 build_arr_dtypes.ctypes,
@@ -851,6 +883,7 @@ def overload_init_window_state(
                 n_orderby_cols,
                 kept_partition_cols_arr.ctypes,
                 kept_order_by_cols_arr.ctypes,
+                window_args_table,
                 op_pool_size_bytes,
                 output_type,
                 parallel,

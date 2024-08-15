@@ -1401,6 +1401,7 @@ global_6 = MetaType((0, 2, 3))
 global_7 = ColNamesMetaType(("A", "C", "D", "RANK"))
 global_4 = MetaType((True,))
 global_5 = MetaType(("rank",))
+global_8 = MetaType(((),))
 
 
 @bodo.jit(distributed=["df"])
@@ -1422,6 +1423,7 @@ def window_skew_impl(df):
         global_6,
         True,
         4,
+        global_8,
         op_pool_size_bytes=WINDOW_PARTITION_BUDGET,
     )
     __bodo_is_last_streaming_output_2 = False

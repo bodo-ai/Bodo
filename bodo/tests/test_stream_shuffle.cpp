@@ -160,7 +160,7 @@ static bodo::tests::suite tests([] {
                        0,                                   // n_udf
                        false,                               // parallel
                        {true}, {true},  // window_na_position
-                       {nullptr},       // window_args
+                       nullptr,         // window_args
                        0,               // n_input_cols
                        nullptr,         // udf_n_redvars
                        nullptr,         // udf_table

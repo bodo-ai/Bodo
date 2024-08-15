@@ -74,19 +74,33 @@ class BodoPhysicalWindow(
         )
 
     /**
+     * Maps operator name to a Boolean list that has length equal to the number of arguments. A "true" value at index
+     * `i` indicates that the `i`th index is a scalar, otherwise it is a column. Everything not included in this
+     * mapping is assumed to have no inputs (e.g. rank related functions, size)
+     */
+    val argsMap =
+        mapOf(
+            "NTILE" to listOf(true),
+            "SUM" to listOf(false),
+            "AVG" to listOf(false),
+            "MAX" to listOf(false),
+            "MIN" to listOf(false),
+            "COUNT" to listOf(false),
+        )
+
+    /**
      *  Returns whether the Window node can be converted to streaming window codegen. If not, the Window node must
      *  be converted back into a Project node. Currently has the following requirements:
      *
      *  <ul>
      *      <li>Streaming must be enabled</li>
      *      <li>The window must only contain a single cohort</li>
-     *      <li>There must be at least 1 partition key</li>
      *      <li>All window aggfunc calls are from the limited list of support</li>
      *      <li>There is a single group with a single aggfunc</li>
      *  </ul>
      */
     fun supportsStreamingWindow(): Boolean {
-        return traitSet.isEnabled(BatchingPropertyTraitDef.INSTANCE) && constants.isEmpty() && groups.size == 1 &&
+        return traitSet.isEnabled(BatchingPropertyTraitDef.INSTANCE) && groups.size == 1 &&
             groups.all {
                     group ->
                 isSupportedHashGroup(group) || isSupportedSortGroup(group) || isSupportedBlankWindowGroup(group)
@@ -104,15 +118,14 @@ class BodoPhysicalWindow(
             group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
-
-                aggCall.distinct == false &&
-                    aggCall.ignoreNulls == false
+                !aggCall.distinct && !aggCall.ignoreNulls
                 when (aggCall.operator.kind) {
                     SqlKind.ROW_NUMBER,
                     SqlKind.RANK,
                     SqlKind.DENSE_RANK,
                     SqlKind.PERCENT_RANK,
                     SqlKind.CUME_DIST,
+                    SqlKind.NTILE,
                     -> true
                     else -> false
                 }
@@ -351,6 +364,7 @@ class BodoPhysicalWindow(
         val orderNullPos: MutableList<Expr> = mutableListOf()
         val funcIndices: MutableList<Expr> = mutableListOf()
         val funcNames: MutableList<Expr> = mutableListOf()
+        val funcScalarArgs: MutableList<Expr> = mutableListOf()
         assert(this.groups.size == 1)
         val group = this.groups[0]
         group.keys.forEach {
@@ -365,18 +379,34 @@ class BodoPhysicalWindow(
                 aggCall ->
             val operatorName = getOperatorName(aggCall)
             funcNames.add(Expr.StringLiteral(operatorName))
-            val funcArgs =
-                aggCall.operands.map {
-                    // Defensive check since it should always be a RexInputRef by the
+            val funcColumnArgs: MutableList<Expr> = mutableListOf()
+            val scalarArgs: MutableList<Expr> = mutableListOf()
+
+            // For each idx'd operand lookup argsMap[funcName][idx]
+            // If it is True -> then it is a scalar arg look up the constant in this.constants[op - numCols]
+            // append to scalar args. Otherwise, the input refering to a column, add the input ref to columnArgs
+            var constantIdx = 0 // index into this.constants
+            val argsList = argsMap[aggCall.operator.name] ?: listOf()
+
+            aggCall.operands.forEachIndexed {
+                    it, op ->
+                val isScalar = argsList[it]
+                if (isScalar) {
+                    val constantArg = this.constants[constantIdx]
+                    scalarArgs.add(ctx.rexTranslator(null).visitLiteral(constantArg))
+                    constantIdx++
+                } else if (op is RexInputRef) {
+                    funcColumnArgs.add(Expr.IntegerLiteral(op.index))
+                } else {
+                    // Defensive check since op should always be a RexInputRef by the
                     // design of the Window node.
-                    if (it is RexInputRef) {
-                        Expr.IntegerLiteral(it.index)
-                    } else {
-                        throw Exception("BodoPhysicalWindowNode: unsupported input to window function '$it'")
-                    }
+                    throw Exception("BodoPhysicalWindowNode: unsupported input to window function '$op'")
                 }
-            funcIndices.add(Expr.Tuple(funcArgs))
+            }
+            funcIndices.add(Expr.Tuple(funcColumnArgs))
+            funcScalarArgs.add(Expr.Tuple(scalarArgs))
         }
+
         val keptInputsArray = inputsToKeep.toList().map { Expr.IntegerLiteral(it) }
         val partitionGlobal = ctx.lowerAsMetaType(Expr.Tuple(partitionKeys))
         val orderGlobal = ctx.lowerAsMetaType(Expr.Tuple(orderKeys))
@@ -385,6 +415,7 @@ class BodoPhysicalWindow(
         val funcNamesGlobal = ctx.lowerAsMetaType(Expr.Tuple(funcNames))
         val keptInputsGlobal = ctx.lowerAsMetaType(Expr.Tuple(keptInputsArray))
         val funcIndicesGlobal = ctx.lowerAsMetaType(Expr.Tuple(funcIndices))
+        val funcScalarArgsGlobal = ctx.lowerAsMetaType(Expr.Tuple(funcScalarArgs))
         val allowWorkStealing =
             !(
                 pipelineAncestorNestedJoin(ctx.fetchParentMappings()) ||
@@ -404,6 +435,7 @@ class BodoPhysicalWindow(
                     keptInputsGlobal,
                     Expr.BooleanLiteral(allowWorkStealing),
                     Expr.IntegerLiteral(input.rowType.fieldCount),
+                    funcScalarArgsGlobal,
                 ),
             )
         val windowInit = Op.Assign(stateVar, stateCall)

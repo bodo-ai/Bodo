@@ -97,7 +97,7 @@ class GroupbyPipeline {
         udf_general_fn general_udfs_cb, bool skip_na_data, int64_t periods,
         int64_t* transform_funcs, int64_t _head_n, bool _return_key,
         bool _return_index, bool _key_dropna, bool* window_ascending,
-        bool* window_na_position, void** window_args,
+        bool* window_na_position, std::shared_ptr<table_info> window_args,
         int8_t* n_window_args_per_func, int* n_input_cols_per_func,
         bool _maintain_input_size, int64_t _n_shuffle_keys, bool _use_sql_rules)
         : orig_in_table(_in_table),
@@ -363,7 +363,6 @@ class GroupbyPipeline {
             int end = func_offsets[k + 1];
             int8_t num_used_cols = ncols_per_func[k];
             int8_t nwindow_colls = n_window_calls_per_func[k];
-            int8_t n_window_args = n_window_args_per_func[k];
             int n_input_cols = n_input_cols_per_func[k];
             for (int j = start; j != end;
                  j++) {  // for each function applied to this column
@@ -373,16 +372,11 @@ class GroupbyPipeline {
                 std::vector<int64_t> transform_funcs_vect;
                 std::vector<bool> window_ascending_vect;
                 std::vector<bool> window_na_position_vect;
-                std::vector<void*> window_args_vect;
                 for (int m = 0; m < nwindow_colls; m++) {
                     transform_funcs_vect.push_back(
                         transform_funcs[(i - num_keys) + m]);
                 }
-                // Populating window_args_vect with the scalar arguments
-                // for window functions (wrapped in void*)
-                for (int m = 0; m < n_window_args; m++) {
-                    window_args_vect.push_back(window_args[(i - num_keys) + m]);
-                }
+
                 for (int m = 0; m < num_used_cols; m++) {
                     // There is no ascending or na_position for the key columns
                     window_ascending_vect.push_back(
@@ -400,7 +394,7 @@ class GroupbyPipeline {
                         input_cols, index_col, ftypes[j], do_combine,
                         skip_na_data, periods, transform_funcs_vect, n_udf,
                         is_parallel, window_ascending_vect,
-                        window_na_position_vect, window_args_vect, n_input_cols,
+                        window_na_position_vect, window_args, n_input_cols,
                         udf_n_redvars, udf_table, udf_table_idx,
                         nunique_tables[i], use_sql_rules));
                 } else {
@@ -411,7 +405,7 @@ class GroupbyPipeline {
                         makeColSet(input_cols, index_col, ftypes[j], do_combine,
                                    skip_na_data, periods, transform_funcs_vect,
                                    n_udf, is_parallel, window_ascending_vect,
-                                   window_na_position_vect, window_args_vect,
+                                   window_na_position_vect, window_args,
                                    n_input_cols, udf_n_redvars, udf_table,
                                    udf_table_idx, nullptr, use_sql_rules));
                 }
@@ -1043,7 +1037,7 @@ class GroupbyPipeline {
     size_t nunique_hashes = 0;
 };
 
-table_info* groupby_and_aggregate(
+table_info* groupby_and_aggregate_py_entry(
     table_info* input_table, int64_t num_keys, int8_t* ncols_per_func,
     int8_t* n_window_calls_per_func, int64_t num_funcs, bool input_has_index,
     int* ftypes, int* func_offsets, int* udf_nredvars, bool is_parallel,
@@ -1051,7 +1045,7 @@ table_info* groupby_and_aggregate(
     int64_t head_n, bool return_key, bool return_index, bool key_dropna,
     void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* in_udf_dummy_table, int64_t* n_out_rows, bool* window_ascending,
-    bool* window_na_position, void** window_args,
+    bool* window_na_position, table_info* window_args_,
     int8_t* n_window_args_per_func, int* n_input_cols_per_func,
     bool maintain_input_size, int64_t n_shuffle_keys, bool use_sql_rules) {
     try {
@@ -1060,6 +1054,8 @@ table_info* groupby_and_aggregate(
 
         std::shared_ptr<table_info> udf_dummy_table =
             std::shared_ptr<table_info>(in_udf_dummy_table);
+
+        std::shared_ptr<table_info> window_args(window_args_);
 
         tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
