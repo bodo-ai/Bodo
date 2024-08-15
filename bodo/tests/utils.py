@@ -953,7 +953,7 @@ def sort_dataframe_values_index(df):
 
     # Sort only works on hashable datatypes
     # Thus we convert (non-hashable) list-like types to (hashable) tuples
-    df = df.applymap(
+    df = df.map(
         lambda x: (
             tuple(x)
             if isinstance(x, (list, np.ndarray, pd.core.arrays.ExtensionArray))
