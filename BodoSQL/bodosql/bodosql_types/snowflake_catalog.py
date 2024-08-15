@@ -491,7 +491,7 @@ def init_snowflake_connector(
     iceberg_volume,
 ):
     """
-    Instrinsic used to actually construct the SnowflakeCatalog from the constructor.
+    Intrinsic used to actually construct the SnowflakeCatalog from the constructor.
     """
     # Check for literals
     if not is_literal_type(username):

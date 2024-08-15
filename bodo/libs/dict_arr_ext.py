@@ -142,7 +142,7 @@ make_attribute_wrapper(DictionaryArrayType, "dict_id", "_dict_id")
 lower_builtin("getiter", dict_str_arr_type)(numba.np.arrayobj.getiter_array)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_dict_arr(
     typingctx, data_t, indices_t, glob_dict_t, unique_dict_t, dict_id_if_present_t
 ):
@@ -201,7 +201,7 @@ def generate_dict_id_codegen(context, builder, sig, args):
     return new_dict_id
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def generate_dict_id(typingctx, length_t):
     """Generate a new id for a dictionary with the
     given length. This is exposed directly for APIs that can use
@@ -235,16 +235,16 @@ def to_pa_dict_arr(A):
     # Arrow, see test_basic.py::test_dict_scalar_to_array
     if (
         isinstance(A, pd.arrays.ArrowStringArray)
-        and pa.types.is_dictionary(A._data.type)
+        and pa.types.is_dictionary(A._pa_array.type)
         and (
-            pa.types.is_string(A._data.type.value_type)
-            or pa.types.is_large_string(A._data.type.value_type)
+            pa.types.is_string(A._pa_array.type.value_type)
+            or pa.types.is_large_string(A._pa_array.type.value_type)
         )
-        and pa.types.is_int32(A._data.type.index_type)
+        and pa.types.is_int32(A._pa_array.type.index_type)
     ):
-        return A._data.combine_chunks()
+        return A._pa_array.combine_chunks()
 
-    return pd.array(A, "string[pyarrow]")._data.combine_chunks().dictionary_encode()
+    return pd.array(A, "string[pyarrow]")._pa_array.combine_chunks().dictionary_encode()
 
 
 @unbox(DictionaryArrayType)

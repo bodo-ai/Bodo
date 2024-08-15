@@ -613,7 +613,7 @@ def cast_int_to_time(typingctx, val, precision):
     return TimeType(precision.literal_value)(types.int64, types.int64), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def cast_time_to_int(typingctx, val):
     """Cast Time value to int"""
     assert isinstance(val, TimeType), "val must be Time"

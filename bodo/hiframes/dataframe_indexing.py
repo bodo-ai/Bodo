@@ -510,8 +510,8 @@ class DataFrameILocModel(models.StructModel):
 make_attribute_wrapper(DataFrameILocType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_dataframe_iloc(typingctx, obj=None):
+@intrinsic
+def init_dataframe_iloc(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         iloc_type = signature.return_type
@@ -735,8 +735,8 @@ class DataFrameLocModel(models.StructModel):
 make_attribute_wrapper(DataFrameLocType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_dataframe_loc(typingctx, obj=None):
+@intrinsic
+def init_dataframe_loc(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         loc_type = signature.return_type
@@ -919,8 +919,8 @@ class DataFrameIatModel(models.StructModel):
 make_attribute_wrapper(DataFrameIatType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_dataframe_iat(typingctx, obj=None):
+@intrinsic
+def init_dataframe_iat(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         iat_type = signature.return_type

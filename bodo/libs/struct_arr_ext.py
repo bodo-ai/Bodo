@@ -597,7 +597,7 @@ def box_struct(typ, val, c):
 
 
 @intrinsic(prefer_literal=True)
-def init_struct(typingctx, data_typ, names_typ=None):
+def init_struct(typingctx, data_typ, names_typ):
     """create a new struct from input data tuple and names."""
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
     struct_type = StructType(data_typ.types, names)
@@ -681,8 +681,8 @@ def init_struct_with_nulls(values, nulls, names):
     return impl
 
 
-@intrinsic(prefer_literal=True)
-def get_struct_data(typingctx, struct_typ=None):
+@intrinsic
+def get_struct_data(typingctx, struct_typ):
     """get data values of struct as tuple"""
     assert isinstance(struct_typ, StructType)
 
@@ -694,8 +694,8 @@ def get_struct_data(typingctx, struct_typ=None):
     return types.BaseTuple.from_types(struct_typ.data)(struct_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_struct_null_bitmap(typingctx, struct_typ=None):
+@intrinsic
+def get_struct_null_bitmap(typingctx, struct_typ):
     """get null bitmap tuple of struct value"""
     assert isinstance(struct_typ, StructType)
 
@@ -709,7 +709,7 @@ def get_struct_null_bitmap(typingctx, struct_typ=None):
 
 
 @intrinsic(prefer_literal=True)
-def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ=None):
+def set_struct_data(typingctx, struct_typ, field_ind_typ, val_typ):
     """set a field in struct to value. needs to replace the whole payload."""
     assert isinstance(struct_typ, StructType) and is_overload_constant_int(
         field_ind_typ
@@ -900,8 +900,8 @@ def construct_struct(context, builder, struct_type, values, nulls):
     return meminfo
 
 
-@intrinsic(prefer_literal=True)
-def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
+@intrinsic
+def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ):
     """get struct from struct array, e.g. A[i]
     Returns a dictionary of value types are the same, otherwise a StructType
     """
@@ -1000,8 +1000,8 @@ def struct_array_get_struct(typingctx, struct_arr_typ, ind_typ=None):
     return out_typ(struct_arr_typ, ind_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_data(typingctx, arr_typ=None):
+@intrinsic
+def get_data(typingctx, arr_typ):
     """get data arrays of struct array as tuple"""
     assert isinstance(arr_typ, StructArrayType)
 
@@ -1013,8 +1013,8 @@ def get_data(typingctx, arr_typ=None):
     return types.BaseTuple.from_types(arr_typ.data)(arr_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_null_bitmap(typingctx, arr_typ=None):
+@intrinsic
+def get_null_bitmap(typingctx, arr_typ):
     """get null bitmap array of struct array"""
     assert isinstance(arr_typ, StructArrayType)
 
@@ -1026,7 +1026,7 @@ def get_null_bitmap(typingctx, arr_typ=None):
     return types.Array(types.uint8, 1, "C")(arr_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_n_structs(typingctx, arr_typ):
     """get length of struct array"""
     assert isinstance(arr_typ, StructArrayType), "get_n_structs: struct array expected"
@@ -1040,7 +1040,7 @@ def get_n_structs(typingctx, arr_typ):
 
 
 @intrinsic(prefer_literal=True)
-def init_struct_arr(typingctx, n_structs_t, data_typ, null_bitmap_typ, names_typ=None):
+def init_struct_arr(typingctx, n_structs_t, data_typ, null_bitmap_typ, names_typ):
     """create a new struct array from input data array tuple, null bitmap, and names."""
     names = tuple(get_overload_const_str(t) for t in names_typ.types)
     struct_arr_type = StructArrayType(data_typ.types, names)

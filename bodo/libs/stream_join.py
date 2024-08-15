@@ -813,7 +813,7 @@ class JoinStateType(StreamingStateType):
 register_model(JoinStateType)(models.OpaqueModel)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _init_join_state(
     typingctx,
     operator_id,
@@ -1227,7 +1227,7 @@ def gen_init_join_state_impl(
     return impl_init_join_state
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _join_build_consume_batch(
     typingctx,
     join_state,
@@ -1312,7 +1312,7 @@ def lower_join_build_consume_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _runtime_join_filter(
     typingctx,
     join_state,
@@ -1707,7 +1707,7 @@ def impl_runtime_join_filter(
     return impl_runtime_join_filter
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _join_probe_consume_batch(
     typingctx,
     join_state,
@@ -1899,7 +1899,7 @@ def lower_join_probe_consume_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def delete_join_state(
     typingctx,
     join_state,
@@ -1921,7 +1921,7 @@ def delete_join_state(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_op_pool_budget_bytes(
     typingctx,
     join_state,
@@ -1949,7 +1949,7 @@ def get_op_pool_budget_bytes(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_op_pool_bytes_pinned(
     typingctx,
     join_state,
@@ -1978,7 +1978,7 @@ def get_op_pool_bytes_pinned(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_op_pool_bytes_allocated(
     typingctx,
     join_state,
@@ -2007,7 +2007,7 @@ def get_op_pool_bytes_allocated(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_num_partitions(
     typingctx,
     join_state,
@@ -2035,7 +2035,7 @@ def get_num_partitions(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_partition_num_top_bits_by_idx(typingctx, join_state, idx):
     """
     Get the number of bits in the 'top_bitmask' of a partition of this join
@@ -2059,7 +2059,7 @@ def get_partition_num_top_bits_by_idx(typingctx, join_state, idx):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_partition_top_bitmask_by_idx(typingctx, join_state, idx):
     """
     Get the 'top_bitmask' of a partition of this join operator by the partition index.

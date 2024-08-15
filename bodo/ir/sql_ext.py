@@ -1941,7 +1941,7 @@ _snowflake_read = types.ExternalFunction(
 )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def snowflake_reader_init_py_entry(
     typingctx,
     query_t,

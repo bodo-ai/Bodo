@@ -1712,7 +1712,7 @@ ll.add_symbol("pq_write_create_dir_py_entry", arrow_cpp.pq_write_create_dir_py_e
 ll.add_symbol("pq_write_partitioned_py_entry", arrow_cpp.pq_write_partitioned_py_entry)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def parquet_write_table_cpp(
     typingctx,
     filename_t,
@@ -1800,7 +1800,7 @@ def parquet_write_table_cpp(
     )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def pq_write_create_dir(
     typingctx,
     filename_t,
@@ -1830,7 +1830,7 @@ def pq_write_create_dir(
     )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def parquet_write_table_partitioned_cpp(
     typingctx,
     filename_t,

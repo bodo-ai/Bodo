@@ -1709,7 +1709,7 @@ def delete_grouping_sets_state(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_op_pool_bytes_pinned(
     typingctx,
     groupby_state,
@@ -1738,7 +1738,7 @@ def get_op_pool_bytes_pinned(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_op_pool_bytes_allocated(
     typingctx,
     groupby_state,
@@ -1767,7 +1767,7 @@ def get_op_pool_bytes_allocated(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_num_partitions(
     typingctx,
     groupby_state,
@@ -1795,7 +1795,7 @@ def get_num_partitions(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_partition_num_top_bits_by_idx(typingctx, groupby_state, idx):
     """
     Get the number of bits in the 'top_bitmask' of a partition of this groupby
@@ -1819,7 +1819,7 @@ def get_partition_num_top_bits_by_idx(typingctx, groupby_state, idx):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_partition_top_bitmask_by_idx(typingctx, groupby_state, idx):
     """
     Get the 'top_bitmask' of a partition of this groupby operator by the partition index.

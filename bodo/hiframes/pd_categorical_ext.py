@@ -125,7 +125,7 @@ make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 
 
 @intrinsic(prefer_literal=True)
-def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type, cat_vals_typ=None):
+def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type, cat_vals_typ):
     """Create a CategoricalDtype from categories array and ordered flag"""
     assert bodo.hiframes.pd_index_ext.is_index_type(
         categories_typ
@@ -526,8 +526,8 @@ def cat_overload_dummy(val_list):
     return lambda val_list: 1  # pragma: no cover
 
 
-@intrinsic(prefer_literal=True)
-def init_categorical_array(typingctx, codes, cat_dtype=None):
+@intrinsic
+def init_categorical_array(typingctx, codes, cat_dtype):
     """Create a CategoricalArrayType with codes array (integers) and categories dtype"""
     assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
 

@@ -129,7 +129,7 @@ def MonthBegin(
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_month_begin(typingctx, n, normalize):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type
@@ -324,7 +324,7 @@ def MonthEnd(
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_month_end(typingctx, n, normalize):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type
@@ -859,7 +859,7 @@ def DateOffset(
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_date_offset(
     typingctx,
     n,
@@ -1129,7 +1129,7 @@ def CombinedInterval_(intervals):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_combined_interval(typingctx, intervals):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type
@@ -1394,7 +1394,7 @@ def Week(
 
 
 # LLVM helper for constructing the object
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_week(typingctx, n, normalize, weekday):
     def codegen(context, builder, signature, args):  # pragma: no cover
         typ = signature.return_type

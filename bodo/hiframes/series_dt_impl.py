@@ -61,8 +61,8 @@ class SeriesDtModel(models.StructModel):
 make_attribute_wrapper(SeriesDatetimePropertiesType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_series_dt_properties(typingctx, obj=None):
+@intrinsic
+def init_series_dt_properties(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         dt_properties_type = signature.return_type

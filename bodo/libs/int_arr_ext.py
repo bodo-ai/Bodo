@@ -366,8 +366,8 @@ def box_int_arr(typ, val, c):
     return res
 
 
-@intrinsic(prefer_literal=True)
-def init_integer_array(typingctx, data, null_bitmap=None):
+@intrinsic
+def init_integer_array(typingctx, data, null_bitmap):
     """Create a IntegerArray with provided data and null bitmap values."""
     assert isinstance(data, types.Array)
     assert null_bitmap == types.Array(types.uint8, 1, "C")

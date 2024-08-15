@@ -80,7 +80,7 @@ parquet_predicate_type = ParquetPredicateType()
 parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def iceberg_pq_read_py_entry(
     typingctx,
     conn_str,
@@ -223,7 +223,7 @@ def iceberg_pq_read_py_entry(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def iceberg_pq_reader_init_py_entry(
     typingctx,
     conn_str,
