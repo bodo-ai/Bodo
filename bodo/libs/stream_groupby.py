@@ -559,6 +559,7 @@ def _init_groupby_state(
     mrnf_n_sort_keys_t,
     mrnf_part_cols_to_keep_t,
     mrnf_sort_cols_to_keep_t,
+    window_args,
     op_pool_size_bytes_t,
     output_state_type,
     parallel_t,
@@ -586,6 +587,7 @@ def _init_groupby_state(
             in the MRNF case.
         mrnf_sort_cols_to_keep (bool*): Bitmask of order-by columns to retain in output
             in the MRNF case.
+        window_args (table_info*) table consisting of 1 row and a column for each scalar window arg
         op_pool_size_bytes (int64): Size of the operator pool (in bytes).
         output_state_type (TypeRef[GroupbyStateType]): The output type for the state
                                                     that should be generated.
@@ -608,6 +610,7 @@ def _init_groupby_state(
             mrnf_n_sort_keys,
             mrnf_part_cols_to_keep,
             mrnf_sort_cols_to_keep,
+            window_args,
             op_pool_size_bytes,
             _,  # output_state_type
             parallel,
@@ -635,6 +638,7 @@ def _init_groupby_state(
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(64),
@@ -660,6 +664,7 @@ def _init_groupby_state(
             mrnf_n_sort_keys,
             mrnf_part_cols_to_keep,
             mrnf_sort_cols_to_keep,
+            window_args,
             output_batch_size,
             parallel,
             sync_iter,
@@ -684,6 +689,7 @@ def _init_groupby_state(
         types.int64,
         types.CPointer(types.bool_),
         types.CPointer(types.bool_),
+        window_args,
         types.int64,
         output_state_type,
         parallel_t,
@@ -986,6 +992,7 @@ def gen_init_groupby_state_impl(
             mrnf_n_sort_keys,
             mrnf_part_cols_to_keep_arr.ctypes,
             mrnf_sort_cols_to_keep_arr.ctypes,
+            None,  # window_args
             op_pool_size_bytes,
             output_type,
             parallel,

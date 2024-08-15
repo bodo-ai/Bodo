@@ -47,6 +47,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeImpl;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
@@ -843,8 +844,7 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
   public TrimResult trimFields(
       BodoPhysicalWindow window, ImmutableBitSet fieldsUsed, Set<RelDataTypeField> extraFields) {
 
-    // If this is true, then there should only be 1 group, always
-    // at least 1 partition key per group, and no constants.
+    // If this is true, then there should only be 1 group.
     assert (window.supportsStreamingWindow());
 
     RelNode input = window.getInput();
@@ -895,8 +895,25 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
         inputFieldsUsedBuilder.set(inputCol);
       }
     }
-    ImmutableBitSet inputFieldsUsed = inputFieldsUsedBuilder.build();
-
+    ImmutableBitSet totalInputFieldsUsed = inputFieldsUsedBuilder.build();
+    // The total inputs consist of both the input columns and the constants.
+    // We split these into two separate bitsets.
+    ImmutableBitSet.Builder constantRemovedInputFieldsUsedBuilder = ImmutableBitSet.builder();
+    ImmutableBitSet.Builder constantsUsedBuilder = ImmutableBitSet.builder();
+    int numInputFields = input.getRowType().getFieldCount();
+    for (int i = 0; i < numInputFields; i++) {
+      if (totalInputFieldsUsed.get(i)) {
+        constantRemovedInputFieldsUsedBuilder.set(i);
+      }
+    }
+    int numConstants = window.constants.size();
+    for (int i = 0; i < numConstants; i++) {
+      if (totalInputFieldsUsed.get(i + numInputFields)) {
+        constantsUsedBuilder.set(i);
+      }
+    }
+    ImmutableBitSet inputFieldsUsed = constantRemovedInputFieldsUsedBuilder.build();
+    ImmutableBitSet constantsUsed = constantsUsedBuilder.build();
     // Create input with trimmed columns.
     TrimResult incompleteTrimResult = trimChild(window, input, inputFieldsUsed, inputExtraFields);
 
@@ -905,7 +922,29 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
         insertPruningProjection(incompleteTrimResult, inputFieldsUsed, inputExtraFields);
 
     RelNode newInput = trimResult.left;
-    final Mapping inputMapping = trimResult.right;
+    final Mapping initialInputMapping = trimResult.right;
+    // Update the input mapping to include any constants. We need to track
+    // how many inputs columns remain (constants start after) and which constants
+    // were pruned.
+    int numRemainingInputCols = initialInputMapping.getTargetCount();
+    final Mapping inputMapping =
+        Mappings.create(
+            MappingType.INVERSE_SURJECTION,
+            initialInputMapping.getSourceCount() + numConstants,
+            numRemainingInputCols + constantsUsed.cardinality());
+    for (int i = 0; i < numInputFields; i++) {
+      int mapValue = initialInputMapping.getTargetOpt(i);
+      if (mapValue != -1) {
+        inputMapping.set(i, mapValue);
+      }
+    }
+    int constantIdx = numRemainingInputCols;
+    for (int i = 0; i < numConstants; i++) {
+      if (constantsUsed.get(i)) {
+        inputMapping.set(numInputFields + i, constantIdx);
+        constantIdx++;
+      }
+    }
 
     // Build the new list of groups based on which outputs are kept.
     final RexVisitor<RexNode> shuttle = new RexPermuteInputsShuttle(inputMapping, newInput);
@@ -995,13 +1034,21 @@ public class BodoRelFieldTrimmer extends RelFieldTrimmer {
     final RelDataType newRowType =
         RelOptUtil.permute(window.getCluster().getTypeFactory(), rowType, mapping);
 
+    // Update the constants to prune any unused ones.
+    List<RexLiteral> newConstants = new ArrayList<>();
+    for (int i = 0; i < window.constants.size(); i++) {
+      if (constantsUsed.get(i)) {
+        newConstants.add(window.constants.get(i));
+      }
+    }
+
     // Create and return the new window node
     BodoPhysicalWindow newWindow =
         BodoPhysicalWindow.create(
             window.getCluster(),
             window.getHints(),
             newInput,
-            window.constants,
+            newConstants,
             newRowType,
             newGroups,
             newInputsToKeepBuilder.build());

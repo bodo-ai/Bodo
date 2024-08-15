@@ -1906,8 +1906,9 @@ void StreamingMRNFColSet::update(const std::vector<grouping_info>& grp_infos,
 WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
                            std::vector<int64_t> _window_funcs,
                            std::vector<bool>& _asc, std::vector<bool>& _na_pos,
-                           std::vector<void*>& _window_args, int _n_input_cols,
-                           bool _is_parallel, bool use_sql_rules)
+                           std::shared_ptr<table_info> _window_args,
+                           int _n_input_cols, bool _is_parallel,
+                           bool use_sql_rules)
     :  // Note the inputCol in BasicColSet is not used by
        // WindowColSet
       BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
@@ -1999,7 +2000,8 @@ std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {
             case Bodo_FTypes::rank:
             case Bodo_FTypes::row_number:
             case Bodo_FTypes::cume_dist:
-            case Bodo_FTypes::percent_rank: {
+            case Bodo_FTypes::percent_rank:
+            case Bodo_FTypes::ntile: {
                 bodo_array_type::arr_type_enum arr_type =
                     bodo_array_type::NULLABLE_INT_BOOL;
                 Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT64;
@@ -2058,8 +2060,9 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
     bool skip_na_data, int64_t periods, std::vector<int64_t> transform_funcs,
     int n_udf, bool is_parallel, std::vector<bool> window_ascending,
-    std::vector<bool> window_na_position, std::vector<void*> window_args,
-    int n_input_cols, int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
+    std::vector<bool> window_na_position,
+    std::shared_ptr<table_info> window_args, int n_input_cols,
+    int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
     int udf_table_idx, std::shared_ptr<table_info> nunique_table,
     bool use_sql_rules) {
     BasicColSet* colset;

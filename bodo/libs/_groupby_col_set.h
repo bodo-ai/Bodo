@@ -394,8 +394,9 @@ class WindowColSet : public BasicColSet {
      */
     WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
                  std::vector<int64_t> _window_funcs, std::vector<bool>& _asc,
-                 std::vector<bool>& _na_pos, std::vector<void*>& _window_args,
-                 int n_input_cols, bool _is_parallel, bool use_sql_rules);
+                 std::vector<bool>& _na_pos,
+                 std::shared_ptr<table_info> _window_args, int n_input_cols,
+                 bool _is_parallel, bool use_sql_rules);
     virtual ~WindowColSet();
 
     /**
@@ -459,7 +460,7 @@ class WindowColSet : public BasicColSet {
     const std::vector<int64_t> window_funcs;
     const std::vector<bool> asc;
     const std::vector<bool> na_pos;
-    const std::vector<void*> window_args;
+    const std::shared_ptr<table_info> window_args;
     const int n_input_cols;
     const bool is_parallel;  // whether input column data is distributed or
                              // replicated
@@ -1520,6 +1521,8 @@ class NgroupColSet : public BasicColSet {
  * the window ascending?
  * @param window_na_position For the window ftype does each orderby column
  * have NA values last?
+ * @param window_args A table of scalar arguments for window functions where
+ * each argument is contained in a column with a single row.
  * @param[in] udf_n_redvars For groupby udf functions these are the
  * reduction variables. For other operations this will be a nullptr.
  * @param[in] udf_table For groupby udf functions this is the table of used
@@ -1537,8 +1540,9 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<array_info> index_col, int ftype, bool do_combine,
     bool skip_na_data, int64_t periods, std::vector<int64_t> transform_funcs,
     int n_udf, bool is_parallel, std::vector<bool> window_ascending,
-    std::vector<bool> window_na_position, std::vector<void*> window_args,
-    int n_input_cols, int* udf_n_redvars = nullptr,
+    std::vector<bool> window_na_position,
+    std::shared_ptr<table_info> window_args, int n_input_cols,
+    int* udf_n_redvars = nullptr,
     std::shared_ptr<table_info> udf_table = nullptr, int udf_table_idx = 0,
     std::shared_ptr<table_info> nunique_table = nullptr,
     bool use_sql_rules = false);

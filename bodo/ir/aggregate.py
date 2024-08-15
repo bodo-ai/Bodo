@@ -2365,16 +2365,22 @@ def gen_top_level_agg_func(
     func_text += "    window_na_position = np.array([{}], dtype=np.bool_)\n".format(
         ", ".join([str(i) for i in window_na_position] + ["False"])
     )
-    # NOTE: adding extra 0 to make sure the list is never empty to avoid Numba
-    # typing issues
-    func_text += "    window_args = np.array([{}], dtype=np.int64)\n".format(
-        ", ".join(
-            [
-                "0" if arg == "None" else f"np.int64(wrap_window_arg({arg}))"
-                for arg in (window_args + [0])
-            ]
+    # NOTE: scalar window args get converted to a cpp table
+    func_text += "    window_args_list = []\n"
+    for i, window_arg in enumerate(window_args):
+        func_text += "    window_arg_arr_{} = coerce_scalar_to_array({}, 1, unknown_type)\n".format(
+            i, window_arg
         )
-    )
+        func_text += (
+            "    window_arg_info_{} = array_to_info(window_arg_arr_{})\n".format(i, i)
+        )
+        func_text += "    window_args_list.append(window_arg_info_{})\n".format(i)
+    # add an extra 0 to avoid typing issues.
+    func_text += "    window_arg_arr_n = coerce_scalar_to_array(0, 1, unknown_type)\n"
+    func_text += "    window_arg_info_n = array_to_info(window_arg_arr_n)\n"
+    func_text += "    window_args_list.append(window_arg_info_n)\n"
+    func_text += "    window_args_table = arr_info_list_to_table(window_args_list)\n"
+
     # NOTE: adding extra 0 to make sure the list is never empty to avoid Numba
     # typing issues
     func_text += "    n_window_args_per_func = np.array([{}], dtype=np.int8)\n".format(
@@ -2417,7 +2423,7 @@ def gen_top_level_agg_func(
         f"transform_funcs.ctypes, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
         f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, "
         f"cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, window_ascending.ctypes, "
-        f"window_na_position.ctypes, window_args.ctypes, n_window_args_per_func.ctypes, n_window_inputs_per_func.ctypes, "
+        f"window_na_position.ctypes, window_args_table, n_window_args_per_func.ctypes, n_window_inputs_per_func.ctypes, "
         f"{agg_node.maintain_input_size}, {n_shuffle_keys}, {agg_node._use_sql_rules})\n"
     )
 
@@ -2513,6 +2519,10 @@ def gen_top_level_agg_func(
     glbls["unknown_cat_out_inds"] = MetaType(tuple(unknown_cat_out_inds))
     glbls["get_table_data"] = bodo.hiframes.table.get_table_data
     glbls["wrap_window_arg"] = bodo.libs.distributed_api.value_to_ptr_as_int64
+    glbls["coerce_scalar_to_array"] = bodo.utils.conversion.coerce_scalar_to_array
+    glbls["array_to_info"] = bodo.libs.array.array_to_info
+    glbls["arr_info_list_to_table"] = bodo.libs.array.arr_info_list_to_table
+    glbls["unknown_type"] = types.unknown
 
     return func_text, glbls
 

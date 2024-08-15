@@ -2573,7 +2573,8 @@ GroupbyState::GroupbyState(
     uint64_t n_keys_, std::vector<bool> mrnf_sort_asc_vec_,
     std::vector<bool> mrnf_sort_na_pos_,
     std::vector<bool> mrnf_part_cols_to_keep_,
-    std::vector<bool> mrnf_sort_cols_to_keep_, int64_t output_batch_size_,
+    std::vector<bool> mrnf_sort_cols_to_keep_,
+    std::shared_ptr<table_info> window_args, int64_t output_batch_size_,
     bool parallel_, int64_t sync_iter_, int64_t op_id_,
     int64_t op_pool_size_bytes_, bool allow_any_work_stealing,
     std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
@@ -2781,9 +2782,9 @@ GroupbyState::GroupbyState(
             window_ftype = 0;
         }
         std::unique_ptr<bodo::Schema> running_values_schema =
-            this->getRunningValueColumnTypes(local_input_cols,
-                                             std::move(in_arr_types_copy),
-                                             ftypes[i], window_ftype);
+            this->getRunningValueColumnTypes(
+                local_input_cols, std::move(in_arr_types_copy), ftypes[i],
+                window_ftype, window_args);
 
         auto seperate_out_cols = this->getSeparateOutputColumns(
             local_input_cols, ftypes[i], window_ftype);
@@ -2843,7 +2844,7 @@ GroupbyState::GroupbyState(
             // safer to mark things as *not* parallel to avoid
             // any synchronization and hangs.
             {window_ftype}, 0, /*is_parallel*/ false, this->mrnf_sort_asc,
-            this->mrnf_sort_na, {nullptr}, 0, nullptr, nullptr, 0, nullptr,
+            this->mrnf_sort_na, window_args, 0, nullptr, nullptr, 0, nullptr,
             use_sql_rules);
 
         // get update/combine type info to initialize build state
@@ -2971,7 +2972,7 @@ GroupbyState::GroupbyState(
 std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
     std::vector<std::shared_ptr<array_info>> local_input_cols,
     std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
-    int window_ftype) {
+    int window_ftype, std::shared_ptr<table_info> window_args) {
     std::shared_ptr<BasicColSet> col_set =
         makeColSet(local_input_cols,     // in_cols
                    nullptr,              // index_col
@@ -2984,7 +2985,7 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
                    false,                // parallel
                    this->mrnf_sort_asc,  // window_ascending
                    this->mrnf_sort_na,   // window_na_position
-                   {nullptr},            // window_args
+                   window_args,          // window_args
                    0,                    // n_input_cols
                    nullptr,              // udf_n_redvars
                    nullptr,              // udf_table
@@ -3018,7 +3019,7 @@ GroupbyState::getSeparateOutputColumns(
                    false,                // parallel
                    this->mrnf_sort_asc,  // window_ascending
                    this->mrnf_sort_na,   // window_na_position
-                   {nullptr},            // window_args
+                   nullptr,              // window_args
                    0,                    // n_input_cols
                    nullptr,              // udf_n_redvars
                    nullptr,              // udf_table
@@ -4807,8 +4808,9 @@ GroupbyState* groupby_state_init_py_entry(
     int32_t* window_ftypes, int32_t* f_in_offsets, int32_t* f_in_cols,
     int n_funcs, uint64_t n_keys, bool* mrnf_sort_asc, bool* mrnf_sort_na,
     uint64_t mrnf_n_sort_keys, bool* mrnf_part_cols_to_keep,
-    bool* mrnf_sort_cols_to_keep, int64_t output_batch_size, bool parallel,
-    int64_t sync_iter, int64_t op_pool_size_bytes) {
+    bool* mrnf_sort_cols_to_keep, table_info* window_args_,
+    int64_t output_batch_size, bool parallel, int64_t sync_iter,
+    int64_t op_pool_size_bytes) {
     // If the memory budget has not been explicitly set, then ask the
     // OperatorComptroller for the budget.
     if (op_pool_size_bytes == -1) {
@@ -4832,6 +4834,7 @@ GroupbyState* groupby_state_init_py_entry(
             mrnf_sort_cols_to_keep_vec[i] = mrnf_sort_cols_to_keep[i];
         }
     }
+    std::shared_ptr<table_info> window_args(window_args_);
 
     return new GroupbyState(
         bodo::Schema::Deserialize(
@@ -4846,8 +4849,8 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
         n_keys, mrnf_sort_asc_vec, mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
-        mrnf_sort_cols_to_keep_vec, output_batch_size, parallel, sync_iter,
-        operator_id, op_pool_size_bytes);
+        mrnf_sort_cols_to_keep_vec, window_args, output_batch_size, parallel,
+        sync_iter, operator_id, op_pool_size_bytes);
 }
 
 /**
@@ -5052,8 +5055,8 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 ftypes_vector, window_ftypes, f_in_offsets_vector,
                 remapped_f_in_cols, num_grouping_keys, mrnf_sort_asc_vec,
                 mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
-                mrnf_sort_cols_to_keep_vec, output_batch_size, parallel,
-                sync_iter, sub_operator_id, op_pool_size_bytes,
+                mrnf_sort_cols_to_keep_vec, nullptr, output_batch_size,
+                parallel, sync_iter, sub_operator_id, op_pool_size_bytes,
                 allow_any_work_stealing, local_key_dict_builders));
         }
         return new GroupingSetsState(

@@ -1167,6 +1167,7 @@ class GroupbyState {
                  std::vector<bool> mrnf_sort_na_pos_,
                  std::vector<bool> mrnf_part_cols_to_keep_,
                  std::vector<bool> mrnf_sort_cols_to_keep_,
+                 std::shared_ptr<table_info> window_args,
                  int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
                  int64_t op_id_, int64_t op_pool_size_bytes_,
                  bool allow_any_work_stealing = true,
@@ -1433,7 +1434,7 @@ class GroupbyState {
     std::unique_ptr<bodo::Schema> getRunningValueColumnTypes(
         std::vector<std::shared_ptr<array_info>> local_input_cols,
         std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
-        int window_ftype);
+        int window_ftype, std::shared_ptr<table_info> window_args);
 
     /**
      * Helper function that gets the output column types for a given function.

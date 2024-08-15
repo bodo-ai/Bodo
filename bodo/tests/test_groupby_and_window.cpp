@@ -5,6 +5,7 @@
 #include "../libs/_groupby_col_set.h"
 #include "../libs/_window_compute.h"
 #include "./test.hpp"
+#include "table_generator.hpp"
 
 typedef enum {
     ZERO,
@@ -404,13 +405,25 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("test_window_select_fns", [] {
         int64_t idx0 = 3;
         int64_t idx1 = -3;
-        std::vector<void *> empty_frame = {nullptr, nullptr};
-        std::vector<void *> prefix_frame = {nullptr, &idx0};
-        std::vector<void *> suffix_frame = {&idx0, nullptr};
-        std::vector<void *> sliding_frame = {&idx1, &idx0};
+        std::shared_ptr<array_info> null_col =
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::INT64);
+        std::shared_ptr<array_info> idx0_col =
+            bodo::tests::cppToBodoArr(std::vector<int64_t>{idx0});
+        std::shared_ptr<array_info> idx1_col =
+            bodo::tests::cppToBodoArr(std::vector<int64_t>{idx1});
+
+        std::shared_ptr<table_info> empty_frame(
+            new table_info({null_col, null_col}));
+        std::shared_ptr<table_info> prefix_frame(
+            new table_info({null_col, idx0_col}));
+        std::shared_ptr<table_info> suffix_frame(
+            new table_info({idx0_col, null_col}));
+        std::shared_ptr<table_info> sliding_frame(
+            new table_info({idx1_col, idx0_col}));
+
 #define TEST_SELECT_WINDOW_FNS(arr_type, dtype)                              \
     TEST_WINDOW_FN(Bodo_FTypes::any_value, arr_type, dtype, arr_type, dtype, \
-                   {}, {}, {}, 1, 0, empty_return_enum::NULL_OUTPUT);        \
+                   {}, {}, nullptr, 1, 0, empty_return_enum::NULL_OUTPUT);   \
     TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {}, \
                    {}, empty_frame, 1, 0, empty_return_enum::NULL_OUTPUT);   \
     TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {}, \
@@ -466,10 +479,22 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("test_window_numeric_fns", [] {
         int64_t idx0 = 3;
         int64_t idx1 = -3;
-        std::vector<void *> empty_frame = {nullptr, nullptr};
-        std::vector<void *> prefix_frame = {nullptr, &idx0};
-        std::vector<void *> suffix_frame = {&idx0, nullptr};
-        std::vector<void *> sliding_frame = {&idx1, &idx0};
+        std::shared_ptr<array_info> null_col =
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::INT64);
+        std::shared_ptr<array_info> idx0_col =
+            bodo::tests::cppToBodoArr(std::vector<int64_t>{idx0});
+        std::shared_ptr<array_info> idx1_col =
+            bodo::tests::cppToBodoArr(std::vector<int64_t>{idx1});
+
+        std::shared_ptr<table_info> empty_frame(
+            new table_info({null_col, null_col}));
+        std::shared_ptr<table_info> prefix_frame(
+            new table_info({null_col, idx0_col}));
+        std::shared_ptr<table_info> suffix_frame(
+            new table_info({idx0_col, null_col}));
+        std::shared_ptr<table_info> sliding_frame(
+            new table_info({idx1_col, idx0_col}));
+
 #define TEST_NUMERIC_WINDOW_FNS(arr_type, dtype)                               \
     TEST_WINDOW_FN(Bodo_FTypes::ratio_to_report, arr_type, dtype,              \
                    bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::FLOAT64,   \
@@ -579,14 +604,26 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("test_window_count_fns", [] {
         int64_t idx0 = 3;
         int64_t idx1 = -3;
-        std::vector<void *> no_frame = {nullptr, nullptr};
-        std::vector<void *> prefix_frame = {nullptr, &idx0};
-        std::vector<void *> suffix_frame = {&idx1, nullptr};
-        std::vector<void *> sliding_frame = {&idx1, &idx0};
+        std::shared_ptr<array_info> null_col =
+            alloc_nullable_array_all_nulls(1, Bodo_CTypes::INT64);
+        std::shared_ptr<array_info> idx0_col =
+            bodo::tests::cppToBodoArr(std::vector<int64_t>{idx0});
+        std::shared_ptr<array_info> idx1_col =
+            bodo::tests::cppToBodoArr(std::vector<int64_t>{idx1});
+
+        std::shared_ptr<table_info> empty_frame(
+            new table_info({null_col, null_col}));
+        std::shared_ptr<table_info> prefix_frame(
+            new table_info({null_col, idx0_col}));
+        std::shared_ptr<table_info> suffix_frame(
+            new table_info({idx1_col, null_col}));
+        std::shared_ptr<table_info> sliding_frame(
+            new table_info({idx1_col, idx0_col}));
+
 #define TEST_COUNT_WINDOW_FNS(arr_type, dtype)                         \
     TEST_WINDOW_FN(Bodo_FTypes::count, arr_type, dtype,                \
                    bodo_array_type::NUMPY, Bodo_CTypes::INT64, {}, {}, \
-                   no_frame, 1, 0, empty_return_enum::ZERO);           \
+                   empty_frame, 1, 0, empty_return_enum::ZERO);        \
     TEST_WINDOW_FN(Bodo_FTypes::count, arr_type, dtype,                \
                    bodo_array_type::NUMPY, Bodo_CTypes::INT64, {}, {}, \
                    prefix_frame, 1, 0, empty_return_enum::ZERO);       \
@@ -618,7 +655,7 @@ static bodo::tests::suite tests([] {
                               Bodo_CTypes::FLOAT64);
         TEST_WINDOW_FN(Bodo_FTypes::size, bodo_array_type::NULLABLE_INT_BOOL,
                        Bodo_CTypes::INT64, bodo_array_type::NUMPY,
-                       Bodo_CTypes::INT64, {}, {}, no_frame, 0, 0,
+                       Bodo_CTypes::INT64, {}, {}, empty_frame, 0, 0,
                        empty_return_enum::ONE);
         TEST_WINDOW_FN(Bodo_FTypes::size, bodo_array_type::NULLABLE_INT_BOOL,
                        Bodo_CTypes::INT64, bodo_array_type::NUMPY,
@@ -635,7 +672,7 @@ static bodo::tests::suite tests([] {
         TEST_WINDOW_FN(Bodo_FTypes::count_if,
                        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL,
                        bodo_array_type::NUMPY, Bodo_CTypes::INT64, {}, {},
-                       no_frame, 1, 0, empty_return_enum::ZERO);
+                       empty_frame, 1, 0, empty_return_enum::ZERO);
         TEST_WINDOW_FN(Bodo_FTypes::count_if,
                        bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::_BOOL,
                        bodo_array_type::NUMPY, Bodo_CTypes::INT64, {}, {},
