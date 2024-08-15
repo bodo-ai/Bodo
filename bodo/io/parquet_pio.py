@@ -536,6 +536,16 @@ def getfs(
         return pa.fs.LocalFileSystem()
 
 
+@pt.overload
+def parse_fpath(fpath: str) -> tuple[str, ParseResult, str]:
+    ...
+
+
+@pt.overload
+def parse_fpath(fpath: list[str]) -> tuple[list[str], ParseResult, str]:
+    ...
+
+
 def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, str]:
     """
     Parse a filepath and extract properties such as the relevant
@@ -578,6 +588,20 @@ def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, s
         fpath = fpath.rstrip("/")
 
     return fpath, parsed_url, protocol
+
+
+@pt.overload
+def get_fpath_without_protocol_prefix(
+    fpath: str, protocol: str, parsed_url: ParseResult
+) -> tuple[str, str]:
+    ...
+
+
+@pt.overload
+def get_fpath_without_protocol_prefix(
+    fpath: list[str], protocol: str, parsed_url: ParseResult
+) -> tuple[list[str], str]:
+    ...
 
 
 def get_fpath_without_protocol_prefix(

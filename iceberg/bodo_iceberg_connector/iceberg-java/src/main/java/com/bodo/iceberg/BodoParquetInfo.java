@@ -2,19 +2,20 @@ package com.bodo.iceberg;
 
 import java.util.LinkedList;
 import java.util.List;
+import org.apache.iceberg.FileScanTask;
 
 public class BodoParquetInfo {
   /** Class that holds the minimal Parquet info needed by Bodo */
   private final String filepath;
 
-  private final long start;
-  private final long length;
+  private final long rowCount;
+  private final long schemaID;
   private final List<String> deleteFiles;
 
-  BodoParquetInfo(String filepath, long start, long length, List<String> deleteFiles) {
-    this.filepath = filepath;
-    this.start = start;
-    this.length = length;
+  BodoParquetInfo(FileScanTask task, long schemaID, List<String> deleteFiles) {
+    this.filepath = task.file().path().toString();
+    this.rowCount = task.file().recordCount();
+    this.schemaID = schemaID;
     this.deleteFiles = deleteFiles;
   }
 
@@ -22,12 +23,12 @@ public class BodoParquetInfo {
     return filepath;
   }
 
-  public long getStart() {
-    return start;
+  public long getRowCount() {
+    return rowCount;
   }
 
-  public long getLength() {
-    return length;
+  public long getSchemaID() {
+    return schemaID;
   }
 
   public List<String> getDeleteFiles() {
@@ -43,6 +44,7 @@ public class BodoParquetInfo {
 
   public String toString() {
     return String.format(
-        "(Filepath: %s, Start Offset: %d, Length: %d)", getFilepath(), getStart(), getLength());
+        "(Filepath: %s, Row Count: %d, Schema ID: %d)",
+        getFilepath(), getRowCount(), getSchemaID());
   }
 }
