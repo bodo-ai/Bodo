@@ -275,6 +275,93 @@ struct StreamSortMetrics {
     IncrementalShuffleMetrics ishuffle_metrics;
 };
 
+#define DEFAULT_SAMPLE_SIZE 2048
+
+/**
+ * Infrastructure for randomly sampling rows from a stream of chunks. Implements
+ * algorithm L as presented here:
+ * https://en.wikipedia.org/wiki/Reservoir_sampling
+ */
+class ReservoirSamplingState {
+    int64_t sample_size = DEFAULT_SAMPLE_SIZE;
+
+    // Indices of columns to be selected for sampling
+    std::vector<int64_t> column_indices;
+    // Schema of sampled table
+    std::shared_ptr<bodo::Schema> schema;
+    // Dictionary builders to use for the samples
+    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+
+    int64_t row_to_sample = -1;
+    // Counter for how many input rows have been consumed so far
+    int64_t total_rows_seen = 0;
+    // Random variable to determine the next row to sample from - see the
+    // algorithm in the URL above.
+    double W;
+
+    // State for random number generation
+    std::mt19937 e;
+    std::uniform_real_distribution<double> dis;
+
+    // Builder of sampled rows
+    TableBuildBuffer samples;
+    // A vector of all indicies that are marked as true in the selection vector
+    std::vector<int64_t> selected_rows;
+
+   public:
+    ReservoirSamplingState(
+        int64_t n_key_t, int64_t sample_size_,
+        std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
+        std::shared_ptr<bodo::Schema> schema)
+        : sample_size(sample_size_), dis(0, 1) {
+        char* sample_size_str = std::getenv("BODO_STREAM_SORT_SAMPLE_SIZE");
+        if (sample_size_str != nullptr) {
+            sample_size = std::stoi(sample_size_str);
+        }
+
+        std::vector<std::unique_ptr<bodo::DataType>> key_types(n_key_t);
+        for (int64_t i = 0; i < n_key_t; i++) {
+            key_types[i] = schema->column_types[i]->copy();
+            dict_builders.push_back(dict_builders_[i]);
+            column_indices.push_back(i);
+        }
+
+        std::iota(column_indices.begin(), column_indices.end(), 0);
+        schema = std::make_shared<bodo::Schema>(std::move(key_types));
+        samples = TableBuildBuffer(schema, dict_builders);
+
+        // Initialize W with a random value
+        W = random();
+    };
+
+    /**
+     * @brief Take in a chunk as input and randomly sample rows from it. The
+     * rows to sample from are picked by incrementing row_to_sample by a random
+     * amount determined by W. These rows will be appended to an internal buffer
+     * and can be obtained by calling Finalize when all input has been
+     * processed.
+     *
+     * @param input table to sample from.
+     */
+    void processInput(const std::shared_ptr<table_info>& input_chunk);
+
+    /**
+     * @brief Returns the set of local samples on this rank by combing the state
+     * in tables, sampled_tables, and replacements.
+     * For every row of tables, we look up if that row has a replacement in
+     * replacements and if so, select a row from the correponding table in
+     * sampled_tables instead. Note that the order of rows in the output table
+     * can be arbitrary.
+     */
+    std::shared_ptr<table_info> Finalize();
+
+   private:
+    /**
+     * @brief Get a uniform random number between 0 and 1
+     */
+    double random();
+};
+
 struct StreamSortState {
     int64_t op_id;
     int64_t n_key_t;
@@ -310,6 +397,8 @@ struct StreamSortState {
     // builder will create a sorted list from the chunks passed to consume batch
     ChunkedTableBuilder builder;
 
+    ReservoirSamplingState reservoir_sampling_state;
+
     // exposed for test only - output of GetParallelSortBounds
     std::shared_ptr<table_info> bounds_;
 
@@ -320,7 +409,8 @@ struct StreamSortState {
                     std::vector<int64_t>&& vect_ascending_,
                     std::vector<int64_t>&& na_position_,
                     std::shared_ptr<bodo::Schema> schema, bool parallel = true,
-                    size_t chunk_size = 4096);
+                    size_t chunk_size = 4096,
+                    size_t sample_size = DEFAULT_SAMPLE_SIZE);
     /**
      * @brief Consume an unsorted table and use it for global sorting
      *
@@ -367,7 +457,7 @@ struct StreamSortState {
      * These bounds determine which elements are assigned to which ranks.
      */
     std::shared_ptr<table_info> GetParallelSortBounds(
-        std::deque<std::shared_ptr<table_info>>& local_chunks);
+        std::shared_ptr<table_info>&& local_samples);
 
     // Partition all sorted input chunks a list of chunks per rank
     // All of the returned data needs to be communicated.
