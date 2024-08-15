@@ -24,7 +24,7 @@
 #include "../libs/_array_operations.h"
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "../libs/_shuffle.h"
+#include "../libs/_dict_builder.h"
 #include "../libs/_theta_sketches.h"
 #include "../libs/iceberg_transforms.h"
 #include "_s3_reader.h"

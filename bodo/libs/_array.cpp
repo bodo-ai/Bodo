@@ -8,6 +8,7 @@
 
 #include <Python.h>
 #include <datetime.h>
+#include <iostream>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include <arrow/api.h>
@@ -19,7 +20,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
-#include "_distributed.h"
+#include "_dict_builder.h"
 #include "_groupby.h"
 #include "_join.h"
 #include "_shuffle.h"

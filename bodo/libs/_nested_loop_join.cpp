@@ -3,7 +3,7 @@
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_distributed.h"
+#include "_dict_builder.h"
 #include "_nested_loop_join_impl.h"
 #include "_shuffle.h"
 
