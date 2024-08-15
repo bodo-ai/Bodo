@@ -76,8 +76,8 @@ class SeriesStrModel(models.StructModel):
 make_attribute_wrapper(SeriesStrMethodType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_series_str_method(typingctx, obj=None):
+@intrinsic
+def init_series_str_method(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         str_method_type = signature.return_type
@@ -1704,8 +1704,8 @@ class SeriesCatModel(models.StructModel):
 make_attribute_wrapper(SeriesCatMethodType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_series_cat_method(typingctx, obj=None):
+@intrinsic
+def init_series_cat_method(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         cat_method_type = signature.return_type

@@ -1166,7 +1166,7 @@ def timestamp_str_overload(a):
     return lambda a: a.isoformat(" ")  # pragma: no cover
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def extract_year_days(typingctx, dt64_t=None):
     """Extracts year and days from dt64 value.
     Returns a 3-tuple of (leftover_dt64_values, year, days)
@@ -1197,7 +1197,7 @@ def extract_year_days(typingctx, dt64_t=None):
     return types.Tuple([types.int64, types.int64, types.int64])(dt64_t), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_month_day(typingctx, year_t, days_t=None):
     """Converts number of days within a year to month and day, returned as a 2-tuple."""
     assert year_t == types.int64
@@ -1533,7 +1533,7 @@ def convert_numpy_timedelta64_to_pd_timedelta(dt64):  # pragma: no cover
     return pd.Timedelta(n_int64)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def integer_to_timedelta64(typingctx, val=None):
     """Cast an int value to timedelta64"""
 
@@ -1543,7 +1543,7 @@ def integer_to_timedelta64(typingctx, val=None):
     return types.NPTimedelta("ns")(val), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def integer_to_dt64(typingctx, val=None):
     """Cast an int value to datetime64"""
 
@@ -1553,7 +1553,7 @@ def integer_to_dt64(typingctx, val=None):
     return types.NPDatetime("ns")(val), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def dt64_to_integer(typingctx, val=None):
     """Cast a datetime64 value to integer"""
 
@@ -1581,7 +1581,7 @@ def td64_hash(val):
     return lambda val: hash(dt64_to_integer(val))
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def timedelta64_to_integer(typingctx, val=None):
     """Cast a timedelta64 value to integer"""
 
@@ -2591,7 +2591,7 @@ def _install_freq_methods():
 _install_freq_methods()
 
 
-# @intrinsic(prefer_literal=True)
+# @intrinsic
 @register_jitable
 def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
     # number of microsecond

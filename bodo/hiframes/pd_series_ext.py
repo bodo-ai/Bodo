@@ -476,8 +476,8 @@ def get_series_payload(context, builder, series_type, value):
     return context.make_helper(builder, payload_type, ref=payload)
 
 
-@intrinsic(prefer_literal=True)
-def get_series_data(typingctx, series_typ=None):
+@intrinsic
+def get_series_data(typingctx, series_typ):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -489,8 +489,8 @@ def get_series_data(typingctx, series_typ=None):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_series_index(typingctx, series_typ=None):
+@intrinsic
+def get_series_index(typingctx, series_typ):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -504,8 +504,8 @@ def get_series_index(typingctx, series_typ=None):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_series_name(typingctx, series_typ=None):
+@intrinsic
+def get_series_name(typingctx, series_typ):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]

@@ -144,8 +144,8 @@ def init_map_arr_codegen(context, builder, sig, args):
     return map_array._getvalue()
 
 
-@intrinsic(prefer_literal=True)
-def init_map_arr(typingctx, data_typ=None):
+@intrinsic
+def init_map_arr(typingctx, data_typ):
     """create a new map array from input data list(struct) array data"""
     assert isinstance(data_typ, ArrayItemArrayType) and isinstance(
         data_typ.dtype, StructArrayType
@@ -408,7 +408,7 @@ make_attribute_wrapper(MapScalarType, "values", "_values")
 make_attribute_wrapper(MapScalarType, "null_bitmask", "_null_bitmask")
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_map_value(typingctx, key_arr_type, value_arr_type, null_bitmask_type):
     """Create a MapValue from key and value arrays"""
     assert null_bitmask_type == types.Array(

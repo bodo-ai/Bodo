@@ -65,8 +65,8 @@ make_attribute_wrapper(CSRMatrixType, "indptr", "indptr")
 make_attribute_wrapper(CSRMatrixType, "shape", "shape")
 
 
-@intrinsic(prefer_literal=True)
-def init_csr_matrix(typingctx, data_t, indices_t, indptr_t, shape_t=None):
+@intrinsic
+def init_csr_matrix(typingctx, data_t, indices_t, indptr_t, shape_t):
     """Create a CSR matrix with provided data values."""
     assert isinstance(data_t, types.Array)
     assert isinstance(indices_t, types.Array) and isinstance(

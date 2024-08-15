@@ -158,7 +158,7 @@ class SnowflakeWriterModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def sf_writer_alloc(typingctx, expected_state_type_t):  # pragma: no cover
     expected_state_type = unwrap_typeref(expected_state_type_t)
     if is_overload_none(expected_state_type):

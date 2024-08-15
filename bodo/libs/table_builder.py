@@ -139,7 +139,7 @@ class TableBuilderStateType(StreamingStateType):
 register_model(TableBuilderStateType)(models.OpaqueModel)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _init_table_builder_state(
     typingctx,
     arr_ctypes,
@@ -186,7 +186,7 @@ def _init_table_builder_state(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _init_chunked_table_builder_state(
     typingctx, arr_ctypes, arr_array_ctypes, n_arrs, output_state_type, chunk_size
 ):
@@ -320,7 +320,7 @@ def gen_init_table_builder_state_impl(
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _chunked_table_builder_append(
     typingctx,
     builder_state,
@@ -344,7 +344,7 @@ def _chunked_table_builder_append(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _table_builder_append(
     typingctx,
     builder_state,
@@ -368,7 +368,7 @@ def _table_builder_append(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _table_builder_nbytes(
     typingctx,
     builder_state,
@@ -452,7 +452,7 @@ def overload_table_builder_nbytes(builder_state):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _table_builder_finalize(
     typingctx,
     builder_state,
@@ -534,7 +534,7 @@ def gen_table_builder_finalize_impl(builder_state):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _chunked_table_builder_pop_chunk(
     typingctx,
     builder_state,
@@ -639,7 +639,7 @@ def gen_table_builder_pop_chunk_impl(builder_state, produce_output=True):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _delete_chunked_table_builder_state(
     typingctx,
     builder_state,
@@ -660,7 +660,7 @@ def _delete_chunked_table_builder_state(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _delete_table_builder_state(
     typingctx,
     builder_state,
@@ -702,7 +702,7 @@ def delete_table_builder_state(builder_state):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _table_builder_get_data(
     typingctx,
     builder_state,
@@ -774,7 +774,7 @@ def gen_table_builder_get_data_impl(builder_state):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def table_builder_reset(
     typingctx,
     builder_state,

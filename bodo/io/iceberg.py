@@ -4095,7 +4095,7 @@ ll.add_symbol(
 )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def iceberg_pq_write_table_cpp(
     typingctx,
     table_data_loc_t,

@@ -123,7 +123,7 @@ class SortStateType(StreamingStateType):
 register_model(SortStateType)(models.OpaqueModel)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _init_stream_sort_state(
     typingctx,
     output_state_type,
@@ -299,7 +299,7 @@ def gen_init_stream_sort_state_impl(
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _delete_stream_sort_state(
     typingctx,
     sort_state,
@@ -332,7 +332,7 @@ def delete_stream_sort_state(sort_state):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _sort_build_consume_batch(typingctx, sort_state, cpp_table, is_last):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -396,7 +396,7 @@ def lower_sort_build_consume_batch(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _produce_output_batch(typingctx, sort_state, produce_output):
     def codegen(context, builder, sig, args):
         sort_state, produce_output = args

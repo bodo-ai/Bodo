@@ -213,8 +213,8 @@ def cast_match_obj_bool(context, builder, fromty, toty, val):
     return builder.load(out)
 
 
-@intrinsic(prefer_literal=True)
-def match_obj_is_none(typingctx, match_typ=None):
+@intrinsic
+def match_obj_is_none(typingctx, match_typ):
     assert match_typ == re_match_type
 
     def codegen(context, builder, sig, args):
@@ -306,7 +306,7 @@ def overload_re_purge():
 
 
 @intrinsic(prefer_literal=True)
-def init_const_pattern(typingctx, pat, pat_const=None):
+def init_const_pattern(typingctx, pat, pat_const):
     """dummy intrinsic to add constant pattern string to Pattern data type"""
     pat_const_str = get_overload_const_str(pat_const)
 

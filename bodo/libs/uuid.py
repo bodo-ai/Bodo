@@ -16,7 +16,7 @@ ll.add_symbol("uuidV5", uuid_cpp.uuidV5)
 string_type = types.unicode_type
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def uuidV4_wrapper(typingctx, output):
     """Wrapper for uuidV4 in _uuid.cpp"""
 
@@ -35,7 +35,7 @@ def uuidV4_wrapper(typingctx, output):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def uuidV5_wrapper(typingctx, output, namespace, name):
     """Wrapper for uuidV5 in _uuid.cpp"""
 

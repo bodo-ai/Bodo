@@ -191,7 +191,7 @@ from bodo.io import csv_cpp
 ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def csv_file_chunk_reader(
     typingctx,
     fname_t,

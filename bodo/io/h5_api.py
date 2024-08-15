@@ -99,8 +99,8 @@ string_list_type = types.List(string_type)
 #################################################
 
 
-@intrinsic(prefer_literal=True)
-def unify_h5_id(typingctx, tp=None):
+@intrinsic
+def unify_h5_id(typingctx, tp):
     """converts h5 id objects (which all have the same hid_t representation) to a single
     type to enable reuse of external functions.
     """
@@ -111,8 +111,8 @@ def unify_h5_id(typingctx, tp=None):
     return h5file_type(tp), codegen
 
 
-@intrinsic(prefer_literal=True)
-def cast_to_h5_dset(typingctx, tp=None):
+@intrinsic
+def cast_to_h5_dset(typingctx, tp):
     """converts h5dataset_or_group_type to h5dataset_type"""
     assert tp in (h5dataset_type, h5dataset_or_group_type)
 
@@ -398,8 +398,8 @@ def get_filter_read_indices(bool_arr):  # pragma: no cover
     return all_indices[start:end]
 
 
-@intrinsic(prefer_literal=True)
-def tuple_to_ptr(typingctx, tuple_tp=None):
+@intrinsic
+def tuple_to_ptr(typingctx, tuple_tp):
     def codegen(context, builder, sig, args):
         ptr = cgutils.alloca_once(builder, args[0].type)
         builder.store(args[0], ptr)

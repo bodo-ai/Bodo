@@ -212,8 +212,8 @@ def impl_ctor_datetime_date(context, builder, sig, args):
     return builder.trunc(o, lir.IntType(32))
 
 
-@intrinsic(prefer_literal=True)
-def cast_int_to_datetime_date(typingctx, val=None):
+@intrinsic
+def cast_int_to_datetime_date(typingctx, val):
     """Cast int value to datetime.date"""
     assert val == types.int32
 
@@ -223,8 +223,8 @@ def cast_int_to_datetime_date(typingctx, val=None):
     return datetime_date_type(types.int32), codegen
 
 
-@intrinsic(prefer_literal=True)
-def cast_datetime_date_to_int(typingctx, val=None):
+@intrinsic
+def cast_datetime_date_to_int(typingctx, val):
     """Cast datetime.date value to int"""
     assert val == datetime_date_type
 
@@ -379,7 +379,7 @@ def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_isocalendar(typingctx, dt_year, dt_month, dt_day):
     def codegen(context, builder, sig, args):
         year = cgutils.alloca_once(builder, lir.IntType(64))
@@ -817,8 +817,8 @@ def box_datetime_date_array(typ, val, c):
     return obj_arr
 
 
-@intrinsic(prefer_literal=True)
-def init_datetime_date_array(typingctx, data, nulls=None):
+@intrinsic
+def init_datetime_date_array(typingctx, data, nulls):
     """Create a DatetimeDateArrayType with provided data values."""
     assert data == types.Array(types.int32, 1, "C") or data == types.Array(
         types.NPDatetime("ns"), 1, "C"

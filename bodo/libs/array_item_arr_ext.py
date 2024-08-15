@@ -286,7 +286,7 @@ def lower_pre_alloc_array_item_array(context, builder, sig, args):
     return array_item_array._getvalue()
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def pre_alloc_array_item_array(typingctx, num_arrs_typ, num_values_typ, dtype_typ):
     assert isinstance(
         num_arrs_typ, types.Integer
@@ -396,7 +396,7 @@ def init_array_item_array_codegen(context, builder, signature, args):
     return array_item_array._getvalue()
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_array_item_array(
     typingctx, n_arrays_typ, data_type, offsets_typ, null_bitmap_typ
 ):
@@ -410,8 +410,8 @@ def init_array_item_array(
     return sig, init_array_item_array_codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_offsets(typingctx, arr_typ=None):
+@intrinsic
+def get_offsets(typingctx, arr_typ):
     assert isinstance(
         arr_typ, ArrayItemArrayType
     ), "get_offsets: ArrayItemArrayType expected"
@@ -435,8 +435,8 @@ def get_offsets(typingctx, arr_typ=None):
     return types.Array(offset_type, 1, "C")(arr_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_offsets_ind(typingctx, arr_typ, ind_t=None):
+@intrinsic
+def get_offsets_ind(typingctx, arr_typ, ind_t):
     """get offsets[ind] without wrapping in Numpy array (can be ~2x faster)"""
     assert isinstance(arr_typ, ArrayItemArrayType)
 
@@ -452,8 +452,8 @@ def get_offsets_ind(typingctx, arr_typ, ind_t=None):
     return offset_type(arr_typ, types.int64), codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_data(typingctx, arr_typ=None):
+@intrinsic
+def get_data(typingctx, arr_typ):
     """get underlying array used for storing data elements.
     NOTE: May have more capacity than necessary (similar to std::vector).
     Use offsets[n] to get total number of elements instead of len(data_arr).
@@ -468,8 +468,8 @@ def get_data(typingctx, arr_typ=None):
     return (arr_typ.dtype)(arr_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_null_bitmap(typingctx, arr_typ=None):
+@intrinsic
+def get_null_bitmap(typingctx, arr_typ):
     assert isinstance(arr_typ, ArrayItemArrayType)
 
     def codegen(context, builder, sig, args):
@@ -514,8 +514,8 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_single_array
 
 
-@intrinsic(prefer_literal=True)
-def get_n_arrays(typingctx, arr_typ=None):
+@intrinsic
+def get_n_arrays(typingctx, arr_typ):
     assert isinstance(arr_typ, ArrayItemArrayType)
 
     def codegen(context, builder, sig, args):
@@ -526,8 +526,8 @@ def get_n_arrays(typingctx, arr_typ=None):
     return types.int64(arr_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
-def replace_data_arr(typingctx, arr_typ, data_typ=None):
+@intrinsic
+def replace_data_arr(typingctx, arr_typ, data_typ):
     """replace the underlying data array of array(item) array"""
     assert isinstance(arr_typ, ArrayItemArrayType) and data_typ == arr_typ.dtype
 

@@ -973,7 +973,7 @@ def ensure_single_value(A):  # pragma: no cover
     return A
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def gen_random_int64(typingcontext):
     """A subset of the numba implementation of random.randrange.
     Designed to always output 1 random 64-bit integer, with the

@@ -521,7 +521,7 @@ def sign_decimal(arr):  # pragma: no cover
     pass
 
 
-@overload(sign_decimal, prefer_literal=True)
+@overload(sign_decimal)
 def overload_sign_decimal(arr):
     if not (
         is_overload_none(arr)
