@@ -431,7 +431,7 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true,
+                              std::move(na_position), table->schema(), true, 10,
                               10);
         state.ConsumeBatch(table, true);
         state.FinalizeBuild();
@@ -444,10 +444,12 @@ bodo::tests::suite external_sort_tests([] {
             arrow::Int64Array* int_arr =
                 static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            // Allow imbalance of 10%
-            int64_t error = std::max((per_host_size + 9) / 10, (int64_t)5);
+            // Allow relative error of 25%
+            double error = 0.25;
             auto in_bound = [&](int64_t diff) -> bool {
-                return std::abs(diff - per_host_size) <= error;
+                double rel_error = std::abs((double)(diff - per_host_size) /
+                                            (double)per_host_size);
+                return rel_error <= error;
             };
 
             for (int64_t i = 0; i < (n_pes - 1); i++) {
@@ -484,28 +486,25 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true,
+                              std::move(na_position), table->schema(), true, 10,
                               10);
         state.ConsumeBatch(table, true);
-        state.builder.FinalizeActiveChunk();
-        auto res = state.GetParallelSortBounds(state.builder.chunks);
+        // This is okay for testing, but calling Finalize here means that this
+        // test cannot safely call GlobalSort.
+        auto local_bounds = state.reservoir_sampling_state.Finalize();
+        auto res = state.GetParallelSortBounds(std::move(local_bounds));
         if (myrank == 0) {
             bodo::tests::check(static_cast<int>(res->nrows()) == (n_pes - 1));
 
             auto arrow_arr = to_arrow(res->columns[0]);
-            arrow::Int64Array* int_arr =
-                static_cast<arrow::Int64Array*>(arrow_arr.get());
+            auto* int_arr = static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            // Allow imbalance of 10%
-            // Currently all input individual chunks are unsorted. There is
-            // another version where input individual chunks are sorted (but not
-            // globally Finalized) Random sampling on the current version
-            // produces slightly worse unbalanced bounds (3%) compared to the
-            // sorted version (0.5%). Although already better than theoretical
-            // value (10%) with high probability
-            int64_t error = std::max((per_host_size + 9) / 10, (int64_t)5);
+            // Allow imbalance of 25%
+            double error = 0.25;
             auto in_bound = [&](int64_t diff) -> bool {
-                return std::abs(diff - per_host_size) <= error;
+                double rel_error = std::abs((double)(diff - per_host_size) /
+                                            (double)per_host_size);
+                return rel_error <= error;
             };
 
             for (int64_t i = 0; i < (n_pes - 1); i++) {
@@ -552,7 +551,7 @@ bodo::tests::suite external_sort_tests([] {
             if (limitoffset[trial].second == -1) {
                 StreamSortState state(0, 1, std::move(vect_ascending),
                                       std::move(na_position), table->schema(),
-                                      false, chunk_size);
+                                      false, chunk_size, chunk_size);
                 state.ConsumeBatch(table, true);
                 state.FinalizeBuild();
 
@@ -657,7 +656,7 @@ bodo::tests::suite external_sort_tests([] {
 
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
-                              chunk_size);
+                              chunk_size, chunk_size);
         state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
@@ -739,7 +738,7 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
-                              chunk_size);
+                              chunk_size, chunk_size);
         state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
@@ -827,7 +826,7 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
-                              chunk_size);
+                              chunk_size, chunk_size);
         state.ConsumeBatch(table, true);
         state.FinalizeBuild();
 
@@ -896,7 +895,7 @@ bodo::tests::suite external_sort_tests([] {
             bodo::tests::cppToBodo({"A"}, {false}, {}, std::move(schema_data));
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), schema_table->schema(),
-                              true, chunk_size);
+                              true, chunk_size, chunk_size);
         int index = 0;
         while (index < n_elem) {
             std::vector<int64_t> local_data;
@@ -1069,7 +1068,8 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> vect_ascending{1};
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
-                              std::move(na_position), table->schema(), true, 5);
+                              std::move(na_position), table->schema(), true, 5,
+                              5);
         state.ConsumeBatch(table, true);
 
         state.FinalizeBuild();
