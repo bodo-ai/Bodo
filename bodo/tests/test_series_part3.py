@@ -903,9 +903,9 @@ def test_heterogeneous_series_df_apply_astype(to_type):
                 else:
                     return str(x)
 
-            exp_output = df_str.applymap(_str_helper)
+            exp_output = df_str.map(_str_helper)
         elif to_type in ("bool", "boolean"):
-            exp_output = df_str.applymap(lambda x: bool(x) if not pd.isna(x) else pd.NA)
+            exp_output = df_str.map(lambda x: bool(x) if not pd.isna(x) else pd.NA)
         check_func(test_impl, (df_str,), check_dtype=False, py_output=exp_output)
     elif "int" in to_type or "Int" in to_type:
         int_func = {
@@ -919,7 +919,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             "uint32": np.uint32,
             "uint64": np.uint64,
         }
-        exp_output = df_int.applymap(
+        exp_output = df_int.map(
             lambda x: int_func[to_type.lower()](x) if not pd.isna(x) else pd.NA
         )
         check_func(test_impl, (df_int,), py_output=exp_output)
@@ -929,7 +929,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             "float32": np.float32,
             "float64": np.float64,
         }
-        exp_output = df_float.applymap(
+        exp_output = df_float.map(
             lambda x: float_func[to_type](x)
             if not pd.isna(x)
             else float_func[to_type](np.nan)
@@ -993,11 +993,11 @@ def test_heterogeneous_series_df_apply_astype_classes():
         else:
             return str(x)
 
-    str_output = df_str.applymap(_str_helper)
+    str_output = df_str.map(_str_helper)
     # TODO: nullable bool
-    bool_output = df_str.applymap(lambda x: bool(x) if not pd.isna(x) else pd.NA)
-    int_output = df_int.applymap(lambda x: int(x) if not pd.isna(x) else pd.NA)
-    float_output = df_float.applymap(lambda x: float(x) if not pd.isna(x) else pd.NA)
+    bool_output = df_str.map(lambda x: bool(x) if not pd.isna(x) else pd.NA)
+    int_output = df_int.map(lambda x: int(x) if not pd.isna(x) else pd.NA)
+    float_output = df_float.map(lambda x: float(x) if not pd.isna(x) else pd.NA)
 
     check_func(test_impl_str, (df_str,), py_output=str_output)
     check_func(test_impl_bool, (df_str,), py_output=bool_output)

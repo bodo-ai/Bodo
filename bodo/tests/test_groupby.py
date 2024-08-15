@@ -1741,7 +1741,7 @@ def test_cumsum_exscan_categorical_random(memory_leak_check):
         check_dtype=False,
         py_output=df2.groupby("A")
         .cumsum(skipna=False)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
     check_func(
         f2,
@@ -1749,7 +1749,7 @@ def test_cumsum_exscan_categorical_random(memory_leak_check):
         check_dtype=False,
         py_output=df2.groupby("A")
         .cumsum(skipna=True)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
 
 
@@ -1799,7 +1799,7 @@ def test_cumsum_exscan_multikey_random(memory_leak_check):
         check_dtype=False,
         py_output=df.groupby(["A", "B"])
         .cumsum()
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
 
 
@@ -4027,7 +4027,7 @@ def test_groupby_cumsum(memory_leak_check):
         sort_output=True,
         py_output=df1.groupby("A")
         .cumsum(skipna=False)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
     check_func(
         impl1,
@@ -4035,7 +4035,7 @@ def test_groupby_cumsum(memory_leak_check):
         sort_output=True,
         py_output=df2.groupby("A")
         .cumsum(skipna=False)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
     check_func(
         impl1,
@@ -4043,7 +4043,7 @@ def test_groupby_cumsum(memory_leak_check):
         sort_output=True,
         py_output=df3.groupby("A")
         .cumsum(skipna=False)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
     check_func(
         impl2,
@@ -4051,7 +4051,7 @@ def test_groupby_cumsum(memory_leak_check):
         sort_output=True,
         py_output=df1.groupby("A")
         .cumsum(skipna=True)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
     check_func(
         impl2,
@@ -4059,7 +4059,7 @@ def test_groupby_cumsum(memory_leak_check):
         sort_output=True,
         py_output=df2.groupby("A")
         .cumsum(skipna=True)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
     check_func(
         impl2,
@@ -4067,7 +4067,7 @@ def test_groupby_cumsum(memory_leak_check):
         sort_output=True,
         py_output=df3.groupby("A")
         .cumsum(skipna=True)
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
 
 
@@ -4122,7 +4122,7 @@ def test_groupby_multi_labels_cumsum_multi_cols(memory_leak_check):
         check_dtype=False,
         py_output=df.groupby(["A", "B"])[["C", "D"]]
         .cumsum()
-        .applymap(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
+        .map(lambda a: pd.NA if (a is not pd.NA) and np.isnan(a) else a),
     )
 
 

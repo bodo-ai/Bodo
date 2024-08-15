@@ -5409,9 +5409,9 @@ dataframe_unsupported = [
     "divide",  # Not in the organized pd docs, putting it here
     "multiply",  # Not in the organized pd docs, putting it here
     # Function application, GroupBy & window
-    "applymap",
     "agg",
     "aggregate",
+    "map",
     "transform",
     "expanding",
     "ewm",
