@@ -70,6 +70,7 @@ from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import run_rank0
 
 if pt.TYPE_CHECKING:  # pragma: no cover
+    from bodo_iceberg_connector import IcebergParquetInfo
     from pyarrow._dataset import Dataset
     from pyarrow._fs import PyFileSystem
 
@@ -159,7 +160,7 @@ def format_iceberg_conn(conn_str: str) -> str:
     return conn_str
 
 
-def format_iceberg_conn_njit(conn):
+def format_iceberg_conn_njit(conn: str) -> str:  # type: ignore
     pass
 
 
@@ -277,7 +278,7 @@ def is_snowflake_managed_iceberg_wh(con: str) -> bool:
 
 def get_iceberg_file_list(
     table_name: str, conn: str, database_schema: str, filters: str | None
-) -> tuple[list[str], list[str]]:
+) -> tuple[list["IcebergParquetInfo"], dict[int, pa.Schema], int]:
     """
     Gets the list of parquet data files that need to be read from an Iceberg table.
 
@@ -300,18 +301,14 @@ def get_iceberg_file_list(
     ), "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
 
     try:
-        res = bic.bodo_connector_get_parquet_file_list(
-            conn, database_schema, table_name, filters
-        )
+        return bic.get_bodo_parquet_info(conn, database_schema, table_name, filters)
     except bic.IcebergError as e:
         raise BodoError(
             f"Failed to Get List of Parquet Data Files from Iceberg Table: {e.message}"
         )
 
-    return res
 
-
-def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
+def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str) -> int:
     """
     Fetch the current snapshot id for an Iceberg table.
 
@@ -330,7 +327,7 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
     ), "get_iceberg_snapshot_id should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
 
     try:
-        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+        return bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
             conn,
             database_schema,
             table_name,
@@ -339,8 +336,6 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
         raise BodoError(
             f"Failed to Get the Snapshot ID from an Iceberg Table: {e.message}"
         )
-
-    return snapshot_id
 
 
 def generate_expr_filter(
@@ -433,6 +428,13 @@ register_model(ThetaSketchCollectionType)(models.OpaqueModel)
 theta_sketch_collection_type = ThetaSketchCollectionType()
 
 
+FieldID: pt.TypeAlias = int | tuple["FieldIDs", ...]
+FieldIDs: pt.TypeAlias = tuple[FieldID, ...]
+FieldName: pt.TypeAlias = str | tuple["FieldNames", ...]
+FieldNames: pt.TypeAlias = tuple[FieldName, ...]
+SchemaGroupIdentifier: pt.TypeAlias = tuple[FieldIDs, FieldNames]
+
+
 class IcebergSchemaGroup:
     """
     Class to store the details about one "Schema Group"
@@ -458,8 +460,8 @@ class IcebergSchemaGroup:
 
     def __init__(
         self,
-        iceberg_field_ids: tuple[int, ...],
-        parquet_field_names: tuple[str, ...],
+        iceberg_field_ids: FieldIDs,
+        parquet_field_names: FieldNames,
         final_schema: pa.Schema,
         expr_filter_f_str: pt.Optional[str] = None,
         filter_scalars: pt.Optional[list[tuple[str, pt.Any]]] = None,
@@ -486,8 +488,8 @@ class IcebergSchemaGroup:
                 'generate_expr_filter'for more details. Defaults to None.
         """
         assert len(iceberg_field_ids) == len(parquet_field_names)
-        self.iceberg_field_ids: tuple[int, ...] = iceberg_field_ids
-        self.parquet_field_names: tuple[str, ...] = parquet_field_names
+        self.iceberg_field_ids = iceberg_field_ids
+        self.parquet_field_names = parquet_field_names
         self.final_schema: pa.Schema = final_schema
         self.read_schema: pa.Schema = self.gen_read_schema(
             self.iceberg_field_ids, self.parquet_field_names, self.final_schema
@@ -504,19 +506,19 @@ class IcebergSchemaGroup:
             )
 
     @property
-    def group_identifier(self) -> tuple[tuple[int, ...], tuple[str, ...]]:
+    def group_identifier(self) -> SchemaGroupIdentifier:
         """
         The tuple that uniquely identifies a Schema Group.
 
         Returns:
-            tuple[tuple[int], tuple[str]]
+            SchemaGroupIdentifier
         """
         return (self.iceberg_field_ids, self.parquet_field_names)
 
     @staticmethod
     def gen_read_field(
-        iceberg_field_ids: int | tuple,
-        parquet_field_names: str | tuple,
+        iceberg_field_ids: FieldID,
+        parquet_field_names: FieldName,
         final_field: pa.Field,
         field_name_for_err_msg: str,
     ) -> pa.Field:
@@ -719,8 +721,8 @@ class IcebergSchemaGroup:
 
     @staticmethod
     def gen_read_schema(
-        iceberg_field_ids: tuple[int | tuple, ...],
-        parquet_field_names: tuple[str | tuple, ...],
+        iceberg_field_ids: FieldIDs,
+        parquet_field_names: FieldNames,
         final_schema: pa.Schema,
     ) -> pa.Schema:
         """
@@ -830,38 +832,12 @@ class IcebergPiece:
     schema_group_idx: int
     # Schema group identifier. This is used when
     # the schema groups haven't been created yet.
-    schema_group_identifier: pt.Optional[tuple[tuple[int], tuple[str]]]
+    schema_group_identifier: SchemaGroupIdentifier | None
     # Number of rows to read from this file
     # In case of row-level filtering, this is the count
     # after applying the filters. In case of piece-level filtering,
     # this is the total number of rows in the piece.
     _bodo_num_rows: int
-
-
-@dataclass
-class IcebergFilePiece(IcebergPiece):
-    """
-    Extension of IcebergPiece where we optionally store
-    additional information about the row groups
-    within the file and their row counts. This is useful
-    when we're able to prune out row groups based on the
-    row-group level metadata and our filters.
-    """
-
-    row_group_idxs: pt.Optional[list[int]] = None
-    row_group_row_counts: pt.Optional[list[int]] = None
-
-
-@dataclass
-class IcebergRowGroupPiece(IcebergPiece):
-    """
-    Piece representing a single row-group in a parquet
-    file. This is used when splitting a file piece
-    into multiple row group level pieces for better
-    distribution between ranks.
-    """
-
-    row_group_idx: int
 
 
 @dataclass
@@ -872,17 +848,14 @@ class IcebergPqDatasetMetrics:
     """
 
     file_list_time: int = 0
+    file_to_schema_time_us: int = 0
     get_fs_time: int = 0
     n_files_analyzed: int = 0
     file_frags_creation_time: int = 0
-    file_frags_fetch_md_time: int = 0
     get_sg_id_time: int = 0
     sort_by_sg_id_time: int = 0
     nunique_sgs_seen: int = 0
-    rg_filtering_time: int = 0
     exact_row_counts_time: int = 0
-    exact_row_counts_recreated_frags: bool = False
-    schema_validation_time: int = 0
     get_row_counts_nrgs: int = 0
     get_row_counts_nrows: int = 0
     get_row_counts_total_bytes: int = 0
@@ -930,7 +903,7 @@ class IcebergParquetDataset:
     # of the schema groups (and hence minimize the number of
     # Arrow scanners/record-batch-readers that it needs
     # to create).
-    pieces: list[IcebergFilePiece]
+    pieces: list[IcebergPiece]
     # Ordered list of schema groups. These are all the
     # different schemas we will need to handle during
     # the actual read for handling schema evolution.
@@ -1235,7 +1208,7 @@ def get_iceberg_file_list_parallel(
     database_schema: str,
     table_name: str,
     filters: str | None = None,
-) -> tuple[list[str], int, list[str]]:
+) -> tuple[list["IcebergParquetInfo"], int, dict[int, pa.Schema], int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
     on rank 0 and handles all the required error
@@ -1248,21 +1221,22 @@ def get_iceberg_file_list_parallel(
         conn (str): Iceberg connection string
         database_schema (str): Iceberg database.
         table_name (str): Iceberg table's name
-        filters (optional): Filters for file
-            pruning. Defaults to None.
+        filters (optional): Filters for file pruning. Defaults to None.
 
     Returns:
-        tuple[list[str], int, list[str]]:
-        - List of file paths from Iceberg sanitized to be used by Bodo
-            - Convert S3A paths to S3 paths
-            - Convert relative paths to absolute paths
+        tuple[IcebergParquetInfo, int, dict[int, pa.Schema]]:
+        - List of Parquet file info from Iceberg including
+            - Original and sanitized file paths
+            - Additional metadata like schema and row count info
         - Snapshot ID that these files were taken from.
-        - List of original file paths directly from Iceberg
+        - Schema group identifier to schema mapping
     """
     comm = MPI.COMM_WORLD
-    pq_abs_path_file_list_or_e = None
+    exc = None
+    pq_infos = None
     snapshot_id_or_e = None
-    iceberg_relative_path_file_list = None
+    all_schemas = None
+    get_file_to_schema_us = None
     # Get the list on just one rank to reduce JVM overheads
     # and general traffic to table for when there are
     # catalogs in the future.
@@ -1275,33 +1249,24 @@ def get_iceberg_file_list_parallel(
         if tracing.is_tracing():  # pragma: no cover
             ev_iceberg_fl.add_attribute("g_filters", filters)
         try:
-            # We return two list of Iceberg files. pq_abs_path_file_list_or_e contains the full
-            # paths that can be used to read individual files. iceberg_relative_path_file_list contains
-            # the path as given exactly by Iceberg, which may be a relative path for local files.
-            #
-            # For example if the absolute path was /Users/bodo/iceberg_db/my_table/part01.pq
-            # and the iceberg directory is iceberg_db, then the path in pq_abs_path_file_list_or_e would be
-            # /Users/bodo/iceberg_db/my_table/part01.pq and the path in iceberg_relative_path_file_list
-            # would be iceberg_db/my_table/part01.pq.
             (
-                pq_abs_path_file_list_or_e,
-                iceberg_relative_path_file_list,
+                pq_infos,
+                all_schemas,
+                get_file_to_schema_us,
             ) = get_iceberg_file_list(table_name, conn, database_schema, filters)
             if tracing.is_tracing():  # pragma: no cover
                 ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
                     os.environ.get("BODO_ICEBERG_TRACING_NUM_FILES_TO_LOG", "50")
                 )
-                ev_iceberg_fl.add_attribute(
-                    "num_files", len(pq_abs_path_file_list_or_e)
-                )
+                ev_iceberg_fl.add_attribute("num_files", len(pq_infos))
                 ev_iceberg_fl.add_attribute(
                     f"first_{ICEBERG_TRACING_NUM_FILES_TO_LOG}_files",
                     ", ".join(
-                        pq_abs_path_file_list_or_e[:ICEBERG_TRACING_NUM_FILES_TO_LOG]
+                        x.orig_path for x in pq_infos[:ICEBERG_TRACING_NUM_FILES_TO_LOG]
                     ),
                 )
         except Exception as e:  # pragma: no cover
-            pq_abs_path_file_list_or_e = e
+            exc = e
 
         ev_iceberg_fl.finalize()
         ev_iceberg_snapshot = tracing.Event("get_snapshot_id", is_parallel=False)
@@ -1313,12 +1278,10 @@ def get_iceberg_file_list_parallel(
             snapshot_id_or_e = e
         ev_iceberg_snapshot.finalize()
 
-        if bodo.user_logging.get_verbose_level() >= 1 and isinstance(
-            pq_abs_path_file_list_or_e, list
-        ):
+        if bodo.user_logging.get_verbose_level() >= 1 and isinstance(pq_infos, list):
             import bodo_iceberg_connector as bic
 
-            """This should never fail given that pq_abs_path_file_list_or_e is not an error, but just to be safe..."""
+            # This should never fail given that pq_infos is not None, but just to be safe.
             try:
                 total_num_files = bic.bodo_connector_get_total_num_pq_files_in_table(
                     conn, database_schema, table_name
@@ -1328,14 +1291,14 @@ def get_iceberg_file_list_parallel(
                     "unknown (error getting total number of files: " + str(e) + ")"
                 )
 
-            num_files_read = len(pq_abs_path_file_list_or_e)
+            num_files_read = len(pq_infos)
 
             if bodo.user_logging.get_verbose_level() >= 2:
                 # Constant to limit the number of files to list in the log message
                 # May want to increase this for higher verbosity levels
                 num_files_to_list = 10
 
-                file_list = ", ".join(pq_abs_path_file_list_or_e[:num_files_to_list])
+                file_list = ", ".join(x.orig_path for x in pq_infos[:num_files_to_list])
                 log_msg = f"Total number of files is {total_num_files}. Reading {num_files_read} files: {file_list}"
 
                 if num_files_read > num_files_to_list:
@@ -1350,18 +1313,25 @@ def get_iceberg_file_list_parallel(
 
     # Send list to all ranks
     (
-        pq_abs_path_file_list_or_e,
+        exc,
+        pq_infos,
         snapshot_id_or_e,
-        iceberg_relative_path_file_list,
+        all_schemas,
+        get_file_to_schema_us,
     ) = comm.bcast(
-        (pq_abs_path_file_list_or_e, snapshot_id_or_e, iceberg_relative_path_file_list)
+        (
+            exc,
+            pq_infos,
+            snapshot_id_or_e,
+            all_schemas,
+            get_file_to_schema_us,
+        )
     )
 
     # Raise error on all processors if found (not just rank 0 which would cause hangs)
-    if isinstance(pq_abs_path_file_list_or_e, Exception):
-        error = pq_abs_path_file_list_or_e
+    if isinstance(exc, Exception):
         raise BodoError(
-            f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
+            f"Error reading Iceberg Table: {type(exc).__name__}: {str(exc)}\n"
         )
     if isinstance(snapshot_id_or_e, Exception):
         error = snapshot_id_or_e
@@ -1369,15 +1339,19 @@ def get_iceberg_file_list_parallel(
             f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
         )
 
-    pq_abs_path_file_list: list[str] = pq_abs_path_file_list_or_e
     snapshot_id: int = snapshot_id_or_e
-    return pq_abs_path_file_list, snapshot_id, iceberg_relative_path_file_list
+    return (
+        pq_infos,
+        snapshot_id,
+        all_schemas,
+        get_file_to_schema_us,
+    )
 
 
 def get_schema_group_identifier_from_pa_field(
     field: pa.Field,
     field_name_for_err_msg: str,
-) -> tuple[tuple | int, tuple | str]:
+) -> SchemaGroupIdentifier:
     """
     Recursive helper for 'get_schema_group_identifier_from_pa_schema'
     to get the schema group identifier for a specific
@@ -1395,7 +1369,7 @@ def get_schema_group_identifier_from_pa_field(
             used in the error messages.
 
     Returns:
-        tuple[tuple | int, tuple | str]: Schema group identifier
+        SchemaGroupIdentifier: Schema group identifier
             for this field.
     """
     field_type = field.type
@@ -1408,7 +1382,7 @@ def get_schema_group_identifier_from_pa_field(
     iceberg_field_id: int = int(field.metadata[b_ICEBERG_FIELD_ID_MD_KEY])
 
     if pa.types.is_struct(field_type):
-        sub_field_schema_group_identifiers: list[tuple[tuple, tuple]] = [
+        sub_field_schema_group_identifiers: list[SchemaGroupIdentifier] = [
             get_schema_group_identifier_from_pa_field(
                 field_type.field(i),
                 f"{field_name_for_err_msg}.{field_type.field(i).name}",
@@ -1455,7 +1429,7 @@ def get_schema_group_identifier_from_pa_field(
 
 def get_schema_group_identifier_from_pa_schema(
     schema: pa.Schema,
-) -> tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]]:
+) -> SchemaGroupIdentifier:
     """
     Generate the schema group identifier from
     the schema of a parquet file. The schema group
@@ -1470,79 +1444,21 @@ def get_schema_group_identifier_from_pa_schema(
             schema group identifier based on.
 
     Returns:
-        tuple[tuple[int | tuple], tuple[str | tuple]]:
-            The schema group identifier.
+        SchemaGroupIdentifier: The schema group identifier.
     """
     field_identifiers = [
         get_schema_group_identifier_from_pa_field(f, f.name) for f in schema
     ]
-    iceberg_field_ids = [x[0] for x in field_identifiers]
-    pq_field_names = [x[1] for x in field_identifiers]
-    return tuple(iceberg_field_ids), tuple(pq_field_names)
-
-
-def create_file_frags_with_md(
-    fpaths: list[str],
-    fs: "PyFileSystem" | pa.fs.FileSystem,
-    metrics: IcebergPqDatasetMetrics,
-    pq_file_format: pt.Optional[ds.ParquetFileFormat] = None,
-) -> list[ds.ParquetFileFragment]:
-    """
-    Create ParquetFileFragments, one for each file path using
-    the provided filesystem. We use the 'pq_file_format', if one
-    is provided, to create the fragments. This is useful, e.g.,
-    when creating fragments with dict-encoding information. If
-    one is not provided, we use the default ParquetFileFormat
-    to create the fragments.
-
-    Args:
-        fpaths (list[str]): List of files to create fragments for.
-        fs (PyFileSystem&quot; | pa.fs.FileSystem): Filesystem to use.
-        metrics (IcebergPqDatasetMetrics): Metrics to update in place.
-        pq_file_format (pt.Optional[ds.ParquetFileFormat], optional): FileFormat
-            to use for creating the fragments. Defaults to None.
-
-    Returns:
-        list[ds.ParquetFileFragment]: List of ParquetFileFragments.
-    """
-
-    # Create a default format if one is not provided.
-    if pq_file_format is None:
-        pq_file_format = ds.ParquetFileFormat()
-
-    # Initialize the ParquetFileFragments per file.
-    start = time.monotonic()
-    pq_file_frags: list[ds.ParquetFileFragment] = []
-    for fpath in fpaths:
-        pq_file_frags.append(pq_file_format.make_fragment(fpath, fs))
-    metrics.file_frags_creation_time += int((time.monotonic() - start) * 1_000_000)
-
-    # Populate their metadata in parallel using the IO thread pool.
-    # Presumably the work is partitioned more or less equally among ranks,
-    # and we are mostly (or just) reading metadata, so we assign four IO
-    # threads to every rank.
-    # XXX Use a separate env var for this?
-    pa_orig_io_thread_count = pa.io_thread_count()
-    io_thread_count = min(int(os.environ.get("BODO_MIN_IO_THREADS", "4")), 4)
-    pa.set_io_thread_count(io_thread_count)
-    try:
-        start = time.monotonic()
-        arrow_cpp.fetch_parquet_frags_metadata(pq_file_frags)
-        metrics.file_frags_fetch_md_time += int((time.monotonic() - start) * 1_000_000)
-    finally:
-        # Restore pyarrow default IO thread count
-        pa.set_io_thread_count(pa_orig_io_thread_count)
-
-    return pq_file_frags
+    iceberg_field_ids = tuple(x[0] for x in field_identifiers)
+    pq_field_names = tuple(x[1] for x in field_identifiers)
+    return iceberg_field_ids, pq_field_names
 
 
 def group_file_frags_by_schema_group_identifier(
-    pq_file_frags: list[ds.ParquetFileFragment],
+    pq_infos: list["IcebergParquetInfo"],
+    file_schemas: list[pa.Schema],
     metrics: IcebergPqDatasetMetrics,
-) -> dict[
-    tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]],
-    list[ds.ParquetFileFragment],
-]:
+) -> dict[SchemaGroupIdentifier, list["IcebergParquetInfo"]]:
     """
     Group a list of Parquet file fragments by their Schema Group identifier,
     i.e. based on the Iceberg Field IDs and corresponding
@@ -1553,15 +1469,15 @@ def group_file_frags_by_schema_group_identifier(
     The caller is expected to handle the error-synchronization.
 
     Args:
-        pq_file_frags (list[ds.ParquetFileFragment]): List of file fragments.
+        pq_infos (list[ds.ParquetFileFragment]): List of Parquet Infos from Iceberg connector.
         metrics (IcebergPqDatasetMetrics): Metrics to update in place.
 
     Returns:
         dict[
-            tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]],
-            list[ds.ParquetFileFragment]
+            SchemaGroupIdentifier,
+            list[IcebergParquetInfo]
         ]: Dictionary mapping the schema group identifier
-            to the list of ParquetFileFragments for that schema group identifier.
+            to the list of IcebergParquetInfo for that schema group identifier.
             The schema group identifier is a tuple of
             two ordered tuples. The first is an ordered tuple
             of the Iceberg field IDs in the file and the second
@@ -1569,19 +1485,19 @@ def group_file_frags_by_schema_group_identifier(
             names. Note that only the top-level fields are considered.
     """
     ## Get the Field IDs and Column Names of the files:
-    iceberg_field_ids: list[tuple[int | tuple, ...]] = []
-    pq_field_names: list[tuple[str | tuple, ...]] = []
+    iceberg_field_ids: list[FieldIDs] = []
+    pq_field_names: list[FieldNames] = []
 
     # Get the schema group identifier for each file using the pre-fetched metadata:
     start = time.monotonic()
-    for pq_file_frag in pq_file_frags:
+    for pq_info, file_schema in zip(pq_infos, file_schemas):
         try:
             schema_group_identifier = get_schema_group_identifier_from_pa_schema(
-                pq_file_frag.physical_schema
+                file_schema
             )
         except Exception as e:
             msg = (
-                f"Encountered an error while generating the schema group identifier for file {pq_file_frag.path}. "
+                f"Encountered an error while generating the schema group identifier for file {pq_info.orig_path}. "
                 "This is most likely either a corrupted/invalid Parquet file or represents a bug/gap in Bodo.\n"
                 f"{str(e)}"
             )
@@ -1593,8 +1509,8 @@ def group_file_frags_by_schema_group_identifier(
     # Sort the files based on their schema group identifier
     start = time.monotonic()
     file_frags_schema_group_ids: list[
-        tuple[ds.ParquetFileFormat, tuple[int | tuple, ...], tuple[str | tuple, ...]]
-    ] = list(zip(pq_file_frags, iceberg_field_ids, pq_field_names))
+        tuple["IcebergParquetInfo", FieldIDs, FieldNames]
+    ] = list(zip(pq_infos, iceberg_field_ids, pq_field_names))
     # Sort/Groupby the field-ids and field-names tuples.
     # We must flatten the tuples for sorting because you
     # cannot compare ints to tuples in Python and nested types
@@ -1603,10 +1519,9 @@ def group_file_frags_by_schema_group_identifier(
     sort_key_func = lambda item: (flatten_tuple(item[1]), flatten_tuple(item[2]))
     keyfunc = lambda item: (item[1], item[2])
     schema_group_id_to_frags: dict[
-        tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]],
-        list[ds.ParquetFileFragment],
+        SchemaGroupIdentifier, list["IcebergParquetInfo"]
     ] = {
-        k: [x[0] for x in list(v)]
+        k: [x[0] for x in v]
         for k, v in itertools.groupby(
             sorted(file_frags_schema_group_ids, key=sort_key_func), keyfunc
         )
@@ -1617,7 +1532,11 @@ def group_file_frags_by_schema_group_identifier(
     return schema_group_id_to_frags
 
 
-def flatten_tuple(x):
+T = pt.TypeVar("T")
+TVals = T | tuple["TVals", ...]
+
+
+def flatten_tuple(x: tuple[TVals, ...]) -> tuple[T]:
     """
     Flatten a tuple of tuples into a single tuple. This is needed
     to handle nested tuples in the schema group identifier due to
@@ -1634,13 +1553,13 @@ def flatten_tuple(x):
 
 def get_pieces_with_exact_row_counts(
     schema_group: IcebergSchemaGroup,
-    schema_group_identifier: tuple[tuple[int], tuple[str]],
-    pq_file_fragments: list[ds.ParquetFileFragment],
+    schema_group_identifier: SchemaGroupIdentifier,
+    pq_infos: list["IcebergParquetInfo"],
     fs: "PyFileSystem" | pa.fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
     metrics: IcebergPqDatasetMetrics,
-) -> list[IcebergFilePiece]:
+) -> list[IcebergPiece]:
     """
     Helper function for 'get_row_counts_for_schema_group' to get pieces with
     the exact row counts for a list of files (after applying filters)
@@ -1651,12 +1570,12 @@ def get_pieces_with_exact_row_counts(
     Args:
         schema_group (IcebergSchemaGroup): SchemaGroup that the files
             belong to.
-        schema_group_identifier (tuple[tuple[int], tuple[str]]):
+        schema_group_identifier (SchemaGroupIdentifier):
             Group identifier. This is a tuple of two ordered tuples.
             The first is an ordered tuple of Iceberg Field IDs and
             the second is an ordered tuple of the corresponding
             field names.
-        pq_file_fragments (list[ds.ParquetFileFragment]): List of files
+        pq_file_fragments (list[IcebergParquetInfo]): List of files
             to get the row counts for.
         fs (PyFileSystem&quot; | pa.fs.FileSystem): Filesystem to
             use for accessing the files and getting the row count
@@ -1671,13 +1590,12 @@ def get_pieces_with_exact_row_counts(
         metrics (IcebergPqDatasetMetrics): Metrics to update in place.
 
     Returns:
-        list[IcebergFilePiece]: Pieces with exact row count information.
+        list[IcebergPiece]: Pieces with exact row count information.
     """
 
-    # For frag.scanner().count_rows(), we use the expected schema
-    # instead of the file schema. This schema
-    # should be a less-restrictive superset of the file schema,
-    # so it should be valid.
+    # For frag.scanner().count_rows(), we use the expected schema instead
+    # of the file schema. This schema should be a less-restrictive
+    # superset of the file schema, so it should be valid.
     read_schema: pa.Schema = schema_group.read_schema
 
     # When using frag.scanner().count_rows(),
@@ -1687,39 +1605,32 @@ def get_pieces_with_exact_row_counts(
     # (see 'get_dataset_for_schema_group'). Without this,
     # the row count may be inaccurate (potentially due to bugs in Arrow).
     # See [BSE-2790] for more context.
-    if len(str_as_dict_cols) > 0:
-        # Create a ParquetFileFormat where we specify the columns to
-        # dict encode. We only do this step if there are columns that
-        # we want to dict-encode. If there aren't, the existing fragments
-        # are valid and we can re-use them. This saves time that would
-        # be spent refetching the metadata for each file (since there's
-        # no known way to use metadata from existing fragments and pass
-        # that to the new ones).
-        col_rename_map: dict[str, str] = {
-            final_schema.field(i).name: read_schema.field(i).name
-            for i in range(len(final_schema.names))
-        }
-        schema_group_str_as_dict_cols: list[str] = [
-            col_rename_map[f] for f in str_as_dict_cols
-        ]
-        pq_file_format = ds.ParquetFileFormat(
-            dictionary_columns=schema_group_str_as_dict_cols
-        )
-        # Set columns to be read as dictionary encoded in the read schema
-        read_schema = schema_with_dict_cols(read_schema, schema_group_str_as_dict_cols)
-        # Recreate the fragments. This would need to re-fetch the metadata
-        # since there's no way to set metadata from an existing fragment
-        # (at least no public interface, there's a SetMetadata function in C++
-        # but it's private).
-        pq_file_fragments = create_file_frags_with_md(
-            [frag.path for frag in pq_file_fragments],
-            fs,
-            metrics,
-            pq_file_format=pq_file_format,
-        )
-        metrics.exact_row_counts_recreated_frags = True
 
-    pieces: list[IcebergFilePiece] = []
+    # Create a ParquetFileFormat where we specify the columns to
+    # dict encode.
+    col_rename_map: dict[str, str] = {
+        final_schema.field(i).name: read_schema.field(i).name
+        for i in range(len(final_schema.names))
+    }
+    schema_group_str_as_dict_cols: list[str] = [
+        col_rename_map[f] for f in str_as_dict_cols
+    ]
+    pq_file_format = ds.ParquetFileFormat(
+        dictionary_columns=schema_group_str_as_dict_cols
+    )
+    # Set columns to be read as dictionary encoded in the read schema
+    read_schema = schema_with_dict_cols(read_schema, schema_group_str_as_dict_cols)
+
+    # Create ParquetFileFragments for parallel row-count calculation
+    start = time.monotonic()
+    pq_file_fragments: list[ds.ParquetFileFragment] = []
+    for pq_info in pq_infos:
+        pq_file_fragments.append(
+            pq_file_format.make_fragment(pq_info.standard_path, fs)
+        )
+    metrics.file_frags_creation_time += int((time.monotonic() - start) * 1_000_000)
+
+    pieces: list[IcebergPiece] = []
 
     # Determine the row counts for each file fragment in parallel.
     # Presumably the work is partitioned more or less equally among ranks,
@@ -1738,7 +1649,7 @@ def get_pieces_with_exact_row_counts(
         )
         for frag, file_row_count in zip(pq_file_fragments, file_row_counts):
             pieces.append(
-                IcebergFilePiece(frag.path, -1, schema_group_identifier, file_row_count)
+                IcebergPiece(frag.path, -1, schema_group_identifier, file_row_count)
             )
             metrics.get_row_counts_nrows += file_row_count
             metrics.get_row_counts_nrgs += frag.num_row_groups
@@ -1754,77 +1665,9 @@ def get_pieces_with_exact_row_counts(
     return pieces
 
 
-def get_pieces_with_filtered_row_groups(
-    schema_group: IcebergSchemaGroup,
-    schema_group_identifier: tuple[tuple[int], tuple[str]],
-    pq_file_fragments: list[ds.ParquetFileFragment],
-    metrics: IcebergPqDatasetMetrics,
-) -> list[IcebergFilePiece]:
-    """
-    Helper function for 'get_row_counts_for_schema_group' to get pieces.
-    We apply row-group level filtering to prune out entire row groups
-    based on the available metadata. The reported row counts are therefore
-    not exact and just an overestimate.
-    NOTE: The file fragments are expected to have their metadata already
-    populated.
-
-    Args:
-        schema_group (IcebergSchemaGroup): SchemaGroup that the files
-            belong to.
-        schema_group_identifier (tuple[tuple[int], tuple[str]]):
-            Group identifier. This is a tuple of two ordered tuples.
-            The first is an ordered tuple of Iceberg Field IDs and
-            the second is an ordered tuple of the corresponding
-            field names.
-        pq_file_fragments (list[ds.ParquetFileFragment]): List of files
-            to get the row counts for.
-        metrics (IcebergPqDatasetMetrics): Metrics to update in place
-
-    Returns:
-        list[IcebergFilePiece]: Pieces with row count information and pruned
-            row-groups.
-    """
-
-    # For frag.subset(...), we use the expected schema
-    # instead of the file schema. This schema
-    # should be a less-restrictive superset of the file schema,
-    # so it should be valid.
-    read_schema: pa.Schema = schema_group.read_schema
-
-    pieces: list[IcebergFilePiece] = []
-    t0 = time.monotonic()
-    for frag in pq_file_fragments:
-        filtered_frag = frag
-        if schema_group.expr_filter is not None:
-            filtered_frag = frag.subset(
-                filter=schema_group.expr_filter, schema=read_schema
-            )
-        rg_idxs = [rg.id for rg in filtered_frag.row_groups]
-        rg_row_counts = [rg.num_rows for rg in filtered_frag.row_groups]
-        file_row_count = sum(rg_row_counts)
-        pieces.append(
-            IcebergFilePiece(
-                filtered_frag.path,
-                -1,
-                schema_group_identifier,
-                file_row_count,
-                rg_idxs,
-                rg_row_counts,
-            )
-        )
-        metrics.get_row_counts_nrows += file_row_count
-        metrics.get_row_counts_nrgs += filtered_frag.num_row_groups
-        metrics.get_row_counts_total_bytes += sum(
-            rg.total_byte_size for rg in filtered_frag.row_groups
-        )
-    metrics.rg_filtering_time += int((time.monotonic() - t0) * 1_000_000)
-
-    return pieces
-
-
 def get_row_counts_for_schema_group(
-    schema_group_identifier: tuple[tuple[int], tuple[str]],
-    pq_file_fragments: list[ds.ParquetFileFragment],
+    schema_group_identifier: SchemaGroupIdentifier,
+    pq_infos: list["IcebergParquetInfo"],
     fs: "PyFileSystem" | pa.fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
@@ -1832,7 +1675,7 @@ def get_row_counts_for_schema_group(
     row_level: bool = False,
     expr_filter_f_str: str | None = None,
     filter_scalars: list[tuple[str, pt.Any]] | None = None,
-) -> list[IcebergFilePiece]:
+) -> list[IcebergPiece]:
     """
     Get the row counts for files belonging to the same
     Schema Group. Note that this is the row count
@@ -1852,12 +1695,12 @@ def get_row_counts_for_schema_group(
     populated.
 
     Args:
-        schema_group_identifier (tuple[tuple[int], tuple[str]]):
+        schema_group_identifier (SchemaGroupIdentifier):
             Group identifier. This is a tuple of two ordered tuples.
             The first is an ordered tuple of Iceberg Field IDs and
             the second is an ordered tuple of the corresponding
             field names.
-        pq_file_fragments (list[ds.ParquetFileFragment]): List of files
+        pq_infos (list[IcebergFileInfo]): List of files
             to get the row counts for.
         fs (PyFileSystem | pa.fs.FileSystem): Filesystem to
              use for accessing the files and getting the row count
@@ -1883,7 +1726,7 @@ def get_row_counts_for_schema_group(
             of 'generate_expr_filter' for more details. Defaults to None.
 
     Returns:
-        list[IcebergFilePiece]: List of 'IcebergFilePiece's.
+        list[IcebergPiece]: List of 'IcebergPiece's.
             In the row_level=False case, this includes details about
             the selected row groups within the files.
     """
@@ -1898,28 +1741,27 @@ def get_row_counts_for_schema_group(
     )
 
     ## 1. Validate that the file schemas are all compatible.
+    # This will incur an expensive metadata read, so its behind a debug flag
+    if bodo.check_parquet_schema:
+        pq_file_format = ds.ParquetFileFormat()
+        for pq_info in pq_infos:
+            frag = pq_file_format.make_fragment(pq_info.standard_path, fs)
+            file_schema = frag.metadata.schema.to_arrow_schema()
+            try:
+                # We use the original read-schema from the schema group
+                # here (i.e. without the dictionary types) since that's
+                # what the file is supposed to contain.
+                validate_file_schema_compatible_with_read_schema(
+                    file_schema, schema_group.read_schema
+                )
+            except Exception as e:
+                msg = f"Schema of file {pq_info.orig_path} is not compatible.\n" + str(
+                    e
+                )
+                raise BodoError(msg)
 
-    # Since the parquet metadata is already populated in the fragments,
-    # this should be very quick. The validation step needs to happen
-    # before the scan on the fragment since otherwise it will fail in
-    # case the file schema isn't compatible with the read_schema.
-    t0 = time.monotonic()
-    for frag in pq_file_fragments:
-        file_schema = frag.metadata.schema.to_arrow_schema()
-        try:
-            # We use the original read-schema from the schema group
-            # here (i.e. without the dictionary types) since that's
-            # what the file is supposed to contain.
-            validate_file_schema_compatible_with_read_schema(
-                file_schema, schema_group.read_schema
-            )
-        except Exception as e:
-            msg = f"Schema of file {frag.path} is not compatible.\n" + str(e)
-            raise BodoError(msg)
-    metrics.schema_validation_time += int((time.monotonic() - t0) * 1_000_000)
-
-    ## 2. Perform filtering to get row counts and construct the IcebergFilePieces.
-    pieces: list[IcebergFilePiece] = []
+    ## 2. Perform filtering to get row counts and construct the IcebergPieces.
+    pieces: list[IcebergPiece] = []
     if row_level:
         ## 2.1 If we need to get exact row counts, we will use the dataset
         # scanner API and apply the filter. Arrow will try to calculate this by
@@ -1929,22 +1771,26 @@ def get_row_counts_for_schema_group(
         pieces = get_pieces_with_exact_row_counts(
             schema_group,
             schema_group_identifier,
-            pq_file_fragments,
+            pq_infos,
             fs,
             final_schema,
             str_as_dict_cols,
             metrics,
         )
     else:
-        ## 2.2 If we are only doing piece level filtering, this can done based on the available
-        # parquet metadata. Since the metadata is already populated, doing this should be almost
-        # instantaneous and no thread pool should be required.
-        pieces = get_pieces_with_filtered_row_groups(
-            schema_group,
-            schema_group_identifier,
-            pq_file_fragments,
-            metrics,
-        )
+        ## 2.2 If we are only doing piece level filtering, we can reuse Iceberg-level
+        # row counts for the estimates. This skips row-group filtering
+        pieces: list[IcebergPiece] = []
+        for pq_info in pq_infos:
+            pieces.append(
+                IcebergPiece(
+                    pq_info.standard_path,
+                    -1,
+                    schema_group_identifier,
+                    pq_info.row_count,
+                )
+            )
+            metrics.get_row_counts_nrows += pq_info.row_count
 
     return pieces
 
@@ -2140,26 +1986,28 @@ def get_iceberg_pq_dataset(
     # applying the iceberg_filter (metadata-level).
     start_time = time.monotonic()
     (
-        pq_abs_path_file_list,
+        pq_infos,
         snapshot_id,
-        iceberg_relative_path_file_list,
+        all_schemas,
+        get_file_to_schema_us,
     ) = get_iceberg_file_list_parallel(
         conn,
         database_schema,
         table_name,
         iceberg_filter,
     )
+    metrics.file_to_schema_time_us = get_file_to_schema_us
     metrics.file_list_time += int((time.monotonic() - start_time) * 1_000_000)
 
     # If no files exist/match, return an empty dataset.
-    if len(pq_abs_path_file_list) == 0:
+    if len(pq_infos) == 0:
         return IcebergParquetDataset(
             True,
             conn,
             database_schema,
             table_name,
             typing_pa_table_schema,
-            iceberg_relative_path_file_list,
+            [],
             snapshot_id,
             filesystem=None,
             pieces=[],
@@ -2168,9 +2016,18 @@ def get_iceberg_pq_dataset(
             metrics=metrics,
         )
 
-    # Construct a filesystem.
     start_time = time.monotonic()
-    pq_abs_path_file_list, parse_result, protocol = parse_fpath(pq_abs_path_file_list)
+    # Clean up file paths further and remove filesystem info
+    pq_abs_path_file_list, parse_result, protocol = parse_fpath(
+        [x.standard_path for x in pq_infos]
+    )
+    pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
+        pq_abs_path_file_list, protocol, parse_result
+    )
+    for x, abs_path in zip(pq_infos, pq_abs_path_file_list):
+        x.standard_path = abs_path
+
+    # Construct a filesystem.
     fs: "PyFileSystem" | pa.fs.FileSystem
     if protocol in {"gcs", "gs"}:
         validate_gcsfs_installed()
@@ -2189,10 +2046,6 @@ def get_iceberg_pq_dataset(
         )
     metrics.get_fs_time += int((time.monotonic() - start_time) * 1_000_000)
 
-    pq_abs_path_file_list, _ = get_fpath_without_protocol_prefix(
-        pq_abs_path_file_list, protocol, parse_result
-    )
-
     if expr_filter_f_str is not None and len(expr_filter_f_str) == 0:
         expr_filter_f_str = None
     if filter_scalars is None:
@@ -2202,63 +2055,65 @@ def get_iceberg_pq_dataset(
 
     # 1. Select a slice of the list of files based on the rank.
     n_pes, rank = bodo.get_size(), bodo.get_rank()
-    start, end = bodo.libs.distributed_api.get_start(
-        len(pq_abs_path_file_list), n_pes, rank
-    ), bodo.libs.distributed_api.get_end(len(pq_abs_path_file_list), n_pes, rank)
-    pq_files_local_slice: list[str] = pq_abs_path_file_list[start:end]
-    metrics.n_files_analyzed += len(pq_files_local_slice)
+    total_num_files = len(pq_abs_path_file_list)
+    start = bodo.libs.distributed_api.get_start(total_num_files, n_pes, rank)
+    end = bodo.libs.distributed_api.get_end(total_num_files, n_pes, rank)
+
+    local_pq_infos = pq_infos[start:end]
+    metrics.n_files_analyzed += len(local_pq_infos)
 
     # 2. For this list of files:
-    #    a. Create ParquetFileFragments for each file and populate their metadata.
-    #    b. Group them by their schema-group.
+    #    a. Determine the file schema.
+    #    b. Group files by their schema-group.
     #    c. For each schema-group:
     #       i. Create a read-schema and then a expr_filter using it.
     #       ii. Get the row counts for each file.
     #           This is also where we will perform schema validation for all the
     #           files, i.e. the schema should be compatible with the read-schema.
+
+    # 2a. We have the assumed file schema from the Iceberg connector.
+    # However, the file schema may be different due to writer quirks.
+    # Most quirks are handled by Arrow except for struct fields. If the table
+    # schema has struct fields, we need to extract the file schemas.
+    # TODO: Add null field casting support in Arrow to remove this.
+    #       or if too complicated, parallelize
+    file_schemas: list[pa.Schema]
+    if any(pa.types.is_struct(ty) for ty in typing_pa_table_schema.types):
+        pq_format = ds.ParquetFileFormat()
+        file_schemas = []
+        for pq_info in local_pq_infos:
+            pq_frag = pq_format.make_fragment(pq_info.standard_path, fs)
+            file_schemas.append(pq_frag.metadata.schema.to_arrow_schema())
+    else:
+        file_schemas = [all_schemas[pq_info.schema_id] for pq_info in local_pq_infos]
+
     err = None
-    local_pieces: list[IcebergFilePiece] = []
+    local_pieces: list[IcebergPiece] = []
     row_level: bool = True
     try:
-        # Create the file fragments and populate the parquet metadata.
-        pq_file_frags: list[ds.ParquetFileFragment] = create_file_frags_with_md(
-            pq_files_local_slice,
-            fs,
-            metrics,
-        )
         # Group the files based on their schema group.
-        schema_group_identifier_to_pq_file_fragments: dict[
-            tuple[tuple[int | tuple, ...], tuple[str | tuple, ...]],
-            list[ds.ParquetFileFragment],
-        ] = group_file_frags_by_schema_group_identifier(pq_file_frags, metrics)
+        schema_group_identifier_to_pq_file_fragments = (
+            group_file_frags_by_schema_group_identifier(
+                local_pq_infos,
+                file_schemas,
+                metrics,
+            )
+        )
 
         # If we're not forced to do a row-level read, decide whether to do
         # a row-level or piece-level read based on how many files exist.
+        # Allows for partial file reads (2 1/2 for example)
         if not force_row_level_read:
-            num_files = 0
-            num_row_groups = 0
-            for (
-                _,
-                schema_group_frags,
-            ) in schema_group_identifier_to_pq_file_fragments.items():
-                num_files += len(schema_group_frags)
-                num_row_groups += sum(
-                    [frag.num_row_groups for frag in schema_group_frags]
-                )
-            num_files_global = comm.allreduce(num_files, op=MPI.SUM)
-            num_row_groups_global = comm.allreduce(num_row_groups, op=MPI.SUM)
-            # Use row-level read if there are very few files.
-            # Allows for partial file reads (2 1/2 for example)
             min_files_per_rank = float(os.environ.get("BODO_MIN_PQ_FILES_PER_RANK", 1))
-            row_level = num_files_global < int(min_files_per_rank * comm.Get_size())
+            row_level = total_num_files < int(min_files_per_rank * comm.Get_size())
 
         for (
             schema_group_identifier,
-            schema_group_pq_file_frags,
+            schema_group_pq_infos,
         ) in schema_group_identifier_to_pq_file_fragments.items():
-            file_pieces: list[IcebergFilePiece] = get_row_counts_for_schema_group(
+            file_pieces: list[IcebergPiece] = get_row_counts_for_schema_group(
                 schema_group_identifier,
-                schema_group_pq_file_frags,
+                schema_group_pq_infos,
                 fs,
                 typing_pa_table_schema,
                 str_as_dict_cols,
@@ -2283,11 +2138,7 @@ def get_iceberg_pq_dataset(
         ev.add_attribute("num_rows", metrics.get_row_counts_nrows)
         ev.add_attribute("num_row_groups", metrics.get_row_counts_nrgs)
         ev.add_attribute("row_group_size_bytes", metrics.get_row_counts_total_bytes)
-        ev.add_attribute("rg_filtering_time", metrics.rg_filtering_time)
         ev.add_attribute("row_filtering_time", metrics.exact_row_counts_time)
-        ev.add_attribute(
-            "file_schema_validation_time_seconds", metrics.schema_validation_time
-        )
         ev.add_attribute("g_num_rows", g_total_rows)
         ev.add_attribute("g_num_row_groups", g_total_rgs)
         ev.add_attribute("g_row_group_size_bytes", g_total_size_bytes)
@@ -2295,9 +2146,9 @@ def get_iceberg_pq_dataset(
 
     # 3. Allgather the pieces on all ranks.
     t0 = time.monotonic()
-    pieces = comm.allgather(local_pieces)
+    all_pieces = comm.allgather(local_pieces)
     metrics.pieces_allgather_time += int((time.monotonic() - t0) * 1_000_000)
-    pieces: list[IcebergFilePiece] = flatten_concatenation(pieces)
+    pieces: list[IcebergPiece] = flatten_concatenation(all_pieces)
 
     # 4. Sort the list based on the schema-group identifier (filename to break ties).
     # We must flatten the tuples for sorting because you
@@ -2325,8 +2176,8 @@ def get_iceberg_pq_dataset(
     #    ranks will end up with the same result.
     t0 = time.monotonic()
     schema_groups: list[IcebergSchemaGroup] = []
-    curr_schema_group_id: tuple[tuple[int], tuple[str]] | None = None
-    iceberg_pieces: list[IcebergFilePiece] = []
+    curr_schema_group_id: SchemaGroupIdentifier | None = None
+    iceberg_pieces: list[IcebergPiece] = []
     for piece in pieces:
         if (curr_schema_group_id is None) or (
             curr_schema_group_id != piece.schema_group_identifier
@@ -2355,7 +2206,7 @@ def get_iceberg_pq_dataset(
         database_schema,
         table_name,
         typing_pa_table_schema,
-        iceberg_relative_path_file_list,
+        [x.orig_path for x in pq_infos],
         snapshot_id,
         fs,
         iceberg_pieces,
@@ -2377,13 +2228,12 @@ def get_iceberg_pq_dataset(
         ev.add_attribute("g_row_counts_mean", data.mean())
         ev.add_attribute("g_row_counts_std", data.std())
         ev.add_attribute("g_row_counts_sum", data.sum())
-
     ev.finalize()
 
     return iceberg_pq_dataset
 
 
-def distribute_pieces(pieces: list[IcebergFilePiece]) -> list[IcebergFilePiece]:
+def distribute_pieces(pieces: list[IcebergPiece]) -> list[IcebergPiece]:
     """
     Distribute Iceberg File pieces between all ranks so that all ranks
     have to read roughly the same number of rows.
@@ -2393,12 +2243,12 @@ def distribute_pieces(pieces: list[IcebergFilePiece]) -> list[IcebergFilePiece]:
     on all ranks. Therefore, no synchronization is performed.
 
     Args:
-        pieces (list[IcebergFilePiece]): List of file pieces to
+        pieces (list[IcebergPiece]): List of file pieces to
             distribute between all ranks. This must be the global
             list of pieces and must be ordered the same on all ranks.
 
     Returns:
-        list[IcebergFilePiece]: List of pieces assigned that this
+        list[IcebergPiece]: List of pieces assigned that this
             rank should read. This will be ordered by the
             schema_group_idx so that all files in the same SchemaGroup
             are next to each other.
@@ -2422,11 +2272,11 @@ def distribute_pieces(pieces: list[IcebergFilePiece]) -> list[IcebergFilePiece]:
     n_pes: int = comm.Get_size()
 
     # Sort the pieces
-    sorted_pieces: list[IcebergFilePiece] = list(
+    sorted_pieces: list[IcebergPiece] = list(
         sorted(pieces, key=lambda p: (p._bodo_num_rows, p.path))
     )
 
-    pieces_myrank: list[IcebergFilePiece] = []
+    pieces_myrank: list[IcebergPiece] = []
 
     # To assign the pieces, we iterate through the pieces and assign the piece
     # to the rank with the least rows already assigned to it. To keep track
@@ -2701,18 +2551,19 @@ def determine_str_as_dict_columns(
     # XXX We should push down some type of file limit to the
     # Iceberg Java Library to avoid retrieving millions of files
     # for no reason.
-    pq_abs_path_file_list, _, _ = get_iceberg_file_list_parallel(
+    all_pq_infos = get_iceberg_file_list_parallel(
         conn, database_schema, table_name, filters=None
-    )
+    )[0]
     # Take a sample of N files where N is the number of ranks. Each rank looks at
     # the metadata of a different random file
-    if len(pq_abs_path_file_list) > bodo.get_size():
+    if len(all_pq_infos) > bodo.get_size():
         # Create a new instance of Random so that the global state is not
         # affected.
         my_random = random.Random(37)
-        pq_abs_path_file_list = my_random.sample(pq_abs_path_file_list, bodo.get_size())
+        pq_infos = my_random.sample(all_pq_infos, bodo.get_size())
     else:
-        pq_abs_path_file_list = pq_abs_path_file_list
+        pq_infos = all_pq_infos
+    pq_abs_path_file_list = [pq_info.standard_path for pq_info in pq_infos]
 
     pq_abs_path_file_list, parse_result, protocol = parse_fpath(pq_abs_path_file_list)
     if protocol in {"gcs", "gs"}:

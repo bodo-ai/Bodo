@@ -504,35 +504,25 @@ struct IcebergParquetReaderMetrics {
 
     // Time to get the file list from the Iceberg Connector
     time_t get_ds_file_list_time = 0;
+    // Time to map the list of files to schema ID in the Iceberg Connector
+    time_t get_ds_file_to_schema_time_us = 0;
     // Time to get the filesystem.
     time_t get_ds_get_fs_time = 0;
     // Number of files that we're analyzing (schema validation, row counts,
     // etc.)
     stat_t get_ds_n_files_analyzed = 0;
-    // Time to create the file fragments
+    // Time to create the file fragments (only applicable in the row_level case)
     time_t get_ds_file_frags_creation_time = 0;
-    // Time to fetch the metadata for the file fragments
-    time_t get_ds_file_frags_fetch_md_time = 0;
     // Time to get Schema Group identifiers for all fragments
     time_t get_ds_get_sg_id_time = 0;
     // Time to sort the fragments by their schema group identifier
     time_t get_ds_sort_by_sg_id_time = 0;
     // Number of unique schema groups in files analyzed by this rank.
     stat_t get_ds_nunique_sgs_seen = 0;
-    // Time to filter out row groups (only applicable in the piece level read
-    // case).
-    time_t get_ds_rg_filtering_time = 0;
     // Time to get exact row counts (only applicable in the row_level case).
     time_t get_ds_exact_row_counts_time = 0;
-    // Whether we needed to recreate the fragments and refetch the metadata
-    // (only applicable in the row level case). The time spent recreating the
-    // frags and fetching the metadata again is part of
-    // get_ds_file_frags_creation_time and get_ds_file_frags_fetch_md_time
-    // respectively.
-    stat_t get_ds_exact_row_counts_recreated_frags = 0;
-    // Time to validate the schemas of all the files
-    time_t get_ds_schema_validation_time = 0;
     // Number of row groups in files assigned to this rank for analysis
+    // (only applicable in the row_level case)
     stat_t get_ds_get_row_counts_nrgs = 0;
     // Number of rows in files assigned to this rank for scan planning. In the
     // row-level case, this is the row count after filtering. In the piece level
@@ -540,6 +530,7 @@ struct IcebergParquetReaderMetrics {
     // the row group level filtering.
     stat_t get_ds_get_row_counts_nrows = 0;
     // Total size in bytes of row groups of files analyzed by this file.
+    // (only applicable in the row_level case)
     stat_t get_ds_get_row_counts_total_bytes = 0;
     // Time spent in all-gathering all the pieces to create the global
     // IcebergParquetDataset after the initial parallel analysis.
@@ -835,17 +826,14 @@ class IcebergParquetReader : public ArrowReader {
     }
 
         COPY_NUMERIC_METRIC(file_list_time);
+        COPY_NUMERIC_METRIC(file_to_schema_time_us);
         COPY_NUMERIC_METRIC(get_fs_time);
         COPY_NUMERIC_METRIC(n_files_analyzed);
         COPY_NUMERIC_METRIC(file_frags_creation_time);
-        COPY_NUMERIC_METRIC(file_frags_fetch_md_time);
         COPY_NUMERIC_METRIC(get_sg_id_time);
         COPY_NUMERIC_METRIC(sort_by_sg_id_time);
         COPY_NUMERIC_METRIC(nunique_sgs_seen);
-        COPY_NUMERIC_METRIC(rg_filtering_time);
         COPY_NUMERIC_METRIC(exact_row_counts_time);
-        COPY_BOOL_METRIC(exact_row_counts_recreated_frags);
-        COPY_NUMERIC_METRIC(schema_validation_time);
         COPY_NUMERIC_METRIC(get_row_counts_nrgs);
         COPY_NUMERIC_METRIC(get_row_counts_nrows);
         COPY_NUMERIC_METRIC(get_row_counts_total_bytes);
@@ -1379,17 +1367,14 @@ class IcebergParquetReader : public ArrowReader {
         StatMetric(#field, this->iceberg_reader_metrics.field, true));
 
         APPEND_TIMER_METRIC(get_ds_file_list_time);
+        APPEND_TIMER_METRIC(get_ds_file_to_schema_time_us);
         APPEND_TIMER_METRIC(get_ds_get_fs_time);
         APPEND_STAT_METRIC(get_ds_n_files_analyzed);
         APPEND_TIMER_METRIC(get_ds_file_frags_creation_time);
-        APPEND_TIMER_METRIC(get_ds_file_frags_fetch_md_time);
         APPEND_TIMER_METRIC(get_ds_get_sg_id_time);
         APPEND_TIMER_METRIC(get_ds_sort_by_sg_id_time);
         APPEND_STAT_METRIC(get_ds_nunique_sgs_seen);
-        APPEND_TIMER_METRIC(get_ds_rg_filtering_time);
         APPEND_TIMER_METRIC(get_ds_exact_row_counts_time);
-        APPEND_STAT_METRIC(get_ds_exact_row_counts_recreated_frags);
-        APPEND_TIMER_METRIC(get_ds_schema_validation_time);
         APPEND_STAT_METRIC(get_ds_get_row_counts_nrgs);
         APPEND_STAT_METRIC(get_ds_get_row_counts_nrows);
         APPEND_STAT_METRIC(get_ds_get_row_counts_total_bytes);
