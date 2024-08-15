@@ -521,6 +521,82 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::Finalize() {
     return sorted_chunks[0];
 }
 
+double ReservoirSamplingState::random() { return dis(e); }
+
+void ReservoirSamplingState::processInput(
+    const std::shared_ptr<table_info>& input_chunk) {
+    auto input = ProjectTable(input_chunk, column_indices);
+    int64_t consumed_input_rows = 0;
+    if (total_rows_seen < sample_size) {
+        // Build our initial set of samples by using a prefix of the input
+        uint64_t rows_to_pull =
+            std::min(static_cast<uint64_t>(sample_size - total_rows_seen),
+                     input->nrows());
+
+        std::vector<bool> selection(input->nrows());
+        std::fill(selection.begin(), selection.begin() + rows_to_pull, true);
+        samples.ReserveTable(input, selection);
+        samples.UnsafeAppendBatch(input, selection);
+        for (size_t i = 0; i < rows_to_pull; i++) {
+            selected_rows.push_back(consumed_input_rows + i);
+        }
+
+        total_rows_seen += rows_to_pull;
+        consumed_input_rows += rows_to_pull;
+        if (static_cast<uint64_t>(consumed_input_rows) == input->nrows()) {
+            return;
+        }
+    }
+
+    if (row_to_sample == -1) {
+        // Initialize row_to_sample to determine the next row to sample and
+        // replace a previously sampled row
+        row_to_sample = sample_size + int64_t(log(random()) / log(1 - W)) + 1;
+    }
+
+    std::vector<int64_t> idxs;
+    // The value of rows_consumed after processing the current input
+    int64_t next_rows_seen =
+        total_rows_seen + input->nrows() - consumed_input_rows;
+    while (row_to_sample <= next_rows_seen) {
+        // Generate a random uint64_t between 0 and sample_size as the sample
+        // being replaced
+        uint64_t target = rand() % sample_size;
+        selected_rows[target] = samples.data_table->nrows() + idxs.size();
+        idxs.push_back(row_to_sample - total_rows_seen + consumed_input_rows);
+
+        W = W * exp(log(random()) / sample_size);
+        row_to_sample = row_to_sample + int64_t(log(random()) / log(1 - W)) + 1;
+    }
+    total_rows_seen = next_rows_seen;
+    if (!idxs.empty()) {
+        std::vector<bool> selection(input->nrows(), false);
+        for (auto idx : idxs) {
+            selection[idx] = true;
+        }
+        samples.ReserveTable(input, selection);
+        samples.UnsafeAppendBatch(input, selection);
+    }
+
+    if (samples.data_table->nrows() > static_cast<uint64_t>(sample_size * 10)) {
+        // Compact the selected rows
+        auto compacted_table = RetrieveTable(samples.data_table, selected_rows);
+        samples.Reset();
+        samples.ReserveTable(compacted_table);
+        samples.UnsafeAppendBatch(compacted_table);
+
+        std::iota(selected_rows.begin(), selected_rows.end(), 0);
+    }
+}
+
+std::shared_ptr<table_info> ReservoirSamplingState::Finalize() {
+    if (total_rows_seen < sample_size) {
+        return samples.data_table;
+    }
+
+    return RetrieveTable(samples.data_table, selected_rows);
+}
+
 uint64_t StreamSortState::GetBudget() const {
     int64_t budget = OperatorComptroller::Default()->GetOperatorBudget(op_id);
     if (budget == -1)
@@ -546,7 +622,8 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
                                  std::vector<int64_t>&& vect_ascending_,
                                  std::vector<int64_t>&& na_position_,
                                  std::shared_ptr<bodo::Schema> schema_,
-                                 bool parallel, size_t chunk_size)
+                                 bool parallel, size_t chunk_size,
+                                 size_t sample_size)
     : op_id(op_id),
       n_key_t(n_key_t),
       vect_ascending(vect_ascending_),
@@ -572,7 +649,8 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
       // the arguments.
       builder(schema, dict_builders, chunk_size,
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool,
-              op_mm) {}
+              op_mm),
+      reservoir_sampling_state(n_key_t, sample_size, dict_builders, schema) {}
 
 StreamSortLimitOffsetState::StreamSortLimitOffsetState(
     int64_t op_id, int64_t n_key_t, std::vector<int64_t>&& vect_ascending_,
@@ -596,6 +674,7 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
     row_info.second += table->nrows();
 
     time_pt start_append = start_timer();
+    reservoir_sampling_state.processInput(table);
 
     builder.UnifyDictionariesAndAppend(table, dict_builders);
     metrics.local_sort_chunk_time += end_timer(start_append);
@@ -655,63 +734,10 @@ void StreamSortState::FinalizeBuild() {
 }
 
 std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
-    std::deque<std::shared_ptr<table_info>>& local_chunks) {
-    int64_t n_local = std::accumulate(
-        local_chunks.begin(), local_chunks.end(), 0,
-        [](int64_t acc, const std::shared_ptr<table_info>& table) {
-            return acc + static_cast<int64_t>(table->nrows());
-        });
-    int64_t n_total = n_local;
-    if (parallel) {
-        MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
-    }
-
-    int n_pes{1}, myrank{1};
+    std::shared_ptr<table_info>&& local_samples) {
+    int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    // Compute samples from the locally sorted table.
-    // (Filled on rank 0, empty on all other ranks)
-    int64_t n_loc_sample =
-        get_num_samples_from_local_table(n_pes, n_total, n_local);
-    auto sample_idxs = get_sample_selection_vector(n_local, n_loc_sample);
-
-    // We can't directly use the indices we got above because we have a
-    // collection of unpinned chunks instead of a pinned contiguous table.
-    // We need to determine which indices belong to which chunk.
-    std::vector<std::vector<int64_t>> indices_per_chunk(local_chunks.size());
-    int64_t cursor = 0;
-    size_t idx = 0;
-    for (size_t chunk = 0; chunk < local_chunks.size(); chunk++) {
-        int64_t next_cursor = cursor + local_chunks[chunk]->nrows();
-        while (idx < sample_idxs.size() && sample_idxs[idx] < next_cursor) {
-            indices_per_chunk[chunk].push_back(sample_idxs[idx] - cursor);
-            idx++;
-        }
-        cursor = next_cursor;
-        if (idx >= sample_idxs.size()) {
-            break;
-        }
-    }
-    assert(idx == sample_idxs.size());
-
-    // Retrieve the data, pinning and unpinning as we go
-    std::vector<std::shared_ptr<table_info>> local_sample_chunks;
-    for (size_t i = 0; i < local_chunks.size(); i++) {
-        const auto& idxs = indices_per_chunk[i];
-        if (idxs.empty()) {
-            continue;
-        }
-        local_chunks[i]->pin();
-        local_sample_chunks.push_back(
-            RetrieveTable(local_chunks[i], idxs, n_key_t));
-        local_chunks[i]->unpin();
-    }
-
-    auto local_samples = local_sample_chunks.empty()
-                             ? dummy_output_chunk
-                             : concat_tables(local_sample_chunks);
-    local_sample_chunks.clear();
     // combine the dictionaries from all the local samples across all ranks
     for (size_t i = 0; i < local_samples->ncols(); i++) {
         if (dict_builders[i]) {
@@ -1012,7 +1038,8 @@ SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
 
     SortedChunkedTableBuilder global_builder = GetGlobalBuilder();
 
-    std::shared_ptr<table_info> bounds = GetParallelSortBounds(local_chunks);
+    std::shared_ptr<table_info> bounds =
+        GetParallelSortBounds(reservoir_sampling_state.Finalize());
     time_pt start_partition = start_timer();
 
     std::vector<std::deque<std::shared_ptr<table_info>>> rankToChunks =
