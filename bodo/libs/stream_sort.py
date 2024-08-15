@@ -130,7 +130,7 @@ def _init_stream_sort_state(
     operator_id,
     limit,
     offset,
-    n_table_cols,
+    n_keys,
     vect_ascending,
     na_position,
     arr_ctypes,
@@ -146,7 +146,7 @@ def _init_stream_sort_state(
             operator_id,
             limit,
             offset,
-            n_table_cols,
+            n_keys,
             vect_ascending,
             na_position,
             arr_ctypes,
@@ -178,7 +178,7 @@ def _init_stream_sort_state(
                 operator_id,
                 limit,
                 offset,
-                n_table_cols,
+                n_keys,
                 vect_ascending,
                 na_position,
                 arr_ctypes,
@@ -263,12 +263,13 @@ def gen_init_stream_sort_state_impl(
     asc_cols_ = get_overload_const_list(asc_cols)
     asc_cols_ = [int(asc) for asc in asc_cols_]
     na_position_ = get_overload_const_list(na_position)
-    na_position_ = [int(pos == "first") for pos in na_position_]
+    na_position_ = [int(pos == "last") for pos in na_position_]
     vect_asc = np.array(asc_cols_, np.int64)
     na_pos = np.array(na_position_, np.int64)
 
     arr_ctypes = output_type.arr_ctypes
     arr_array_types = output_type.arr_array_types
+    n_arrs = len(arr_ctypes)
 
     def impl(
         operator_id,
@@ -286,12 +287,12 @@ def gen_init_stream_sort_state_impl(
             operator_id,
             limit,
             offset,
-            n_table_cols,
+            len(by),
             vect_asc.ctypes,
             na_pos.ctypes,
             arr_ctypes.ctypes,
             arr_array_types.ctypes,
-            n_table_cols,
+            n_arrs,
             parallel,
         )
 
@@ -434,7 +435,13 @@ def gen_produce_output_batch_impl(sort_state, produce_output):
     Returns:
         bool: is last batch globally with possiblity of false negatives due to iterations between syncs
     """
-    out_cols_arr = np.array(sort_state.column_mapping, dtype=np.int64)
+    # Undo the mapping in column_mapping (move key columns from prefix back to
+    # their original locations)
+    out_cols_arr = np.zeros(len(sort_state.column_mapping), dtype=np.int64)
+    # sort_state.column_mapping[i] maps column i to some new location, so we
+    # need to do the inverse and map the new location back to i.
+    for i, c in enumerate(sort_state.column_mapping):
+        out_cols_arr[c] = i
     out_table_type = sort_state.out_table_type
 
     def impl_produce_output_batch(sort_state, produce_output):  # pragma: no cover

@@ -1,31 +1,50 @@
 #include "_table_builder_utils.h"
 
+#include "_array_build_buffer.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
+#include "_dict_builder.h"
 
 std::unique_ptr<array_info> alloc_empty_array(
     const std::unique_ptr<bodo::DataType>& datatype,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm,
+    std::shared_ptr<DictionaryBuilder> dict_builder = nullptr) {
     if (datatype->is_array()) {
         auto array_type = static_cast<bodo::ArrayType*>(datatype.get());
-        auto inner_arr = alloc_empty_array(array_type->value_type, pool, mm);
+        auto inner_arr = alloc_empty_array(
+            array_type->value_type, pool, mm,
+            dict_builder ? dict_builder->child_dict_builders[0] : nullptr);
         return alloc_array_item(0, std::move(inner_arr), 0, pool, mm);
 
     } else if (datatype->is_struct()) {
         auto struct_type = static_cast<bodo::StructType*>(datatype.get());
 
         std::vector<std::shared_ptr<array_info>> arrs;
-        for (auto& datatype : struct_type->child_types) {
-            arrs.push_back(alloc_empty_array(datatype, pool, mm));
+        for (size_t i = 0; i < struct_type->child_types.size(); i++) {
+            auto& datatype = struct_type->child_types[i];
+            arrs.push_back(alloc_empty_array(
+                datatype, pool, mm,
+                dict_builder ? dict_builder->child_dict_builders[i] : nullptr));
         };
 
         return alloc_struct(0, arrs, 0, pool, mm);
     } else if (datatype->is_map()) {
         bodo::MapType* map_type = static_cast<bodo::MapType*>(datatype.get());
+        std::shared_ptr<DictionaryBuilder> list_dict_builder = nullptr;
+        std::shared_ptr<DictionaryBuilder> struct_dict_builder = nullptr;
+        std::shared_ptr<DictionaryBuilder> key_dict_builder = nullptr;
+        std::shared_ptr<DictionaryBuilder> value_dict_builder = nullptr;
+        if (dict_builder) {
+            list_dict_builder = dict_builder->child_dict_builders[0];
+            struct_dict_builder = list_dict_builder->child_dict_builders[0];
+            key_dict_builder = struct_dict_builder->child_dict_builders[0];
+            value_dict_builder = struct_dict_builder->child_dict_builders[1];
+        }
+
         std::unique_ptr<array_info> key_arr =
-            alloc_empty_array(map_type->key_type, pool, mm);
-        std::unique_ptr<array_info> value_arr =
-            alloc_empty_array(map_type->value_type, pool, mm);
+            alloc_empty_array(map_type->key_type, pool, mm, key_dict_builder);
+        std::unique_ptr<array_info> value_arr = alloc_empty_array(
+            map_type->value_type, pool, mm, value_dict_builder);
         std::unique_ptr<array_info> struct_arr = alloc_struct(
             0, {std::move(key_arr), std::move(value_arr)}, 0, pool, mm);
         std::unique_ptr<array_info> array_item_arr =
@@ -37,17 +56,25 @@ std::unique_ptr<array_info> alloc_empty_array(
             false, false, pool, mm);
         array_out->precision = datatype->precision;
         array_out->scale = datatype->scale;
+        if (dict_builder) {
+            assert(datatype->array_type == bodo_array_type::DICT);
+            array_out->child_arrays[0] = dict_builder->dict_buff->data_array;
+        }
         return array_out;
     }
 }
 
 std::shared_ptr<table_info> alloc_table(
     const std::shared_ptr<bodo::Schema>& schema, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::shared_ptr<::arrow::MemoryManager> mm,
+    std::vector<std::shared_ptr<DictionaryBuilder>>* dict_builders) {
     std::vector<std::shared_ptr<array_info>> arrays;
 
-    for (auto& arr_type : schema->column_types) {
-        arrays.push_back(alloc_empty_array(arr_type, pool, mm));
+    for (size_t i = 0; i < schema->column_types.size(); i++) {
+        auto& arr_type = schema->column_types[i];
+        arrays.push_back(alloc_empty_array(
+            arr_type, pool, mm,
+            dict_builders == nullptr ? nullptr : (*dict_builders)[i]));
     }
 
     return std::make_shared<table_info>(arrays);

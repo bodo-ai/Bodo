@@ -4,6 +4,7 @@
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
+#include "_dict_builder.h"
 #include "_distributed.h"
 #include "_groupby_col_set.h"
 #include "_groupby_common.h"

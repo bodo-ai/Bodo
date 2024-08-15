@@ -42,7 +42,7 @@ def col_a_identical_tables(request):
 @pytest.mark.slow
 def test_orderby_numeric_scalar(bodosql_numeric_types, spark_info, memory_leak_check):
     """tests that orderby works with scalar values in the Select statement"""
-    query = "SELECT A, 1, 2, 3, 4 as Y FROM table1 ORDER BY Y"
+    query = "SELECT A, 1, 2, 3, 4 as Y FROM table1 ORDER BY Y, A"
     check_query(
         query,
         bodosql_numeric_types,

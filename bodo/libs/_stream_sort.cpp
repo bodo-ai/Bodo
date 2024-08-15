@@ -105,8 +105,7 @@ std::shared_ptr<table_info> UnifyDictionaryArrays(
         if (dict_builders[i] == nullptr) {
             out_arr = in_arr;
         } else {
-            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr, true,
-                                                             unify_empty);
+            out_arr = dict_builders[i]->UnifyDictionaryArray(in_arr, true);
         }
         out_arrs.emplace_back(out_arr);
     }
@@ -123,6 +122,8 @@ void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk) {
     auto sorted_chunk = sort_values_table_local(
         std::move(chunk), n_key_t, vect_ascending.data(), na_position.data(),
         dead_keys.data(), false);
+    // TODO(aneesh) we could truncate the table here if limit+offset <
+    // chunk_size
     input_chunks.push_back({sorted_chunk, n_key_t});
     sorted_chunk->unpin();
 }
@@ -563,8 +564,8 @@ StreamSortState::StreamSortState(int64_t op_id, int64_t n_key_t,
       op_pool(bodo::BufferPool::DefaultPtr()),
       op_mm(bodo::default_buffer_memory_manager()),
       schema(std::move(schema_)),
-      dummy_output_chunk(alloc_table(schema, op_pool, op_mm)),
       dict_builders(create_dict_builders(schema)),
+      dummy_output_chunk(alloc_table(schema, op_pool, op_mm, &dict_builders)),
       chunk_size(chunk_size),
       // Note that builder only stores references to the vectors owned by
       // this object, so we must refer to the instances on this class, not
@@ -617,28 +618,6 @@ void StreamSortLimitOffsetState::ConsumeBatch(std::shared_ptr<table_info> table,
         top_k.input_chunks = top_k.Finalize();
     }
     metrics.local_sort_chunk_time += end_timer(start_append);
-}
-
-/**
- * @brief make a dictionary global and unique by recursively calling
- * make_dictionary_global_and_unique on nested data types
- *
- * @param dict_builder dictionary builder to be made global and unique
- */
-void recursive_make_dict_global_and_unique(
-    std::shared_ptr<DictionaryBuilder>& dict_builder) {
-    if (dict_builder->child_dict_builders.size()) {
-        for (auto& child_builder : dict_builder->child_dict_builders) {
-            recursive_make_dict_global_and_unique(child_builder);
-        }
-        return;
-    }
-
-    std::shared_ptr<array_info> empty_dict_array =
-        create_dict_string_array(dict_builder->dict_buff->data_array,
-                                 alloc_nullable_array(0, Bodo_CTypes::INT32));
-    make_dictionary_global_and_unique(empty_dict_array, true);
-    dict_builder->UnifyDictionaryArray(empty_dict_array);
 }
 
 void StreamSortState::FinalizeBuild() {
@@ -733,7 +712,15 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
                              ? dummy_output_chunk
                              : concat_tables(local_sample_chunks);
     local_sample_chunks.clear();
+    // combine the dictionaries from all the local samples across all ranks
+    for (size_t i = 0; i < local_samples->ncols(); i++) {
+        if (dict_builders[i]) {
+            recursive_make_array_global_and_unique(local_samples->columns[i],
+                                                   true);
+        }
+    }
 
+    auto ref_table = alloc_table_like(local_samples);
     // Collecting all samples globally
     bool all_gather = false;
     std::shared_ptr<table_info> all_samples =
@@ -742,8 +729,11 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
     // Compute split bounds from the samples.
     // Output is broadcasted to all ranks.
     bounds_ = compute_bounds_from_samples(
-        std::move(all_samples), dummy_output_chunk, n_key_t,
+        std::move(all_samples), std::move(ref_table), n_key_t,
         vect_ascending.data(), na_position.data(), myrank, n_pes, parallel);
+    // Transpose bounds to use the same indices as the local builders - we know
+    // that the dictionary builder has all keys at this point.
+    bounds_ = UnifyDictionaryArrays(bounds_, dict_builders);
 
     return bounds_;
 }
@@ -1125,7 +1115,6 @@ SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
             auto [done, table] =
                 s.recvDone(dict_builders, metrics.ishuffle_metrics);
             if (done && table->nrows()) {
-                table = UnifyDictionaryArrays(table, dict_builders);
                 time_pt start_append = start_timer();
                 global_builder.AppendChunk(std::move(table));
                 metrics.global_append_chunk_time += end_timer(start_append);
@@ -1233,7 +1222,7 @@ void StreamSortState::ReportMetrics() {
 StreamSortState* stream_sort_state_init_py_entry(
     int64_t op_id, int64_t limit, int64_t offset, int64_t n_key_t,
     int64_t* vect_ascending, int64_t* na_position, int8_t* arr_c_types,
-    int8_t* arr_array_types, int n_arrs, bool parallel) {
+    int8_t* arr_array_types, int64_t n_arrs, bool parallel) {
     try {
         // Copy the per-column configuration into owned vectors
         std::vector<int64_t> vect_ascending_(n_key_t);
@@ -1253,7 +1242,7 @@ StreamSortState* stream_sort_state_init_py_entry(
             return state;
         }
         // Either limit or offset is set. Use the subclass
-        // StreamSortLimitOffsetStata
+        // StreamSortLimitOffsetState
         auto* state = new StreamSortLimitOffsetState(
             op_id, n_key_t, std::move(vect_ascending_), std::move(na_position_),
             std::move(schema), parallel, limit, offset);

@@ -143,7 +143,8 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
                 assert(false);
                 break;
         }
-    } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+    } else if (in_arr->arr_type == bodo_array_type::NUMPY ||
+               in_arr->arr_type == bodo_array_type::CATEGORICAL) {
         switch (in_arr->dtype) {
             case Bodo_CTypes::INT8:
                 APPEND_ROWS(bodo_array_type::NUMPY, Bodo_CTypes::INT8);
@@ -311,7 +312,8 @@ void ArrayBuildBuffer::UnsafeAppendBatch(
                 assert(false);
                 break;
         }
-    } else if (in_arr->arr_type == bodo_array_type::NUMPY) {
+    } else if (in_arr->arr_type == bodo_array_type::NUMPY ||
+               in_arr->arr_type == bodo_array_type::CATEGORICAL) {
         switch (in_arr->dtype) {
             case Bodo_CTypes::INT8:
                 APPEND_BATCH_ARRAY(bodo_array_type::NUMPY, Bodo_CTypes::INT8);
@@ -452,6 +454,7 @@ void ArrayBuildBuffer::IncrementSize(size_t addln_size) {
         case bodo_array_type::DICT: {
             this->dict_indices->IncrementSize(addln_size);
         } break;
+        case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
             CHECK_ARROW_MEM(
@@ -632,6 +635,7 @@ void ArrayBuildBuffer::ReserveSize(uint64_t new_data_len) {
         case bodo_array_type::DICT: {
             this->dict_indices->ReserveSize(new_data_len);
         } break;
+        case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
             uint64_t size_type = numpy_item_size[this->data_array->dtype];
             if (min_capacity > capacity) {
@@ -709,6 +713,7 @@ void ArrayBuildBuffer::Reset() {
             CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(0),
                             "ArrayBuildBuffer::Reset: SetSize failed!");
         } break;
+        case bodo_array_type::CATEGORICAL:
         case bodo_array_type::NUMPY: {
             CHECK_ARROW_MEM(data_array->buffers[0]->SetSize(0),
                             "ArrayBuildBuffer::Reset: SetSize failed!");

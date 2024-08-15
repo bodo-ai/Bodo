@@ -24,7 +24,7 @@
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_datetime_utils.h"
-#include "../libs/_shuffle.h"
+#include "../libs/_dict_builder.h"
 #include "_fs_io.h"
 
 // In general, when reading a parquet dataset we want it to have at least
