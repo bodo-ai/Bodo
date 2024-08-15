@@ -1747,7 +1747,7 @@ static bodo::tests::suite tests([] {
             // two chunks with no data.
             if (myrank % 2 == 0) {
                 std::shared_ptr<array_info> partition =
-                    bodo::tests::cppToBodoArr<int>({1});
+                    bodo::tests::cppToBodoArr<int>({});
                 std::shared_ptr<array_info> input =
                     bodo::tests::cppToBodoArr<int>({}, true);
                 std::shared_ptr<array_info> sum =
@@ -1759,6 +1759,7 @@ static bodo::tests::suite tests([] {
                     std::make_shared<table_info>(table_info(chunk_cols));
                 in_chunks.push_back(chunk);
                 in_chunks.push_back(chunk);
+                in_chunks.push_back(chunk);
 
                 std::vector<std::shared_ptr<array_info>> out_chunk_cols = {
                     partition, input, sum};
@@ -1766,21 +1767,22 @@ static bodo::tests::suite tests([] {
                     std::make_shared<table_info>(table_info(out_chunk_cols));
                 expected_out_chunks.push_back(out_chunk);
                 expected_out_chunks.push_back(out_chunk);
+                expected_out_chunks.push_back(out_chunk);
             } else {
                 int64_t first_sum = 0;
                 int64_t second_sum = 0;
 
                 if (myrank > 2) {
-                    first_sum += static_cast<int>(-1 + (4 * myrank));
-                    first_sum += static_cast<int>(0 + (4 * myrank));
+                    first_sum += static_cast<int>(-5 + (4 * myrank));
+                    first_sum += static_cast<int>(-4 + (4 * myrank));
                 }
                 first_sum += static_cast<int>(1 + (4 * myrank));
                 first_sum += static_cast<int>(2 + (4 * myrank));
                 second_sum += static_cast<int>(3 + (4 * myrank));
                 second_sum += static_cast<int>(4 + (4 * myrank));
                 if (myrank < (num_ranks - 2)) {
-                    second_sum += static_cast<int>(5 + (4 * myrank));
-                    second_sum += static_cast<int>(6 + (4 * myrank));
+                    second_sum += static_cast<int>(9 + (4 * myrank));
+                    second_sum += static_cast<int>(10 + (4 * myrank));
                 }
 
                 // Chunk 0: first partition (overlaps with previous rank)
@@ -1855,13 +1857,13 @@ static bodo::tests::suite tests([] {
                             table_info(out_chunk_cols));
                     expected_out_chunks.push_back(out_chunk);
                 }
-
-                verify_window_calculators(
-                    in_chunks, partition_col_indices, order_col_indices,
-                    keep_indices, input_col_indices, window_funcs,
-                    bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
-                    expected_out_chunks, true, &pool, mm);
             }
+
+            verify_window_calculators(
+                in_chunks, partition_col_indices, order_col_indices,
+                keep_indices, input_col_indices, window_funcs,
+                bodo_array_type::NUMPY, bodo_array_type::UNKNOWN,
+                expected_out_chunks, true, &pool, mm);
         });
 
     bodo::tests::test(
