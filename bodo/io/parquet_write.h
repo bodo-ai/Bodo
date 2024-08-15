@@ -50,6 +50,7 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * since the writer init function creates the directory.
  * @param arrow_fs (default nullptr): Arrow filesystem to write to, fall back to
  * parsing the path if not present
+ * @param force_hdfs (default false): Force HDFS filesystem type
  * @returns size of the written file (in bytes)
  */
 int64_t pq_write(const char *_path_name,
@@ -59,7 +60,8 @@ int64_t pq_write(const char *_path_name,
                  const char *prefix,
                  std::vector<bodo_array_type::arr_type_enum> bodo_array_types,
                  bool create_dir = true, std::string filename = "",
-                 arrow::fs::FileSystem *arrow_fs = nullptr);
+                 arrow::fs::FileSystem *arrow_fs = nullptr,
+                 bool force_hdfs = false);
 
 int64_t pq_write_py_entry(const char *_path_name, table_info *table,
                           array_info *col_names_arr, array_info *index,
@@ -70,7 +72,8 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
                           const char *idx_name, const char *bucket_region,
                           int64_t row_group_size, const char *prefix,
                           bool convert_timedelta_to_int64, const char *tz,
-                          bool downcast_time_ns_to_us, bool create_dir);
+                          bool downcast_time_ns_to_us, bool create_dir,
+                          bool force_hdfs);
 
 /**
  * @brief Create a directory for streaming Parquet write if not exists (called
