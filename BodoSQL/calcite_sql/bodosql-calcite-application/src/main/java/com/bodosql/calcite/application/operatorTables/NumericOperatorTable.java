@@ -116,10 +116,10 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ReturnTypes.DOUBLE_NULLABLE,
           // What Input Types does the function accept. This function accepts four numeric arguments
           OperandTypes.family(
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC,
-              SqlTypeFamily.NUMERIC),
+              SqlTypeFamily.APPROXIMATE_NUMERIC,
+              SqlTypeFamily.APPROXIMATE_NUMERIC,
+              SqlTypeFamily.APPROXIMATE_NUMERIC,
+              SqlTypeFamily.APPROXIMATE_NUMERIC),
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
