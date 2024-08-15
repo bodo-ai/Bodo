@@ -68,7 +68,7 @@ dictionary_encoding_state_type = DictionaryEncodingStateType()
 register_model(DictionaryEncodingStateType)(models.OpaqueModel)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_dict_encoding_state(typingctx):
     """Initialize the C++ DictionaryEncodingState pointer"""
 
@@ -85,7 +85,7 @@ def init_dict_encoding_state(typingctx):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def state_contains_dict_array(typingctx, dict_encoding_state, func_id, dict_id):
     """Return if the given dictionary encoding state has cached
     the result of the given function with the given dictionary.
@@ -133,7 +133,7 @@ def get_array(
     return (arr, new_dict_id, cached_dict_length)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _get_array(typingctx, dict_encoding_state, func_id, cache_dict_id):
     def codegen(context, builder, sig, args):
         dict_encoding_state, func_id, dict_id = args
@@ -193,7 +193,7 @@ def set_array(
     )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _set_array(
     typingctx,
     dict_encoding_state,
@@ -241,7 +241,7 @@ def _get_list_payload(context, builder, list_type, list_value):
     )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def state_contains_multi_input_dict_array(
     typingctx, dict_encoding_state, func_id, dict_ids, dict_lens
 ):
@@ -313,7 +313,7 @@ def get_array_multi_input(
     return (arr, new_dict_id)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _get_array_multi_input(
     typingctx, dict_encoding_state, func_id, cache_dict_ids, cache_dict_lens
 ):
@@ -384,7 +384,7 @@ def set_array_multi_input(
     )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _set_array_multi_input(
     typingctx,
     dict_encoding_state,
@@ -454,7 +454,7 @@ def _set_array_multi_input(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_state_num_set_calls(typingctx, dict_encoding_state):
     """Get the number of times set was called on the dictionary encoding state."""
 
@@ -471,7 +471,7 @@ def get_state_num_set_calls(typingctx, dict_encoding_state):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def delete_dict_encoding_state(typingctx, dict_encoding_state):
     """Initialize the C++ DictionaryEncodingState pointer"""
 

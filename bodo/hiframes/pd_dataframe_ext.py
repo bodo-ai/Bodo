@@ -117,6 +117,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     to_nullable_type,
     to_str_arr_if_dict_array,
+    unwrap_typeref,
 )
 from bodo.utils.utils import is_null_pointer
 
@@ -1086,10 +1087,8 @@ def construct_dataframe(
     return dataframe._getvalue()
 
 
-@intrinsic(prefer_literal=True)
-def init_runtime_cols_dataframe(
-    typingctx, data_typ, index_typ, colnames_index_typ=None
-):
+@intrinsic
+def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_index_typ):
     """Create a DataFrame from the provided table, index, and column
     names when the number of columns is determined at runtime.
     """
@@ -1132,7 +1131,7 @@ def init_runtime_cols_dataframe(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     """Create a DataFrame with provided data, index and columns values.
     Used as a single constructor for DataFrame and assigning its data, so that
@@ -1148,11 +1147,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     if n_cols == 0:
         column_names = ()
 
-    untyperefed_col_names_typ = (
-        col_names_typ.instance_type
-        if isinstance(col_names_typ, types.TypeRef)
-        else col_names_typ
-    )
+    untyperefed_col_names_typ = unwrap_typeref(col_names_typ)
 
     assert isinstance(untyperefed_col_names_typ, ColNamesMetaType) and isinstance(
         untyperefed_col_names_typ.meta, tuple
@@ -1229,8 +1224,8 @@ def overload_pushdown_safe_init_df(table, colNames):
     return impl
 
 
-@intrinsic(prefer_literal=True)
-def has_parent(typingctx, df=None):
+@intrinsic
+def has_parent(typingctx, df):
     check_runtime_cols_unsupported(df, "has_parent")
 
     def codegen(context, builder, sig, args):
@@ -1243,7 +1238,7 @@ def has_parent(typingctx, df=None):
 
 
 @intrinsic(prefer_literal=True)
-def _column_needs_unboxing(typingctx, df_typ, i_typ=None):
+def _column_needs_unboxing(typingctx, df_typ, i_typ):
     check_runtime_cols_unsupported(df_typ, "_column_needs_unboxing")
     assert isinstance(df_typ, DataFrameType) and is_overload_constant_int(i_typ)
 
@@ -1286,8 +1281,8 @@ def get_dataframe_payload(context, builder, df_type, value):
     return context.make_helper(builder, payload_type, ref=payload)
 
 
-@intrinsic(prefer_literal=True)
-def _get_dataframe_data(typingctx, df_typ=None):
+@intrinsic
+def _get_dataframe_data(typingctx, df_typ):
     check_runtime_cols_unsupported(df_typ, "_get_dataframe_data")
     ret_typ = types.Tuple(df_typ.data)
     if df_typ.is_table_format:
@@ -1306,8 +1301,8 @@ def _get_dataframe_data(typingctx, df_typ=None):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
-def get_dataframe_index(typingctx, df_typ=None):
+@intrinsic
+def get_dataframe_index(typingctx, df_typ):
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
@@ -1362,8 +1357,8 @@ def get_dataframe_data_impl(df, i):
     return _impl
 
 
-@intrinsic(prefer_literal=True)
-def get_dataframe_table(typingctx, df_typ=None):
+@intrinsic
+def get_dataframe_table(typingctx, df_typ):
     """return internal data table for dataframe with table format"""
     assert df_typ.is_table_format, "get_dataframe_table() expects table format"
 
@@ -1443,8 +1438,8 @@ def lower_get_dataframe_all_data(context, builder, sig, args):
     return context.compile_internal(builder, impl, sig, args)
 
 
-@intrinsic(prefer_literal=True)
-def get_dataframe_column_names(typingctx, df_typ=None):
+@intrinsic
+def get_dataframe_column_names(typingctx, df_typ):
     """return internal column names for dataframe with runtime columns"""
     assert (
         df_typ.has_runtime_cols
@@ -1617,7 +1612,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_colu
 
 
 @intrinsic(prefer_literal=True)
-def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
+def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ):
     """set column data of a dataframe inplace"""
     check_runtime_cols_unsupported(df_typ, "set_dataframe_data")
     assert_bodo_error(is_overload_constant_int(c_ind_typ))
@@ -1670,8 +1665,8 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
-def set_df_index(typingctx, df_t, index_t=None):
+@intrinsic
+def set_df_index(typingctx, df_t, index_t):
     """used in very limited cases like distributed to_csv() to create a new
     dataframe with index
     """
@@ -1708,7 +1703,7 @@ def set_df_index(typingctx, df_t, index_t=None):
 
 
 @intrinsic(prefer_literal=True)
-def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t=None):
+def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t):
     """Set df column and reflect to parent Python object
     return a new df.
     """
@@ -2303,7 +2298,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     return _init_df
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _tuple_to_table_format_decoded(typingctx, df_typ):
     """
     Internal testing function used to convert a
@@ -2337,7 +2332,7 @@ def _tuple_to_table_format_decoded(typingctx, df_typ):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _table_to_tuple_format_decoded(typingctx, df_typ):
     """
     Internal testing function used to convert a

@@ -544,7 +544,7 @@ c_scatterv = types.ExternalFunction(
 )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def value_to_ptr(typingctx, val_tp=None):
     """convert value to a pointer on stack
     WARNING: avoid using since pointers on stack cannot be passed around safely
@@ -559,7 +559,7 @@ def value_to_ptr(typingctx, val_tp=None):
     return types.voidptr(val_tp), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def value_to_ptr_as_int64(typingctx, val_tp=None):
     def codegen(context, builder, sig, args):
         ptr = cgutils.alloca_once(builder, args[0].type)
@@ -570,7 +570,7 @@ def value_to_ptr_as_int64(typingctx, val_tp=None):
     return types.int64(val_tp), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def load_val_ptr(typingctx, ptr_tp, val_tp=None):
     def codegen(context, builder, sig, args):
         ptr = builder.bitcast(args[0], args[1].type.as_pointer())
@@ -2785,7 +2785,7 @@ def scatterv_impl_jit(data, send_counts=None, warn_if_dist=True):
     raise BodoError("scatterv() not available for {}".format(data))  # pragma: no cover
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def cptr_to_voidptr(typingctx, cptr_tp=None):
     def codegen(context, builder, sig, args):
         return builder.bitcast(args[0], lir.IntType(8).as_pointer())

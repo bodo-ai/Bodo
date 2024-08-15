@@ -309,7 +309,7 @@ def overload_iceberg_writer_fetch_theta(writer):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _read_puffin_file_ndvs(typingctx, puffin_loc_t, bucket_region_t, iceberg_schema_t):
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -554,7 +554,7 @@ class IcebergWriterModel(models.StructModel):
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def iceberg_writer_alloc(typingctx, expected_state_type_t):  # pragma: no cover
     expected_state_type = unwrap_typeref(expected_state_type_t)
     if is_overload_none(expected_state_type):

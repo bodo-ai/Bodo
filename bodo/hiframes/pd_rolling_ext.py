@@ -204,7 +204,7 @@ def overload_series_rolling(
 
 @intrinsic(prefer_literal=True)
 def init_rolling(
-    typingctx, obj_type, window_type, min_periods_type, center_type, on_type=None
+    typingctx, obj_type, window_type, min_periods_type, center_type, on_type
 ):
     """Initialize a rolling object. The data object inside can be a DataFrame, Series,
     or GroupBy."""

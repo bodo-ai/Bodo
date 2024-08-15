@@ -78,8 +78,8 @@ class SeriesIatModel(models.StructModel):
 make_attribute_wrapper(SeriesIatType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_series_iat(typingctx, obj=None):
+@intrinsic
+def init_series_iat(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         iat_type = signature.return_type
@@ -221,8 +221,8 @@ class SeriesIlocModel(models.StructModel):
 make_attribute_wrapper(SeriesIlocType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_series_iloc(typingctx, obj=None):
+@intrinsic
+def init_series_iloc(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         iloc_type = signature.return_type
@@ -501,8 +501,8 @@ class SeriesLocModel(models.StructModel):
 make_attribute_wrapper(SeriesLocType, "obj", "_obj")
 
 
-@intrinsic(prefer_literal=True)
-def init_series_loc(typingctx, obj=None):
+@intrinsic
+def init_series_loc(typingctx, obj):
     def codegen(context, builder, signature, args):
         (obj_val,) = args
         loc_type = signature.return_type

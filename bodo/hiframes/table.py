@@ -566,7 +566,7 @@ def table_shape_overload(T):
     return lambda T: (T._len, types.int64(ncols))  # pragma: no cover
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def compute_num_runtime_columns(typingctx, table_type):
     """
     Compute the number of columns generated for a table
@@ -625,7 +625,7 @@ def get_table_data(typingctx, table_type, ind_typ):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def del_column(typingctx, table_type, ind_typ):
     """Decrement the reference count by 1 for the columns in a table."""
     from bodo.io.arrow_reader import ArrowReaderType
@@ -1117,7 +1117,7 @@ def init_table(typingctx, table_type, to_str_if_dict_t):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_table_from_lists(typingctx, tuple_of_lists_type, table_type):
     """initialize a table object with table_type and list of arrays
     provided by the tuple of lists, tuple_of_lists_type.
@@ -1178,7 +1178,7 @@ def get_table_block(typingctx, table_type, blk_type):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
     """make all used in columns of table are unboxed.
     Throw an error if column array is null and there is no parent to unbox from
@@ -1188,7 +1188,6 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
 
     def codegen(context, builder, sig, args):
         table_arg, used_col_set = args
-        pyapi = context.get_python_api(builder)
 
         use_all = used_cols_typ == types.none
         if not use_all:
@@ -1249,7 +1248,7 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t):
     """make sure column of table is unboxed
     Throw an error if column array is null and there is no parent to unbox from
@@ -1323,7 +1322,7 @@ def set_table_block(typingctx, table_type, arr_list_type, blk_type):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def set_table_len(typingctx, table_type, l_type):
     """set table len and return a new table object"""
     assert isinstance(table_type, TableType), "table type expected"
@@ -1338,7 +1337,7 @@ def set_table_len(typingctx, table_type, l_type):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def set_table_parent(typingctx, out_table_type, in_table_type):
     """set out_table parent to the in_table's parent and return a new table object"""
     assert isinstance(in_table_type, TableType), "table type expected"
@@ -1392,14 +1391,14 @@ def alloc_list_like(typingctx, list_type, len_type, to_str_if_dict_t):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def alloc_empty_list_type(typingctx, size_typ, data_typ):
     """
     allocate a list with a given size and data type filled
     with null values.
     """
     assert isinstance(size_typ, types.Integer), "Size must be an integer"
-    dtype = data_typ.instance_type if isinstance(data_typ, types.TypeRef) else data_typ
+    dtype = unwrap_typeref(data_typ)
     list_type = types.List(dtype)
 
     def codegen(context, builder, sig, args):
@@ -2045,8 +2044,8 @@ def overload_table_getitem(T, idx):
     return lambda T, idx: table_filter(T, idx)  # pragma: no cover
 
 
-@intrinsic(prefer_literal=True)
-def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ=None):
+@intrinsic
+def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ):
     """
     Takes a list of arrays and the length of each array and creates a Python
     Table from this list (without making a copy).

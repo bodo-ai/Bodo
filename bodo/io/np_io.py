@@ -40,7 +40,7 @@ _file_write_parallel = types.ExternalFunction(
 )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_dtype_size(typingctx, dtype=None):
     assert isinstance(dtype, types.DTypeSpec)
 
@@ -70,7 +70,7 @@ def tofile_overload(arr, fname):
 
 
 # from llvmlite import ir as lir
-# @intrinsic(prefer_literal=True)
+# @intrinsic
 # def print_array_ptr(typingctx, arr_ty):
 #     assert isinstance(arr_ty, types.Array)
 #     def codegen(context, builder, sig, args):

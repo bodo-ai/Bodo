@@ -1189,7 +1189,7 @@ def overload_full_type(n, val, t):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def is_null_pointer(typingctx, ptr_typ=None):
     """check whether the pointer type is NULL or not"""
 
@@ -1201,7 +1201,7 @@ def is_null_pointer(typingctx, ptr_typ=None):
     return types.bool_(ptr_typ), codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def is_null_value(typingctx, val_typ=None):
     """check whether a value is NULL or not"""
 
@@ -1253,7 +1253,7 @@ def object_length(c, obj):
     return c.builder.call(fn, (obj,))
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def incref(typingctx, data=None):
     """manual incref of data to workaround bugs. Should be avoided if possible."""
 
@@ -1437,7 +1437,7 @@ def has_scipy():
     return _has_scipy
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def check_and_propagate_cpp_exception(typingctx):
     """
     Check if an error occured in C++ using the C Python API

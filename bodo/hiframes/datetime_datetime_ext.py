@@ -154,7 +154,7 @@ def datetime_datetime(year, month, day, hour=0, minute=0, second=0, microsecond=
     return impl_datetime
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_datetime(typingctx, year, month, day, hour, minute, second, microsecond):
     def codegen(context, builder, signature, args):
         typ = signature.return_type

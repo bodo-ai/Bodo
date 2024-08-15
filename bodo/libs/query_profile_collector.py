@@ -44,7 +44,7 @@ ll.add_symbol(
 )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init(typingctx):
     """Wrapper for init_py_entry in _query_profile_collector.cpp"""
 
@@ -61,7 +61,7 @@ def init(typingctx):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def start_pipeline(typingctx, pipeline_id):
     """Wrapper for start_pipeline in _query_profile_collector.cpp"""
 
@@ -83,7 +83,7 @@ def start_pipeline(typingctx, pipeline_id):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def end_pipeline(typingctx, pipeline_id, num_iterations):
     """Wrapper for end_pipeline in _query_profile_collector.cpp"""
 
@@ -106,7 +106,7 @@ def end_pipeline(typingctx, pipeline_id, num_iterations):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def submit_operator_stage_row_counts(
     typingctx, operator_id, pipeline_id, output_row_count
 ):
@@ -134,7 +134,7 @@ def submit_operator_stage_row_counts(
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def submit_operator_stage_time(typingctx, operator_id, stage_id, time):
     """Wrapper for submit_operator_stage_time_query_profile_collector_py_entry in _query_profile_collector.cpp"""
 
@@ -160,7 +160,7 @@ def submit_operator_stage_time(typingctx, operator_id, stage_id, time):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def get_operator_duration(typingctx, operator_id):
     """Wrapper for get_operator_duration_query_profile_collector_py_entry in _query_profile_collector.cpp"""
 
@@ -179,7 +179,7 @@ def get_operator_duration(typingctx, operator_id):
     return sig, codegen
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _finalize(typingctx, verbose_level):
     """Wrapper for finalize in _query_profile_collector.cpp"""
 

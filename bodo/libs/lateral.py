@@ -34,7 +34,7 @@ ll.add_symbol("lateral_flatten", lateral.lateral_flatten_py_entrypt)
 from bodo.libs.bodosql_array_kernels import get_combined_type
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _lateral_flatten(
     typingctx,
     table_t,

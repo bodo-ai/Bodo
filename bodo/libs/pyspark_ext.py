@@ -81,8 +81,8 @@ spark_session_builder_type = SparkSessionBuilderType()
 register_model(SparkSessionBuilderType)(models.OpaqueModel)
 
 
-@intrinsic(prefer_literal=True)
-def init_session(typingctx=None):
+@intrinsic
+def init_session(typingctx):
     """Create a SparkSession() value.
     creates a null value since the value isn't used
     """
@@ -93,8 +93,8 @@ def init_session(typingctx=None):
     return spark_session_type(), codegen
 
 
-@intrinsic(prefer_literal=True)
-def init_session_builder(typingctx=None):
+@intrinsic
+def init_session_builder(typingctx):
     """Create a SparkSession.builder value.
     creates a null value since the value isn't used
     """
@@ -322,9 +322,9 @@ class SparkDataFrameModel(models.StructModel):
 make_attribute_wrapper(SparkDataFrameType, "df", "_df")
 
 
-@intrinsic(prefer_literal=True)
-def init_spark_df(typingctx, df_typ=None):
-    """Create a Spark DataFrame value from a Pandas dataframe value"""
+@intrinsic
+def init_spark_df(typingctx, df_typ):
+    """Create a Spark DataFrame value from a Pandas DataFrame value"""
 
     def codegen(context, builder, sig, args):
         (df,) = args
@@ -727,7 +727,7 @@ register_model(ExprType)(models.OpaqueModel)
 
 
 @intrinsic(prefer_literal=True)
-def init_col_from_name(typingctx, col=None):
+def init_col_from_name(typingctx, col):
     """create Column object from column name"""
     assert_bodo_error(is_overload_constant_str(col))
     col_str = get_overload_const_str(col)
@@ -751,8 +751,8 @@ def overload_f_col(col):
     return lambda col: init_col_from_name(col)  # pragma: no cover
 
 
-@intrinsic(prefer_literal=True)
-def init_f_sum(typingctx, col=None):
+@intrinsic
+def init_f_sum(typingctx, col):
     """create a Column object for F.sum"""
     col_type = ColumnType(ExprType("sum", (col.expr,)))
 

@@ -273,7 +273,7 @@ def overload_get_local_timestamp(ts):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_timestamptz(typingctx, utc_timestamp, offset_minutes):
     """Create a TimestampTZ object"""
 
@@ -436,7 +436,7 @@ make_attribute_wrapper(TimestampTZArrayType, "data_offset", "data_offset")
 make_attribute_wrapper(TimestampTZArrayType, "null_bitmap", "_null_bitmap")
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_timestamptz_array(typingctx, data_ts, data_offset, nulls):
     """Create a TimestampTZArrayType with provided data values."""
     assert data_ts == types.Array(

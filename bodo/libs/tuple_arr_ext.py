@@ -71,8 +71,8 @@ class TupleArrayModel(models.StructModel):
 make_attribute_wrapper(TupleArrayType, "data", "_data")
 
 
-@intrinsic(prefer_literal=True)
-def init_tuple_arr(typingctx, data_typ=None):
+@intrinsic
+def init_tuple_arr(typingctx, data_typ):
     """create a new tuple array from struct array data"""
     assert isinstance(data_typ, StructArrayType)
     out_type = TupleArrayType(data_typ.data)

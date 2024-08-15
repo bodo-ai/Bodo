@@ -264,7 +264,7 @@ register_model(Decimal128Type)(models.IntegerModel)
 
 
 @intrinsic(prefer_literal=True)
-def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
+def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp):
     """cast int128 to decimal128"""
     assert val == int128_type
     assert_bodo_error(is_overload_constant_int(precision_tp))
@@ -281,7 +281,7 @@ def int128_to_decimal128type(typingctx, val, precision_tp, scale_tp=None):
     )
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def decimal128type_to_int128(typingctx, val):
     """cast int128 to decimal128"""
     assert isinstance(val, Decimal128Type)
@@ -333,7 +333,7 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
     return uni_str._getvalue()
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def decimal_to_str(typingctx, val_t=None):
     """convert decimal128 to string"""
     assert isinstance(val_t, Decimal128Type)
@@ -427,7 +427,7 @@ def overload_str_to_decimal_scalar(val, precision, scale, null_on_error):
         return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _str_to_decimal_array(typingctx, val_tp, precision_tp, scale_tp, null_on_error_tp):
     from bodo.libs.array import array_info_type
 
@@ -494,7 +494,7 @@ def overload_decimal_array_to_str_array(arr):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _decimal_array_to_str_array(typingctx, arr_t):
     from bodo.libs.array import array_info_type
 
@@ -532,7 +532,7 @@ def overload_decimal_scalar_to_str(arr):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _decimal_scalar_to_str(typingctx, arr_t):
     def codegen(context, builder, signature, args):
         (val,) = args
@@ -591,7 +591,7 @@ def overload_str_decimal(val):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def decimal128type_to_int64_tuple(typingctx, val):
     """convert decimal128type to a 2-tuple of int64 values"""
     assert isinstance(val, Decimal128Type)
@@ -810,7 +810,7 @@ def decimal_to_float64_codegen(context, builder, signature, args, scale):
     return ret
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def decimal_to_float64(typingctx, val_t):
     """convert decimal128 to float"""
     assert isinstance(val_t, Decimal128Type)
@@ -842,7 +842,7 @@ def decimal_arr_to_float64(arr):
     pass
 
 
-@overload(decimal_arr_to_float64, prefer_literal=True)
+@overload(decimal_arr_to_float64)
 def overload_decimal_arr_to_float64(arr):
     """
     Convert a decimal array to a float array
@@ -1412,7 +1412,7 @@ def decimal_scalar_sign(val):  # pragma: no cover
     pass
 
 
-@overload(decimal_scalar_sign, prefer_literal=True)
+@overload(decimal_scalar_sign)
 def overload_decimal_scalar_sign(val):
     """
     Returns the sign of the decimal scalar. 0 for 0, 1 for positive, -1 for negative.
@@ -1455,7 +1455,7 @@ def decimal_array_sign(arr):  # pragma: no cover
     pass
 
 
-@overload(decimal_array_sign, prefer_literal=True)
+@overload(decimal_array_sign)
 def overload_decimal_array_sign(arr):
     """
     Returns the element-wise signs of the decimal array.
@@ -1709,7 +1709,7 @@ def overload_add_or_subtract_decimal_arrays(d1, d2, do_addition):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _add_or_subtract_decimal_arrays(
     typingctx,
     d1_t,
@@ -1927,7 +1927,7 @@ def overload_multiply_decimal_arrays(d1, d2):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _multiply_decimal_arrays(
     typingctx, d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
 ):
@@ -2116,7 +2116,7 @@ def overload_modulo_decimal_arrays(d1, d2):
     return impl
 
 
-@intrinsic(prefer_literal=False)
+@intrinsic
 def _modulo_decimal_arrays(
     typingctx, d1_t, d2_t, out_precision_t, out_scale_t, is_scalar_d1_t, is_scalar_d2_t
 ):
@@ -2312,7 +2312,7 @@ def overload_divide_decimal_arrays(d1, d2, do_div0=False):
     return impl
 
 
-@intrinsic(prefer_literal=False)
+@intrinsic
 def _divide_decimal_arrays(
     typingctx,
     d1_t,
@@ -2430,7 +2430,7 @@ def overload_round_decimal_array(arr, round_scale, output_p, output_s):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _round_decimal_array(typingctx, arr_t, round_scale_t, output_p_t, output_s_t):
     from bodo.libs.array import array_info_type
 
@@ -2671,7 +2671,7 @@ def overload_ceil_floor_decimal_array(arr, round_scale, output_p, output_s, is_c
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _ceil_floor_decimal_array(
     typingctx, arr_t, round_scale_t, output_p_t, output_s_t, is_ceil_t
 ):
@@ -2855,7 +2855,7 @@ def overload_trunc_decimal_array(arr, round_scale, output_p, output_s):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _trunc_decimal_array(typingctx, arr_t, round_scale_t, output_p_t, output_s_t):
     from bodo.libs.array import array_info_type
 
@@ -2919,7 +2919,7 @@ def overload_abs_decimal_array(arr):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _abs_decimal_array(typingctx, arr):
     from bodo.libs.array import array_info_type
 
@@ -2945,7 +2945,7 @@ def abs_decimal_scalar(arr):  # pragma: no cover
     pass
 
 
-@overload(abs_decimal_scalar, inline="always", prefer_literal=True)
+@overload(abs_decimal_scalar, inline="always")
 def overload_abs_decimal_scalar(arr):
     """
     Return the absolute value of a decimal scalar.
@@ -2958,7 +2958,7 @@ def overload_abs_decimal_scalar(arr):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _abs_decimal_scalar(typingctx, arr_t):
     assert isinstance(arr_t, Decimal128Type), "_abs_decimal_scalar: decimal expected"
 
@@ -3027,7 +3027,7 @@ def overload_factorial_decimal_scalar(val):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _factorial_decimal_scalar(typingctx, val_t, input_s):
     assert isinstance(
         val_t, Decimal128Type
@@ -3086,7 +3086,7 @@ def overload_factorial_decimal_array(arr):
     return impl
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def _factorial_decimal_array(typingctx, arr_t):
     from bodo.libs.array import array_info_type
 
@@ -3133,7 +3133,7 @@ make_attribute_wrapper(DecimalArrayType, "null_bitmap", "_null_bitmap")
 
 
 @intrinsic(prefer_literal=True)
-def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp=None):
+def init_decimal_array(typingctx, data, null_bitmap, precision_tp, scale_tp):
     """Create a DecimalArray with provided data and null bitmap values."""
     assert data == types.Array(int128_type, 1, "C")
     assert null_bitmap == types.Array(types.uint8, 1, "C")

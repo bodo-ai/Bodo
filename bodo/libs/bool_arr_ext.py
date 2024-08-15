@@ -467,7 +467,7 @@ def lower_init_bool_array(context, builder, signature, args):
     return bool_arr._getvalue()
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def init_bool_array(typingctx, data, null_bitmap, length):
     """Create a BooleanArray with provided data and null bitmap values."""
     assert data == types.Array(types.uint8, 1, "C")

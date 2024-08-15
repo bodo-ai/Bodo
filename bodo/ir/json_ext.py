@@ -73,7 +73,7 @@ class JsonReader(Connector):
         return list(zip((x.name for x in self.out_vars), self.out_table_col_types))
 
 
-@intrinsic(prefer_literal=True)
+@intrinsic
 def json_file_chunk_reader(
     typingctx,
     fname_t,
