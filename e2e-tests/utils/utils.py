@@ -23,7 +23,7 @@ def checksum_str_df(df):
         int64: Checksum
     """
     comm = MPI.COMM_WORLD
-    df_hash = df.applymap(lambda x: sum(x.encode("ascii")) % 256)
+    df_hash = df.map(lambda x: sum(x.encode("ascii")) % 256)
     str_sum = np.int64(df_hash.sum().sum())
     str_sum = comm.allreduce(str_sum, op=MPI.SUM)
     return np.int64(str_sum)
