@@ -693,7 +693,6 @@ void StreamSortLimitOffsetState::ConsumeBatch(std::shared_ptr<table_info> table,
     } else {
         // Maintain a heap of at most limit + offset elements when limit/offset
         // is small
-        table = UnifyDictionaryArrays(table, dict_builders);
         top_k.AppendChunk(table);
         top_k.input_chunks = top_k.Finalize();
     }
@@ -1020,6 +1019,7 @@ void StreamSortState::GlobalSort_NonParallel(
     std::deque<std::shared_ptr<table_info>>&& local_chunks) {
     SortedChunkedTableBuilder global_builder = GetGlobalBuilder();
     for (auto& chunk : local_chunks) {
+        chunk->pin();
         global_builder.AppendChunk(std::move(chunk));
     }
     time_pt start_finalize = start_timer();
@@ -1049,6 +1049,7 @@ SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
     metrics.partition_chunks_time = end_timer(start_partition);
 
     for (auto& chunk : rankToChunks[myrank]) {
+        chunk->pin();
         global_builder.AppendChunk(std::move(chunk));
     }
     rankToChunks[myrank].clear();
@@ -1058,7 +1059,6 @@ SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
     time_pt start_communication = start_timer();
     std::vector<AsyncShuffleSendState> send_states;
 
-    int64_t recv_count = 0;
     std::vector<AsyncShuffleRecvState> recv_states;
 
     bool have_chunks_to_send = false;
@@ -1149,7 +1149,6 @@ SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
                 // TODO(aneesh) every num_chunks tables we can start
                 // the sort process while we went for messages.
             }
-            recv_count++;
             return done;
         });
 
@@ -1212,6 +1211,7 @@ std::pair<std::shared_ptr<table_info>, bool> StreamSortState::GetOutput() {
     bool out_is_last = false;
     if (output_idx < output_chunks.size()) {
         std::swap(output, output_chunks[output_idx]);
+        output->pin();
         output_idx++;
     } else {
         out_is_last = true;
