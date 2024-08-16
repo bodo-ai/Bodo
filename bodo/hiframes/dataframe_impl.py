@@ -1715,9 +1715,7 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
                 for c in out_colnames
             ]
             # TODO: Determine what possible exceptions this might raise.
-            comm_dtype = numba.np.numpy_support.from_dtype(
-                np.find_common_type(dtypes, [])
-            )
+            comm_dtype = numba.np.numpy_support.from_dtype(np.result_type(*dtypes))
     except NotImplementedError:
         raise BodoError(
             f"Dataframe.{func_name}() with column types: {df.data} could not be merged to a common type."

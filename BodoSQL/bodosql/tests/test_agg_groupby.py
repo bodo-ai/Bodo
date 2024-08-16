@@ -800,7 +800,7 @@ def test_any_value(agg_col, memory_leak_check):
                         False,
                         True,
                     ],
-                    dtype=np.bool8,
+                    dtype=np.bool_,
                 ),
                 "G": pd.Series(
                     [

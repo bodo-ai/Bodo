@@ -1907,8 +1907,8 @@ def get_common_scalar_dtype(
     # bodo.null_dtype can be cast to any type so remove it from the list.
     scalar_types = [t for t in scalar_types if t != bodo.null_dtype]
     try:
-        common_dtype = np.find_common_type(
-            [numba.np.numpy_support.as_dtype(t) for t in scalar_types], []
+        common_dtype = np.result_type(
+            *[numba.np.numpy_support.as_dtype(t) for t in scalar_types]
         )
         # If we get an object dtype we do not have a common type.
         # Otherwise, the types can be used together
@@ -2095,11 +2095,9 @@ def get_common_scalar_dtype(
 
 
 def find_common_np_dtype(arr_types):
-    """finds common numpy dtype of array types using np.find_common_type"""
+    """finds common numpy dtype of array types using np.result_type"""
     return numba.np.numpy_support.from_dtype(
-        np.find_common_type(
-            [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
-        )
+        np.result_type(*[numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types])
     )
 
 

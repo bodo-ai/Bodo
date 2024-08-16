@@ -1179,8 +1179,8 @@ def test_np_select_nullable(arr_tuple_val, memory_leak_check):
 
     A1 = pd.array(arr_tuple_val[0][:minsize])
     A2 = pd.array(arr_tuple_val[1][:minsize])
-    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
-    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
+    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
 
     if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
         A2, pd.arrays.FloatingArray
@@ -1222,15 +1222,15 @@ def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
 
     cond = np.random.randint(2, size=minsize).astype(bool)
 
-    cond[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    cond[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
 
     def impl(A1, A2, cond):
         return np.where(cond, A1, A2)
 
     A1 = pd.array(arr_tuple_val[0][:minsize])
     A2 = pd.array(arr_tuple_val[1][:minsize])
-    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
-    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
+    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.nan
 
     if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
         A2, pd.arrays.FloatingArray
