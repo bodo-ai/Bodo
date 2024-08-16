@@ -1919,6 +1919,10 @@ def get_common_scalar_dtype(
     # Numpy, we will get a NumbaNotImplementedError
     except numba.core.errors.NumbaNotImplementedError:
         pass
+    # If we get types that aren't compatible in Numpy, we will get a
+    # DTypePromotionError
+    except np.exceptions.DTypePromotionError:
+        pass
 
     # Timestamp/dt64 can be used interchangeably
     # TODO: Should datetime.datetime also be included?
@@ -2096,9 +2100,20 @@ def get_common_scalar_dtype(
 
 def find_common_np_dtype(arr_types):
     """finds common numpy dtype of array types using np.result_type"""
-    return numba.np.numpy_support.from_dtype(
-        np.result_type(*[numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types])
-    )
+    try:
+        return numba.np.numpy_support.from_dtype(
+            np.result_type(
+                *[numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types]
+            )
+        )
+    # If we have a Bodo or Numba type that isn't implemented in
+    # Numpy, we will get a NumbaNotImplementedError
+    except numba.core.errors.NumbaNotImplementedError:
+        raise_bodo_error(f"Unable to find a common dtype for types: {arr_types}")
+    # If we get types that aren't compatible in Numpy, we will get a
+    # DTypePromotionError
+    except np.exceptions.DTypePromotionError:
+        raise_bodo_error(f"Unable to find a common dtype for types: {arr_types}")
 
 
 def is_immutable(typ: types.Type) -> bool:
