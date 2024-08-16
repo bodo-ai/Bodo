@@ -398,8 +398,14 @@ def get_filter_read_indices(bool_arr):  # pragma: no cover
     return all_indices[start:end]
 
 
-@intrinsic
+@intrinsic(prefer_literal=True)
 def tuple_to_ptr(typingctx, tuple_tp):
+    """
+    Converts a tuple representation to a pointer.
+    Note: The tuple may contain Integer literals, which changes
+    its value, so prefer_literal=True is required.
+    """
+
     def codegen(context, builder, sig, args):
         ptr = cgutils.alloca_once(builder, args[0].type)
         builder.store(args[0], ptr)
