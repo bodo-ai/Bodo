@@ -36,6 +36,37 @@ Bodo 2024.8 Release (Date: 8/6/2024) {#August_2024}
 * Fixed a bug that would cause `SHOW TABLES` commands to error when the tables had a large number of rows/bytes.
 * Fixed a bug in comparisons for elements of nested arrays with dictionary-encoded data.
 
-### Dependency upgrade:
+### Dependency Upgrades:
 
 * Upgraded to Numba 0.60.
+
+
+## 2024.8.1 New Features and Improvements
+
+
+### New Features:
+- Added support for storage account name and storage account key and VM-identities when using Azure.
+- Added support for `SUM` on decimals when invoked as a window function or a regular aggregation without groupby.
+- Added support for `VAR_POP`, `VAR_SAMP`, `STDDEV_POP`, `STDDEV_SAMP`, `COVAR_POP`, `COVAR_SAMP`, `CORR`, `PERCENTILE_DISC` and `PERCENTILE_CONT` on decimals.
+- Added support for `FACTORIAL`, `CEIL`, `FLOOR`, `ROUND`, and `TRUNC` on decimals.
+- Added support for `DIV0NULL`.
+
+### Performance Improvements:
+- SQL Planner improvements to better handle use of NDV values and nullability of functions.
+- Ensured BodoSQL now decomposes `VAR_POP`, `VAR_SAMP`, `STDDEV_POP`, `STDDEV_SAMP`, `COVAR_POP`, `COVAR_SAMP` and `CORR` into combinations of `SUM` and `COUNT` to improve re-use of computations across multiple functions.
+- Added streaming support for `AVG(X) OVER ()` and `COUNT(*) OVER ()`.
+- Added streaming support for `SUM` as a window function when there are partitions but no frames.
+- Improved performance of reading string columns for Iceberg tables. This is only available on the Bodo Cloud Platform at this stage.
+- Improved robustness when pushing down very large IN queries with Iceberg.
+- Enabled pruning an entire Iceberg table via a JoinFilter with an empty build table.
+- Enabled rewriting `COUNT(DISTINCT)` to use an internal optimization via grouping sets that allows more equal work distribution across cores.
+- Improve performance of reading small Iceberg tables.
+
+### Bug Fixes:
+- Fixed bug enabling streaming for `CUME_DIST` and `PERCENT_RANK` when there are no partition columns.
+- Arrays of tuple values are now returned to regular Python properly as arrays of tuples instead of arrays of structs.
+- Fixed bugs that prevented compiling complex nested UDF inlining cases.
+
+### Dependency Upgrades:
+- Upgraded to Calcite 1.37.
+- Upgraded to Arrow 17.
