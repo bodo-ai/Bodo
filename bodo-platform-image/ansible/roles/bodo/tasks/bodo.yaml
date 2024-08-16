@@ -79,6 +79,13 @@
   tags:
     - bodo
 
+- name: BODO | Install Bodo Platform DDL Service
+  command:
+    chdir: "/tmp/bodo-platform-ddl-service/"
+    cmd: "/bin/bash bodo-ddl.install"
+  tags:
+    - bodo
+
 - name: BODO | Clean Cache for Conda
   command:
     cmd: "/opt/conda/bin/mamba clean --all"
@@ -87,6 +94,6 @@
 
 - name: BODO | Clean /tmp Folder
   command:
-    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions /tmp/bodo-platform-ipyparallel-kernel"
+    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions /tmp/bodo-platform-ipyparallel-kernel /tmp/bodo-platform-ddl-service"
   tags:
     - bodo

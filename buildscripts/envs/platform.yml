@@ -25,5 +25,7 @@ dependencies:
   - nbconvert=6.5.0                         #[linux64]
   - _openmp_mutex *=*gnu*                   #[linux64]
   - jupyter_client==8.6.1                   #[linux64]
+  - uvicorn                                 #[linux64]
+  - fastapi                                 #[linux64]
   # Bug in Conda-Lock. One dep must be for all platforms
   - httpie
