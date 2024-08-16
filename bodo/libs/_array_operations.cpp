@@ -284,13 +284,13 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 bodo::vector<int64_t> sort_values_table_local_get_indices(
     std::shared_ptr<table_info> in_table, int64_t n_key_t,
     const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    size_t start_offset, size_t n_rows, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("sort_values_table_local", is_parallel);
-    size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
     bodo::vector<int64_t> ListIdx(n_rows, pool);
     for (size_t i = 0; i < n_rows; i++) {
-        ListIdx[i] = i;
+        ListIdx[i] = start_offset + i;
     }
 
     // The comparison operator gets called many times by timsort so any overhead
@@ -350,7 +350,8 @@ std::shared_ptr<table_info> sort_values_table_local(
     const int64_t* dead_keys, bool is_parallel, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     auto ListIdx = sort_values_table_local_get_indices(
-        in_table, n_key, vect_ascending, na_position, is_parallel, pool, mm);
+        in_table, n_key, vect_ascending, na_position, is_parallel, 0,
+        in_table->nrows(), pool, mm);
 
     std::shared_ptr<table_info> ret_table;
     if (dead_keys == nullptr) {

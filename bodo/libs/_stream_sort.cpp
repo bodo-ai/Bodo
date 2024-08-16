@@ -214,7 +214,8 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
         // special version of RetrieveTable that can combine indices from
         // multiple tables together.
         auto out_idxs = sort_values_table_local_get_indices(
-            table, n_key_t, vect_ascending.data(), na_position.data(), false);
+            table, n_key_t, vect_ascending.data(), na_position.data(), false, 0,
+            table->nrows());
         uint64_t n_cols = table->ncols();
         std::vector<uint64_t> col_inds;
         for (int64_t i = 0; i < n_key_t; i++) {
@@ -945,7 +946,7 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
         auto concatenated_tables = concat_tables(collected_tables);
         auto indices = sort_values_table_local_get_indices(
             concatenated_tables, n_key_t, vect_ascending.data(),
-            na_position.data(), false);
+            na_position.data(), false, 0, concatenated_tables->nrows());
         uint64_t n_cols = concatenated_tables->ncols();
         std::vector<uint64_t> col_inds;
         for (int64_t i = 0; i < n_key_t; i++) {

@@ -6,6 +6,7 @@
 #include <set>
 #include <span>
 
+#include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
@@ -459,11 +460,11 @@ inline bool isnan_categorical_ptr(int dtype, char* ptr) {
     }
 }
 
-int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
-                          int64_t pos1_s, int64_t pos1_e,
-                          std::shared_ptr<arrow::Array> const& arr2,
-                          int64_t pos2_s, int64_t pos2_e,
-                          bool const& na_position_bis, bool const& is_na_equal);
+template <bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+    requires(arr_type == bodo_array_type::UNKNOWN)
+bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
+                     const std::shared_ptr<array_info>& arr2, int64_t pos2,
+                     bool is_na_equal);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
@@ -482,19 +483,131 @@ template <bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
 bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
                      const std::shared_ptr<array_info>& arr2, int64_t pos2,
                      bool is_na_equal) {
-    if constexpr (arr_type == bodo_array_type::STRUCT ||
-                  arr_type == bodo_array_type::ARRAY_ITEM ||
-                  arr_type == bodo_array_type::MAP) {
-        // TODO: Handle is_na_equal in Arrow arrays
-        int64_t pos1_s = pos1;
-        int64_t pos1_e = pos1 + 1;
-        int64_t pos2_s = pos2;
-        int64_t pos2_e = pos2 + 1;
-        bool na_position_bis = true;  // This value has no importance
-        int val = ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
-                                        to_arrow(arr2), pos2_s, pos2_e,
-                                        na_position_bis, is_na_equal);
-        return val == 0;
+    if constexpr (arr_type == bodo_array_type::ARRAY_ITEM) {
+        // NULLABLE case. We need to consider the bitmask and the values.
+        bool bit1 = arr1->get_null_bit<arr_type>(pos1);
+        bool bit2 = arr2->get_null_bit<arr_type>(pos2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        if (bit1 != bit2) {
+            return false;
+        }
+        if (!bit1) {
+            return is_na_equal;
+        }
+
+        std::shared_ptr<array_info> data1 = arr1->child_arrays[0];
+        auto* offsets1 = (offset_t*)arr1->data1<bodo_array_type::ARRAY_ITEM>();
+
+        std::shared_ptr<array_info> data2 = arr2->child_arrays[0];
+        auto* offsets2 = (offset_t*)arr2->data1<bodo_array_type::ARRAY_ITEM>();
+
+        offset_t start1 = offsets1[pos1];
+        offset_t start2 = offsets2[pos2];
+        offset_t length1 = offsets1[pos1 + 1] - start1;
+        offset_t length2 = offsets2[pos2 + 1] - start2;
+        if (length1 != length2) {
+            return false;
+        }
+
+        for (offset_t i = 0; i < length1; i++) {
+            if (!TestEqualColumn<bodo_array_type::UNKNOWN>(
+                    data1, start1 + i, data2, start2 + i, is_na_equal)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if constexpr (arr_type == bodo_array_type::MAP) {
+        // NULLABLE case. We need to consider the bitmask and the values.
+        bool bit1 = arr1->get_null_bit<arr_type>(pos1);
+        bool bit2 = arr2->get_null_bit<arr_type>(pos2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        if (bit1 != bit2) {
+            return false;
+        }
+        if (!bit1) {
+            return is_na_equal;
+        }
+
+        // Map is stored as a list of structs of key, value pairs
+        std::shared_ptr<array_info> list1 = arr1->child_arrays[0];
+        auto* offsets1 = (offset_t*)list1->data1<bodo_array_type::ARRAY_ITEM>();
+        std::shared_ptr<array_info> list2 = arr2->child_arrays[0];
+        auto* offsets2 = (offset_t*)list2->data1<bodo_array_type::ARRAY_ITEM>();
+
+        offset_t start1 = offsets1[pos1];
+        offset_t start2 = offsets2[pos2];
+        offset_t length1 = offsets1[pos1 + 1] - start1;
+        offset_t length2 = offsets2[pos2 + 1] - start2;
+        if (length1 != length2) {
+            return false;
+        }
+
+        // We need to compare ignoring the order the keys themselves, so we sort
+        // the range of keys corresponding the rows being compared first
+        std::vector<int64_t> vect_ascending{0};
+        std::vector<int64_t> na_position{0};
+
+        std::vector<std::shared_ptr<array_info>> key_col1{
+            list1->child_arrays[0]->child_arrays[0]};
+        auto key_table1 = std::make_shared<table_info>(std::move(key_col1));
+        auto sorted_idxs1 = sort_values_table_local_get_indices(
+            std::move(key_table1), 1, vect_ascending.data(), na_position.data(),
+            false, start1, length1);
+
+        std::vector<std::shared_ptr<array_info>> key_col2{
+            list2->child_arrays[0]};
+        auto key_table2 = std::make_shared<table_info>(std::move(key_col2));
+        auto sorted_idxs2 = sort_values_table_local_get_indices(
+            std::move(key_table2), 1, vect_ascending.data(), na_position.data(),
+            false, start2, length1);
+
+        for (size_t i = 0; i < length1; i++) {
+            // Check that sorted keys/values are equal
+            if (!TestEqualColumn(list1->child_arrays[0], sorted_idxs1[i],
+                                 list2->child_arrays[0], sorted_idxs2[i],
+                                 is_na_equal)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if constexpr (arr_type == bodo_array_type::STRUCT) {
+        size_t n_fields1 = arr1->child_arrays.size();
+        size_t n_fields2 = arr2->child_arrays.size();
+        if (n_fields1 != n_fields2) {
+            return false;
+        }
+
+        for (size_t i = 0; i < n_fields1; i++) {
+            auto arr_type1 = arr1->child_arrays[i]->arr_type;
+            auto arr_type2 = arr2->child_arrays[i]->arr_type;
+            if (arr_type1 != arr_type2) {
+                return false;
+            }
+        }
+
+        // NULLABLE case. We need to consider the bitmask and the values.
+        bool bit1 = arr1->get_null_bit<arr_type>(pos1);
+        bool bit2 = arr2->get_null_bit<arr_type>(pos2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        if (bit1 != bit2) {
+            return false;
+        }
+        if (!bit1) {
+            return is_na_equal;
+        }
+
+        for (size_t i = 0; i < arr1->child_arrays.size(); i++) {
+            if (!TestEqualColumn(arr1->child_arrays[i], pos1,
+                                 arr2->child_arrays[i], pos2, is_na_equal)) {
+                return false;
+            }
+        }
+        return true;
     }
     if constexpr (arr_type == bodo_array_type::NUMPY ||
                   arr_type == bodo_array_type::CATEGORICAL) {
@@ -623,7 +736,7 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
 
 /** Wrapper for TestEqualColumn when the array type is not already known.
  */
-template <bodo_array_type::arr_type_enum arr_type = bodo_array_type::UNKNOWN>
+template <bodo_array_type::arr_type_enum arr_type>
     requires(arr_type == bodo_array_type::UNKNOWN)
 bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
                      const std::shared_ptr<array_info>& arr2, int64_t pos2,
@@ -658,24 +771,6 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
  */
 std::shared_ptr<arrow::ArrayData> get_sort_indices_of_slice_arrow(
     std::shared_ptr<arrow::Array> const& arr, int64_t pos_s, int64_t pos_e);
-
-/* This function test if two rows of two arrow columns (which may or may not be
- * the same) are equal, greater or lower than the other.
- *
- * @param arr1            : the first arrow array
- * @param pos1_s, pos1_e  : the starting and ending positions
- * @param arr2            : the second arrow array
- * @param pos2_s, pos2_e  : the starting and ending positions
- * @param na_position_bis : Whether the missing data is first or last
- * @param is_na_equal      : should na values be considered equal
- * @return 1 is arr1[pos1_s:pos1_e] < arr2[pos2_s:pos2_e], 0 is equality, -1 if
- * >.
- */
-int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
-                          int64_t pos1_s, int64_t pos1_e,
-                          std::shared_ptr<arrow::Array> const& arr2,
-                          int64_t pos2_s, int64_t pos2_e,
-                          bool const& na_position_bis, bool const& is_na_equal);
 
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
