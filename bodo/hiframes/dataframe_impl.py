@@ -1714,9 +1714,16 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
                 numba.np.numpy_support.as_dtype(df.data[df.column_index[c]].dtype)
                 for c in out_colnames
             ]
-            # TODO: Determine what possible exceptions this might raise.
             comm_dtype = numba.np.numpy_support.from_dtype(np.result_type(*dtypes))
-    except NotImplementedError:
+    # If we have a Bodo or Numba type that isn't implemented in
+    # Numpy, we will get a NumbaNotImplementedError
+    except numba.core.errors.NumbaNotImplementedError:
+        raise BodoError(
+            f"Dataframe.{func_name}() with column types: {df.data} could not be merged to a common type."
+        )
+    # If we get types that aren't compatible in Numpy, we will get a
+    # DTypePromotionError
+    except np.exceptions.DTypePromotionError:
         raise BodoError(
             f"Dataframe.{func_name}() with column types: {df.data} could not be merged to a common type."
         )
