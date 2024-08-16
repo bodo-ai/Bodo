@@ -1141,314 +1141,377 @@ std::shared_ptr<arrow::ArrayData> get_sort_indices_of_slice_arrow(
     return sort_indices_res.ValueOrDie().array();
 }
 
-int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
-                          int64_t pos1_s, int64_t pos1_e,
-                          std::shared_ptr<arrow::Array> const& arr2,
-                          int64_t pos2_s, int64_t pos2_e,
-                          bool const& na_position_bis,
-                          bool const& is_na_equal) {
-    auto process_length = [](int const& len1, int const& len2) -> int {
+int CompareNAValues(bool na_position_bis, bool bit1, bool bit2) {
+    if (bit1 && !bit2) {
+        if (na_position_bis) {
+            return 1;
+        } else {
+            return -1;
+        }
+    }
+    if (!bit1 && bit2) {
+        if (na_position_bis) {
+            return -1;
+        } else {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+template <bodo_array_type::arr_type_enum T>
+int KeyComparisonAsPython_Column_impl(bool const& na_position_bis,
+                                      const std::shared_ptr<array_info>& arr1,
+                                      size_t const& iRow1,
+                                      const std::shared_ptr<array_info>& arr2,
+                                      size_t const& iRow2);
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::NUMPY>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    // In the case of NUMPY, we compare the values for concluding.
+    uint64_t siztype = numpy_item_size[arr1->dtype];
+    char* ptr1 = arr1->data1<bodo_array_type::NUMPY>() + (siztype * iRow1);
+    char* ptr2 = arr2->data1() + (siztype * iRow2);
+    return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::CATEGORICAL>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    // In the case of CATEGORICAL, we need to check for null
+    uint64_t siztype = numpy_item_size[arr1->dtype];
+    char* ptr1 =
+        arr1->data1<bodo_array_type::CATEGORICAL>() + (siztype * iRow1);
+    char* ptr2 = arr2->data1() + (siztype * iRow2);
+    bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
+    bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
+    int reply = CompareNAValues(na_position_bis, is_not_na1, is_not_na2);
+    if (reply != 0) {
+        return reply;
+    }
+
+    if (is_not_na1) {
+        return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+    }
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::NULLABLE_INT_BOOL>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    // NULLABLE case. We need to consider the bitmask and the values.
+    uint8_t* null_bitmask1 =
+        (uint8_t*)arr1->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
+    uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask();
+    bool bit1 = GetBit(null_bitmask1, iRow1);
+    bool bit2 = GetBit(null_bitmask2, iRow2);
+    // If one bitmask is T and the other the reverse then they are
+    // clearly not equal.
+    int reply = CompareNAValues(na_position_bis, bit1, bit2);
+    if (reply != 0) {
+        return reply;
+    }
+    // If both bitmasks are false, then it does not matter what value
+    // they are storing. Comparison is the same as for NUMPY.
+    if (bit1) {
+        if (arr1->dtype == Bodo_CTypes::_BOOL) {
+            uint8_t* data1 =
+                (uint8_t*)arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>();
+            uint8_t* data2 = (uint8_t*)arr2->data1();
+            bool bit1 = arrow::bit_util::GetBit(data1, iRow1);
+            bool bit2 = arrow::bit_util::GetBit(data2, iRow2);
+            if (bit1 == bit2) {
+                return 0;
+            } else if (bit1) {
+                // bit1 is true and bit2 is false
+                // So (val1 < val2) == False
+                return -1;
+            } else {
+                // bit1 is false and bit2 is true
+                // So (val1 < val2) == True
+                return 1;
+            }
+        } else {
+            uint64_t siztype = numpy_item_size[arr1->dtype];
+            char* ptr1 = arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
+                         (siztype * iRow1);
+            char* ptr2 = arr2->data1() + (siztype * iRow2);
+            int test =
+                NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+            return test;
+        }
+    }
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::TIMESTAMPTZ>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    // NULLABLE case. We need to consider the bitmask and the values.
+    uint8_t* null_bitmask1 =
+        (uint8_t*)arr1->null_bitmask<bodo_array_type::TIMESTAMPTZ>();
+    uint8_t* null_bitmask2 =
+        (uint8_t*)arr2->null_bitmask<bodo_array_type::TIMESTAMPTZ>();
+    bool bit1 = GetBit(null_bitmask1, iRow1);
+    bool bit2 = GetBit(null_bitmask2, iRow2);
+    // If one bitmask is T and the other the reverse then they are
+    // clearly not equal.
+    int reply = CompareNAValues(na_position_bis, bit1, bit2);
+    if (reply != 0) {
+        return reply;
+    }
+    // If bit1 is true it means that both rows are non-null, so
+    // we need to compare their UTC timestamps.
+    if (bit1) {
+        uint64_t siztype = numpy_item_size[arr1->dtype];
+        char* ptr1 =
+            arr1->data1<bodo_array_type::TIMESTAMPTZ>() + (siztype * iRow1);
+        char* ptr2 =
+            arr2->data1<bodo_array_type::TIMESTAMPTZ>() + (siztype * iRow2);
+        int test = NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+        return test;
+    }
+
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::STRING>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    // For STRING case we need to deal bitmask and the values.
+    assert(arr2->arr_type == bodo_array_type::STRING);
+    bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(iRow1);
+    bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(iRow2);
+    // If bitmasks are different then we can conclude the comparison
+    int reply = CompareNAValues(na_position_bis, bit1, bit2);
+    if (reply != 0)
+        return reply;
+    // If bitmasks are both false, then no need to compare the string
+    // values.
+    if (bit1) {
+        // Here we consider the shifts in data2 for the comparison.
+        offset_t* data2_1 = (offset_t*)arr1->data2<bodo_array_type::STRING>();
+        offset_t* data2_2 = (offset_t*)arr2->data2<bodo_array_type::STRING>();
+        offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
+        offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
+        // Compute minimal length
+        offset_t minlen = len1;
+        if (len2 < len1)
+            minlen = len2;
+        // From the common characters, we may be able to conclude.
+        offset_t pos1_prev = data2_1[iRow1];
+        offset_t pos2_prev = data2_2[iRow2];
+        char* data1_1 =
+            (char*)arr1->data1<bodo_array_type::STRING>() + pos1_prev;
+        char* data1_2 = (char*)arr2->data1() + pos2_prev;
+        int test = std::memcmp(data1_2, data1_1, minlen);
+        if (test)
+            return test;
+        // If not, we may be able to conclude via the string length.
         if (len1 > len2)
             return -1;
         if (len1 < len2)
             return 1;
-        return 0;
-    };
-#if OFFSET_BITWIDTH == 32
-    if (arr1->type_id() == arrow::Type::LIST) {
-        std::shared_ptr<arrow::ListArray> list_array1 =
-            std::dynamic_pointer_cast<arrow::ListArray>(arr1);
-        std::shared_ptr<arrow::ListArray> list_array2 =
-            std::dynamic_pointer_cast<arrow::ListArray>(arr2);
-#else
-    if (arr1->type_id() == arrow::Type::LARGE_LIST) {
-        std::shared_ptr<arrow::LargeListArray> list_array1 =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(arr1);
-        std::shared_ptr<arrow::LargeListArray> list_array2 =
-            std::dynamic_pointer_cast<arrow::LargeListArray>(arr2);
-#endif
-        int64_t len1 = pos1_e - pos1_s;
-        int64_t len2 = pos2_e - pos2_s;
-        int64_t min_len = std::min(len1, len2);
-        for (int64_t idx = 0; idx < min_len; idx++) {
-            std::pair<int, bool> epair =
-                process_arrow_bitmap(na_position_bis, list_array1, pos1_s + idx,
-                                     list_array2, pos2_s + idx, is_na_equal);
-            if (epair.first != 0)
-                return epair.first;
-            if (epair.second) {
-                int n_pos1_s = list_array1->value_offset(pos1_s + idx);
-                int n_pos1_e = list_array1->value_offset(pos1_s + idx + 1);
-                int n_pos2_s = list_array2->value_offset(pos2_s + idx);
-                int n_pos2_e = list_array2->value_offset(pos2_s + idx + 1);
-                int test = ComparisonArrowColumn(
-                    list_array1->values(), n_pos1_s, n_pos1_e,
-                    list_array2->values(), n_pos2_s, n_pos2_e, na_position_bis,
-                    is_na_equal);
-                if (test)
-                    return test;
-            }
-        }
-        return process_length(len1, len2);
-    } else if (arr1->type_id() == arrow::Type::MAP) {
-        std::shared_ptr<arrow::MapArray> map_array1 =
-            std::dynamic_pointer_cast<arrow::MapArray>(arr1);
-        std::shared_ptr<arrow::MapArray> map_array2 =
-            std::dynamic_pointer_cast<arrow::MapArray>(arr2);
-        int64_t len1 = pos1_e - pos1_s;
-        int64_t len2 = pos2_e - pos2_s;
-
-        int64_t min_len = std::min(len1, len2);
-        for (int64_t idx = 0; idx < min_len; ++idx) {
-            std::pair<int, bool> epair =
-                process_arrow_bitmap(na_position_bis, map_array1, pos1_s + idx,
-                                     map_array2, pos2_s + idx, is_na_equal);
-
-            if (epair.first != 0)
-                return epair.first;
-            if (epair.second) {
-                int inner_pos1_s = map_array1->value_offset(pos1_s + idx);
-                int inner_pos1_e = map_array1->value_offset(pos1_s + idx + 1);
-                int inner_pos2_s = map_array2->value_offset(pos2_s + idx);
-                int inner_pos2_e = map_array2->value_offset(pos2_s + idx + 1);
-                int64_t inner_len1 = inner_pos1_e - inner_pos1_s;
-                int64_t inner_len2 = inner_pos2_e - inner_pos2_s;
-                int64_t min_inner_len = std::min(inner_len1, inner_len2);
-
-                // Get the sort indices of the row's elements based on the keys
-                auto sort_indices1_arr = get_sort_indices_of_slice_arrow(
-                    map_array1->keys(), inner_pos1_s, inner_pos1_e);
-                auto sort_indices2_arr = get_sort_indices_of_slice_arrow(
-                    map_array2->keys(), inner_pos2_s, inner_pos2_e);
-                const uint64_t* sort_indices1 =
-                    sort_indices1_arr->GetValues<uint64_t>(1);
-                const uint64_t* sort_indices2 =
-                    sort_indices2_arr->GetValues<uint64_t>(1);
-
-                for (int64_t inner_idx = 0; inner_idx < min_inner_len;
-                     ++inner_idx) {
-                    // Compare the keys and values in the sorted order
-                    int n_pos1_s = inner_pos1_s + sort_indices1[inner_idx];
-                    int n_pos1_e = n_pos1_s + 1;
-                    int n_pos2_s = inner_pos2_s + sort_indices2[inner_idx];
-                    int n_pos2_e = n_pos2_s + 1;
-                    int test = ComparisonArrowColumn(
-                        map_array1->keys(), n_pos1_s, n_pos1_e,
-                        map_array2->keys(), n_pos2_s, n_pos2_e, na_position_bis,
-                        is_na_equal);
-                    if (test) {
-                        return test;
-                    }
-                    test = ComparisonArrowColumn(map_array1->items(), n_pos1_s,
-                                                 n_pos1_e, map_array2->items(),
-                                                 n_pos2_s, n_pos2_e,
-                                                 na_position_bis, is_na_equal);
-                    if (test) {
-                        return test;
-                    }
-                }
-                int inner_len_processed =
-                    process_length(inner_len1, inner_len2);
-                if (inner_len_processed) {
-                    return inner_len_processed;
-                }
-            }
-        }
-        return process_length(len1, len2);
-
-    } else if (arr1->type_id() == arrow::Type::STRUCT) {
-        auto struct_array1 =
-            std::dynamic_pointer_cast<arrow::StructArray>(arr1);
-        auto struct_array2 =
-            std::dynamic_pointer_cast<arrow::StructArray>(arr2);
-        auto struct_type1 =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_array1->type());
-        auto struct_type2 =
-            std::dynamic_pointer_cast<arrow::StructType>(struct_array2->type());
-        int num_fields1 = struct_type1->num_fields();
-        int num_fields2 = struct_type2->num_fields();
-        if (num_fields1 > num_fields2) {
-            return -1;
-        } else if (num_fields1 < num_fields2) {
-            return 1;
-        }
-        int64_t len1 = pos1_e - pos1_s;
-        int64_t len2 = pos2_e - pos2_s;
-        int64_t min_len = std::min(len1, len2);
-        for (int64_t idx = 0; idx < min_len; idx++) {
-            int n_pos1_s = pos1_s + idx;
-            int n_pos1_e = pos1_s + idx + 1;
-            int n_pos2_s = pos2_s + idx;
-            int n_pos2_e = pos2_s + idx + 1;
-            std::pair<int, bool> epair =
-                process_arrow_bitmap(na_position_bis, struct_array1, n_pos1_s,
-                                     struct_array2, n_pos2_s, is_na_equal);
-            if (epair.first != 0)
-                return epair.first;
-            if (epair.second) {
-                for (int i = 0; i < num_fields1; i++) {
-                    int test = ComparisonArrowColumn(
-                        struct_array1->field(i), n_pos1_s, n_pos1_e,
-                        struct_array2->field(i), n_pos2_s, n_pos2_e,
-                        na_position_bis, is_na_equal);
-                    if (test)
-                        return test;
-                }
-            }
-        }
-        return process_length(len1, len2);
-#if OFFSET_BITWIDTH == 32
-    } else if (arr1->type_id() == arrow::Type::STRING) {
-        auto str_array1 = std::dynamic_pointer_cast<arrow::StringArray>(arr1);
-        auto str_array2 = std::dynamic_pointer_cast<arrow::StringArray>(arr2);
-#else
-    } else if (arr1->type_id() == arrow::Type::LARGE_STRING) {
-        auto str_array1 =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr1);
-        auto str_array2 =
-            std::dynamic_pointer_cast<arrow::LargeStringArray>(arr2);
-#endif
-        int64_t len1 = pos1_e - pos1_s;
-        int64_t len2 = pos2_e - pos2_s;
-        int64_t min_len = std::min(len1, len2);
-        for (int64_t idx = 0; idx < min_len; idx++) {
-            int n_pos1_s = pos1_s + idx;
-            int n_pos2_s = pos2_s + idx;
-            std::pair<int, bool> epair =
-                process_arrow_bitmap(na_position_bis, str_array1, n_pos1_s,
-                                     str_array2, n_pos2_s, is_na_equal);
-            if (epair.first != 0)
-                return epair.first;
-            if (epair.second) {
-                std::string_view str1 = str_array1->GetView(pos1_s + idx);
-                std::string_view str2 = str_array2->GetView(pos2_s + idx);
-                size_t len1 = str1.size();
-                size_t len2 = str2.size();
-                size_t minlen = std::min(len1, len2);
-                int test = std::memcmp(str2.data(), str1.data(), minlen);
-                if (test)
-                    return test;
-                // If not, we may be able to conclude via the string length.
-                if (len1 > len2)
-                    return -1;
-                if (len1 < len2)
-                    return 1;
-            }
-        }
-        return process_length(len1, len2);
-    } else if (arr1->type_id() == arrow::Type::DICTIONARY) {
-        auto dict_arr1 =
-            std::dynamic_pointer_cast<arrow::DictionaryArray>(arr1);
-        auto dict_indices1 =
-            std::static_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
-                dict_arr1->indices());
-        auto str_array1 = std::static_pointer_cast<arrow::LargeStringArray>(
-            dict_arr1->dictionary());
-
-        auto dict_arr2 =
-            std::dynamic_pointer_cast<arrow::DictionaryArray>(arr2);
-        auto dict_indices2 =
-            std::static_pointer_cast<arrow::NumericArray<arrow::Int32Type>>(
-                dict_arr2->indices());
-        auto str_array2 = std::static_pointer_cast<arrow::LargeStringArray>(
-            dict_arr2->dictionary());
-
-        int64_t len1 = pos1_e - pos1_s;
-        int64_t len2 = pos2_e - pos2_s;
-        int64_t min_len = std::min(len1, len2);
-        for (int64_t idx = 0; idx < min_len; idx++) {
-            int n_pos1_s = pos1_s + idx;
-            int n_pos2_s = pos2_s + idx;
-            std::pair<int, bool> epair =
-                process_arrow_bitmap(na_position_bis, dict_arr1, n_pos1_s,
-                                     dict_arr2, n_pos2_s, is_na_equal);
-            if (epair.first != 0)
-                return epair.first;
-            if (epair.second) {
-                std::string_view str1 = str_array1->GetView(
-                    *(dict_indices1->raw_values() + pos1_s + idx));
-                std::string_view str2 = str_array2->GetView(
-                    *(dict_indices2->raw_values() + pos2_s + idx));
-                size_t len1 = str1.size();
-                size_t len2 = str2.size();
-                size_t minlen = std::min(len1, len2);
-                int test = std::memcmp(str2.data(), str1.data(), minlen);
-                if (test)
-                    return test;
-                // If not, we may be able to conclude via the string length.
-                if (len1 > len2)
-                    return -1;
-                if (len1 < len2)
-                    return 1;
-            }
-        }
-        return process_length(len1, len2);
-    } else {
-        auto primitive_array1 =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr1);
-        auto primitive_array2 =
-            std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr2);
-        int64_t len1 = pos1_e - pos1_s;
-        int64_t len2 = pos2_e - pos2_s;
-        int64_t min_len = std::min(len1, len2);
-        if (arr1->type()->id() == arrow::Type::BOOL) {
-            // Boolean arrays have 1 bit per boolean so we
-            // need a separate loop.
-            uint8_t* data_ptr1 = (uint8_t*)primitive_array1->values()->data();
-            uint8_t* data_ptr2 = (uint8_t*)primitive_array2->values()->data();
-            for (int64_t idx = 0; idx < min_len; idx++) {
-                int n_pos1_s = pos1_s + idx;
-                int n_pos2_s = pos2_s + idx;
-                std::pair<int, bool> epair = process_arrow_bitmap(
-                    na_position_bis, primitive_array1, n_pos1_s,
-                    primitive_array2, n_pos2_s, is_na_equal);
-                if (epair.first != 0) {
-                    return epair.first;
-                } else if (epair.second) {
-                    bool bit1 = arrow::bit_util::GetBit(data_ptr1, n_pos1_s);
-                    bool bit2 = arrow::bit_util::GetBit(data_ptr2, n_pos2_s);
-                    if (bit1 != bit2) {
-                        if (bit1) {
-                            // bit1 is true, bit2 is false so (bit1 < bit2) ==
-                            // False
-                            return -1;
-                        } else {
-                            // bit1 is false, bit2 is true so (bit1 < bit2) ==
-                            // True
-                            return 1;
-                        }
-                    }
-                }
-            }
-        } else {
-            for (int64_t idx = 0; idx < min_len; idx++) {
-                int n_pos1_s = pos1_s + idx;
-                int n_pos2_s = pos2_s + idx;
-                std::pair<int, bool> epair = process_arrow_bitmap(
-                    na_position_bis, primitive_array1, n_pos1_s,
-                    primitive_array2, n_pos2_s, is_na_equal);
-                if (epair.first != 0) {
-                    return epair.first;
-                } else if (epair.second) {
-                    int test = 0;
-                    // TODO: implement other types
-                    Bodo_CTypes::CTypeEnum bodo_typ =
-                        arrow_to_bodo_type(primitive_array1->type()->id());
-                    size_t siz_typ = numpy_item_size[bodo_typ];
-                    char* ptr1 = (char*)primitive_array1->values()->data() +
-                                 siz_typ * n_pos1_s;
-                    char* ptr2 = (char*)primitive_array2->values()->data() +
-                                 siz_typ * n_pos2_s;
-                    test = NumericComparison(bodo_typ, ptr1, ptr2,
-                                             na_position_bis);
-                    if (test) {
-                        return test;
-                    }
-                }
-            }
-        }
-        return process_length(len1, len2);
     }
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::DICT>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    assert(arr2->arr_type == bodo_array_type::DICT);
+    if (!is_matching_dictionary(arr1->child_arrays[0], arr2->child_arrays[0])) {
+        throw std::runtime_error(
+            "KeyComparisonAsPython_Column: don't know if arrays "
+            "have unified dictionary");
+    }
+    // Since arr1->child_arrays[0] == arr2->child_arrays[0] (if arr2 is
+    // DICT)
+    std::shared_ptr<array_info> arr_dict = arr1->child_arrays[0];
+    std::shared_ptr<array_info> arr1_indices = arr1->child_arrays[1];
+    std::shared_ptr<array_info> arr2_indices = arr2->child_arrays[1];
+
+    if (arr_dict->is_locally_sorted) {
+        // In case of sorted dictionaries, we can simply compare the
+        // indices
+        return KeyComparisonAsPython_Column(na_position_bis, arr1_indices,
+                                            iRow1, arr2_indices, iRow2);
+    }
+    // If the dictionary is not sorted, then do the regular STRING like
+    // check
+
+    // NULLABLE case. We need to consider the bitmask and the values (of
+    // the indices)
+    bool bit1 =
+        arr1_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow1);
+    bool bit2 =
+        arr2_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(iRow2);
+    // If one bitmask is T and the other the reverse then they are
+    // clearly not equal.
+    int reply = CompareNAValues(na_position_bis, bit1, bit2);
+    if (reply != 0)
+        return reply;
+
+    // Currently we assume there are no null values in the dictionary
+    // itself, so no special handling is needed, but this might change
+    // in the future.
+
+    // If both bitmasks are false, then it does not matter what value
+    // they are storing.
+    if (bit1) {
+        // Get the index for the dict array
+        int32_t new_iRow1 =
+            arr1_indices
+                ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(iRow1);
+        int32_t new_iRow2 =
+            arr2_indices
+                ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(iRow2);
+
+        // Now we compare the dict entries (same as the STRING logic)
+        return KeyComparisonAsPython_Column(na_position_bis, arr_dict,
+                                            new_iRow1, arr_dict, new_iRow2);
+    }
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::STRUCT>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    bool bit1 = arr1->get_null_bit<bodo_array_type::STRUCT>(iRow1);
+    bool bit2 = arr2->get_null_bit<bodo_array_type::STRUCT>(iRow2);
+    int na_comp = CompareNAValues(na_position_bis, bit1, bit2);
+    if (na_comp != 0) {
+        return na_comp;
+    }
+    size_t num_fields1 = arr1->child_arrays.size();
+    size_t num_fields2 = arr2->child_arrays.size();
+    if (num_fields1 > num_fields2) {
+        return -1;
+    } else if (num_fields1 < num_fields2) {
+        return 1;
+    }
+
+    for (size_t i = 0; i < num_fields1; i++) {
+        int res =
+            KeyComparisonAsPython_Column(na_position_bis, arr1->child_arrays[i],
+                                         iRow1, arr2->child_arrays[i], iRow2);
+        if (res != 0) {
+            return res;
+        }
+    }
+    // The structs are equal
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::ARRAY_ITEM>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    bool bit1 = arr1->get_null_bit<bodo_array_type::ARRAY_ITEM>(iRow1);
+    bool bit2 = arr2->get_null_bit<bodo_array_type::ARRAY_ITEM>(iRow2);
+    int na_comp = CompareNAValues(na_position_bis, bit1, bit2);
+    if (na_comp != 0) {
+        return na_comp;
+    }
+    auto data1 = arr1->child_arrays[0];
+    auto offsets1 = (offset_t*)arr1->data1<bodo_array_type::ARRAY_ITEM>();
+
+    auto data2 = arr2->child_arrays[0];
+    auto offsets2 = (offset_t*)arr2->data1<bodo_array_type::ARRAY_ITEM>();
+
+    offset_t start1 = offsets1[iRow1];
+    offset_t start2 = offsets2[iRow2];
+    offset_t length1 = offsets1[iRow1 + 1] - start1;
+    offset_t length2 = offsets2[iRow2 + 1] - start2;
+
+    for (size_t i = 0; i < std::min(length1, length2); i++) {
+        int res = KeyComparisonAsPython_Column(na_position_bis, data1,
+                                               start1 + i, data2, start2 + i);
+        if (res != 0) {
+            return res;
+        }
+    }
+
+    if (length1 > length2) {
+        return -1;
+    } else if (length1 < length2) {
+        return 1;
+    }
+    // The lists are equal
+    return 0;
+}
+
+template <>
+int KeyComparisonAsPython_Column_impl<bodo_array_type::MAP>(
+    bool const& na_position_bis, const std::shared_ptr<array_info>& arr1,
+    size_t const& iRow1, const std::shared_ptr<array_info>& arr2,
+    size_t const& iRow2) {
+    bool bit1 = arr1->get_null_bit<bodo_array_type::MAP>(iRow1);
+    bool bit2 = arr2->get_null_bit<bodo_array_type::MAP>(iRow2);
+    int na_comp = CompareNAValues(na_position_bis, bit1, bit2);
+    if (na_comp != 0) {
+        return na_comp;
+    }
+    std::shared_ptr<array_info> list1 = arr1->child_arrays[0];
+    auto* offsets1 = (offset_t*)list1->data1<bodo_array_type::ARRAY_ITEM>();
+    std::shared_ptr<array_info> list2 = arr2->child_arrays[0];
+    auto* offsets2 = (offset_t*)list2->data1<bodo_array_type::ARRAY_ITEM>();
+
+    offset_t start1 = offsets1[iRow1];
+    offset_t start2 = offsets2[iRow2];
+    offset_t length1 = offsets1[iRow1 + 1] - start1;
+    offset_t length2 = offsets2[iRow2 + 1] - start2;
+
+    // We need to compare ignoring the order the keys themselves, so we sort
+    // the range of keys corresponding the rows being compared first
+    std::vector<int64_t> vect_ascending{0};
+    std::vector<int64_t> na_position{0};
+
+    std::vector<std::shared_ptr<array_info>> key_col1{
+        list1->child_arrays[0]->child_arrays[0]};
+    auto key_table1 = std::make_shared<table_info>(std::move(key_col1));
+    auto sorted_idxs1 = sort_values_table_local_get_indices(
+        std::move(key_table1), 1, vect_ascending.data(), na_position.data(),
+        false, start1, length1);
+
+    std::vector<std::shared_ptr<array_info>> key_col2{
+        list2->child_arrays[0]->child_arrays[0]};
+    auto key_table2 = std::make_shared<table_info>(std::move(key_col2));
+    auto sorted_idxs2 = sort_values_table_local_get_indices(
+        std::move(key_table2), 1, vect_ascending.data(), na_position.data(),
+        false, start2, length2);
+
+    for (size_t i = 0; i < std::min(length1, length2); i++) {
+        int kv_comp = KeyComparisonAsPython_Column(
+            na_position_bis, list1->child_arrays[0], sorted_idxs1[i],
+            list2->child_arrays[0], sorted_idxs2[i]);
+        if (kv_comp != 0) {
+            return kv_comp;
+        }
+    }
+
+    if (length1 > length2) {
+        return -1;
+    } else if (length1 < length2) {
+        return 1;
+    }
+    return 0;
 }
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis,
@@ -1456,228 +1519,28 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis,
                                  size_t const& iRow1,
                                  const std::shared_ptr<array_info>& arr2,
                                  size_t const& iRow2) {
-    if (arr1->arr_type == bodo_array_type::STRUCT ||
-        arr1->arr_type == bodo_array_type::ARRAY_ITEM ||
-        arr1->arr_type == bodo_array_type::MAP) {
-        int64_t pos1_s = iRow1;
-        int64_t pos1_e = iRow1 + 1;
-        int64_t pos2_s = iRow2;
-        int64_t pos2_e = iRow2 + 1;
-        return ComparisonArrowColumn(to_arrow(arr1), pos1_s, pos1_e,
-                                     to_arrow(arr2), pos2_s, pos2_e,
-                                     na_position_bis, true);
-    }
-    if (arr1->arr_type == bodo_array_type::NUMPY) {
-        // In the case of NUMPY, we compare the values for concluding.
-        uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 = arr1->data1<bodo_array_type::NUMPY>() + (siztype * iRow1);
-        char* ptr2 = arr2->data1() + (siztype * iRow2);
-        return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
-    }
-    auto process_bits = [&](bool bit1, bool bit2) -> int {
-        if (bit1 && !bit2) {
-            if (na_position_bis) {
-                return 1;
-            } else {
-                return -1;
-            }
-        }
-        if (!bit1 && bit2) {
-            if (na_position_bis) {
-                return -1;
-            } else {
-                return 1;
-            }
-        }
-        return 0;
-    };
-    if (arr1->arr_type == bodo_array_type::CATEGORICAL) {
-        // In the case of CATEGORICAL, we need to check for null
-        uint64_t siztype = numpy_item_size[arr1->dtype];
-        char* ptr1 =
-            arr1->data1<bodo_array_type::CATEGORICAL>() + (siztype * iRow1);
-        char* ptr2 = arr2->data1() + (siztype * iRow2);
-        bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
-        bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
-        int reply = process_bits(is_not_na1, is_not_na2);
-        if (reply != 0)
-            return reply;
-        if (is_not_na1) {
-            return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
-        }
-    }
-    if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        // NULLABLE case. We need to consider the bitmask and the values.
-        uint8_t* null_bitmask1 =
-            (uint8_t*)arr1->null_bitmask<bodo_array_type::NULLABLE_INT_BOOL>();
-        uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask();
-        bool bit1 = GetBit(null_bitmask1, iRow1);
-        bool bit2 = GetBit(null_bitmask2, iRow2);
-        // If one bitmask is T and the other the reverse then they are
-        // clearly not equal.
-        int reply = process_bits(bit1, bit2);
-        if (reply != 0) {
-            return reply;
-        }
-        // If both bitmasks are false, then it does not matter what value
-        // they are storing. Comparison is the same as for NUMPY.
-        if (bit1) {
-            if (arr1->dtype == Bodo_CTypes::_BOOL) {
-                uint8_t* data1 =
-                    (uint8_t*)arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>();
-                uint8_t* data2 = (uint8_t*)arr2->data1();
-                bool bit1 = arrow::bit_util::GetBit(data1, iRow1);
-                bool bit2 = arrow::bit_util::GetBit(data2, iRow2);
-                if (bit1 == bit2) {
-                    return 0;
-                } else if (bit1) {
-                    // bit1 is true and bit2 is false
-                    // So (val1 < val2) == False
-                    return -1;
-                } else {
-                    // bit1 is false and bit2 is true
-                    // So (val1 < val2) == True
-                    return 1;
-                }
-            } else {
-                uint64_t siztype = numpy_item_size[arr1->dtype];
-                char* ptr1 = arr1->data1<bodo_array_type::NULLABLE_INT_BOOL>() +
-                             (siztype * iRow1);
-                char* ptr2 = arr2->data1() + (siztype * iRow2);
-                int test =
-                    NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
-                return test;
-            }
-        }
-    }
-    if (arr1->arr_type == bodo_array_type::TIMESTAMPTZ) {
-        // NULLABLE case. We need to consider the bitmask and the values.
-        uint8_t* null_bitmask1 =
-            (uint8_t*)arr1->null_bitmask<bodo_array_type::TIMESTAMPTZ>();
-        uint8_t* null_bitmask2 =
-            (uint8_t*)arr2->null_bitmask<bodo_array_type::TIMESTAMPTZ>();
-        bool bit1 = GetBit(null_bitmask1, iRow1);
-        bool bit2 = GetBit(null_bitmask2, iRow2);
-        // If one bitmask is T and the other the reverse then they are
-        // clearly not equal.
-        int reply = process_bits(bit1, bit2);
-        if (reply != 0) {
-            return reply;
-        }
-        // If bit1 is true it means that both rows are non-null, so
-        // we need to compare their UTC timestamps.
-        if (bit1) {
-            uint64_t siztype = numpy_item_size[arr1->dtype];
-            char* ptr1 =
-                arr1->data1<bodo_array_type::TIMESTAMPTZ>() + (siztype * iRow1);
-            char* ptr2 =
-                arr2->data1<bodo_array_type::TIMESTAMPTZ>() + (siztype * iRow2);
-            int test =
-                NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
-            return test;
-        }
-    }
-    if (arr1->arr_type == bodo_array_type::STRING) {
-        // For STRING case we need to deal bitmask and the values.
-        assert(arr2->arr_type == bodo_array_type::STRING);
-        bool bit1 = arr1->get_null_bit<bodo_array_type::STRING>(iRow1);
-        bool bit2 = arr2->get_null_bit<bodo_array_type::STRING>(iRow2);
-        // If bitmasks are different then we can conclude the comparison
-        int reply = process_bits(bit1, bit2);
-        if (reply != 0)
-            return reply;
-        // If bitmasks are both false, then no need to compare the string
-        // values.
-        if (bit1) {
-            // Here we consider the shifts in data2 for the comparison.
-            offset_t* data2_1 =
-                (offset_t*)arr1->data2<bodo_array_type::STRING>();
-            offset_t* data2_2 =
-                (offset_t*)arr2->data2<bodo_array_type::STRING>();
-            offset_t len1 = data2_1[iRow1 + 1] - data2_1[iRow1];
-            offset_t len2 = data2_2[iRow2 + 1] - data2_2[iRow2];
-            // Compute minimal length
-            offset_t minlen = len1;
-            if (len2 < len1)
-                minlen = len2;
-            // From the common characters, we may be able to conclude.
-            offset_t pos1_prev = data2_1[iRow1];
-            offset_t pos2_prev = data2_2[iRow2];
-            char* data1_1 =
-                (char*)arr1->data1<bodo_array_type::STRING>() + pos1_prev;
-            char* data1_2 = (char*)arr2->data1() + pos2_prev;
-            int test = std::memcmp(data1_2, data1_1, minlen);
-            if (test)
-                return test;
-            // If not, we may be able to conclude via the string length.
-            if (len1 > len2)
-                return -1;
-            if (len1 < len2)
-                return 1;
-        }
-    }
-    if (arr1->arr_type == bodo_array_type::DICT) {
-        if (arr2->arr_type == bodo_array_type::DICT) {
-            if (!is_matching_dictionary(arr1->child_arrays[0],
-                                        arr2->child_arrays[0])) {
-                throw std::runtime_error(
-                    "KeyComparisonAsPython_Column: don't know if arrays "
-                    "have unified dictionary");
-            }
-        }
-        assert(arr2->arr_type == bodo_array_type::DICT);
-        // Since arr1->child_arrays[0] == arr2->child_arrays[0] (if arr2 is
-        // DICT)
-        std::shared_ptr<array_info> arr_dict = arr1->child_arrays[0];
-        std::shared_ptr<array_info> arr1_indices = arr1->child_arrays[1];
-        std::shared_ptr<array_info> arr2_indices = arr2->child_arrays[1];
+    assert(arr2->arr_type == arr1->arr_type);
+    switch (arr1->arr_type) {
+#define IMPL_COMPARISON(type)                                                 \
+    case type:                                                                \
+        return KeyComparisonAsPython_Column_impl<type>(na_position_bis, arr1, \
+                                                       iRow1, arr2, iRow2)
 
-        if (arr_dict->is_locally_sorted) {
-            // In case of sorted dictionaries, we can simply compare the
-            // indices
-            return KeyComparisonAsPython_Column(na_position_bis, arr1_indices,
-                                                iRow1, arr2_indices, iRow2);
-        }
-        // If the dictionary is not sorted, then do the regular STRING like
-        // check
+        IMPL_COMPARISON(bodo_array_type::STRUCT);
+        IMPL_COMPARISON(bodo_array_type::ARRAY_ITEM);
+        IMPL_COMPARISON(bodo_array_type::MAP);
+        IMPL_COMPARISON(bodo_array_type::NUMPY);
+        IMPL_COMPARISON(bodo_array_type::CATEGORICAL);
+        IMPL_COMPARISON(bodo_array_type::NULLABLE_INT_BOOL);
+        IMPL_COMPARISON(bodo_array_type::TIMESTAMPTZ);
+        IMPL_COMPARISON(bodo_array_type::STRING);
+        IMPL_COMPARISON(bodo_array_type::DICT);
 
-        // NULLABLE case. We need to consider the bitmask and the values (of
-        // the indices)
-        bool bit1 =
-            arr1_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
-                iRow1);
-        bool bit2 =
-            arr2_indices->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
-                iRow2);
-        // If one bitmask is T and the other the reverse then they are
-        // clearly not equal.
-        int reply = process_bits(bit1, bit2);
-        if (reply != 0)
-            return reply;
-
-        // Currently we assume there are no null values in the dictionary
-        // itself, so no special handling is needed, but this might change
-        // in the future.
-
-        // If both bitmasks are false, then it does not matter what value
-        // they are storing.
-        if (bit1) {
-            // Get the index for the dict array
-            int32_t new_iRow1 =
-                arr1_indices
-                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
-                        iRow1);
-            int32_t new_iRow2 =
-                arr2_indices
-                    ->at<dict_indices_t, bodo_array_type::NULLABLE_INT_BOOL>(
-                        iRow2);
-
-            // Now we compare the dict entries (same as the STRING logic)
-            return KeyComparisonAsPython_Column(na_position_bis, arr_dict,
-                                                new_iRow1, arr_dict, new_iRow2);
-        }
+        default:
+            throw std::runtime_error("Unsupported type for comparison: " +
+                                     GetArrType_as_string(arr1->arr_type));
+#undef DISPATCH_COMPARISION
     }
-    return 0;
 }
 
 bool KeyComparisonAsPython(

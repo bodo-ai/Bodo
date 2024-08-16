@@ -200,15 +200,8 @@ struct multi_col_key {
                 case bodo_array_type::ARRAY_ITEM:
                 case bodo_array_type::STRUCT:
                 case bodo_array_type::MAP: {
-                    int64_t pos1_s = row;
-                    int64_t pos1_e = row + 1;
-                    int64_t pos2_s = other.row;
-                    int64_t pos2_e = other.row + 1;
-                    bool na_position_bis = true;
-                    int test = ComparisonArrowColumn(
-                        to_arrow(c1), pos1_s, pos1_e, to_arrow(c2), pos2_s,
-                        pos2_e, na_position_bis, true);
-                    if (test != 0) {
+                    if (!TestEqualColumn(c1, row, c2, row,
+                                         /* is_na_equal */ true)) {
                         return false;
                     }
                 }
