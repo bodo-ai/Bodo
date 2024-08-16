@@ -1820,7 +1820,7 @@ np_to_pd_dtype: dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
     np.dtype(np.uint16): pd.UInt16Dtype,
     np.dtype(np.uint32): pd.UInt32Dtype,
     np.dtype(np.uint64): pd.UInt64Dtype,
-    np.dtype(np.string_): pd.StringDtype,
+    np.dtype(np.str_): pd.StringDtype,
     np.dtype(np.bool_): pd.BooleanDtype,
 }
 

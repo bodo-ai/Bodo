@@ -2802,7 +2802,7 @@ def test_groupby_nunique_dropna(memory_leak_check):
             # Nullable boolean
             "C": pd.Series([True, None, None, None, True, True, True], dtype="boolean"),
             # Nullable Binary
-            "H": [b"AA", b"B", np.NaN, b"B", np.NaN, b"AA", b"B"],
+            "H": [b"AA", b"B", np.nan, b"B", np.nan, b"AA", b"B"],
         },
     )
 
