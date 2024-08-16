@@ -11,7 +11,7 @@
 
 >>> @bodo.jit
 ... def f():
-...   df = pd.DataFrame({"A": [1, 2, 3], "B": [.1,np.NaN,12.3],})
+...   df = pd.DataFrame({"A": [1, 2, 3], "B": [.1,np.nan,12.3],})
 ...   return df.cumsum()
 >>> f()
    A    B
@@ -21,5 +21,3 @@
 ```
 !!! note
   Not supported for dataframe with nullable integer.
-
-

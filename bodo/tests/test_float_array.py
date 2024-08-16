@@ -164,7 +164,7 @@ def test_float_arr_coerce_scalar(memory_leak_check):
     scalar_float = 1.0
     full_output = pd.array([scalar_float] * n, dtype=pd.Float64Dtype())
     null_output = pd.arrays.FloatingArray(
-        np.array([np.NaN] * 50), np.array([True] * 50)
+        np.array([np.nan] * 50), np.array([True] * 50)
     )
 
     def impl1(arg, len):

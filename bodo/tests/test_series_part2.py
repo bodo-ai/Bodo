@@ -2189,10 +2189,10 @@ def test_series_np_where_binary(memory_leak_check):
         return np.where(S == b"aa")
 
     S1 = pd.Series(
-        [b"aa", b"asdfa", b"aa", np.NaN, b"s", b"aa", b"asdgs"] * 2,
+        [b"aa", b"asdfa", b"aa", np.nan, b"s", b"aa", b"asdgs"] * 2,
     )
     S2 = pd.Series(
-        [np.NaN, b"asdga", b"alsdnf", np.NaN, b"aa", b"aa", b"mnbhju"] * 2,
+        [np.nan, b"asdga", b"alsdnf", np.nan, b"aa", b"aa", b"mnbhju"] * 2,
     )
 
     check_func(test_impl1, (S1, S2, b"nabjhij"))
@@ -2577,10 +2577,10 @@ def test_series_mask_binary(memory_leak_check):
         return S.mask(S != b"hsjldf", val)
 
     S = pd.Series(
-        np.array([np.NaN, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
+        np.array([np.nan, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
     )
     other_series = pd.Series([b"sadkjf", b"asdf", b"nkjhg", np.nan, b"sdlfj"])
-    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", np.NaN, b"sdlfj"], dtype=object)
+    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", np.nan, b"sdlfj"], dtype=object)
     np.random.seed(0)
 
     check_func(test_impl, (S, b"sasadgk"))
