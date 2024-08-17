@@ -339,7 +339,8 @@ class ReservoirSamplingState {
      * rows to sample from are picked by incrementing row_to_sample by a random
      * amount determined by W. These rows will be appended to an internal buffer
      * and can be obtained by calling Finalize when all input has been
-     * processed.
+     * processed. Note that it is assumed that input_chunk has already been
+     * unified with the dict_builders used to construct this state.
      *
      * @param input table to sample from.
      */
