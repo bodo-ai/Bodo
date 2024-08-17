@@ -538,7 +538,7 @@ def test_all_null():
                     ),
                 }
             ),
-            id="uint8",
+            id="int8",
         ),
         pytest.param(
             pd.DataFrame(
@@ -573,8 +573,125 @@ def test_simple_sum(df, spark_info, capfd):
             query,
             {"TABLE1": df},
             spark_info,
-            # None,
-            # expected_output=answer,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "IDX": range(13000),
+                    "P": [str(i)[:2] for i in range(13000)],
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i % 128 for i in range(13000)],
+                        dtype=pd.UInt8Dtype(),
+                    ),
+                }
+            ),
+            id="uint8",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "P": [round(1.5 * np.sin(i)) for i in range(1000)],
+                    "S": pd.array(
+                        [
+                            [None, True, False][min(i % 3, i % 4, i % 5)]
+                            for i in range(1000)
+                        ],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            id="bool",
+        ),
+    ],
+)
+def test_simple_count(df, spark_info, capfd):
+    """Verifies that the correct path is taken for COUNT"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = "SELECT IDX, COUNT(S) OVER (PARTITION BY P) as W FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+@pytest.mark.parametrize(
+    "partition_col",
+    [
+        pytest.param("P1", id="single_partition"),
+        pytest.param("P2", id="two_partitions"),
+        pytest.param("P3", id="few_partitions", marks=pytest.mark.slow),
+        pytest.param("P4", id="more_partitions"),
+        pytest.param("P5", id="many_partitions", marks=pytest.mark.slow),
+    ],
+)
+def test_simple_count_star(partition_col, spark_info, capfd):
+    """Verifies that the correct path is taken for COUNT(*)"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = f"SELECT IDX, COUNT(*) OVER (PARTITION BY {partition_col}) as W FROM TABLE1"
+
+    df = pd.DataFrame(
+        {
+            "IDX": range(12000),
+            "P1": [17 for i in range(12000)],
+            "P2": [min(i % 2, i % 3, i % 4, i % 5) for i in range(12000)],
+            "P3": [min(i % 6, i % 7, i % 8) for i in range(12000)],
+            "P4": [int(np.tan(i)) for i in range(12000)],
+            "P5": [int((np.tan(i) * 3) ** 2) for i in range(12000)],
+        }
+    )
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
             check_names=False,
             check_dtype=False,
             sort_output=True,
