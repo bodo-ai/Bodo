@@ -94,7 +94,7 @@ std::ostream& operator<<(std::ostream& os, const TableAndRange& obj) {
  * @return table with unified dict data
  */
 std::shared_ptr<table_info> UnifyDictionaryArrays(
-    const std::shared_ptr<table_info>& in_table,
+    const std::shared_ptr<table_info>&& in_table,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     bool unify_empty = false) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
@@ -118,7 +118,7 @@ void SortedChunkedTableBuilder::AppendChunk(std::shared_ptr<table_info> chunk) {
         return;
     }
 
-    chunk = UnifyDictionaryArrays(chunk, dict_builders);
+    chunk = UnifyDictionaryArrays(std::move(chunk), dict_builders);
     auto sorted_chunk = sort_values_table_local(
         std::move(chunk), n_key_t, vect_ascending.data(), na_position.data(),
         dead_keys.data(), false);
@@ -675,9 +675,10 @@ void StreamSortState::ConsumeBatch(std::shared_ptr<table_info> table,
     row_info.second += table->nrows();
 
     time_pt start_append = start_timer();
-    reservoir_sampling_state.processInput(table);
+    auto unified = UnifyDictionaryArrays(std::move(table), dict_builders);
+    reservoir_sampling_state.processInput(unified);
 
-    builder.UnifyDictionariesAndAppend(table, dict_builders);
+    builder.AppendBatch(unified);
     metrics.local_sort_chunk_time += end_timer(start_append);
 }
 
@@ -712,8 +713,8 @@ void StreamSortState::FinalizeBuild() {
         }
         recursive_make_dict_global_and_unique(dict_builder);
     }
-    dummy_output_chunk =
-        UnifyDictionaryArrays(dummy_output_chunk, dict_builders, true);
+    dummy_output_chunk = UnifyDictionaryArrays(std::move(dummy_output_chunk),
+                                               dict_builders, true);
 
     std::unique_ptr<int64_t[]> in_info = std::make_unique<int64_t[]>(2);
     in_info[0] = row_info.first;
@@ -759,7 +760,7 @@ std::shared_ptr<table_info> StreamSortState::GetParallelSortBounds(
         vect_ascending.data(), na_position.data(), myrank, n_pes, parallel);
     // Transpose bounds to use the same indices as the local builders - we know
     // that the dictionary builder has all keys at this point.
-    bounds_ = UnifyDictionaryArrays(bounds_, dict_builders);
+    bounds_ = UnifyDictionaryArrays(std::move(bounds_), dict_builders);
 
     return bounds_;
 }
@@ -932,7 +933,7 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
     std::vector<std::shared_ptr<table_info>> collected_tables;
     // TODO (Aneesh) We should extend concat_tables to take a dict_builder.
     local_concat_tables =
-        UnifyDictionaryArrays(local_concat_tables, dict_builders);
+        UnifyDictionaryArrays(std::move(local_concat_tables), dict_builders);
     auto collected_table =
         gather_table(local_concat_tables, -1, false, parallel, 0);
     metrics.communication_phase += end_timer(start_communication);
