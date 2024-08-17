@@ -151,7 +151,9 @@ class BodoPhysicalWindow(
                         SqlKind.PERCENT_RANK,
                         SqlKind.CUME_DIST,
                         -> true
-                        SqlKind.SUM -> group.lowerBound.isUnbounded && group.upperBound.isUnbounded
+                        SqlKind.SUM,
+                        SqlKind.COUNT,
+                        -> group.lowerBound.isUnbounded && group.upperBound.isUnbounded
                         else -> false
                     }
             }
