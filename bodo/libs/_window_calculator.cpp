@@ -6,6 +6,7 @@
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
+#include "_groupby_update.h"
 #include "_memory.h"
 #include "_shuffle.h"
 #include "_table_builder_utils.h"
@@ -439,19 +440,33 @@ class SimpleAggregationWindowCalculator
               _builders, _is_empty, _pool, _mm),
           ftype(_ftype) {
         // Identify the index of the column from _chunks that is the target
-        // of the aggregation function.
-        if (this->input_col_indices.size() == 1) {
+        // of the aggregation function (except for ::size which has no args).
+        if (ftype == Bodo_FTypes::size) {
+            if (!this->input_col_indices.empty()) {
+                throw std::runtime_error(
+                    "SimpleAggregationWindowCalculator: expected 0 input "
+                    "columns for ::size, "
+                    "received " +
+                    std::to_string(this->input_col_indices.size()));
+            }
+        } else if (this->input_col_indices.size() == 1) {
             agg_column = this->input_col_indices[0];
         } else {
             throw std::runtime_error(
-                "SimpleAggregationWindowCalculator: expected 1 input column, "
+                "SimpleAggregationWindowCalculator: expected 1 input "
+                "column, "
                 "received " +
                 std::to_string(this->input_col_indices.size()));
         }
 
         // Identify the corresponding output dtype
-        std::unique_ptr<bodo::DataType> dtype =
-            this->schema->column_types[agg_column]->copy();
+        std::unique_ptr<bodo::DataType> dtype;
+        if (ftype == Bodo_FTypes::size) {
+            dtype = std::make_unique<bodo::DataType>(
+                bodo_array_type::NULLABLE_INT_BOOL, Bodo_CTypes::INT8);
+        } else {
+            dtype = this->schema->column_types[agg_column]->copy();
+        }
         std::tie(this->out_arr_type, this->out_dtype) =
             get_groupby_output_dtype(this->ftype, dtype->array_type,
                                      dtype->c_type);
@@ -470,10 +485,10 @@ class SimpleAggregationWindowCalculator
         }
     }
 
-    void ComputePartition(size_t partition_start_chunk,
-                          size_t partition_start_row,
-                          size_t partition_end_chunk, size_t partition_end_row,
-                          bool is_last) {
+    virtual void ComputePartition(size_t partition_start_chunk,
+                                  size_t partition_start_row,
+                                  size_t partition_end_chunk,
+                                  size_t partition_end_row, bool is_last) {
         if (this->is_empty) {
             return;
         }
@@ -530,6 +545,32 @@ class SimpleAggregationWindowCalculator
             agg_chunk->unpin();
         }
 
+        // Fill the entire partition with this value.
+        if (curr_agg->arr_type == bodo_array_type::NUMPY ||
+            curr_agg->get_null_bit(0)) {
+            FillPartitionWithValue(partition_start_chunk, partition_start_row,
+                                   partition_end_chunk, partition_end_row,
+                                   is_last, curr_agg);
+        }
+
+        // If this is the first partition, store the current aggregate value for
+        // communication across ranks.
+        std::vector<int64_t> idxs(1, 0);
+        if (partition_start_chunk == 0 && partition_start_row == 0) {
+            first_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
+        }
+        // If this is the last partition, store the current aggregate value for
+        // communication across ranks.
+        if (is_last) {
+            last_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
+        }
+    }
+
+    void FillPartitionWithValue(size_t partition_start_chunk,
+                                size_t partition_start_row,
+                                size_t partition_end_chunk,
+                                size_t partition_end_row, bool is_last,
+                                std::shared_ptr<array_info> &curr_agg) {
         // Iterate across the same chunks to update the corresponding rows to
         // use the aggregate value calculated in the previous loop. If the
         // aggregation value is null, we do nothing since the output should have
@@ -558,24 +599,12 @@ class SimpleAggregationWindowCalculator
                 agg_chunk->unpin();
             }
         }
-
-        // If this is the first partition, store the current aggregate value for
-        // communication across ranks.
-        std::vector<int64_t> idxs(1, 0);
-        if (partition_start_chunk == 0 && partition_start_row == 0) {
-            first_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
-        }
-        // If this is the last partition, store the current aggregate value for
-        // communication across ranks.
-        if (is_last) {
-            last_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
-        }
     }
 
-    virtual size_t NumAuxillaryColumns() { return 1; }
+    size_t NumAuxillaryColumns() final { return 1; }
 
-    virtual void GetFirstRowInfo(
-        std::vector<std::shared_ptr<array_info>> &out_cols) {
+    void GetFirstRowInfo(
+        std::vector<std::shared_ptr<array_info>> &out_cols) final {
         if (this->is_empty) {
             // If empty, just create an empty array witht he correct dtype.
             out_cols.push_back(alloc_array_top_level(
@@ -586,8 +615,8 @@ class SimpleAggregationWindowCalculator
         out_cols.push_back(first_agg);
     }
 
-    virtual void GetLastRowInfo(
-        std::vector<std::shared_ptr<array_info>> &out_cols) {
+    void GetLastRowInfo(
+        std::vector<std::shared_ptr<array_info>> &out_cols) final {
         if (this->is_empty) {
             GetFirstRowInfo(out_cols);
         } else {
@@ -622,7 +651,7 @@ class SimpleAggregationWindowCalculator
                             size_t first_partition_chunk_end,
                             size_t first_partition_row_end,
                             size_t last_partition_chunk_start,
-                            size_t last_partition_row_start) {
+                            size_t last_partition_row_start) final {
         if (this->is_empty) {
             return;
         }
@@ -659,21 +688,23 @@ class SimpleAggregationWindowCalculator
         dummy_grp_info.row_to_group.resize(n_rows, 0);
         std::vector<std::shared_ptr<array_info>> dummy_aux_cols;
 
+        int combine_ftype = get_combine_func(ftype);
+
         // True if the current rank is all one partition
         if (last_partition_chunk_start == 0 && last_partition_row_start == 0) {
             std::shared_ptr<array_info> partition_agg = alloc_array_top_level(
                 1, 0, 0, this->out_arr_type, out_dtype, -1, 0, 0, false, false,
                 false, this->pool, this->mm);
-            aggfunc_output_initialize(partition_agg, ftype, true);
+            aggfunc_output_initialize(partition_agg, combine_ftype, true);
 
             // Aggregate the values to get the entire aggregate of the current
             // partition.
             do_apply_to_column(preceding_aggs, partition_agg, dummy_aux_cols,
-                               dummy_grp_info, ftype);
+                               dummy_grp_info, combine_ftype);
             do_apply_to_column(first_agg, partition_agg, dummy_aux_cols,
-                               dummy_grp_info, ftype);
+                               dummy_grp_info, combine_ftype);
             do_apply_to_column(following_aggs, partition_agg, dummy_aux_cols,
-                               dummy_grp_info, ftype);
+                               dummy_grp_info, combine_ftype);
 
             // If the result is non-null, override every row in the current
             // chunk with that value.
@@ -700,11 +731,12 @@ class SimpleAggregationWindowCalculator
                     alloc_array_top_level(1, 0, 0, this->out_arr_type,
                                           out_dtype, -1, 0, 0, false, false,
                                           false, this->pool, this->mm);
-                aggfunc_output_initialize(first_part_agg, this->ftype, true);
+                aggfunc_output_initialize(first_part_agg, combine_ftype, true);
                 do_apply_to_column(preceding_aggs, first_part_agg,
-                                   dummy_aux_cols, dummy_grp_info, ftype);
+                                   dummy_aux_cols, dummy_grp_info,
+                                   combine_ftype);
                 do_apply_to_column(first_agg, first_part_agg, dummy_aux_cols,
-                                   dummy_grp_info, ftype);
+                                   dummy_grp_info, combine_ftype);
 
                 // If the result is non-null, override every row in the first
                 // partition with that value.
@@ -733,11 +765,12 @@ class SimpleAggregationWindowCalculator
                     alloc_array_top_level(1, 0, 0, this->out_arr_type,
                                           out_dtype, -1, 0, 0, false, false,
                                           false, this->pool, this->mm);
-                aggfunc_output_initialize(last_part_agg, ftype, true);
+                aggfunc_output_initialize(last_part_agg, combine_ftype, true);
                 do_apply_to_column(last_agg, last_part_agg, dummy_aux_cols,
-                                   dummy_grp_info, ftype);
+                                   dummy_grp_info, combine_ftype);
                 do_apply_to_column(following_aggs, last_part_agg,
-                                   dummy_aux_cols, dummy_grp_info, ftype);
+                                   dummy_aux_cols, dummy_grp_info,
+                                   combine_ftype);
 
                 // If the result is non-null, override every row in the last
                 // partition with that value.
@@ -762,12 +795,12 @@ class SimpleAggregationWindowCalculator
         }
     }
 
-    virtual std::shared_ptr<array_info> ProduceOutputBatch(size_t chunk_idx) {
+    std::shared_ptr<array_info> ProduceOutputBatch(size_t chunk_idx) final {
         // Produce the requested section from agg_cunks.
         return agg_chunks[chunk_idx];
     }
 
-   private:
+   protected:
     // Which type of aggregation is being done.
     Bodo_FTypes::FTypeEnum ftype;
 
@@ -789,6 +822,76 @@ class SimpleAggregationWindowCalculator
     // The chunks of data used to store the aggregated data on the
     // current rank, which becomes the output data.
     std::vector<std::shared_ptr<array_info>> agg_chunks;
+};
+
+template <bodo_array_type::arr_type_enum OrderByArrType>
+    requires(valid_window_array_type<OrderByArrType>)
+class SizeWindowCalculator
+    : public SimpleAggregationWindowCalculator<OrderByArrType> {
+   public:
+    SizeWindowCalculator(
+        std::shared_ptr<bodo::Schema> _schema,
+        std::vector<std::shared_ptr<table_info>> _chunks,
+        std::vector<int32_t> _order_col_indices,
+        std::vector<int32_t> _input_col_indices,
+        std::vector<std::shared_ptr<DictionaryBuilder>> _builders,
+        bool _is_empty, bodo::IBufferPool *const _pool,
+        std::shared_ptr<::arrow::MemoryManager> _mm)
+        : SimpleAggregationWindowCalculator<OrderByArrType>(
+              _schema, _chunks, _order_col_indices, _input_col_indices,
+              _builders, _is_empty, Bodo_FTypes::size, _pool, _mm) {}
+
+    void ComputePartition(size_t partition_start_chunk,
+                          size_t partition_start_row,
+                          size_t partition_end_chunk, size_t partition_end_row,
+                          bool is_last) {
+        if (this->is_empty) {
+            return;
+        }
+
+        // Calculate the total row count in the partition
+        size_t total_rows = 0;
+        for (size_t chunk_idx = partition_start_chunk;
+             chunk_idx <= partition_end_chunk; chunk_idx++) {
+            std::shared_ptr<array_info> agg_chunk = this->agg_chunks[chunk_idx];
+
+            // Identify the range of rows to iterate across. If we are in
+            // the first chunk, start at partition_start_row. If we are in the
+            // last chunk, end on partition_end_row.
+            size_t last_row = agg_chunk->length - 1;
+            size_t start_row =
+                (chunk_idx == partition_start_chunk) ? partition_start_row : 0;
+            size_t end_row = (chunk_idx == partition_end_chunk)
+                                 ? partition_end_row
+                                 : last_row;
+            total_rows += (end_row - start_row) + 1;
+        }
+
+        // Have a singleton array to store the total row count value from the
+        // entire partition.
+        std::shared_ptr<array_info> curr_agg = alloc_array_top_level(
+            1, 0, 0, this->out_arr_type, this->out_dtype, -1, 0, 0, false,
+            false, false, this->pool, this->mm);
+        aggfunc_output_initialize(curr_agg, this->ftype, true);
+        getv<size_t>(curr_agg, 0) = total_rows;
+
+        // Fill the entire partition with this value.
+        this->FillPartitionWithValue(partition_start_chunk, partition_start_row,
+                                     partition_end_chunk, partition_end_row,
+                                     is_last, curr_agg);
+
+        // If this is the first partition, store the current aggregate value for
+        // communication across ranks.
+        std::vector<int64_t> idxs(1, 0);
+        if (partition_start_chunk == 0 && partition_start_row == 0) {
+            this->first_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
+        }
+        // If this is the last partition, store the current aggregate value for
+        // communication across ranks.
+        if (is_last) {
+            this->last_agg = RetrieveArray_SingleColumn(curr_agg, idxs);
+        }
+    }
 };
 
 /**
@@ -869,6 +972,7 @@ class WindowCollectionComputer {
                         _pool, _mm);
                     break;
                 }
+                case Bodo_FTypes::count:
                 case Bodo_FTypes::sum: {
                     calculator =
                         new SimpleAggregationWindowCalculator<OrderByArrType>(
@@ -877,6 +981,13 @@ class WindowCollectionComputer {
                             this->is_empty,
                             (Bodo_FTypes::FTypeEnum)window_funcs[func_idx],
                             _pool, _mm);
+                    break;
+                }
+                case Bodo_FTypes::size: {
+                    calculator = new SizeWindowCalculator<OrderByArrType>(
+                        _schema, _chunks, _order_col_indices,
+                        input_col_indices[func_idx], _builders, this->is_empty,
+                        _pool, _mm);
                     break;
                 }
                 default: {
