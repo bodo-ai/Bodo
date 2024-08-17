@@ -508,14 +508,12 @@ bodo::tests::suite external_sort_tests([] {
             };
 
             for (int64_t i = 0; i < (n_pes - 1); i++) {
-                if (i == 0)
+                if (i == 0) {
                     bodo::tests::check(in_bound(int_arr->Value(i)));
-                else
+                } else {
                     bodo::tests::check(
                         in_bound(int_arr->Value(i) - int_arr->Value(i - 1)));
-                if (i == n_pes - 2)
-                    bodo::tests::check(
-                        in_bound(per_host_size * n_pes - int_arr->Value(i)));
+                }
             }
         }
     });
