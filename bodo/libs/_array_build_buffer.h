@@ -15,7 +15,7 @@ struct ArrayBuildBuffer {
     // Internal array with data values
     std::shared_ptr<array_info> data_array;
 
-    // Current number of elements in the buffer
+    // Current number of elements in the buffer (alias for data_array->length)
     const uint64_t& size;
     // Total capacity for data elements (including current elements,
     // capacity>=size should always be true)
@@ -1092,10 +1092,18 @@ struct ArrayBuildBuffer {
      * @brief Reserve enough space to be able to append the selected column
      * of all finalized chunks of a ChunkedTableBuilder.
      *
-     * @param chunked_tb The ChunkedTableBuilder whose chunks we must copy over.
+     * @param chunks The table chunks we must copy over.
      * @param array_idx Index of the array to reserve space for.
      */
-    void ReserveArray(const ChunkedTableBuilder& chunked_tb,
+    template <typename T>
+        requires(
+            std::is_same<T, std::vector<std::shared_ptr<table_info>>>::value ||
+            std::is_same<T, std::deque<std::shared_ptr<table_info>>>::value)
+    void ReserveArrayChunks(const T& chunks, const size_t array_idx);
+
+    void ReserveArray(const std::vector<std::shared_ptr<table_info>>& chunks,
+                      const size_t array_idx);
+    void ReserveArray(const std::deque<std::shared_ptr<table_info>>& chunks,
                       const size_t array_idx);
 
     /**

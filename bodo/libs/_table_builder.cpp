@@ -443,7 +443,14 @@ void TableBuildBuffer::ReserveTable(
 
 void TableBuildBuffer::ReserveTable(const ChunkedTableBuilder& chunked_tb) {
     for (size_t i = 0; i < this->data_table->ncols(); i++) {
-        array_buffers[i].ReserveArray(chunked_tb, i);
+        array_buffers[i].ReserveArray(chunked_tb.chunks, i);
+    }
+}
+
+void TableBuildBuffer::ReserveTable(
+    const std::vector<std::shared_ptr<table_info>>& chunks) {
+    for (size_t i = 0; i < this->data_table->ncols(); i++) {
+        array_buffers[i].ReserveArray(chunks, i);
     }
 }
 

@@ -196,7 +196,7 @@ std::deque<TableAndRange> SortedChunkedTableBuilder::MergeChunks(
             }
         }
 
-        auto table = concat_tables(tables);
+        auto table = concat_tables(std::move(tables), dict_builders);
 
         // Just to be safe, unpin all input tables before dropping refs
         for (auto& chunks : sorted_chunks) {
@@ -824,85 +824,6 @@ StreamSortState::PartitionChunksByRank(
     return rankToChunks;
 }
 
-/**
- * @brief Construct inputs to shuffle_table_kernel by combining at most one
- * chunk per rank into a single table
- *
- * @param n_pes number of rank
- * @param myrank local rank
- * @param rankToChunks vector of length n_pes with one vector of chunks per
- * rank. Note that all chunks are unpinned.
- * @param rankToCurrentChunk for each rank, index into rankToChunks[rank] to
- * determine which chunk to send.
- * @param dummy_output_chunk empty table to use if no chunks are avalible to
- * send
- *
- * @return pair of table and hashes mapping rows to rank to input into
- * shuffle_table_kernel
- */
-std::pair<std::shared_ptr<table_info>, std::shared_ptr<uint32_t[]>>
-construct_table_to_send(
-    int n_pes, int myrank,
-    std::vector<std::vector<std::shared_ptr<table_info>>>& rankToChunks,
-    std::vector<size_t>& rankToCurrentChunk,
-    std::shared_ptr<table_info> dummy_output_chunk) {
-    // Tables that are being sent in this round
-    std::vector<std::shared_ptr<table_info>> tables_to_send;
-    // Once we concat the list above, we need to know which range of rows
-    // will be sent to which ranks. We maintain a list of row offsets into
-    // the final table for this.
-    // offsets[i] stores the index of the first row to send to rank i, and
-    // the length of the list will be appended to the end, so the number of
-    // rows to send to rank i will always be offsets[i + 1] - offsets[i].
-    std::vector<int64_t> offsets;
-
-    // Track how many rows will be the table after concat
-    int64_t cursor = 0;
-    for (int i = 0; i < n_pes; i++) {
-        std::shared_ptr<table_info> table_to_send;
-
-        if (i != myrank) {
-            if (rankToCurrentChunk[i] < rankToChunks[i].size()) {
-                std::swap(table_to_send,
-                          rankToChunks[i][rankToCurrentChunk[i]]);
-                rankToCurrentChunk[i]++;
-                table_to_send->pin();
-            }
-        }
-
-        offsets.push_back(cursor);
-        if (table_to_send) {
-            tables_to_send.push_back(table_to_send);
-            cursor += table_to_send->nrows();
-        }
-    }
-    offsets.push_back(cursor);
-
-    auto table_to_send = tables_to_send.empty() ? dummy_output_chunk
-                                                : concat_tables(tables_to_send);
-
-    for (const auto& table : tables_to_send) {
-        table->unpin();
-    }
-    tables_to_send.clear();
-
-    // TODO(aneesh) Ideally we'd use point-to-point communication and just
-    // sent tables directly to the rank they're destined for without setting
-    // up the hashes/using shuffle_table_kernel
-    std::shared_ptr<uint32_t[]> hashes =
-        std::make_unique<uint32_t[]>(offsets.back());
-    cursor = 0;
-    for (int i = 0; i < n_pes; i++) {
-        int64_t num_elems = offsets[i + 1] - offsets[i];
-        for (int j = 0; j < num_elems; j++) {
-            hashes[cursor] = i;
-            cursor++;
-        }
-    }
-
-    return std::make_pair(std::move(table_to_send), std::move(hashes));
-}
-
 void StreamSortLimitOffsetState::SmallLimitOptim() {
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -920,7 +841,8 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
             i.table->pin();
             local_collected_tables.push_back(std::move(i.table));
         }
-        local_concat_tables = concat_tables(local_collected_tables);
+        local_concat_tables =
+            concat_tables(std::move(local_collected_tables), dict_builders);
     }
 
     SortedChunkedTableBuilder global_builder(
@@ -931,7 +853,6 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
     // Send all data to rank 0 synchronously
     time_pt start_communication = start_timer();
     std::vector<std::shared_ptr<table_info>> collected_tables;
-    // TODO (Aneesh) We should extend concat_tables to take a dict_builder.
     local_concat_tables =
         UnifyDictionaryArrays(std::move(local_concat_tables), dict_builders);
     auto collected_table =
@@ -943,7 +864,8 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
         time_pt start_append = start_timer();
         collected_tables.push_back(std::move(collected_table));
         metrics.global_append_chunk_time += end_timer(start_append);
-        auto concatenated_tables = concat_tables(collected_tables);
+        auto concatenated_tables =
+            concat_tables(std::move(collected_tables), dict_builders);
         auto indices = sort_values_table_local_get_indices(
             concatenated_tables, n_key_t, vect_ascending.data(),
             na_position.data(), false, 0, concatenated_tables->nrows());
