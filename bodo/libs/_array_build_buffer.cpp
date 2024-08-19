@@ -537,19 +537,22 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
     }
 }
 
-void ArrayBuildBuffer::ReserveArray(const ChunkedTableBuilder& chunked_tb,
-                                    const size_t array_idx) {
-    if (chunked_tb.chunks.empty()) {
+template <typename T>
+    requires(std::is_same<T, std::vector<std::shared_ptr<table_info>>>::value ||
+             std::is_same<T, std::deque<std::shared_ptr<table_info>>>::value)
+void ArrayBuildBuffer::ReserveArrayChunks(const T& chunks,
+                                          const size_t array_idx) {
+    if (chunks.empty()) {
         return;
     }
     // Verify array and ctype
     const std::shared_ptr<array_info>& in_arr_first_chunk =
-        chunked_tb.chunks[0]->columns[array_idx];
+        chunks[0]->columns[array_idx];
 
     this->ReserveArrayTypeCheck(in_arr_first_chunk);
 
     size_t total_length = 0;
-    for (auto& table : chunked_tb.chunks) {
+    for (auto& table : chunks) {
         total_length += table->columns[array_idx]->length;
     }
 
@@ -560,7 +563,7 @@ void ArrayBuildBuffer::ReserveArray(const ChunkedTableBuilder& chunked_tb,
         // update data buffer to be able to store all strings from the chunked
         // table
         size_t new_capacity_chars = 0;
-        for (auto& table : chunked_tb.chunks) {
+        for (auto& table : chunks) {
             const std::shared_ptr<array_info>& arr = table->columns[array_idx];
             // TODO Remove pin/unpin requirement to get this information.
             // Looking at size_ of the buffers[0] might be sufficient
@@ -572,6 +575,18 @@ void ArrayBuildBuffer::ReserveArray(const ChunkedTableBuilder& chunked_tb,
 
         this->ReserveSpaceForStringAppend(new_capacity_chars);
     }
+}
+
+void ArrayBuildBuffer::ReserveArray(
+    const std::vector<std::shared_ptr<table_info>>& chunks,
+    const size_t array_idx) {
+    this->ReserveArrayChunks(chunks, array_idx);
+}
+
+void ArrayBuildBuffer::ReserveArray(
+    const std::deque<std::shared_ptr<table_info>>& chunks,
+    const size_t array_idx) {
+    this->ReserveArrayChunks(chunks, array_idx);
 }
 
 void ArrayBuildBuffer::ReserveArrayRow(

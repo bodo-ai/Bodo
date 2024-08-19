@@ -139,15 +139,25 @@ struct TableBuildBuffer {
     void ReserveTableSize(const size_t new_data_len);
 
     /**
-     * @brief Reserve enough space to be able to append all the
-     * finalized chunks of a ChunkedTableBuilder.
-     * NOTE: This requires reserving space for
-     * variable-sized elements like strings and nested arrays.
+     * @brief Reserve enough space to be able to append all the finalized chunks
+     * of a ChunkedTableBuilder.
+     * NOTE: This requires reserving space for variable-sized elements like
+     * strings and nested arrays.
      *
      * @param chunked_tb ChunkedTableBuilder whose chunks we want to append
      * to this TableBuildBuffer.
      */
     void ReserveTable(const ChunkedTableBuilder& chunked_tb);
+
+    /**
+     * @brief Reserve enough space to be able to append all the chunks in the
+     * input vector.
+     * NOTE: This requires reserving space for variable-sized elements like
+     * strings and nested arrays.
+     *
+     * @param chunks tables to append
+     */
+    void ReserveTable(const std::vector<std::shared_ptr<table_info>>& chunks);
 
     /**
      * @brief Clear the buffers, i.e. set size to 0.

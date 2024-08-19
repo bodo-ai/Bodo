@@ -9,6 +9,7 @@
 #include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
+#include "_dict_builder.h"
 #include "hyperloglog.hpp"
 
 // Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
@@ -1269,6 +1270,14 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
  */
 std::shared_ptr<table_info> concat_tables(
     const std::vector<std::shared_ptr<table_info>>& table_chunks);
+
+/**
+ * @brief same as concat_tables but takes in a dictaionary builder that the
+ * input MUST already be merged with.
+ */
+std::shared_ptr<table_info> concat_tables(
+    std::vector<std::shared_ptr<table_info>>&& table_chunks,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders);
 
 /**
  * @brief Concatenate the arrays into a single array.
