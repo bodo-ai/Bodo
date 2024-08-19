@@ -32,6 +32,7 @@ import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.rules.FilterFlattenCorrelatedConditionRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
 import org.apache.calcite.rel.rules.FilterProjectTransposeRule;
+import org.apache.calcite.rel.rules.JoinExtractFilterRule;
 import org.apache.calcite.rel.rules.SingleValuesOptimizationRules;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBuilder;
@@ -122,6 +123,7 @@ public class BodoRelDecorrelator extends RelDecorrelator {
                             op.operand(Filter.class).predicate(x -> !x.containsOver()).anyInputs())
                     .withRelBuilderFactory(f)
                     .toRule())
+            .addRuleInstance(JoinExtractFilterRule.Config.DEFAULT.withRelBuilderFactory(f).toRule())
             .build();
 
     HepPlanner planner = createPlanner(program);
