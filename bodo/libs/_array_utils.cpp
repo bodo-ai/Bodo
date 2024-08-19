@@ -2415,7 +2415,6 @@ std::shared_ptr<table_info> concat_tables(
     assert(table_chunks.size() > 0);
 
     auto schema = table_chunks[0]->schema();
-    // TODO(aneesh) take dict_builders as an optional parameter
     std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
     for (auto& col : schema->column_types) {
         // Note that none of the columns are "keys" from the perspective of the
@@ -2425,8 +2424,15 @@ std::shared_ptr<table_info> concat_tables(
     }
 
     TableBuildBuffer table_builder(std::move(schema), dict_builders);
+    table_builder.ReserveTable(table_chunks);
+
     for (auto& table : table_chunks) {
-        table_builder.UnifyTablesAndAppend(table, dict_builders);
+        std::shared_ptr<table_info> unified_table =
+            unify_dictionary_arrays_helper(table, dict_builders, 0, false);
+        // TODO(aneesh) we should take ownership of the vector passed in the
+        // clear the pointer to the original table here to try to deallocate it
+        // earlier.
+        table_builder.UnsafeAppendBatch(std::move(unified_table));
     }
 
     return table_builder.data_table;
@@ -2448,4 +2454,19 @@ std::shared_ptr<array_info> concat_arrays(
         concatenated_table->columns[0];
 
     return concatenated_arr;
+}
+
+std::shared_ptr<table_info> concat_tables(
+    std::vector<std::shared_ptr<table_info>>&& table_chunks,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
+    auto schema = table_chunks[0]->schema();
+    TableBuildBuffer table_builder(std::move(schema), dict_builders);
+    table_builder.ReserveTable(table_chunks);
+
+    for (auto& table : table_chunks) {
+        table_builder.UnsafeAppendBatch(table);
+        table.reset();
+    }
+
+    return table_builder.data_table;
 }
