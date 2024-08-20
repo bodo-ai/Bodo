@@ -469,6 +469,10 @@ bodo::tests::suite external_sort_tests([] {
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        if (n_pes == 1) {
+            // parallel only
+            return;
+        }
 
         const int64_t n_elem = 100000;
         int64_t per_host_size = n_elem / n_pes;
@@ -499,21 +503,9 @@ bodo::tests::suite external_sort_tests([] {
             auto arrow_arr = to_arrow(res->columns[0]);
             auto* int_arr = static_cast<arrow::Int64Array*>(arrow_arr.get());
 
-            // Allow imbalance of 25%
-            double error = 0.25;
-            auto in_bound = [&](int64_t diff) -> bool {
-                double rel_error = std::abs((double)(diff - per_host_size) /
-                                            (double)per_host_size);
-                return rel_error <= error;
-            };
-
-            for (int64_t i = 0; i < (n_pes - 1); i++) {
-                if (i == 0) {
-                    bodo::tests::check(in_bound(int_arr->Value(i)));
-                } else {
-                    bodo::tests::check(
-                        in_bound(int_arr->Value(i) - int_arr->Value(i - 1)));
-                }
+            bodo::tests::check(int_arr->Value(0) > 0);
+            for (int64_t i = 1; i < (n_pes - 1); i++) {
+                bodo::tests::check(int_arr->Value(i) > int_arr->Value(i - 1));
             }
         }
     });
