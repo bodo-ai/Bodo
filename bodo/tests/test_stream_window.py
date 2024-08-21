@@ -1029,6 +1029,60 @@ def test_partitionless_rank_family(
             ),
             id="bitxor_agg",
         ),
+        pytest.param(
+            "min",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None, 1, 1, 3, 3, 3, 3]
+                        + [7] * 8
+                        + [15] * 16
+                        + [31] * 32
+                        + [63] * 64,
+                        dtype=pd.Int64Dtype(),
+                    ),
+                }
+            ),
+            id="min",
+        ),
+        pytest.param(
+            "max",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None, 1, 1, 5, 5, 5, 5]
+                        + [13] * 8
+                        + [29] * 16
+                        + [61] * 32
+                        + [125] * 64,
+                        dtype=pd.Int64Dtype(),
+                    ),
+                }
+            ),
+            id="max",
+        ),
     ],
 )
 def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check):
