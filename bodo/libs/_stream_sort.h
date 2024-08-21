@@ -436,6 +436,12 @@ struct StreamSortState {
      */
     std::pair<std::shared_ptr<table_info>, bool> GetOutput();
 
+    /**
+     * Get all sorted output chunks. Note that all table_infos should be assumed
+     * to be unpinned.
+     */
+    std::vector<std::shared_ptr<table_info>> GetAllOutputUnpinned();
+
     // Helper methods
 
     /**

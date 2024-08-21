@@ -7,6 +7,83 @@
 #include "_window_calculator.h"
 #include "_window_compute.h"
 
+WindowStateSorter::WindowStateSorter(
+    std::shared_ptr<bodo::Schema>& build_table_schema, size_t n_window_keys,
+    const std::vector<bool>& order_by_asc, const std::vector<bool>& order_by_na,
+    bool parallel)
+    : build_table_schema(build_table_schema),
+      num_keys(n_window_keys + order_by_asc.size()),
+      skip_sorting(num_keys == 0),
+      asc(num_keys),
+      na_pos(num_keys) {
+    // Set arbitrary values for sort properties for partition by
+    // keys.
+    for (size_t i = 0; i < n_window_keys; i++) {
+        asc[i] = 0;
+        na_pos[i] = 0;
+    }
+    // Use the sort properties for order by keys.
+    for (size_t i = 0; i < order_by_asc.size(); i++) {
+        size_t dest_index = i + n_window_keys;
+        asc[dest_index] = order_by_asc[i];
+        na_pos[dest_index] = order_by_na[i];
+    }
+
+    // TODO(aneesh): replace this with a CTB
+    build_table_dict_builders.resize(build_table_schema->column_types.size());
+    for (size_t i = 0; i < build_table_schema->column_types.size(); i++) {
+        // Mark the partition by and order by columns as keys since it may
+        // be needed or useful for sort.
+        bool is_key = i < num_keys;
+        build_table_dict_builders[i] = create_dict_builder_for_array(
+            build_table_schema->column_types[i]->copy(), is_key);
+    }
+
+    if (skip_sorting) {
+        build_table_buffer = std::make_unique<TableBuildBuffer>(
+            build_table_schema, build_table_dict_builders);
+        return;
+    }
+
+    stream_sorter = std::make_unique<StreamSortState>(
+        -1, num_keys, std::move(asc), std::move(na_pos), build_table_schema,
+        parallel);
+}
+
+void WindowStateSorter::AppendBatch(std::shared_ptr<table_info>& table,
+                                    bool is_last) {
+    if (skip_sorting) {
+        assert(build_table_buffer != nullptr);
+        build_table_buffer->UnifyTablesAndAppend(table,
+                                                 build_table_dict_builders);
+
+        return;
+    }
+
+    assert(stream_sorter != nullptr);
+    stream_sorter->ConsumeBatch(table, is_last);
+    if (is_last) {
+        stream_sorter->FinalizeBuild();
+    }
+}
+
+std::vector<std::shared_ptr<table_info>> WindowStateSorter::Finalize() {
+    if (skip_sorting) {
+        // TODO(aneesh) use a CTB instead to return a vector of unpinned chunks
+        // Skip sort if there are no partition/order columns.
+        assert(build_table_buffer != nullptr);
+        return {build_table_buffer->data_table};
+    }
+
+    assert(stream_sorter != nullptr);
+    std::vector<std::shared_ptr<table_info>> chunks =
+        stream_sorter->GetAllOutputUnpinned();
+    if (chunks.empty()) {
+        return {stream_sorter->dummy_output_chunk};
+    }
+    return chunks;
+}
+
 WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                          std::vector<int32_t> window_ftypes_, uint64_t n_keys_,
                          std::vector<bool> order_by_asc_,
@@ -48,6 +125,9 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
       func_input_indices(std::move(func_input_indices_)),
       func_input_offsets(std::move(func_input_offsets_)),
       sync_iter(sync_iter_),
+      // Build schema always matches the input schema.
+      build_table_schema(std::make_shared<bodo::Schema>(*in_schema_)),
+      sorter(build_table_schema, n_keys, order_by_asc, order_by_na, parallel),
       op_id(op_id_) {
     // Enable/disable work stealing
     char* disable_output_work_stealing_env_ =
@@ -61,19 +141,6 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
 
     // Build schema always matches the input schema.
     this->build_table_schema = std::make_shared<bodo::Schema>(*in_schema_);
-
-    this->build_table_dict_builders.resize(
-        this->build_table_schema->column_types.size());
-    size_t num_sort_keys = n_keys + order_by_asc.size();
-    for (size_t i = 0; i < this->build_table_schema->column_types.size(); i++) {
-        // Mark the partition by and order by columns as keys since it may
-        // be needed or useful for sort.
-        bool is_key = i < num_sort_keys;
-        this->build_table_dict_builders[i] = create_dict_builder_for_array(
-            this->build_table_schema->column_types[i]->copy(), is_key);
-    }
-    this->build_table_buffer = std::make_unique<TableBuildBuffer>(
-        this->build_table_schema, this->build_table_dict_builders);
 
     // Generate the output schema
     std::unique_ptr<bodo::Schema> output_schema =
@@ -106,7 +173,7 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                     this->build_table_schema->column_types[i]->copy(), true);
         }
     }
-    for (size_t i = n_keys; i < num_sort_keys; i++) {
+    for (size_t i = n_keys; i < this->sorter.NumSortKeys(); i++) {
         if (order_by_cols_to_keep[i - n_keys]) {
             output_schema->append_column(
                 this->build_table_schema->column_types[i]->copy());
@@ -116,7 +183,7 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
         }
     }
     size_t input_idx = 0;
-    for (size_t i = num_sort_keys;
+    for (size_t i = this->sorter.NumSortKeys();
          i < this->build_table_schema->column_types.size(); i++) {
         if (input_cols_to_keep[input_idx]) {
             output_schema->append_column(
@@ -128,11 +195,6 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
         input_idx++;
     }
     // Append the window function output types.
-    std::vector<std::shared_ptr<array_info>> input_cols(order_by_asc.size());
-    for (size_t i = 0; i < order_by_asc.size(); i++) {
-        input_cols[i] =
-            this->build_table_buffer->data_table->columns[i + n_keys];
-    }
 
     for (size_t func_idx = 0; func_idx < window_ftypes.size(); func_idx++) {
         InferWindowOutputDataType(func_idx, output_schema);
@@ -377,8 +439,8 @@ void WindowState::ReportBuildMetrics() {
     // to be updated.
     DictBuilderMetrics dict_builder_metrics;
     MetricBase::StatValue n_dict_builders = 0;
-    for (size_t i = 0; i < this->build_table_dict_builders.size(); i++) {
-        const auto& dict_builder = this->build_table_dict_builders[i];
+    for (size_t i = 0; i < this->sorter.GetDictBuilders().size(); i++) {
+        const auto& dict_builder = this->sorter.GetDictBuilders()[i];
         if (dict_builder != nullptr) {
             dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
             n_dict_builders++;
@@ -462,18 +524,8 @@ void WindowState::FinalizeBuild() {
 
     // TODO: Separate sort from compute.
     ScopedTimer window_timer(this->metrics.finalize_window_compute_time);
-    // Skip sort if there are no partition/order columns.
-    std::shared_ptr<table_info> sorted_table;
-    bool skip_sorting = num_keys == 0;
-    if (skip_sorting) {
-        sorted_table = this->build_table_buffer->data_table;
-    } else {
-        sorted_table = sort_values_table(
-            this->build_table_buffer->data_table, num_keys, asc.data(),
-            na_pos.data(), nullptr, nullptr, nullptr, this->parallel);
-        // Clear the build table to minimize memory.
-        this->build_table_buffer.reset();
-    }
+    std::vector<std::shared_ptr<table_info>> sorted_table_chunks =
+        sorter.Finalize();
 
     std::vector<int32_t> partition_indices(this->n_keys);
     for (size_t col_idx = 0; col_idx < this->n_keys; col_idx++) {
@@ -499,8 +551,8 @@ void WindowState::FinalizeBuild() {
     std::vector<int32_t> keep_indices;
     std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
         this->partition_by_cols_to_keep, this->order_by_cols_to_keep,
-        this->input_cols_to_keep, sorted_table->ncols());
-    for (size_t i = 0; i < sorted_table->ncols(); i++) {
+        this->input_cols_to_keep, sorted_table_chunks[0]->ncols());
+    for (size_t i = 0; i < sorted_table_chunks[0]->ncols(); i++) {
         if (cols_to_keep_bitmask[i]) {
             keep_indices.push_back(i);
         }
@@ -508,14 +560,14 @@ void WindowState::FinalizeBuild() {
     if (supports_calculator_computation(partition_indices, order_indices,
                                         window_ftypes)) {
         bodo_array_type::arr_type_enum partition_arr_type =
-            get_common_arr_type({sorted_table}, partition_indices);
+            get_common_arr_type(sorted_table_chunks, partition_indices);
         bodo_array_type::arr_type_enum order_arr_type =
-            get_common_arr_type({sorted_table}, order_indices);
+            get_common_arr_type(sorted_table_chunks, order_indices);
         std::vector<std::shared_ptr<table_info>> out_chunks;
         compute_window_functions_via_calculators(
-            build_table_schema, {sorted_table}, partition_indices,
+            build_table_schema, sorted_table_chunks, partition_indices,
             order_indices, keep_indices, input_indices, window_ftypes,
-            this->build_table_dict_builders, partition_arr_type, order_arr_type,
+            this->sorter.GetDictBuilders(), partition_arr_type, order_arr_type,
             out_chunks, this->parallel);
         for (auto& out_chunk : out_chunks) {
             out_chunk->pin();
@@ -527,6 +579,12 @@ void WindowState::FinalizeBuild() {
             this->output_state->buffer.AppendBatch(dict_unified_table);
         }
     } else {
+        for (auto& chunk : sorted_table_chunks) {
+            chunk->pin();
+        }
+        std::shared_ptr<table_info> sorted_table =
+            concat_tables(sorted_table_chunks);
+
         // Compute the window function results.
         std::vector<std::shared_ptr<array_info>> partition_by_cols(
             this->n_keys);
@@ -549,7 +607,7 @@ void WindowState::FinalizeBuild() {
         // singleton unique answer).
         std::vector<std::shared_ptr<array_info>> out_arrs;
         size_t input_size = sorted_table->columns[0]->length;
-        size_t alloc_size = (skip_sorting) ? 1 : input_size;
+        size_t alloc_size = (this->sorter.NumSortKeys() == 0) ? 1 : input_size;
         for (size_t fn_idx = 0; fn_idx < this->window_ftypes.size(); fn_idx++) {
             AllocWindowOutputColumn(fn_idx, alloc_size, out_arrs);
         }
@@ -557,7 +615,7 @@ void WindowState::FinalizeBuild() {
         sorted_window_computation(
             partition_by_cols, order_by_cols, argument_cols, func_input_offsets,
             this->window_ftypes, out_arrs, input_size,
-            this->build_table_dict_builders, this->parallel);
+            this->sorter.GetDictBuilders(), this->parallel);
         window_timer.finalize();
         // Append the table to the output buffer.
         std::vector<std::shared_ptr<array_info>> cols_to_keep;
@@ -586,6 +644,12 @@ void WindowState::FinalizeBuild() {
         std::cerr << "[DEBUG] WindowState::FinalizeBuild: Finished"
                   << std::endl;
     }
+}
+
+void WindowState::AppendBatch(std::shared_ptr<table_info>& in_table,
+                              bool is_last) {
+    auto table = UnifyDictionaryArrays(in_table, sorter.GetDictBuilders());
+    sorter.AppendBatch(table, is_last);
 }
 
 /**
@@ -676,10 +740,7 @@ bool window_build_consume_batch(WindowState* window_state,
                                 std::shared_ptr<table_info> in_table,
                                 bool is_last) {
     // We require that all dictionary keys/values are unified before update
-    in_table = window_state->UnifyDictionaryArrays(
-        in_table, window_state->build_table_dict_builders);
-    window_state->build_table_buffer->ReserveTable(in_table);
-    window_state->build_table_buffer->UnsafeAppendBatch(in_table);
+    window_state->AppendBatch(in_table, is_last);
     // Compute output when all input batches are accumulated.
     // Note: We don't need to be synchronized because this is a pipeline
     // breaking step without any "shuffle" that depends on the iteration count.
@@ -717,7 +778,7 @@ bool window_build_consume_batch_py_entry(WindowState* window_state,
             // finalize because the dict builders in the output state
             // are used instead.
             assert(window_state->build_input_finalized);
-            window_state->build_table_dict_builders.clear();
+            window_state->sorter.GetDictBuilders().clear();
         }
         return is_last;
 
