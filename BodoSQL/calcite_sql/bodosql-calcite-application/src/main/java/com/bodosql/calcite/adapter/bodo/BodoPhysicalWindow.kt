@@ -35,6 +35,7 @@ import org.apache.calcite.rel.type.RelDataType
 import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.sql.SqlKind
+import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.ImmutableBitSet
 import org.apache.calcite.util.Util
 import kotlin.math.ceil
@@ -145,6 +146,25 @@ class BodoPhysicalWindow(
             }
     }
 
+    // The list of types that are allowed in the streaming sort-based implementation of
+    // selection functions (min, max, etc.)
+    private val supportedSelectionTypes =
+        listOf(
+            SqlTypeName.BOOLEAN,
+            SqlTypeName.TINYINT,
+            SqlTypeName.SMALLINT,
+            SqlTypeName.INTEGER,
+            SqlTypeName.BIGINT,
+            SqlTypeName.DECIMAL,
+            SqlTypeName.FLOAT,
+            SqlTypeName.REAL,
+            SqlTypeName.DOUBLE,
+            SqlTypeName.DATE,
+            SqlTypeName.TIME,
+            SqlTypeName.TIMESTAMP,
+            SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+        )
+
     /**
      * Returns whether a window cohort is supported for the
      * Bodo execution codepath that sorts on the partition+orderby columns.
@@ -168,6 +188,12 @@ class BodoPhysicalWindow(
                         SqlKind.SUM,
                         SqlKind.COUNT,
                         -> group.lowerBound.isUnbounded && group.upperBound.isUnbounded
+                        SqlKind.MIN,
+                        SqlKind.MAX,
+                        ->
+                            group.lowerBound.isUnbounded &&
+                                group.upperBound.isUnbounded &&
+                                supportedSelectionTypes.contains(aggCall.operands[0].type.sqlTypeName)
                         SqlKind.BIT_AND, SqlKind.BIT_OR, SqlKind.BIT_XOR,
                         SqlKind.OTHER, SqlKind.OTHER_FUNCTION,
                         ->

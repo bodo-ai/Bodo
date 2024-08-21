@@ -470,6 +470,27 @@ class SimpleAggregationWindowCalculator
                 std::to_string(this->input_col_indices.size()));
         }
 
+        // If doing a selection function, verify that the inputs are
+        // numeric, since SimpleAggregationWindowCalculator does not
+        // support updates on slices with non-numeric data.
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max) {
+            switch (this->schema->column_types[agg_column]->array_type) {
+                case bodo_array_type::NULLABLE_INT_BOOL:
+                case bodo_array_type::NUMPY: {
+                    break;
+                }
+                default: {
+                    throw std::runtime_error(
+                        "SimpleAggregationWindowCalculator: " +
+                        get_name_for_Bodo_FTypes(ftype) +
+                        " unsupported on array type " +
+                        GetArrType_as_string(
+                            this->schema->column_types[agg_column]
+                                ->array_type));
+                }
+            }
+        }
+
         // Identify the corresponding output dtype
         std::unique_ptr<bodo::DataType> dtype;
         if (ftype == Bodo_FTypes::size) {
@@ -983,6 +1004,8 @@ class WindowCollectionComputer {
                         _pool, _mm);
                     break;
                 }
+                case Bodo_FTypes::min:
+                case Bodo_FTypes::max:
                 case Bodo_FTypes::count:
                 case Bodo_FTypes::count_if:
                 case Bodo_FTypes::bitor_agg:
