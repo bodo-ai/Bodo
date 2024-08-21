@@ -9,6 +9,7 @@
 #include "_groupby_update.h"
 #include "_memory.h"
 #include "_shuffle.h"
+#include "_stream_join.h"
 #include "_table_builder_utils.h"
 
 // See the following link for an explanation of the classes in this file:
@@ -1207,6 +1208,13 @@ class WindowCollectionComputer {
                 it->GetFirstRowInfo(first_row->columns);
                 it->GetLastRowInfo(last_row->columns);
             }
+            // Add builders for the newly appended columns from Get*RowInfo
+            auto schema = first_row->schema();
+            for (size_t i = builders.size(); i < first_row->ncols(); i++) {
+                builders.push_back(create_dict_builder_for_array(
+                    schema->column_types[i]->copy(), false));
+            }
+
             // Calculate the index of the row in the first/last tables
             // corresponding to the current rank.
             int64_t send_rows = static_cast<int64_t>(!is_empty);
@@ -1218,8 +1226,12 @@ class WindowCollectionComputer {
             // Communicate the first/last row info across all ranks.
             std::shared_ptr<table_info> all_first_rows = gather_table(
                 first_row, first_row->columns.size(), true, is_parallel);
+            all_first_rows = unify_dictionary_arrays_helper(
+                all_first_rows, builders, all_first_rows->ncols());
             std::shared_ptr<table_info> all_last_rows = gather_table(
                 last_row, last_row->columns.size(), true, is_parallel);
+            all_last_rows = unify_dictionary_arrays_helper(
+                all_last_rows, builders, all_last_rows->ncols());
 
             // Skip the remaining steps if the current rank is empty.
             if (is_empty) {
