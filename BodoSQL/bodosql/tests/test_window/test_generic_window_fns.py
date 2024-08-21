@@ -1,11 +1,13 @@
+import functools
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from mpi4py import MPI
 
-from bodo.tests.utils import pytest_slow_unless_window
+from bodo.tests.utils import pytest_slow_unless_window, temp_env_override
 from bodosql.tests.test_window.window_common import (  # noqa
     all_numeric_window_col_names,
     all_numeric_window_df,
@@ -553,9 +555,6 @@ def test_all_null():
 )
 def test_simple_sum(df, spark_info, capfd):
     """Verifies that the correct path is taken for SUM"""
-    from mpi4py import MPI
-
-    from bodo.tests.utils import temp_env_override
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
 
@@ -619,9 +618,6 @@ def test_simple_sum(df, spark_info, capfd):
 )
 def test_simple_count(df, spark_info, capfd):
     """Verifies that the correct path is taken for COUNT"""
-    from mpi4py import MPI
-
-    from bodo.tests.utils import temp_env_override
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
 
@@ -661,9 +657,6 @@ def test_simple_count(df, spark_info, capfd):
 )
 def test_simple_count_star(partition_col, spark_info, capfd):
     """Verifies that the correct path is taken for COUNT(*)"""
-    from mpi4py import MPI
-
-    from bodo.tests.utils import temp_env_override
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
 
@@ -703,6 +696,212 @@ def test_simple_count_star(partition_col, spark_info, capfd):
 
 
 @pytest.mark.parametrize(
+    "func_name, answer_func, out_dtype",
+    [
+        pytest.param(
+            "COUNT_IF",
+            lambda x: x.astype(pd.BooleanDtype()).sum(),
+            pd.UInt64Dtype(),
+            id="count_if",
+        ),
+        pytest.param(
+            "BOOLOR_AGG",
+            lambda x: None if x.count() == 0 else (x.sum() > 0),
+            pd.BooleanDtype(),
+            id="boolor_agg",
+        ),
+        pytest.param(
+            "BOOLAND_AGG",
+            lambda x: None
+            if x.count() == 0
+            else (x.astype(pd.BooleanDtype()).sum() == x.count()),
+            pd.BooleanDtype(),
+            id="booland_agg",
+        ),
+        pytest.param(
+            "BITOR_AGG",
+            lambda x: None
+            if x.count() == 0
+            else functools.reduce(lambda a, b: a | b, x[pd.notna(x)]),
+            pd.Int64Dtype(),
+            id="bitor_agg",
+        ),
+        pytest.param(
+            "BITAND_AGG",
+            lambda x: None
+            if x.count() == 0
+            else functools.reduce(lambda a, b: a & b, x[pd.notna(x)]),
+            pd.Int64Dtype(),
+            id="bitand_agg",
+        ),
+        pytest.param(
+            "BITXOR_AGG",
+            lambda x: None
+            if x.count() == 0
+            else functools.reduce(lambda a, b: a ^ b, x[pd.notna(x)]),
+            pd.Int64Dtype(),
+            id="bitxor_agg",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "df, arg_strings",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "P": [0] * 500,
+                    "IDX": range(500),
+                    "D": pd.array(
+                        [
+                            [None, False, True][min(i % 3, i % 4, i % 5)]
+                            for i in range(500)
+                        ],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            {
+                "COUNT_IF": "D",
+                "BOOLAND_AGG": "D",
+                "BOOLOR_AGG": "D",
+                "BITAND_AGG": "D::INTEGER",
+                "BITOR_AGG": "D::INTEGER",
+                "BITXOR_AGG": "D::INTEGER",
+            },
+            id="boolean-single_partition",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "P": [i // 100 for i in range(300)],
+                    "IDX": range(300),
+                    "D": pd.array(
+                        [[None, False, True][i // 100] for i in range(300)],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            {
+                "COUNT_IF": "D",
+                "BOOLAND_AGG": "D",
+                "BOOLOR_AGG": "D",
+                "BITAND_AGG": "D::INTEGER",
+                "BITOR_AGG": "D::INTEGER",
+                "BITXOR_AGG": "D::INTEGER",
+            },
+            id="boolean-two_partitions",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "P": [round(np.tan(i)) for i in range(200)],
+                    "IDX": range(200),
+                    "D": pd.array(
+                        [[True, None, False][min(i % 3, i % 4)] for i in range(200)],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            {
+                "COUNT_IF": "D",
+                "BOOLAND_AGG": "D",
+                "BOOLOR_AGG": "D",
+                "BITAND_AGG": "D::INTEGER",
+                "BITOR_AGG": "D::INTEGER",
+                "BITXOR_AGG": "D::INTEGER",
+            },
+            id="boolean-many_partitions",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "P": [0] * 500,
+                    "IDX": range(500),
+                    "D": pd.array(
+                        [None if i % 2 == 0 else i % 128 for i in range(500)],
+                        dtype=pd.Int8Dtype(),
+                    ),
+                }
+            ),
+            {
+                "COUNT_IF": "D>0",
+                "BOOLAND_AGG": "D",
+                "BOOLOR_AGG": "D",
+                "BITAND_AGG": "D",
+                "BITOR_AGG": "D",
+                "BITXOR_AGG": "D",
+            },
+            id="integer-single_partition",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "P": [round(np.tan(i)) for i in range(500)],
+                    "IDX": range(500),
+                    "D": pd.array(
+                        [None if i % 2 == 0 else i % 128 for i in range(500)],
+                        dtype=pd.Int64Dtype(),
+                    ),
+                }
+            ),
+            {
+                "COUNT_IF": "D>0",
+                "BOOLAND_AGG": "D",
+                "BOOLOR_AGG": "D",
+                "BITAND_AGG": "D",
+                "BITOR_AGG": "D",
+                "BITXOR_AGG": "D",
+            },
+            id="integer-many_partitions",
+        ),
+    ],
+)
+def test_simple_aggfuncs(func_name, answer_func, out_dtype, df, arg_strings, capfd):
+    """Verifies that the correct path is taken for COUNT_IF, BOOLOR_AGG, BOOLAND_AGG,
+    BITAND_AGG, BITOR_AGG, BITXOR_AGG"""
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = f"SELECT IDX, {func_name}({arg_strings[func_name]}) OVER (PARTITION BY P) as W FROM TABLE1"
+
+    gb_answers = df.groupby("P")["D"].apply(answer_func)
+    answer_dict = dict(zip(gb_answers.index, gb_answers))
+
+    answer = pd.DataFrame(
+        {
+            "IDX": df["IDX"],
+            "W": pd.array([answer_dict[p] for p in df["P"]], dtype=out_dtype),
+        }
+    )
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            None,
+            expected_output=answer,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+            only_jit_1DVar=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+@pytest.mark.parametrize(
     "data, expected_out",
     [
         pytest.param(
@@ -727,9 +926,6 @@ def test_simple_count_star(partition_col, spark_info, capfd):
 )
 def test_avg_over_blank(data, expected_out, capfd):
     """Verifies that the correct path is taken for AVG"""
-    from mpi4py import MPI
-
-    from bodo.tests.utils import temp_env_override
 
     df = pd.DataFrame({"A": data})
 
@@ -761,9 +957,6 @@ def test_avg_over_blank(data, expected_out, capfd):
 
 def test_countstar_over_blank(capfd):
     """Checks that count(*) over () works properly and takes the correct codepath"""
-    from mpi4py import MPI
-
-    from bodo.tests.utils import temp_env_override
 
     df = pd.DataFrame(
         {

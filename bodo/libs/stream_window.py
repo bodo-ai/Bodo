@@ -165,6 +165,12 @@ class WindowStateType(StreamingStateType):
             "min",
             "max",
             "count",
+            "count_if",
+            "boolor_agg",
+            "booland_agg",
+            "bitor_agg",
+            "bitand_agg",
+            "bitxor_agg",
             "sum",
             "mean",
             "dense_rank",
@@ -394,7 +400,13 @@ class WindowStateType(StreamingStateType):
                     ), f"Expected 1 input column to function {func_name}, received {len(indices)}"
                     input_index = indices[0]
                     input_type = self.build_table_type.arr_types[input_index]
-                    if func_name in {"min", "max"}:
+                    if func_name in {
+                        "min",
+                        "max",
+                        "bitand_agg",
+                        "bitor_agg",
+                        "bitxor_agg",
+                    }:
                         output_type = input_type
                     elif func_name == "sum":
                         in_dtype = input_type.dtype

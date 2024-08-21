@@ -67,6 +67,12 @@ inline bool supports_calculator_computation(
     // Ensure all of the ftypes are supported in the calculator logic.
     for (int32_t window_func : window_funcs) {
         switch (window_func) {
+            case Bodo_FTypes::count_if:
+            case Bodo_FTypes::bitor_agg:
+            case Bodo_FTypes::bitand_agg:
+            case Bodo_FTypes::bitxor_agg:
+            case Bodo_FTypes::booland_agg:
+            case Bodo_FTypes::boolor_agg:
             case Bodo_FTypes::size:
             case Bodo_FTypes::count:
             case Bodo_FTypes::sum:
