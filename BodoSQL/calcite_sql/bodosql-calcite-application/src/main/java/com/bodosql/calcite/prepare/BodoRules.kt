@@ -18,6 +18,7 @@ import com.bodosql.calcite.application.logicalRules.AggregateFilterToCaseRule
 import com.bodosql.calcite.application.logicalRules.AggregateMergeRule
 import com.bodosql.calcite.application.logicalRules.AggregateReduceFunctionsRule
 import com.bodosql.calcite.application.logicalRules.BodoAggregateJoinTransposeRule
+import com.bodosql.calcite.application.logicalRules.BodoCommonSubexpressionRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinDeriveIsNotNullFilterRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinProjectTransposeNoCSEUndoRule
 import com.bodosql.calcite.application.logicalRules.BodoJoinPushTransitivePredicatesRule
@@ -566,6 +567,12 @@ object BodoRules {
             .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
             .toRule()
 
+    @JvmField
+    val BODO_COMMON_SUBEXPRESSION_RULE: RelOptRule =
+        BodoCommonSubexpressionRule.Config.DEFAULT
+            .withRelBuilderFactory(BODO_LOGICAL_BUILDER)
+            .toRule()
+
     // Remove any case expressions from filters because we cannot use them in filter
     // pushdown.
     @JvmField
@@ -1054,6 +1061,7 @@ object BodoRules {
             AGGREGATE_REDUCE_FUNCTIONS_RULE,
             EXPAND_COUNT_DISTINCT_RULE,
             AGGREGATE_CONSTANT_PULL_UP_RULE,
+            BODO_COMMON_SUBEXPRESSION_RULE,
         )
 
     /**
