@@ -1,5 +1,12 @@
 package com.bodosql.calcite.adapter.bodo
 
+import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable.BITAND_AGG
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable.BITOR_AGG
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable.BITXOR_AGG
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable.BOOLAND_AGG
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable.BOOLOR_AGG
+import com.bodosql.calcite.application.operatorTables.AggOperatorTable.COUNT_IF
 import com.bodosql.calcite.codeGeneration.OperatorEmission
 import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
 import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
@@ -86,6 +93,12 @@ class BodoPhysicalWindow(
             "MAX" to listOf(false),
             "MIN" to listOf(false),
             "COUNT" to listOf(false),
+            "COUNT_IF" to listOf(false),
+            "BOOLOR_AGG" to listOf(false),
+            "BOOLAND_AGG" to listOf(false),
+            "BITAND_AGG" to listOf(false),
+            "BITOR_AGG" to listOf(false),
+            "BITXOR_AGG" to listOf(false),
         )
 
     /**
@@ -151,9 +164,24 @@ class BodoPhysicalWindow(
                         SqlKind.PERCENT_RANK,
                         SqlKind.CUME_DIST,
                         -> true
+                        SqlKind.COUNTIF,
                         SqlKind.SUM,
                         SqlKind.COUNT,
                         -> group.lowerBound.isUnbounded && group.upperBound.isUnbounded
+                        SqlKind.BIT_AND, SqlKind.BIT_OR, SqlKind.BIT_XOR,
+                        SqlKind.OTHER, SqlKind.OTHER_FUNCTION,
+                        ->
+                            when (aggCall.operator.name) {
+                                COUNT_IF.name,
+                                BOOLAND_AGG.name,
+                                BOOLOR_AGG.name,
+                                BITAND_AGG.name,
+                                BITOR_AGG.name,
+                                BITXOR_AGG.name,
+                                COUNT_IF.name,
+                                -> true
+                                else -> false
+                            }
                         else -> false
                     }
             }
@@ -389,9 +417,14 @@ class BodoPhysicalWindow(
             // append to scalar args. Otherwise, the input refering to a column, add the input ref to columnArgs
             var constantIdx = 0 // index into this.constants
             val argsList = argsMap[aggCall.operator.name] ?: listOf()
-
+            if (aggCall.operands.size < argsList.size && aggCall.kind != SqlKind.COUNT) {
+                throw BodoSQLCodegenException("Too few arguments for window function: $aggCall (expected {${argsList.size}})")
+            }
             aggCall.operands.forEachIndexed {
                     it, op ->
+                if (it >= argsList.size) {
+                    throw BodoSQLCodegenException("Too many arguments for window function: $aggCall (expected at most {${argsList.size}})")
+                }
                 val isScalar = argsList[it]
                 if (isScalar) {
                     val constantArg = this.constants[constantIdx]

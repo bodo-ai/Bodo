@@ -839,6 +839,196 @@ def test_partitionless_rank_family(
             ),
             id="sum",
         ),
+        pytest.param(
+            "count",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [0, 1, 1, 2, 2, 2, 2]
+                        + [4] * 8
+                        + [8] * 16
+                        + [16] * 32
+                        + [32] * 64,
+                        dtype=pd.Int64Dtype(),
+                    ),
+                }
+            ),
+            id="count",
+        ),
+        pytest.param(
+            "count_if",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [
+                            [None, False, True, False, None, None, True][
+                                min(i % 7, i % 10)
+                            ]
+                            for i in range(127)
+                        ],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [0, 1, 1, 1, 1, 1, 1]
+                        + [2] * 8
+                        + [3] * 16
+                        + [7] * 32
+                        + [14] * 64,
+                        dtype=pd.Int64Dtype(),
+                    ),
+                }
+            ),
+            id="count_if",
+        ),
+        pytest.param(
+            "boolor_agg",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 == 0 else (i - 1) % 3 for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None, False, False] + [True] * 124,
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            id="boolor_agg",
+        ),
+        pytest.param(
+            "booland_agg",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i % 27 for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None]
+                        + [True] * 14
+                        + [False] * 16
+                        + [True] * 32
+                        + [False] * 64,
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            id="booland_agg",
+        ),
+        pytest.param(
+            "bitand_agg",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 <= i % 3 else i for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None, None, None, 3, 3, 3, 3]
+                        + [9] * 8
+                        + [1] * 16
+                        + [33] * 32
+                        + [1] * 64,
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            id="bitand_agg",
+        ),
+        pytest.param(
+            "bitor_agg",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 2 <= i % 3 else i for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None, None, None, 3, 3, 3, 3]
+                        + [9] * 8
+                        + [31] * 16
+                        + [63] * 32
+                        + [127] * 64,
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            id="bitor_agg",
+        ),
+        pytest.param(
+            "bitxor_agg",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [None if i % 3 == 0 else i for i in range(127)],
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None, 3, 3, 1, 1, 1, 1]
+                        + [13] * 8
+                        + [5] * 16
+                        + [53] * 32
+                        + [21] * 64,
+                        dtype=pd.Int16Dtype(),
+                    ),
+                }
+            ),
+            id="bitxor_agg",
+        ),
     ],
 )
 def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check):

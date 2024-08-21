@@ -1599,6 +1599,8 @@ def get_window_func_types():
         "std_pop": to_nullable_type(dtype_to_array_type(types.float64)),
         "mean": to_nullable_type(dtype_to_array_type(types.float64)),
         "min_row_number_filter": bodo.boolean_array_type,
+        "booland_agg": bodo.boolean_array_type,
+        "boolor_agg": bodo.boolean_array_type,
         # None = output dtype matches input dtype
         "any_value": None,
         "first": None,
@@ -1606,6 +1608,9 @@ def get_window_func_types():
         "max": None,
         "min": None,
         "sum": None,
+        "bitand_agg": None,
+        "bitor_agg": None,
+        "bitxor_agg": None,
     }
     return window_func_types
 
