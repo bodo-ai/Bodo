@@ -1,7 +1,7 @@
 package com.bodosql.calcite.prepare
 
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalProject
-import com.bodosql.calcite.application.logicalRules.ProjectionSubcolumnEliminationRule
+import com.bodosql.calcite.application.logicalRules.AbstractBodoCommonSubexpressionRule
 import com.bodosql.calcite.rel.core.BodoPhysicalRelFactories
 import org.apache.calcite.plan.RelOptLattice
 import org.apache.calcite.plan.RelOptMaterialization
@@ -45,7 +45,7 @@ object SubColumnEliminationProgram : Program {
          */
         override fun visit(node: RelNode): RelNode {
             return if (node is BodoPhysicalProject) {
-                val result = ProjectionSubcolumnEliminationRule.applySubColumnElimination(builder, node, node.input)
+                val result = AbstractBodoCommonSubexpressionRule.applySubexpressionElimination(builder, node)
                 if (result != null) {
                     visit(result)
                 } else {

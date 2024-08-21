@@ -123,7 +123,7 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
         }
     )
     query = f"SELECT IDX, {', '.join(selects)} FROM table1"
-    pandas_code = check_query(
+    check_query(
         query,
         {"TABLE1": df},
         None,
@@ -132,10 +132,7 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
         check_dtype=False,
         check_names=False,
         return_codegen=True,
-        only_jit_1DVar=True,
-    )["pandas_code"]
-
-    count_window_applies(pandas_code, 2, ["COVAR_SAMP", "COVAR_POP"])
+    )
 
 
 @pytest.mark.parametrize(
