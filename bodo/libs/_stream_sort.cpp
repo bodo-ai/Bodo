@@ -1143,6 +1143,11 @@ std::pair<std::shared_ptr<table_info>, bool> StreamSortState::GetOutput() {
     return std::make_pair(output, out_is_last);
 }
 
+std::vector<std::shared_ptr<table_info>>
+StreamSortState::GetAllOutputUnpinned() {
+    return std::move(output_chunks);
+}
+
 void StreamSortState::ReportMetrics() {
     if (this->op_id == -1) {
         return;

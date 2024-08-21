@@ -2,6 +2,42 @@
 #include "_memory_budget.h"
 #include "_operator_pool.h"
 #include "_stream_groupby.h"
+#include "_stream_sort.h"
+
+class WindowStateSorter {
+    std::shared_ptr<bodo::Schema> build_table_schema;
+    size_t num_keys;
+    // True when num_keys is 0 in which case we just collect the tables instead
+    // of doing any sorting.
+    bool skip_sorting;
+    // Dictionary builders used for the build_table_buffer.
+    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
+    // Input state
+    // TODO: Enable some type of partitioning. Ideally this can be
+    // done by switching to a CTB and supporting that inside our sort.
+    std::unique_ptr<TableBuildBuffer> build_table_buffer;
+
+    std::vector<int64_t> asc;
+    std::vector<int64_t> na_pos;
+
+    std::unique_ptr<StreamSortState> stream_sorter;
+
+   public:
+    WindowStateSorter(std::shared_ptr<bodo::Schema>& build_table_schema,
+                      size_t n_window_keys,
+                      const std::vector<bool>& order_by_asc,
+                      const std::vector<bool>& order_by_na, bool parallel);
+
+    void AppendBatch(std::shared_ptr<table_info>& table, bool is_last);
+
+    std::vector<std::shared_ptr<table_info>> Finalize();
+
+    size_t NumSortKeys() { return num_keys; }
+
+    std::vector<std::shared_ptr<DictionaryBuilder>>& GetDictBuilders() {
+        return build_table_dict_builders;
+    }
+};
 
 class WindowState {
    private:
@@ -44,13 +80,9 @@ class WindowState {
     // Current iteration of build steps
     uint64_t build_iter = 0;
 
-    // Dictionary builders used for the build_table_buffer.
-    std::vector<std::shared_ptr<DictionaryBuilder>> build_table_dict_builders;
-
-    // Input state
-    // TODO: Enable some type of partitioning. Ideally this can be
-    // done by switching to a CTB and supporting that inside our sort.
-    std::unique_ptr<TableBuildBuffer> build_table_buffer;
+    /// The schema of the inputs
+    std::shared_ptr<bodo::Schema> build_table_schema;
+    WindowStateSorter sorter;
 
     // Output state
     std::shared_ptr<GroupbyOutputState> output_state = nullptr;
@@ -69,9 +101,6 @@ class WindowState {
     // TODO: Replace with window metrics.
     GroupbyMetrics metrics;
     const int64_t op_id;
-
-    /// The schema of the inputs
-    std::shared_ptr<bodo::Schema> build_table_schema;
 
     WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                 std::vector<int32_t> window_ftypes_, uint64_t n_keys_,
@@ -146,4 +175,6 @@ class WindowState {
      *
      */
     void FinalizeBuild();
+
+    void AppendBatch(std::shared_ptr<table_info>& in_table, bool is_last);
 };
