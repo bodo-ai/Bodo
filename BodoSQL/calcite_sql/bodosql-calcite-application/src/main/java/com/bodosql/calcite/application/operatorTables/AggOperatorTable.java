@@ -183,7 +183,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               "BITOR_AGG",
               SqlKind.BIT_OR,
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.NUMERIC.or(OperandTypes.STRING))
+              OperandTypes.EXACT_NUMERIC)
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
@@ -192,7 +192,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               "BITAND_AGG",
               SqlKind.BIT_AND,
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
-              OperandTypes.NUMERIC.or(OperandTypes.STRING))
+              OperandTypes.EXACT_NUMERIC)
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 

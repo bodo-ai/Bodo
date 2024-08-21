@@ -408,6 +408,17 @@ void fill_numeric_array_with_value(const std::shared_ptr<array_info> &arr,
         FILL_DTYPE_CASE(Bodo_CTypes::DATETIME);
         FILL_DTYPE_CASE(Bodo_CTypes::TIME);
         FILL_DTYPE_CASE(Bodo_CTypes::TIMEDELTA);
+        case Bodo_CTypes::_BOOL: {
+            bool bit = GetBit(
+                value_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>(),
+                0);
+            uint8_t *write_buffer =
+                arr->data1<bodo_array_type::NULLABLE_INT_BOOL, uint8_t>();
+            for (size_t idx = start; idx < end; idx++) {
+                SetBitTo(write_buffer, idx, bit);
+            }
+            break;
+        }
         default: {
             throw std::runtime_error(
                 "fill_numeric_array_with_value: unsupported dtype " +
@@ -973,6 +984,12 @@ class WindowCollectionComputer {
                     break;
                 }
                 case Bodo_FTypes::count:
+                case Bodo_FTypes::count_if:
+                case Bodo_FTypes::bitor_agg:
+                case Bodo_FTypes::bitand_agg:
+                case Bodo_FTypes::bitxor_agg:
+                case Bodo_FTypes::booland_agg:
+                case Bodo_FTypes::boolor_agg:
                 case Bodo_FTypes::sum: {
                     calculator =
                         new SimpleAggregationWindowCalculator<OrderByArrType>(
