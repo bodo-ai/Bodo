@@ -150,21 +150,26 @@ def run_sql_query_wrapper(
         metrics_file.write(f"Execution time: {float(execution_time)}\n".encode("utf-8"))
 
     if output is not None:
+        metadata_dir = args.pq_out_filename
+        pq_output_dir = ""
+
+        if args.pq_out_filename:
+            pq_output_dir = os.path.join(args.pq_out_filename, "output.pq")
+
         # Parse output for type specification and number of rows
         # only if we're writing out for JDBC / SDK
-        if args.pq_out_filename:
+        if metadata_dir:
             total_len = MPI.COMM_WORLD.reduce(len(output), op=MPI.SUM, root=0)
             if bodo.get_rank() == 0:
                 output_types = parse_output_types(output)
-                with fsspec.open(
-                    os.path.join(args.pq_out_filename, "metadata.json"), "w"
-                ) as f:
+                with fsspec.open(os.path.join(metadata_dir, "metadata.json"), "w") as f:
                     json.dump({"num_rows": total_len, "schema": output_types}, f)
 
         t_cqr = time.time()
+
         consume_query_result(
             output,
-            args.pq_out_filename if args.pq_out_filename else "",
+            pq_output_dir,
             print_output,
         )
 
