@@ -724,8 +724,13 @@ void StreamSortState::FinalizeBuild() {
         MPI_Allreduce(in_info.get(), sum_row_info.get(), 2, MPI_LONG_LONG_INT,
                       MPI_SUM, MPI_COMM_WORLD);
     }
-    int64_t bytes_per_row = parallel ? (sum_row_info[0] / sum_row_info[1])
-                                     : (row_info.first / row_info.second);
+
+    int64_t bytes_per_row = 0;
+    if (parallel && sum_row_info[1] > 0) {
+        bytes_per_row = sum_row_info[0] / sum_row_info[1];
+    } else if (!parallel && row_info.second > 0) {
+        bytes_per_row = row_info.first / row_info.second;
+    }
 
     chunk_size =
         GetChunkSize(bytes_per_row, mem_budget_bytes, num_chunks, chunk_size);
