@@ -1,4 +1,5 @@
 #include "_stream_window.h"
+#include <vector>
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -88,9 +89,7 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                          std::vector<int32_t> window_ftypes_, uint64_t n_keys_,
                          std::vector<bool> order_by_asc_,
                          std::vector<bool> order_by_na_,
-                         std::vector<bool> partition_by_cols_to_keep_,
-                         std::vector<bool> order_by_cols_to_keep_,
-                         std::vector<bool> input_cols_to_keep_,
+                         std::vector<bool> cols_to_keep_,
                          std::vector<int32_t> func_input_indices_,
                          std::vector<int32_t> func_input_offsets_,
                          int64_t output_batch_size_, bool parallel_,
@@ -119,9 +118,7 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
       window_ftypes(std::move(window_ftypes_)),
       order_by_asc(std::move(order_by_asc_)),
       order_by_na(std::move(order_by_na_)),
-      partition_by_cols_to_keep(std::move(partition_by_cols_to_keep_)),
-      order_by_cols_to_keep(std::move(order_by_cols_to_keep_)),
-      input_cols_to_keep(std::move(input_cols_to_keep_)),
+      cols_to_keep_bitmask(std::move(cols_to_keep_)),
       func_input_indices(std::move(func_input_indices_)),
       func_input_offsets(std::move(func_input_offsets_)),
       sync_iter(sync_iter_),
@@ -148,15 +145,9 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
     // Window outputs all the input columns - where partition_by_cols_to_keep or
     // order_by_cols_to_keep or input_cols_to_keep are false + the number of
     // function columns.
-    size_t dropped_partition_by_cols =
-        std::count(partition_by_cols_to_keep.begin(),
-                   partition_by_cols_to_keep.end(), false);
-    size_t dropped_order_by_cols = std::count(
-        order_by_cols_to_keep.begin(), order_by_cols_to_keep.end(), false);
-    size_t dropped_input_cols =
-        std::count(input_cols_to_keep.begin(), input_cols_to_keep.end(), false);
-    size_t dropped_cols =
-        dropped_partition_by_cols + dropped_order_by_cols + dropped_input_cols;
+
+    size_t dropped_cols = std::count(cols_to_keep_bitmask.begin(),
+                                     cols_to_keep_bitmask.end(), false);
     size_t num_output_cols = (this->build_table_schema->column_types.size() -
                               dropped_cols + window_ftypes.size());
     // Create separate dictionary builders for the output because the sort step
@@ -164,36 +155,17 @@ WindowState::WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
     std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders(
         num_output_cols);
     size_t output_index = 0;
-    for (size_t i = 0; i < n_keys; i++) {
-        if (partition_by_cols_to_keep[i]) {
+    for (size_t i = 0; i < cols_to_keep_bitmask.size(); i++) {
+        if (cols_to_keep_bitmask[i]) {
             output_schema->append_column(
                 this->build_table_schema->column_types[i]->copy());
             output_dict_builders[output_index++] =
                 create_dict_builder_for_array(
-                    this->build_table_schema->column_types[i]->copy(), true);
+                    this->build_table_schema->column_types[i]->copy(),
+                    i < this->sorter.NumSortKeys() + n_keys);
         }
     }
-    for (size_t i = n_keys; i < this->sorter.NumSortKeys(); i++) {
-        if (order_by_cols_to_keep[i - n_keys]) {
-            output_schema->append_column(
-                this->build_table_schema->column_types[i]->copy());
-            output_dict_builders[output_index++] =
-                create_dict_builder_for_array(
-                    this->build_table_schema->column_types[i]->copy(), true);
-        }
-    }
-    size_t input_idx = 0;
-    for (size_t i = this->sorter.NumSortKeys();
-         i < this->build_table_schema->column_types.size(); i++) {
-        if (input_cols_to_keep[input_idx]) {
-            output_schema->append_column(
-                this->build_table_schema->column_types[i]->copy());
-            output_dict_builders[output_index++] =
-                create_dict_builder_for_array(
-                    this->build_table_schema->column_types[i]->copy(), false);
-        }
-        input_idx++;
-    }
+
     // Append the window function output types.
 
     for (size_t func_idx = 0; func_idx < window_ftypes.size(); func_idx++) {
@@ -549,9 +521,6 @@ void WindowState::FinalizeBuild() {
     }
 
     std::vector<int32_t> keep_indices;
-    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        this->partition_by_cols_to_keep, this->order_by_cols_to_keep,
-        this->input_cols_to_keep, sorted_table_chunks[0]->ncols());
     for (size_t i = 0; i < sorted_table_chunks[0]->ncols(); i++) {
         if (cols_to_keep_bitmask[i]) {
             keep_indices.push_back(i);
@@ -669,13 +638,9 @@ void WindowState::AppendBatch(std::shared_ptr<table_info>& in_table,
  *  considered 'last' for the order-by columns. It should be
  * 'n_order_by_keys' elements long.
  * @param n_order_by_keys Number of order-by columns.
- * @param partition_by_cols_to_keep Bitmask specifying the partition by
- * columns to keep. It must have n_keys elements.
- * @param order_by_cols_to_keep Bitmask specifying the order-by columns
- * to keep. It must have n_order_by_keys elements.
- * @param input_cols_to_keep Bitmask specifying the order-by columns
- * to keep. It must have the same number of elements as the total
- * number of columns minus the partition/order columns.
+ * @param cols_to_keep Bitmask specifying the partition, order-by, and input
+ * columns to keep. It must have the same number of elements as the total number
+ * of columns.
  * @param n_input_cols The intended length of input_cols_to_keep
  * @param output_batch_size Batch size for reading output.
  * @param parallel Is the output parallel?
@@ -687,8 +652,7 @@ WindowState* window_state_init_py_entry(
     int64_t operator_id, int8_t* build_arr_c_types,
     int8_t* build_arr_array_types, int n_build_arrs, int32_t* window_ftypes,
     int32_t n_funcs, uint64_t n_keys, bool* order_by_asc, bool* order_by_na,
-    uint64_t n_order_by_keys, bool* partition_by_cols_to_keep,
-    bool* order_by_cols_to_keep, bool* input_cols_to_keep, int32_t n_input_cols,
+    uint64_t n_order_by_keys, bool* cols_to_keep, int32_t n_input_cols,
     int32_t* func_input_indices, int32_t* func_input_offsets,
     int64_t output_batch_size, bool parallel, int64_t sync_iter,
     bool allow_work_stealing) {
@@ -700,12 +664,8 @@ WindowState* window_state_init_py_entry(
                                        order_by_asc + n_order_by_keys);
     std::vector<bool> order_by_na_vec(order_by_na,
                                       order_by_na + n_order_by_keys);
-    std::vector<bool> partition_by_cols_to_keep_vec(
-        partition_by_cols_to_keep, partition_by_cols_to_keep + n_keys);
-    std::vector<bool> order_by_cols_to_keep_vec(
-        order_by_cols_to_keep, order_by_cols_to_keep + n_order_by_keys);
-    std::vector<bool> input_cols_to_keep_vec(input_cols_to_keep,
-                                             input_cols_to_keep + n_input_cols);
+    size_t n_cols = n_keys + n_order_by_keys + n_input_cols;
+    std::vector<bool> cols_to_keep_vec(cols_to_keep, cols_to_keep + n_cols);
     std::vector<int32_t> func_input_offsets_vec(
         func_input_offsets, func_input_offsets + n_funcs + 1);
     int32_t n_inputs = func_input_offsets_vec[n_funcs];
@@ -719,8 +679,7 @@ WindowState* window_state_init_py_entry(
                                 build_arr_c_types + n_build_arrs)),
 
         std::vector<int32_t>(window_ftypes, window_ftypes + n_funcs), n_keys,
-        order_by_asc_vec, order_by_na_vec, partition_by_cols_to_keep_vec,
-        order_by_cols_to_keep_vec, input_cols_to_keep_vec,
+        order_by_asc_vec, order_by_na_vec, cols_to_keep_vec,
         func_input_indices_vec, func_input_offsets_vec, output_batch_size,
         parallel, sync_iter, operator_id, op_pool_size_bytes,
         allow_work_stealing);

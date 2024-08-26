@@ -1404,6 +1404,22 @@ def overload_fix_arr_dtype(
 
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
+    if isinstance(data.dtype, types.Integer) and isinstance(
+        nb_dtype, bodo.Decimal128Type
+    ):
+        new_prec = nb_dtype.precision
+        new_scale = nb_dtype.scale
+
+        def impl_int_to_decimal(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            dec_arr = bodo.libs.decimal_arr_ext.int_to_decimal(data)
+            return bodo.libs.decimal_arr_ext.cast_decimal_to_decimal_array(
+                dec_arr, new_prec, new_scale, False
+            )
+
+        return impl_int_to_decimal
+
     # Matching data case
     if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
         same_typ = (
