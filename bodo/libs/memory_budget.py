@@ -6,7 +6,7 @@ from enum import Enum
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.extending import intrinsic
+from numba.extending import intrinsic, lower_builtin
 
 import bodo
 from bodo.ext import memory_budget_cpp
@@ -79,34 +79,36 @@ def init_operator_comptroller_with_budget(typingctx, budget):
     return sig, codegen
 
 
-@intrinsic
 def register_operator(
-    typingctx, operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
+    operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
 ):
-    """Wrapper for register_operator in _memory_budget.cpp"""
+    pass
 
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-            ],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="register_operator"
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return
 
-    sig = types.none(
-        operator_id, operator_type, min_pipeline_id, max_pipeline_id, estimate
+@lower_builtin(
+    register_operator,
+    types.int64,
+    types.EnumMember(OperatorType, types.int64),
+    types.int64,
+    types.int64,
+    types.int64,
+)
+def lower_register_operator(context, builder, sig, args):
+    fnty = lir.FunctionType(
+        lir.VoidType(),
+        [
+            lir.IntType(64),
+            lir.IntType(64),
+            lir.IntType(64),
+            lir.IntType(64),
+            lir.IntType(64),
+        ],
     )
-    return sig, codegen
+    fn_typ = cgutils.get_or_insert_function(
+        builder.module, fnty, name="register_operator"
+    )
+    builder.call(fn_typ, args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
 
 @intrinsic

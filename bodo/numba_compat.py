@@ -2879,7 +2879,31 @@ if _check_numba_change:  # pragma: no cover
 # -------------------- ForceLiteralArg --------------------
 
 
+def __reduce__(self):
+    from numba.core.types.abstract import Type, _type_reconstructor
+
+    reconstructor, args, state = super(Type, self).__reduce__()
+    # Bodo change: remove the cached Cython type to avoid pickle errors
+    state.pop("c_type", None)
+    return (_type_reconstructor, (reconstructor, args, state))
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.types.abstract.Type.__reduce__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "39ab85be220b371f6d627818e191afbe20742d6ec3cef383ad22b4fb67efac66"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.types.abstract.Type.__reduce__ has changed")
+
+
+numba.core.types.abstract.Type.__reduce__ = __reduce__
+
+
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
+    from bodo.transforms.native_typer import bodo_resolve_call
+    from bodo.transforms.typeinfer import BodoFunction
+
     assert fnty
     context = typeinfer.context
 
@@ -2900,7 +2924,15 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         # Unwrap TypeRef
         fnty = fnty.instance_type
     try:
-        sig = typeinfer.resolve_call(fnty, pos_args, kw_args)
+        # Bodo change: use Bodo's native typer if it's a supported Bodo call
+        if isinstance(fnty, BodoFunction):
+            assert kw_args == {}, "bodo_resolve_call: kw args not supported yet"
+            sig = bodo_resolve_call(
+                fnty.templates[0].path,
+                tuple(numba.types.unliteral(t) for t in pos_args),
+            )
+        else:
+            sig = typeinfer.resolve_call(fnty, pos_args, kw_args)
     except ForceLiteralArg as e:
         # Adjust for bound methods
         folding_args = (
