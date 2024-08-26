@@ -79,6 +79,9 @@ class BodoPhysicalWindow(
     private val sqlToBodoWindowFuncName =
         mapOf(
             "AVG" to "mean",
+            "FIRST_VALUE" to "first",
+            "ANY_VALUE" to "first",
+            "LAST_VALUE" to "last",
         )
 
     /**
@@ -89,6 +92,9 @@ class BodoPhysicalWindow(
     val argsMap =
         mapOf(
             "NTILE" to listOf(true),
+            "FIRST_VALUE" to listOf(false),
+            "LAST_VALUE" to listOf(false),
+            "ANY_VALUE" to listOf(false),
             "SUM" to listOf(false),
             "AVG" to listOf(false),
             "MAX" to listOf(false),
@@ -193,6 +199,9 @@ class BodoPhysicalWindow(
                         SqlKind.SUM,
                         SqlKind.COUNT,
                         -> group.lowerBound.isUnbounded && group.upperBound.isUnbounded
+                        SqlKind.FIRST_VALUE,
+                        SqlKind.LAST_VALUE,
+                        SqlKind.ANY_VALUE,
                         SqlKind.MIN,
                         SqlKind.MAX,
                         ->

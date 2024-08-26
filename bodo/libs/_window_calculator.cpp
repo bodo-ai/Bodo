@@ -474,7 +474,8 @@ class SimpleAggregationWindowCalculator
         // If doing a selection function, verify that the inputs are
         // numeric, since SimpleAggregationWindowCalculator does not
         // support updates on slices with non-numeric data.
-        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max) {
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
+            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last) {
             switch (this->schema->column_types[agg_column]->array_type) {
                 case bodo_array_type::NULLABLE_INT_BOOL:
                 case bodo_array_type::NUMPY: {
@@ -605,9 +606,7 @@ class SimpleAggregationWindowCalculator
                                 size_t partition_end_row, bool is_last,
                                 std::shared_ptr<array_info> &curr_agg) {
         // Iterate across the same chunks to update the corresponding rows to
-        // use the aggregate value calculated in the previous loop. If the
-        // aggregation value is null, we do nothing since the output should have
-        // been pre-allocated as NULL if this was possible.
+        // use the aggregate value calculated in the previous loop.
         if (curr_agg->arr_type == bodo_array_type::NUMPY ||
             curr_agg->get_null_bit(0)) {
             for (size_t chunk_idx = partition_start_chunk;
@@ -628,6 +627,33 @@ class SimpleAggregationWindowCalculator
 
                 fill_numeric_array_with_value(agg_chunk, curr_agg, start_row,
                                               end_row + 1);
+
+                agg_chunk->unpin();
+            }
+        }
+        // Alternatively, if we are writing NULL, just set the null bitmask for
+        // the entire range to false.
+        if (curr_agg->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
+            !curr_agg->get_null_bit(0)) {
+            for (size_t chunk_idx = partition_start_chunk;
+                 chunk_idx <= partition_end_chunk; chunk_idx++) {
+                std::shared_ptr<array_info> agg_chunk = agg_chunks[chunk_idx];
+                agg_chunk->pin();
+
+                // Identify the range of rows to iterate across. If we are in
+                // the first chunk, start at partition_start_row. If we are in
+                // the last chunk, end on partition_end_row.
+                size_t last_row = agg_chunk->length - 1;
+                size_t start_row = (chunk_idx == partition_start_chunk)
+                                       ? partition_start_row
+                                       : 0;
+                size_t end_row = (chunk_idx == partition_end_chunk)
+                                     ? partition_end_row
+                                     : last_row;
+
+                for (size_t row = start_row; row <= end_row; row++) {
+                    agg_chunk->set_null_bit(row, 0);
+                }
 
                 agg_chunk->unpin();
             }
@@ -684,7 +710,7 @@ class SimpleAggregationWindowCalculator
                             size_t first_partition_chunk_end,
                             size_t first_partition_row_end,
                             size_t last_partition_chunk_start,
-                            size_t last_partition_row_start) final {
+                            size_t last_partition_row_start) {
         if (this->is_empty) {
             return;
         }
@@ -927,6 +953,136 @@ class SizeWindowCalculator
     }
 };
 
+template <bodo_array_type::arr_type_enum OrderByArrType>
+    requires(valid_window_array_type<OrderByArrType>)
+class NumericFirstLastWindowCalculator
+    : public SimpleAggregationWindowCalculator<OrderByArrType> {
+   public:
+    NumericFirstLastWindowCalculator(
+        std::shared_ptr<bodo::Schema> _schema,
+        std::vector<std::shared_ptr<table_info>> _chunks,
+        std::vector<int32_t> _order_col_indices,
+        std::vector<int32_t> _input_col_indices,
+        std::vector<std::shared_ptr<DictionaryBuilder>> _builders,
+        bool _is_empty, Bodo_FTypes::FTypeEnum _ftype,
+        bodo::IBufferPool *const _pool,
+        std::shared_ptr<::arrow::MemoryManager> _mm)
+        : SimpleAggregationWindowCalculator<OrderByArrType>(
+              _schema, _chunks, _order_col_indices, _input_col_indices,
+              _builders, _is_empty, _ftype, _pool, _mm),
+          is_first(_ftype == Bodo_FTypes::first) {}
+
+    void ComputePartition(size_t partition_start_chunk,
+                          size_t partition_start_row,
+                          size_t partition_end_chunk, size_t partition_end_row,
+                          bool is_last) final {
+        if (this->is_empty) {
+            return;
+        }
+
+        size_t select_chunk =
+            is_first ? partition_start_chunk : partition_end_chunk;
+        size_t select_row = is_first ? partition_start_row : partition_end_row;
+
+        // Select the desired row from the begining/end of the partition.
+        std::shared_ptr<array_info> target_chunk =
+            this->chunks[select_chunk]->columns[this->agg_column];
+        target_chunk->pin();
+        std::vector<int64_t> target_row(1, select_row);
+        std::shared_ptr<array_info> curr_val =
+            RetrieveArray_SingleColumn(target_chunk, target_row);
+        target_chunk->unpin();
+
+        // Fill the entire partition with this value.
+        this->FillPartitionWithValue(partition_start_chunk, partition_start_row,
+                                     partition_end_chunk, partition_end_row,
+                                     is_last, curr_val);
+
+        // If this is the first partition, store the selected value for
+        // communication across ranks.
+        std::vector<int64_t> idxs(1, 0);
+        if (partition_start_chunk == 0 && partition_start_row == 0) {
+            this->first_agg = RetrieveArray_SingleColumn(curr_val, idxs);
+        }
+        // If this is the last partition, store the selected value for
+        // communication across ranks.
+        if (is_last) {
+            this->last_agg = RetrieveArray_SingleColumn(curr_val, idxs);
+        }
+    }
+
+    /**
+     * Arguments used by this implementation:
+     * - first_boundary_info: used to send agg values from following ranks
+     * - last_boundary_info: used to send agg values from previous ranks
+     * - rank_idx: used to determine which rows in first/last boundary info are
+     * the current rank.
+     * - func_offset: used to infer which column of first/last boundary info
+     * contains the agg values from previous/following ranks.
+     * - start_partition: used as the start of previous ranks to find the true
+     * FIRST_VALUE.
+     * - first_partition_chunk_end: used to determine up to which chunk to
+     * update with the selected FIRST_VALUE from previous ranks.
+     * - first_partition_row_end: used to determine up to which row in
+     *   first_partition_chunk_end to update.
+     * - end_partition: used as the end of following ranks to find the true
+     * LAST_VALUE.
+     * - last_partition_chunk_start: used to determine starting from which chunk
+     * to update with the selected LAST_VALUE from following ranks.
+     * - last_partition_row_start: used to determine starting from which row in
+     *   last_partition_chunk_start to update.
+     */
+    void UpdateBoundaryInfo(std::shared_ptr<table_info> &first_boundary_info,
+                            std::shared_ptr<table_info> &last_boundary_info,
+                            size_t rank_idx, size_t func_offset,
+                            size_t start_partition, size_t start_order,
+                            size_t end_partition, size_t end_order,
+                            size_t first_partition_chunk_end,
+                            size_t first_partition_row_end,
+                            size_t last_partition_chunk_start,
+                            size_t last_partition_row_start) {
+        if (this->is_empty) {
+            return;
+        }
+
+        if (is_first) {
+            std::shared_ptr<array_info> &last_aggs =
+                last_boundary_info->columns[func_offset];
+            // Skip if there are no preceding ranks to use as an update value
+            if (rank_idx == start_partition) {
+                return;
+            }
+            // Select the target value to update
+            std::vector<int64_t> target_idx(1, start_partition);
+            std::shared_ptr<array_info> target =
+                RetrieveArray_SingleColumn(last_aggs, target_idx);
+            // Perform the batch update
+            this->FillPartitionWithValue(0, 0, first_partition_chunk_end,
+                                         first_partition_row_end, false,
+                                         target);
+        } else {
+            std::shared_ptr<array_info> &first_aggs =
+                first_boundary_info->columns[func_offset];
+            // Skip if there are no preceding ranks to use as an update value
+            if (rank_idx == end_partition) {
+                return;
+            }
+            // Select the target value to update
+            std::vector<int64_t> target_idx(1, end_partition);
+            std::shared_ptr<array_info> target =
+                RetrieveArray_SingleColumn(first_aggs, target_idx);
+            // Perform the batch update
+            size_t chunk_end = this->chunks.size() - 1;
+            size_t row_end = this->chunks[chunk_end]->nrows() - 1;
+            this->FillPartitionWithValue(last_partition_chunk_start,
+                                         last_partition_row_start, chunk_end,
+                                         row_end, false, target);
+        }
+    }
+
+    bool is_first;
+};
+
 /**
  * The orchestration class that handles a collection of window
  * functions being computed together.
@@ -1003,6 +1159,17 @@ class WindowCollectionComputer {
                         _schema, _chunks, _order_col_indices,
                         input_col_indices[func_idx], _builders, this->is_empty,
                         _pool, _mm);
+                    break;
+                }
+                case Bodo_FTypes::first:
+                case Bodo_FTypes::last: {
+                    calculator =
+                        new NumericFirstLastWindowCalculator<OrderByArrType>(
+                            _schema, _chunks, _order_col_indices,
+                            input_col_indices[func_idx], _builders,
+                            this->is_empty,
+                            (Bodo_FTypes::FTypeEnum)window_funcs[func_idx],
+                            _pool, _mm);
                     break;
                 }
                 case Bodo_FTypes::min:
