@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import datetime
 from decimal import Decimal
 
 import numpy as np
@@ -1180,7 +1181,173 @@ def test_streaming_window_aggfunc_impl(func_name, df, answer, memory_leak_check)
         check_dtype=False,
         reset_index=True,
         sort_output=True,
-        only_1D=True,
+        only_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "func_name, df, answer",
+    [
+        pytest.param(
+            "first",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "O": [np.tan(i) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [
+                            None
+                            if i % 2 == 0
+                            else datetime.date.fromordinal(738886 + i)
+                            for i in range(127)
+                        ],
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [None] * 3
+                        + [datetime.date(2024, 1, 6)] * 4
+                        + [datetime.date(2024, 1, 12)] * 8
+                        + [None] * 16
+                        + [datetime.date(2024, 2, 3)] * 32
+                        + [datetime.date(2024, 3, 18)] * 64,
+                    ),
+                }
+            ),
+            id="first",
+        ),
+        pytest.param(
+            "last",
+            pd.DataFrame(
+                {
+                    "P": [int(np.log2(i + 1)) for i in range(127)],
+                    "O": [np.tan(i) for i in range(127)],
+                    "IDX": range(127),
+                    "S": pd.array(
+                        [
+                            None if i % 3 == 1 else bodo.Time(nanosecond=int(1.5**i))
+                            for i in range(127)
+                        ],
+                    ),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "IDX": range(127),
+                    "WIN": pd.array(
+                        [bodo.Time(nanosecond=1)]
+                        + [None] * 6
+                        + [bodo.Time(nanosecond=291)] * 8
+                        + [bodo.Time(nanosecond=985)] * 16
+                        + [None] * 96,
+                    ),
+                }
+            ),
+            id="last",
+        ),
+    ],
+)
+def test_streaming_window_value_fn(func_name, df, answer, memory_leak_check):
+    """
+    Tests the streaming window code for simple aggregations on value functions
+    that support the new sort based implementation.
+    """
+
+    kept_cols = bodo.utils.typing.MetaType((0, 1, 2, 3))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "IDX",
+            "WIN",
+        )
+    )
+    output_col_order = bodo.utils.typing.MetaType(
+        (
+            0,
+            1,
+        )
+    )
+    partition_global = bodo.utils.typing.MetaType((0,))
+    order_global = bodo.utils.typing.MetaType((1,))
+    true_global = bodo.utils.typing.MetaType((True, True))
+    kept_indices = bodo.utils.typing.MetaType((2,))
+    func_names = bodo.utils.typing.MetaType((func_name,))
+    func_input_indices = bodo.utils.typing.MetaType(((3,),))
+    func_scalar_args = bodo.utils.typing.MetaType(((),))
+
+    def impl(in_df):
+        in_table = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(in_df),
+            (),
+            kept_cols,
+            2,
+        )
+        window_state = bodo.libs.stream_window.init_window_state(
+            4001,
+            partition_global,
+            order_global,
+            true_global,
+            true_global,
+            func_names,
+            func_input_indices,
+            kept_indices,
+            True,
+            4,
+            func_scalar_args,
+        )
+        iteration = 0
+        local_len = bodo.hiframes.table.local_len(in_table)
+        is_last_1 = False
+        is_last_2 = False
+        while not (is_last_2):
+            table_section = bodo.hiframes.table.table_local_filter(
+                in_table, slice((iteration * 4096), ((iteration + 1) * 4096))
+            )
+            is_last_1 = (iteration * 4096) >= local_len
+            (
+                is_last_2,
+                _,
+            ) = bodo.libs.stream_window.window_build_consume_batch(
+                window_state, table_section, is_last_1
+            )
+            iteration = iteration + 1
+        is_last_3 = False
+        table_builder_state = bodo.libs.table_builder.init_table_builder_state(5001)
+        while not (is_last_3):
+            (
+                window_output_batch,
+                is_last_3,
+            ) = bodo.libs.stream_window.window_produce_output_batch(window_state, True)
+            bodo.libs.table_builder.table_builder_append(
+                table_builder_state, window_output_batch
+            )
+        bodo.libs.stream_window.delete_window_state(window_state)
+        window_output = bodo.libs.table_builder.table_builder_finalize(
+            table_builder_state
+        )
+        out_table = bodo.hiframes.table.table_subset(
+            window_output, output_col_order, False
+        )
+
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(out_table), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (out_table,), index_var, col_meta
+        )
+        return out_df
+
+    check_func(
+        impl,
+        (df,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=True,
+        only_1DVar=True,
     )
 
 

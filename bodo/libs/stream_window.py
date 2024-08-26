@@ -268,6 +268,8 @@ class WindowStateType(StreamingStateType):
             Set[str]: Set of function names that can support sort.
         """
         return {
+            "first",
+            "last",
             "min",
             "max",
             "count",
@@ -505,6 +507,8 @@ class WindowStateType(StreamingStateType):
                         "bitand_agg",
                         "bitor_agg",
                         "bitxor_agg",
+                        "first",
+                        "last",
                     }:
                         output_type = input_type
                     elif func_name == "sum":

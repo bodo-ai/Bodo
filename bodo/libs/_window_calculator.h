@@ -67,6 +67,8 @@ inline bool supports_calculator_computation(
     // Ensure all of the ftypes are supported in the calculator logic.
     for (int32_t window_func : window_funcs) {
         switch (window_func) {
+            case Bodo_FTypes::first:
+            case Bodo_FTypes::last:
             case Bodo_FTypes::min:
             case Bodo_FTypes::max:
             case Bodo_FTypes::count_if:
