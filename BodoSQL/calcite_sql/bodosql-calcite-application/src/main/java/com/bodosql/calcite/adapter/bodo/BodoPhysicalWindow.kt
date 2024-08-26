@@ -100,6 +100,8 @@ class BodoPhysicalWindow(
             "BITAND_AGG" to listOf(false),
             "BITOR_AGG" to listOf(false),
             "BITXOR_AGG" to listOf(false),
+            "LEAD" to listOf(false, true, true),
+            "LAG" to listOf(false, true, true),
         )
 
     /**
@@ -141,6 +143,9 @@ class BodoPhysicalWindow(
                     SqlKind.CUME_DIST,
                     SqlKind.NTILE,
                     -> true
+                    SqlKind.LEAD,
+                    SqlKind.LAG,
+                    -> !(aggCall.ignoreNulls)
                     else -> false
                 }
             }
@@ -441,29 +446,46 @@ class BodoPhysicalWindow(
             // For each idx'd operand lookup argsMap[funcName][idx]
             // If it is True -> then it is a scalar arg look up the constant in this.constants[op - numCols]
             // append to scalar args. Otherwise, the input refering to a column, add the input ref to columnArgs
-            var constantIdx = 0 // index into this.constants
+            val numFields = this.input.rowType.fieldCount
             val argsList = argsMap[aggCall.operator.name] ?: listOf()
-            if (aggCall.operands.size < argsList.size && aggCall.kind != SqlKind.COUNT) {
+            if (aggCall.operands.size < argsList.size &&
+                aggCall.kind != SqlKind.COUNT &&
+                aggCall.kind != SqlKind.LEAD &&
+                aggCall.kind != SqlKind.LAG
+            ) {
                 throw BodoSQLCodegenException("Too few arguments for window function: $aggCall (expected {${argsList.size}})")
             }
             aggCall.operands.forEachIndexed {
                     it, op ->
+                // Defensive check since op should always be a RexInputRef by the
+                // design of the Window node.
+                if (op !is RexInputRef) {
+                    throw Exception("BodoPhysicalWindowNode: unsupported input to window function '$op'")
+                }
                 if (it >= argsList.size) {
                     throw BodoSQLCodegenException("Too many arguments for window function: $aggCall (expected at most {${argsList.size}})")
                 }
                 val isScalar = argsList[it]
                 if (isScalar) {
-                    val constantArg = this.constants[constantIdx]
+                    val constantArg = this.constants[op.index - numFields]
                     scalarArgs.add(ctx.rexTranslator(null).visitLiteral(constantArg))
-                    constantIdx++
-                } else if (op is RexInputRef) {
-                    funcColumnArgs.add(Expr.IntegerLiteral(op.index))
                 } else {
-                    // Defensive check since op should always be a RexInputRef by the
-                    // design of the Window node.
-                    throw Exception("BodoPhysicalWindowNode: unsupported input to window function '$op'")
+                    funcColumnArgs.add(Expr.IntegerLiteral(op.index))
                 }
             }
+
+            // fill in default scalar arguments if any exist for lead/lag case
+            if (aggCall.operator.name == "LEAD" || aggCall.operator.name == "LAG") {
+                if (aggCall.operands.size == 1) {
+                    // no scalar args supplied (default shift and "default value")
+                    scalarArgs.add(Expr.IntegerLiteral(1))
+                    scalarArgs.add(Expr.None)
+                } else if (aggCall.operands.size == 2) {
+                    // only need to provide default for "default value" (shift supplied)
+                    scalarArgs.add(Expr.None)
+                }
+            }
+
             funcIndices.add(Expr.Tuple(funcColumnArgs))
             funcScalarArgs.add(Expr.Tuple(scalarArgs))
         }

@@ -37,8 +37,12 @@ from bodo.utils.typing import (
     MetaType,
     dtype_to_array_type,
     error_on_unsupported_streaming_arrays,
+    get_common_bodosql_integer_arr_type,
     get_overload_const_int,
+    is_bodosql_integer_arr_type,
+    is_nullable,
     is_overload_none,
+    to_nullable_type,
     unwrap_typeref,
 )
 
@@ -54,6 +58,12 @@ ll.add_symbol(
     stream_window_cpp.window_produce_output_batch_py_entry,
 )
 ll.add_symbol("delete_window_state", stream_window_cpp.delete_window_state)
+
+null_array_type = bodo.libs.null_arr_ext.NullArrayType()
+
+
+def scalar_to_arrtype(scalar):
+    return dtype_to_array_type(bodo.typeof(scalar))
 
 
 class WindowStateType(StreamingStateType):
@@ -102,6 +112,102 @@ class WindowStateType(StreamingStateType):
         self.build_table_type = build_table_type
         super().__init__(
             name=f"WindowStateType({partition_indices=}, {order_by_indices=}, {is_ascending=}, {nulls_last=}, {func_names=}, {func_input_indices=}, {kept_input_indices=}, {n_inputs=}, {window_args=}, {build_table_type=})"
+        )
+
+    @staticmethod
+    def derive_common_arr_types(arr_type1, arr_type2):
+        common_arr_type = arr_type1
+        if common_arr_type == null_array_type:
+            return to_nullable_type(arr_type2)
+
+        if arr_type2 == null_array_type:
+            return to_nullable_type(common_arr_type)
+
+        if is_nullable(arr_type2):
+            common_arr_type = to_nullable_type(common_arr_type)
+
+        if isinstance(common_arr_type, bodo.MapArrayType):
+            assert isinstance(arr_type2, bodo.MapArrayType)
+            common_key_type = WindowStateType.derive_common_arr_types(
+                common_arr_type.key_arr_type, arr_type2.key_arr_type
+            )
+            common_value_type = WindowStateType.derive_common_arr_types(
+                common_arr_type.value_arr_type, arr_type2.value_arr_type
+            )
+            return bodo.MapArrayType(common_key_type, common_value_type)
+
+        if isinstance(common_arr_type, bodo.ArrayItemArrayType):
+            assert isinstance(arr_type2, bodo.ArrayItemArrayType)
+            common_element_type = WindowStateType.derive_common_arr_types(
+                common_arr_type.dtype, arr_type2.dtype
+            )
+            return bodo.ArrayItemArrayType(common_element_type)
+
+        if isinstance(common_arr_type, bodo.StructArrayType):
+            assert isinstance(arr_type2, bodo.StructArrayType)
+            n_fields = len(common_arr_type.data)
+            field_names = common_arr_type.names
+            assert len(arr_type2.data) == n_fields and arr_type2.names == field_names
+            common_field_types = []
+            for arr1_field, arr2_field in zip(common_arr_type.data, arr_type2.data):
+                common_field_types.append(
+                    WindowStateType.derive_common_arr_types(arr1_field, arr2_field)
+                )
+            return bodo.StructArrayType(tuple(common_field_types))
+
+        valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
+        if common_arr_type in valid_str_types:
+            # if the input column is a dictionary keep it as a dict, and if it is a string keep it as string
+            assert arr_type2 in valid_str_types
+            return common_arr_type
+
+        # integer, float, decimal array case
+        # NOTE: here we are assuming that the types are "castable" e.g. Int and Int, Float and Float,
+        # Decimal and Deciaml (with the same scale/precision)
+        if is_bodosql_integer_arr_type(common_arr_type) or isinstance(
+            common_arr_type.dtype, types.Float
+        ):
+            common_arr_type = get_common_bodosql_integer_arr_type(
+                [common_arr_type, arr_type2]
+            )
+
+        # other cases we case the the default to the same type as the input
+        return common_arr_type
+
+    def derive_common_table_types(self):
+        if self.build_table_type == types.unknown:
+            return types.unknown, types.unknown
+
+        build_table_arr_types = list(self.build_table_type.arr_types)
+
+        args_arr_types = []
+
+        for func_name, indices, args in zip(
+            self.func_names, self.func_input_indices, self.window_args
+        ):
+            if func_name not in supported_agg_funcs:
+                raise BodoError(func_name + " is not a supported aggregate function.")
+
+            # we potentially need to do casting...
+            if func_name in ["lead", "lag"]:
+                input_arr_type = build_table_arr_types[indices[0]]
+                shift_amt, default_value = args
+                common_arr_type = WindowStateType.derive_common_arr_types(
+                    input_arr_type, scalar_to_arrtype(default_value)
+                )
+                # cast the shift amt to an int64 numpy for consistency
+                args_arr_types.append(scalar_to_arrtype(np.int64(0)))
+                args_arr_types.append(common_arr_type)
+                build_table_arr_types[indices[0]] = common_arr_type
+            else:
+                # otherwise just add the types of the args
+                args_arr_types.extend(map(scalar_to_arrtype, args))
+
+        if len(args_arr_types) == 0:
+            args_arr_types.append(scalar_to_arrtype(None))
+
+        return bodo.TableType(tuple(build_table_arr_types)), bodo.TableType(
+            tuple(args_arr_types)
         )
 
     def translate_indices(self, indices: pt.List[int]) -> pt.List[int]:
@@ -212,25 +318,14 @@ class WindowStateType(StreamingStateType):
         return types
 
     @cached_property
-    def kept_partition_by_cols(self) -> pt.List[bool]:
-        """
-        Get the indices of the partition by columns that are kept as input.
-        """
-        return [i in self.kept_input_indices_set for i in self.partition_indices]
+    def cols_to_keep(self) -> pt.List[bool]:
+        """Converts kept_input_indices to a bitmask of length num_input_cols
 
-    @cached_property
-    def kept_order_by_cols(self) -> pt.List[bool]:
+        Returns:
+            pt.List[bool]: The bitmask over all input columns where True indicates that we should keep it in the output.
         """
-        Get the indices of the order by columns that are kept as input.
-        """
-        return [i in self.kept_input_indices_set for i in self.order_by_indices]
-
-    @cached_property
-    def kept_input_cols(self) -> pt.List[bool]:
-        """
-        Get the indices of the input columns that are kept as input.
-        """
-        result = []
+        result = [i in self.kept_input_indices_set for i in self.partition_indices]
+        result.extend([i in self.kept_input_indices_set for i in self.order_by_indices])
         for i in range(self.n_inputs):
             if i in self.partition_indices or i in self.order_by_indices:
                 continue
@@ -246,8 +341,8 @@ class WindowStateType(StreamingStateType):
             List[types.ArrayCompatible]: The list of array types used
             by partition by.
         """
-        build_table_type = self.build_table_type
-        if build_table_type == types.unknown:
+        casted_build_table_type, _ = self.derive_common_table_types()
+        if casted_build_table_type == types.unknown:
             # Typing transformations haven't fully finished yet.
             return []
 
@@ -255,7 +350,7 @@ class WindowStateType(StreamingStateType):
         arr_types = []
         num_keys = len(partition_indices)
         arr_types = [
-            self.build_table_type.arr_types[partition_indices[i]]
+            casted_build_table_type.arr_types[partition_indices[i]]
             for i in range(num_keys)
         ]
 
@@ -270,15 +365,15 @@ class WindowStateType(StreamingStateType):
             List[types.ArrayCompatible]: The list of array types used
             by order by.
         """
-        build_table_type = self.build_table_type
-        if build_table_type == types.unknown:
+        casted_build_table_type, _ = self.derive_common_table_types()
+        if casted_build_table_type == types.unknown:
             # Typing transformations haven't fully finished yet.
             return []
         order_by_indices = self.order_by_indices
 
         num_sort_cols = len(order_by_indices)
         arr_types = [
-            self.build_table_type.arr_types[order_by_indices[i]]
+            casted_build_table_type.arr_types[order_by_indices[i]]
             for i in range(num_sort_cols)
         ]
 
@@ -302,7 +397,7 @@ class WindowStateType(StreamingStateType):
         partition_indices = self.partition_indices
         order_by_types = self.order_by_types
         order_by_indices = self.order_by_indices
-        table = self.build_table_type
+        table, _ = self.derive_common_table_types()
         return self._derive_input_type(
             partition_by_types,
             order_by_indices,
@@ -362,9 +457,11 @@ class WindowStateType(StreamingStateType):
         if self.build_table_type == types.unknown:
             return types.unknown
 
+        casted_build_table_type, _ = self.derive_common_table_types()
+
         # The output table puts all the input columns first, in the original order, followed by the window function outputs
         input_arr_types = [
-            self.build_table_type.arr_types[i] for i in self.kept_input_indices
+            casted_build_table_type.arr_types[i] for i in self.kept_input_indices
         ]
         # Now include the output types for any window functions
         window_func_types = get_window_func_types()
@@ -377,7 +474,7 @@ class WindowStateType(StreamingStateType):
                     indices = self.inputs_to_function(func_idx)
 
                     input_index = indices[0]
-                    input_type = self.build_table_type.arr_types[input_index]
+                    input_type = casted_build_table_type.arr_types[input_index]
                     in_dtype = input_type.dtype
 
                     # Here we use the typing rules for sum + division to derive the type for mean. This differs from Snowflake behavior: Snowflake adds 3 to the scale by default. If the input scale is >34 it gives an error
@@ -399,10 +496,12 @@ class WindowStateType(StreamingStateType):
                         len(indices) == 1
                     ), f"Expected 1 input column to function {func_name}, received {len(indices)}"
                     input_index = indices[0]
-                    input_type = self.build_table_type.arr_types[input_index]
+                    input_type = casted_build_table_type.arr_types[input_index]
                     if func_name in {
                         "min",
                         "max",
+                        "lead",
+                        "lag",
                         "bitand_agg",
                         "bitor_agg",
                         "bitxor_agg",
@@ -525,9 +624,7 @@ def _init_window_state(
     order_by_asc_t,
     order_by_na_t,
     n_order_by_keys_t,
-    partition_by_cols_to_keep_t,
-    order_by_cols_to_keep_t,
-    input_cols_to_keep_t,
+    cols_to_keep_t,
     n_input_cols_t,
     func_input_indices_t,
     func_input_offsets_t,
@@ -574,9 +671,7 @@ def _init_window_state(
             order_by_asc,
             order_by_na,
             n_order_by_keys,
-            partition_by_cols_to_keep,
-            order_by_cols_to_keep,
-            input_cols_to_keep,
+            cols_to_keep,
             n_input_cols,
             func_input_indices,
             func_input_offsets,
@@ -609,8 +704,6 @@ def _init_window_state(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
                 lir.IntType(32),
                 lir.IntType(32).as_pointer(),
                 lir.IntType(32).as_pointer(),
@@ -634,9 +727,7 @@ def _init_window_state(
             order_by_asc,
             order_by_na,
             n_order_by_keys,
-            partition_by_cols_to_keep,
-            order_by_cols_to_keep,
-            input_cols_to_keep,
+            cols_to_keep,
             n_input_cols,
             func_input_indices,
             func_input_offsets,
@@ -659,8 +750,6 @@ def _init_window_state(
         types.CPointer(types.bool_),
         types.CPointer(types.bool_),
         types.int64,
-        types.CPointer(types.bool_),
-        types.CPointer(types.bool_),
         types.CPointer(types.bool_),
         types.int32,
         types.CPointer(types.int32),
@@ -775,16 +864,17 @@ def overload_init_window_state(
         window_ftypes.append(supported_agg_funcs.index(fname))
     ftypes_arr = np.array(ftypes, np.int32)
     window_ftypes_arr = np.array(window_ftypes, np.int32)
-    f_in_cols = output_type.f_in_cols
-    f_in_offsets_arr = np.array([0, len(f_in_cols)], np.int32)
-    f_in_cols_arr = np.array(f_in_cols, np.int32)
     n_funcs = len(output_type.func_names)
     sort_ascending_arr = np.array(output_type.is_ascending, np.bool_)
     sort_nulls_last_arr = np.array(output_type.nulls_last, np.bool_)
-    kept_partition_cols_arr = np.array(output_type.kept_partition_by_cols, np.bool_)
-    kept_order_by_cols_arr = np.array(output_type.kept_order_by_cols, np.bool_)
-    kept_input_cols_arr = np.array(output_type.kept_input_cols, np.bool_)
-    n_input_cols = np.int32(len(output_type.kept_input_cols))
+
+    kept_cols_arr = np.array(output_type.cols_to_keep, np.bool_)
+
+    n_input_cols = np.int32(
+        len(output_type.cols_to_keep)
+        - len(output_type.partition_indices)
+        - len(output_type.order_by_indices)
+    )
     n_orderby_cols = len(output_type.order_by_indices)
     func_input_indices_list = []
     func_input_offsets_list = [0]
@@ -803,6 +893,9 @@ def overload_init_window_state(
             window_args_list.extend(window_args)
 
     window_args_tuple = tuple(window_args_list)
+    _, scalar_args_table = output_type.derive_common_table_types()
+    scalar_args_arr_types = scalar_args_table.arr_types
+    in_col_inds = MetaType(tuple(range(len(window_args_tuple))))
 
     if output_type.is_sort_impl:
         # The internal C++ window state object is just for sort implementations
@@ -833,9 +926,7 @@ def overload_init_window_state(
                 sort_ascending_arr.ctypes,
                 sort_nulls_last_arr.ctypes,
                 n_orderby_cols,
-                kept_partition_cols_arr.ctypes,
-                kept_order_by_cols_arr.ctypes,
-                kept_input_cols_arr.ctypes,
+                kept_cols_arr.ctypes,
                 n_input_cols,
                 func_input_indices_arr.ctypes,
                 func_input_offsets_arr.ctypes,
@@ -851,57 +942,86 @@ def overload_init_window_state(
             raise BodoError(
                 "Invalid window state: cannot use hash-based implementation of window functions without partition columns"
             )
-
         # The hash partition window state C++ object is just a group by state.
-        def impl(
-            operator_id,
-            partition_indices,
-            order_by_indices,
-            is_ascending,
-            nulls_last,
-            func_names,
-            func_input_indices,
-            kept_input_indices,
-            allow_work_stealing,
-            n_inputs,
-            window_args,  # list of tuples containing scalar window args
-            op_pool_size_bytes=-1,
-            expected_state_type=None,
-            parallel=False,
-        ):  # pragma: no cover
-            window_args_arr_list = []
-            for window_arg in window_args_tuple:
-                window_arg_arr = bodo.utils.conversion.coerce_scalar_to_array(
-                    window_arg, 1, types.unknown
-                )
-                window_arg_info = bodo.libs.array.array_to_info(window_arg_arr)
-                window_args_arr_list.append(window_arg_info)
-            window_args_table = bodo.libs.array.arr_info_list_to_table(
-                window_args_arr_list
+        func_text = """
+def impl(
+        operator_id,
+        partition_indices,
+        order_by_indices,
+        is_ascending,
+        nulls_last,
+        func_names,
+        func_input_indices,
+        kept_input_indices,
+        allow_work_stealing,
+        n_inputs,
+        window_args,  # list of tuples containing scalar window args
+        op_pool_size_bytes=-1,
+        expected_state_type=None,
+        parallel=False,
+):\n
+"""
+        func_text += "    window_args_arrs = ({},)\n".format(
+            ",".join(
+                [
+                    "bodo.utils.conversion.coerce_scalar_to_array(window_args_tuple[{}], 1, types.unknown)\n".format(
+                        i
+                    )
+                    for i in range(len(window_args_tuple))
+                ]
             )
-
-            output_val = bodo.libs.stream_groupby._init_groupby_state(
-                operator_id,
-                build_arr_dtypes.ctypes,
-                build_arr_array_types.ctypes,
-                n_build_arrs,
-                ftypes_arr.ctypes,
-                window_ftypes_arr.ctypes,
-                f_in_offsets_arr.ctypes,
-                f_in_cols_arr.ctypes,
-                n_funcs,
-                sort_ascending_arr.ctypes,
-                sort_nulls_last_arr.ctypes,
-                n_orderby_cols,
-                kept_partition_cols_arr.ctypes,
-                kept_order_by_cols_arr.ctypes,
-                window_args_table,
-                op_pool_size_bytes,
-                output_type,
-                parallel,
-            )
-            return output_val
-
+        )
+        func_text += "    window_args_table = bodo.hiframes.table.logical_table_to_table((), tuple(window_args_arrs), in_col_inds, 0)\n"
+        func_text += "    casted_args_table = bodo.utils.table_utils.table_astype(window_args_table, scalar_args_table, False, False)\n"
+        func_text += "    window_args_cpp_table = bodo.libs.array.py_data_to_cpp_table(casted_args_table, (), in_col_inds, {})\n".format(
+            len(window_args_tuple)
+        )
+        func_text += """
+    output_val = bodo.libs.stream_groupby._init_groupby_state(
+        operator_id,
+        build_arr_dtypes.ctypes,
+        build_arr_array_types.ctypes,
+        n_build_arrs,
+        ftypes_arr.ctypes,
+        window_ftypes_arr.ctypes,
+        func_input_offsets_arr.ctypes,
+        func_input_indices_arr.ctypes,
+        n_funcs,
+        sort_ascending_arr.ctypes,
+        sort_nulls_last_arr.ctypes,
+        n_orderby_cols,
+        kept_cols_arr.ctypes,
+        window_args_cpp_table,
+        op_pool_size_bytes,
+        output_type,
+        parallel,
+    )
+    return output_val
+"""
+        local_vars = {}
+        global_vars = {
+            "bodo": bodo,
+            "types": types,
+            "build_arr_dtypes": build_arr_dtypes,
+            "build_arr_array_types": build_arr_array_types,
+            "n_build_arrs": n_build_arrs,
+            "ftypes_arr": ftypes_arr,
+            "window_ftypes_arr": window_ftypes_arr,
+            "func_input_offsets_arr": func_input_offsets_arr,
+            "func_input_indices_arr": func_input_indices_arr,
+            "n_funcs": n_funcs,
+            "sort_ascending_arr": sort_ascending_arr,
+            "sort_nulls_last_arr": sort_nulls_last_arr,
+            "n_orderby_cols": n_orderby_cols,
+            "window_args_tuple": window_args_tuple,
+            "scalar_args_arr_types": scalar_args_arr_types,
+            "output_type": output_type,
+            "scalar_args_table": scalar_args_table,
+            "in_col_inds": in_col_inds,
+            "kept_cols_arr": kept_cols_arr,
+        }
+        exec(func_text, global_vars, local_vars)
+        impl = local_vars["impl"]
         return impl
 
 
@@ -923,6 +1043,9 @@ def gen_window_build_consume_batch_impl(window_state: WindowStateType, table, is
     """
     in_col_inds = MetaType(window_state.build_indices)
     n_table_cols = len(in_col_inds)
+    casted_table_type, _ = window_state.derive_common_table_types()
+    if casted_table_type == types.unknown:
+        casted_table_type = table
 
     if window_state.is_sort_impl:
 
@@ -945,7 +1068,13 @@ def gen_window_build_consume_batch_impl(window_state: WindowStateType, table, is
         def impl_window_build_consume_batch(
             window_state, table, is_last
         ):  # pragma: no cover
-            cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
+            casted_table = bodo.utils.table_utils.table_astype(
+                table, casted_table_type, False, False
+            )
+
+            cpp_table = py_data_to_cpp_table(
+                casted_table, (), in_col_inds, n_table_cols
+            )
             # Currently the window state C++ object is just a group by state.
             return bodo.libs.stream_groupby._groupby_build_consume_batch(
                 window_state, cpp_table, is_last, True

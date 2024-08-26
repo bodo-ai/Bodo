@@ -5,6 +5,7 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_chunked_table_builder.h"
+#include "_dict_builder.h"
 #include "_operator_pool.h"
 #include "_query_profile_collector.h"
 #include "_stream_shuffle.h"
@@ -443,14 +444,11 @@ class GroupbyPartition {
      * This will also clear the build state (i.e. all memory associated with the
      * logical hash table).
      *
-     * @param mrnf_part_cols_to_keep Bitmask specifying the partition columns to
-     * retain in the output.
-     * @param mrnf_sort_cols_to_keep Bitmask specifying the order-by columns to
+     * @param cols_to_keep Bitmask specifying the columns to
      * retain in the output.
      * @param output_buffer The output buffer to append the generated output to.
      */
-    void FinalizeMrnf(const std::vector<bool>& mrnf_part_cols_to_keep,
-                      const std::vector<bool>& mrnf_sort_cols_to_keep,
+    void FinalizeMrnf(const std::vector<bool>& cols_to_keep, size_t n_sort_keys,
                       ChunkedTableBuilder& output_buffer);
 
     /**
@@ -471,9 +469,11 @@ class GroupbyPartition {
      * retain in the output.
      * @param output_buffer The output buffer to append the generated output to.
      */
-    void FinalizeWindow(const std::vector<bool>& partition_by_cols_to_keep,
-                        const std::vector<bool>& order_by_cols_to_keep,
-                        ChunkedTableBuilder& output_buffer);
+    void FinalizeWindow(
+        const std::vector<bool>& cols_to_keep_bitmask, size_t n_sort_keys,
+        ChunkedTableBuilder& output_buffer,
+        std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builder,
+        std::vector<int32_t> f_in_offsets, std::vector<int32_t> f_in_cols);
 
    private:
     const size_t num_top_bits = 0;
@@ -1079,10 +1079,9 @@ class GroupbyState {
 
     // Min-Row Number Filter (MRNF) specific attributes.
     AggregationType agg_type = AggregationType::AGGREGATE;
-    const std::vector<bool> mrnf_sort_asc;
-    const std::vector<bool> mrnf_sort_na;
-    const std::vector<bool> mrnf_part_cols_to_keep;
-    const std::vector<bool> mrnf_sort_cols_to_keep;
+    const std::vector<bool> sort_asc;
+    const std::vector<bool> sort_na;
+    const std::vector<bool> cols_to_keep_bitmask;
 
     // The number of iterations between syncs (adjusted by
     // shuffle_state)
@@ -1158,21 +1157,17 @@ class GroupbyState {
     bool global_is_last = false;
     MPI_Comm shuffle_comm;
 
-    GroupbyState(const std::unique_ptr<bodo::Schema>& in_schema_,
-                 std::vector<int32_t> ftypes_,
-                 std::vector<int32_t> window_ftypes_,
-                 std::vector<int32_t> f_in_offsets_,
-                 std::vector<int32_t> f_in_cols_, uint64_t n_keys_,
-                 std::vector<bool> mrnf_sort_asc_vec_,
-                 std::vector<bool> mrnf_sort_na_pos_,
-                 std::vector<bool> mrnf_part_cols_to_keep_,
-                 std::vector<bool> mrnf_sort_cols_to_keep_,
-                 std::shared_ptr<table_info> window_args,
-                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,
-                 int64_t op_id_, int64_t op_pool_size_bytes_,
-                 bool allow_any_work_stealing = true,
-                 std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
-                     key_dict_builders_ = std::nullopt);
+    GroupbyState(
+        const std::unique_ptr<bodo::Schema>& in_schema_,
+        std::vector<int32_t> ftypes_, std::vector<int32_t> window_ftypes_,
+        std::vector<int32_t> f_in_offsets_, std::vector<int32_t> f_in_cols_,
+        uint64_t n_keys_, std::vector<bool> sort_asc_vec_,
+        std::vector<bool> sort_na_pos_, std::vector<bool> cols_to_keep_bitmask_,
+        std::shared_ptr<table_info> window_args, int64_t output_batch_size_,
+        bool parallel_, int64_t sync_iter_, int64_t op_id_,
+        int64_t op_pool_size_bytes_, bool allow_any_work_stealing = true,
+        std::optional<std::vector<std::shared_ptr<DictionaryBuilder>>>
+            key_dict_builders_ = std::nullopt);
 
     ~GroupbyState() { MPI_Comm_free(&this->shuffle_comm); }
 
@@ -1298,7 +1293,7 @@ class GroupbyState {
      * the schema of the dummy_build_table. The dummy_build_table
      * is the 'build_table_buffer' from any of the GroupbyPartitions in this
      * GroupbyState.
-     * We will use 'mrnf_part_cols_to_keep' and 'mrnf_sort_cols_to_keep' to
+     * We will use 'cols_to_keep' to
      * determine the columns to retain.
      *
      * NOTE: The function is idempotent and only initializes once. All
@@ -1316,7 +1311,7 @@ class GroupbyState {
      * is the 'build_table_buffer' from any of the GroupbyPartitions in this
      * GroupbyState. This function will then generate the logic to add the
      * window columns to the output buffer.
-     * We will use 'mrnf_part_cols_to_keep' and 'mrnf_sort_cols_to_keep' to
+     * We will use 'cols_to_keep' to
      * determine the columns to retain.
      *
      * NOTE: The function is idempotent and only initializes once. All
@@ -1622,27 +1617,3 @@ class GroupingSetsState {
     // Dictionary builders that are shared between all group by states.
     std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders;
 };
-
-/**
- * @brief Helper function to get a bitmask specifying the columns
- * to keep in the output in a Window case.
- * We assume that the columns are in the order:
- * - Partition columns
- * - Order-By columns
- * - Remaining columns
- * We will keep the partition columns corresponding to
- * true bits in the partition_by_cols_to_keep bitmask.
- * Similarly for the order-by columns using order_by_cols_to_keep.
- * All remaining columns will be retained unless input_cols_to_keep
- * vetoes any of the remaining columns.
- *
- * @param partition_by_cols_to_keep Bitmask of the partition columns to retain.
- * @param order_by_cols_to_keep Bitmask of the order-by columns to retain.
- * @param order_by_cols_to_keep Bitmask of the input columns to retain.
- * @param n_cols Total number of columns.
- * @return std::vector<bool> Combined bitmask of the columns to retain.
- */
-std::vector<bool> get_window_cols_to_keep_bitmask(
-    const std::vector<bool>& partition_by_cols_to_keep,
-    const std::vector<bool>& order_by_cols_to_keep,
-    const std::vector<bool>& input_cols_to_keep, const size_t n_cols);

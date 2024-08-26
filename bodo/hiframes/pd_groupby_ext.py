@@ -1611,6 +1611,8 @@ def get_window_func_types():
         "bitand_agg": None,
         "bitor_agg": None,
         "bitxor_agg": None,
+        "lead": None,
+        "lag": None,
     }
     return window_func_types
 

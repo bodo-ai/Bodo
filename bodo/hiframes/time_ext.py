@@ -519,24 +519,16 @@ def unbox_time(typ, val, c):
 @lower_constant(TimeType)
 def lower_constant_time(context, builder, ty, pyval):  # pragma: no cover
     """Convert a constant Python time object to its Bodo representation as a nanoseconds integer."""
-    hour_ll = context.get_constant(types.int64, pyval.hour)
-    minute_ll = context.get_constant(types.int64, pyval.minute)
-    second_ll = context.get_constant(types.int64, pyval.second)
-    millisecond_ll = context.get_constant(types.int64, pyval.millisecond)
-    microsecond_ll = context.get_constant(types.int64, pyval.microsecond)
-    nanosecond_ll = context.get_constant(types.int64, pyval.nanosecond)
 
-    nopython_time = _to_nanos_codegen(
-        context,
-        hour_ll,
-        minute_ll,
-        second_ll,
-        millisecond_ll,
-        microsecond_ll,
-        nanosecond_ll,
-    )
-
-    return nopython_time
+    as_nano = (
+        (
+            ((((pyval.hour * 60) + pyval.minute) * 60 + pyval.second) * 1000)
+            + pyval.millisecond
+        )
+        * 1000
+        + pyval.microsecond
+    ) * 1000 + pyval.nanosecond
+    return context.get_constant(types.int64, as_nano)
 
 
 @box(TimeType)

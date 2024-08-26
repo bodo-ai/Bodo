@@ -67,9 +67,7 @@ class WindowState {
     const std::vector<int32_t> window_ftypes;
     const std::vector<bool> order_by_asc;
     const std::vector<bool> order_by_na;
-    const std::vector<bool> partition_by_cols_to_keep;
-    const std::vector<bool> order_by_cols_to_keep;
-    const std::vector<bool> input_cols_to_keep;
+    const std::vector<bool> cols_to_keep_bitmask;
     const std::vector<int32_t> func_input_indices;
     const std::vector<int32_t> func_input_offsets;
 
@@ -105,9 +103,7 @@ class WindowState {
     WindowState(const std::unique_ptr<bodo::Schema>& in_schema_,
                 std::vector<int32_t> window_ftypes_, uint64_t n_keys_,
                 std::vector<bool> order_by_asc_, std::vector<bool> order_by_na_,
-                std::vector<bool> partition_by_cols_to_keep_,
-                std::vector<bool> order_by_cols_to_keep_,
-                std::vector<bool> input_cols_to_keep_,
+                std::vector<bool> cols_to_keep_,
                 std::vector<int32_t> func_input_indices_,
                 std::vector<int32_t> func_input_offsets_,
                 int64_t output_batch_size_, bool parallel_, int64_t sync_iter_,

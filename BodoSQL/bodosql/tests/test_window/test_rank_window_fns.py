@@ -1046,7 +1046,7 @@ def test_ntile(capfd, spark_info, n_bins):
         }
     )
 
-    query = f"SELECT ID, C, NTILE({n_bins}) OVER (PARTITION BY A ORDER BY B ASC NULLS LAST) FROM TABLE1"
+    query = f"SELECT ID, NTILE({n_bins}) OVER (PARTITION BY A ORDER BY B ASC NULLS LAST) FROM TABLE1"
     expected_log_message = "[DEBUG] GroupbyState::FinalizeBuild:"
 
     # Randomize the order of the input data
