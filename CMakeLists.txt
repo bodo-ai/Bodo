@@ -336,6 +336,29 @@ target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt)
 install(TARGETS memory_tester DESTINATION "bodo/tests/")
 
 
+# ---------------------- Cython Target - bodo.transforms.native_typer -----------------------
+add_custom_command(
+  OUTPUT bodo/transforms/native_typer.cpp
+  DEPENDS bodo/transforms/native_typer.pyx
+  VERBATIM
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${CYTHON_EXECUTABLE}" --cplus -3 --output-file "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/native_typer.cpp" "bodo/transforms/native_typer.pyx"
+  COMMENT "Cythonizing Source bodo/transforms/native_typer.pyx into bodo/transforms/native_typer.cpp"
+)
+
+python_add_library(
+  native_typer
+  MODULE WITH_SOABI
+    "bodo/transforms/native_typer.cpp"
+    "bodo/transforms/fast_typer.cpp"
+)
+
+target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/")
+target_link_directories(native_typer PRIVATE ${PYARROW_LIB_DIR})
+target_link_libraries(native_typer PRIVATE fmt)
+install(TARGETS native_typer DESTINATION "bodo/transforms/")
+
+
 # ------------------------- Main Bodo Extension -------------------------
 set(sources_list
   "bodo/io/_csv_json_reader.cpp"
