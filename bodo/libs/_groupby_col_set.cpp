@@ -7,6 +7,7 @@
 #include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_dict_builder.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
@@ -1903,12 +1904,12 @@ void StreamingMRNFColSet::update(const std::vector<grouping_info>& grp_infos,
 
 // ############################## Window ##############################
 
-WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
-                           std::vector<int64_t> _window_funcs,
-                           std::vector<bool>& _asc, std::vector<bool>& _na_pos,
-                           std::shared_ptr<table_info> _window_args,
-                           int _n_input_cols, bool _is_parallel,
-                           bool use_sql_rules)
+WindowColSet::WindowColSet(
+    std::vector<std::shared_ptr<array_info>>& in_cols,
+    std::vector<int64_t> _window_funcs, std::vector<bool>& _asc,
+    std::vector<bool>& _na_pos, std::shared_ptr<table_info> _window_args,
+    int _n_input_cols, bool _is_parallel, bool use_sql_rules,
+    std::vector<std::vector<std::unique_ptr<bodo::DataType>>> _in_arr_types_vec)
     :  // Note the inputCol in BasicColSet is not used by
        // WindowColSet
       BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
@@ -1918,7 +1919,8 @@ WindowColSet::WindowColSet(std::vector<std::shared_ptr<array_info>>& in_cols,
       na_pos(_na_pos),
       window_args(_window_args),
       n_input_cols(_n_input_cols),
-      is_parallel(_is_parallel) {}
+      is_parallel(_is_parallel),
+      in_arr_types_vec(std::move(_in_arr_types_vec)) {}
 
 WindowColSet::~WindowColSet() {}
 
@@ -1984,17 +1986,24 @@ void WindowColSet::alloc_running_value_columns(
     }
 }
 
+void WindowColSet::setOutDictBuilders(
+    std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builders) {
+    this->out_dict_builders = out_dict_builders;
+}
+
 void WindowColSet::update(const std::vector<grouping_info>& grp_infos,
                           bodo::IBufferPool* const pool,
                           std::shared_ptr<::arrow::MemoryManager> mm) {
     window_computation(this->input_cols, window_funcs, this->update_cols,
-                       grp_infos[0], asc, na_pos, window_args, n_input_cols,
-                       is_parallel, use_sql_rules, pool, mm);
+                       this->out_dict_builders, grp_infos[0], asc, na_pos,
+                       window_args, n_input_cols, is_parallel, use_sql_rules,
+                       pool, mm);
 }
 
 std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {
     std::vector<std::unique_ptr<bodo::DataType>> output_types;
-    for (int64_t window_func : window_funcs) {
+    for (size_t i = 0; i < window_funcs.size(); i++) {
+        int64_t window_func = window_funcs[i];
         switch (window_func) {
             case Bodo_FTypes::dense_rank:
             case Bodo_FTypes::rank:
@@ -2009,6 +2018,14 @@ std::vector<std::unique_ptr<bodo::DataType>> WindowColSet::getOutputTypes() {
                     get_groupby_output_dtype(window_func, arr_type, dtype);
                 output_types.push_back(
                     std::make_unique<bodo::DataType>(arr_type, dtype));
+                break;
+            }
+            case Bodo_FTypes::lead:
+            case Bodo_FTypes::lag: {
+                // TODO: cast in_arr_type to nullable if default is null
+                std::unique_ptr<bodo::DataType> in_arr_type =
+                    in_arr_types_vec[i][0]->copy();
+                output_types.push_back(std::move(in_arr_type));
                 break;
             }
             default:
@@ -2064,7 +2081,9 @@ std::unique_ptr<BasicColSet> makeColSet(
     std::shared_ptr<table_info> window_args, int n_input_cols,
     int* udf_n_redvars, std::shared_ptr<table_info> udf_table,
     int udf_table_idx, std::shared_ptr<table_info> nunique_table,
-    bool use_sql_rules) {
+    bool use_sql_rules,
+    std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
+        in_arr_types_vec) {
     BasicColSet* colset;
 
     if ((ftype != Bodo_FTypes::window &&
@@ -2162,7 +2181,8 @@ std::unique_ptr<BasicColSet> makeColSet(
         case Bodo_FTypes::window:
             colset = new WindowColSet(
                 in_cols, transform_funcs, window_ascending, window_na_position,
-                window_args, n_input_cols, is_parallel, use_sql_rules);
+                window_args, n_input_cols, is_parallel, use_sql_rules,
+                std::move(in_arr_types_vec));
             break;
         case Bodo_FTypes::listagg:
 

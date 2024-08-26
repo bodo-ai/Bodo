@@ -1012,8 +1012,34 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
         out_arr = arrow_array_to_bodo(out_arrow_array, pool);
     }
     if (arr_type == bodo_array_type::TIMESTAMPTZ) {
-        throw std::runtime_error(
-            "RetrieveArray_TwoColumns: doesn't support TIMESTAMPTZ");
+        out_arr = alloc_array_top_level(nRowOut, -1, -1, arr_type, dtype);
+        uint64_t size_ts_type = numpy_item_size[Bodo_CTypes::INT64];
+        uint64_t size_offset_type = numpy_item_size[Bodo_CTypes::INT16];
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<std::shared_ptr<array_info>, int64_t> ArrRow =
+                get_iRow(iRow);
+            bool bit = false;
+            if (ArrRow.second >= 0) {
+                std::shared_ptr<array_info> e_col = ArrRow.first;
+                char* out_ts_ptr =
+                    out_arr->data1<bodo_array_type::TIMESTAMPTZ>() +
+                    size_ts_type * iRow;
+                char* in_ts_ptr = e_col->data1<bodo_array_type::TIMESTAMPTZ>() +
+                                  size_ts_type * ArrRow.second;
+                char* out_offset_ptr =
+                    out_arr->data2<bodo_array_type::TIMESTAMPTZ>() +
+                    size_offset_type * iRow;
+                char* in_offset_ptr =
+                    e_col->data1<bodo_array_type::TIMESTAMPTZ>() +
+                    size_offset_type * ArrRow.second;
+
+                memcpy(out_ts_ptr, in_ts_ptr, size_ts_type);
+                memcpy(out_offset_ptr, in_offset_ptr, size_offset_type);
+                bit = e_col->get_null_bit<bodo_array_type::TIMESTAMPTZ>(
+                    ArrRow.second);
+            }
+            out_arr->set_null_bit<bodo_array_type::TIMESTAMPTZ>(iRow, bit);
+        }
     }
     return out_arr;
 }

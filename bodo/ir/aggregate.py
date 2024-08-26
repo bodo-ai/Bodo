@@ -302,6 +302,8 @@ supported_agg_funcs = [
     "conditional_change_event",
     "any_value",
     "grouping",
+    "lead",
+    "lag",
 ]
 
 # This is just a list of the functions that can be used with
@@ -356,6 +358,8 @@ supported_window_funcs = [
     "any_value",
     "first",
     "last",
+    "lead",
+    "lag",
 ]
 
 

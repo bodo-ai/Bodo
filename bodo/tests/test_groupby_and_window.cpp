@@ -199,9 +199,11 @@ std::shared_ptr<array_info> make_result_output(size_t n) {
         out_arrs.push_back(make_arr<out_arr_type, out_dtype>(n));              \
         std::shared_ptr<array_info> expected_out =                             \
             make_result_output<out_arr_type, out_dtype, return_type>(n);       \
-        window_computation(input_arrs, {ftype}, out_arrs, grp_info, asc_vect,  \
-                           na_pos_vect, window_args, n_input_cols, false,      \
-                           true);                                              \
+        std::vector<std::shared_ptr<DictionaryBuilder>> out_dict_builders = {  \
+            nullptr};                                                          \
+        window_computation(input_arrs, {ftype}, out_arrs, out_dict_builders,   \
+                           grp_info, asc_vect, na_pos_vect, window_args,       \
+                           n_input_cols, false, true);                         \
         std::stringstream ss1;                                                 \
         std::stringstream ss2;                                                 \
         DEBUG_PrintColumn(ss1, out_arrs[0]);                                   \
@@ -248,7 +250,7 @@ std::shared_ptr<array_info> make_result_output(size_t n) {
     }
 
 static bodo::tests::suite tests([] {
-    bodo::tests::test("ensure_all_window_ftypes tested", [] {
+    bodo::tests::test("ensure_all_window_ftypes_tested", [] {
         /* Every time a new ftype is added, we must add an all-null
          * test to this file for that ftype if it is a window function.
          * Once a test is added, the ftype is added to the set
@@ -276,7 +278,8 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::ratio_to_report,
             Bodo_FTypes::conditional_true_event,
             Bodo_FTypes::conditional_change_event,
-        };
+            Bodo_FTypes::lead,
+            Bodo_FTypes::lag};
         std::set<size_t> untested_window_function_ftypes = {
             // These functions do not have a permanent all-null C++ test since
             // the result is technically nondeterministic.
@@ -421,25 +424,42 @@ static bodo::tests::suite tests([] {
         std::shared_ptr<table_info> sliding_frame(
             new table_info({idx1_col, idx0_col}));
 
-#define TEST_SELECT_WINDOW_FNS(arr_type, dtype)                              \
-    TEST_WINDOW_FN(Bodo_FTypes::any_value, arr_type, dtype, arr_type, dtype, \
-                   {}, {}, nullptr, 1, 0, empty_return_enum::NULL_OUTPUT);   \
-    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {}, \
-                   {}, empty_frame, 1, 0, empty_return_enum::NULL_OUTPUT);   \
-    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {}, \
-                   {}, prefix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);  \
-    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {}, \
-                   {}, suffix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);  \
-    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {}, \
-                   {}, sliding_frame, 1, 0, empty_return_enum::NULL_OUTPUT); \
-    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},  \
-                   {}, empty_frame, 1, 0, empty_return_enum::NULL_OUTPUT);   \
-    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},  \
-                   {}, prefix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);  \
-    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},  \
-                   {}, suffix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);  \
-    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},  \
-                   {}, sliding_frame, 1, 0, empty_return_enum::NULL_OUTPUT);
+        std::shared_ptr<array_info> null_default;
+        std::shared_ptr<table_info> window_args;
+        std::shared_ptr<array_info> one_arr =
+            alloc_numpy(1, Bodo_CTypes::INT64);
+        getv<int64_t>(one_arr, 0) = 1;
+
+#define TEST_SELECT_WINDOW_FNS(arr_type, dtype)                                \
+    TEST_WINDOW_FN(Bodo_FTypes::any_value, arr_type, dtype, arr_type, dtype,   \
+                   {}, {}, nullptr, 1, 0, empty_return_enum::NULL_OUTPUT);     \
+    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {},   \
+                   {}, empty_frame, 1, 0, empty_return_enum::NULL_OUTPUT);     \
+    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {},   \
+                   {}, prefix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);    \
+    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {},   \
+                   {}, suffix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);    \
+    TEST_WINDOW_FN(Bodo_FTypes::first, arr_type, dtype, arr_type, dtype, {},   \
+                   {}, sliding_frame, 1, 0, empty_return_enum::NULL_OUTPUT);   \
+    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},    \
+                   {}, empty_frame, 1, 0, empty_return_enum::NULL_OUTPUT);     \
+    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},    \
+                   {}, prefix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);    \
+    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},    \
+                   {}, suffix_frame, 1, 0, empty_return_enum::NULL_OUTPUT);    \
+    TEST_WINDOW_FN(Bodo_FTypes::last, arr_type, dtype, arr_type, dtype, {},    \
+                   {}, sliding_frame, 1, 0, empty_return_enum::NULL_OUTPUT);   \
+    null_default = make_all_null_arr<arr_type, dtype>(1);                      \
+    {                                                                          \
+        std::shared_ptr<table_info> window_args_(                              \
+            new table_info({one_arr, null_default}));                          \
+        window_args = window_args_;                                            \
+    }                                                                          \
+    TEST_WINDOW_FN(Bodo_FTypes::lead, arr_type, dtype, arr_type, dtype, {},    \
+                   {}, window_args, 1, 0, empty_return_enum::NULL_OUTPUT);     \
+    TEST_WINDOW_FN(Bodo_FTypes::lag, arr_type, dtype, arr_type, dtype, {}, {}, \
+                   window_args, 1, 0, empty_return_enum::NULL_OUTPUT);
+
         TEST_SELECT_WINDOW_FNS(bodo_array_type::NULLABLE_INT_BOOL,
                                Bodo_CTypes::INT8);
         TEST_SELECT_WINDOW_FNS(bodo_array_type::NULLABLE_INT_BOOL,
@@ -687,7 +707,7 @@ static bodo::tests::suite tests([] {
                        sliding_frame, 1, 0, empty_return_enum::ZERO);
     });
 
-    bodo::tests::test("ensure_all_groupby_ftypes tested", [] {
+    bodo::tests::test("ensure_all_groupby_ftypes_tested", [] {
         /* Every time a new ftype is added, we must add an all-null
          * test to this file for that ftype if it is a BodoSQL groupby
          * function. Once a test is added, the ftype is added to the set
@@ -777,7 +797,8 @@ static bodo::tests::suite tests([] {
             Bodo_FTypes::conditional_true_event,
             Bodo_FTypes::conditional_change_event,
             Bodo_FTypes::grouping,
-        };
+            Bodo_FTypes::lead,
+            Bodo_FTypes::lag};
         for (size_t i = 0; i < Bodo_FTypes::n_ftypes; i++) {
             bool is_groupby_fn_tested =
                 tested_groupby_function_ftypes.contains(i);

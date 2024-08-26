@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include "_bodo_common.h"
+#include "_dict_builder.h"
 #include "_groupby.h"
 #include "_groupby_common.h"
 #include "_groupby_update.h"
@@ -200,6 +201,27 @@ class BasicColSet {
     }
 
     /**
+     * @brief For window functions
+     *
+     * @return std::vector<int32_t>
+     */
+    virtual const std::vector<int64_t> getFtypes() {
+        throw std::runtime_error(
+            "getOutputTypes() not implemented for this colset");
+    }
+
+    /**
+     * @brief For window col set
+     *
+     * @param out_dict_builder The dictionary builders for the output columns
+     */
+    virtual void setOutDictBuilders(
+        std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builder) {
+        throw std::runtime_error(
+            "setOutDictBuilders not implemented for this colset");
+    }
+
+    /**
      * @brief Get combine/update column types for this ColSet function with the
      * given input array types. Should match arrays allocated with
      * alloc_update_or_combine_columns().
@@ -213,10 +235,16 @@ class BasicColSet {
         const std::shared_ptr<bodo::Schema>& in_schema) const {
         // TODO[BSE-578]: implement getRunningValueColumnTypes() for other
         // colsets that can have more update columns
+        // place holder arr typ or dtype in the case there are no input columns
+        bodo_array_type::arr_type_enum arr_typ = bodo_array_type::NUMPY;
+        Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::INT8;
+        if (in_schema->column_types.size() > 0) {
+            arr_typ = in_schema->column_types[0]->array_type;
+            dtype = in_schema->column_types[0]->c_type;
+        }
+
         std::tuple<bodo_array_type::arr_type_enum, Bodo_CTypes::CTypeEnum>
-            out_arr_type = get_groupby_output_dtype(
-                ftype, in_schema->column_types[0]->array_type,
-                in_schema->column_types[0]->c_type);
+            out_arr_type = get_groupby_output_dtype(ftype, arr_typ, dtype);
         std::vector<std::unique_ptr<bodo::DataType>> datatypes;
         datatypes.push_back(std::make_unique<bodo::DataType>(
             std::get<0>(out_arr_type), std::get<1>(out_arr_type)));
@@ -396,7 +424,9 @@ class WindowColSet : public BasicColSet {
                  std::vector<int64_t> _window_funcs, std::vector<bool>& _asc,
                  std::vector<bool>& _na_pos,
                  std::shared_ptr<table_info> _window_args, int n_input_cols,
-                 bool _is_parallel, bool use_sql_rules);
+                 bool _is_parallel, bool use_sql_rules,
+                 std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
+                     _in_arr_types_vec);
     virtual ~WindowColSet();
 
     /**
@@ -447,12 +477,21 @@ class WindowColSet : public BasicColSet {
         std::vector<std::shared_ptr<array_info>> new_in_cols) override {
         this->input_cols = new_in_cols;
     }
+
+    virtual const std::vector<int64_t> getFtypes() override {
+        return this->window_funcs;
+    }
+
     virtual void clear() override {
         BasicColSet::clear();
         this->input_cols.clear();
     }
 
     virtual std::vector<std::unique_ptr<bodo::DataType>> getOutputTypes()
+        override;
+
+    virtual void setOutDictBuilders(
+        std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builder)
         override;
 
    private:
@@ -464,6 +503,9 @@ class WindowColSet : public BasicColSet {
     const int n_input_cols;
     const bool is_parallel;  // whether input column data is distributed or
                              // replicated
+    const std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
+        in_arr_types_vec;
+    std::vector<std::shared_ptr<DictionaryBuilder>> out_dict_builders;
 };
 
 /**
@@ -1533,6 +1575,8 @@ class NgroupColSet : public BasicColSet {
  * special handling
  * @param use_sql_rules Should we use SQL rules for NULL handling/initial
  * values.
+ * @param[in] in_arr_types_vec A vector contains vectors of input types for each
+ * function.
  * @return A pointer to the created col set.
  */
 std::unique_ptr<BasicColSet> makeColSet(
@@ -1545,4 +1589,6 @@ std::unique_ptr<BasicColSet> makeColSet(
     int* udf_n_redvars = nullptr,
     std::shared_ptr<table_info> udf_table = nullptr, int udf_table_idx = 0,
     std::shared_ptr<table_info> nunique_table = nullptr,
-    bool use_sql_rules = false);
+    bool use_sql_rules = false,
+    std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec =
+        {});

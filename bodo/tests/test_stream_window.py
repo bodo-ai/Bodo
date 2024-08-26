@@ -1387,3 +1387,244 @@ def test_ntile(memory_leak_check):
         reset_index=True,
         sort_output=True,
     )
+
+
+@pytest.mark.parametrize(
+    "default_val, in_col, out_col",
+    [
+        pytest.param(
+            np.int64(-1),
+            np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
+            np.array([70, 90, -1, 60, 50, -1], dtype=np.int64),
+            id="upcast_input",
+        ),
+        pytest.param(
+            np.int8(-1),
+            np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
+            np.array([70, 90, -1, 60, 50, -1], dtype=np.int32),
+            id="upcast_default",
+        ),
+        pytest.param(
+            None,
+            np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
+            pd.array([70, 90, None, 60, 50, None], dtype=pd.Int32Dtype),
+            id="null_default",
+        ),
+        pytest.param(
+            None,
+            ["apple", "orange", "banana", "pear", "lemon", "lime"],
+            ["pear", "lime", None, "banana", "orange", None],
+            id="string-null",
+        ),
+        pytest.param(
+            "hi",
+            ["apple", "orange", "banana", "pear", "lemon", "lime"],
+            ["pear", "lime", "hi", "banana", "orange", "hi"],
+            id="string-dict",
+        ),
+        pytest.param(
+            None,
+            pd.array(
+                [
+                    {
+                        "x": i,
+                        "y": "hi" + str(i),
+                    }
+                    for i in range(6)
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("x", pa.int64()), pa.field("y", pa.string())])
+                ),
+            ),
+            pd.array(
+                [
+                    (
+                        None
+                        if name is None
+                        else {
+                            "x": int(name),
+                            "y": "hi" + name,
+                        }
+                    )
+                    for name in ["3", "5", None, "2", "1", None]
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.struct(
+                        [pa.field("x", pa.int64(), True), pa.field("y", pa.string())]
+                    )
+                ),
+            ),
+            id="struct_null",
+        ),
+        pytest.param(
+            None,
+            pd.array(
+                [Decimal(str(i)) for i in [40, 50, 60, 70, 80, 90]],
+                dtype=pd.ArrowDtype(pa.decimal128(32, 0)),
+            ),
+            pd.array(
+                [
+                    None if i == None else Decimal(str(i))
+                    for i in [70, 90, None, 60, 50, None]
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(32, 0)),
+            ),
+            id="decimal",
+        ),
+        pytest.param(
+            np.float32(-1),
+            np.array([40, 50, 60, 70, 80, 90], dtype=np.float64),
+            np.array([70, 90, -1, 60, 50, -1], dtype=np.float64),
+            id="float",
+        ),
+        pytest.param(
+            None,
+            pd.array(
+                [
+                    ["40", "1", "2", "3"],
+                    ["50", "2", "3"],
+                    ["60", "6", "7"],
+                    ["70", "0", "1"],
+                    ["80", "2"],
+                    ["90", "0"],
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            pd.array(
+                [
+                    ["70", "0", "1"],
+                    ["90", "0"],
+                    None,
+                    ["60", "6", "7"],
+                    ["50", "2", "3"],
+                    None,
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_string())),
+            ),
+            id="array_null",
+        ),
+        pytest.param(
+            None,
+            pd.array(
+                ({x: x} for x in [40, 50, 60, 70, 80, 90]),
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
+            ),
+            pd.array(
+                (None if x is None else {x: x} for x in [70, 90, None, 60, 50, None]),
+                dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
+            ),
+            id="map_null",
+        ),
+    ],
+)
+def test_lead_lag(default_val, in_col, out_col, memory_leak_check):
+    """
+    Test three basic senarios for casting (w/out Nulls):
+    1. Cast input table
+    2. Cast default val
+    3. Cast input table and default val
+
+    SELECT A, B, C, LEAD(C, 1, default_val) OVER (PARTITION BY A ORDER BY B) FROM TABLE
+    """
+    func_name = "lead"
+    in_df = pd.DataFrame(
+        {
+            "A": ["A", "B", "A", "A", "B", "B"],
+            "B": [1, 5, 4, 2, 3, 6],
+            "C": in_col,
+        }
+    )
+
+    n_inputs = len(in_df.columns)
+    kept_cols = bodo.utils.typing.MetaType(tuple(range(n_inputs)))
+    col_meta = bodo.utils.typing.ColNamesMetaType(
+        (
+            "A",
+            "B",
+            "C",
+            "OUT",
+        )
+    )
+    partition_global = bodo.utils.typing.MetaType((0,))
+    order_global = bodo.utils.typing.MetaType((1,))
+    true_global = bodo.utils.typing.MetaType(tuple([True]))
+    kept_indices = bodo.utils.typing.MetaType((0, 1, 2))
+    func_names = bodo.utils.typing.MetaType((func_name,))
+    func_input_indices = bodo.utils.typing.MetaType(((2,),))
+    func_scalar_args = bodo.utils.typing.MetaType(((1, default_val),))
+
+    def impl(in_df):
+        in_table = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(in_df),
+            (),
+            kept_cols,
+            n_inputs,
+        )
+        window_state = bodo.libs.stream_window.init_window_state(
+            4001,
+            partition_global,
+            order_global,
+            true_global,
+            true_global,
+            func_names,
+            func_input_indices,
+            kept_indices,
+            True,
+            n_inputs,
+            func_scalar_args,
+        )
+        iteration = 0
+        local_len = bodo.hiframes.table.local_len(in_table)
+        is_last_1 = False
+        is_last_2 = False
+        while not (is_last_2):
+            table_section = bodo.hiframes.table.table_local_filter(
+                in_table, slice((iteration * 4096), ((iteration + 1) * 4096))
+            )
+            is_last_1 = (iteration * 4096) >= local_len
+            (
+                is_last_2,
+                _,
+            ) = bodo.libs.stream_window.window_build_consume_batch(
+                window_state, table_section, is_last_1
+            )
+            iteration = iteration + 1
+        is_last_3 = False
+        table_builder_state = bodo.libs.table_builder.init_table_builder_state(5001)
+        while not (is_last_3):
+            (
+                window_output_batch,
+                is_last_3,
+            ) = bodo.libs.stream_window.window_produce_output_batch(window_state, True)
+            bodo.libs.table_builder.table_builder_append(
+                table_builder_state, window_output_batch
+            )
+        bodo.libs.stream_window.delete_window_state(window_state)
+        window_output = bodo.libs.table_builder.table_builder_finalize(
+            table_builder_state
+        )
+        index_var = bodo.hiframes.pd_index_ext.init_range_index(
+            0, len(window_output), 1, None
+        )
+        out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (window_output,), index_var, col_meta
+        )
+        return out_df
+
+    out_df = pd.DataFrame(
+        {
+            "A": ["A", "B", "A", "A", "B", "B"],
+            "B": [1, 5, 4, 2, 3, 6],
+            "C": in_col,
+            "OUT": out_col,
+        }
+    )
+
+    check_func(
+        impl,
+        (in_df,),
+        py_output=out_df,
+        check_dtype=True,
+        reset_index=True,
+        sort_output=True,
+    )

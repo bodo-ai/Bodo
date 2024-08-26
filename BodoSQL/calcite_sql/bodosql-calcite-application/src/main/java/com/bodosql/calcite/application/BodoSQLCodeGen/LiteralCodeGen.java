@@ -125,8 +125,13 @@ public class LiteralCodeGen {
             return new Expr.Raw("np.float32(" + node.getValue().toString() + ")");
           case REAL:
           case DOUBLE:
-          case DECIMAL:
             return new Expr.Raw("np.float64(" + node.getValue().toString() + ")");
+          case DECIMAL:
+            if (node.getType().getScale() > 0) {
+              return new Expr.Raw("np.float64(" + node.getValue().toString() + ")");
+            } else {
+              return new Expr.Raw("np.int64(" + node.getValue().toString() + ")");
+            }
             // TODO: Determine why this case exists
           case SYMBOL:
             return new Expr.Raw(node.getValue().toString());

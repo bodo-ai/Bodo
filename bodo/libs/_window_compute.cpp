@@ -8,6 +8,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
+#include "_dict_builder.h"
 #include "_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
@@ -788,6 +789,69 @@ void conditional_change_event_computation(
 }
 
 /**
+ * @brief Helper function for lead/lag that translates an array of sorted
+ * indices and group info to an list of unsorted indices
+ *
+ * Loops over sorted indices
+ * Translate sortedIdx -> sortedIdx + shift (do bounds check)
+ * IdxArray[unsort(sortedIdx)] = unsort(sortedIdx + shift)
+ *
+ * @param sorted_groups
+ * @param sorted_idx
+ * @param shifted_idxs
+ * @param shift_amt
+ * @tparam ignore_nulls
+ */
+template <bool ignore_nulls>
+    requires(!ignore_nulls)
+void translate_indices(std::shared_ptr<array_info> sorted_groups,
+                       std::shared_ptr<array_info> sorted_idx,
+                       std::vector<int64_t>& shifted_idxs, int64_t shift_amt) {
+    const int64_t n_rows = sorted_groups->length;
+    const int64_t out_of_bounds_val = -1;
+    // loop over sorted array of indexes and perform the shift.
+    // Check if the shifted index is out of bounds (for the group or the entire
+    // column)
+    for (int64_t i = 0; i < n_rows; i++) {
+        int64_t curr_group = getv<int64_t>(sorted_groups, i);
+        int64_t shifted_idx = i + shift_amt;
+        // the index to populate in the output column
+        int64_t unsorted_idx = getv<int64_t>(sorted_idx, i);
+        // bounds check
+        if (shifted_idx < 0 || shifted_idx >= n_rows ||
+            getv<int64_t>(sorted_groups, shifted_idx) != curr_group) {
+            shifted_idxs[unsorted_idx] = out_of_bounds_val;
+        } else {
+            int64_t unsorted_shifted_idx =
+                getv<int64_t>(sorted_idx, shifted_idx);
+            shifted_idxs[unsorted_idx] = unsorted_shifted_idx;
+        }
+    }
+}
+
+template <bool ignore_nulls>
+void lead_lag_computation(std::shared_ptr<array_info>& out_arr,
+                          std::shared_ptr<array_info> sorted_groups,
+                          std::shared_ptr<array_info> sorted_idx,
+                          std::shared_ptr<array_info> in_col,
+                          std::shared_ptr<array_info> default_value,
+                          int64_t shift_amt) {
+    size_t n_rows = out_arr->length;
+
+    std::vector<int64_t> shifted_idxs(n_rows, 0);
+
+    // TODO refactor retrieve array two column so that this only needs to be a
+    // single row
+    std::vector<int64_t> default_idxs(n_rows, 0);
+
+    translate_indices<ignore_nulls>(sorted_groups, sorted_idx, shifted_idxs,
+                                    shift_amt);
+
+    out_arr = RetrieveArray_TwoColumns(in_col, default_value, shifted_idxs,
+                                       default_idxs);
+}
+
+/**
  * @brief Get the window frame args from window args table.
  *
  * @param window_args The table of scalar window args containing the frame
@@ -831,18 +895,19 @@ std::tuple<int64_t*, int64_t*> get_window_frame_args(
     return std::make_tuple(frame_lo, frame_hi);
 }
 
-void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
-                        std::vector<int64_t> window_funcs,
-                        std::vector<std::shared_ptr<array_info>> out_arrs,
-                        grouping_info const& grp_info,
-                        const std::vector<bool>& asc_vect,
-                        const std::vector<bool>& na_pos_vect,
-                        const std::shared_ptr<table_info> window_args,
-                        int n_input_cols, bool is_parallel, bool use_sql_rules,
-                        bodo::IBufferPool* const pool,
-                        std::shared_ptr<::arrow::MemoryManager> mm) {
+void window_computation(
+    std::vector<std::shared_ptr<array_info>>& input_arrs,
+    std::vector<int64_t> window_funcs,
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builders,
+    grouping_info const& grp_info, const std::vector<bool>& asc_vect,
+    const std::vector<bool>& na_pos_vect,
+    const std::shared_ptr<table_info> window_args, int n_input_cols,
+    bool is_parallel, bool use_sql_rules, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t window_arg_offset = 0;
     int64_t window_col_offset = input_arrs.size() - n_input_cols;
+    int64_t builders_offset = out_dict_builders.size() - n_input_cols;
     std::vector<std::shared_ptr<array_info>> orderby_arrs(
         input_arrs.begin(), input_arrs.begin() + window_col_offset);
     std::shared_ptr<table_info> iter_table = nullptr;
@@ -1003,6 +1068,42 @@ void window_computation(std::vector<std::shared_ptr<array_info>>& input_arrs,
                                          iter_table->columns[idx_col], nullptr,
                                          nullptr, window_funcs[i]);
                 window_col_offset++;
+                break;
+            }
+            case Bodo_FTypes::lead:
+            case Bodo_FTypes::lag: {
+                std::shared_ptr<array_info> input_col =
+                    input_arrs[window_col_offset];
+                // shift amount is standardized so that we can do one function
+                // call
+                int64_t shift_amt =
+                    getv<int64_t>(window_args->columns[window_arg_offset], 0);
+                shift_amt = (window_funcs[i] == Bodo_FTypes::lag)
+                                ? -1 * shift_amt
+                                : shift_amt;
+                // default value could be any type or NULL
+                std::shared_ptr<array_info> default_value =
+                    window_args->columns[window_arg_offset + 1];
+
+                // if there is a dictionary builder for the input/output
+                // we need to unify with the default value.
+                if (out_dict_builders[builders_offset] != nullptr) {
+                    default_value = out_dict_builders[builders_offset]
+                                        ->UnifyDictionaryArray(default_value);
+                    // technically we shouldn't need to do this but
+                    // RetrieveArray_TwoColumn was complaining...
+                    set_array_dict_from_builder(
+                        input_col, out_dict_builders[builders_offset]);
+                }
+
+                // TODO add ignore nulls case
+                lead_lag_computation<false>(out_arrs[i], iter_table->columns[0],
+                                            iter_table->columns[idx_col],
+                                            input_col, default_value,
+                                            shift_amt);
+                window_col_offset++;
+                builders_offset++;
+                window_arg_offset = window_arg_offset + 2;
                 break;
             }
             default:

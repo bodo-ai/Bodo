@@ -1011,6 +1011,8 @@ def parse_dtype(dtype, func_name=None):
         dtype,
         (
             types.Number,
+            types.NPDatetime,
+            bodo.TimestampTZType,
             bodo.Decimal128Type,
             bodo.StructType,
             bodo.MapScalarType,

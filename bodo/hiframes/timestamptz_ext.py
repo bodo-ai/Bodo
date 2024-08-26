@@ -7,6 +7,7 @@ import pandas as pd
 import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.imputils import lower_constant
 from numba.extending import (
     NativeValue,
     box,
@@ -293,9 +294,20 @@ def init_timestamptz(typingctx, utc_timestamp, offset_minutes):
     )
 
 
+@lower_constant(TimestampTZType)
+def constant_timestamptz(context, builder, ty, pyval):
+    # Extracting constants. Inspired from @lower_constant(types.Complex)
+    # in numba/numba/targets/numbers.py
+    offset_minutes = context.get_constant(types.int16, pyval.offset_minutes)
+    utc_timestamp = context.get_constant(
+        pd_timestamp_tz_naive_type, pyval.utc_timestamp
+    )
+
+    return lir.Constant.literal_struct([utc_timestamp, offset_minutes])
+
+
 def init_timestamptz_from_local(local_timestamp, offset_minutes):  # pragma: no cover
-    # Dummy used for overload
-    pass
+    return bodo.TimestampTZ.fromLocal(local_timestamp, offset_minutes)
 
 
 @overload(init_timestamptz_from_local)
@@ -345,8 +357,8 @@ def create_cmp_op_overload(op):
         if isinstance(lhs, TimestampTZType) and is_overload_none(rhs):
             # When we compare TimestampTZ and None in order to sort or take extreme values
             # in a series/array of TimestampTZ, TimestampTZ() > None, TimestampTZ() < None should all return True
-            return (
-                lambda lhs, rhs: False if op is operator.eq else True
+            return lambda lhs, rhs: (
+                False if op is operator.eq else True
             )  # pragma: no cover
 
         if is_overload_none(lhs) and isinstance(rhs, TimestampTZType):

@@ -10,9 +10,11 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_chunked_table_builder.h"
+#include "_dict_builder.h"
 #include "_distributed.h"
 #include "_groupby_col_set.h"
 #include "_groupby_common.h"
+#include "_groupby_ftypes.h"
 #include "_memory_budget.h"
 #include "_query_profile_collector.h"
 #include "_shuffle.h"
@@ -466,8 +468,6 @@ std::shared_ptr<table_info> eval_groupby_funcs_helper(
  * @param f_in_offsets Must be length 2 and must be [0, f_in_cols.size()].
  * @param mrnf_sort_asc Must be the same length as mrnf_sort_na.
  * @param mrnf_sort_na Must be the same length as mrnf_sort_asc.
- * @param mrnf_sort_cols_to_keep Must be the same length as mrnf_sort_asc.
- * @param mrnf_part_cols_to_keep Must be of length n_keys.
  * @param in_arr_n_cols Number of columns in the input table.
  * @param n_keys Number of partitioning keys.
  * @param caller Name of the caller function. Used in runtime-errors.
@@ -477,8 +477,6 @@ void validate_mrnf_args(const std::vector<int32_t>& ftypes,
                         const std::vector<int32_t>& f_in_offsets,
                         const std::vector<bool>& mrnf_sort_asc,
                         const std::vector<bool>& mrnf_sort_na,
-                        const std::vector<bool>& mrnf_sort_cols_to_keep,
-                        const std::vector<bool>& mrnf_part_cols_to_keep,
                         size_t in_arr_n_cols, uint64_t n_keys,
                         std::string caller) {
     if (ftypes.size() != 1) {
@@ -486,20 +484,6 @@ void validate_mrnf_args(const std::vector<int32_t>& ftypes,
             fmt::format("{}: Min Row-Number Filter cannot be "
                         "combined with other aggregate functions.",
                         caller));
-    }
-    if ((mrnf_sort_asc.size() != mrnf_sort_na.size()) ||
-        (mrnf_sort_asc.size() != mrnf_sort_cols_to_keep.size())) {
-        throw std::runtime_error(
-            fmt::format("{}: Min Row-Number Filter arguments "
-                        "are not the correct size.",
-                        caller));
-    }
-    if (mrnf_part_cols_to_keep.size() != n_keys) {
-        throw std::runtime_error(
-            fmt::format("{}: Size of bitmask "
-                        "specifying partition columns to retain is not the "
-                        "correct size. Expected {} but got {} instead.",
-                        caller, n_keys, mrnf_part_cols_to_keep.size()));
     }
     // f_in_cols should be:
     //   [<n_keys>, <n_keys+1>, ..., <in_arr_n_cols-1>]
@@ -518,37 +502,6 @@ void validate_mrnf_args(const std::vector<int32_t>& ftypes,
                         "for Min Row-Number Filter!",
                         caller));
     }
-}
-
-std::vector<bool> get_window_cols_to_keep_bitmask(
-    const std::vector<bool>& partition_by_cols_to_keep,
-    const std::vector<bool>& order_by_cols_to_keep,
-    const std::vector<bool>& input_cols_to_keep, const size_t n_cols) {
-    std::vector<bool> cols_to_keep(n_cols, false);
-    // Set bitmask to true for partition columns to keep based on
-    // partition_by_cols_to_keep.
-    for (size_t i = 0; i < partition_by_cols_to_keep.size(); i++) {
-        if (partition_by_cols_to_keep[i]) {
-            cols_to_keep[i] = true;
-        }
-    }
-    // Set bitmask to true for order-by columns to keep based on
-    // order_by_cols_to_keep.
-    for (size_t i = 0; i < order_by_cols_to_keep.size(); i++) {
-        if (order_by_cols_to_keep[i]) {
-            cols_to_keep[partition_by_cols_to_keep.size() + i] = true;
-        }
-    }
-    // Set bitmask to true for all the remaining columns if they agree with
-    // input_cols_to_keep.
-    size_t input_col_idx = 0;
-    for (size_t i =
-             (partition_by_cols_to_keep.size() + order_by_cols_to_keep.size());
-         i < n_cols; i++) {
-        cols_to_keep[i] = input_cols_to_keep[input_col_idx];
-        input_col_idx++;
-    }
-    return cols_to_keep;
 }
 
 /**
@@ -643,8 +596,10 @@ std::tuple<std::unique_ptr<uint8_t[]>, size_t> compute_local_mrnf(
  */
 std::shared_ptr<array_info> compute_local_window(
     std::shared_ptr<table_info>& in_table,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builders,
     const std::shared_ptr<BasicColSet>& colset, size_t n_sort_cols,
     size_t n_keys, GroupbyMetrics::AggUpdateMetrics& metrics,
+    std::vector<int32_t> f_in_offsets, std::vector<int32_t> f_in_cols,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
@@ -655,13 +610,25 @@ std::shared_ptr<array_info> compute_local_window(
             /*req_extended_group_info=*/false, metrics.grouping_metrics, pool);
     grouping_info& grp_info = grp_infos[0];
     // Construct a vector with the order-by columns.
-    std::vector<std::shared_ptr<array_info>> orderby_arrs(
+    std::vector<std::shared_ptr<array_info>> orderby_input_arrs(
         in_table->columns.begin() + n_keys,
         in_table->columns.begin() + n_keys + n_sort_cols);
 
+    size_t num_funcs = f_in_offsets.size() - 1;
+
+    // also add any extra input columns for functions such as lead to be passed
+    // into window_computation
+    for (size_t i = 0; i < num_funcs; i++) {
+        for (size_t j = f_in_offsets[i]; j < (size_t)f_in_offsets[i + 1]; j++) {
+            size_t in_col_idx = f_in_cols[j];
+            orderby_input_arrs.push_back(in_table->columns[in_col_idx]);
+        }
+    }
+
     std::vector<std::shared_ptr<array_info>> list_arr;
     // Compute the output index column using this colset:
-    colset->setInCol(orderby_arrs);
+    colset->setInCol(orderby_input_arrs);
+    colset->setOutDictBuilders(out_dict_builders);
     colset->alloc_update_columns(grp_info.num_groups, list_arr,
                                  /*alloc_out_if_no_combine*/ false, pool, mm);
     ScopedTimer update_timer(metrics.colset_update_time);
@@ -1361,8 +1328,7 @@ void GroupbyPartition::ActivatePartition() {
 }
 
 void GroupbyPartition::FinalizeMrnf(
-    const std::vector<bool>& mrnf_part_cols_to_keep,
-    const std::vector<bool>& mrnf_sort_cols_to_keep,
+    const std::vector<bool>& cols_to_keep_bitmask, size_t n_sort_keys,
     ChunkedTableBuilder& output_buffer) {
     // Make sure this partition is active. This is idempotent
     // and hence a NOP if the partition is already active.
@@ -1371,22 +1337,18 @@ void GroupbyPartition::FinalizeMrnf(
     // MRNF only supports a single colset.
     assert(this->col_sets.size() == 1);
     ScopedTimer mrnf_timer(this->metrics.finalize_compute_mrnf_time);
-    auto [out_bitmask, n_bits_set] =
-        compute_local_mrnf(this->build_table_buffer->data_table,
-                           this->col_sets[0], mrnf_sort_cols_to_keep.size(),
-                           this->n_keys, this->metrics.finalize_update_metrics,
-                           this->op_scratch_pool, this->op_scratch_mm);
+    auto [out_bitmask, n_bits_set] = compute_local_mrnf(
+        this->build_table_buffer->data_table, this->col_sets[0], n_sort_keys,
+        this->n_keys, this->metrics.finalize_update_metrics,
+        this->op_scratch_pool, this->op_scratch_mm);
     mrnf_timer.finalize();
 
-    // Use mrnf_part_cols_to_keep and mrnf_sort_cols_to_keep to determine
+    // cols_to_keep_bitmask to determine
     // the columns to skip from build_table_buffer.
     size_t n_cols = this->build_table_buffer->data_table->columns.size();
-    std::vector<bool> input_cols_to_keep(n_cols, true);
-    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        mrnf_part_cols_to_keep, mrnf_sort_cols_to_keep, input_cols_to_keep,
-        n_cols);
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
 
+    assert(cols_to_keep_bitmask.size() == n_cols);
     for (size_t i = 0; i < n_cols; i++) {
         if (cols_to_keep_bitmask[i]) {
             cols_to_keep.push_back(
@@ -1406,9 +1368,10 @@ void GroupbyPartition::FinalizeMrnf(
 }
 
 void GroupbyPartition::FinalizeWindow(
-    const std::vector<bool>& partition_by_cols_to_keep,
-    const std::vector<bool>& order_by_cols_to_keep,
-    ChunkedTableBuilder& output_buffer) {
+    const std::vector<bool>& cols_to_keep_bitmask, size_t n_sort_keys,
+    ChunkedTableBuilder& output_buffer,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builder,
+    std::vector<int32_t> f_in_offsets, std::vector<int32_t> f_in_cols) {
     // Make sure this partition is active. This is idempotent
     // and hence a NOP if the partition is already active.
     this->ActivatePartition();
@@ -1417,21 +1380,18 @@ void GroupbyPartition::FinalizeWindow(
     assert(this->col_sets.size() == 1);
     ScopedTimer window_timer(this->metrics.finalize_window_compute_time);
     std::shared_ptr<array_info> window_col = compute_local_window(
-        this->build_table_buffer->data_table, this->col_sets[0],
-        partition_by_cols_to_keep.size(), this->n_keys,
-        this->metrics.finalize_update_metrics, this->op_scratch_pool,
-        this->op_scratch_mm);
+        this->build_table_buffer->data_table, out_dict_builder,
+        this->col_sets[0], n_sort_keys, this->n_keys,
+        this->metrics.finalize_update_metrics, f_in_offsets, f_in_cols,
+        this->op_scratch_pool, this->op_scratch_mm);
     window_timer.finalize();
 
     // Use partition_by_cols_to_keep and order_by_cols_to_keep to determine
     // the columns to skip from build_table_buffer.
     size_t n_cols = this->build_table_buffer->data_table->columns.size();
-    std::vector<bool> input_cols_to_keep(n_cols, true);
-    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        partition_by_cols_to_keep, order_by_cols_to_keep, input_cols_to_keep,
-        n_cols);
     std::vector<std::shared_ptr<array_info>> cols_to_keep;
 
+    assert(cols_to_keep_bitmask.size() == n_cols);
     for (size_t i = 0; i < n_cols; i++) {
         if (cols_to_keep_bitmask[i]) {
             cols_to_keep.push_back(
@@ -2570,10 +2530,8 @@ GroupbyState::GroupbyState(
     const std::unique_ptr<bodo::Schema>& in_schema_,
     std::vector<int32_t> ftypes, std::vector<int32_t> window_ftypes_,
     std::vector<int32_t> f_in_offsets_, std::vector<int32_t> f_in_cols_,
-    uint64_t n_keys_, std::vector<bool> mrnf_sort_asc_vec_,
-    std::vector<bool> mrnf_sort_na_pos_,
-    std::vector<bool> mrnf_part_cols_to_keep_,
-    std::vector<bool> mrnf_sort_cols_to_keep_,
+    uint64_t n_keys_, std::vector<bool> sort_asc_vec_,
+    std::vector<bool> sort_na_pos_, std::vector<bool> cols_to_keep_bitmask_,
     std::shared_ptr<table_info> window_args, int64_t output_batch_size_,
     bool parallel_, int64_t sync_iter_, int64_t op_id_,
     int64_t op_pool_size_bytes_, bool allow_any_work_stealing,
@@ -2604,10 +2562,9 @@ GroupbyState::GroupbyState(
       output_batch_size(output_batch_size_),
       f_in_offsets(std::move(f_in_offsets_)),
       f_in_cols(std::move(f_in_cols_)),
-      mrnf_sort_asc(std::move(mrnf_sort_asc_vec_)),
-      mrnf_sort_na(std::move(mrnf_sort_na_pos_)),
-      mrnf_part_cols_to_keep(std::move(mrnf_part_cols_to_keep_)),
-      mrnf_sort_cols_to_keep(std::move(mrnf_sort_cols_to_keep_)),
+      sort_asc(std::move(sort_asc_vec_)),
+      sort_na(std::move(sort_na_pos_)),
+      cols_to_keep_bitmask(std::move(cols_to_keep_bitmask_)),
       sync_iter(sync_iter_),
       op_id(op_id_) {
     // Partitioning is enabled by default:
@@ -2695,9 +2652,7 @@ GroupbyState::GroupbyState(
     // Validate MRNF arguments in the MRNF case:
     if (this->agg_type == AggregationType::MRNF) {
         validate_mrnf_args(ftypes, this->f_in_cols, this->f_in_offsets,
-                           this->mrnf_sort_asc, this->mrnf_sort_na,
-                           this->mrnf_sort_cols_to_keep,
-                           this->mrnf_part_cols_to_keep, in_schema_->ncols(),
+                           this->sort_asc, this->sort_na, in_schema_->ncols(),
                            this->n_keys, "GroupbyState::GroupbyState");
     }
 
@@ -2825,9 +2780,12 @@ GroupbyState::GroupbyState(
             local_input_cols_vec.at(i);
         std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
             in_arr_types_vec.at(i);
+
+        std::vector<std::unique_ptr<bodo::DataType>> window_in_arr_types;
         std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
         for (const auto& t : in_arr_types) {
             in_arr_types_copy.push_back(t->copy());
+            window_in_arr_types.push_back((t->copy()));
         }
         int ftype = ftypes[i];
         int window_ftype;
@@ -2838,15 +2796,20 @@ GroupbyState::GroupbyState(
             window_ftype = 0;
         }
 
+        // TODO: refactor groupby init to separate out window logic / arguments
+        // from regular groupby
+        std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
+            window_in_arr_types_vec(1);
+        window_in_arr_types_vec[0] = std::move(window_in_arr_types);
+
         std::shared_ptr<BasicColSet> col_set = makeColSet(
             local_input_cols, index_col, ftype, do_combine, skip_na_data, 0,
             // In the streaming multi-partition scenario, it's
             // safer to mark things as *not* parallel to avoid
             // any synchronization and hangs.
-            {window_ftype}, 0, /*is_parallel*/ false, this->mrnf_sort_asc,
-            this->mrnf_sort_na, window_args, 0, nullptr, nullptr, 0, nullptr,
-            use_sql_rules);
-
+            {window_ftype}, 0, /*is_parallel*/ false, this->sort_asc,
+            this->sort_na, window_args, f_in_cols.size(), nullptr, nullptr, 0,
+            nullptr, use_sql_rules, std::move(window_in_arr_types_vec));
         // get update/combine type info to initialize build state
         std::unique_ptr<bodo::Schema> running_values_schema =
             col_set->getRunningValueColumnTypes(
@@ -2930,8 +2893,8 @@ GroupbyState::GroupbyState(
 
     this->shuffle_state = std::make_unique<GroupbyIncrementalShuffleState>(
         build_table_schema, this->build_table_dict_builders, this->col_sets,
-        this->mrnf_sort_cols_to_keep.size(), this->n_keys, this->build_iter,
-        this->sync_iter, op_id_, this->nunique_only, this->agg_type,
+        this->sort_na.size(), this->n_keys, this->build_iter, this->sync_iter,
+        op_id_, this->nunique_only, this->agg_type,
         this->f_running_value_offsets, this->accumulate_before_update);
 
     this->partitions.emplace_back(std::make_shared<GroupbyPartition>(
@@ -2974,24 +2937,24 @@ std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(
     std::vector<std::unique_ptr<bodo::DataType>>&& in_dtypes, int ftype,
     int window_ftype, std::shared_ptr<table_info> window_args) {
     std::shared_ptr<BasicColSet> col_set =
-        makeColSet(local_input_cols,     // in_cols
-                   nullptr,              // index_col
-                   ftype,                // ftype
-                   true,                 // do_combine
-                   true,                 // skip_na_data
-                   0,                    // period
-                   {window_ftype},       // transform_funcs
-                   0,                    // n_udf
-                   false,                // parallel
-                   this->mrnf_sort_asc,  // window_ascending
-                   this->mrnf_sort_na,   // window_na_position
-                   window_args,          // window_args
-                   0,                    // n_input_cols
-                   nullptr,              // udf_n_redvars
-                   nullptr,              // udf_table
-                   0,                    // udf_table_idx
-                   nullptr,              // nunique_table
-                   true                  // use_sql_rules
+        makeColSet(local_input_cols,  // in_cols
+                   nullptr,           // index_col
+                   ftype,             // ftype
+                   true,              // do_combine
+                   true,              // skip_na_data
+                   0,                 // period
+                   {window_ftype},    // transform_funcs
+                   0,                 // n_udf
+                   false,             // parallel
+                   this->sort_asc,    // window_ascending
+                   this->sort_na,     // window_na_position
+                   window_args,       // window_args
+                   0,                 // n_input_cols
+                   nullptr,           // udf_n_redvars
+                   nullptr,           // udf_table
+                   0,                 // udf_table_idx
+                   nullptr,           // nunique_table
+                   true               // use_sql_rules
         );
 
     // get update/combine type info to initialize build state
@@ -3008,24 +2971,24 @@ GroupbyState::getSeparateOutputColumns(
     std::vector<std::shared_ptr<array_info>> local_input_cols, int ftype,
     int window_ftype) {
     std::shared_ptr<BasicColSet> col_set =
-        makeColSet(local_input_cols,     // in_cols
-                   nullptr,              // index_col
-                   ftype,                // ftype
-                   true,                 // do_combine
-                   true,                 // skip_na_data
-                   0,                    // period
-                   {window_ftype},       // transform_funcs
-                   0,                    // n_udf
-                   false,                // parallel
-                   this->mrnf_sort_asc,  // window_ascending
-                   this->mrnf_sort_na,   // window_na_position
-                   nullptr,              // window_args
-                   0,                    // n_input_cols
-                   nullptr,              // udf_n_redvars
-                   nullptr,              // udf_table
-                   0,                    // udf_table_idx
-                   nullptr,              // nunique_table
-                   true                  // use_sql_rules
+        makeColSet(local_input_cols,  // in_cols
+                   nullptr,           // index_col
+                   ftype,             // ftype
+                   true,              // do_combine
+                   true,              // skip_na_data
+                   0,                 // period
+                   {window_ftype},    // transform_funcs
+                   0,                 // n_udf
+                   false,             // parallel
+                   this->sort_asc,    // window_ascending
+                   this->sort_na,     // window_na_position
+                   nullptr,           // window_args
+                   0,                 // n_input_cols
+                   nullptr,           // udf_n_redvars
+                   nullptr,           // udf_table
+                   0,                 // udf_table_idx
+                   nullptr,           // nunique_table
+                   true               // use_sql_rules
         );
 
     auto seperate_out_cols = col_set->getSeparateOutputColumnType();
@@ -3474,16 +3437,12 @@ void GroupbyState::InitOutputBufferMrnf(
     }
 
     size_t n_cols = dummy_build_table->columns.size();
-    std::vector<bool> input_cols_to_keep(n_cols, true);
-    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep,
-        input_cols_to_keep, n_cols);
 
     // List of column types in the output.
     std::vector<std::unique_ptr<bodo::DataType>> output_column_types;
     std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders;
     for (size_t i = 0; i < n_cols; i++) {
-        if (cols_to_keep_bitmask[i]) {
+        if (this->cols_to_keep_bitmask[i]) {
             output_column_types.push_back(
                 dummy_build_table->columns[i]->data_type());
             // We can re-use existing dictionaries.
@@ -3508,23 +3467,19 @@ void GroupbyState::InitOutputBufferWindow(
     assert(this->agg_type == AggregationType::WINDOW);
     assert(this->col_sets.size() == 1);
     const std::shared_ptr<BasicColSet>& col_set = this->col_sets[0];
-
+    const std::vector<int64_t> window_funcs = col_set->getFtypes();
     // Skip if already initialized.
     if (this->output_state != nullptr) {
         return;
     }
 
     size_t n_cols = dummy_build_table->columns.size();
-    std::vector<bool> input_cols_to_keep(n_cols, true);
-    std::vector<bool> cols_to_keep_bitmask = get_window_cols_to_keep_bitmask(
-        this->mrnf_part_cols_to_keep, this->mrnf_sort_cols_to_keep,
-        input_cols_to_keep, n_cols);
 
     // List of column types in the output.
     std::vector<std::unique_ptr<bodo::DataType>> output_column_types;
     std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders;
     for (size_t i = 0; i < n_cols; i++) {
-        if (cols_to_keep_bitmask[i]) {
+        if (this->cols_to_keep_bitmask[i]) {
             output_column_types.push_back(
                 dummy_build_table->columns[i]->data_type());
             // We can re-use existing dictionaries.
@@ -3535,9 +3490,19 @@ void GroupbyState::InitOutputBufferWindow(
     // Append the window function column types.
     const std::vector<std::unique_ptr<bodo::DataType>> window_output_types =
         col_set->getOutputTypes();
+
     for (size_t i = 0; i < window_output_types.size(); i++) {
         output_column_types.push_back(window_output_types[i]->copy());
-        output_dict_builders.push_back(nullptr);
+        // if lead lag then we need to set the dict builder. It can just be a
+        // copy of the input
+        if (window_funcs[i] == Bodo_FTypes::lead ||
+            window_funcs[i] == Bodo_FTypes::lag) {
+            size_t in_col_idx = f_in_cols[f_in_offsets[i]];
+            output_dict_builders.push_back(
+                this->build_table_dict_builders[in_col_idx]);
+        } else {
+            output_dict_builders.push_back(nullptr);
+        }
     }
 
     // Build the output schema from the output column types.
@@ -4089,8 +4054,7 @@ void GroupbyState::FinalizeBuild() {
                                 ->build_table_buffer->data_table);
                     }
                     this->partitions[i_part]->FinalizeMrnf(
-                        this->mrnf_part_cols_to_keep,
-                        this->mrnf_sort_cols_to_keep,
+                        this->cols_to_keep_bitmask, this->sort_na.size(),
                         this->output_state->buffer);
                 } else if (this->agg_type == AggregationType::WINDOW) {
                     // Initialize output buffer if this is the first
@@ -4101,9 +4065,10 @@ void GroupbyState::FinalizeBuild() {
                                 ->build_table_buffer->data_table);
                     }
                     this->partitions[i_part]->FinalizeWindow(
-                        this->mrnf_part_cols_to_keep,
-                        this->mrnf_sort_cols_to_keep,
-                        this->output_state->buffer);
+                        this->cols_to_keep_bitmask, this->sort_na.size(),
+                        this->output_state->buffer,
+                        this->output_state->dict_builders, this->f_in_offsets,
+                        this->f_in_cols);
                 } else {
                     output_table = this->partitions[i_part]->Finalize();
                 }
@@ -4783,19 +4748,15 @@ GroupingSetsState::ProduceOutputBatch(bool produce_output) {
  * @param ftypes function types (Bodo_FTypes ints)
  * @param window_ftypes window function types (Bodo_FTypes ints)
  * @param n_keys number of groupby keys
- * @param mrnf_sort_asc Boolean bitmask specifying sort-direction for MRNF
+ * @param sort_asc Boolean bitmask specifying sort-direction for MRNF
  *  order-by columns. It should be 'mrnf_n_sort_keys' elements long.
- * @param mrnf_sort_na Boolean bitmask specifying whether nulls should be
+ * @param sort_na Boolean bitmask specifying whether nulls should be
  *  considered 'last' for the order-by columns of MRNF. It should be
  * 'mrnf_n_sort_keys' elements long.
- * @param mrnf_n_sort_keys Number of MRNF order-by columns. If this is
- *  >0, we will use MRNF specific code.
- * @param mrnf_part_cols_to_keep Bitmask specifying the partition columns
- * to keep in the MRNF case. In the MRNF case, it must have n_keys elements.
- * Otherwise, it can be nullptr since it won't be read.
- * @param mrnf_sort_cols_to_keep Bitmask specifying the order-by columns
- * to keep in the MRNF case. In the MRNF case, it must have mrnf_n_sort_keys
- * elements. Otherwise, it can be nullptr since it won't be read.
+ * @param n_sort_keys Number of MRNF order-by columns. If this is
+ *  >0, we will use MRNF or windowspecific code.
+ * @param cols_to_keep Bitmask of columns to keep in the output. Should be the
+ * same length as the number of columns in the input.
  * @param output_batch_size Batch size for reading output.
  * @param op_pool_size_bytes Size of the operator buffer pool for this join
  * operator. If it's set to -1, we will get the budget from the operator
@@ -4806,9 +4767,8 @@ GroupbyState* groupby_state_init_py_entry(
     int64_t operator_id, int8_t* build_arr_c_types,
     int8_t* build_arr_array_types, int n_build_arrs, int32_t* ftypes,
     int32_t* window_ftypes, int32_t* f_in_offsets, int32_t* f_in_cols,
-    int n_funcs, uint64_t n_keys, bool* mrnf_sort_asc, bool* mrnf_sort_na,
-    uint64_t mrnf_n_sort_keys, bool* mrnf_part_cols_to_keep,
-    bool* mrnf_sort_cols_to_keep, table_info* window_args_,
+    int n_funcs, uint64_t n_keys, bool* sort_asc, bool* sort_na,
+    uint64_t n_sort_keys, bool* cols_to_keep, table_info* window_args_,
     int64_t output_batch_size, bool parallel, int64_t sync_iter,
     int64_t op_pool_size_bytes) {
     // If the memory budget has not been explicitly set, then ask the
@@ -4819,19 +4779,19 @@ GroupbyState* groupby_state_init_py_entry(
     }
 
     // Create vectors for the MRNF arguments from the raw pointer arrays.
-    std::vector<bool> mrnf_sort_asc_vec(mrnf_n_sort_keys, false);
-    std::vector<bool> mrnf_sort_na_vec(mrnf_n_sort_keys, false);
-    std::vector<bool> mrnf_part_cols_to_keep_vec(n_keys, true);
-    std::vector<bool> mrnf_sort_cols_to_keep_vec(mrnf_n_sort_keys, true);
+    std::vector<bool> sort_asc_vec(n_sort_keys, false);
+    std::vector<bool> sort_na_vec(n_sort_keys, false);
+    std::vector<bool> cols_to_keep_vec(n_build_arrs, true);
     if (n_funcs == 1 && (ftypes[0] == Bodo_FTypes::min_row_number_filter ||
                          ftypes[0] == Bodo_FTypes::window)) {
-        for (size_t i = 0; i < n_keys; i++) {
-            mrnf_part_cols_to_keep_vec[i] = mrnf_part_cols_to_keep[i];
+        for (size_t i = 0; i < (size_t)n_build_arrs; i++) {
+            cols_to_keep_vec[i] = cols_to_keep[i];
         }
-        for (size_t i = 0; i < mrnf_n_sort_keys; i++) {
-            mrnf_sort_asc_vec[i] = mrnf_sort_asc[i];
-            mrnf_sort_na_vec[i] = mrnf_sort_na[i];
-            mrnf_sort_cols_to_keep_vec[i] = mrnf_sort_cols_to_keep[i];
+        for (size_t i = 0; i < n_sort_keys; i++) {
+            sort_na_vec[i] = sort_na[i];
+        }
+        for (size_t i = 0; i < n_sort_keys; i++) {
+            sort_asc_vec[i] = sort_asc[i];
         }
     }
     std::shared_ptr<table_info> window_args(window_args_);
@@ -4848,9 +4808,9 @@ GroupbyState* groupby_state_init_py_entry(
         std::vector<int32_t>(window_ftypes, window_ftypes + n_funcs),
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),
-        n_keys, mrnf_sort_asc_vec, mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
-        mrnf_sort_cols_to_keep_vec, window_args, output_batch_size, parallel,
-        sync_iter, operator_id, op_pool_size_bytes);
+        n_keys, sort_asc_vec, sort_na_vec, cols_to_keep_vec, window_args,
+        output_batch_size, parallel, sync_iter, operator_id,
+        op_pool_size_bytes);
 }
 
 /**
@@ -4972,8 +4932,7 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
         std::vector<int32_t> window_ftypes(0, 0);
         std::vector<bool> mrnf_sort_asc_vec(0, false);
         std::vector<bool> mrnf_sort_na_vec(0, false);
-        std::vector<bool> mrnf_part_cols_to_keep_vec(0, true);
-        std::vector<bool> mrnf_sort_cols_to_keep_vec(0, true);
+        std::vector<bool> cols_to_keep_vec(0, true);
 
         // Generate a grouping state for each grouping set and perform any
         // necessary remapping.
@@ -5054,8 +5013,7 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 std::make_unique<bodo::Schema>(std::move(kept_column_types)),
                 ftypes_vector, window_ftypes, f_in_offsets_vector,
                 remapped_f_in_cols, num_grouping_keys, mrnf_sort_asc_vec,
-                mrnf_sort_na_vec, mrnf_part_cols_to_keep_vec,
-                mrnf_sort_cols_to_keep_vec, nullptr, output_batch_size,
+                mrnf_sort_na_vec, cols_to_keep_vec, nullptr, output_batch_size,
                 parallel, sync_iter, sub_operator_id, op_pool_size_bytes,
                 allow_any_work_stealing, local_key_dict_builders));
         }

@@ -86,7 +86,8 @@ void min_row_number_filter_no_sort(
 void window_computation(
     std::vector<std::shared_ptr<array_info>>& orderby_arrs,
     std::vector<int64_t> window_funcs,
-    std::vector<std::shared_ptr<array_info>> out_arrs,
+    std::vector<std::shared_ptr<array_info>>& out_arrs,
+    std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builders,
     grouping_info const& grp_info, const std::vector<bool>& asc_vect,
     const std::vector<bool>& na_pos_vect,
     const std::shared_ptr<table_info> window_args, int n_input_cols,

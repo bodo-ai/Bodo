@@ -402,31 +402,21 @@ class GroupbyStateType(StreamingStateType):
         return tuple(total_idxs)
 
     @property
-    def mrnf_part_cols_to_keep(self) -> np.ndarray:
-        """
-        Bit-mask specifying the partition columns to retain in the output table
-        in the MRNF case.
+    def mrnf_cols_to_keep_bitmask(self) -> List[bool]:
+        """Creates a bitmask for MRNF key and sort columns.
 
         Returns:
-            np.ndarray: Boolean bitmask.
+            A bitmask of length n_sort_keys + n_keys where True indicates that we should keep that column in the output.
         """
-        return np.array(
-            [idx in self.mrnf_col_inds_keep for idx in self.key_inds], dtype=np.bool_
+        n_build_arrs = len(self.build_arr_array_types)
+        cols_to_keep_bitmask = [idx in self.mrnf_col_inds_keep for idx in self.key_inds]
+        cols_to_keep_bitmask.extend(
+            idx in self.mrnf_col_inds_keep for idx in self.mrnf_sort_col_inds
         )
-
-    @property
-    def mrnf_sort_cols_to_keep(self) -> np.ndarray:
-        """
-        Bit-mask specifying the order-by columns to retain in the output table
-        in the MRNF case.
-
-        Returns:
-            np.ndarray: Boolean bitmask.
-        """
-        return np.array(
-            [idx in self.mrnf_col_inds_keep for idx in self.mrnf_sort_col_inds],
-            dtype=np.bool_,
+        cols_to_keep_bitmask.extend(
+            [True for _ in range(n_build_arrs - len(cols_to_keep_bitmask))]
         )
+        return cols_to_keep_bitmask
 
     @cached_property
     def build_indices(self):
@@ -557,8 +547,7 @@ def _init_groupby_state(
     mrnf_sort_asc_t,
     mrnf_sort_na_t,
     mrnf_n_sort_keys_t,
-    mrnf_part_cols_to_keep_t,
-    mrnf_sort_cols_to_keep_t,
+    cols_to_keep_t,
     window_args,
     op_pool_size_bytes_t,
     output_state_type,
@@ -583,9 +572,7 @@ def _init_groupby_state(
         mrnf_sort_asc (bool*): Bitmask for sort direction of order-by columns in MRNF case.
         mrnf_sort_na (bool*): Bitmask for null sort direction of order-by columns in MRNF case.
         mrnf_n_sort_keys (int): Number of MRNF order-by columns.
-        mrnf_part_cols_to_keep (bool*): Bitmask of partition/key columns to retain in output
-            in the MRNF case.
-        mrnf_sort_cols_to_keep (bool*): Bitmask of order-by columns to retain in output
+        cols_to_keep (bool*): Bitmask of olumns to retain in output
             in the MRNF case.
         window_args (table_info*) table consisting of 1 row and a column for each scalar window arg
         op_pool_size_bytes (int64): Size of the operator pool (in bytes).
@@ -608,8 +595,7 @@ def _init_groupby_state(
             mrnf_sort_asc,
             mrnf_sort_na,
             mrnf_n_sort_keys,
-            mrnf_part_cols_to_keep,
-            mrnf_sort_cols_to_keep,
+            mrnf_cols_to_keep,
             window_args,
             op_pool_size_bytes,
             _,  # output_state_type
@@ -638,7 +624,6 @@ def _init_groupby_state(
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(1),
                 lir.IntType(64),
@@ -662,8 +647,7 @@ def _init_groupby_state(
             mrnf_sort_asc,
             mrnf_sort_na,
             mrnf_n_sort_keys,
-            mrnf_part_cols_to_keep,
-            mrnf_sort_cols_to_keep,
+            mrnf_cols_to_keep,
             window_args,
             output_batch_size,
             parallel,
@@ -687,7 +671,6 @@ def _init_groupby_state(
         types.CPointer(types.bool_),
         types.CPointer(types.bool_),
         types.int64,
-        types.CPointer(types.bool_),
         types.CPointer(types.bool_),
         window_args,
         types.int64,
@@ -958,8 +941,7 @@ def gen_init_groupby_state_impl(
     mrnf_sort_asc_arr = np.array(output_type.mrnf_sort_col_asc, dtype=np.bool_)
     mrnf_sort_na_arr = np.array(output_type.mrnf_sort_col_na, dtype=np.bool_)
 
-    mrnf_part_cols_to_keep_arr = output_type.mrnf_part_cols_to_keep
-    mrnf_sort_cols_to_keep_arr = output_type.mrnf_sort_cols_to_keep
+    mrnf_cols_to_keep_arr = np.array(output_type.mrnf_cols_to_keep_bitmask, np.bool_)
 
     mrnf_n_sort_keys = output_type.n_mrnf_sort_keys
 
@@ -990,8 +972,7 @@ def gen_init_groupby_state_impl(
             mrnf_sort_asc_arr.ctypes,
             mrnf_sort_na_arr.ctypes,
             mrnf_n_sort_keys,
-            mrnf_part_cols_to_keep_arr.ctypes,
-            mrnf_sort_cols_to_keep_arr.ctypes,
+            mrnf_cols_to_keep_arr.ctypes,
             None,  # window_args
             op_pool_size_bytes,
             output_type,

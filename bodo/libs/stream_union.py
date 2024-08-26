@@ -209,15 +209,19 @@ def gen_init_union_state_impl(
     assert output_type.all == all_const
 
     arr_dtypes = np.array(
-        []
-        if output_type.out_table_type == types.unknown
-        else output_type.out_table_type.c_dtypes,
+        (
+            []
+            if output_type.out_table_type == types.unknown
+            else output_type.out_table_type.c_dtypes
+        ),
         dtype=np.int8,
     )
     arr_array_types = np.array(
-        []
-        if output_type.out_table_type == types.unknown
-        else output_type.out_table_type.c_array_types,
+        (
+            []
+            if output_type.out_table_type == types.unknown
+            else output_type.out_table_type.c_array_types
+        ),
         dtype=np.int8,
     )
 
@@ -247,11 +251,10 @@ def gen_init_union_state_impl(
         f_in_offsets = np.array([1], np.int32)
         f_in_cols = np.array([], np.int32)
 
-        mrnf_sort_asc = np.array([], dtype=np.bool_)
-        mrnf_sort_na = np.array([], dtype=np.bool_)
-        mrnf_part_cols_to_keep = np.array([], dtype=np.bool_)
-        mrnf_sort_cols_to_keep = np.array([], dtype=np.bool_)
-        mrnf_n_sort_keys = 0
+        sort_asc = np.array([], dtype=np.bool_)
+        sort_na = np.array([], dtype=np.bool_)
+        cols_to_keep = np.array([], dtype=np.bool_)
+        n_sort_keys = 0
 
         def impl(
             operator_id,
@@ -269,11 +272,10 @@ def gen_init_union_state_impl(
                 f_in_offsets.ctypes,
                 f_in_cols.ctypes,
                 0,
-                mrnf_sort_asc.ctypes,
-                mrnf_sort_na.ctypes,
-                mrnf_n_sort_keys,
-                mrnf_part_cols_to_keep.ctypes,
-                mrnf_sort_cols_to_keep.ctypes,
+                sort_asc.ctypes,
+                sort_na.ctypes,
+                n_sort_keys,
+                cols_to_keep.ctypes,
                 None,  # window_args
                 -1,  # op_pool_size_bytes
                 output_type,
