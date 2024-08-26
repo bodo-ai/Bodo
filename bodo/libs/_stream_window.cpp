@@ -218,6 +218,8 @@ void WindowState::InferWindowOutputDataType(
         case Bodo_FTypes::count: {
             break;
         }
+        case Bodo_FTypes::first:
+        case Bodo_FTypes::last:
         case Bodo_FTypes::count_if:
         case Bodo_FTypes::booland_agg:
         case Bodo_FTypes::boolor_agg:
