@@ -22,6 +22,7 @@ from contextlib import ExitStack
 import numba
 import numba.core.boxing
 import numba.core.inline_closurecall
+import numba.core.lowering
 import numba.core.runtime.context
 import numba.core.typing.listdecl
 import numba.np.linalg
@@ -2900,6 +2901,53 @@ if _check_numba_change:  # pragma: no cover
 numba.core.types.abstract.Type.__reduce__ = __reduce__
 
 
+def _lower_call_ExternalFunction(self, fnty, expr, signature):
+    from numba.core import funcdesc
+
+    import bodo
+    from bodo.transforms.typeinfer import ExternalFunctionErrorChecked
+
+    # Handle a named external function
+    self.debug_print("# external function")
+    argvals = self.fold_call_args(
+        fnty,
+        signature,
+        expr.args,
+        expr.vararg,
+        expr.kws,
+    )
+    fndesc = funcdesc.ExternalFunctionDescriptor(
+        fnty.symbol, fnty.sig.return_type, fnty.sig.args
+    )
+    func = self.context.declare_external_function(self.builder.module, fndesc)
+    ret = self.context.call_external_function(
+        self.builder,
+        func,
+        fndesc.argtypes,
+        argvals,
+    )
+    # Bodo change: add error checking to Bodo C++ calls
+    if isinstance(fnty, ExternalFunctionErrorChecked):
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(
+            self.context, self.builder
+        )
+    return ret
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.lowering.Lower._lower_call_ExternalFunction)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c2b544edc50c99e26893dc115bdb879cd762556323b11e9d5d555fbc72213e0b"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.lowering.Lower._lower_call_ExternalFunction has changed"
+        )
+
+
+numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFunction
+
+
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     from bodo.transforms.native_typer import bodo_resolve_call
     from bodo.transforms.typeinfer import BodoFunction
@@ -2924,8 +2972,11 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
         # Unwrap TypeRef
         fnty = fnty.instance_type
     try:
+        # Bodo change: add a shortcut for ExternalFunction, which is just a signature
+        if isinstance(fnty, types.ExternalFunction):
+            sig = fnty.sig
         # Bodo change: use Bodo's native typer if it's a supported Bodo call
-        if isinstance(fnty, BodoFunction):
+        elif isinstance(fnty, BodoFunction):
             assert kw_args == {}, "bodo_resolve_call: kw args not supported yet"
             sig = bodo_resolve_call(
                 fnty.templates[0].path,

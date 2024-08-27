@@ -3,12 +3,11 @@
 
 import llvmlite.binding as ll
 import numba
-from llvmlite import ir as lir
-from numba.core import cgutils, types
-from numba.extending import intrinsic
+from numba.core import types
 
 import bodo
 from bodo.ext import query_profile_collector_cpp
+from bodo.transforms.typeinfer import ExternalFunctionErrorChecked
 
 ll.add_symbol(
     "init_query_profile_collector_py_entry",
@@ -44,156 +43,41 @@ ll.add_symbol(
 )
 
 
-@intrinsic
-def init(typingctx):
-    """Wrapper for init_py_entry in _query_profile_collector.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.VoidType(), [])
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="init_query_profile_collector_py_entry"
-        )
-        builder.call(fn_typ, ())
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
-
-    sig = types.none()
-    return sig, codegen
+init = ExternalFunctionErrorChecked(
+    "init_query_profile_collector_py_entry", types.none()
+)
 
 
-@intrinsic
-def start_pipeline(typingctx, pipeline_id):
-    """Wrapper for start_pipeline in _query_profile_collector.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(64),
-            ],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="start_pipeline_query_profile_collector_py_entry"
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
-
-    sig = types.none(pipeline_id)
-    return sig, codegen
+start_pipeline = ExternalFunctionErrorChecked(
+    "start_pipeline_query_profile_collector_py_entry", types.none(types.int64)
+)
 
 
-@intrinsic
-def end_pipeline(typingctx, pipeline_id, num_iterations):
-    """Wrapper for end_pipeline in _query_profile_collector.cpp"""
+end_pipeline = ExternalFunctionErrorChecked(
+    "end_pipeline_query_profile_collector_py_entry",
+    types.none(types.int64, types.int64),
+)
 
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(64),
-                lir.IntType(64),
-            ],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="end_pipeline_query_profile_collector_py_entry"
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
-
-    sig = types.none(pipeline_id, num_iterations)
-    return sig, codegen
+submit_operator_stage_row_counts = ExternalFunctionErrorChecked(
+    "submit_operator_stage_row_counts_query_profile_collector_py_entry",
+    types.none(types.int64, types.int64, types.int64),
+)
 
 
-@intrinsic
-def submit_operator_stage_row_counts(
-    typingctx, operator_id, pipeline_id, output_row_count
-):
-    """Wrapper for submit_operator_stage_row_counts in _query_profile_collector.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.IntType(64),
-            ],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module,
-            fnty,
-            name="submit_operator_stage_row_counts_query_profile_collector_py_entry",
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
-
-    sig = types.none(operator_id, pipeline_id, output_row_count)
-    return sig, codegen
+submit_operator_stage_time = ExternalFunctionErrorChecked(
+    "submit_operator_stage_time_query_profile_collector_py_entry",
+    types.none(types.int64, types.int64, types.float64),
+)
 
 
-@intrinsic
-def submit_operator_stage_time(typingctx, operator_id, stage_id, time):
-    """Wrapper for submit_operator_stage_time_query_profile_collector_py_entry in _query_profile_collector.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.VoidType(),
-            [
-                lir.IntType(64),
-                lir.IntType(64),
-                lir.DoubleType(),
-            ],
-        )
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module,
-            fnty,
-            name="submit_operator_stage_time_query_profile_collector_py_entry",
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
-
-    sig = types.none(operator_id, stage_id, time)
-    return sig, codegen
+get_operator_duration = ExternalFunctionErrorChecked(
+    "get_operator_duration_query_profile_collector_py_entry", types.float64(types.int64)
+)
 
 
-@intrinsic
-def get_operator_duration(typingctx, operator_id):
-    """Wrapper for get_operator_duration_query_profile_collector_py_entry in _query_profile_collector.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.DoubleType(), [lir.IntType(64)])
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module,
-            fnty,
-            name="get_operator_duration_query_profile_collector_py_entry",
-        )
-        ret = builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return ret
-
-    sig = types.float64(operator_id)
-    return sig, codegen
-
-
-@intrinsic
-def _finalize(typingctx, verbose_level):
-    """Wrapper for finalize in _query_profile_collector.cpp"""
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(64)])
-        fn_typ = cgutils.get_or_insert_function(
-            builder.module, fnty, name="finalize_query_profile_collector_py_entry"
-        )
-        builder.call(fn_typ, args)
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return context.get_dummy_value()
-
-    sig = types.none(verbose_level)
-    return sig, codegen
+_finalize = ExternalFunctionErrorChecked(
+    "finalize_query_profile_collector_py_entry", types.none(types.int64)
+)
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
