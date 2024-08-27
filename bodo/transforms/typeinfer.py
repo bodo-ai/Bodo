@@ -4,7 +4,7 @@ from numba.core.typing.templates import (
     Registry,
 )
 from numba.extending import models, register_model
-from numba.types import Function
+from numba.types import ExternalFunction, Function
 
 
 class BodoFunction(Function):
@@ -17,6 +17,15 @@ class BodoFunction(Function):
 
 
 register_model(BodoFunction)(models.OpaqueModel)
+
+
+class ExternalFunctionErrorChecked(ExternalFunction):
+    """Same as Numba's ExternalFunction, but lowering checks for Python exceptions"""
+
+    pass
+
+
+register_model(ExternalFunctionErrorChecked)(models.OpaqueModel)
 
 
 class BodoRegistry(Registry):
