@@ -80,7 +80,8 @@ inline bool supports_calculator_computation(
             case Bodo_FTypes::size:
             case Bodo_FTypes::count:
             case Bodo_FTypes::sum:
-            case Bodo_FTypes::row_number: {
+            case Bodo_FTypes::row_number:
+            case Bodo_FTypes::rank: {
                 break;
             }
             default: {
