@@ -4,6 +4,7 @@ import com.bodo.iceberg.catalog.CatalogCreator;
 import com.bodo.iceberg.filters.FilterExpr;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -51,9 +52,16 @@ public class BodoIcebergHandler {
   // Map of transaction hashcode to transaction instance
   private final HashMap<Integer, Transaction> transactions;
 
+  @Nullable private final SnowflakePrefetch prefetcher;
+
   // Note: This API is exposed to Python.
   public BodoIcebergHandler(
-      String connStr, String catalogType, String dbName, String tableName, String coreSitePath)
+      String connStr,
+      String catalogType,
+      String dbName,
+      String tableName,
+      String coreSitePath,
+      @Nullable SnowflakePrefetch prefetcher)
       throws URISyntaxException {
     this.catalog = CatalogCreator.create(connStr, catalogType, coreSitePath);
 
@@ -63,6 +71,20 @@ public class BodoIcebergHandler {
     id = TableIdentifier.of(dbNamespace, tableName);
 
     this.transactions = new HashMap<>();
+    this.prefetcher = prefetcher;
+  }
+
+  /**
+   * Inner function to help load tables, either from the catalog or the SnowflakePrefetcher if
+   * defined
+   *
+   * @return Iceberg table associated with ID
+   */
+  private Table loadTable() throws SQLException, URISyntaxException, InterruptedException {
+    if (this.prefetcher != null && this.prefetcher.tableExists(id)) {
+      return prefetcher.loadTable(id);
+    }
+    return catalog.loadTable(id);
   }
 
   /**
@@ -73,8 +95,9 @@ public class BodoIcebergHandler {
    * @param property The name of the property to get.
    * @return the corresponding property value or null if key does not exist
    */
-  public String getTableProperty(String property) {
-    Table table = catalog.loadTable(id);
+  public String getTableProperty(String property)
+      throws SQLException, URISyntaxException, InterruptedException {
+    Table table = loadTable();
     return table.properties().get(property);
   }
 
@@ -131,13 +154,14 @@ public class BodoIcebergHandler {
    *
    * @return Information about Table needed by Bodo
    */
-  public TableInfo getTableInfo(boolean error) {
+  public TableInfo getTableInfo(boolean error)
+      throws SQLException, URISyntaxException, InterruptedException {
     if (!catalog.tableExists(id) && !error) {
       return null;
     }
 
     // Note that repeated calls to loadTable are cheap due to CachingCatalog
-    return new TableInfo(catalog.loadTable(id));
+    return new TableInfo(loadTable());
   }
 
   /**
@@ -147,8 +171,9 @@ public class BodoIcebergHandler {
    */
   public Triple<
           List<BodoParquetInfo>, Map<Integer, org.apache.arrow.vector.types.pojo.Schema>, Long>
-      getParquetInfo(FilterExpr filters) throws IOException {
-    return FileHandler.getParquetInfo(catalog.loadTable(id), filters);
+      getParquetInfo(FilterExpr filters)
+          throws IOException, SQLException, URISyntaxException, InterruptedException {
+    return FileHandler.getParquetInfo(loadTable(), filters);
   }
 
   /**
@@ -159,12 +184,13 @@ public class BodoIcebergHandler {
    * @return List of booleans indicating which columns have theta sketches. The booleans correspond
    *     to the columns in the schema, not the field IDs.
    */
-  public List<Boolean> tableColumnsHaveThetaSketches() {
-    Table table = catalog.loadTable(id);
+  public List<Boolean> tableColumnsHaveThetaSketches()
+      throws SQLException, URISyntaxException, InterruptedException {
+    Table table = loadTable();
     Schema schema = table.schema();
     List<Types.NestedField> columns = schema.columns();
     List<Boolean> hasThetaSketches = new ArrayList<>(Collections.nCopies(columns.size(), false));
-    Snapshot currentSnapshot = catalog.loadTable(id).currentSnapshot();
+    Snapshot currentSnapshot = table.currentSnapshot();
     if (currentSnapshot != null) {
       // Create a mapping of field ID to column index
       Map<Integer, Integer> fieldIdToIndex = new HashMap<>();
@@ -208,8 +234,9 @@ public class BodoIcebergHandler {
    * @return List of booleans indicating which columns have theta sketches enabled. The booleans
    *     correspond to the columns in the schema, not the field IDs.
    */
-  public List<Boolean> tableColumnsEnabledThetaSketches() {
-    Table table = catalog.loadTable(id);
+  public List<Boolean> tableColumnsEnabledThetaSketches()
+      throws SQLException, URISyntaxException, InterruptedException {
+    Table table = loadTable();
     Schema schema = table.schema();
     List<Types.NestedField> columns = schema.columns();
     List<Boolean> enabledThetaSketches =
@@ -230,11 +257,11 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public int getNumParquetFiles() throws IOException {
+  public int getNumParquetFiles() throws SQLException, URISyntaxException, InterruptedException {
 
     // First, check if we can get the information from the summary
-    Table table = catalog.loadTable(id);
-    Snapshot currentSnapshot = catalog.loadTable(id).currentSnapshot();
+    Table table = loadTable();
+    Snapshot currentSnapshot = table.currentSnapshot();
 
     if (currentSnapshot.summary().containsKey("total-data-files")) {
       return Integer.parseInt(currentSnapshot.summary().get("total-data-files"));
@@ -394,8 +421,9 @@ public class BodoIcebergHandler {
    *
    * @return Location of the table metadata file.
    */
-  public @Nonnull String getTableMetadataPath() {
-    Table table = catalog.loadTable(id);
+  public @Nonnull String getTableMetadataPath()
+      throws SQLException, URISyntaxException, InterruptedException {
+    Table table = loadTable();
     if (table instanceof HasTableOperations) {
       HasTableOperations opsTable = (HasTableOperations) table;
       return opsTable.operations().current().metadataFileLocation();
@@ -430,8 +458,8 @@ public class BodoIcebergHandler {
    * @param replace Whether to replace the table if it already exists
    * @return Transaction ID
    */
-  public Integer startCreateOrReplaceTable(
-      Schema schema, boolean replace, Map<String, String> prop) {
+  public Integer startCreateOrReplaceTable(Schema schema, boolean replace, Map<String, String> prop)
+      throws SQLException, URISyntaxException, InterruptedException {
     Map<String, String> properties = new HashMap<>();
     properties.put(TableProperties.FORMAT_VERSION, "2");
     // TODO: Support passing in new partition spec and sort order as well
@@ -583,8 +611,8 @@ public class BodoIcebergHandler {
   /**
    * Fetch the snapshot id for a table. Returns -1 for a newly created table without any snapshots
    */
-  public long getSnapshotId() {
-    Snapshot snapshot = catalog.loadTable(id).currentSnapshot();
+  public long getSnapshotId() throws SQLException, URISyntaxException, InterruptedException {
+    Snapshot snapshot = loadTable().currentSnapshot();
     // When the table has just been created
     if (snapshot == null) {
       return -1;

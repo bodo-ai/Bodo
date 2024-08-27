@@ -6,7 +6,7 @@ class StreamingStateScope {
     /**
      * Helper Class to Store Operator Info and Ranges
      */
-    private class OperatorPipelineRange(val opID: OperatorID, val startPipelineID: Int, val opType: Int? = null) {
+    private class OperatorPipelineRange(val opID: OperatorID, val startPipelineID: Int) {
         var endPipelineID: Int? = null
         var memEstimate: Int = -1
     }
@@ -79,11 +79,11 @@ class StreamingStateScope {
         return inits
     }
 
-    fun genQueryProfileCollectorInit(): List<Op> {
+    private fun genQueryProfileCollectorInit(): List<Op> {
         return listOf(Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.init")))
     }
 
-    fun genQueryProfileCollectorFinalize(): Op {
+    private fun genQueryProfileCollectorFinalize(): Op {
         return Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.finalize"))
     }
 

@@ -10,12 +10,12 @@ import java.util.concurrent.atomic.AtomicInteger
 class OperatorEmission(
     val stateInitFn: (BodoPhysicalRel.BuildContext) -> StateVariable,
     val deleteStateFn: (BodoPhysicalRel.BuildContext, StateVariable) -> Unit,
-    val terminatingPipelines: List<TerminatingPipelineEmission>,
-    val outputPipeline: OutputtingPipelineEmission?,
+    private val terminatingPipelines: List<TerminatingPipelineEmission>,
+    private val outputPipeline: OutputtingPipelineEmission?,
     val timeStateInitialization: Boolean,
 ) {
     private val firstPipeline = if (terminatingPipelines.isEmpty()) outputPipeline!! else terminatingPipelines.first()
-    private val lastPipeline = if (outputPipeline != null) outputPipeline else terminatingPipelines.last()
+    private val lastPipeline = outputPipeline ?: terminatingPipelines.last()
     private val stageNumber = AtomicInteger(0)
 
     /**
