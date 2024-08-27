@@ -4,6 +4,7 @@ Infrastructure used to test correctness.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
 import re
+import warnings
 from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -303,6 +304,9 @@ def check_query(
         # there exists another worker running on multiple ranks
         run_jit_1D = False
         run_jit_1DVar = False
+
+    if not (run_jit_seq or run_jit_1D or run_jit_1DVar or run_python):
+        warnings.warn("check_query: No tests are being run.")
 
     # If a user sets BODOSQL_TESTING_DEBUG, we print the
     # unoptimized plan, optimized plan, and the Pandas code

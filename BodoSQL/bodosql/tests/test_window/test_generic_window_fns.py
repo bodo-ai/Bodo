@@ -890,7 +890,6 @@ def test_simple_aggfuncs(func_name, answer_func, out_dtype, df, arg_strings, cap
             check_names=False,
             check_dtype=False,
             sort_output=True,
-            only_jit_1DVar=True,
         )
 
     comm = MPI.COMM_WORLD
