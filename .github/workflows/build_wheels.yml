@@ -1,0 +1,68 @@
+name: Build Wheels
+
+on: 
+  workflow_dispatch: 
+  release:
+      types: [published]
+
+
+# Recommended with setup-micromamba
+# https://github.com/mamba-org/setup-micromamba#about-login-shells
+defaults:
+  run:
+    shell: bash -leo pipefail {0}
+
+jobs:
+  build_wheels:
+    permissions:
+      id-token: write
+      contents: read
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-13 is an intel runner, macos-14 is apple silicon
+        os: [macos-13, macos-14]
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
+          role-session-name: BodoEngineBuildWheelSession
+          role-skip-session-tagging: true
+
+      - uses: actions/checkout@v4
+        with:
+          # For setuptools_scm to be able to determine version,
+          # we need to fetch the entire history
+          fetch-depth: 0
+
+      # Set up the build conda environment
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: build-env
+          environment-file: buildscripts/envs/conda-lock.yml
+          cache-environment: true
+          create-args: --category main --category dev
+          init-shell: >-
+            bash
+            zsh
+            powershell
+
+      - name: Build wheels
+        env: 
+          CIBW_BEFORE_BUILD: |
+            PYTHON_VERSION=$(python --version | awk -F 'Python ' '{print$2}') &&
+            source {project}/buildscripts/bodo/pip/setup_env.sh $PYTHON_VERSION {package}/buildscripts/envs/ &&
+            eval "$(micromamba shell hook --shell bash)" && micromamba activate build-env
+          CIBW_ENVIRONMENT: DISABLE_CCACHE=1 SCCACHE_BUCKET=engine-codebuild-cache SCCACHE_REGION=us-east-2 SCCACHE_S3_USE_SSL=true SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true MACOSX_DEPLOYMENT_TARGET=${{ matrix.os == 'macos-14' && '11.0' || '10.15' }}
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: 'delocate-wheel --ignore-missing-dependencies --sanitize-rpaths --exclude libmpi --exclude libpmpi --exclude libarrow --exclude libarrow_acero --exclude libarrow_dataset --exclude libarrow_flight --exclude libarrow_python --exclude libarrow_python_flight --exclude libarrow_python_parquet_encryption --exclude libarrow_substrait --exclude libparquet --require-archs {delocate_archs} -v {wheel} && python buildscripts/bodo/pip/macos/patch_libs_for_pip.py -p {wheel} && mv {wheel} {dest_dir}'
+        run: pipx run cibuildwheel==2.20.*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
