@@ -1,6 +1,8 @@
 package com.bodosql.calcite.ir
 
 import com.bodosql.calcite.application.BodoSQLCodegenException
+import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer.Companion.createSingleBatchTimer
 import com.bodosql.calcite.application.utils.JoinStateCache
 import org.apache.calcite.rel.RelNode
 import java.util.Stack
@@ -23,10 +25,24 @@ class Module(private val frame: Frame) {
     /**
      * Builder is used to construct a new module.
      */
-    class Builder(val symbolTable: SymbolTable, private val functionFrame: Frame, private var hideOperatorIDs: Boolean) {
-        constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame(), hideOperatorIDs = false)
+    class Builder(
+        val symbolTable: SymbolTable,
+        private val functionFrame: Frame,
+        private var hideOperatorIDs: Boolean,
+        val verboseLevel: Int,
+    ) {
+        constructor(
+            verboseLevel: Int,
+        ) : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame(), hideOperatorIDs = false, verboseLevel)
+        constructor() : this(symbolTable = SymbolTable(), functionFrame = CodegenFrame(), hideOperatorIDs = false, verboseLevel = 0)
 
         private val scope: StreamingStateScope = StreamingStateScope()
+
+        // Info about Snowflake-managed Iceberg tables to generate a prefetch call for
+        // TODO: Is there a better place to put this? We need this info to insert a call
+        //       at the beginning of codegen
+        private var sfConnStr: String? = null
+        private var sfIcebergTablePaths = mutableSetOf<String>()
 
         private var activeFrame: Frame = functionFrame
         private var parentFrames: Stack<Frame> = Stack()
@@ -36,6 +52,23 @@ class Module(private val frame: Frame) {
         private var nodeToOperatorCounters: MutableMap<Int, Int> = mutableMapOf()
 
         private var idMapping: Map<Int, Int> = mapOf()
+
+        /**
+         * Add a Snowflake-managed Iceberg table to track for prefetching generation
+         */
+        fun addSfIcebergTablePath(
+            connExpr: Expr,
+            tablePath: String,
+        ) {
+            if (connExpr !is Expr.StringLiteral) {
+                throw Exception("Internal Error: Snowflake connection strings are not constant")
+            }
+            if (sfConnStr != null && sfConnStr != connExpr.arg) {
+                throw Exception("Internal Error: Multiple Snowflake connection strings found")
+            }
+            sfConnStr = connExpr.arg
+            sfIcebergTablePaths.add(tablePath)
+        }
 
         fun setIDMapping(minId: Map<Int, Int>) {
             idMapping = minId
@@ -154,6 +187,42 @@ class Module(private val frame: Frame) {
         }
 
         /**
+         * Generate the Snowflake-managed Iceberg prefetch call
+         */
+        private fun genSfIcebergPrefetch() {
+            if (sfIcebergTablePaths.size == 0) {
+                return
+            }
+
+            val timerInfo =
+                createSingleBatchTimer(
+                    this,
+                    this.verboseLevel,
+                    "prefetching SF-managed Iceberg metadata",
+                    "PREFETCH TIMING",
+                    sfIcebergTablePaths.sorted().joinToString(", "),
+                    SingleBatchRelNodeTimer.OperationType.IO_BATCH,
+                )
+
+            val ops = mutableListOf<Op>()
+            timerInfo.genStartTimer()?.let { ops.add(it) }
+            ops.add(
+                Op.Stmt(
+                    Expr.Call(
+                        "bodo.io.iceberg.prefetch_sf_tables_njit",
+                        Expr.StringLiteral(sfConnStr!!),
+                        Expr.List(
+                            sfIcebergTablePaths.map { Expr.StringLiteral(it) },
+                        ),
+                    ),
+                ),
+            )
+            ops.addAll(timerInfo.genEndTimer())
+
+            functionFrame.prependAll(ops)
+        }
+
+        /**
          * Construct a module from the built code.
          * @return The built module.
          */
@@ -161,7 +230,11 @@ class Module(private val frame: Frame) {
             require(parentFrames.empty()) { "Internal Error in module.build: parentFrames stack is not empty" }
             if (scope.hasOperators()) {
                 scope.addToFrame(functionFrame)
+
+                // Generate Snowflake-managed Iceberg prefetch call
+                this.genSfIcebergPrefetch()
             }
+
             return Module(functionFrame)
         }
 

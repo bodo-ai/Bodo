@@ -3,6 +3,7 @@ package com.bodosql.calcite.adapter.iceberg
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.application.timers.SingleBatchRelNodeTimer
+import com.bodosql.calcite.catalog.SnowflakeCatalog
 import com.bodosql.calcite.codeGeneration.OperatorEmission
 import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
 import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
@@ -16,6 +17,7 @@ import com.bodosql.calcite.rel.core.RuntimeJoinFilterBase
 import com.bodosql.calcite.rel.metadata.BodoRelMetadataQuery
 import com.bodosql.calcite.traits.BatchingProperty
 import com.bodosql.calcite.traits.ExpectedBatchingProperty
+import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.ConventionTraitDef
 import org.apache.calcite.plan.RelOptCluster
 import org.apache.calcite.plan.RelOptCost
@@ -160,6 +162,16 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
         val filters = flattenedInfo.filters
         val tableScanNode = flattenedInfo.scan
         val limit = flattenedInfo.limit
+
+        // Store table name and base connection string in builder for prefetch gen
+        // Note: Only when reading from a Snowflake-managed Iceberg table (using Snowflake catalog)
+        if (tableScanNode.getCatalogTable().getCatalog() is SnowflakeCatalog) {
+            var staticConExpr = relInput.generatePythonConnStr(ImmutableList.of("", ""))
+            staticConExpr =
+                if (staticConExpr is StringLiteral) StringLiteral("iceberg+${staticConExpr.arg}") else staticConExpr
+            ctx.builder().addSfIcebergTablePath(staticConExpr, tableScanNode.getCatalogTable().getQualifiedName())
+        }
+
         val columnsArg = Expr.List(cols.map { v -> StringLiteral(v) })
         val filtersArg =
             if (filters.isEmpty()) {
@@ -175,7 +187,6 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
             }
 
         val schemaPath = getSchemaPath(relInput)
-
         var conExpr = relInput.generatePythonConnStr(schemaPath)
         conExpr = if (conExpr is StringLiteral) StringLiteral("iceberg+" + conExpr.arg) else conExpr
 

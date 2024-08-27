@@ -172,7 +172,6 @@ public class BodoCodeGenVisitor extends RelVisitor {
   // Writes only use a constant amount of memory of 256MB. We multiply
   // that by 1.5 to allow for some wiggle room.
   private final int SNOWFLAKE_WRITE_MEMORY_ESTIMATE = ((int) (1.5 * 256 * 1024 * 1024));
-  private BodoSqlTable table;
 
   private @Nullable TreeReverserDuplicateTracker reverseVisitor = null;
 
@@ -208,7 +207,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
     this.tracingLevel = tracingLevel;
-    this.generatedCode = new Module.Builder();
+    this.generatedCode = new Module.Builder(verboseLevel);
     this.generatedCode.setHideOperatorIDs(hideOperatorIDs);
     this.streamingOptions = new StreamingOptions(batchSize);
     this.dynamicParamTypes = dynamicParamTypes;

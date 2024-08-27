@@ -33,44 +33,51 @@ class SingleBatchRelNodeTimer(
         }
 
     /**
+     * Helper function for generating a timer start.
+     * Used for non-traditional cases
+     */
+    fun genStartTimer(): Op? {
+        if (isNoOp) {
+            return null
+        }
+        val timeCall = Expr.Call("time.time")
+        return Assign(startTimerVar, timeCall)
+    }
+
+    /**
      * Insert the starting time.time() call before a
      * non-streaming operator. This must be called before
      * the code is generated for the operator.
      */
     fun insertStartTimer() {
-        if (isNoOp) {
-            return
-        }
-        val timeCall = Expr.Call("time.time")
-        val stmt = Assign(startTimerVar, timeCall)
-        builder.add(stmt)
+        genStartTimer()?.let { builder.add(it) }
     }
 
     /**
-     * Insert a terminating time.time() call and print the information
-     * after a non-streaming operator. This requires insertStartTimer()
-     * to have previously been called and the operator code to already
-     * be generated.
+     * Helper function to generate instructions for finishing
+     * and printing the timer. Used for non-traditional cases
      */
-    fun insertEndTimer() {
+    fun genEndTimer(): List<Op> {
+        val ops = mutableListOf<Op>()
         if (isNoOp) {
-            return
+            return ops
         }
+
         val endTimerVar = builder.symbolTable.genGenericTempVar()
         // Generate the time call
         val timeCall = Expr.Call("time.time")
         val endTimer = Assign(endTimerVar, timeCall)
-        builder.add(endTimer)
+        ops.add(endTimer)
 
         // Compute the difference
         val subVar = builder.symbolTable.genGenericTempVar()
         val subCall = Expr.Binary("-", endTimerVar, startTimerVar)
         val subAssign = Assign(subVar, subCall)
-        builder.add(subAssign)
+        ops.add(subAssign)
 
         // Generate a variable with the node details to print
         val nodeDetailsVariable = builder.symbolTable.genGenericTempVar()
-        builder.add(Assign(nodeDetailsVariable, Expr.StringLiteral(nodeDetails)))
+        ops.add(Assign(nodeDetailsVariable, Expr.StringLiteral(nodeDetails)))
 
         val printMessage =
             String.format(
@@ -88,7 +95,18 @@ class SingleBatchRelNodeTimer(
                     Expr.Raw(printMessage),
                 ),
             )
-        builder.add(logMessageCall)
+        ops.add(logMessageCall)
+        return ops
+    }
+
+    /**
+     * Insert a terminating time.time() call and print the information
+     * after a non-streaming operator. This requires insertStartTimer()
+     * to have previously been called and the operator code to already
+     * be generated.
+     */
+    fun insertEndTimer() {
+        genEndTimer().let { builder.addAll(it) }
     }
 
     companion object {
