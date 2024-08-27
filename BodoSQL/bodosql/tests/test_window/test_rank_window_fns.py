@@ -957,11 +957,18 @@ SELECT {window_func} OVER (PARTITION BY B ORDER BY A) FROM TABLE1
     assert assert_success
 
 
-def test_row_number_intense(spark_info, memory_leak_check):
+@pytest.mark.parametrize(
+    "func",
+    [
+        pytest.param("ROW_NUMBER", id="row_number"),
+        pytest.param("RANK", id="rank", marks=pytest.mark.slow),
+    ],
+)
+def test_row_number_intense(func, spark_info, memory_leak_check):
     """
     Tests ROW_NUMBER on a larger set of data with a lot of skew between the partition sizes.
     """
-    query = "SELECT P1, P2, O1, O2, ROW_NUMBER() OVER (PARTITION BY P1, P2 ORDER BY O1 ASC NULLS LAST, O2 ASC NULLS LAST) FROM TABLE1"
+    query = f"SELECT P1, P2, O1, O2, {func}() OVER (PARTITION BY P1, P2 ORDER BY O1 ASC NULLS LAST, O2 ASC NULLS LAST) FROM TABLE1"
     n_rows = 1_000_000
     p1 = []
     p2 = []
@@ -972,7 +979,7 @@ def test_row_number_intense(spark_info, memory_leak_check):
         p1.append(i % 2)
         p2.append(np.int64(np.log10(i + 1)))
         o1.append(strings[i % 8])
-        o2.append(i)
+        o2.append(int(np.tan(i) // 3))
 
     ctx = {
         "TABLE1": pd.DataFrame(

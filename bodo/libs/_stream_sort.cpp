@@ -559,7 +559,7 @@ void ReservoirSamplingState::processInput(
     // The value of rows_consumed after processing the current input
     int64_t next_rows_seen =
         total_rows_seen + input->nrows() - consumed_input_rows;
-    while (row_to_sample <= next_rows_seen) {
+    while (row_to_sample < next_rows_seen) {
         // Generate a random uint64_t between 0 and sample_size as the sample
         // being replaced
         uint64_t target = rand() % sample_size;
