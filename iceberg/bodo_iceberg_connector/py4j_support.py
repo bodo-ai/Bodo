@@ -6,7 +6,6 @@ import os
 import sys
 import typing as pt
 import warnings
-from typing import Any, List
 
 from mpi4py import MPI
 from py4j.java_collections import ListConverter, MapConverter
@@ -24,6 +23,9 @@ CLASSES: pt.Dict[str, "JavaClass"] = {}
 
 # Dictionary mapping table info -> Reader obj
 table_dict = {}
+# Tuple of connection string and instance of SnowflakePrefetch associated
+prefetch_inst: tuple[str | None, pt.Any | None] = (None, None)
+
 
 # Core site location.
 _CORE_SITE_PATH = ""
@@ -154,7 +156,7 @@ def convert_dict_to_java(python_dict: dict):
     return MapConverter().convert(python_dict, gateway._gateway_client)
 
 
-def convert_list_to_java(vals: List[Any]):
+def convert_list_to_java(vals: pt.List[pt.Any]):
     """
     Converts a Python list to a Java ArrayList
     """
@@ -208,6 +210,10 @@ get_bodo_arrow_schema_utils_class = get_class_wrapper(
     "BodoArrowSchemaUtil",
     lambda gateway: gateway.jvm.com.bodo.iceberg.BodoArrowSchemaUtil,  # type: ignore
 )
+get_snowflake_prefetch_class = get_class_wrapper(
+    "SnowflakePrefetchClass",
+    lambda gateway: gateway.jvm.com.bodo.iceberg.SnowflakePrefetch,  # type: ignore
+)
 
 # Bodo Filter Pushdown Classes
 get_column_ref_class = get_class_wrapper(
@@ -231,7 +237,25 @@ def get_java_table_handler(conn_str: str, catalog_type: str, db_name: str, table
         created_core_site = get_core_site_path()
         # Use the defaults if the user didn't override the core site.
         core_site = created_core_site if os.path.exists(created_core_site) else ""
+        inst = (
+            prefetch_inst[1]
+            if prefetch_inst[0] is not None and conn_str.startswith(prefetch_inst[0])
+            else None
+        )
         table_dict[key] = reader_class(
-            conn_str, catalog_type, db_name, table, core_site
+            conn_str, catalog_type, db_name, table, core_site, inst
         )
     return table_dict[key]
+
+
+def get_snowflake_prefetch(conn_str: str) -> pt.Any:
+    global prefetch_inst
+
+    if prefetch_inst[0] is None:
+        prefetch_class = get_snowflake_prefetch_class()
+        inst = prefetch_class(conn_str)
+        prefetch_inst = (conn_str, inst)
+    elif prefetch_inst[0] != conn_str:
+        raise ValueError("Cannot prefetch  object with a different connection string")
+
+    return prefetch_inst[1]

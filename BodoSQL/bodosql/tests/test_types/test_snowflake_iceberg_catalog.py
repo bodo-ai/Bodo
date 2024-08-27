@@ -57,13 +57,20 @@ def test_basic_read(memory_leak_check):
     )
 
     query = "SELECT A, B, C FROM BODOSQL_ICEBERG_READ_TEST"
-    check_func(
-        impl,
-        (bc, query),
-        py_output=py_out,
-        sort_output=True,
-        reset_index=True,
-    )
+    stream = StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, query),
+            py_output=py_out,
+            sort_output=True,
+            reset_index=True,
+        )
+        check_logger_msg(
+            stream,
+            'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
+        )
 
 
 @temp_env_override({"AWS_REGION": "us-east-1"})

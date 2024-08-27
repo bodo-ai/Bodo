@@ -2076,14 +2076,17 @@ def get_iceberg_pq_dataset(
     # Most quirks are handled by Arrow except for struct fields. If the table
     # schema has struct fields, we need to extract the file schemas.
     # TODO: Add null field casting support in Arrow to remove this.
-    #       or if too complicated, parallelize
     file_schemas: list[pa.Schema]
     if any(pa.types.is_struct(ty) for ty in typing_pa_table_schema.types):
         pq_format = ds.ParquetFileFormat()
-        file_schemas = []
-        for pq_info in local_pq_infos:
-            pq_frag = pq_format.make_fragment(pq_info.standard_path, fs)
-            file_schemas.append(pq_frag.metadata.schema.to_arrow_schema())
+        pq_frags = [
+            pq_format.make_fragment(pq_info.standard_path, fs)
+            for pq_info in local_pq_infos
+        ]
+        arrow_cpp.fetch_parquet_frags_metadata(pq_frags)
+        file_schemas = [
+            pq_frag.metadata.schema.to_arrow_schema() for pq_frag in pq_frags
+        ]
     else:
         file_schemas = [all_schemas[pq_info.schema_id] for pq_info in local_pq_infos]
 
@@ -2657,6 +2660,50 @@ def determine_str_as_dict_columns(
         if metric < bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD:
             str_as_dict.add(str_col_names_to_check[i])
     return str_as_dict
+
+
+def prefetch_sf_tables(conn_str: str, table_paths: list[str]) -> None:
+    "Helper function for the Python contents of prefetch_sf_tables_njit."
+
+    import bodo_iceberg_connector as bic
+
+    comm = MPI.COMM_WORLD
+    exc = None
+
+    conn_str = format_iceberg_conn(conn_str)
+    if bodo.get_rank() == 0:
+        try:
+            bic.prefetch_sf_tables(conn_str, table_paths)
+        except bic.IcebergError as e:
+            exc = BodoError(
+                f"Failed to prefetch Snowflake-managed Iceberg table paths: {e.message}"
+            )
+
+    exc = comm.bcast(exc)
+    if exc is not None:
+        raise exc
+
+
+def prefetch_sf_tables_njit(conn_str: str, table_paths: list[str]) -> None:
+    """
+    Prefetch the metadata path for a list of Snowflake-managed Iceberg tables.
+    This function is called in parallel across all ranks. It is mainly used
+    for SQL code generation.
+
+    Args:
+        conn_str (str): Snowflake connection string to connect to.
+        table_paths (list[str]): List of table paths to prefetch paths for.
+    """
+    pass
+
+
+@overload(prefetch_sf_tables_njit)
+def overload_prefetch_sf_tables_njit(conn_str, table_paths):
+    def impl(conn_str, table_paths):
+        with bodo.no_warning_objmode():
+            prefetch_sf_tables(conn_str, table_paths)
+
+    return impl
 
 
 # ----------------------------- Iceberg Write ----------------------------- #
