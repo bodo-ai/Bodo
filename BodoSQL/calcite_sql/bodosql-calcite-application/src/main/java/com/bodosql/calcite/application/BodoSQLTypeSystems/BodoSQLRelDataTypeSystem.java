@@ -67,7 +67,7 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
   private CatalogContext currentDatabase;
 
   public BodoSQLRelDataTypeSystem() {
-    this(BodoTZInfo.UTC, 0, 0, null, false, false);
+    this(BodoTZInfo.UTC, 0, 0, null, true, true);
   }
 
   public BodoSQLRelDataTypeSystem(
