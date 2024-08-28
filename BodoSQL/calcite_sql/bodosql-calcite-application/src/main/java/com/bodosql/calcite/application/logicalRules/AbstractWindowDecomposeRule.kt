@@ -1,16 +1,22 @@
 package com.bodosql.calcite.application.logicalRules
 
 import com.bodosql.calcite.application.operatorTables.CondOperatorTable
+import com.bodosql.calcite.application.operatorTables.NumericOperatorTable
 import com.google.common.collect.ImmutableList
 import org.apache.calcite.plan.RelOptRuleCall
 import org.apache.calcite.plan.RelRule
+import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.core.Project
 import org.apache.calcite.rex.RexBuilder
 import org.apache.calcite.rex.RexCallBinding
+import org.apache.calcite.rex.RexFieldCollation
+import org.apache.calcite.rex.RexInputRef
 import org.apache.calcite.rex.RexLiteral
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexShuttle
+import org.apache.calcite.rex.RexWindowBound
+import org.apache.calcite.rex.RexWindowBounds
 import org.apache.calcite.sql.SqlAggFunction
 import org.apache.calcite.sql.SqlWindow
 import org.apache.calcite.sql.`fun`.SqlStdOperatorTable
@@ -26,14 +32,27 @@ import java.math.BigDecimal
 abstract class AbstractWindowDecomposeRule protected constructor(config: Config) :
     RelRule<AbstractWindowDecomposeRule.Config>(config) {
         override fun onMatch(call: RelOptRuleCall) {
-            val decomposer = WindowDecomposer(call.builder().rexBuilder)
-
             val project: Project = call.rel(0)
+            val input: RelNode = project.input
+            val decomposer = WindowDecomposer(input.rowType.fieldCount, call.builder().rexBuilder)
             val rewrittenNodes = project.projects.map { it.accept(decomposer) }
 
             if (decomposer.doneRewrite) {
                 val builder = call.builder()
                 builder.push(project.input)
+
+                // If the decomposer created new child nodes, place those into a new child
+                // projection before the projection with the decomposed window functions.
+                if (decomposer.newNodes.isNotEmpty()) {
+                    val newInputs: MutableList<RexNode> = mutableListOf()
+                    input.rowType.fieldList.forEachIndexed {
+                            idx, field ->
+                        newInputs.add(RexInputRef(idx, field.type))
+                    }
+                    newInputs.addAll(decomposer.newNodes)
+                    builder.project(newInputs)
+                }
+
                 builder.project(rewrittenNodes)
                 call.transformTo(builder.build())
             }
@@ -99,6 +118,106 @@ abstract class AbstractWindowDecomposeRule protected constructor(config: Config)
                     args,
                     over.window.partitionKeys,
                     over.window.orderKeys,
+                    over.window.lowerBound,
+                    over.window.upperBound,
+                    over.window.isRows,
+                    true,
+                    false,
+                    over.isDistinct,
+                    over.ignoreNulls(),
+                )
+            }
+
+            /**
+             * Copies a RexOver node but with a different operator and argument nodes, and with
+             * new window bounds.
+             *
+             * @param builder The rex builder used to create new rex nodes.
+             * @param over The original RexOver call being duplicated.
+             * @param typ The new output data type.
+             * @param operator The new operator to use.
+             * @param args The new operands to use.
+             * @param lower: The new lower bound to use.
+             * @param upper: The new upper bound to use.
+             */
+            fun duplicateOverWithNewOperatorAndBounds(
+                builder: RexBuilder,
+                over: RexOver,
+                op: SqlAggFunction,
+                args: List<RexNode>,
+                lower: RexWindowBound,
+                upper: RexWindowBound,
+            ): RexNode {
+                // Infer the output type of the new window function
+                val binding: RexCallBinding =
+                    object : RexCallBinding(
+                        builder.typeFactory,
+                        op,
+                        args,
+                        ImmutableList.of(),
+                    ) {
+                        override fun getGroupCount(): Int {
+                            return if (SqlWindow.isAlwaysNonEmpty(lower, upper)) 1 else 0
+                        }
+                    }
+                val outTyp = op.returnTypeInference!!.inferReturnType(binding)
+                // Create the new call
+                return builder.makeOver(
+                    outTyp,
+                    op,
+                    args,
+                    over.window.partitionKeys,
+                    over.window.orderKeys,
+                    lower,
+                    upper,
+                    over.window.isRows,
+                    true,
+                    false,
+                    over.isDistinct,
+                    over.ignoreNulls(),
+                )
+            }
+
+            /**
+             * Copies a RexOver node but with a different operator and argument nodes, and with
+             * new window partition/order terms.
+             *
+             * @param builder The rex builder used to create new rex nodes.
+             * @param over The original RexOver call being duplicated.
+             * @param typ The new output data type.
+             * @param operator The new operator to use.
+             * @param args The new operands to use.
+             * @param partition: The new partition keys to use.
+             * @param order: The new order keys to use.
+             */
+            fun duplicateOverWithNewOperatorAndWindow(
+                builder: RexBuilder,
+                over: RexOver,
+                op: SqlAggFunction,
+                args: List<RexNode>,
+                partition: List<RexNode>,
+                order: ImmutableList<RexFieldCollation>,
+            ): RexNode {
+                // Infer the output type of the new window function
+                val binding: RexCallBinding =
+                    object : RexCallBinding(
+                        builder.typeFactory,
+                        op,
+                        args,
+                        ImmutableList.of(),
+                    ) {
+                        override fun getGroupCount(): Int {
+                            return if (SqlWindow.isAlwaysNonEmpty(over.window.lowerBound, over.window.upperBound)) 1 else 0
+                        }
+                    }
+                val outTyp = op.returnTypeInference!!.inferReturnType(binding)
+                // Create the new call
+                return builder.makeOver(
+                    outTyp,
+                    op,
+                    args,
+                    partition,
+                    order,
                     over.window.lowerBound,
                     over.window.upperBound,
                     over.window.isRows,
@@ -300,6 +419,58 @@ abstract class AbstractWindowDecomposeRule protected constructor(config: Config)
                 return builder.makeCast(over.type, quotient)
             }
 
+            /**
+             * Rewrites a `PERCENT_RANK() OVER (...)` call into the form
+             * `DIV0(RANK() OVER (...) - 1, COUNT(*) OVER (...) - 1)`
+             */
+            fun rewritePercentRank(
+                builder: RexBuilder,
+                over: RexOver,
+            ): RexNode {
+                val rank =
+                    duplicateOverWithNewOperatorAndBounds(
+                        builder,
+                        over,
+                        SqlStdOperatorTable.RANK,
+                        listOf(),
+                        RexWindowBounds.UNBOUNDED_PRECEDING,
+                        RexWindowBounds.UNBOUNDED_FOLLOWING,
+                    )
+                val rankMinus = builder.makeCall(SqlStdOperatorTable.MINUS, rank, builder.makeExactLiteral(BigDecimal.ONE))
+                val count =
+                    duplicateOverWithNewOperatorAndBounds(
+                        builder,
+                        over,
+                        SqlStdOperatorTable.COUNT,
+                        listOf(),
+                        RexWindowBounds.UNBOUNDED_PRECEDING,
+                        RexWindowBounds.UNBOUNDED_FOLLOWING,
+                    )
+                val countMinus = builder.makeCall(SqlStdOperatorTable.MINUS, count, builder.makeExactLiteral(BigDecimal.ONE))
+                return builder.makeCall(NumericOperatorTable.DIV0, rankMinus, countMinus)
+            }
+
+            /**
+             * Rewrites a `RATIO_TO_REPORT(X) OVER (...)` call into the form
+             * `DIV0(RANK() OVER (...) - 1, SUM(X) OVER (...) - 1)`
+             */
+            fun rewriteRatioToReport(
+                builder: RexBuilder,
+                over: RexOver,
+            ): RexNode {
+                val sum =
+                    duplicateOverWithNewOperatorAndBounds(
+                        builder,
+                        over,
+                        SqlStdOperatorTable.SUM,
+                        over.operands,
+                        RexWindowBounds.UNBOUNDED_PRECEDING,
+                        RexWindowBounds.UNBOUNDED_FOLLOWING,
+                    )
+                val denominator = builder.makeCall(CondOperatorTable.NULLIF, sum, builder.makeExactLiteral(BigDecimal.ZERO))
+                return builder.makeCall(SqlStdOperatorTable.DIVIDE, over.operands[0], denominator)
+            }
+
             val shouldRewriteRules =
                 mapOf(
                     "AVG" to AbstractWindowDecomposeRule::allowNonBlankRewriteRule,
@@ -310,6 +481,9 @@ abstract class AbstractWindowDecomposeRule protected constructor(config: Config)
                     "COVAR_SAMP" to AbstractWindowDecomposeRule::allowNonDistinctRewriteRule,
                     "COVAR_POP" to AbstractWindowDecomposeRule::allowNonDistinctRewriteRule,
                     "CORR" to AbstractWindowDecomposeRule::allowNonDistinctRewriteRule,
+                    "PERCENT_RANK" to { _ -> true },
+                    "CUME_DIST" to { _ -> true },
+                    "RATIO_TO_REPORT" to { _ -> true },
                 )
 
             val rewriteFuncs =
@@ -322,10 +496,18 @@ abstract class AbstractWindowDecomposeRule protected constructor(config: Config)
                     "COVAR_SAMP" to rewriteCovar(isSample = true),
                     "COVAR_POP" to rewriteCovar(isSample = false),
                     "CORR" to AbstractWindowDecomposeRule::rewriteCorr,
+                    "PERCENT_RANK" to AbstractWindowDecomposeRule::rewritePercentRank,
+                    "RATIO_TO_REPORT" to AbstractWindowDecomposeRule::rewriteRatioToReport,
                 )
 
-            class WindowDecomposer(val builder: RexBuilder) : RexShuttle() {
+            val rewriteFuncsWithNewNodes =
+                mapOf(
+                    "CUME_DIST" to WindowDecomposer::rewriteCumeDist,
+                )
+
+            class WindowDecomposer(val nInputs: Int, val builder: RexBuilder) : RexShuttle() {
                 public var doneRewrite = false
+                public val newNodes: MutableList<RexNode> = mutableListOf()
 
                 override fun visitOver(over: RexOver): RexNode {
                     val name = over.op.name
@@ -338,7 +520,36 @@ abstract class AbstractWindowDecomposeRule protected constructor(config: Config)
                     doneRewrite = true
 
                     // Invoke the appropriate rewrite function.
-                    return rewriteFuncs[name]!!(builder, over)
+                    return if (rewriteFuncsWithNewNodes.containsKey(name)) {
+                        rewriteFuncsWithNewNodes[name]!!(this, over)
+                    } else {
+                        rewriteFuncs[name]!!(builder, over)
+                    }
+                }
+
+                /**
+                 * Rewrites a `CUME_DIST() OVER (PARTITION BY A ORDER BY B)` call into the form
+                 * `MAX(ROW_NUMBER() OVER (PARTITION BY A ORDER BY B) OVER (PARTITION BY A, B)) / COUNT(*) OVER (PARTITION BY A)`.
+                 * Ensures that the row_number and count calls are added to a child projection.
+                 */
+                fun rewriteCumeDist(over: RexOver): RexNode {
+                    val rowNumber = duplicateOverWithNewOperator(builder, over, SqlStdOperatorTable.ROW_NUMBER, listOf())
+                    val rowNumberRef = RexInputRef(nInputs + newNodes.size, rowNumber.type)
+                    newNodes.add(rowNumber)
+                    val count = duplicateOverWithNewOperator(builder, over, SqlStdOperatorTable.COUNT, listOf())
+                    val countRef = RexInputRef(nInputs + newNodes.size, count.type)
+                    newNodes.add(count)
+                    val newPartition = over.window.partitionKeys + over.window.orderKeys.map { it.key }
+                    val max =
+                        duplicateOverWithNewOperatorAndWindow(
+                            builder,
+                            over,
+                            SqlStdOperatorTable.MAX,
+                            listOf(rowNumberRef),
+                            newPartition,
+                            ImmutableList.of(),
+                        )
+                    return builder.makeCall(SqlStdOperatorTable.DIVIDE, max, countRef)
                 }
             }
         }

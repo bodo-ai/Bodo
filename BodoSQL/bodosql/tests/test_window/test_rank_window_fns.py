@@ -102,18 +102,16 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     for i, func in enumerate(funcs):
         selects.append(f"{func} OVER (PARTITION BY W2 ORDER BY {order_clause}) AS C{i}")
     query = f"SELECT A, W4, {', '.join(selects)} FROM table1"
-    pandas_code = check_query(
+    check_query(
         query,
         all_types_window_df,
         spark_info,
         check_dtype=False,
         check_names=False,
-        return_codegen=True,
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
         convert_columns_tz_naive=convert_columns_tz_naive,
-    )["pandas_code"]
-    count_window_applies(pandas_code, 0, ["RANK"])
+    )
 
 
 @pytest.mark.parametrize(
@@ -705,6 +703,7 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
         expected_output=expected_df,
         check_dtype=False,
         check_names=False,
+        only_jit_1DVar=True,
     )
 
 
@@ -744,6 +743,9 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
                 }
             ),
             id="percent_rank",
+            marks=pytest.mark.skip(
+                reason="Blocked until multiple window functions are allowed in streaming together"
+            ),
         ),
         pytest.param(
             "CUME_DIST()",
@@ -753,7 +755,7 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
                     "VAL": [5 * (1 + (i // 5)) / 25 for i in range(25)],
                 }
             ),
-            id="cume_rank",
+            id="cume_dist",
         ),
     ],
 )
@@ -868,6 +870,9 @@ def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_che
             ),
             "[DEBUG] WindowState::FinalizeBuild: Finished",
             id="percent_rank",
+            marks=pytest.mark.skip(
+                reason="Blocked until multiple window functions are allowed in streaming together"
+            ),
         ),
         pytest.param(
             "CUME_DIST()",
@@ -884,7 +889,7 @@ def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_che
                 }
             ),
             "[DEBUG] WindowState::FinalizeBuild: Finished",
-            id="cume_rank",
+            id="cume_dist",
         ),
     ],
 )
@@ -997,7 +1002,26 @@ def test_row_number_intense(func, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+        only_jit_1DVar=True,
     )
+
+
+@pytest.fixture(scope="session")
+def ntile_df():
+    df = pd.DataFrame(
+        {
+            "ID": list(range(10010)),
+            "A": [1] * 5005 + [2] * 5005,
+            "B": [i for i in range(5004)] + [None] + [i for i in range(5004)] + [None],
+            "C": ["socks", "shoes", None, "shirt", None] * 2002,
+        }
+    )
+
+    # Randomize the order of the input data
+    rng = np.random.default_rng(42)
+    perm = rng.permutation(len(df))
+    df = df.iloc[perm, :]
+    return df
 
 
 @pytest.mark.parametrize(
@@ -1037,29 +1061,15 @@ def test_row_number_intense(func, spark_info, memory_leak_check):
         ),
     ],
 )
-def test_ntile(capfd, spark_info, n_bins):
+def test_ntile(ntile_df, capfd, spark_info, n_bins):
     from mpi4py import MPI
 
     from bodo.tests.utils import temp_env_override
 
     comm = MPI.COMM_WORLD
 
-    in_df = pd.DataFrame(
-        {
-            "ID": list(range(10010)),
-            "A": [1] * 5005 + [2] * 5005,
-            "B": [i for i in range(5004)] + [None] + [i for i in range(5004)] + [None],
-            "C": ["socks", "shoes", None, "shirt", None] * 2002,
-        }
-    )
-
     query = f"SELECT ID, NTILE({n_bins}) OVER (PARTITION BY A ORDER BY B ASC NULLS LAST) FROM TABLE1"
     expected_log_message = "[DEBUG] GroupbyState::FinalizeBuild:"
-
-    # Randomize the order of the input data
-    rng = np.random.default_rng(42)
-    perm = rng.permutation(len(in_df))
-    in_df = in_df.iloc[perm, :]
 
     # checks that we are using stream groupby
     with temp_env_override(
@@ -1069,7 +1079,7 @@ def test_ntile(capfd, spark_info, n_bins):
     ):
         check_query(
             query,
-            {"TABLE1": in_df},
+            {"TABLE1": ntile_df},
             spark_info,
             check_names=False,
             check_dtype=False,

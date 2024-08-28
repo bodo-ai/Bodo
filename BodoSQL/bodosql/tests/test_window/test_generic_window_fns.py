@@ -262,27 +262,32 @@ def test_blended_fusion(memory_leak_check):
     }
     selects = []
     funcs = [
-        "RANK()",
-        "AVG(A)",
-        "MEDIAN(A)",
-        "MODE(A)",
-        "CONDITIONAL_CHANGE_EVENT(A)",
+        ("RANK()", False),
+        ("AVG(A)", True),
+        ("MEDIAN(A)", False),
+        ("MODE(A)", False),
+        ("CONDITIONAL_CHANGE_EVENT(A)", False),
+        ("SUM(A)", True),
     ]
-    for i in range(len(funcs)):
-        selects.append(f"{funcs[i]} OVER (PARTITION BY B ORDER BY C)")
+    for func, frame_syntax in funcs:
+        suffix = (
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
+            if frame_syntax
+            else ""
+        )
+        selects.append(f"{func} OVER (PARTITION BY B ORDER BY C {suffix})")
     query = f"SELECT C, {', '.join(selects)} FROM table1"
     answer = pd.DataFrame(
         {
-            "C": pd.Series(list(range(10))),
-            "RANK": pd.Series([i + 1 for i in range(10)]),
-            "AVG": pd.Series(
-                [None, None, 2, 2.5, 2.5, 10 / 3, 10 / 3, 4.25, 4.25, 4.25]
-            ),
-            "MEDIAN": pd.Series([None, None, 2, 2.5, 2.5, 3, 3, 4, 4, 4]),
-            "MODE": pd.Series([None] * 2 + [2] * 8, dtype=pd.Int32Dtype()),
+            "C": range(10),
+            "RANK": range(1, 11),
+            "AVG": [4.25] * 10,
+            "MEDIAN": [4] * 10,
+            "MODE": [2] * 10,
             "CONDITIONAL_CHANGE_EVENT": pd.Series(
                 [0, 0, 0, 1, 1, 2, 2, 3, 3, 3], dtype=pd.Int32Dtype()
             ),
+            "SUM": [17] * 10,
         }
     )
     pandas_code = check_query(

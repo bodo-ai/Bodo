@@ -152,7 +152,7 @@ def col_to_window_df(cols):
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def uint8_window_df():
     """Returns a DataFrame for window function testing using only uint8 data"""
     return col_to_window_df({"A": uint8_col})
@@ -170,7 +170,7 @@ def numeric_types_window_df(request):
     return col_to_window_df({"A": request.param})
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def all_numeric_window_df(request):
     """Same as numeric_types_window_df except htat it returns all the columns at once"""
     return col_to_window_df(
@@ -182,7 +182,7 @@ def all_numeric_window_df(request):
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def all_numeric_window_col_names(request):
     """Returns the data column names from all_numeric_window_df"""
     return {
@@ -218,7 +218,7 @@ def all_types_window_df(request):
 
 
 @pytest.mark.tz_aware
-@pytest.fixture
+@pytest.fixture(scope="session")
 def all_window_df():
     """Same as all_types_window_df, but returns them all in the same DataFrame."""
     return col_to_window_df(
@@ -237,7 +237,7 @@ def all_window_df():
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def all_window_col_names():
     """Returns the data column names from all_window_df, each mapped to a
     string of a constant value of that type.
