@@ -28,45 +28,36 @@ following syntax:
 SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
 ```
 The `#!sql ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
-section is used to specify the window over which to compute the
+section is the window's "frame" used to specify the window over which to compute the
 function. A bound can can come before the current row, using `#!sql PRECEDING` or after the current row, using
 `#!sql FOLLOWING`. The bounds can be relative (i.e.
 `#!sql N PRECEDING` or `#!sql N FOLLOWING`), where `N` is a positive integer,
 or they can be absolute (i.e. `#!sql UNBOUNDED PRECEDING` or
 `#!sql UNBOUNDED FOLLOWING`).
 
-For example:
+For example, consider the following window function calls:
 
 ```sql
-SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
+SELECT
+    SUM(A) OVER () as S1,
+    SUM(A) OVER (PARTITION BY B) as S2,
+    SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as S3,
+    SUM(A) OVER (ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) as S4,
+FROM table1
 ```
-This query computes the sum of every 3 rows, i.e. the sum of a row of interest, its preceding row, and its following row.
+This query computes 4 sums, and returns 1 row for every row in the original table:
 
-In contrast:
-
-```sql
-SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
-```
-This query computes the cumulative sum over a row and all of its preceding rows.
+- `S1`: The sum of each row of `A` across the entire table. 
+- `S2`: The sum of all values of `A` within each partition of `B`.
+- `S3`: The cumulative sum of each row and all rows before it when the rows are partitioned by B the sorted by C.
+- `S4`: The the sum each row with the row before & after it in the entire table when ordered by C.
 
 !!! note
     For most window functions, BodoSQL returns `NULL` if the specified window frame
     is empty or all `NULL`. Exceptions to this behavior are noted.
 
-Window functions perform a series of steps as followed:
+All window functions optionally allow `#!sql PARTITION BY`. Some window functions optionally allow `#!sql ORDER BY`, and some may actually require it. Some window functions optionally allow window frames, and others ban it. If a function supports window frames but one is not provided, the default frame behavior depends on the function.
 
-1.  Partition the data by `#!sql PARTITION_COLUMN`. This is effectively a groupby operation on `#!sql PARTITION_COLUMN`.
-2.  Sort each group as specified by the `#!sql ORDER BY` clause.
-3.  Perform the calculation over the specified window, i.e. the newly ordered subset of data.
-4.  Shuffle the data back to the original ordering.
-
-For BodoSQL, `#!sql PARTITION BY` is required, but
-`#!sql ORDER BY` is optional for most functions and
-`#!sql ROWS BETWEEN` is optional for all of them. If
-`#!sql ROWS BETWEEN` is not specified then it defaults to either
-computing the result over the entire window (if no `#!sql ORDER BY`
-clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURRENT ROW`
-(if there is an `#!sql ORDER BY` clause).
 !!! note
     `#!sql RANGE BETWEEN` is not currently supported.
 
@@ -78,55 +69,55 @@ clause is specified) or to using the window `#!sql UNBOUNDED PRECEDING TO CURREN
 
 BodoSQL Currently supports the following Aggregation & Window functions:
 
-| Function | Supported with GROUP BY? | Supported without GROUP BY? | Supported as window function? | (WINDOW) Allows ORDER BY? | (WINDOW) Requires ORDER BY? | (WINDOW) Allows frame? |
-|---|---|---|---|---|---|---|
-| `#!sql ANY_VALUE` | Y | Y | Y | Y | N | Y |
-| `#!sql APPROX_PERCENTILE` | N | Y | Y | N | N | N |
-| `#!sql ARRAY_AGG` | Y | N | N | N/A | N/A | N/A |
-| `#!sql ARRAY_UNIQUE_AGG` | Y | N | N | N/A | N/A | N/A |
-| `#!sql AVG` | Y | Y | Y | Y | N | Y |
-| `#!sql BITAND_AGG` | Y | Y | Y | N | N | N |
-| `#!sql BITOR_AGG` | Y | Y | Y | N | N | N |
-| `#!sql BITXOR_AGG` | Y | Y | Y | N | N | N |
-| `#!sql BOOLAND_AGG` | Y | Y | Y | N | N | N |
-| `#!sql BOOLOR_AGG` | Y | Y | Y | N | N | N |
-| `#!sql BOOLXOR_AGG` | Y | Y | Y | N | N | N |
-| `#!sql CONDITIONAL_CHANGE_EVENT` | N | N | Y | Y | Y | N |
-| `#!sql CONDITIONAL_TRUE_EVENT` | N | N | Y | Y | Y | N |
-| `#!sql CORR` | N | N | Y | N | N | N |
-| `#!sql COUNT` | Y | Y | Y | Y | N | Y |
-| `#!sql COUNT(*)` | Y | Y | Y | Y | N | Y |
-| `#!sql COUNT_IF` | Y | Y | Y | Y | N | Y |
-| `#!sql COVAR_POP` | N | N | Y | N | N | N |
-| `#!sql COVAR_SAMP` | N | N | Y | N | N | N |
-| `#!sql CUME_DIST` | N | N | Y | Y | Y | N |
-| `#!sql DENSE_RANK` | N | N | Y | Y | Y | N |
-| `#!sql FIRST_VALUE` | N | N | Y | Y | N | Y |
-| `#!sql KURTOSIS` | Y | Y | Y | N | N | N |
-| `#!sql LEAD` | N | N | Y | Y | Y | N |
-| `#!sql LAST_VALUE` | N | N | Y | Y | N | Y |
-| `#!sql LAG` | N | N | Y | Y | Y | N |
-| `#!sql LISTAGG` | Y | Y | N | N/A | N/A | N/A |
-| `#!sql MAX` | Y | Y | Y | Y | N | Y |
-| `#!sql MEDIAN` | Y | Y | Y | N | N | N |
-| `#!sql MIN` | Y | Y | Y | Y | N | Y |
-| `#!sql MODE` | Y | N | Y | Y | N | N |
-| `#!sql NTH_VALUE` | N | N | Y | Y | N | Y |
-| `#!sql NTILE` | N | N | Y | Y | Y | N |
+| Function | Supported with GROUP BY? | Supported without GROUP BY? | Supported as window function?  | (WINDOW) Requires ORDER BY? | (WINDOW) Allows frame? |
+|---|---|---|---|---|---|
+| `#!sql ANY_VALUE` | Y | Y | Y | N | N |
+| `#!sql APPROX_PERCENTILE` | N | Y | Y | N | N |
+| `#!sql ARRAY_AGG` | Y | N | N | N/A | N/A |
+| `#!sql ARRAY_UNIQUE_AGG` | Y | N | N | N/A | N/A |
+| `#!sql AVG` | Y | Y | Y | N | Y |
+| `#!sql BITAND_AGG` | Y | Y | Y | N | N |
+| `#!sql BITOR_AGG` | Y | Y | Y | N | N |
+| `#!sql BITXOR_AGG` | Y | Y | Y | N | N |
+| `#!sql BOOLAND_AGG` | Y | Y | Y | N | N |
+| `#!sql BOOLOR_AGG` | Y | Y | Y | N | N |
+| `#!sql BOOLXOR_AGG` | Y | Y | Y | N | N |
+| `#!sql CONDITIONAL_CHANGE_EVENT` | N | N | Y | Y | N |
+| `#!sql CONDITIONAL_TRUE_EVENT` | N | N | Y | Y | N |
+| `#!sql CORR` | N | N | Y | N | N |
+| `#!sql COUNT` | Y | Y | Y | N | Y |
+| `#!sql COUNT(*)` | Y | Y | Y | N | Y |
+| `#!sql COUNT_IF` | Y | Y | Y | N | Y |
+| `#!sql COVAR_POP` | N | N | Y | N | N |
+| `#!sql COVAR_SAMP` | N | N | Y | N | N |
+| `#!sql CUME_DIST` | N | N | Y | Y | N |
+| `#!sql DENSE_RANK` | N | N | Y | Y | N |
+| `#!sql FIRST_VALUE` | N | N | Y | N | Y |
+| `#!sql KURTOSIS` | Y | Y | Y | N | N |
+| `#!sql LEAD` | N | N | Y | Y | N |
+| `#!sql LAST_VALUE` | N | N | Y | N | Y |
+| `#!sql LAG` | N | N | Y | Y | N |
+| `#!sql LISTAGG` | Y | Y | N | N/A | N/A |
+| `#!sql MAX` | Y | Y | Y | N | Y |
+| `#!sql MEDIAN` | Y | Y | Y | N | N |
+| `#!sql MIN` | Y | Y | Y | N | Y |
+| `#!sql MODE` | Y | N | Y | N | N |
+| `#!sql NTH_VALUE` | N | N | Y | N | Y |
+| `#!sql NTILE` | N | N | Y | Y | N |
 | `#!sql OBJECT_AGG` | Y | N | Y | N | N | N |
-| `#!sql PERCENTILE_CONT` | Y | Y | N | N/A | N/A | N/A |
-| `#!sql PERCENTILE_DISC` | Y | Y | N | N/A | N/A | N/A |
-| `#!sql PERCENT_RANK` | N | N | Y | Y | Y | N |
-| `#!sql RANK` | N | N | Y | Y | Y | N |
-| `#!sql RATIO_TO_REPORT` | N | N | Y | Y | N | N |
-| `#!sql ROW_NUMBER` | N | N | Y | Y | Y | N |
-| `#!sql SKEW` | Y | Y | Y | Y | N | N |
-| `#!sql STDDEV` | Y | Y | Y | Y | N | Y |
-| `#!sql STDDEV_POP` | Y | Y | Y | Y | N | Y |
-| `#!sql STDDEV_SAMP` | Y | Y | Y | Y | N | Y |
-| `#!sql SUM` | Y | Y | Y | Y | N | Y |
-| `#!sql VARIANCE` | Y | Y | Y | Y | N | Y |
-| `#!sql VARIANCE_POP` | Y | Y | Y | Y | N | Y |
-| `#!sql VARIANCE_SAMP` | Y | Y | Y | Y | N | Y |
-| `#!sql VAR_POP` | Y | Y | Y | Y | N | Y |
-| `#!sql VAR_SAMP` | Y | Y | Y | Y | N | Y |
+| `#!sql PERCENTILE_CONT` | Y | Y | N | N/A | N/A |
+| `#!sql PERCENTILE_DISC` | Y | Y | N | N/A | N/A |
+| `#!sql PERCENT_RANK` | N | N | Y | Y | N |
+| `#!sql RANK` | N | N | Y | Y | N |
+| `#!sql RATIO_TO_REPORT` | N | N | Y | N | N |
+| `#!sql ROW_NUMBER` | N | N | Y | Y | N |
+| `#!sql SKEW` | Y | Y | Y | N | N |
+| `#!sql STDDEV` | Y | Y | Y | N | Y |
+| `#!sql STDDEV_POP` | Y | Y | Y | N | Y |
+| `#!sql STDDEV_SAMP` | Y | Y | Y | N | Y |
+| `#!sql SUM` | Y | Y | Y | N | Y |
+| `#!sql VARIANCE` | Y | Y | Y | N | Y |
+| `#!sql VARIANCE_POP` | Y | Y | Y | N | Y |
+| `#!sql VARIANCE_SAMP` | Y | Y | Y | N | Y |
+| `#!sql VAR_POP` | Y | Y | Y | N | Y |
+| `#!sql VAR_SAMP` | Y | Y | Y | N | Y |

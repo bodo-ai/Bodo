@@ -425,6 +425,10 @@
                                         <exclude>org/apache/calcite/rel2sql/SqlImplementor.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/LogicVisitor.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexWindow$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexWindow.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexShuttle$1.class</exclude>
+                                        <exclude>org/apache/calcite/rex/RexShuttle.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexBuilder$1.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexBuilder.class</exclude>
                                         <exclude>org/apache/calcite/rex/RexCall$1.class</exclude>

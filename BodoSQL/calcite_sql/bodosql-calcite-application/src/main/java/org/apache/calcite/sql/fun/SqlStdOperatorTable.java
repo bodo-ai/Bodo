@@ -1075,7 +1075,8 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                     .create("MODE", SqlKind.MODE, ReturnTypes.ARG0_NULLABLE_IF_EMPTY,
                             OperandTypes.ANY)
                     .withGroupOrder(Optionality.FORBIDDEN)
-                    .withFunctionType(SqlFunctionCategory.SYSTEM);
+                    .withFunctionType(SqlFunctionCategory.SYSTEM)
+                    .withAllowsFraming(false);
 
     /**
      * <code>APPROX_COUNT_DISTINCT</code> aggregate function.
@@ -1214,7 +1215,8 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                             OperandTypes.NUMERIC_NUMERIC
                     )
                     .withGroupOrder(Optionality.FORBIDDEN)
-                    .withFunctionType(SqlFunctionCategory.SYSTEM);
+                    .withFunctionType(SqlFunctionCategory.SYSTEM)
+                    .withAllowsFraming(false);
 
     /**
      * <code>COVAR_SAMP</code> aggregate function.
@@ -1227,7 +1229,8 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                             OperandTypes.NUMERIC_NUMERIC
                     )
                     .withGroupOrder(Optionality.FORBIDDEN)
-                    .withFunctionType(SqlFunctionCategory.SYSTEM);
+                    .withFunctionType(SqlFunctionCategory.SYSTEM)
+                    .withAllowsFraming(false);
 
     /**
      * <code>STDDEV_SAMP</code> aggregate function.
@@ -2354,7 +2357,8 @@ public class SqlStdOperatorTable extends ReflectiveSqlOperatorTable {
                             OperandTypes.UNIT_INTERVAL_NUMERIC_LITERAL)
                     .withFunctionType(SqlFunctionCategory.SYSTEM)
                     .withGroupOrder(Optionality.MANDATORY)
-                    .withPercentile(true);
+                    .withPercentile(true)
+                    .withAllowsFraming(false);
 
     /**
      * The LISTAGG operator. String aggregator function.

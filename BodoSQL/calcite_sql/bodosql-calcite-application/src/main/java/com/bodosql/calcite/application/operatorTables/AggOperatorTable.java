@@ -48,13 +48,13 @@ public class AggOperatorTable implements SqlOperatorTable {
               opBinding -> ArrayAggReturnType(opBinding),
               OperandTypes.ANY)
           .withGroupOrder(Optionality.OPTIONAL)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction ARRAY_UNIQUE_AGG =
       SqlBasicAggFunction.create(
               "ARRAY_UNIQUE_AGG", SqlKind.OTHER_FUNCTION, ReturnTypes.TO_ARRAY, OperandTypes.ANY)
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   //  Returns the logical (boolean) OR value of all non-NULL boolean records in a group.
   //  BOOLOR_AGG returns ‘true’ if at least one record in the group evaluates to ‘true’.
@@ -70,7 +70,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               BOOL_AGG_RET_TYPE,
               OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   // The same as BOOLAND_AGG except that it returns true if all of the inputs are true
   public static final SqlAggFunction BOOLAND_AGG =
@@ -81,7 +81,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               BOOL_AGG_RET_TYPE,
               OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   // The same as BOOLAND_AGG except that it returns true if exactly one of the inputs  is are true
   public static final SqlAggFunction BOOLXOR_AGG =
@@ -92,21 +92,21 @@ public class AggOperatorTable implements SqlOperatorTable {
               BOOL_AGG_RET_TYPE,
               OperandTypes.BOOLEAN.or(OperandTypes.NUMERIC))
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlBasicAggFunction CONDITIONAL_TRUE_EVENT =
       SqlBasicAggFunction.create(
           "CONDITIONAL_TRUE_EVENT",
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.INTEGER,
-          OperandTypes.BOOLEAN);
+          OperandTypes.BOOLEAN).withAllowsFraming(false);
 
   public static final SqlBasicAggFunction CONDITIONAL_CHANGE_EVENT =
       SqlBasicAggFunction.create(
           "CONDITIONAL_CHANGE_EVENT",
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.INTEGER,
-          OperandTypes.ANY);
+          OperandTypes.ANY).withAllowsFraming(false);
 
   public static final SqlBasicAggFunction COUNT_IF =
       SqlBasicAggFunction.create(
@@ -143,7 +143,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               ReturnTypes.DOUBLE.andThen(SqlTypeTransforms.FORCE_NULLABLE),
               OperandTypes.NUMERIC_NUMERIC)
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction APPROX_PERCENTILE =
       SqlBasicAggFunction.create(
@@ -151,23 +151,25 @@ public class AggOperatorTable implements SqlOperatorTable {
               SqlKind.OTHER_FUNCTION,
               ReturnTypes.DOUBLE_NULLABLE,
               OperandTypes.NUMERIC_NUMERIC)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction MEDIAN =
       SqlBasicAggFunction.create(
               "MEDIAN", SqlKind.MEDIAN, ReturnTypes.ARG0_NULLABLE_IF_EMPTY, OperandTypes.NUMERIC)
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction KURTOSIS =
       SqlBasicAggFunction.create(
               "KURTOSIS", SqlKind.OTHER_FUNCTION, ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM)
+              .withAllowsFraming(false);
 
   public static final SqlAggFunction SKEW =
       SqlBasicAggFunction.create(
               "SKEW", SqlKind.OTHER_FUNCTION, ReturnTypes.DOUBLE_NULLABLE, OperandTypes.NUMERIC)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM)
+              .withAllowsFraming(false);
 
   public static final SqlAggFunction RATIO_TO_REPORT =
       SqlBasicAggFunction.create(
@@ -176,7 +178,8 @@ public class AggOperatorTable implements SqlOperatorTable {
           // Can output null in the case that the sum within the group
           // evaluates to 0
           BodoReturnTypes.DOUBLE_FORCE_NULLABLE,
-          OperandTypes.NUMERIC);
+          OperandTypes.NUMERIC)
+              .withAllowsFraming(false);
 
   public static final SqlAggFunction BITOR_AGG =
       SqlBasicAggFunction.create(
@@ -185,7 +188,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
               OperandTypes.EXACT_NUMERIC)
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction BITAND_AGG =
       SqlBasicAggFunction.create(
@@ -194,7 +197,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
               OperandTypes.EXACT_NUMERIC)
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction BITXOR_AGG =
       SqlBasicAggFunction.create(
@@ -203,7 +206,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               sqlOperatorBinding -> bitX_ret_type(sqlOperatorBinding),
               OperandTypes.NUMERIC.or(OperandTypes.STRING))
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   public static final SqlAggFunction OBJECT_AGG =
       SqlBasicAggFunction.create(
@@ -212,7 +215,7 @@ public class AggOperatorTable implements SqlOperatorTable {
               ReturnTypes.ARG1.andThen(BodoReturnTypes.TO_MAP),
               OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.ANY))
           .withGroupOrder(Optionality.FORBIDDEN)
-          .withFunctionType(SqlFunctionCategory.SYSTEM);
+          .withFunctionType(SqlFunctionCategory.SYSTEM).withAllowsFraming(false);
 
   private List<SqlOperator> aggOperatorList =
       Arrays.asList(

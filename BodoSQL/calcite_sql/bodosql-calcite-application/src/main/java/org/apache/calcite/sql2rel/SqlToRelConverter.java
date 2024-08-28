@@ -2414,10 +2414,10 @@ public class SqlToRelConverter {
     SqlNodeList orderList = window.getOrderList();
 
     if (!aggCall.getOperator().allowsFraming()) {
-      // If the operator does not allow framing, bracketing is implicitly
-      // everything up to the current row.
+      // If the operator does not allow framing, that is implicitly the same
+      // as everything.
       sqlLowerBound = SqlWindow.createUnboundedPreceding(SqlParserPos.ZERO);
-      sqlUpperBound = SqlWindow.createCurrentRow(SqlParserPos.ZERO);
+      sqlUpperBound = SqlWindow.createUnboundedFollowing(SqlParserPos.ZERO);
       if (aggCall.getKind() == SqlKind.ROW_NUMBER) {
         // ROW_NUMBER() expects specific kind of framing.
         rows = true;
