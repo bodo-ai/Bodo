@@ -582,7 +582,7 @@ def windowed_median(S, lower_bound, upper_bound):
 
     calculate_block = "res[i] = np.median(vals)"
 
-    constant_block = "constant_value = S.median()"
+    constant_block = "constant_value = None if S.count() == 0 else S.dropna().median()"
 
     setup_block = "vals = np.zeros(0, dtype=np.float64)"
 

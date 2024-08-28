@@ -3232,7 +3232,7 @@ SqlWindow WindowSpecification() :
         )
     |
         {
-            isRows = SqlLiteral.createBoolean(false, SqlParserPos.ZERO);
+            isRows = SqlLiteral.createBoolean(true, SqlParserPos.ZERO);
             lowerBound = upperBound = null;
         }
     )

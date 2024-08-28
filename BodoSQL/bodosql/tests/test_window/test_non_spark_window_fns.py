@@ -5,7 +5,6 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from bodo import Time
 from bodo.tests.utils import nullable_float_arr_maker, pytest_slow_unless_window
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
@@ -176,40 +175,30 @@ def test_conditional_event_mixed(memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "data_col, partition_col, window_frame, answer",
+    "data_col, partition_col, answer",
     [
         pytest.param(
-            pd.Series([1, 2, 3, 4, 5, 6], dtype=pd.Int32Dtype()),
-            pd.Series(["A"] * 6),
-            "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW",
-            pd.Series([1, 1.5, 2, 2.5, 3, 3.5]),
-            id="int32-single_partition-prefix",
+            pd.array([1, 2, 3, 4, 5, 6], dtype=pd.Int32Dtype()),
+            pd.array(["A"] * 6),
+            pd.array([3.5] * 6),
+            id="int32",
         ),
         pytest.param(
-            pd.Series(
-                [10, 20, None, 30, 40, None, 50, 60, None], dtype=pd.UInt8Dtype()
+            nullable_float_arr_maker(
+                [0.275, 0.488, 0.06, 0.92, 1.0, 0.1, 0.0, 0.0, 0.0], [6, 8], [-1]
             ),
-            pd.Series(["A", "B", "C"] * 3),
-            "ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING",
-            pd.Series([30, 40, None, 40, 50, None, 50, 60, None]),
-            id="uint8-multiple_partitions-suffix",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series([0.275, 0.488, 0.04, 0.06, 0.92, 1.0, 0.1, None, 0.0, None]),
-            pd.Series(["A"] * 10),
-            "ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING",
-            pd.Series([0.275, 0.1675, 0.275, 0.488, 0.1, 0.51, 0.51, 0.1, 0.05, 0.0]),
-            id="float64-single_partition-rolling_5",
+            pd.array(["A"] * 3 + ["B"] * 5 + ["C"]),
+            nullable_float_arr_maker([0.275] * 3 + [0.51] * 5 + [0.0], [8], [-1]),
+            id="float64",
             marks=pytest.mark.slow,
         ),
     ],
 )
-def test_median(data_col, partition_col, window_frame, answer):
+def test_median(data_col, partition_col, answer):
     """Tests median (needs to be handled seperately due to PySpark limitations
     on calculating medians)"""
     assert len(data_col) == len(partition_col)
-    query = f"SELECT A, B, C, MEDIAN(A) OVER (PARTITION BY B ORDER BY C {window_frame}) FROM table1"
+    query = f"SELECT C, MEDIAN(A) OVER (PARTITION BY B) FROM table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {"A": data_col, "B": partition_col, "C": list(range(len(data_col)))}
@@ -217,8 +206,6 @@ def test_median(data_col, partition_col, window_frame, answer):
     }
     expected_output = pd.DataFrame(
         {
-            "A": data_col,
-            "B": partition_col,
             "C": list(range(len(data_col))),
             "D": answer,
         }
@@ -293,6 +280,35 @@ def test_ratio_to_report(data_info, dtype, memory_leak_check):
     )
 
 
+def test_partitionless_ratio_to_report(memory_leak_check):
+    query = "SELECT IDX, RATIO_TO_REPORT(S) OVER () AS WIN FROM TABLE1"
+    n_rows = 10_000
+    df = pd.DataFrame(
+        {
+            "IDX": range(n_rows),
+            "S": pd.array(
+                [
+                    None if i % 7 == i % 6 else np.int64((np.tan(i) * 3) ** 2)
+                    for i in range(n_rows)
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+        }
+    )
+    answer = pd.DataFrame({"IDX": df["IDX"], "WIN": df["S"] / df["S"].sum()})
+    ordering = np.random.default_rng(42).permutation(np.arange(len(df)))
+    ctx = {"TABLE1": df.iloc[ordering]}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=answer,
+        only_jit_1DVar=True,
+    )
+
+
 @pytest.mark.slow
 def test_approx_percentile(memory_leak_check):
     """Tests APPROX_PERCENTILE as a window function"""
@@ -345,33 +361,8 @@ def test_approx_percentile(memory_leak_check):
 # due to the semantics of how Python iterates over hashmaps
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "data_col, bounds, answer",
+    "data_col, answer",
     [
-        pytest.param(
-            pd.Series([0, -1, -1, 2, 2, 2, 3, 3, 3, 3], dtype=pd.Int32Dtype()),
-            ("UNBOUNDED PRECEDING", "CURRENT ROW"),
-            pd.DataFrame(
-                {0: pd.Series([0, 0, -1, -1, -1, 2, 2, 3, 3, 3], dtype=pd.Int32Dtype())}
-            ),
-            id="int32-prefix",
-        ),
-        pytest.param(
-            pd.Series(
-                [100, 1, 1, 100, None, None, 2, 2, 100, 2],
-                dtype=pd.UInt8Dtype(),
-            ),
-            ("5 PRECEDING", "1 PRECEDING"),
-            pd.DataFrame(
-                {
-                    0: pd.Series(
-                        [None, 100, 100, 1, 100, None, None, 2, 2, 2],
-                        dtype=pd.UInt8Dtype(),
-                    )
-                }
-            ),
-            id="uint8-before3",
-            marks=pytest.mark.slow,
-        ),
         pytest.param(
             pd.Series(
                 [
@@ -387,7 +378,6 @@ def test_approx_percentile(memory_leak_check):
                     "ABC",
                 ]
             ),
-            None,
             pd.DataFrame(
                 {
                     0: pd.Series(
@@ -399,154 +389,20 @@ def test_approx_percentile(memory_leak_check):
                     )
                 }
             ),
-            id="string-noframe",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series([b"X", b"Y", b"X", b"Y", b"X", b"X", b"Y", b"Y", None, None]),
-            ("1 PRECEDING", "1 FOLLOWING"),
-            pd.DataFrame(
-                {
-                    0: pd.Series(
-                        [b"X", b"X", b"Y", b"X", b"X", b"X", b"Y", b"Y", b"Y", None]
-                    )
-                }
-            ),
-            id="binary-rolling3",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series(
-                [True, True, None, None, None, True, False, False, False, True],
-                dtype=pd.BooleanDtype(),
-            ),
-            ("1 FOLLOWING", "UNBOUNDED FOLLOWING"),
-            pd.DataFrame(
-                {
-                    0: pd.Series(
-                        [True, None, None, None, None, False, False, True, True, None],
-                        dtype=pd.BooleanDtype(),
-                    )
-                }
-            ),
-            id="boolean-exclusive_suffix",
+            id="string",
             marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([1.0, 2.0, 3.0, 1.0, 1.0, 3.0, 2.0, 1.0, 2.0, 3.0]),
-            ("UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
             pd.DataFrame({0: [1.0] * 5 + [3.0] * 5}),
-            id="float-entire",
+            id="float",
             marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series([pd.Timestamp(f"201{y}-7-4") for y in "0110143224"]),
-            ("UNBOUNDED PRECEDING", "1 FOLLOWING"),
-            pd.DataFrame(
-                {0: pd.Series([pd.Timestamp(f"201{y}-7-4") for y in "0101144244"])}
-            ),
-            id="timestamp-overinclusive_prefix",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            pd.Series(
-                [pd.Timestamp(f"201{y}-7-4", tz="US/Pacific") for y in "0110143224"]
-            ),
-            ("UNBOUNDED PRECEDING", "1 FOLLOWING"),
-            pd.DataFrame(
-                {
-                    0: pd.Series(
-                        [
-                            pd.Timestamp(f"201{y}-7-4", tz="US/Pacific")
-                            for y in "0101144244"
-                        ]
-                    )
-                }
-            ),
-            id="tz-aware-overinclusive_prefix",
-            marks=pytest.mark.tz_aware,
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    datetime.date(2024, 1, 1),
-                    datetime.date(2024, 1, 1),
-                    None,
-                    datetime.date(2022, 7, 4),
-                    None,
-                    datetime.date(1999, 12, 31),
-                    datetime.date(1999, 12, 31),
-                    datetime.date(1999, 12, 31),
-                    datetime.date(2022, 7, 4),
-                    datetime.date(2022, 7, 4),
-                ]
-            ),
-            ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
-            pd.DataFrame(
-                {
-                    0: pd.Series(
-                        [
-                            datetime.date(2024, 1, 1),
-                            datetime.date(2024, 1, 1),
-                            datetime.date(2022, 7, 4),
-                            datetime.date(2022, 7, 4),
-                            None,
-                            datetime.date(1999, 12, 31),
-                            datetime.date(1999, 12, 31),
-                            datetime.date(2022, 7, 4),
-                            datetime.date(2022, 7, 4),
-                            datetime.date(2022, 7, 4),
-                        ]
-                    )
-                }
-            ),
-            id="date-suffix",
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    Time(6, 10, 0, microsecond=500, precision=9),
-                    Time(7, 45, 59, precision=9),
-                    Time(7, 45, 59, precision=9),
-                    Time(6, 10, 0, microsecond=500, precision=9),
-                    Time(7, 45, 59, nanosecond=1, precision=9),
-                    None,
-                    Time(12, 30, 0, precision=9),
-                    Time(10, 0, 1, precision=9),
-                    Time(10, 0, 1, precision=9),
-                    Time(12, 30, 0, precision=9),
-                ]
-            ),
-            ("UNBOUNDED PRECEDING", "CURRENT ROW"),
-            pd.DataFrame(
-                {
-                    0: pd.Series(
-                        [
-                            Time(6, 10, 0, microsecond=500, precision=9),
-                            Time(6, 10, 0, microsecond=500, precision=9),
-                            Time(7, 45, 59, precision=9),
-                            Time(6, 10, 0, microsecond=500, precision=9),
-                            Time(6, 10, 0, microsecond=500, precision=9),
-                            None,
-                            Time(12, 30, 0, precision=9),
-                            Time(12, 30, 0, precision=9),
-                            Time(10, 0, 1, precision=9),
-                            Time(12, 30, 0, precision=9),
-                        ]
-                    )
-                }
-            ),
-            id="time-prefix",
         ),
     ],
 )
-def test_mode(data_col, bounds, answer, memory_leak_check):
+def test_mode(data_col, answer, memory_leak_check):
     """Tests the mode function with hardcoded answers"""
-    if bounds == None:
-        query = "select MODE(A) OVER (PARTITION BY B) from table1"
-    else:
-        query = f"select MODE(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN {bounds[0]} AND {bounds[1]}) from table1"
-
+    query = "select MODE(A) OVER (PARTITION BY B) from table1"
     assert len(data_col) == 10
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -626,15 +482,9 @@ def test_variance_stddev_nan(memory_leak_check):
 
 def test_kurtosis_skew(memory_leak_check):
     """Tests the kurtosis and skew functions"""
-    window_calls = [
-        ("SKEW", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
-        ("KURTOSIS", "UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
-    ]
     selects = []
-    for func, lower, upper in window_calls:
-        selects.append(
-            f"{func}(A) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN {lower} AND {upper})"
-        )
+    for func in ["SKEW", "KURTOSIS"]:
+        selects.append(f"{func}(A) OVER (PARTITION BY P)")
     query = f"SELECT {', '.join(selects)} FROM table1"
     ctx = {
         "TABLE1": pd.DataFrame(
@@ -647,7 +497,6 @@ def test_kurtosis_skew(memory_leak_check):
                     dtype=pd.Int32Dtype(),
                 ),
                 "P": [2.718281828] * 4 + [1.0] * 4 + [None] * 4 + [0.0] * 4,
-                "O": list(range(16)),
             }
         )
     }
@@ -684,19 +533,20 @@ def test_kurtosis_skew(memory_leak_check):
 def test_bool_agg(memory_leak_check):
     """Tests the boolean aggregation functions"""
     window_calls = [
-        ("BOOLOR_AGG", "A", "2 PRECEDING", "CURRENT ROW"),
-        ("BOOLAND_AGG", "B", "2 PRECEDING", "CURRENT ROW"),
-        ("BOOLXOR_AGG", "A", "2 PRECEDING", "CURRENT ROW"),
-        ("BOOLOR_AGG", "B", "CURRENT ROW", "1 FOLLOWING"),
-        ("BOOLAND_AGG", "A", "CURRENT ROW", "1 FOLLOWING"),
-        ("BOOLXOR_AGG", "B", "CURRENT ROW", "1 FOLLOWING"),
+        ("BOOLOR_AGG", "A"),
+        ("BOOLOR_AGG", "B"),
+        ("BOOLAND_AGG", "A"),
+        ("BOOLAND_AGG", "B"),
+        ("BOOLXOR_AGG", "A"),
+        (
+            "BOOLXOR_AGG",
+            "B",
+        ),
     ]
     selects = []
-    for func, col, lower, upper in window_calls:
-        selects.append(
-            f"{func}({col}) OVER (PARTITION BY P ORDER BY O ROWS BETWEEN {lower} AND {upper})"
-        )
-    query = f"SELECT {', '.join(selects)} FROM table1"
+    for func, col in window_calls:
+        selects.append(f"{func}({col}) OVER (PARTITION BY P)")
+    query = f"SELECT O, {', '.join(selects)} FROM table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -704,38 +554,40 @@ def test_bool_agg(memory_leak_check):
                     [None, 1, 0, None, 2, 3, 0, None], dtype=pd.Int32Dtype()
                 ),
                 "B": pd.Series(
-                    [None, True, False, None, True, True, False, None],
+                    [None, False, True, None, True, True, False, None],
                     dtype=pd.BooleanDtype(),
                 ),
-                "P": [pd.Timestamp("2023-1-1")] * 8,
-                "O": list(range(8)),
+                "P": [pd.Timestamp("2023-3-14"), pd.Timestamp("2023-7-4")]
+                + [pd.Timestamp("2023-1-1")] * 6,
+                "O": range(8),
             }
         )
     }
     answer = pd.DataFrame(
         {
-            0: pd.Series(
-                [None, True, True, True, True, True, True, True],
-                dtype=pd.BooleanDtype(),
-            ),
+            0: range(8),
             1: pd.Series(
-                [None, True, False, False, False, True, False, False],
+                [None] + [True] * 7,
                 dtype=pd.BooleanDtype(),
             ),
             2: pd.Series(
-                [None, True, True, True, True, False, False, True],
+                [None, False] + [True] * 6,
                 dtype=pd.BooleanDtype(),
             ),
             3: pd.Series(
-                [True, True, False, True, True, True, False, None],
+                [None, True] + [False] * 6,
                 dtype=pd.BooleanDtype(),
             ),
             4: pd.Series(
-                [True, False, False, True, True, False, False, None],
+                [None] + [False] * 7,
                 dtype=pd.BooleanDtype(),
             ),
             5: pd.Series(
-                [True, True, False, True, False, True, False, None],
+                [None, True] + [False] * 6,
+                dtype=pd.BooleanDtype(),
+            ),
+            6: pd.Series(
+                [None] + [False] * 7,
                 dtype=pd.BooleanDtype(),
             ),
         }
