@@ -209,6 +209,7 @@ def test_filter_pushdown_col_not_read(memory_leak_check):
         )
 
 
+@temp_env_override({"AWS_REGION": "us-east-1"})
 def test_snowflake_catalog_iceberg_write(memory_leak_check):
     """tests that writing tables using Iceberg works"""
 

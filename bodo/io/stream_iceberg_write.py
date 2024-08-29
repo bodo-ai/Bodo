@@ -1027,8 +1027,12 @@ def gen_iceberg_writer_init_impl(
         writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_njit(
             table_loc, _is_parallel
         )
+
+        # Since streaming write is used only for SQL, replicated in this
+        # context means actually replicated data (instead of independent sequential
+        # functions with different data).
         writer["max_pq_chunksize"] = get_table_target_file_size_bytes(
-            con_str, schema, table_name, _is_parallel
+            con_str, schema, table_name, is_parallel=True
         )
         allow_theta = allow_theta_sketches and get_enable_theta()
         if allow_theta:
@@ -1493,9 +1497,9 @@ def convert_to_snowflake_iceberg_table_py(
             # TODO[BSE-2666]: Add robust error checking
 
             # Make sure catalog integration exists
-            catalog_integration_name = "BodoTmpCatalogInt"
+            catalog_integration_name = "BodoTmpObjectStoreCatalogInt"
             catalog_integration_query = f"""
-            CREATE OR REPLACE CATALOG INTEGRATION {catalog_integration_name}
+            CREATE CATALOG INTEGRATION IF NOT EXISTS {catalog_integration_name}
                 CATALOG_SOURCE=OBJECT_STORE
                 TABLE_FORMAT=ICEBERG
                 ENABLED=TRUE;
