@@ -1,12 +1,13 @@
 # `pd.Series.prod`
 
-`pandas.Series.prod(axis=None, skipna=None, level=None, numeric_only=None)`
+`pandas.Series.prod(axis=None, skipna=True, level=None, numeric_only=None, min_count=0)`
 
 ### Supported Arguments
 
 | argument                    | datatypes                              |
 |-----------------------------|----------------------------------------|
 | `skipna`                    |    Boolean                             |
+| `min_count`                 |    Integer                             |
 
 !!! note
     - Series type must be numeric
