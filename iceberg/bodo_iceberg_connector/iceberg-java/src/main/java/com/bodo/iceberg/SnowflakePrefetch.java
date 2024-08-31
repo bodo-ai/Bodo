@@ -151,7 +151,7 @@ public class SnowflakePrefetch {
    * quotes and delimited using `.` (periods)
    */
   private static String idToQualifiedName(TableIdentifier id) {
-    List<String> components = Arrays.asList(id.namespace().levels());
+    List<String> components = new ArrayList<String>(Arrays.asList(id.namespace().levels()));
     components.add(id.name());
     // Construct tablePath by wrapping components in quotes
     return components.stream()
