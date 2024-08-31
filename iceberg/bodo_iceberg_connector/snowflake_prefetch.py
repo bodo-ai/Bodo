@@ -13,6 +13,6 @@ def prefetch_sf_tables(conn_str: str, table_paths: list[str]) -> None:
         table_paths (list[str]): List of fully qualified table paths to prefetch
     """
 
-    prefetch_inst = get_snowflake_prefetch(conn_str)
+    prefetch_inst = get_snowflake_prefetch(conn_str, reset=True)
     # Py4J has trouble passing list of strings, so jsonify between Python and Java
     prefetch_inst.prefetchMetadataPaths(json.dumps(table_paths))

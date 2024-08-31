@@ -248,14 +248,23 @@ def get_java_table_handler(conn_str: str, catalog_type: str, db_name: str, table
     return table_dict[key]
 
 
-def get_snowflake_prefetch(conn_str: str) -> pt.Any:
+def get_snowflake_prefetch(conn_str: str, reset: bool = False) -> pt.Any:
+    """
+    Get the static / global SnowflakePrefetch instance associated with
+    the given connection string.
+
+    - If the connection string is different, raise an error.
+    - If the instance is not initialized or reset is True, initialize a new instance.
+      Reset is applied for test runs when multiple queries are executed sequentially.
+    """
+
     global prefetch_inst
 
-    if prefetch_inst[0] is None:
+    if prefetch_inst[0] is None or reset:
         prefetch_class = get_snowflake_prefetch_class()
         inst = prefetch_class(conn_str)
         prefetch_inst = (conn_str, inst)
     elif prefetch_inst[0] != conn_str:
-        raise ValueError("Cannot prefetch  object with a different connection string")
+        raise ValueError("Cannot prefetch object with a different connection string")
 
     return prefetch_inst[1]
