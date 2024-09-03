@@ -15,7 +15,7 @@ from bodosql.tests.utils import check_query
 pytestmark = pytest_slow_unless_window
 
 
-def test_lead_lag(spark_info, memory_leak_check):
+def test_lead_lag_mixed(spark_info, memory_leak_check):
     """Tests the window functions LEAD/LAG with a minimal set of combinations
     that cover the essential of behavior."""
     selects = [
@@ -264,3 +264,27 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
 
     finally:
         bodo.bodo_use_decimal = old_use_decimal
+
+
+def test_lead_lag_multiple(spark_info, memory_leak_check):
+    """Tests multiple lead/lag computations alongside other functions that can be done together."""
+    window = "OVER (PARTITION BY P ORDER BY O)"
+    query = f"SELECT T, I, LEAD(S, 12, '') {window}, ROW_NUMBER() {window}, LAG(I) {window}, LEAD(T, 1, 'foobar') {window} FROM TABLE1"
+    n_rows = 8000
+    df = pd.DataFrame(
+        {
+            "P": [int(np.tan(i)) for i in range(n_rows)],
+            "O": [np.tan(i) for i in range(n_rows)],
+            "I": range(n_rows),
+            "S": [None if i % 7 == 1 else str(i)[2:] for i in range(n_rows)],
+            "T": [None if (i % 6) == (i % 7) else hex(i % 500) for i in range(n_rows)],
+        }
+    )
+    check_query(
+        query,
+        {"TABLE1": df},
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        only_jit_1DVar=True,
+    )

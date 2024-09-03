@@ -101,7 +101,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     convert_columns_tz_naive = ["A"] if is_tz_aware else None
     for i, func in enumerate(funcs):
         selects.append(f"{func} OVER (PARTITION BY W2 ORDER BY {order_clause}) AS C{i}")
-    query = f"SELECT A, W4, {', '.join(selects)} FROM table1"
+    query = f"SELECT W2, A, {', '.join(selects)} FROM table1"
     check_query(
         query,
         all_types_window_df,
@@ -111,6 +111,44 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
         convert_columns_tz_naive=convert_columns_tz_naive,
+    )
+
+
+def test_rank_ntile_mix(spark_info, memory_leak_check):
+    """
+    Tests a mix of window functions that use the hash-based streaming window
+    impl together.
+    """
+
+    window = " OVER (PARTITION BY P ORDER BY O)"
+    window_terms = [
+        "RANK()",
+        "NTILE(4)",
+        "DENSE_RANK()",
+        "NTILE(75)",
+        "NTILE(126)",
+        "NTILE(7)",
+        "NTILE(500)",
+        "PERCENT_RANK()",
+        "NTILE(13)",
+        "NTILE(2)",
+    ]
+    query = f"SELECT IDX, O, {', '.join([term + window for term in window_terms])} FROM TABLE1"
+    n_rows = 10000
+    df = pd.DataFrame(
+        {
+            "P": [int(i**0.25 + np.tan(i)) for i in range(n_rows)],
+            "O": [np.tan(i) for i in range(n_rows)],
+            "IDX": range(n_rows),
+        }
+    )
+
+    check_query(
+        query,
+        {"TABLE1": df},
+        spark_info,
+        check_dtype=False,
+        check_names=False,
     )
 
 
