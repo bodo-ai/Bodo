@@ -967,6 +967,7 @@ SELECT {window_func} OVER (PARTITION BY B ORDER BY A) FROM TABLE1
     [
         pytest.param("ROW_NUMBER", id="row_number"),
         pytest.param("RANK", id="rank", marks=pytest.mark.slow),
+        pytest.param("DENSE_RANK", id="dense_rank", marks=pytest.mark.slow),
     ],
 )
 def test_row_number_intense(func, spark_info, memory_leak_check):

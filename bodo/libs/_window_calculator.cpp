@@ -389,7 +389,7 @@ class RankWindowCalculator : public RowNumberWindowCalculator<OrderByArrType> {
         // Iterate across all of the chunks from partition_start_chunk to
         // partition_end_chunk, inclusive.
         size_t current_row_number = 0;
-        size_t current_rank = 0;
+        size_t current_rank = 1;
         // number of rows on the previous chunk (for comparing accross chunk
         // boundaries)
         size_t prev_n_rows = 0;
@@ -426,32 +426,24 @@ class RankWindowCalculator : public RowNumberWindowCalculator<OrderByArrType> {
             size_t end_row = (chunk_idx == partition_end_chunk)
                                  ? partition_end_row
                                  : (rank_chunk->length - 1);
-            for (size_t row = start_row; row <= end_row; row++) {
-                // If we are at the start of the paritition, set row number and
-                // rank to 1.
-                bool is_dist_order = true;
-                if (row == 0 && prev_chunk != nullptr) {
-                    // If we are at the start of a new chunk and in the middle
-                    // of a partition, check with the last row of the previous
-                    // chunk,
-                    is_dist_order = distinct_from_other_row<OrderByArrType>(
-                        prev_order_cols, prev_n_rows - 1, curr_order_cols, 0);
-                } else if (row != start_row ||
-                           chunk_idx != partition_start_chunk) {
-                    // If we are in the middle of a chunk and in the middle of a
-                    // partition, check the previous row
-                    is_dist_order = distinct_from_other_row<OrderByArrType>(
-                        curr_order_cols, row, curr_order_cols, row - 1);
-                }
 
+            current_row_number = current_row_number + 1;
+            if (prev_chunk != nullptr &&
+                distinct_from_other_row<OrderByArrType>(
+                    prev_order_cols, prev_n_rows - 1, curr_order_cols, 0)) {
+                current_rank = current_row_number;
+            }
+            rank_data[start_row] = current_rank;
+            for (size_t row = start_row + 1; row <= end_row; row++) {
                 current_row_number = current_row_number + 1;
-
-                if (is_dist_order) {
-                    rank_data[row] = current_row_number;
+                // If we are in the middle of a chunk and in the middle of a
+                // partition, check the previous row
+                if (distinct_from_other_row<OrderByArrType>(
+                        curr_order_cols, row, curr_order_cols, row - 1)) {
                     current_rank = current_row_number;
-                } else {
-                    rank_data[row] = current_rank;
                 }
+
+                rank_data[row] = current_rank;
             }
 
             prev_n_rows = curr_chunk->nrows();
@@ -621,6 +613,190 @@ class RankWindowCalculator : public RowNumberWindowCalculator<OrderByArrType> {
     }
 
    private:
+    size_t rank = 1;
+};
+
+template <bodo_array_type::arr_type_enum OrderByArrType>
+    requires(valid_window_array_type<OrderByArrType>)
+class DenseRankWindowCalculator
+    : public RowNumberWindowCalculator<OrderByArrType> {
+   public:
+    DenseRankWindowCalculator(
+        std::shared_ptr<bodo::Schema> _schema,
+        std::vector<std::shared_ptr<table_info>> _chunks,
+        std::vector<int32_t> _order_col_indices,
+        std::vector<int32_t> _input_col_indices,
+        std::vector<std::shared_ptr<DictionaryBuilder>> _builders,
+        bool is_empty, bodo::IBufferPool *const _pool,
+        std::shared_ptr<::arrow::MemoryManager> _mm)
+        : RowNumberWindowCalculator<OrderByArrType>(
+              _schema, _chunks, _order_col_indices, _input_col_indices,
+              _builders, is_empty, _pool, _mm) {}
+
+    void ComputePartition(size_t partition_start_chunk,
+                          size_t partition_start_row,
+                          size_t partition_end_chunk, size_t partition_end_row,
+                          bool is_last) final {
+        // Skip if the input data was empty.
+        if (this->is_empty) {
+            return;
+        }
+
+        // Iterate across all of the chunks from partition_start_chunk to
+        // partition_end_chunk, inclusive.
+        size_t current_rank = 1;
+        // number of rows on the previous chunk (for comparing accross chunk
+        // boundaries)
+        size_t prev_n_rows = 0;
+        std::shared_ptr<table_info> prev_chunk = nullptr;
+        std::shared_ptr<table_info> curr_chunk = nullptr;
+        std::vector<std::shared_ptr<array_info>> curr_order_cols = {};
+
+        for (size_t chunk_idx = partition_start_chunk;
+             chunk_idx <= partition_end_chunk; chunk_idx++) {
+            if (prev_chunk != nullptr) {
+                prev_chunk->unpin();
+            }
+
+            prev_chunk = curr_chunk;
+            std::vector<std::shared_ptr<array_info>> prev_order_cols =
+                curr_order_cols;
+
+            curr_chunk = this->chunks[chunk_idx];
+            std::shared_ptr<array_info> rank_chunk =
+                this->output_chunks[chunk_idx];
+            curr_chunk->pin();
+            rank_chunk->pin();
+
+            curr_order_cols = {};
+            fetch_columns(curr_chunk, this->order_col_indices, curr_order_cols);
+            size_t *rank_data =
+                rank_chunk->data1<bodo_array_type::NUMPY, size_t>();
+
+            // Iterate across all of the rows in the current chunk. If we are in
+            // the first chunk, start at partition_start_row. If we are in the
+            // last chunk, end on partition_end_row.
+            size_t start_row =
+                (chunk_idx == partition_start_chunk) ? partition_start_row : 0;
+            size_t end_row = (chunk_idx == partition_end_chunk)
+                                 ? partition_end_row
+                                 : (rank_chunk->length - 1);
+
+            if (prev_chunk != nullptr &&
+                distinct_from_other_row<OrderByArrType>(
+                    prev_order_cols, prev_n_rows - 1, curr_order_cols, 0)) {
+                current_rank++;
+            }
+            rank_data[start_row] = current_rank;
+            for (size_t row = start_row + 1; row <= end_row; row++) {
+                if (distinct_from_other_row<OrderByArrType>(
+                        curr_order_cols, row, curr_order_cols, row - 1)) {
+                    current_rank = current_rank + 1;
+                }
+                rank_data[row] = current_rank;
+            }
+
+            prev_n_rows = curr_chunk->nrows();
+            rank_chunk->unpin();
+        }
+
+        // If this is the last partition, store the current row number for
+        // communication across ranks.
+        if (is_last) {
+            rank = current_rank;
+        }
+    }
+
+    void GetLastRowInfo(
+        std::vector<std::shared_ptr<array_info>> &out_cols) final {
+        // Allocate a single column storing the last row_number value.
+        std::shared_ptr<array_info> rank_arr =
+            alloc_numpy(1, Bodo_CTypes::UINT64);
+        rank_arr->data1<bodo_array_type::NUMPY, size_t>()[0] = rank;
+        if (this->is_empty) {
+            // If the input data is empty, ensure the row_number arr is also
+            // empty.
+            rank_arr = alloc_array_like(rank_arr, true, this->pool, this->mm);
+        }
+        out_cols.push_back(rank_arr);
+    }
+
+    /**
+     * Arguments used by this implementation:
+     * - last_boundary_info: used to send row_number values from previous ranks
+     * - rank_idx: used to determine which row in last_boundary_info is the
+     * current rank.
+     * - func_offset: used to infer which column of last_boundary_info contains
+     *   the ROW_NUMBER values from previous ranks.
+     * - start_partition: used as the start of previous ranks to sum.
+     * - first_partition_chunk_end: used to determine up to which chunk to
+     * update with the ROW_NUMBER values from previous ranks.
+     * - first_partition_row_end: used to determine up to which row in
+     *   first_partition_chunk_end to update.
+     */
+    void UpdateBoundaryInfo(std::shared_ptr<table_info> &first_boundary_info,
+                            std::shared_ptr<table_info> &last_boundary_info,
+                            size_t rank_idx, size_t func_offset,
+                            size_t start_partition, size_t start_order,
+                            size_t end_partition, size_t end_order,
+                            size_t first_partition_chunk_end,
+                            size_t first_partition_row_end,
+                            size_t last_partition_chunk_start,
+                            size_t last_partition_row_start) final {
+        // Compute the sum of the row_number values from previous ranks
+        // in the same partition.
+        size_t rank_offset = 0;
+        size_t *rank_data = last_boundary_info->columns[func_offset]
+                                ->data1<bodo_array_type::NUMPY, size_t>();
+
+        std::vector<std::shared_ptr<array_info>> last_order_rows;
+        std::vector<std::shared_ptr<array_info>> first_order_rows;
+        fetch_columns(first_boundary_info, this->order_col_indices,
+                      first_order_rows);
+        fetch_columns(last_boundary_info, this->order_col_indices,
+                      last_order_rows);
+
+        // sum the row numbers before the current orderby (subtract 1 if
+        // necessary)
+        for (size_t rank = start_partition; rank < start_order; rank++) {
+            rank_offset += rank_data[rank];
+            if (!distinct_from_other_row<OrderByArrType>(
+                    first_order_rows, rank + 1, last_order_rows, rank)) {
+                rank_offset -= 1;
+            }
+        }
+
+        if (start_order < rank_idx) {
+            rank_offset = rank_offset + rank_data[start_order] - 1;
+        }
+
+        // If there is a value to add, do so to all rows in the prefix
+        // of the current rank belonging to the first partition.
+        if (rank_offset > 0) {
+            for (size_t chunk_idx = 0; chunk_idx <= first_partition_chunk_end;
+                 chunk_idx++) {
+                std::shared_ptr<array_info> rank_chunk =
+                    this->output_chunks[chunk_idx];
+                rank_chunk->pin();
+                size_t *rank_data =
+                    rank_chunk->data1<bodo_array_type::NUMPY, size_t>();
+
+                size_t rows_in_partition =
+                    (chunk_idx == first_partition_chunk_end)
+                        ? first_partition_row_end
+                        : (rank_chunk->length - 1);
+
+                for (size_t row = 0; row <= rows_in_partition; row++) {
+                    rank_data[row] += rank_offset;
+                }
+                rank_chunk->unpin();
+            }
+        }
+    }
+
+   private:
+    // The last row_number value from the current rank, which is to be
+    // passed onto subsequent ranks.
     size_t rank = 1;
 };
 
@@ -1420,6 +1596,20 @@ class WindowCollectionComputer {
                         _pool, _mm);
                     break;
                 }
+                case Bodo_FTypes::rank: {
+                    calculator = new RankWindowCalculator<OrderByArrType>(
+                        _schema, _chunks, _order_col_indices,
+                        input_col_indices[func_idx], _builders, this->is_empty,
+                        _pool, _mm);
+                    break;
+                }
+                case Bodo_FTypes::dense_rank: {
+                    calculator = new DenseRankWindowCalculator<OrderByArrType>(
+                        _schema, _chunks, _order_col_indices,
+                        input_col_indices[func_idx], _builders, this->is_empty,
+                        _pool, _mm);
+                    break;
+                }
                 case Bodo_FTypes::first:
                 case Bodo_FTypes::last: {
                     calculator =
@@ -1429,13 +1619,6 @@ class WindowCollectionComputer {
                             this->is_empty,
                             (Bodo_FTypes::FTypeEnum)window_funcs[func_idx],
                             _pool, _mm);
-                    break;
-                }
-                case Bodo_FTypes::rank: {
-                    calculator = new RankWindowCalculator<OrderByArrType>(
-                        _schema, _chunks, _order_col_indices,
-                        input_col_indices[func_idx], _builders, this->is_empty,
-                        _pool, _mm);
                     break;
                 }
                 case Bodo_FTypes::min:
