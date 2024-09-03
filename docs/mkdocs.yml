@@ -867,6 +867,8 @@ nav:
               - api_docs/pandas/series/str.lower.md
               - api_docs/pandas/series/str.lstrip.md
               - api_docs/pandas/series/str.pad.md
+              - api_docs/pandas/series/str.removeprefix.md
+              - api_docs/pandas/series/str.removesuffix.md
               - api_docs/pandas/series/str.repeat.md
               - api_docs/pandas/series/str.replace.md
               - api_docs/pandas/series/str.restrip.md
