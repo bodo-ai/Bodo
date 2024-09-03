@@ -583,7 +583,7 @@ std::tuple<std::unique_ptr<uint8_t[]>, size_t> compute_local_mrnf(
 #pragma region  // Window Helpers
 
 /**
- * @brief Helper function to output result for a window function.
+ * @brief Helper function to output result for 1 or more window function.
  * @param in_table The input table to compute the MRNF bitmask for.
  * @param colset The colset to use for computing the output bitmask.
  * @param n_sort_cols The number of columns that will be used for the sort.
@@ -591,10 +591,10 @@ std::tuple<std::unique_ptr<uint8_t[]>, size_t> compute_local_mrnf(
  * @param[in, out] metrics Metrics to add to.
  * @param pool The buffer pool to use for allocations.
  * @param mm Memory manager corresponding to the pool.
- * @return std::shared_ptr<array_info> Output array_info for the window
- * function.
+ * @return std::vector<std::shared_ptr<array_info>> Output array_infos for the
+ * window functions.
  */
-std::shared_ptr<array_info> compute_local_window(
+std::vector<std::shared_ptr<array_info>> compute_local_window(
     std::shared_ptr<table_info>& in_table,
     std::vector<std::shared_ptr<DictionaryBuilder>>& out_dict_builders,
     const std::shared_ptr<BasicColSet>& colset, size_t n_sort_cols,
@@ -638,9 +638,8 @@ std::shared_ptr<array_info> compute_local_window(
     metrics.colset_update_nrows += in_table->nrows();
     const std::vector<std::shared_ptr<array_info>> out_cols =
         colset->getOutputColumns();
-    const std::shared_ptr<array_info>& output_col = out_cols[0];
     colset->clear();
-    return output_col;
+    return out_cols;
 }
 
 #pragma endregion  // Window Helpers
@@ -1379,7 +1378,7 @@ void GroupbyPartition::FinalizeWindow(
     // Window only supports a single colset.
     assert(this->col_sets.size() == 1);
     ScopedTimer window_timer(this->metrics.finalize_window_compute_time);
-    std::shared_ptr<array_info> window_col = compute_local_window(
+    std::vector<std::shared_ptr<array_info>> window_cols = compute_local_window(
         this->build_table_buffer->data_table, out_dict_builder,
         this->col_sets[0], n_sort_keys, this->n_keys,
         this->metrics.finalize_update_metrics, f_in_offsets, f_in_cols,
@@ -1398,7 +1397,9 @@ void GroupbyPartition::FinalizeWindow(
                 this->build_table_buffer->data_table->columns[i]);
         }
     }
-    cols_to_keep.push_back(window_col);
+    for (auto& it : window_cols) {
+        cols_to_keep.push_back(it);
+    }
     std::shared_ptr<table_info> data_table_w_cols_to_keep =
         std::make_shared<table_info>(cols_to_keep);
 
@@ -2691,76 +2692,181 @@ GroupbyState::GroupbyState(
     bool skip_na_data = true;
     bool use_sql_rules = true;
 
-    // First, get the input column types for each function.
-    std::vector<std::vector<std::shared_ptr<array_info>>> local_input_cols_vec(
-        ftypes.size());
-    std::vector<std::vector<std::unique_ptr<bodo::DataType>>> in_arr_types_vec(
-        ftypes.size());
-    for (size_t i = 0; i < ftypes.size(); i++) {
-        // Get the input columns, array types, and dtypes for the current
-        // function
-        std::vector<std::shared_ptr<array_info>>& local_input_cols =
-            local_input_cols_vec.at(i);
-        std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
-            in_arr_types_vec.at(i);
-        for (size_t logical_input_ind = (size_t)f_in_offsets[i];
-             logical_input_ind < (size_t)f_in_offsets[i + 1];
-             logical_input_ind++) {
-            size_t physical_input_ind = (size_t)f_in_cols[logical_input_ind];
-            // set dummy input columns in ColSet since will be replaced by
-            // input batches
-            local_input_cols.push_back(nullptr);
-            in_arr_types.push_back(
-                (in_schema_->column_types[physical_input_ind])->copy());
-        }
-    }
+    if (!ftypes.empty() && ftypes[0] == Bodo_FTypes::window) {
+        // Handle a collection of window functions.
+        this->accumulate_before_update = true;
 
-    // Next, perform a check on the running value and output types.
-    // If any of them are of type string,
-    // set accumulate_before_update to true.
-    for (size_t i = 0; i < ftypes.size(); i++) {
-        std::vector<std::shared_ptr<array_info>>& local_input_cols =
-            local_input_cols_vec.at(i);
-        std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
-            in_arr_types_vec.at(i);
-        std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
-        for (const auto& t : in_arr_types) {
-            in_arr_types_copy.push_back(t->copy());
-        }
-
-        int ftype = ftypes[i];
-        int window_ftype;
-        if (ftype == Bodo_FTypes::window) {
-            window_ftype = window_ftypes_[i];
-        } else {
-            // This value is ignored.
-            window_ftype = 0;
-        }
-        std::unique_ptr<bodo::Schema> running_values_schema =
-            this->getRunningValueColumnTypes(
-                local_input_cols, std::move(in_arr_types_copy), ftypes[i],
-                window_ftype, window_args);
-
-        auto seperate_out_cols = this->getSeparateOutputColumns(
-            local_input_cols, ftypes[i], window_ftype);
-        std::set<bodo_array_type::arr_type_enum> force_acc_types = {
-            bodo_array_type::STRING, bodo_array_type::DICT,
-            bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT,
-            bodo_array_type::MAP};
-        for (const auto& t : (running_values_schema->column_types)) {
-            if (force_acc_types.contains(t->array_type)) {
-                this->accumulate_before_update = true;
-                break;
+        // First, get the input column types for each function.
+        size_t n_window_funcs = window_ftypes_.size();
+        std::vector<std::shared_ptr<array_info>> local_input_cols_vec;
+        std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
+            in_arr_types_vec(n_window_funcs);
+        for (size_t i = 0; i < n_window_funcs; i++) {
+            // Get the input columns, array types, and dtypes for the current
+            // function
+            std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
+                in_arr_types_vec.at(i);
+            for (size_t logical_input_ind = (size_t)f_in_offsets[i];
+                 logical_input_ind < (size_t)f_in_offsets[i + 1];
+                 logical_input_ind++) {
+                size_t physical_input_ind =
+                    (size_t)f_in_cols[logical_input_ind];
+                // set dummy input columns in ColSet since will be replaced by
+                // input batches
+                local_input_cols_vec.push_back(nullptr);
+                in_arr_types.push_back(
+                    (in_schema_->column_types[physical_input_ind])->copy());
             }
         }
+        std::vector<int64_t> window_funcs;
+        for (auto it : window_ftypes_) {
+            window_funcs.push_back(static_cast<int64_t>(it));
+        }
+        std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
+        for (const auto& it : in_arr_types_vec) {
+            for (const auto& t : it) {
+                in_arr_types_copy.push_back(t->copy());
+            }
+        }
+        std::shared_ptr<BasicColSet> col_set = makeColSet(
+            local_input_cols_vec, index_col, Bodo_FTypes::window, false,
+            skip_na_data, 0,
+            // In the streaming multi-partition scenario, it's
+            // safer to mark things as *not* parallel to avoid
+            // any synchronization and hangs.
+            window_funcs, 0, /*is_parallel*/ false, this->sort_asc,
+            this->sort_na, window_args, f_in_cols.size(), nullptr, nullptr, 0,
+            nullptr, use_sql_rules, std::move(in_arr_types_vec));
 
-        if (seperate_out_cols.size() != 0) {
-            for (auto t : seperate_out_cols) {
-                if (force_acc_types.contains(std::get<0>(t))) {
+        // get update/combine type info to initialize build state
+        std::unique_ptr<bodo::Schema> running_values_schema =
+            col_set->getRunningValueColumnTypes(
+                std::make_shared<bodo::Schema>(std::move(in_arr_types_copy)));
+        size_t n_running_value_types = running_values_schema->ncols();
+        curr_running_value_offset += n_running_value_types;
+        this->f_running_value_offsets.push_back(curr_running_value_offset);
+
+        this->col_sets.push_back(col_set);
+    } else {
+        // First, get the input column types for each function.
+        std::vector<std::vector<std::shared_ptr<array_info>>>
+            local_input_cols_vec(ftypes.size());
+        std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
+            in_arr_types_vec(ftypes.size());
+        for (size_t i = 0; i < ftypes.size(); i++) {
+            // Get the input columns, array types, and dtypes for the current
+            // function
+            std::vector<std::shared_ptr<array_info>>& local_input_cols =
+                local_input_cols_vec.at(i);
+            std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
+                in_arr_types_vec.at(i);
+            for (size_t logical_input_ind = (size_t)f_in_offsets[i];
+                 logical_input_ind < (size_t)f_in_offsets[i + 1];
+                 logical_input_ind++) {
+                size_t physical_input_ind =
+                    (size_t)f_in_cols[logical_input_ind];
+                // set dummy input columns in ColSet since will be replaced by
+                // input batches
+                local_input_cols.push_back(nullptr);
+                in_arr_types.push_back(
+                    (in_schema_->column_types[physical_input_ind])->copy());
+            }
+        }
+        // Handle non-window functions.
+        // Perform a check on the running value and output types.
+        // If any of them are of type string, set accumulate_before_update to
+        // true.
+        for (size_t i = 0; i < ftypes.size(); i++) {
+            std::vector<std::shared_ptr<array_info>>& local_input_cols =
+                local_input_cols_vec.at(i);
+            std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
+                in_arr_types_vec.at(i);
+            std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
+            for (const auto& t : in_arr_types) {
+                in_arr_types_copy.push_back(t->copy());
+            }
+
+            std::unique_ptr<bodo::Schema> running_values_schema =
+                this->getRunningValueColumnTypes(local_input_cols,
+                                                 std::move(in_arr_types_copy),
+                                                 ftypes[i], 0, window_args);
+
+            auto seperate_out_cols =
+                this->getSeparateOutputColumns(local_input_cols, ftypes[i], 0);
+            std::set<bodo_array_type::arr_type_enum> force_acc_types = {
+                bodo_array_type::STRING, bodo_array_type::DICT,
+                bodo_array_type::ARRAY_ITEM, bodo_array_type::STRUCT,
+                bodo_array_type::MAP};
+            for (const auto& t : (running_values_schema->column_types)) {
+                if (force_acc_types.contains(t->array_type)) {
                     this->accumulate_before_update = true;
                     break;
                 }
             }
+
+            if (seperate_out_cols.size() != 0) {
+                for (auto t : seperate_out_cols) {
+                    if (force_acc_types.contains(std::get<0>(t))) {
+                        this->accumulate_before_update = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Finally, now that we know if we need to accumulate all values before
+        // update, do one last iteration to actually create each of the col_sets
+        bool do_combine = !this->accumulate_before_update;
+        for (size_t i = 0; i < ftypes.size(); i++) {
+            std::vector<std::shared_ptr<array_info>>& local_input_cols =
+                local_input_cols_vec.at(i);
+            std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
+                in_arr_types_vec.at(i);
+            std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
+            for (const auto& t : in_arr_types) {
+                in_arr_types_copy.push_back(t->copy());
+            }
+
+            std::shared_ptr<BasicColSet> col_set = makeColSet(
+                local_input_cols, index_col, ftypes[i], do_combine,
+                skip_na_data, 0,
+                // In the streaming multi-partition scenario, it's
+                // safer to mark things as *not* parallel to avoid
+                // any synchronization and hangs.
+                {}, 0, /*is_parallel*/ false, this->sort_asc, this->sort_na,
+                window_args, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
+
+            // get update/combine type info to initialize build state
+            std::unique_ptr<bodo::Schema> running_values_schema =
+                col_set->getRunningValueColumnTypes(
+                    std::make_shared<bodo::Schema>(
+                        std::move(in_arr_types_copy)));
+            size_t n_running_value_types = running_values_schema->ncols();
+
+            if (!this->accumulate_before_update) {
+                build_table_schema->append_schema(
+                    std::move(running_values_schema));
+
+                // Determine what separate output columns are necessary.
+                // This is only required in the AGG case.
+                auto separate_out_col_type =
+                    col_set->getSeparateOutputColumnType();
+                if (separate_out_col_type.size() != 0) {
+                    if (separate_out_col_type.size() != 1) {
+                        throw std::runtime_error(
+                            "GroupbyState::GroupbyState Colsets with multiple "
+                            "separate output columns not supported");
+                    }
+                    separate_out_cols_schema->append_column(
+                        std::get<0>(separate_out_col_type[0]),
+                        std::get<1>(separate_out_col_type[0]));
+                }
+            }
+
+            curr_running_value_offset += n_running_value_types;
+            this->f_running_value_offsets.push_back(curr_running_value_offset);
+
+            this->col_sets.push_back(col_set);
         }
     }
 
@@ -2771,74 +2877,6 @@ GroupbyState::GroupbyState(
     this->num_histogram_bits =
         this->compute_histogram ? this->max_partition_depth : 0;
     this->histogram_buckets.resize((1 << this->num_histogram_bits), 0);
-
-    // Finally, now that we know if we need to accumulate all values before
-    // update, do one last iteration to actually create each of the col_sets
-    bool do_combine = !this->accumulate_before_update;
-    for (size_t i = 0; i < ftypes.size(); i++) {
-        std::vector<std::shared_ptr<array_info>>& local_input_cols =
-            local_input_cols_vec.at(i);
-        std::vector<std::unique_ptr<bodo::DataType>>& in_arr_types =
-            in_arr_types_vec.at(i);
-
-        std::vector<std::unique_ptr<bodo::DataType>> window_in_arr_types;
-        std::vector<std::unique_ptr<bodo::DataType>> in_arr_types_copy;
-        for (const auto& t : in_arr_types) {
-            in_arr_types_copy.push_back(t->copy());
-            window_in_arr_types.push_back((t->copy()));
-        }
-        int ftype = ftypes[i];
-        int window_ftype;
-        if (ftype == Bodo_FTypes::window) {
-            window_ftype = window_ftypes_[i];
-        } else {
-            // This value is ignored.
-            window_ftype = 0;
-        }
-
-        // TODO: refactor groupby init to separate out window logic / arguments
-        // from regular groupby
-        std::vector<std::vector<std::unique_ptr<bodo::DataType>>>
-            window_in_arr_types_vec(1);
-        window_in_arr_types_vec[0] = std::move(window_in_arr_types);
-
-        std::shared_ptr<BasicColSet> col_set = makeColSet(
-            local_input_cols, index_col, ftype, do_combine, skip_na_data, 0,
-            // In the streaming multi-partition scenario, it's
-            // safer to mark things as *not* parallel to avoid
-            // any synchronization and hangs.
-            {window_ftype}, 0, /*is_parallel*/ false, this->sort_asc,
-            this->sort_na, window_args, f_in_cols.size(), nullptr, nullptr, 0,
-            nullptr, use_sql_rules, std::move(window_in_arr_types_vec));
-        // get update/combine type info to initialize build state
-        std::unique_ptr<bodo::Schema> running_values_schema =
-            col_set->getRunningValueColumnTypes(
-                std::make_shared<bodo::Schema>(std::move(in_arr_types_copy)));
-        size_t n_running_value_types = running_values_schema->ncols();
-
-        if (!this->accumulate_before_update) {
-            build_table_schema->append_schema(std::move(running_values_schema));
-
-            // Determine what separate output columns are necessary.
-            // This is only required in the AGG case.
-            auto separate_out_col_type = col_set->getSeparateOutputColumnType();
-            if (separate_out_col_type.size() != 0) {
-                if (separate_out_col_type.size() != 1) {
-                    throw std::runtime_error(
-                        "GroupbyState::GroupbyState Colsets with multiple "
-                        "separate output columns not supported");
-                }
-                separate_out_cols_schema->append_column(
-                    std::get<0>(separate_out_col_type[0]),
-                    std::get<1>(separate_out_col_type[0]));
-            }
-        }
-
-        curr_running_value_offset += n_running_value_types;
-        this->f_running_value_offsets.push_back(curr_running_value_offset);
-
-        this->col_sets.push_back(col_set);
-    }
 
     // See if all ColSet functions are nunique, which enables optimization of
     // dropping duplicate shuffle table rows before shuffle
@@ -4778,13 +4816,25 @@ GroupbyState* groupby_state_init_py_entry(
             OperatorComptroller::Default()->GetOperatorBudget(operator_id);
     }
 
+    // The true number of funcs is 1 if doing a window operation, since each
+    // window ftype should correspond to a single ::window in the ftypes vector.
+    size_t true_n_funcs =
+        (n_funcs > 0 && ftypes[0] == Bodo_FTypes::window) ? 1 : n_funcs;
+
+    std::unique_ptr<bodo::Schema> in_schema = bodo::Schema::Deserialize(
+        std::vector<int8_t>(build_arr_array_types,
+                            build_arr_array_types + n_build_arrs),
+        std::vector<int8_t>(build_arr_c_types,
+                            build_arr_c_types + n_build_arrs));
+    size_t n_inputs = in_schema->column_types.size();
+
     // Create vectors for the MRNF arguments from the raw pointer arrays.
     std::vector<bool> sort_asc_vec(n_sort_keys, false);
     std::vector<bool> sort_na_vec(n_sort_keys, false);
-    std::vector<bool> cols_to_keep_vec(n_build_arrs, true);
-    if (n_funcs == 1 && (ftypes[0] == Bodo_FTypes::min_row_number_filter ||
-                         ftypes[0] == Bodo_FTypes::window)) {
-        for (size_t i = 0; i < (size_t)n_build_arrs; i++) {
+    std::vector<bool> cols_to_keep_vec(n_inputs, true);
+    if (true_n_funcs == 1 && (ftypes[0] == Bodo_FTypes::min_row_number_filter ||
+                              ftypes[0] == Bodo_FTypes::window)) {
+        for (size_t i = 0; i < (size_t)n_inputs; i++) {
             cols_to_keep_vec[i] = cols_to_keep[i];
         }
         for (size_t i = 0; i < n_sort_keys; i++) {
@@ -4797,14 +4847,7 @@ GroupbyState* groupby_state_init_py_entry(
     std::shared_ptr<table_info> window_args(window_args_);
 
     return new GroupbyState(
-        bodo::Schema::Deserialize(
-            std::vector<int8_t>(build_arr_array_types,
-                                build_arr_array_types + n_build_arrs),
-            std::vector<int8_t>(build_arr_c_types,
-                                build_arr_c_types + n_build_arrs)),
-
-        std::vector<int32_t>(ftypes, ftypes + n_funcs),
-        // Note: We assume window functions are 1 ftype per window ftype.
+        in_schema, std::vector<int32_t>(ftypes, ftypes + true_n_funcs),
         std::vector<int32_t>(window_ftypes, window_ftypes + n_funcs),
         std::vector<int32_t>(f_in_offsets, f_in_offsets + n_funcs + 1),
         std::vector<int32_t>(f_in_cols, f_in_cols + f_in_offsets[n_funcs]),

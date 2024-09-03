@@ -2697,7 +2697,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::UINT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::FLOAT64)
-            // TODO: add decimal????
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitor_agg, Bodo_CTypes::DECIMAL)
             break;
         case Bodo_FTypes::bitand_agg:
             // BITAND_AGG
@@ -2711,7 +2711,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::UINT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::FLOAT64)
-            // TODO: add decimal????
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitand_agg, Bodo_CTypes::DECIMAL)
             break;
         case Bodo_FTypes::bitxor_agg:
             // BITXOR_AGG
@@ -2725,7 +2725,7 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::UINT64)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::FLOAT32)
             APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::FLOAT64)
-            // TODO: add decimal????
+            APPLY_TO_COLUMN_CALL(Bodo_FTypes::bitxor_agg, Bodo_CTypes::DECIMAL)
             break;
         case Bodo_FTypes::count_if:
             // count_if requires a boolean input.

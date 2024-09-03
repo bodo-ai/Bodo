@@ -102,8 +102,6 @@ class WindowStateType(StreamingStateType):
         self.is_ascending = is_ascending
         self.nulls_last = nulls_last
         self.func_names = func_names
-        if len(func_names) != 1:
-            raise BodoError("Streaming Window only supports a single function.")
         self.kept_input_indices = kept_input_indices
         self.kept_input_indices_set = set(kept_input_indices)
         self.func_input_indices = func_input_indices
@@ -519,10 +517,8 @@ class WindowStateType(StreamingStateType):
                                 in_dtype.scale,
                             )
                             output_type = dtype_to_array_type(out_dtype)
-                        elif (
-                            (func_name == "sum")
-                            and isinstance(in_dtype, types.Integer)
-                            and (in_dtype.bitwidth <= 64)
+                        elif isinstance(in_dtype, types.Integer) and (
+                            in_dtype.bitwidth <= 64
                         ):
                             # Upcast output integer to the 64-bit variant to prevent overflow.
                             out_dtype = types.int64 if in_dtype.signed else types.uint64
@@ -860,7 +856,7 @@ def overload_init_window_state(
     build_arr_dtypes = output_type.build_arr_ctypes
     build_arr_array_types = output_type.build_arr_array_types
     n_build_arrs = len(build_arr_dtypes)
-    ftypes = [supported_agg_funcs.index("window")] * len(output_type.func_names)
+    ftypes = [supported_agg_funcs.index("window")]
     window_ftypes = []
     for fname in output_type.func_names:
         if fname not in supported_agg_funcs:
@@ -890,11 +886,10 @@ def overload_init_window_state(
     window_args_list = []
     for window_args in output_type.window_args:
         # TODO: verify number of scalar arguments for each window function
-        # NOTE: Adds None for funcs with no args so that it compiles
-        if len(window_args) == 0:
-            window_args_list.append(None)
-        else:
-            window_args_list.extend(window_args)
+        window_args_list.extend(window_args)
+    # NOTE: Adds None for funcs with no args so that it compiles
+    if len(window_args) == 0:
+        window_args_list.append(None)
 
     window_args_tuple = tuple(window_args_list)
     _, scalar_args_table = output_type.derive_common_table_types()

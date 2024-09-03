@@ -137,7 +137,6 @@ class BodoPhysicalWindow(
      */
     fun isSupportedHashGroup(group: Window.Group): Boolean {
         return group.keys.cardinality() >= 1 &&
-            group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
                 !aggCall.distinct && !aggCall.ignoreNulls
@@ -145,8 +144,6 @@ class BodoPhysicalWindow(
                     SqlKind.ROW_NUMBER,
                     SqlKind.RANK,
                     SqlKind.DENSE_RANK,
-                    SqlKind.PERCENT_RANK,
-                    SqlKind.CUME_DIST,
                     SqlKind.NTILE,
                     -> true
                     SqlKind.LEAD,
@@ -184,17 +181,15 @@ class BodoPhysicalWindow(
      */
     fun isSupportedSortGroup(group: Window.Group): Boolean {
         return (group.keys.cardinality() >= 1 || group.orderKeys.keys.isNotEmpty()) &&
-            group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
                 !aggCall.distinct && !aggCall.ignoreNulls &&
                     when (aggCall.operator.kind) {
                         SqlKind.ROW_NUMBER,
                         SqlKind.RANK,
-                        SqlKind.DENSE_RANK,
-                        SqlKind.PERCENT_RANK,
-                        SqlKind.CUME_DIST,
                         -> true
+                        SqlKind.DENSE_RANK,
+                        -> group.aggCalls.size == 1
                         SqlKind.COUNTIF,
                         SqlKind.SUM,
                         SqlKind.COUNT,
@@ -235,7 +230,6 @@ class BodoPhysicalWindow(
     fun isSupportedBlankWindowGroup(group: Group): Boolean {
         return group.keys.cardinality() == 0 &&
             group.orderKeys.keys.size == 0 &&
-            group.aggCalls.size == 1 &&
             group.aggCalls.all {
                     aggCall ->
                 !aggCall.distinct && !aggCall.ignoreNulls

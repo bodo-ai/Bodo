@@ -835,7 +835,8 @@ void lead_lag_computation(std::shared_ptr<array_info>& out_arr,
                           std::shared_ptr<array_info> sorted_idx,
                           std::shared_ptr<array_info> in_col,
                           std::shared_ptr<array_info> default_value,
-                          int64_t shift_amt) {
+                          int64_t shift_amt, bodo::IBufferPool* const pool,
+                          std::shared_ptr<::arrow::MemoryManager> mm) {
     size_t n_rows = out_arr->length;
 
     std::vector<int64_t> shifted_idxs(n_rows, 0);
@@ -848,7 +849,7 @@ void lead_lag_computation(std::shared_ptr<array_info>& out_arr,
                                     shift_amt);
 
     out_arr = RetrieveArray_TwoColumns(in_col, default_value, shifted_idxs,
-                                       default_idxs);
+                                       default_idxs, pool, mm);
 }
 
 /**
@@ -907,7 +908,6 @@ void window_computation(
     std::shared_ptr<::arrow::MemoryManager> mm) {
     int64_t window_arg_offset = 0;
     int64_t window_col_offset = input_arrs.size() - n_input_cols;
-    int64_t builders_offset = out_dict_builders.size() - n_input_cols;
     std::vector<std::shared_ptr<array_info>> orderby_arrs(
         input_arrs.begin(), input_arrs.begin() + window_col_offset);
     std::shared_ptr<table_info> iter_table = nullptr;
@@ -1087,22 +1087,23 @@ void window_computation(
 
                 // if there is a dictionary builder for the input/output
                 // we need to unify with the default value.
-                if (out_dict_builders[builders_offset] != nullptr) {
-                    default_value = out_dict_builders[builders_offset]
+                int64_t dict_builder_offset =
+                    (out_dict_builders.size() - window_funcs.size()) + i;
+                if (out_dict_builders[dict_builder_offset] != nullptr) {
+                    default_value = out_dict_builders[dict_builder_offset]
                                         ->UnifyDictionaryArray(default_value);
                     // technically we shouldn't need to do this but
                     // RetrieveArray_TwoColumn was complaining...
                     set_array_dict_from_builder(
-                        input_col, out_dict_builders[builders_offset]);
+                        input_col, out_dict_builders[dict_builder_offset]);
                 }
 
                 // TODO add ignore nulls case
                 lead_lag_computation<false>(out_arrs[i], iter_table->columns[0],
                                             iter_table->columns[idx_col],
-                                            input_col, default_value,
-                                            shift_amt);
+                                            input_col, default_value, shift_amt,
+                                            pool, mm);
                 window_col_offset++;
-                builders_offset++;
                 window_arg_offset = window_arg_offset + 2;
                 break;
             }
