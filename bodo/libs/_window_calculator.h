@@ -81,7 +81,8 @@ inline bool supports_calculator_computation(
             case Bodo_FTypes::count:
             case Bodo_FTypes::sum:
             case Bodo_FTypes::row_number:
-            case Bodo_FTypes::rank: {
+            case Bodo_FTypes::rank:
+            case Bodo_FTypes::dense_rank: {
                 break;
             }
             default: {
