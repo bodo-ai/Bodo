@@ -145,6 +145,10 @@ public class BodoTypeCoercionImpl extends TypeCoercionImpl {
         return factory.createSqlType(SqlTypeName.DOUBLE);
     }
 
+    if (SqlTypeUtil.isNumeric(in) && expected == SqlTypeFamily.INTEGER) {
+      return factory.createSqlType(SqlTypeName.INTEGER);
+    }
+
     return super.implicitCast(in, expected);
   }
 

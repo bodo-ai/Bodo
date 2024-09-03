@@ -5,6 +5,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo
 from bodo.tests.utils import nullable_float_arr_maker, pytest_slow_unless_window
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
@@ -654,38 +655,38 @@ def test_bit_agg(data, dtype, memory_leak_check):
     for func in bit_agg_funcs:
         selects.append(f"{func}(B) OVER (PARTITION BY A)")
 
-    query = f"SELECT {', '.join(selects)} FROM table1"
+    query = f"SELECT A, {', '.join(selects)} FROM table1"
 
     expected = pd.DataFrame(
         {
-            0: pd.Series(
+            0: ctx["TABLE1"]["A"],
+            1: pd.Series(
                 [126, 126, 126, 79, 79, 79, 215, 215, 215, None],
                 dtype=pd.Int32Dtype(),
             ),
-            1: pd.Series(
+            2: pd.Series(
                 [32, 32, 32, 4, 4, 4, 0, 0, 0, None],
                 dtype=pd.Int32Dtype(),
             ),
-            2: pd.Series(
+            3: pd.Series(
                 [114, 114, 114, 76, 76, 76, 208, 208, 208, None],
                 dtype=pd.Int32Dtype(),
             ),
         }
     )
-
-    pandas_code = check_query(
-        query,
-        ctx,
-        None,
-        check_dtype=False,
-        check_names=False,
-        sort_output=False,
-        expected_output=expected,
-        return_codegen=True,
-    )["pandas_code"]
-
-    # Verify that fusion is working correctly.
-    count_window_applies(pandas_code, 1, bit_agg_funcs)
+    old_use_decimal = bodo.bodo_use_decimal
+    try:
+        bodo.bodo_use_decimal = True
+        check_query(
+            query,
+            ctx,
+            None,
+            check_dtype=False,
+            check_names=False,
+            expected_output=expected,
+        )
+    finally:
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(

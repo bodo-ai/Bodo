@@ -433,7 +433,6 @@ def test_all_null():
     data is all-null.
     """
     selects = [
-        "idx",
         "ROW_NUMBER() OVER (PARTITION BY P ORDER BY O) AS RN",
         "RANK() OVER (PARTITION BY P ORDER BY O) AS R",
         "DENSE_RANK() OVER (PARTITION BY P ORDER BY O) AS DR",
@@ -472,7 +471,6 @@ def test_all_null():
     query = f"SELECT {', '.join(selects)} FROM table1"
     df = pd.DataFrame(
         {
-            "IDX": list(range(10)),
             "P": [0] * 10,
             "O": pd.array([None] * 10, dtype=pd.Int32Dtype()),
             "B": pd.array([None] * 10, dtype=pd.BooleanDtype()),
@@ -480,7 +478,6 @@ def test_all_null():
     )
     answer = pd.DataFrame(
         {
-            "IDX": list(range(10)),
             "RN": list(range(1, 11)),
             "R": [1] * 10,
             "DR": [1] * 10,
@@ -563,7 +560,173 @@ def test_simple_sum(df, spark_info, capfd):
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
 
-    query = "SELECT IDX, SUM(S) OVER (PARTITION BY P) as W FROM TABLE1"
+    query = f"SELECT IDX, SUM(S) OVER (PARTITION BY P) as W FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "IDX": range(13000),
+                    "P": [str(i)[:2] for i in range(13000)],
+                    "S": pd.array(
+                        [None if i % 2 == 0 else i % 128 for i in range(13000)],
+                        dtype=pd.UInt8Dtype(),
+                    ),
+                }
+            ),
+            id="uint8",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "IDX": range(1000),
+                    "P": [round(1.5 * np.sin(i)) for i in range(1000)],
+                    "S": pd.array(
+                        [
+                            [None, True, False][min(i % 3, i % 4, i % 5)]
+                            for i in range(1000)
+                        ],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                }
+            ),
+            id="bool",
+        ),
+    ],
+)
+def test_simple_count(df, spark_info, capfd):
+    """Verifies that the correct path is taken for COUNT"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = "SELECT IDX, COUNT(S) OVER (PARTITION BY P) as W FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+@pytest.mark.parametrize(
+    "partition_col",
+    [
+        pytest.param("P1", id="single_partition"),
+        pytest.param("P2", id="two_partitions"),
+        pytest.param("P3", id="few_partitions", marks=pytest.mark.slow),
+        pytest.param("P4", id="more_partitions"),
+        pytest.param("P5", id="many_partitions", marks=pytest.mark.slow),
+    ],
+)
+def test_simple_count_star(partition_col, spark_info, capfd):
+    """Verifies that the correct path is taken for COUNT(*)"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = f"SELECT IDX, COUNT(*) OVER (PARTITION BY {partition_col}) as W FROM TABLE1"
+
+    df = pd.DataFrame(
+        {
+            "IDX": range(12000),
+            "P1": [17 for i in range(12000)],
+            "P2": [min(i % 2, i % 3, i % 4, i % 5) for i in range(12000)],
+            "P3": [min(i % 6, i % 7, i % 8) for i in range(12000)],
+            "P4": [int(np.tan(i)) for i in range(12000)],
+            "P5": [int((np.tan(i) * 3) ** 2) for i in range(12000)],
+        }
+    )
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+def test_multiple_sum_count(spark_info, capfd):
+    """Verifies that the correct path is taken for SUM/COUNT when called multiple times"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    df = pd.DataFrame(
+        {
+            "IDX": range(4500),
+            "P": [int(np.tan(i)) for i in range(4500)],
+            "S": pd.array(
+                [None if i % 7 == 6 else i % 255 for i in range(4500)],
+                dtype=pd.UInt8Dtype(),
+            ),
+        }
+    )
+    terms = [
+        "SUM(S) OVER (PARTITION BY P) as W1",
+        "COUNT(S) OVER (PARTITION BY P) as W2",
+        "COUNT(*) OVER (PARTITION BY P) as W3",
+    ]
+    query = f"SELECT IDX, {', '.join(terms)} FROM TABLE1"
 
     with temp_env_override(
         {
@@ -990,6 +1153,54 @@ def test_countstar_over_blank(capfd):
             None,
             expected_output=expected_df,
             check_names=False,
+        )
+
+    comm = MPI.COMM_WORLD
+    _, err = capfd.readouterr()
+    assert_success = expected_log_message in err
+    assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
+
+
+def test_multiple_over_blank(capfd):
+    """Checks that multiple FUNC(X) OVER () work properly and takes the correct codepath"""
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    df = pd.DataFrame(
+        {
+            "IDX": range(1000),
+            "DATA": pd.array(
+                [None if i % 2 == i % 3 else str(i)[2:] for i in range(1000)]
+            ),
+        }
+    )
+
+    expected_df = pd.DataFrame(
+        {
+            "IDX": range(1000),
+            "NON_NULL": pd.array([666 for i in range(1000)]),
+            "TOTAL": pd.array([1000 for i in range(1000)]),
+        }
+    )
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    query = "SELECT IDX, COUNT(DATA) OVER () as NON_NULL, COUNT(*) OVER () as TOTAL FROM TABLE1"
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            None,
+            expected_output=expected_df,
+            check_names=False,
+            check_dtype=False,
         )
 
     comm = MPI.COMM_WORLD

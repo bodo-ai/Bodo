@@ -572,8 +572,8 @@ def _init_groupby_state(
         mrnf_sort_asc (bool*): Bitmask for sort direction of order-by columns in MRNF case.
         mrnf_sort_na (bool*): Bitmask for null sort direction of order-by columns in MRNF case.
         mrnf_n_sort_keys (int): Number of MRNF order-by columns.
-        cols_to_keep (bool*): Bitmask of olumns to retain in output
-            in the MRNF case.
+        cols_to_keep (bool*): Bitmask of columns to retain in output
+            in the MRNF or window case.
         window_args (table_info*) table consisting of 1 row and a column for each scalar window arg
         op_pool_size_bytes (int64): Size of the operator pool (in bytes).
         output_state_type (TypeRef[GroupbyStateType]): The output type for the state
@@ -595,7 +595,7 @@ def _init_groupby_state(
             mrnf_sort_asc,
             mrnf_sort_na,
             mrnf_n_sort_keys,
-            mrnf_cols_to_keep,
+            cols_to_keep,
             window_args,
             op_pool_size_bytes,
             _,  # output_state_type
@@ -647,7 +647,7 @@ def _init_groupby_state(
             mrnf_sort_asc,
             mrnf_sort_na,
             mrnf_n_sort_keys,
-            mrnf_cols_to_keep,
+            cols_to_keep,
             window_args,
             output_batch_size,
             parallel,
