@@ -88,3 +88,6 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 - Sometimes error messages aren't helpful because they're treated as internal errors. In that case set `export NUMBA_DEVELOPER_MODE=1`.
 - To get numba caching information, set `export NUMBA_DEBUG_CACHE=1`.
 - If you set `export BODO_SKIP_CPP_TESTS=1` you can skip compiling the C++ tests, which can take a long time to build.
+
+## Troubleshooting
+If you encounter any issues, [check this confluence document](https://bodo.atlassian.net/wiki/spaces/B/pages/1894416388/Troubleshooting+build+bodo+from+source+on+platform). 
