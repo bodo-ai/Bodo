@@ -1355,3 +1355,49 @@ def test_join_splitview_nan_entry(memory_leak_check):
 
     S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4, 3, 1], name="A")
     check_func(test_impl, (S,), check_typing_issues=False)
+
+
+@pytest.mark.parametrize(
+    "substr",
+    [
+        pytest.param("a", id="single_char"),
+        pytest.param("1", id="single_digit", marks=pytest.mark.slow),
+        pytest.param("23", id="multi_digit"),
+    ],
+)
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(
+            pd.Series([None if i % 7 == i % 6 else str(i) for i in range(1000)]),
+            id="numeric_strings_unique",
+        ),
+        pytest.param(
+            pd.Series(
+                [None if i % 25 == 13 else hex(int(i**0.75))[2:] for i in range(5000)]
+            ),
+            id="hex_strings_duplicates",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "is_prefix",
+    [
+        pytest.param(True, id="prefix"),
+        pytest.param(False, id="suffix"),
+    ],
+)
+def test_remove_prefix_suffix(data, substr, is_prefix):
+    """
+    Tests pd.Series.str.removeprefix and pd.Series.str.removesuffix.
+    """
+
+    def impl_prefix(S, substr):
+        return S.str.removeprefix(substr)
+
+    def impl_suffix(S, substr):
+        return S.str.removesuffix(substr)
+
+    func = impl_prefix if is_prefix else impl_suffix
+
+    check_func(func, (data, substr))

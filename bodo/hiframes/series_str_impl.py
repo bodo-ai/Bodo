@@ -20,6 +20,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.generic_pandas_coverage import generate_simple_series_impl
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -448,6 +449,36 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_replace_noregex_impl
+
+
+@overload_method(
+    SeriesStrMethodType, "removeprefix", inline="always", no_unliteral=True
+)
+def overload_str_method_removeprefix(S, prefix):
+    str_arg_check("removeprefix", "prefix", prefix)
+    scalar_text = " data_str = data[i]\n"
+    scalar_text += " if data_str.startswith(prefix):\n"
+    scalar_text += "   result[i] = data_str[len(prefix):]\n"
+    scalar_text += " else:\n"
+    scalar_text += "   result[i] = data_str\n"
+    return generate_simple_series_impl(
+        ("S", "prefix"), (S, prefix), S.stype, scalar_text
+    )
+
+
+@overload_method(
+    SeriesStrMethodType, "removesuffix", inline="always", no_unliteral=True
+)
+def overload_str_method_removesuffix(S, suffix):
+    str_arg_check("removesuffix", "suffix", suffix)
+    scalar_text = " data_str = data[i]\n"
+    scalar_text += " if data_str.endswith(suffix):\n"
+    scalar_text += "   result[i] = data_str[:-len(suffix)]\n"
+    scalar_text += " else:\n"
+    scalar_text += "   result[i] = data_str\n"
+    return generate_simple_series_impl(
+        ("S", "suffix"), (S, suffix), S.stype, scalar_text
+    )
 
 
 @numba.njit
