@@ -187,9 +187,8 @@ class BodoPhysicalWindow(
                     when (aggCall.operator.kind) {
                         SqlKind.ROW_NUMBER,
                         SqlKind.RANK,
-                        -> true
                         SqlKind.DENSE_RANK,
-                        -> group.aggCalls.size == 1
+                        -> true
                         SqlKind.COUNTIF,
                         SqlKind.SUM,
                         SqlKind.COUNT,
