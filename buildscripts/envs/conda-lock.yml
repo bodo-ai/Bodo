@@ -12055,7 +12055,7 @@ package:
     python_abi: 3.12.*
   url: https://conda.anaconda.org/bodo.ai/linux-64/pyarrow-17.0.0-py312h9cebb41_1.conda
   hash:
-    md5: b5ca7712fe792e34ff60bcc643d35905
+    md5: 0b71496572e47a26128b9c5eb983b0ca
     sha256: 7b2395a38f627dbc66db23cceb00cd82af70503220a021a14b622c0283d9f218
   category: main
   optional: false
