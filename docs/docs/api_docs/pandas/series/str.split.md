@@ -25,3 +25,27 @@
 dtype: object
 ```
 
+``` py
+>>> @bodo.jit
+... def f(S):
+...     return S.str.split(" ", n=2)
+>>> S = pd.Series(["alphabet soup is delicious", "hello world", "oh what a beautiful morning"])
+>>> f(S)
+0     [alphabet, soup, is delicious]
+1                     [hello, world]
+2    [oh, what, a beautiful morning]
+dtype: object
+```
+
+``` py
+>>> @bodo.jit
+... def f(S):
+...     return S.str.split(n=1)
+>>> S = pd.Series(["alphabet soup is delicious", "hello \n\tworld", "oh what a beautiful morning"])
+>>> f(S)
+0     [alphabet, soup is delicious]
+1                     [hello, world]
+2    [oh, what a beautiful morning]
+dtype: object
+```
+
