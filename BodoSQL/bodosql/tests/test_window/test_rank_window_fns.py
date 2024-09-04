@@ -1128,3 +1128,46 @@ def test_ntile(ntile_df, capfd, spark_info, n_bins):
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
 
     assert assert_success
+
+
+def test_multiple_rank_fns(spark_info, capfd, memory_leak_check):
+    """
+    Tests that multiple rank functions can be computed together in the sort based impl
+    """
+    from mpi4py import MPI
+
+    from bodo.tests.utils import temp_env_override
+
+    comm = MPI.COMM_WORLD
+
+    expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
+
+    window = " OVER (PARTITION BY P ORDER BY O)"
+    window_terms = ["RANK()", "DENSE_RANK()"]
+    query = f"SELECT IDX, O, {', '.join([term + window for term in window_terms])} FROM TABLE1"
+    n_rows = 10000
+    df = pd.DataFrame(
+        {
+            "P": [int(i**0.25 + np.tan(i)) for i in range(n_rows)],
+            "O": [int(np.tan(i)) for i in range(n_rows)],
+            "IDX": range(n_rows),
+        }
+    )
+
+    with temp_env_override(
+        {
+            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+        }
+    ):
+        check_query(
+            query,
+            {"TABLE1": df},
+            spark_info,
+            check_dtype=False,
+            check_names=False,
+        )
+        _, err = capfd.readouterr()
+        assert_success = expected_log_message in err
+        assert_success = comm.allreduce(assert_success, op=MPI.LAND)
+
+    assert assert_success
