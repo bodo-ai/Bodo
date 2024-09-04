@@ -206,12 +206,26 @@ def test_len(test_unicode, memory_leak_check):
 # TODO: Add memory_leak_check when bugs are resolved.
 @pytest.mark.slow
 def test_split(test_unicode_no_nan):
-    def test_impl(S):
+    def impl_regular(S):
         return S.str.split(",")
+
+    def impl_delim_n(S, n):
+        return S.str.split(", ", n=n)
+
+    def impl_n(S, n):
+        return S.str.split(n=n)
 
     # TODO: more split tests similar to the ones test_hiframes
     # TODO: support and test NA
-    check_func(test_impl, (test_unicode_no_nan,))
+    check_func(impl_regular, (test_unicode_no_nan,))
+    check_func(impl_delim_n, (test_unicode_no_nan, -1))
+    check_func(impl_n, (test_unicode_no_nan, -1))
+    check_func(impl_delim_n, (test_unicode_no_nan, 1))
+    check_func(impl_n, (test_unicode_no_nan, 1))
+    check_func(impl_delim_n, (test_unicode_no_nan, 2))
+    check_func(impl_n, (test_unicode_no_nan, 2))
+    check_func(impl_delim_n, (test_unicode_no_nan, 10))
+    check_func(impl_n, (test_unicode_no_nan, 10))
 
 
 # TODO: Add memory_leak_check when bugs are resolved.

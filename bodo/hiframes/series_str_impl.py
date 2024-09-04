@@ -241,14 +241,23 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 
         return _str_split_view_impl
 
-    # TODO: optimize!
+    use_default_pat = is_overload_none(pat) and not (
+        is_overload_constant_int(n) and get_overload_const_int(n) < 1
+    )
+
     def _str_split_impl(S_str, pat=None, n=-1, expand=False):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        # not inlining loops since fusion optimization doesn't seem likely
-        out_arr = bodo.libs.str_ext.str_split(arr, pat, n)
+        # Not inlining loops since fusion optimization doesn't seem likely
+        if use_default_pat and n >= 1:
+            # Avoiding passing in None since the implementation of split does not
+            # do the correct pandas behavior when pat=None and n>=1, but does when
+            # passed in the corresponding regex pattern.
+            out_arr = bodo.libs.str_ext.str_split_empty_n(arr, n)
+        else:
+            out_arr = bodo.libs.str_ext.str_split(arr, pat, n)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return _str_split_impl

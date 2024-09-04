@@ -825,6 +825,54 @@ def str_split(arr, pat, n):  # pragma: no cover
     return out_arr
 
 
+@numba.njit(cache=True)
+def str_split_empty_n(arr, n):  # pragma: no cover
+    """Used for pd.Series.str.split when pat is not provided, but n is and it is positive."""
+    compiled_pat = re.compile("\\s+")
+
+    # Do a pre-pass to calculate the exact number of strings and number of characters from
+    # the inner string array of the final answer.
+    l = len(arr)
+    num_strs = 0
+    num_chars = 0
+    numba.parfors.parfor.init_prange()
+    for i in numba.parfors.parfor.internal_prange(l):
+        if bodo.libs.array_kernels.isna(arr, i):
+            continue
+        vals = compiled_pat.split(arr[i].strip(), maxsplit=n)
+        num_strs += len(vals)
+        for s in vals:
+            num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+
+    # Allocate the array item array where the inner array is the string
+    # array with the specified size.
+    out_arr = bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+        l, (num_strs, num_chars), bodo.libs.str_arr_ext.string_array_type
+    )
+    index_offsets = bodo.libs.array_item_arr_ext.get_offsets(out_arr)
+    null_bitmap = bodo.libs.array_item_arr_ext.get_null_bitmap(out_arr)
+    data = bodo.libs.array_item_arr_ext.get_data(out_arr)
+
+    # Repeat the same logic as the first pass, writing the split up
+    # string lists into the result array.
+    curr_ind = 0
+    for j in numba.parfors.parfor.internal_prange(l):
+        index_offsets[j] = curr_ind
+        if bodo.libs.array_kernels.isna(arr, j):
+            bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 0)
+            continue
+        bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
+        vals = compiled_pat.split(arr[j].strip(), maxsplit=n)
+        n_str = len(vals)
+        for k in range(n_str):
+            s = vals[k]
+            data[curr_ind] = s
+            curr_ind += 1
+
+    index_offsets[l] = curr_ind
+    return out_arr
+
+
 @overload(hex)
 def overload_hex(x):
     if isinstance(x, types.Integer):

@@ -2828,7 +2828,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("str_split", "bodo.libs.str_ext"):
+        if fdef == ("str_split", "bodo.libs.str_ext") or fdef == (
+            "str_split_empty_n",
+            "bodo.libs.str_ext",
+        ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
