@@ -1509,8 +1509,8 @@ std::shared_ptr<table_info> recv_sorted_window_data(
             TableBuildBuffer result_table(std::move(schema), dict_builders);
             IncrementalShuffleMetrics metrics;
             while (recv_states.size() != 0) {
-                consume_completed_recvs(recv_states, dict_builders, metrics,
-                                        result_table);
+                consume_completed_recvs(recv_states, MPI_COMM_WORLD,
+                                        dict_builders, metrics, result_table);
             }
 
             // Transpose the partition by and order by columns with the updated

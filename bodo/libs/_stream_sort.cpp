@@ -1068,8 +1068,8 @@ SortedChunkedTableBuilder StreamSortState::GlobalSort_Partition(
         }
         // If we have any completed receives, add them to the builder
         std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
-            auto [done, table] =
-                s.recvDone(dict_builders, metrics.ishuffle_metrics);
+            auto [done, table] = s.recvDone(dict_builders, MPI_COMM_WORLD,
+                                            metrics.ishuffle_metrics);
             if (done && table->nrows()) {
                 time_pt start_append = start_timer();
                 global_builder.AppendChunk(std::move(table));

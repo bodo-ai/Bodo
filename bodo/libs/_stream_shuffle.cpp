@@ -569,6 +569,35 @@ AsyncShuffleSendState shuffle_issend(std::shared_ptr<table_info> in_table,
     return send_state;
 }
 
+void AsyncShuffleRecvState::TryRecvLensAndAllocArrs(MPI_Comm& shuffle_comm) {
+    // Only post irecv if we haven't already
+    if (!recv_requests.empty()) {
+        return;
+    }
+    std::optional<std::vector<uint64_t>> recv_lens_opt =
+        GetRecvLens(shuffle_comm);
+    // Only post irecv if we have received the lens
+    if (!recv_lens_opt.has_value()) {
+        return;
+    }
+    std::vector<uint64_t>& recv_lens = recv_lens_opt.value();
+
+    len_iter_t lens_iter = recv_lens.cbegin();
+
+    // Start with tag = 1 since tag = 0 is for the lengths
+    int curr_tag = 1;
+    // Post irecv for all data
+    for (uint64_t i = 0; i < schema->column_types.size(); i++) {
+        std::unique_ptr<bodo::DataType>& data_type = schema->column_types[i];
+        std::shared_ptr<array_info> out_arr =
+            recv_shuffle_data_unknown_type<true>(
+                data_type, shuffle_comm, source, curr_tag, *this, lens_iter);
+        out_arr->precision = data_type->precision;
+        out_arr->scale = data_type->scale;
+        out_arrs.push_back(out_arr);
+    }
+}
+
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
                    std::vector<AsyncShuffleRecvState>& recv_states) {
     assert(in_table->ncols() > 0);
@@ -576,48 +605,29 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
     while (true) {
         int flag;
         MPI_Status status;
-        // TODO: check err return
-        MPI_Iprobe(MPI_ANY_SOURCE, 0, shuffle_comm, &flag, &status);
+
+        int err = MPI_Iprobe(MPI_ANY_SOURCE, LENGTH_TAG, shuffle_comm, &flag,
+                             &status);
+        if (err) {
+            char err_msg[MPI_MAX_ERROR_STRING];
+            MPI_Error_string(err, err_msg, nullptr);
+            throw std::runtime_error("MPI error on MPI_Improbe: " +
+                                     std::string(err_msg));
+        }
         if (!flag) {
             break;
         }
-        AsyncShuffleRecvState recv_state(status.MPI_SOURCE);
+
+        AsyncShuffleRecvState recv_state(status.MPI_SOURCE, in_table->schema());
 
         recv_state.PostLensRecv(status, shuffle_comm);
         recv_states.push_back(std::move(recv_state));
     }
 
+    // TODO(aneesh) it seems like a weird API to have this happen in
+    // shuffle_irecv instead of exclusively happening in recvDone
     for (auto& recv_state : recv_states) {
-        // Only post irecv if we haven't already
-        if (!recv_state.recv_requests.empty()) {
-            continue;
-        }
-        std::optional<std::vector<uint64_t>> recv_lens_opt =
-            recv_state.GetRecvLens(shuffle_comm);
-        // Only post irecv if we have received the lens
-        if (!recv_lens_opt.has_value()) {
-            continue;
-        }
-        std::vector<uint64_t>& recv_lens = recv_lens_opt.value();
-
-        len_iter_t lens_iter = recv_lens.cbegin();
-
-        // Start with tag = 1 since tag = 0 is for the lengths
-        int curr_tag = 1;
-        // Post irecv for all data
-        std::unique_ptr<bodo::Schema> schema = in_table->schema();
-        for (uint64_t i = 0; i < in_table->ncols(); i++) {
-            std::unique_ptr<bodo::DataType>& data_type =
-                schema->column_types[i];
-            std::shared_ptr<array_info>& in_arr = in_table->columns[i];
-            std::shared_ptr<array_info> out_arr =
-                recv_shuffle_data_unknown_type<true>(
-                    data_type, shuffle_comm, recv_state.source, curr_tag,
-                    recv_state, lens_iter);
-            out_arr->precision = in_arr->precision;
-            out_arr->scale = in_arr->scale;
-            recv_state.out_arrs.push_back(out_arr);
-        }
+        recv_state.TryRecvLensAndAllocArrs(shuffle_comm);
     }
 }
 
@@ -643,8 +653,8 @@ IncrementalShuffleState::ShuffleIfRequired(const bool is_last) {
 
     time_pt start = start_timer();
     // Check for finished recvs
-    consume_completed_recvs(this->recv_states, this->dict_builders,
-                            this->metrics, out_builder);
+    consume_completed_recvs(this->recv_states, this->shuffle_comm,
+                            this->dict_builders, this->metrics, out_builder);
     this->metrics.shuffle_recv_finalization_time += end_timer(start);
 
     std::optional<std::shared_ptr<table_info>> new_data =
@@ -814,9 +824,20 @@ std::shared_ptr<array_info> AsyncShuffleRecvState::finalize_receive_array(
 
 std::pair<bool, std::shared_ptr<table_info>> AsyncShuffleRecvState::recvDone(
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-    IncrementalShuffleMetrics& metrics) {
+    MPI_Comm shuffle_comm, IncrementalShuffleMetrics& metrics) {
     if (recv_requests.empty()) {
-        return std::make_pair(false, nullptr);
+        // Try receiving the length again and see if we can populate the data
+        // requests.
+        // TODO(aneesh) we also call TryRecvLensAndAllocArrs in shuffle_irecv
+        // but that isn't sufficient - if there's ever a case where we stop
+        // calling shuffle_irecv and attempt to call recvDone until outstanding
+        // requests are completed, it's possible that a request that hasn't yet
+        // recieved it's length will be stuck waiting forever.
+
+        TryRecvLensAndAllocArrs(shuffle_comm);
+        if (recv_requests.empty()) {
+            return std::make_pair(false, nullptr);
+        }
     }
 
     // This could be optimzed by allocating the required size upfront and having
@@ -1026,11 +1047,11 @@ void AsyncShuffleRecvState::PostLensRecv(MPI_Status& status,
 }
 
 void consume_completed_recvs(
-    std::vector<AsyncShuffleRecvState>& recv_states,
+    std::vector<AsyncShuffleRecvState>& recv_states, MPI_Comm shuffle_comm,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     IncrementalShuffleMetrics& metrics, TableBuildBuffer& out_builder) {
     std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
-        auto [done, table] = s.recvDone(dict_builders, metrics);
+        auto [done, table] = s.recvDone(dict_builders, shuffle_comm, metrics);
         if (done) {
             out_builder.ReserveTable(table);
             out_builder.UnsafeAppendBatch(table);
