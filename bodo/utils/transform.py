@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, types
+from numba.core import event, ir, ir_utils, types
 from numba.core.ir_utils import (
     GuardException,
     build_definitions,
@@ -2190,3 +2190,24 @@ def get_runtime_join_filter_terms(
                 non_equality_tup = non_equality_meta.value.meta
                 rtjf_terms.append((state_var, col_indices_tup, non_equality_tup))
     return rtjf_terms
+
+
+def create_nested_run_pass_event(pass_name: str, state, pass_obj):
+    """
+    Creates a nested call to "run_pass" from inside another Bodo compiler
+    pass.
+
+    Args:
+        pass_name (str): The name of the pass for logging purposes.
+        state (_type_): The state object that contains the IR and type information and is used for invoking
+        "run_pass" on the given state.
+        pass_obj (_type_): Any compiler pass object that can invoke "run_pass" on the given
+        state.
+    """
+    # Code is translated from Numba:
+    # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/compiler_machinery.py#L307
+    # Note we removed most of the event details because they are unused and some of our calls may not have all of
+    # of the necessary information.
+    ev_details = dict(name=f"{pass_name} [...]")
+    with event.trigger_event("numba:run_pass", data=ev_details):
+        pass_obj.run_pass(state)

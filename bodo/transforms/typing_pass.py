@@ -60,6 +60,7 @@ from bodo.utils.transform import (
     ReplaceFunc,
     compile_func_single_block,
     container_update_method_names,
+    create_nested_run_pass_event,
     get_call_expr_arg,
     get_const_arg,
     get_const_func_output_type,
@@ -172,7 +173,10 @@ class BodoTypeInference(PartialTypeInference):
                 # set global partial typing flag, see comment above
                 in_partial_typing = True
                 typing_transform_required = False
-                super(BodoTypeInference, self).run_pass(state)
+                # Call into Numba's PartialTypeInference but with chrome tracing enabled properly.
+                create_nested_run_pass_event(
+                    PartialTypeInference.name(), state, super(BodoTypeInference, self)
+                )
                 curr_typing_pass_required = typing_transform_required
             finally:
                 in_partial_typing = saved_in_partial_typing
@@ -334,7 +338,9 @@ class BodoTypeInference(PartialTypeInference):
                     typ.dispatcher._compiler._failed_cache.clear()
 
             # run regular type inference again with _raise_errors=True to raise errors
-            NopythonTypeInference().run_pass(state)
+            create_nested_run_pass_event(
+                NopythonTypeInference.name(), state, NopythonTypeInference()
+            )
         else:
             # last return type check in Numba:
             # https://github.com/numba/numba/blob/0bac18af44d08e913cd512babb9f9b7f6386d30a/numba/core/typed_passes.py#L141
@@ -7123,9 +7129,11 @@ class TypingTransforms:
         # phis need to be transformed into regular assignments since unrolling changes
         # control flow
         # typemap=None to avoid PreLowerStripPhis's generator manipulation
-        numba.core.typed_passes.PreLowerStripPhis().run_pass(
-            numba.core.compiler.StateDict({"func_ir": self.func_ir, "typemap": None})
+        state = numba.core.compiler.StateDict(
+            {"func_ir": self.func_ir, "typemap": None}
         )
+        strip_phis_pass = numba.core.typed_passes.PreLowerStripPhis()
+        create_nested_run_pass_event(strip_phis_pass.name(), state, strip_phis_pass)
 
         # get loop label info
         loop_body = {l: self.func_ir.blocks[l] for l in loop.body if l != loop.header}
@@ -7170,12 +7178,11 @@ class TypingTransforms:
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
 
         # call SSA reconstruction to rename variables and prepare for type inference
-        numba.core.untyped_passes.ReconstructSSA().run_pass(
-            numba.core.compiler.StateDict(
-                {"func_ir": self.func_ir, "locals": self.locals}
-            )
+        state = numba.core.compiler.StateDict(
+            {"func_ir": self.func_ir, "locals": self.locals}
         )
-
+        ssa_pass = numba.core.untyped_passes.ReconstructSSA()
+        create_nested_run_pass_event(ssa_pass.name(), state, ssa_pass)
         self.changed = True
 
     def _get_enclosing_loop(self, var, label, cfg):
