@@ -75,7 +75,7 @@ from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
-from bodo.utils.transform import get_call_expr_arg
+from bodo.utils.transform import create_nested_run_pass_event, get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
@@ -2800,7 +2800,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
     )
     # run overload inliner to inline Series implementations such as Series.max()
     inline_overload_pass = numba.core.typed_passes.InlineOverloads()
-    inline_overload_pass.run_pass(pm)
+    create_nested_run_pass_event(inline_overload_pass.name(), pm, inline_overload_pass)
 
     # TODO: Can we capture parfor_metadata for error messages?
     series_pass = bodo.transforms.series_pass.SeriesPass(
