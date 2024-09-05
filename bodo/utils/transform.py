@@ -2199,7 +2199,7 @@ def create_nested_run_pass_event(pass_name: str, state, pass_obj):
 
     Args:
         pass_name (str): The name of the pass for logging purposes.
-        state (_type_): The state object that contains the IR and type information and is used for invoking
+        state (StateDict): The state object that contains the IR and type information and is used for invoking
         "run_pass" on the given state.
         pass_obj (_type_): Any compiler pass object that can invoke "run_pass" on the given
         state.

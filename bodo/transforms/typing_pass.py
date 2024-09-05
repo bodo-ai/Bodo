@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Set
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, types
+from numba.core import event, ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
 from numba.core.extending import register_jitable
 from numba.core.inline_closurecall import inline_closure_call
@@ -6331,31 +6331,35 @@ class TypingTransforms:
             [self.typemap[value.name] for value in dynamic_param_values]
         )
 
-        if func_name == "sql":
-            (
-                impl,
-                additional_globals_to_lower,
-                sql_plan,
-            ) = bodosql.context_ext._gen_sql_plan_pd_func_and_glbls_for_query(
-                sql_context_type,
-                sql_str,
-                dynamic_param_value_types,
-                named_param_keys,
-                named_param_value_types,
-            )
-            # Save the plan if a cache location is set up.
-            BodoSqlPlanCache.cache_bodosql_plan(sql_plan, sql_str)
-        elif func_name == "convert_to_pandas":
-            (
-                impl,
-                additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_str_for_query(
-                sql_context_type,
-                sql_str,
-                dynamic_param_value_types,
-                named_param_keys,
-                named_param_value_types,
-            )
+        # Generate a chrome tracing event inside the Numba infrastructure for accurately
+        # measuring the time spent in BodoSQL in compilation.
+        ev_details = dict(name=f"BodoSQL Planning: [...]")
+        with event.trigger_event("numba:run_pass", data=ev_details):
+            if func_name == "sql":
+                (
+                    impl,
+                    additional_globals_to_lower,
+                    sql_plan,
+                ) = bodosql.context_ext._gen_sql_plan_pd_func_and_glbls_for_query(
+                    sql_context_type,
+                    sql_str,
+                    dynamic_param_value_types,
+                    named_param_keys,
+                    named_param_value_types,
+                )
+                # Save the plan if a cache location is set up.
+                BodoSqlPlanCache.cache_bodosql_plan(sql_plan, sql_str)
+            elif func_name == "convert_to_pandas":
+                (
+                    impl,
+                    additional_globals_to_lower,
+                ) = bodosql.context_ext._gen_pd_func_str_for_query(
+                    sql_context_type,
+                    sql_str,
+                    dynamic_param_value_types,
+                    named_param_keys,
+                    named_param_value_types,
+                )
 
         self.changed = True
         # BodoSQL generates df.columns setattr, which needs another transform to work
