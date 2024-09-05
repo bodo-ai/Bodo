@@ -627,8 +627,10 @@ class AsyncShuffleRecvState {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     std::vector<MPI_Request> recv_requests;
     int source;
+    std::unique_ptr<bodo::Schema> schema;
 
-    AsyncShuffleRecvState(int source_) : source(source_) {}
+    AsyncShuffleRecvState(int source_, std::unique_ptr<bodo::Schema> schema_)
+        : source(source_), schema(std::move(schema_)) {}
 
     /**
      * @brief Returns a tuple of a boolean and a shared_ptr to a table_info. If
@@ -640,21 +642,22 @@ class AsyncShuffleRecvState {
      */
     std::pair<bool, std::shared_ptr<table_info>> recvDone(
         const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
-        IncrementalShuffleMetrics& metrics);
+        MPI_Comm shuffle_comm, IncrementalShuffleMetrics& metrics);
 
-    /**
-     * @brief Return the lengths of incoming arrays
-     * @param shuffle_comm MPI communicator for shuffle
-     * note that this function should only be called once
-     * since it clears the underlying buffer
-     */
-    std::optional<std::vector<uint64_t>> GetRecvLens(MPI_Comm shuffle_comm);
     /**
      * @brief Post MPI_Irecv call for lengths of incoming arrays
      * @param status MPI status object for probe of length message
      * @param shuffle_comm MPI communicator for shuffle
      */
     void PostLensRecv(MPI_Status& status, MPI_Comm shuffle_comm);
+
+    /**
+     * @brief test if the requested posted by PostLensRecv is complete and if
+     * so, get the lengths and post receives for the data arrays.
+     *
+     * @param shuffle_comm MPI communicator for shuffle
+     */
+    void TryRecvLensAndAllocArrs(MPI_Comm& shuffle_comm);
 
     /**
      * @brief Get total memory size of recv buffers in flight
@@ -670,6 +673,14 @@ class AsyncShuffleRecvState {
     }
 
    private:
+    /**
+     * @brief Return the lengths of incoming arrays
+     * @param shuffle_comm MPI communicator for shuffle
+     * note that this function should only be called once
+     * since it clears the underlying buffer
+     */
+    std::optional<std::vector<uint64_t>> GetRecvLens(MPI_Comm shuffle_comm);
+
     std::shared_ptr<array_info> finalize_receive_array(
         const std::shared_ptr<array_info>& arr,
         const std::shared_ptr<DictionaryBuilder>& dict_builder,
@@ -684,7 +695,7 @@ class AsyncShuffleRecvState {
  * append their out tables to out_builder
  */
 void consume_completed_recvs(
-    std::vector<AsyncShuffleRecvState>& recv_states,
+    std::vector<AsyncShuffleRecvState>& recv_states, MPI_Comm shuffle_comm,
     const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
     IncrementalShuffleMetrics& metrics, TableBuildBuffer& out_builder);
 
