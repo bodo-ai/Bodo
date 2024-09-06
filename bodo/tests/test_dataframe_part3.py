@@ -801,7 +801,8 @@ def test_df_merge_col_key_types(key, memory_leak_check):
 
     try:
         check_func(impl, (df1, df2), reset_index=True, sort_output=True)
-    except TypeError:
+    # Merge seems to work on map array inside Pandas.
+    except BodoError:
         with pytest.raises(BodoError, match=r".* MapArrayType unsupported(.|\n)*"):
             bodo.jit(impl)(df1, df2)
 

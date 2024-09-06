@@ -2665,6 +2665,13 @@ def bucket_scalar_impl(x, y: int) -> Optional[int]:
     if x is pd.NA:
         return x
 
+    # Pandas 2.2.2 converts Int64 data to float in Series.apply for some reason.
+    # We work around this bug by converting back to int.
+    if isinstance(x, float):
+        if np.isnan(x):
+            return pd.NA
+        x = int(x)
+
     if isinstance(x, int):
         res = mmh3.hash(struct.pack("<q", x))
     elif isinstance(x, (datetime, pd.Timestamp)):

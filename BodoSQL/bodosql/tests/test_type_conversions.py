@@ -116,9 +116,10 @@ def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak
         None,
         expected_output=pd.DataFrame(
             {
-                "COL": bodosql_nullable_numeric_types["TABLE1"]["A"].map(
-                    lambda x: None if pd.isna(x) else str(x)
-                )
+                "COL": bodosql_nullable_numeric_types["TABLE1"]["A"]
+                .astype(str)
+                .replace("<NA>", None)
+                .replace("<NA", None)
             }
         ),
     )

@@ -489,7 +489,7 @@ def test_csv_remove_col_keep_date(datapath, memory_leak_check):
         df = pd.read_csv(
             fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": int, "B": float, "C": str, "D": int},
+            dtype={"A": int, "B": float, "D": int},
             parse_dates=["C"],
         )
         return df["C"]
@@ -506,7 +506,7 @@ def test_csv_usecols_parse_dates(datapath, memory_leak_check):
         df = pd.read_csv(
             fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": int, "B": float, "C": str, "D": int},
+            dtype={"A": int, "B": float, "D": int},
             parse_dates=["C"],
             usecols=["A", "C", "D"],
         )
@@ -961,6 +961,7 @@ def test_csv_sep_arg(datapath, memory_leak_check):
             (1, 5),
             (2, 0),
             (2, 1),
+            (2, 2),
         ), "Check if this test is still valid"
         with pytest.raises(
             BodoError, match=r".*Specified \\n as separator or delimiter.*"
@@ -1145,7 +1146,7 @@ def test_csv_date_col_name(datapath, memory_leak_check):
         return pd.read_csv(
             fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": int, "B": float, "C": str, "D": int},
+            dtype={"A": int, "B": float, "D": int},
             parse_dates=["C"],
         )
 
@@ -1160,7 +1161,7 @@ def test_csv_date_col_name(datapath, memory_leak_check):
 
 
 def test_csv_read_only_datetime1(datapath, memory_leak_check):
-    """Test the use of reading dataframe containing
+    """Test the use of reading DataFrame containing
     single datetime like column
     """
     fname = datapath("csv_data_only_date1.csv")
@@ -1169,7 +1170,6 @@ def test_csv_read_only_datetime1(datapath, memory_leak_check):
         return pd.read_csv(
             fname,
             names=["A"],
-            dtype={"A": str},
             parse_dates=["A"],
         )
 
@@ -1184,7 +1184,7 @@ def test_csv_read_only_datetime1(datapath, memory_leak_check):
 
 
 def test_csv_read_only_datetime2(datapath, memory_leak_check):
-    """Test the use of reading dataframe containing
+    """Test the use of reading DataFrame containing
     only datetime-like columns
     """
     fname = datapath("csv_data_only_date2.csv")
@@ -1193,7 +1193,6 @@ def test_csv_read_only_datetime2(datapath, memory_leak_check):
         return pd.read_csv(
             fname,
             names=["A", "B"],
-            dtype={"A": str, "B": str},
             parse_dates=[0, 1],
         )
 
@@ -1418,6 +1417,7 @@ def test_excel1(datapath, memory_leak_check):
         (1, 5),
         (2, 0),
         (2, 1),
+        (2, 2),
     ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
     if pandas_version == (1, 3):
         check_func(test_impl3, (fname,), is_out_distributed=False)
@@ -2439,7 +2439,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": int, "B": float, "C": str, "D": int},
+                dtype={"A": int, "B": float, "D": int},
                 parse_dates=[2],
             )
 

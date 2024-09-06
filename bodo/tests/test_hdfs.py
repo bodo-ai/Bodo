@@ -165,7 +165,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": int, "B": float, "C": str, "D": int},
+            dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
         )
 
@@ -173,7 +173,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": int, "B": float, "C": str, "D": int},
+        dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
     )
 

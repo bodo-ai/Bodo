@@ -325,7 +325,12 @@ def test_to_char_cols(spark_info, to_char_test_dfs, func, memory_leak_check):
             lambda x: np.nan if pd.isna(x) else ("true" if x else "false")
         )
     else:
-        py_output = arr.apply(lambda x: np.nan if pd.isna(x) else str(x))
+        py_output = (
+            arr.astype(str)
+            .replace("<NA>", None)
+            .replace("nan", None)
+            .replace("NaT", None)
+        )
     py_output = pd.DataFrame({"A": py_output})
     check_query(
         query,

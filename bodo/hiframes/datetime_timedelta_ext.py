@@ -29,6 +29,7 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
+import bodo.pandas_compat
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.libs import hdatetime_ext
 from bodo.utils.indexing import (
@@ -240,10 +241,11 @@ def pd_timedelta(
 
     # internal Pandas API that normalizes variations of unit. e.g. 'seconds' -> 's'
     unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(get_overload_const_str(unit))
-    # we don't need the precicion value in this case
-    value_to_nanoseconds_multiplier, _ = pd._libs.tslibs.conversion.precision_from_unit(
-        unit
-    )
+    # we don't need the precision value in this case
+    (
+        value_to_nanoseconds_multiplier,
+        _,
+    ) = bodo.pandas_compat.precision_from_unit_to_nanoseconds(unit)
 
     def impl_timedelta(
         value=_no_input,
