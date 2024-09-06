@@ -707,6 +707,7 @@ nav:
               - api_docs/pandas/series/any.md
               - api_docs/pandas/series/append.md
               - api_docs/pandas/series/apply.md
+              - api_docs/pandas/series/argmin.md
               - api_docs/pandas/series/argsort.md
               - api_docs/pandas/series/astype.md
               - api_docs/pandas/series/autocorr.md

@@ -18,7 +18,9 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
+from bodo.hiframes.datetime_datetime_ext import (
+    datetime_datetime_type,
+)
 from bodo.hiframes.datetime_timedelta_ext import (
     PDTimeDeltaType,
     datetime_timedelta_type,
@@ -1386,6 +1388,72 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         return bodo.libs.array_ops.array_op_idxmax(arr, index)
+
+    return impl
+
+
+def check_argmax_min_args(func_name, S):
+    """Verifies that underlying data of S is compatible with argmin/argmax array kernels
+
+    Args:
+        func_name (str): The name of the function
+        S (SeriesType): The input Series
+
+    Raises:
+
+        BodoError: When argument is not numeric/categorical with order supported.
+    """
+    # TODO: [BSE-3878] Remove this check once we support timestamp with time zone.
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        S, f"Series.{func_name}()"
+    )
+
+    # TODO: Make sure we handle the issue with numpy library leading to argmax
+    # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L103
+
+    # Bodo restrictions:
+    # Only supported for numeric types with numpy arrays
+    # - int, floats, bool, dt64, td64. (maybe complex)
+    # We also support categorical and nullable arrays
+    if not (
+        S.dtype == types.none
+        or (
+            bodo.utils.utils.is_np_array_typ(S.data)
+            and (
+                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                or isinstance(S.dtype, (types.Number, types.Boolean))
+            )
+        )
+        or isinstance(
+            S.data,
+            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
+        )
+        or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
+    ):
+        raise BodoError(
+            f"Series.{func_name}() only supported for numeric array types. Array type: {S.data} not supported."
+        )
+    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
+        raise BodoError(f"Series.{func_name}(): only ordered categoricals are possible")
+
+
+@overload_method(SeriesType, "argmin", inline="always", no_unliteral=True)
+def overload_series_argmin(S, axis=None, skipna=True):
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args(
+        "Series.argmin",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    check_argmax_min_args("argmin", S)
+
+    def impl(S, axis=None, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_kernels._nan_argmin(arr)
 
     return impl
 

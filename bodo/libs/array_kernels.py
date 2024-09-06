@@ -4348,7 +4348,7 @@ def _overload_nan_argmin(arr):
         def impl_bodo_arr(arr):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             init_val = bodo.hiframes.series_kernels._get_type_max_value(arr)
-            ival = typing.builtins.IndexValue(-1, init_val)
+            ival = typing.builtins.IndexValue(len(arr), init_val)
             for i in numba.parfors.parfor.internal_prange(len(arr)):
                 if bodo.libs.array_kernels.isna(arr, i):
                     continue
