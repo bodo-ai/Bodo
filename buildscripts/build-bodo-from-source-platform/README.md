@@ -1,6 +1,6 @@
 # build-bodo-from-source-platform
 
-## Set up DEV environment on platform, single-node cluster
+## Set up DEV environment on platform
 
 > [!NOTE]
 > If the node is too small, it may run out of memory during the build process.
@@ -12,33 +12,17 @@
 > When running step 3 (or any other similar building and cloning instructions) below, please avoid building in `/bodofs`. Its usage has to be limited to storing basic files and nothing that requires high disk performance or full POSIX.
 
 1. SSH into the cluster node (`My Notebook` -> `BODO CLUSTERS` -> `Terminal` beside the running cluster).
-1. Copy single_node_install.sh to the node.
-1. Run the script: `bash single_node_install.sh` (recommended in directory `/home/bodo`).
-1. Enter your GitHub PAT and branch to checkout when prompted
-
-## Set up DEV environment on platform, multi-node cluster
-
-1. SSH into any of the cluster nodes.
-1. Set your [Github token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token#creating-a-personal-access-token-classic) as an environment variable: `export GITHUB_TOKEN=<token>`
-1. Clone Bodo repository on all machines using a Github token: `psh git clone https://$GITHUB_TOKEN@github.com/Bodo-inc/Bodo.git`.
-   This will also set the token in the Git Remote Origin URL, and therefore future git actions won't ask for credentials.
-1. Upgrade `conda` to allow installing packages `psh sudo /opt/conda/bin/conda upgrade --force conda --yes`
-1. Install `conda-lock` on all nodes: `psh sudo /opt/conda/bin/mamba install conda-lock -c conda-forge -n base --yes`
-1. Remove `mpi` and `mpich` on all nodes: `psh sudo /opt/conda/bin/conda remove mpi mpich -n base --force --yes`
-1. Navigate to the folder with the environment lock file: `cd Bodo/buildscripts/envs`
-1. Create a DEV environment from the lock file: `psh conda-lock install --dev --mamba -n DEV conda-lock.yml`
-1. Activate the environment: `conda activate DEV`
-1. Remove `mpi` and `mpich` on all nodes for the DEV environment. `psh conda remove mpi mpich --force --yes`
-1. Navigate to base folder of Bodo repo: `cd ~/Bodo`
-1. Build Bodo: `BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 psh pip install --no-deps --no-build-isolation -ve .`
-1. Build BodoSQL: `cd BodoSQL && psh python setup.py develop && cd ..`
-1. Build Iceberg Connector: `cd iceberg && psh python setup.py develop && cd ..`
-1. Install bodo-platform-utils for bodosqlwrapper use: `cd bodo-platform-image/bodo-platform-utils/ && psh pip install -ve . && cd ../..`
-1. Set same modify time for bodosqlwrapper.py on all nodes: `psh python -c "import os; os.utime(r'/home/bodo/Bodo/bodo-platform-image/bodo-platform-utils/bodo_platform_utils/bodosqlwrapper.py', (1602179630, 1602179630))"`
+1. Copy `install.sh` to the node.
+1. Run the script: `bash -i install.sh` (recommended in directory `/home/bodo`).
+1. Enter your GitHub PAT and branch to checkout when prompted (alternatively,
+   `GITHUB_TOKEN` and `BRANCH_NAME` can be set as environment variables)
+1. Run `conda activate DEV` to enter the environment created by the install
+   script.
 
 > [!NOTE]
 > Modify time for bodosqlwrapper.py has to be the same when installed from source on different nodes since files having different timestamps breaks Numba caching.
-> Therefore, the last command has to run after any source code changes to `bodosqlwrapper.py`.
+> Therefore, after any source code changes to `bodosqlwrapper.py`, run:
+> `psh touch -am -t 202401010000 ~/Bodo/bodo-platform-image/bodo-platform-utils/bodo_platform_utils/bodosqlwrapper.py`
 > See https://bodo.atlassian.net/browse/BSE-3582
 
 > [!NOTE]
