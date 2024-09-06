@@ -396,6 +396,7 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
             } else if (struct_val_size == sizeof(int32_t)) {
                 int32_t value = 0;
                 switch (type_enum) {
+                    case Bodo_CTypes::_BOOL:
                     case Bodo_CTypes::INT8:
                         value = (int32_t) * ((int8_t*)in_val_ptr);
                         break;

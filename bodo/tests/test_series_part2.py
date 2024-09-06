@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -820,6 +821,98 @@ def test_series_idxmax(series_val, memory_leak_check):
     else:
         py_output = no_default
     check_func(test_impl, (series_val,), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pytest.param(
+            pd.Series([None, None, 1.2, 0.1, 3.4, 6.8], dtype=pd.Float32Dtype()),
+            id="float",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, None, 4, -2, 6], dtype=pd.Int32Dtype()),
+            id="nullable-int",
+        ),
+        pytest.param(
+            pd.Series([True, True, True, False, True], dtype=pd.BooleanDtype()),
+            id="bool",
+        ),
+        pytest.param(
+            pd.Series(
+                [Decimal(str((i + 7) % 5)) for i in range(10)],
+                dtype=pd.ArrowDtype(pa.decimal128(32, 12)),
+            ),
+            id="decimal",
+            marks=pytest.mark.skip("[BSE-3880]: Support argmin with Decimal"),
+        ),
+        pytest.param(
+            pd.Series(["f", "a", "b", "c", "d", "e"], dtype=pd.StringDtype()),
+            id="string",
+            marks=pytest.mark.skip(
+                "[BSE-3879]: Support argmin with String/binary Series"
+            ),
+        ),
+        pytest.param(
+            pd.Series(pd.Categorical([1, 1, 0, 5, 0, 2], ordered=True)),
+            id="categorical",
+        ),
+        pytest.param(
+            pd.Series([datetime.date(2020 + 9 - i, 9 - i + 1, i + 1) for i in range(10)]), id="date"
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "2024-01-14",
+                    "2024-01-15",
+                    "2024-02-16",
+                    "2024-01-17",
+                    "2024-01-17",
+                    "2000-02-24",
+                ],
+                dtype="datetime64[ns]",
+            ),
+            id="datetime64ns",
+            marks=pytest.mark.skip(
+                "[BSE-3878] Support argmin with datetime64[ns]"
+            ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}",
+                        tz="US/Pacific",
+                    )
+                    for i in range(10)
+                ]
+            ),
+            id="timestamp_w_tz",
+            marks=pytest.mark.skip(
+                "[BSE-3878] Support argmin with timestamp with time zone"
+            ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"200{9-i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}"
+                    )
+                    for i in range(10)
+                ]
+            ),
+            id="timestamp",
+            marks=pytest.mark.skip(
+                "[BSE-3878] Support argmin with timestamp"
+            ),
+        ),
+    ],
+)
+def test_series_argmin(S, memory_leak_check):
+    def test_impl(S):
+        return S.argmin()
+
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize(
