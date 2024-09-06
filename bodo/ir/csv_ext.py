@@ -977,7 +977,7 @@ def _gen_read_csv_objmode(
     )
     # NOTE: using repr() for sep to support cases like "\n" properly
     # and escapechar to support `\\` properly.
-    func_text += f"        usecols=usecols_arr_{call_id}_2, sep={sep!r}, low_memory=False, escapechar={escapechar!r})\n"
+    func_text += f"        usecols=[int(i) for i in usecols_arr_{call_id}_2], sep={sep!r}, low_memory=False, escapechar={escapechar!r})\n"
     # _gen_read_csv_objmode() may be called from iternext_impl which doesn't
     # have access to the parallel flag in the CSVNode so we retrieve it from
     # the file reader.

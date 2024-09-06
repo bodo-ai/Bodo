@@ -17,7 +17,7 @@ dependencies:
   # Core
   - numba =0.60.0
   - numpy >=1.24,<1.27
-  - pandas >=2.1,<2.2
+  - pandas >=2.2,<2.3
 
   # HDFS
   - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_*
@@ -74,4 +74,4 @@ dependencies:
   - ipython==8.16.1
 
   # Neworking
-  - requests 
+  - requests

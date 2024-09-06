@@ -1,5 +1,6 @@
 import hashlib
 import inspect
+import typing as pt
 import warnings
 
 import numpy as np
@@ -133,7 +134,7 @@ if _check_pandas_change:
         != "8f29eb56a84ce4000be3ba611f5a23cbf81b981fd8cfe5c7776e79f7800ba94e"
     ):  # pragma: no cover
         warnings.warn(
-            "pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_typehas changed"
+            "pd.core.arrays.arrow.array.ArrowExtensionArray._concat_same_type has changed"
         )
 
 
@@ -168,3 +169,79 @@ pd.core.computation.ops.FuncNode.__init__ = FuncNode__init__
 # See test_series_value_counts
 if not hasattr(pd.arrays.DatetimeArray, "notna"):
     pd.arrays.DatetimeArray.notna = lambda self: ~self.isna()
+
+
+# Implementation of precision_from_unit() which has been move to a cdef and
+# is not accessible from Python. This is the python equivalent of the function.
+# When possible we attempt to call into exposed Pandas APIs directly so we can
+# benefit from native code.
+def precision_from_unit_to_nanoseconds(in_reso: pt.Optional[str]):
+    if in_reso is None:
+        in_reso = "ns"
+    if in_reso == "Y":
+        # each 400 years we have 97 leap years, for an average of 97/400=.2425
+        #  extra days each year. We get 31556952 by writing
+        #  3600*24*365.2425=31556952
+        multiplier = pd._libs.tslibs.dtypes.periods_per_second(
+            pd._libs.dtypes.abbrev_to_npy_unit("ns")
+        )
+        m = multiplier * 31556952
+    elif in_reso == "M":
+        # 2629746 comes from dividing the "Y" case by 12.
+        multiplier = pd._libs.tslibs.dtypes.periods_per_second(
+            pd._libs.dtypes.abbrev_to_npy_unit("ns")
+        )
+        m = multiplier * 2629746
+    else:
+        # Careful: if get_conversion_factor raises, the exception does
+        #  not propagate, instead we get a warning about an ignored exception.
+        #  https://github.com/pandas-dev/pandas/pull/51483#discussion_r1115198951
+        m = get_conversion_factor_to_ns(in_reso)
+
+    p = np.floor(np.log10(m))  # number of digits in 'm' minus 1
+    return m, p
+
+
+def get_conversion_factor_to_ns(in_reso: str) -> int:
+    """
+    Get the conversion factor between two resolutions.
+
+    Parameters
+    ----------
+    in_reso : str
+        The input resolution.
+    out_reso : str
+        The output resolution.
+
+    Returns
+    -------
+    int
+        The conversion factor.
+    """
+    if in_reso == "ns":
+        return 1
+
+    if in_reso == "W":
+        value = get_conversion_factor_to_ns("D")
+        factor = 7
+    elif in_reso == "D" or in_reso == "d":
+        value = get_conversion_factor_to_ns("h")
+        factor = 24
+    elif in_reso == "h":
+        value = get_conversion_factor_to_ns("m")
+        factor = 60
+    elif in_reso == "m":
+        value = get_conversion_factor_to_ns("s")
+        factor = 60
+    elif in_reso == "s":
+        value = get_conversion_factor_to_ns("ms")
+        factor = 1000
+    elif in_reso == "ms":
+        value = get_conversion_factor_to_ns("us")
+        factor = 1000
+    elif in_reso == "us":
+        value = get_conversion_factor_to_ns("ns")
+        factor = 1000
+    else:
+        raise ValueError(f"Unsupported resolution {in_reso}")
+    return factor * value

@@ -984,7 +984,9 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
             # are in different order from written df.
             pd.testing.assert_frame_equal(
                 bodo_result.sort_values("int8_col").reset_index(drop=True),
-                py_output.sort_values("int8_col").reset_index(drop=True),
+                py_output.astype({"nullable_bool_col": "boolean"})
+                .sort_values("int8_col")
+                .reset_index(drop=True),
                 check_dtype=False,
             )
         except Exception as e:

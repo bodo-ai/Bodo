@@ -175,7 +175,7 @@ def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
         return pd.read_csv(
             "s3://bodo-test/csv_data_date1.csv",
             names=["A", "B", "C", "D"],
-            dtype={"A": int, "B": float, "C": str, "D": int},
+            dtype={"A": int, "B": float, "D": int},
             parse_dates=[2],
         )
 
@@ -183,7 +183,7 @@ def test_s3_csv_data_date1(minio_server_with_s3_envs, s3_bucket, datapath):
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": int, "B": float, "C": str, "D": int},
+        dtype={"A": int, "B": float, "D": int},
         parse_dates=[2],
     )
     check_func(test_impl, (), py_output=py_output, convert_to_nullable_float=False)

@@ -937,8 +937,13 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
             )
             df = pd.DataFrame(cols)
         case "size":
-            expected_df = df.groupby("A", as_index=False, dropna=False).agg(
-                {column: lambda x: len(x) for column in df.columns[1:]}
+            expected_df = df.copy(deep=True)
+            # Logically replace every column with an integer due to pyarrow
+            # issues.
+            for i in range(1, len(expected_df.columns)):
+                expected_df[expected_df.columns[i]] = 1
+            expected_df = expected_df.groupby("A", as_index=False, dropna=False).agg(
+                {column: lambda x: len(x) for column in expected_df.columns[1:]}
             )
         case "sum":
             expected_df = pd.DataFrame()

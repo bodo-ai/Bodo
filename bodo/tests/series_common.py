@@ -61,7 +61,8 @@ GLOBAL_VAL = 2
             id="series_val2",
         ),  # bool array without NA
         pytest.param(
-            pd.Series([True, False, False, np.nan, True] * 2), id="series_val3"
+            pd.Series([True, False, False, np.nan, True] * 2, dtype="boolean"),
+            id="series_val3",
         ),  # bool array with NA
         pytest.param(
             pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),

@@ -1023,10 +1023,8 @@ def test_series_isin(S, values, memory_leak_check):
     check_func(test_impl, (S, values), check_dtype=False)
 
 
-# TODO: Readd the memory leak check when constant lower leak is fixed
-# This leak results from Categorical Constant lowering
 @pytest.mark.slow
-def test_series_isin_true(series_val):
+def test_series_isin_true(series_val, memory_leak_check):
     """
     Checks Series.isin() works with a variety of Series types.
     This aims at ensuring everything can compile because all
@@ -1046,13 +1044,6 @@ def test_series_isin_true(series_val):
         py_output = pd.Series(
             [True, True] + [False] * (len(series_val) - 2), index=series_val.index
         )
-    elif isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
-        series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
-    ):
-        # Bug in Pandas https://github.com/pandas-dev/pandas/issues/36550
-        py_output = pd.Series(
-            [True, True] + [False] * (len(series_val) - 2), index=series_val.index
-        )
     else:
         py_output = no_default
     # TODO: Check distributed
@@ -1064,6 +1055,9 @@ def test_series_isin_true(series_val):
         py_output=py_output,
         dist_test=False,
         check_dtype=False,
+        # Pandas correctly outputs a different result with nullable and non-nullable
+        # float.
+        convert_to_nullable_float=False,
     )
 
 
