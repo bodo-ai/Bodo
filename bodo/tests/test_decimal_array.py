@@ -174,7 +174,9 @@ def test_series_astype_str(decimal_arr_value, memory_leak_check):
         for i in bodo.prange(len(S2)):
             val = 0
             if not (
-                bodo.libs.array_kernels.isna(S2, i) or S2[i] == "None" or S2[i] == "nan"
+                bodo.libs.array_kernels.isna(S2, i)
+                or S2[i] == "None"
+                or S2[i] == "<NA>"
             ):
                 val = float(S2[i])
             s += val

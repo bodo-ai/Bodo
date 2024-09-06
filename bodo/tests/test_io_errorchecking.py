@@ -579,14 +579,23 @@ def test_csv_unsupported_arg_kwarg(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl():
-        # squeeze is repeated
+        # usecols is repeated
         return pd.read_csv(
-            fname, ",", None, "infer", ["A", "B", "C"], None, None, False, squeeze=False
+            fname,
+            ",",
+            None,
+            "infer",
+            ["A", "B", "C"],
+            None,
+            None,
+            None,
+            None,
+            engine=None,
         )
 
     with pytest.raises(
         BodoError,
-        match="pd.read_csv\\(\\) got multiple values for argument 'squeeze'.",
+        match="pd.read_csv\\(\\) got multiple values for argument 'engine'.",
     ):
         bodo.jit(impl)()
 
@@ -629,12 +638,13 @@ def test_csv_unsupported_arg_mismatch(memory_leak_check):
             ["A", "B", "C", "D", "E"],
             None,
             None,
-            True,  # squeeze argument is here
+            None,
+            "pyarrow",  # engine argument is here
         )
 
     with pytest.raises(
         BodoError,
-        match="pd.read_csv\\(\\) arguments \\['squeeze'\\] not supported yet",
+        match="pd.read_csv\\(\\) arguments \\['engine'\\] not supported yet",
     ):
         bodo.jit(impl)()
 

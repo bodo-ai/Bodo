@@ -9,7 +9,7 @@
 |--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `dtype`            | <ul><li>   String (string must be parsable by `np.dtype`) </li><li>  Valid type (see types)</li><li>   The following functions: float, int, bool, str </li></ul> | **Must be constant at   Compile Time**                                                                                                                                                                                                                 |
 | `copy`             | Boolean                                                                                                                                                          | **Must be constant at Compile Time**                                                                                                                                                                                                                   |
-| `_bodo_nan_to_str` | Boolean                                                                                                                                                          | <ul><li> **Must be constant at Compile Time** </li><li> Argument unique to  Bodo. When `True` NA values in when converting to string are represented as NA  instead of a string representation of the  NA value  'nan'), the default  Pandas behavior. |
+| `_bodo_nan_to_str` | Boolean                                                                                                                                                          | <ul><li> **Must be constant at Compile Time** </li><li> Argument unique to  Bodo. When `True` NA values in when converting to string are represented as NA  instead of a string representation of the  NA value  '<NA>'), the default  Pandas behavior. |
 
 
 ### Example Usage
@@ -33,4 +33,3 @@
 999    999.0
 Length: 1000, dtype: float32
 ```
-

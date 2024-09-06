@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pyspark
 from mpi4py import MPI
 from pyspark.sql.types import (
@@ -1193,21 +1194,19 @@ def _check_query_equal(
 
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
-    # also, convert datetime64[ns] to datetime.date if necessary
     for i in range(len(bodosql_output.columns)):
         # pd dtype must be the first value for comparing numpy dtypes
         if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
             arr = bodosql_output.iloc[:, i].values
-            # arr.to_numpy() fails in Arrow if all values are NA
-            # see test_cond.py::test_decode\[all_scalar_no_case_no_default\]
-            if arr.isna().all():
+            try:
+                # Cast to regular string array to avoid dictionary issues.
+                result = pa.compute.cast(arr._pa_array, pa.string()).to_pandas()
                 # Workaround Pandas 2 Arrow setitem error by setting to an int first
                 bodosql_output.iloc[:, i] = 3
-                bodosql_output.iloc[:, i] = None
-            else:
-                # Workaround Pandas 2 Arrow setitem error by setting to an int first
-                bodosql_output.iloc[:, i] = 3
-                bodosql_output.iloc[:, i] = arr.to_numpy()
+                bodosql_output.iloc[:, i] = result
+            except Exception as e:
+                pass
+
     if convert_columns_to_pandas:
         bodosql_output = bodo.tests.utils.convert_non_pandas_columns(bodosql_output)
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)

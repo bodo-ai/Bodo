@@ -2227,15 +2227,7 @@ def test_df_take(df_value, memory_leak_check):
     def impl(df):
         return df.take([1, 3])
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(
-        bodo_func(df_value),
-        impl(df_value),
-        check_dtype=False,
-        check_column_type=False,
-        check_categorical=False,
-        check_index_type=False,
-    )
+    check_func(impl, (df_value,), only_seq=True)
 
 
 # TODO: add memory_leak_check

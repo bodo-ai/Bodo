@@ -1385,22 +1385,21 @@ class UntypedPass:
 
     def _handle_pd_read_csv(self, assign, lhs, rhs, label):
         """transform pd.read_csv(names=[A], dtype={'A': np.int32}) call"""
-        # schema: pd.read_csv(filepath_or_buffer, sep=',', delimiter=None,
-        # header='infer', names=None, index_col=None, usecols=None,
-        # squeeze=False, prefix=None, mangle_dupe_cols=True, dtype=None,
-        # engine=None, converters=None, true_values=None, false_values=None,
-        # skipinitialspace=False, skiprows=None, skipfooter=0, nrows=None,
-        # na_values=None, keep_default_na=True, na_filter=True, verbose=False,
-        # skip_blank_lines=True, parse_dates=False, infer_datetime_format=False,
-        # keep_date_col=False, date_parser=None, dayfirst=False, cache_dates=True,
-        # iterator=False, chunksize=None, compression='infer', thousands=None,
-        # decimal=b'.', lineterminator=None, quotechar='"', quoting=0,
-        # doublequote=True, escapechar=None, comment=None, encoding=None,
-        # encoding_errors='strict', dialect=None,
-        # error_bad_lines=True, warn_bad_lines=True, on_bad_lines='error',
-        # delim_whitespace=False, low_memory=True, memory_map=False,
-        # NOTE: sample_nrows is Bodo specific argument
-        # float_precision=None, storage_options=None, sample_nrows=100)
+        # schema: pd.read_csv(filepath_or_buffer, *, sep=_NoDefault.no_default,
+        # delimiter=None, header='infer', names=_NoDefault.no_default, index_col=None,
+        # usecols=None, dtype=None, engine=None, converters=None, true_values=None,
+        # false_values=None, skipinitialspace=False, skiprows=None, skipfooter=0,
+        # nrows=None, na_values=None, keep_default_na=True, na_filter=True,
+        # verbose=_NoDefault.no_default, skip_blank_lines=True, parse_dates=None,
+        # infer_datetime_format=_NoDefault.no_default,
+        # keep_date_col=_NoDefault.no_default, date_parser=_NoDefault.no_default,
+        # date_format=None, dayfirst=False, cache_dates=True, iterator=False,
+        # chunksize=None, compression='infer', thousands=None, decimal='.',
+        # lineterminator=None, quotechar='"', quoting=0, doublequote=True,
+        # escapechar=None, comment=None, encoding=None, encoding_errors='strict',
+        # dialect=None, on_bad_lines='error', delim_whitespace=_NoDefault.no_default,
+        # low_memory=True, memory_map=False, float_precision=None, storage_options=None,
+        # dtype_backend=_NoDefault.no_default)
         kws = dict(rhs.kws)
 
         # TODO: Can we use fold the arguments even though this untyped pass?
@@ -1797,9 +1796,6 @@ class UntypedPass:
             ("names", None),
             ("index_col", None),
             ("usecols", None),
-            ("squeeze", False),
-            ("prefix", None),
-            ("mangle_dupe_cols", True),
             ("dtype", None),
             ("engine", None),
             ("converters", None),
@@ -1818,6 +1814,7 @@ class UntypedPass:
             ("infer_datetime_format", False),
             ("keep_date_col", False),
             ("date_parser", None),
+            ("date_format", None),
             ("dayfirst", False),
             ("cache_dates", True),
             ("iterator", False),
@@ -1834,14 +1831,13 @@ class UntypedPass:
             ("encoding", None),
             ("encoding_errors", "strict"),
             ("dialect", None),
-            ("error_bad_lines", True),
-            ("warn_bad_lines", True),
             ("on_bad_lines", "error"),
             ("delim_whitespace", False),
             ("low_memory", False),
             ("memory_map", False),
             ("float_precision", None),
             ("storage_options", None),
+            ("dtype_backend", "numpy_nullable"),
             # TODO: Specify this is kwonly in error checks
             ("_bodo_upcast_to_float64", False),
             ("sample_nrows", 100),
@@ -2002,7 +1998,12 @@ class UntypedPass:
             if col_names != 0:
                 cols = _replace_col_names(col_names, usecols)
             col_names = cols
-            dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
+            # Date types are handled through a separate argument and omitted now.
+            dtype_map = {
+                c: dtypes[usecols[i]]
+                for i, c in enumerate(col_names)
+                if i not in date_cols and c not in date_cols
+            }
         # Update usecols and col_names
         else:
             # Get usecols as indices.
@@ -2451,6 +2452,10 @@ class UntypedPass:
                 dtype_map = _dtype_val_to_arr_type(
                     dtype_map_const, "pd.read_json", rhs.loc
                 )
+            # NOTE: read_json's behavior is different from read_csv since it doesn't
+            # have the "names" argument for specifying column names. Therefore, we need
+            # to infer column names from dtype to pass to _get_read_file_col_info below.
+            col_names = list(dtype_map.keys())
 
         columns, data_arrs, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -3448,16 +3453,14 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     columns = []
     data_arrs = []
     out_types = []
-    for i, (col_name, typ) in enumerate(dtype_map.items()):
-        columns.append(col_name)
-        # get array dtype
-        # date_cols = False from read_json(convert_dates=False)
-        if date_cols and (i in date_cols or col_name in date_cols):
-            typ = types.Array(types.NPDatetime("ns"), 1, "C")
-        out_types.append(typ)
-        # output array variable
-        data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
-
+    for i, col_name in enumerate(col_names):
+        # Column is alive if its in the dtype_map or date_cols
+        if col_name in dtype_map or i in date_cols or col_name in date_cols:
+            # Pandas prioritizes dtype_map over date_cols
+            col_type = dtype_map.get(col_name, types.Array(bodo.datetime64ns, 1, "C"))
+            columns.append(col_name)
+            out_types.append(col_type)
+            data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
     return columns, data_arrs, out_types
 
 

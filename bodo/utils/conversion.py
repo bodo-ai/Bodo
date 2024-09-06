@@ -1319,7 +1319,7 @@ def overload_fix_arr_dtype(
                 for j in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(data, j):
                         if nan_to_str:
-                            A[j] = "nan"
+                            A[j] = "<NA>"
                         else:
                             bodo.libs.array_kernels.setna(A, j)
                         continue

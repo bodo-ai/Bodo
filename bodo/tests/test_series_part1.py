@@ -884,9 +884,10 @@ def test_series_astype_str(series_val):
         return
 
     # XXX Pandas 1.2. Null value in categorical input gets
-    # set as a null value and not "nan". It is unclear if
+    # set as a null value and not "<NA>". It is unclear if
     # this is unique to certain types. np.nan is still
-    # converted to "nan"
+    # converted to "<NA>". Note there seems to be a difference
+    # between np.nan and pd.NA now (as well as NaT).
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 

@@ -39,6 +39,7 @@ from numba.extending import (
 
 import bodo
 import bodo.libs.str_ext
+import bodo.pandas_compat
 import bodo.utils.utils
 from bodo.hiframes.datetime_date_ext import (
     DatetimeDateType,
@@ -266,48 +267,44 @@ def box_pandas_timestamp(typ, val, c):
     ns_obj = c.pyapi.long_from_longlong(pdts.nanosecond)
 
     pdts_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pd.Timestamp))
-    if typ.tz is None:
-        args = c.pyapi.tuple_pack(())
-        # NOTE: nanosecond argument is keyword-only as of Pandas 2
-        kwargs = c.pyapi.dict_pack(
-            [
-                ("year", year_obj),
-                ("month", month_obj),
-                ("day", day_obj),
-                ("hour", hour_obj),
-                ("minute", minute_obj),
-                ("second", second_obj),
-                ("microsecond", us_obj),
-                ("nanosecond", ns_obj),
-            ]
-        )
-        res = c.pyapi.call(pdts_obj, args, kwargs)
-        c.pyapi.decref(args)
-        c.pyapi.decref(kwargs)
-    else:
+    args = c.pyapi.tuple_pack(())
+    # NOTE: nanosecond argument is keyword-only as of Pandas 2
+    kwargs = c.pyapi.dict_pack(
+        [
+            ("year", year_obj),
+            ("month", month_obj),
+            ("day", day_obj),
+            ("hour", hour_obj),
+            ("minute", minute_obj),
+            ("second", second_obj),
+            ("microsecond", us_obj),
+            ("nanosecond", ns_obj),
+        ]
+    )
+    res = c.pyapi.call(pdts_obj, args, kwargs)
+    c.pyapi.decref(args)
+    c.pyapi.decref(kwargs)
+
+    if typ.tz is not None:
         if isinstance(typ.tz, int):
             tz_obj = c.pyapi.long_from_longlong(lir.Constant(lir.IntType(64), typ.tz))
         else:
             tz_str = c.context.insert_const_string(c.builder.module, str(typ.tz))
             tz_obj = c.pyapi.string_from_string(tz_str)
 
-        args = c.pyapi.tuple_pack(())
-        kwargs = c.pyapi.dict_pack(
-            [
-                ("year", year_obj),
-                ("month", month_obj),
-                ("day", day_obj),
-                ("hour", hour_obj),
-                ("minute", minute_obj),
-                ("second", second_obj),
-                ("microsecond", us_obj),
-                ("nanosecond", ns_obj),
-                ("tz", tz_obj),
-            ]
+        false_obj = c.pyapi.from_native_value(
+            types.bool_,
+            c.context.get_constant_generic(c.builder, types.bool_, False),
+            c.env_manager,
         )
-        res = c.pyapi.call(pdts_obj, args, kwargs)
-        c.pyapi.decref(args)
-        c.pyapi.decref(kwargs)
+        # Call ts.tz_localize(tz, False) instead of passing tz to Timestamp constructor
+        # since the constructor will not allow ambiguous daylight saving times as of
+        # Pandas 2.2.2.
+        # See bodo/tests/test_timestamp_timezones.py::test_datetime_timedelta_sub
+        ts_naive = res
+        res = c.pyapi.call_method(ts_naive, "tz_localize", (tz_obj, false_obj))
+        c.pyapi.decref(ts_naive)
+        c.pyapi.decref(false_obj)
         c.pyapi.decref(tz_obj)
 
     c.pyapi.decref(year_obj)
@@ -545,7 +542,9 @@ def overload_pd_timestamp(
         unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(
             get_overload_const_str(unit)
         )
-        nanoseconds, precision = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        nanoseconds, precision = bodo.pandas_compat.precision_from_unit_to_nanoseconds(
+            unit
+        )
         if isinstance(ts_input, types.Integer):
 
             def impl_int(
@@ -710,7 +709,7 @@ def overload_pd_timestamp(
         return impl_date
 
     if isinstance(ts_input, numba.core.types.scalars.NPDatetime):
-        nanoseconds, precision = pd._libs.tslibs.conversion.precision_from_unit(
+        nanoseconds, precision = bodo.pandas_compat.precision_from_unit_to_nanoseconds(
             ts_input.unit
         )
 
@@ -2189,7 +2188,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
     # Float scalar
     if isinstance(arg_a, types.Float):
-        m, p = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        m, p = bodo.pandas_compat.precision_from_unit_to_nanoseconds(unit)
 
         def impl_float_scalar(arg_a, unit="ns", errors="raise"):  # pragma: no cover
             val = float_to_timedelta_val(arg_a, p, m)
@@ -2199,16 +2198,16 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
     # Integer scalar
     if isinstance(arg_a, types.Integer):
-        m, _ = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        m, _ = bodo.pandas_compat.precision_from_unit_to_nanoseconds(unit)
 
         def impl_integer_scalar(arg_a, unit="ns", errors="raise"):  # pragma: no cover
             return pd.Timedelta(arg_a * m)
 
         return impl_integer_scalar
 
-    # TODO: Add tuple support. These require separate kernels becasue we cannot check isna for tuples
+    # TODO: Add tuple support. These require separate kernels because we cannot check isna for tuples
     if is_iterable_type(arg_a) and not isinstance(arg_a, types.BaseTuple):
-        m, p = pd._libs.tslibs.conversion.precision_from_unit(unit)
+        m, p = bodo.pandas_compat.precision_from_unit_to_nanoseconds(unit)
         td64_dtype = np.dtype("timedelta64[ns]")
         if isinstance(arg_a.dtype, types.Float):
             # float input
