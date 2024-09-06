@@ -1,7 +1,7 @@
 locals {
   prefix     = "bodo-gh-ci"
   aws_region = "us-east-2"
-  version    = "5.9.0"
+  version    = "5.16.0"
 }
 
 
@@ -21,7 +21,7 @@ resource "aws_resourcegroups_group" "resourcegroups_group" {
 module "runners" {
   source = "philips-labs/github-runner/aws//modules/multi-runner"
   # Same as local.version
-  version = "5.9.0"
+  version = "5.16.0"
 
   # Multi-Size Runners to Use
   # Assume all Runners are Using Amazon Linux 2023
@@ -125,6 +125,12 @@ module "runners" {
   runner_binaries_syncer_lambda_zip = "runner-binaries-syncer-${local.version}.zip"
   runners_lambda_zip                = "runners-${local.version}.zip"
 
+  # Termination Watcher Config
+  instance_termination_watcher = {
+    enable = true
+    zip    = "termination-watcher-${local.version}.zip"
+  }
+
   # Additional Features
   # Enable debug logging for the lambda functions
   # log_level = "debug"
@@ -132,7 +138,7 @@ module "runners" {
 
 module "webhook_github_app" {
   source     = "philips-labs/github-runner/aws//modules/webhook-github-app"
-  version    = "5.9.0"
+  version    = "5.16.0"
   depends_on = [module.runners]
 
   github_app = {
@@ -141,4 +147,26 @@ module "webhook_github_app" {
     webhook_secret = random_password.random.result
   }
   webhook_endpoint = module.runners.webhook.endpoint
+}
+
+module "spot_termination_watchter" {
+  source     = "philips-labs/github-runner/aws//modules/termination-watcher"
+  version    = "5.16.0"
+  depends_on = [module.runners]
+
+  config = {
+    prefix = "global"
+    zip    = "termination-watcher-${local.version}.zip"
+
+    tag_filters = {
+      "ghr:Application" = "github-action-runner"
+    }
+
+    metrics = {
+      enable = true
+      metric = {
+        enable_spot_termination_warning = true
+      }
+    }
+  }
 }
