@@ -839,10 +839,16 @@ def str_split_empty_n(arr, n):  # pragma: no cover
     for i in numba.parfors.parfor.internal_prange(l):
         if bodo.libs.array_kernels.isna(arr, i):
             continue
-        vals = compiled_pat.split(arr[i].strip(), maxsplit=n)
-        num_strs += len(vals)
-        for s in vals:
-            num_chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+        strs = 0
+        chars = 0
+        pruned_str = arr[i].strip()
+        if not (bodo.libs.array_kernels.isna(arr, i) or pruned_str == 0):
+            vals = compiled_pat.split(pruned_str, maxsplit=n)
+            strs = len(vals)
+            for s in vals:
+                chars += bodo.libs.str_arr_ext.get_utf8_size(s)
+        num_strs += strs
+        num_chars += chars
 
     # Allocate the array item array where the inner array is the string
     # array with the specified size.
@@ -862,12 +868,14 @@ def str_split_empty_n(arr, n):  # pragma: no cover
             bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 0)
             continue
         bodo.libs.int_arr_ext.set_bit_to_arr(null_bitmap, j, 1)
-        vals = compiled_pat.split(arr[j].strip(), maxsplit=n)
-        n_str = len(vals)
-        for k in range(n_str):
-            s = vals[k]
-            data[curr_ind] = s
-            curr_ind += 1
+        pruned_str = arr[j].strip()
+        if len(pruned_str) > 0:
+            vals = compiled_pat.split(pruned_str, maxsplit=n)
+            n_str = len(vals)
+            for k in range(n_str):
+                s = vals[k]
+                data[curr_ind] = s
+                curr_ind += 1
 
     index_offsets[l] = curr_ind
     return out_arr
