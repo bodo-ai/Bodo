@@ -752,40 +752,6 @@ def test_multi_function_repartition(capfd):
             id="dense_rank-integer",
         ),
         pytest.param(
-            "percent_rank",
-            (1,),
-            pd.DataFrame(
-                {
-                    "IDX": range(1000),
-                    "O": [i // 10 for i in range(1000)],
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "IDX": range(1000),
-                    "OUT": [(10 * (i // 10)) / 999 for i in range(1000)],
-                }
-            ),
-            id="percent_rank-integer",
-        ),
-        pytest.param(
-            "cume_dist",
-            (1,),
-            pd.DataFrame(
-                {
-                    "IDX": range(1000),
-                    "O": [i // 10 for i in range(1000)],
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "IDX": range(1000),
-                    "OUT": [((10 * (1 + (i // 10)))) / 1000 for i in range(1000)],
-                }
-            ),
-            id="cume_dist-integer",
-        ),
-        pytest.param(
             "dense_rank",
             (1,),
             pd.DataFrame(

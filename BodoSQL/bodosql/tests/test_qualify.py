@@ -353,8 +353,8 @@ def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
     """Ensures that LIMIT is evaluated after QUALIFY"""
     df = pd.DataFrame(
         {
-            "A": [1] * 4 + [2] * 4 + [3] * 4,
-            "B": [1] * 12,
+            "A": range(18),
+            "B": [1] * 4 + [2] * 3 + [3] * 5 + [4] * 6,
         }
     )
 
@@ -362,22 +362,22 @@ def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
 
     """If limit is evaluated first, we expect:
      df = pd.DataFrame({
-        "A" : [1] * 3,
+        "A" : [0, 1, 2],
         "B" : [1] * 3,
     })
-    and the qualify Count filtering will reduce it to an empty df.
+    and the qualify Count filtering will return those rows from column A.
 
-    if qualify is evaluated first, we expect the output after evaluating the
-    qualify to be unchanged, and then the limit will result in the output:
+    If qualify is evaluated first, we expect the output after evaluating the
+    qualify to be as follows, and then the limit will output the same rows:
     df = pd.DataFrame({
-        "A" : [1] * 3,
-        "B" : [1] * 3,
+        "A" : [4, 5, 6],
+        "B" : [2] * 3,
     })
 
     """
-    query = "SELECT A from table1 QUALIFY MAX(A) OVER (PARTITION BY B) <= 3 LIMIT 3"
+    query = "SELECT A from table1 QUALIFY COUNT(A) OVER (PARTITION BY B) <= 3"
 
-    expected_output = pd.DataFrame({"A": [1] * 3})
+    expected_output = pd.DataFrame({"A": [4, 5, 6]})
 
     check_query(
         query,

@@ -97,31 +97,23 @@ void window_computation(
         bodo::default_buffer_memory_manager());
 
 /**
- * @brief Handles computing window functions based on the table that
- * has already been sorted. This code path uses sort based computation,
- * so we must pass the all the partition by values as we do not have grouping
- * information.
+ * @brief Handles computing a collection of window functions without
+ * partition or orderby values. Just computes the single-row result for
+ * each window function and relies on the call site to explode the results.
  *
- * If this computation is being done in parallel on distributed data, then there
- * may be an extra communication step where a rank needs to talk to its
- * neighbor(s) to update its value(s).
- *
- * @param[in] partition_by_arrs The arrays that hold the partition by values.
- * @param[in] order_by_arrs The arrays that hold the order by values.
- * @param[in] window_args The arrays that hold the window argument values.
- * @param[in] window_offset_indices The vector used to associate elements of
- * window_args with the corresponding function call.
+ * @param[in] chunks The chunks of unpinned input data.
  * @param[in] window_funcs The name(s) of the window function(s) being computed.
- * @param[out] out_arrs The output array(s) being populated.
- * @param[in] out_rows the number of rows the output should have
- * @param is_parallel Is the data distributed? This is used for communicating
- * with a neighboring rank for boundary groups.
+ * @param[in] window_input_indices The indices of which input columns are inputs
+ * to window functions.
+ * @param[in] window_offset_indices The offsets of which indices in
+ * window_input_indices match up to which window functions.
+ * @param[out] out_arrs The collection of output arrays to populate with the
+ * single-row answer for each window function.
+ * @param is_parallel Is the data distributed?
  */
-void sorted_window_computation(
-    std::vector<std::shared_ptr<array_info>>& partition_by_arrs,
-    std::vector<std::shared_ptr<array_info>>& order_by_arrs,
-    const std::vector<std::shared_ptr<array_info>>& window_args,
-    const std::vector<int32_t>& window_offset_indices,
+void global_window_computation(
+    std::vector<std::shared_ptr<table_info>>& chunks,
     const std::vector<int32_t>& window_funcs,
-    std::vector<std::shared_ptr<array_info>>& out_arrs, size_t out_rows,
-    std::vector<std::shared_ptr<DictionaryBuilder>> builders, bool is_parallel);
+    const std::vector<int32_t>& window_input_indices,
+    const std::vector<int32_t>& window_offset_indices,
+    std::vector<std::shared_ptr<array_info>>& out_arrs, bool is_parallel);
