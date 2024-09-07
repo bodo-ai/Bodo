@@ -479,7 +479,6 @@ void WindowState::FinalizeBuild() {
     // We first sort the entire table and then compute any functions.
     size_t num_order_by_keys = this->order_by_asc.size();
     size_t num_keys = this->n_keys + num_order_by_keys;
-    size_t num_argument_cols = func_input_indices.size();
     std::vector<int64_t> asc(num_keys);
     std::vector<int64_t> na_pos(num_keys);
 
@@ -528,8 +527,49 @@ void WindowState::FinalizeBuild() {
             keep_indices.push_back(i);
         }
     }
-    if (supports_calculator_computation(partition_indices, order_indices,
-                                        window_ftypes)) {
+
+    if (partition_indices.empty() && order_indices.empty()) {
+        // If there is no partition/order column, re-route to the global
+        // computation.
+        size_t n_chunks = sorted_table_chunks.size();
+        std::vector<std::shared_ptr<array_info>> out_arrs;
+        for (size_t fn_idx = 0; fn_idx < this->window_ftypes.size(); fn_idx++) {
+            AllocWindowOutputColumn(fn_idx, 1, out_arrs);
+        }
+        global_window_computation(sorted_table_chunks, this->window_ftypes,
+                                  func_input_indices, func_input_offsets,
+                                  out_arrs, this->parallel);
+
+        // Append the table chunks to the output buffer.
+        for (size_t chunk_idx = 0; chunk_idx < n_chunks; chunk_idx++) {
+            size_t chunk_size = sorted_table_chunks[chunk_idx]->nrows();
+            std::vector<std::shared_ptr<array_info>> cols_to_keep;
+            // Append the pass-through columns
+            for (size_t col_idx : keep_indices) {
+                cols_to_keep.push_back(
+                    sorted_table_chunks[chunk_idx]->columns[col_idx]);
+            }
+            // Append the window function outputs replicated to match the input
+            // row count
+            for (const std::shared_ptr<array_info>& out_col : out_arrs) {
+                std::vector<int64_t> idxs(chunk_size, 0);
+                cols_to_keep.push_back(
+                    RetrieveArray_SingleColumn(out_col, idxs));
+            }
+            std::shared_ptr<table_info> data_table_w_cols_to_keep =
+                std::make_shared<table_info>(cols_to_keep);
+            data_table_w_cols_to_keep->pin();
+
+            // Unify the dictionaries. This should be append only because the
+            // output state dict builders should be empty right now.
+            std::shared_ptr<table_info> dict_unified_table =
+                this->UnifyDictionaryArrays(
+                    std::move(data_table_w_cols_to_keep),
+                    this->output_state->dict_builders);
+            this->output_state->buffer.AppendBatch(dict_unified_table);
+        }
+    } else {
+        // Otherwise, use the sort-based implementation with window calculators.
         bodo_array_type::arr_type_enum partition_arr_type =
             get_common_arr_type(sorted_table_chunks, partition_indices);
         bodo_array_type::arr_type_enum order_arr_type =
@@ -549,64 +589,8 @@ void WindowState::FinalizeBuild() {
                                             this->output_state->dict_builders);
             this->output_state->buffer.AppendBatch(dict_unified_table);
         }
-    } else {
-        for (auto& chunk : sorted_table_chunks) {
-            chunk->pin();
-        }
-        std::shared_ptr<table_info> sorted_table =
-            concat_tables(sorted_table_chunks);
-
-        // Compute the window function results.
-        std::vector<std::shared_ptr<array_info>> partition_by_cols(
-            this->n_keys);
-        std::vector<std::shared_ptr<array_info>> order_by_cols(
-            num_order_by_keys);
-        std::vector<std::shared_ptr<array_info>> argument_cols(
-            num_argument_cols);
-        for (size_t i = 0; i < this->n_keys; i++) {
-            partition_by_cols[i] = sorted_table->columns[i];
-        }
-        for (size_t i = 0; i < num_order_by_keys; i++) {
-            order_by_cols[i] = sorted_table->columns[i + this->n_keys];
-        }
-        for (size_t i = 0; i < num_argument_cols; i++) {
-            argument_cols[i] = sorted_table->columns[func_input_indices[i]];
-        }
-
-        // Allocate the output arrays, only allocating a single row if there are
-        // no partition/order terms (since the array is used to store the
-        // singleton unique answer).
-        std::vector<std::shared_ptr<array_info>> out_arrs;
-        size_t input_size = sorted_table->columns[0]->length;
-        size_t alloc_size = (this->sorter.NumSortKeys() == 0) ? 1 : input_size;
-        for (size_t fn_idx = 0; fn_idx < this->window_ftypes.size(); fn_idx++) {
-            AllocWindowOutputColumn(fn_idx, alloc_size, out_arrs);
-        }
-
-        sorted_window_computation(
-            partition_by_cols, order_by_cols, argument_cols, func_input_offsets,
-            this->window_ftypes, out_arrs, input_size,
-            this->sorter.GetDictBuilders(), this->parallel);
-        window_timer.finalize();
-        // Append the table to the output buffer.
-        std::vector<std::shared_ptr<array_info>> cols_to_keep;
-        for (size_t col_idx : keep_indices) {
-            cols_to_keep.push_back(sorted_table->columns[col_idx]);
-        }
-        for (const std::shared_ptr<array_info>& window_col : out_arrs) {
-            cols_to_keep.push_back(window_col);
-        }
-        std::shared_ptr<table_info> data_table_w_cols_to_keep =
-            std::make_shared<table_info>(cols_to_keep);
-
-        // Unify the dictionaries. This should be append only because the output
-        // state dict builders should be empty right now.
-        std::shared_ptr<table_info> dict_unified_table =
-            this->UnifyDictionaryArrays(std::move(data_table_w_cols_to_keep),
-                                        this->output_state->dict_builders);
-        this->output_state->buffer.AppendBatch(dict_unified_table);
     }
-
+    window_timer.finalize();
     this->output_state->Finalize();
     this->build_input_finalized = true;
     this->metrics.finalize_time += end_timer(start_finalize);
