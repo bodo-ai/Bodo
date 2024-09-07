@@ -213,7 +213,9 @@ class BodoPhysicalWindow(
                                 BITOR_AGG.name,
                                 BITXOR_AGG.name,
                                 COUNT_IF.name,
-                                -> true
+                                ->
+                                    group.lowerBound.isUnbounded &&
+                                        group.upperBound.isUnbounded
                                 else -> false
                             }
                         else -> false
