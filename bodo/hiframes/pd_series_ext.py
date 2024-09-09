@@ -1382,7 +1382,6 @@ series_unsupported_methods = (
     # Missing data handling
     "interpolate",
     # Reshaping, sorting
-    "argmax",
     "reorder_levels",
     "swaplevel",
     "unstack",
