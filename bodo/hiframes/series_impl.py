@@ -1458,6 +1458,27 @@ def overload_series_argmin(S, axis=None, skipna=True):
     return impl
 
 
+@overload_method(SeriesType, "argmax", inline="always", no_unliteral=True)
+def overload_series_argmax(S, axis=None, skipna=True):
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args(
+        "Series.argmax",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    check_argmax_min_args("argmax", S)
+
+    def impl(S, axis=None, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_kernels._nan_argmax(arr)
+
+    return impl
+
+
 @overload_method(SeriesType, "infer_objects", inline="always")
 def overload_series_infer_objects(S):
     """

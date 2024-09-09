@@ -824,6 +824,9 @@ def test_series_idxmax(series_val, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "is_argmin", [pytest.param(True, id="argmin"), pytest.param(False, id="argmax")]
+)
+@pytest.mark.parametrize(
     "S",
     [
         pytest.param(
@@ -844,13 +847,13 @@ def test_series_idxmax(series_val, memory_leak_check):
                 dtype=pd.ArrowDtype(pa.decimal128(32, 12)),
             ),
             id="decimal",
-            marks=pytest.mark.skip("[BSE-3880]: Support argmin with Decimal"),
+            marks=pytest.mark.skip("[BSE-3880]: Support argmin/argmax with Decimal"),
         ),
         pytest.param(
             pd.Series(["f", "a", "b", "c", "d", "e"], dtype=pd.StringDtype()),
             id="string",
             marks=pytest.mark.skip(
-                "[BSE-3879]: Support argmin with String/binary Series"
+                "[BSE-3879]: Support argmin/argmax with String/binary Series"
             ),
         ),
         pytest.param(
@@ -858,7 +861,10 @@ def test_series_idxmax(series_val, memory_leak_check):
             id="categorical",
         ),
         pytest.param(
-            pd.Series([datetime.date(2020 + 9 - i, 9 - i + 1, i + 1) for i in range(10)]), id="date"
+            pd.Series(
+                [datetime.date(2020 + 9 - i, 9 - i + 1, i + 1) for i in range(10)]
+            ),
+            id="date",
         ),
         pytest.param(
             pd.Series(
@@ -874,7 +880,7 @@ def test_series_idxmax(series_val, memory_leak_check):
             ),
             id="datetime64ns",
             marks=pytest.mark.skip(
-                "[BSE-3878] Support argmin with datetime64[ns]"
+                "[BSE-3878] Support argmin/argmax with datetime64[ns]"
             ),
         ),
         pytest.param(
@@ -889,8 +895,36 @@ def test_series_idxmax(series_val, memory_leak_check):
             ),
             id="timestamp_w_tz",
             marks=pytest.mark.skip(
-                "[BSE-3878] Support argmin with timestamp with time zone"
+                "[BSE-3878] Support argmin/argmax with datetime64[ns]"
             ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"2000-01-01 12:00:00",
+                        tz="US/Central",
+                    ),
+                    pd.Timestamp(
+                        f"2000-01-01 12:00:00",
+                        tz="US/Pacific",
+                    ),
+                    pd.Timestamp(
+                        f"2000-01-01 12:00:00",
+                        tz="US/Alaska",
+                    ),
+                    pd.Timestamp(
+                        f"2000-01-01 12:00:00",
+                        tz="US/Eastern",
+                    ),
+                    pd.Timestamp(
+                        f"2000-01-01 12:00:00",
+                        tz="US/Mountain",
+                    ),
+                ]
+            ),
+            id="timestamp_w_tz_diff_timezones",
+            marks=pytest.mark.skip("[BSE-3878] Support argmin/argmax with timestamp"),
         ),
         pytest.param(
             pd.Series(
@@ -902,17 +936,21 @@ def test_series_idxmax(series_val, memory_leak_check):
                 ]
             ),
             id="timestamp",
-            marks=pytest.mark.skip(
-                "[BSE-3878] Support argmin with timestamp"
-            ),
+            marks=pytest.mark.skip("[BSE-3878] Support argmin/argmax with timestamp"),
         ),
     ],
 )
-def test_series_argmin(S, memory_leak_check):
-    def test_impl(S):
+def test_series_argmin_max(S, is_argmin, memory_leak_check):
+    def test_argmin_impl(S):
         return S.argmin()
 
-    check_func(test_impl, (S,))
+    def test_argmax_impl(S):
+        return S.argmax()
+
+    if is_argmin:
+        check_func(test_argmin_impl, (S,))
+    else:
+        check_func(test_argmax_impl, (S,))
 
 
 @pytest.mark.parametrize(
