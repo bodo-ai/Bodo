@@ -102,8 +102,6 @@ class JoinStateType(StreamingStateType):
         self,
         build_key_inds,
         probe_key_inds,
-        build_column_names,
-        probe_column_names,
         build_outer,
         probe_outer,
         build_table_type=types.unknown,
@@ -114,8 +112,6 @@ class JoinStateType(StreamingStateType):
 
         self.build_key_inds = build_key_inds
         self.probe_key_inds = probe_key_inds
-        self.build_column_names = build_column_names
-        self.probe_column_names = probe_column_names
         self.build_outer = build_outer
         self.probe_outer = probe_outer
         self.build_table_type = build_table_type
@@ -125,8 +121,6 @@ class JoinStateType(StreamingStateType):
                 f"JoinStateType("
                 f"build_keys={build_key_inds}, "
                 f"probe_keys={probe_key_inds}, "
-                f"build_column_names={build_column_names}, "
-                f"probe_column_names={probe_column_names}, "
                 f"build_outer={build_outer}, "
                 f"probe_outer={probe_outer}, "
                 f"build_table={build_table_type}, "
@@ -139,8 +133,6 @@ class JoinStateType(StreamingStateType):
         return (
             self.build_key_inds,
             self.probe_key_inds,
-            self.build_column_names,
-            self.probe_column_names,
             self.build_outer,
             self.probe_outer,
             self.build_table_type,
@@ -986,8 +978,6 @@ def _get_init_join_state_type(
     expected_state_type,
     build_key_inds,
     probe_key_inds,
-    build_colnames,
-    probe_colnames,
     build_outer,
     probe_outer,
 ):
@@ -997,8 +987,6 @@ def _get_init_join_state_type(
     if is_overload_none(expected_state_type):
         build_keys = unwrap_typeref(build_key_inds).meta
         probe_keys = unwrap_typeref(probe_key_inds).meta
-        build_column_names = unwrap_typeref(build_colnames).meta
-        probe_column_names = unwrap_typeref(probe_colnames).meta
         if len(build_keys) != len(probe_keys):
             raise BodoError(
                 "init_join_state(): Number of keys on build and probe sides must match"
@@ -1011,8 +999,6 @@ def _get_init_join_state_type(
         output_type = JoinStateType(
             build_keys,
             probe_keys,
-            build_column_names,
-            probe_column_names,
             get_overload_const_bool(build_outer),
             get_overload_const_bool(probe_outer),
         )
@@ -1033,8 +1019,8 @@ class InitJoinStateInfer(AbstractTemplate):
         (
             build_key_inds,
             probe_key_inds,
-            build_colnames,
-            probe_colnames,
+            _,
+            _,
             build_outer,
             probe_outer,
         ) = folded_args[1:7]
@@ -1042,8 +1028,6 @@ class InitJoinStateInfer(AbstractTemplate):
             expected_state_type,
             build_key_inds,
             probe_key_inds,
-            build_colnames,
-            probe_colnames,
             build_outer,
             probe_outer,
         )
@@ -1119,18 +1103,20 @@ def gen_init_join_state_impl(
 
         gen_expr_const = get_overload_const_str(non_equi_condition)
 
+        build_column_names = unwrap_typeref(build_colnames).meta
+        probe_column_names = unwrap_typeref(probe_colnames).meta
         # Parse the query
         _, _, parsed_gen_expr = bodo.hiframes.dataframe_impl._parse_merge_cond(
             gen_expr_const,
-            output_type.probe_column_names,
+            probe_column_names,
             probe_table_type.arr_types,
-            output_type.build_column_names,
+            build_column_names,
             build_table_type.arr_types,
         )
         left_logical_to_physical = output_type.probe_logical_to_physical_map()
         right_logical_to_physical = output_type.build_logical_to_physical_map()
-        left_var_map = {c: i for i, c in enumerate(output_type.probe_column_names)}
-        right_var_map = {c: i for i, c in enumerate(output_type.build_column_names)}
+        left_var_map = {c: i for i, c in enumerate(probe_column_names)}
+        right_var_map = {c: i for i, c in enumerate(build_column_names)}
 
         # Generate a general join condition cfunc
         general_cond_cfunc, _, _ = gen_general_cond_cfunc(
