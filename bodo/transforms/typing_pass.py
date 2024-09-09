@@ -5166,8 +5166,6 @@ class TypingTransforms:
                     new_type = bodo.libs.stream_join.JoinStateType(
                         output_type.build_key_inds,
                         output_type.probe_key_inds,
-                        output_type.build_column_names,
-                        output_type.probe_column_names,
                         output_type.build_outer,
                         output_type.probe_outer,
                         input_table_type,
@@ -5177,8 +5175,6 @@ class TypingTransforms:
                     new_type = bodo.libs.stream_join.JoinStateType(
                         output_type.build_key_inds,
                         output_type.probe_key_inds,
-                        output_type.build_column_names,
-                        output_type.probe_column_names,
                         output_type.build_outer,
                         output_type.probe_outer,
                         output_type.build_table_type,
