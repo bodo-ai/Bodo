@@ -62,7 +62,7 @@ void WindowStateSorter::AppendBatch(std::shared_ptr<table_info>& table,
     }
 
     assert(stream_sorter != nullptr);
-    stream_sorter->ConsumeBatch(table, is_last);
+    stream_sorter->ConsumeBatch(table);
     if (is_last) {
         stream_sorter->FinalizeBuild();
     }

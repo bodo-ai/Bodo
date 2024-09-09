@@ -993,14 +993,14 @@ void recursive_make_array_global_and_unique(std::shared_ptr<array_info>& array,
     }
 }
 
-void recursive_make_dict_global_and_unique(
+void recursive_unify_dict_builder_globally(
     std::shared_ptr<DictionaryBuilder>& dict_builder) {
     if (!dict_builder) {
         return;
     }
     if (!dict_builder->child_dict_builders.empty()) {
         for (auto& child_builder : dict_builder->child_dict_builders) {
-            recursive_make_dict_global_and_unique(child_builder);
+            recursive_unify_dict_builder_globally(child_builder);
         }
         return;
     }
