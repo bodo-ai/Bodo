@@ -125,6 +125,33 @@ struct ChunkedTableAndRangeBuilder : AbstractChunkedTableBuilder {
 #define RANGE_MAX 1
 
 /**
+ * @brief Metrics for the Finalize step of SortedChunkedTableBuilder which
+ * performs a chunk-merge based sort.
+ *
+ */
+struct SortedCTBFinalizeMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    time_t ctb_sort_total_time = 0;
+    stat_t n_leaf_level_merges = 0;
+    time_t leaf_level_merges_time = 0;
+    stat_t n_chunk_merge_levels = 0;
+    stat_t n_chunk_merges = 0;
+    time_t merge_chunks_total_time = 0;
+    time_t merge_chunks_make_heap_time = 0;
+    stat_t merge_chunks_n_inmem = 0;
+    time_t merge_chunks_inmem_concat_time = 0;
+    time_t merge_chunks_inmem_sort_time = 0;
+    time_t merge_chunks_output_append_time = 0;
+    time_t merge_chunks_pop_heap_time = 0;
+    time_t merge_chunks_push_heap_time = 0;
+
+    // Add metrics to the 'metrics' vector.
+    void ExportMetrics(std::vector<MetricBase>& metrics);
+};
+
+/**
  * Builder that accepts a stream of tables and sorts all rows
  */
 struct SortedChunkedTableBuilder {
@@ -170,6 +197,8 @@ struct SortedChunkedTableBuilder {
 
     bodo::IBufferPool* pool;
     std::shared_ptr<::arrow::MemoryManager> mm;
+
+    SortedCTBFinalizeMetrics metrics;
 
     SortedChunkedTableBuilder(
         std::shared_ptr<bodo::Schema> schema,
@@ -256,26 +285,98 @@ struct SortedChunkedTableBuilder {
         std::vector<std::deque<TableAndRange>>&& sorted_chunks);
 };
 
+/**
+ * @brief Metrics for the sort computation. This consists of metrics for both
+ * the regular as well as the limit-offset cases. The user is responsible for a
+ * reporting a subset of these based on relevancy.
+ *
+ */
 struct StreamSortMetrics {
     using stat_t = MetricBase::StatValue;
     using time_t = MetricBase::TimerValue;
-    using blob_t = MetricBase::BlobValue;
 
-    time_t local_sort_chunk_time;
-    time_t global_sort_time;
-    time_t global_append_chunk_time;
-    time_t communication_phase;
-    time_t partition_chunks_time;
-    time_t sampling_time;
+    //// Stage 1 (Consume and Finalize)
+
+    /// Local consume batch metrics
+    stat_t input_chunks_size_bytes_total = 0;
+    stat_t n_input_chunks = 0;
+    time_t input_append_time = 0;
+    // Only in the small limit case:
+    time_t topk_heap_append_chunk_time = 0;
+    time_t topk_heap_update_time = 0;
+
+    /// FinalizeBuild metrics
+    time_t global_dict_unification_time = 0;
+    time_t total_finalize_time = 0;
+
+    /// Partitioning Metrics
+    time_t global_builder_append_time = 0;
+    time_t get_bounds_total_time = 0;
+    time_t get_bounds_dict_unify_time = 0;
+    time_t get_bounds_gather_samples_time = 0;
+    time_t get_bounds_compute_bounds_time = 0;
+    time_t partition_chunks_total_time = 0;
+    time_t partition_chunks_pin_time = 0;
+    time_t partition_chunks_append_time = 0;
+    time_t partition_chunks_compute_dest_rank_time = 0;
+    time_t shuffle_total_time = 0;
+    time_t shuffle_issend_time = 0;
+    time_t shuffle_send_done_check_time = 0;
+    stat_t shuffle_n_send_done_checks = 0;
+    time_t shuffle_irecv_time = 0;
+    stat_t shuffle_n_irecvs = 0;
+    time_t shuffle_recv_done_check_time = 0;
+    stat_t shuffle_n_recv_done_checks = 0;
+    time_t shuffle_barrier_test_time = 0;
+    stat_t shuffle_n_barrier_tests = 0;
+    stat_t n_shuffle_send = 0;
+    stat_t n_shuffle_recv = 0;
+    stat_t shuffle_total_sent_nrows = 0;
+    stat_t shuffle_total_recv_nrows = 0;
+    stat_t shuffle_total_approx_sent_size_bytes = 0;
+    stat_t shuffle_approx_sent_size_bytes_dicts = 0;
+    stat_t shuffle_total_recv_size_bytes = 0;
+    stat_t n_rows_after_shuffle = 0;
+    // We only get approx_recv_size_bytes_dicts and dict_unification_time
+    // from this.
+    // TODO(aneesh) Refactor to avoid using this object as is, instead having
+    // more finer grained metrics.
+    IncrementalShuffleMetrics ishuffle_metrics;
+
+    /// SortedCTB Finalize metrics
+    SortedCTBFinalizeMetrics sorted_ctb_finalize_metrics;
+
+    /// LimitOffset Finalize metrics
+    // Only in the small limit case:
+    time_t small_limit_local_concat_time = 0;
+    time_t small_limit_gather_time = 0;
+    time_t small_limit_rank0_sort_time = 0;
+    time_t small_limit_rank0_output_append_time = 0;
+    // Only in the non-small-limit case:
+    time_t compute_local_limit_time = 0;
+
+    //// Stage 2 (Produce output)
 
     int64_t output_row_count = 0;
-
-    // TODO(aneesh) report these metrics and refactor to avoid using this object
-    // as is, instead having more finer grained metrics
-    IncrementalShuffleMetrics ishuffle_metrics;
 };
 
 #define DEFAULT_SAMPLE_SIZE 2048
+
+/**
+ * @brief Metrics for the sampling state.
+ *
+ */
+struct ReservoirSamplingMetrics {
+    using stat_t = MetricBase::StatValue;
+    using time_t = MetricBase::TimerValue;
+
+    time_t sampling_process_input_time = 0;
+    stat_t n_sampling_buffer_rebuilds = 0;
+    stat_t n_samples_taken = 0;
+
+    // Add sampling metrics to the 'metrics' vector.
+    void ExportMetrics(std::vector<MetricBase>& metrics);
+};
 
 /**
  * Infrastructure for randomly sampling rows from a stream of chunks. Implements
@@ -283,6 +384,7 @@ struct StreamSortMetrics {
  * https://en.wikipedia.org/wiki/Reservoir_sampling
  */
 class ReservoirSamplingState {
+   private:
     int64_t sample_size = DEFAULT_SAMPLE_SIZE;
 
     // Indices of columns to be selected for sampling
@@ -309,6 +411,9 @@ class ReservoirSamplingState {
     std::vector<int64_t> selected_rows;
 
    public:
+    // Metrics
+    ReservoirSamplingMetrics metrics;
+
     ReservoirSamplingState(
         int64_t n_key_t, int64_t sample_size_,
         std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
@@ -370,6 +475,7 @@ struct StreamSortState {
     std::vector<int64_t> na_position;
     std::vector<int64_t> dead_keys;
     bool parallel = true;
+    bool build_finalized = false;
 
     uint64_t mem_budget_bytes;
     size_t num_chunks;
@@ -394,17 +500,18 @@ struct StreamSortState {
     // Empty table created with the same schema as the input
     std::shared_ptr<table_info> dummy_output_chunk;
 
-    int64_t chunk_size;
-    // builder will create a sorted list from the chunks passed to consume batch
+    int64_t chunk_size = 4096;
+    // Input chunks
     ChunkedTableBuilder builder;
 
     ReservoirSamplingState reservoir_sampling_state;
 
-    // exposed for test only - output of GetParallelSortBounds
+    // NOTE: Exposed for test only - output of GetParallelSortBounds
     std::shared_ptr<table_info> bounds_;
 
     // Metrics for sorting
     StreamSortMetrics metrics;
+    bool reported_build_metrics = false;
 
     StreamSortState(int64_t op_id, int64_t n_key_t,
                     std::vector<int64_t>&& vect_ascending_,
@@ -416,13 +523,9 @@ struct StreamSortState {
      * @brief Consume an unsorted table and use it for global sorting
      *
      * @param table unsorted input table
-     * @param parallel whether or not multiple ranks are participating in the
-     * sort
-     * @param is_last if this table is guaranteed to be the last input this
-     * state will see.
      * @return boolean indicating if the consume phase is complete
      */
-    virtual void ConsumeBatch(std::shared_ptr<table_info> table, bool is_last);
+    virtual void ConsumeBatch(std::shared_ptr<table_info> table);
 
     /**
      * @brief call after ConsumeBatch is called with is_last set to true to
@@ -484,15 +587,18 @@ struct StreamSortState {
         std::deque<std::shared_ptr<table_info>>&& local_chunks);
 
     // Helper function that gets override in child class to pass in limit/offset
-    virtual SortedChunkedTableBuilder GetGlobalBuilder() {
+    virtual SortedChunkedTableBuilder GetGlobalBuilder() const {
         return SortedChunkedTableBuilder(
             schema, dict_builders, n_key_t, vect_ascending, na_position,
-            dead_keys, num_chunks, chunk_size, mem_budget_bytes, -1, -1,
+            dead_keys, num_chunks, this->chunk_size, mem_budget_bytes, -1, -1,
             parallel, op_pool, op_mm);
     }
 
-    // Report all metrics
-    void ReportMetrics();
+    /// Report metrics for the build stage. The function is idempotent and
+    /// metrics will only be reported once.
+    /// @param metrics_out Vector to append metrics to and report.
+    virtual void ReportBuildMetrics(std::vector<MetricBase>& metrics_out);
+
     virtual ~StreamSortState() = default;
 };
 
@@ -507,10 +613,10 @@ struct StreamSortLimitOffsetState : StreamSortState {
                                std::shared_ptr<bodo::Schema> schema,
                                bool parallel = true, int64_t limit = -1,
                                int64_t offset = -1, size_t chunk_size = 4096,
-                               bool enable_small_limit_optimization = false);
+                               bool enable_small_limit_optimization = true);
 
     // Override base class to pass in limit / offset
-    SortedChunkedTableBuilder GetGlobalBuilder() override {
+    SortedChunkedTableBuilder GetGlobalBuilder() const override {
         return SortedChunkedTableBuilder(
             schema, dict_builders, n_key_t, vect_ascending, na_position,
             dead_keys, num_chunks, chunk_size, mem_budget_bytes,
@@ -522,7 +628,7 @@ struct StreamSortLimitOffsetState : StreamSortState {
         std::deque<std::shared_ptr<table_info>>&& local_chunks) override;
 
     // Override base class to maintain a heap of at most limit + offset elements
-    void ConsumeBatch(std::shared_ptr<table_info> table, bool is_last) override;
+    void ConsumeBatch(std::shared_ptr<table_info> table) override;
 
     // Compute local limit based on global limit after partitioning
     void ComputeLocalLimit(SortedChunkedTableBuilder& global_builder);
@@ -531,6 +637,11 @@ struct StreamSortLimitOffsetState : StreamSortState {
     // and sort everything on rank 0
     // TODO: scatter data from rank 0 to all rank
     void SmallLimitOptim();
+
+    /// Report metrics for the build stage. The function is idempotent and
+    /// metrics will only be reported once.
+    /// @param metrics_out Vector to append metrics to and report.
+    void ReportBuildMetrics(std::vector<MetricBase>& metrics_out) override;
 
     ~StreamSortLimitOffsetState() override = default;
 };
