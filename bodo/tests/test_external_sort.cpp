@@ -433,7 +433,7 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true, 10,
                               10);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
         state.FinalizeBuild();
 
         auto res = state.bounds_;
@@ -492,7 +492,7 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true, 10,
                               10);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
         // This is okay for testing, but calling Finalize here means that this
         // test cannot safely call GlobalSort.
         auto local_bounds = state.reservoir_sampling_state.Finalize();
@@ -542,7 +542,7 @@ bodo::tests::suite external_sort_tests([] {
                 StreamSortState state(0, 1, std::move(vect_ascending),
                                       std::move(na_position), table->schema(),
                                       false, chunk_size, chunk_size);
-                state.ConsumeBatch(table, true);
+                state.ConsumeBatch(table);
                 state.FinalizeBuild();
 
                 int index = 0;
@@ -580,8 +580,8 @@ bodo::tests::suite external_sort_tests([] {
                 StreamSortLimitOffsetState state(
                     0, 1, std::move(vect_ascending), std::move(na_position),
                     table->schema(), false, limitoffset[trial].first,
-                    limitoffset[trial].second, chunk_size);
-                state.ConsumeBatch(table, true);
+                    limitoffset[trial].second, chunk_size, false);
+                state.ConsumeBatch(table);
                 state.FinalizeBuild();
 
                 int index = limitoffset[trial].second;
@@ -647,7 +647,7 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               chunk_size, chunk_size);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
         state.FinalizeBuild();
 
         std::pair<int, int> range{};
@@ -729,7 +729,7 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               chunk_size, chunk_size);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
         state.FinalizeBuild();
 
         std::vector<std::shared_ptr<table_info>> tables;
@@ -817,7 +817,7 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true,
                               chunk_size, chunk_size);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
         state.FinalizeBuild();
 
         // Collect all output tables
@@ -900,7 +900,7 @@ bodo::tests::suite external_sort_tests([] {
 
             std::shared_ptr<table_info> table = bodo::tests::cppToBodo(
                 {"A"}, {false}, {}, std::move(local_data));
-            state.ConsumeBatch(table, index >= n_elem);
+            state.ConsumeBatch(table);
         }
         state.FinalizeBuild();
 
@@ -993,7 +993,7 @@ bodo::tests::suite external_sort_tests([] {
 
                 std::shared_ptr<table_info> table = bodo::tests::cppToBodo(
                     {"A"}, {false}, {}, std::move(local_data));
-                state.ConsumeBatch(table, index >= n_elem);
+                state.ConsumeBatch(table);
             }
 
             state.FinalizeBuild();
@@ -1060,7 +1060,7 @@ bodo::tests::suite external_sort_tests([] {
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true, 5,
                               5);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
 
         state.FinalizeBuild();
         // Collect all output tables
@@ -1124,7 +1124,7 @@ bodo::tests::suite external_sort_tests([] {
         std::vector<int64_t> na_position{0};
         StreamSortState state(0, 1, std::move(vect_ascending),
                               std::move(na_position), table->schema(), true, 5);
-        state.ConsumeBatch(table, true);
+        state.ConsumeBatch(table);
 
         state.FinalizeBuild();
         // Collect all output tables

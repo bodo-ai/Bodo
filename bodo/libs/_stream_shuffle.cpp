@@ -54,7 +54,6 @@ void IncrementalShuffleMetrics::add_to_metrics(
                                     this->peak_utilization_bytes));
     metrics.emplace_back(
         StatMetric("shuffle_n_buffer_resets", this->n_buffer_resets));
-    metrics.emplace_back(TimerMetric("recv_wait_time", this->recv_wait_time));
 }
 
 int64_t get_shuffle_threshold() {

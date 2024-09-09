@@ -102,8 +102,6 @@ class IncrementalShuffleMetrics {
     stat_t peak_utilization_bytes = 0;
     // Total number of times we reset the buffer since it grew too large.
     stat_t n_buffer_resets = 0;
-    // Time spent waiting for a message in recv.
-    time_t recv_wait_time = 0;
 
     /**
      * @brief Helper function for exporting metrics during reporting steps in

@@ -396,10 +396,16 @@ void recursive_make_array_global_and_unique(std::shared_ptr<array_info>& array,
                                             bool parallel);
 
 /**
- * @brief make a dictionary builder global and unique by recursively calling
- * make_dictionary_global_and_unique on nested data types
+ * @brief Unify the local dictionary builder with the logical global dictionary
+ * (computed by recursively calling make_dictionary_global_and_unique on nested
+ * data types). This will ensure that this dict-builder has all possible values
+ * that exist on the dict-builder of any rank. Dictionary builders are append
+ * only, so any new values are only appended. This means that the underlying
+ * dictionaries are not guaranteed to have the values in the same order.
+ * Dictionary builders are deduplicated by definition, so only values that don't
+ * already exist will be added.
  *
  * @param dict_builder dictionary builder to be made global and unique
  */
-void recursive_make_dict_global_and_unique(
+void recursive_unify_dict_builder_globally(
     std::shared_ptr<DictionaryBuilder>& dict_builder);

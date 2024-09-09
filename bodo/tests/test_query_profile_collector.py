@@ -29,6 +29,7 @@ from bodo.tests.utils import (
     reduce_sum,
     temp_env_override,
 )
+from bodo.utils.typing import ColNamesMetaType, MetaType
 
 
 def test_query_profile_collection_compiles(memory_leak_check):
@@ -1611,3 +1612,213 @@ def test_iceberg_metrics_collection(
     assert "unify_append_small_time" in read_metrics_dict
     assert "output_pop_chunk_time" in read_metrics_dict
     assert "n_small_batches" in read_metrics_dict
+
+
+@pytest.mark.parametrize(
+    "limit_offset",
+    [
+        pytest.param((-1, -1), id="no_limit_offset"),
+        pytest.param((10, 10), id="small_limit_offset"),
+        pytest.param((10_000_000_000, 5_000), id="large_limit"),
+    ],
+)
+def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
+    """
+    Test that generated query profile has the metrics that we expect
+    to be reported by sort.
+    """
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    n_pes = comm.Get_size()
+    tmp_path_rank0 = comm.bcast(str(tmp_path))
+
+    input_df = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3, 4, 5] * 7500, dtype="Int64"),
+            "B": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["A", "bc", "De", "FGh", "Ij"] * 7500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            "C": pd.array([1, 2, 3, 4, 5] * 7500, dtype="Int64"),
+            "D": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["pizza", "potatoes", "cilantro", "cucumber", "jalapeno"] * 7500,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+
+    global_1 = MetaType((0, 1, 2, 3))
+    global_2 = ColNamesMetaType(("A", "B", "C", "D"))
+    limit, offset = limit_offset
+    limit_offset_case = bool(limit != -1)
+    small_limit_case = limit_offset_case and bool(limit < 100)
+
+    def impl(df):
+        bodo.libs.memory_budget.init_operator_comptroller()
+        bodo.libs.memory_budget.register_operator(
+            0, bodo.libs.memory_budget.OperatorType.SORT, 0, 0, 268435456
+        )
+        bodo.libs.memory_budget.register_operator(
+            1, bodo.libs.memory_budget.OperatorType.ACCUMULATE_TABLE, 1, 1, 1800000
+        )
+        bodo.libs.memory_budget.compute_satisfiable_budgets()
+        bodo.libs.query_profile_collector.init()
+        T1 = bodo.hiframes.table.logical_table_to_table(
+            bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), global_1, 4
+        )
+
+        is_last = False
+        _iter = 0
+        df_len = bodo.hiframes.table.local_len(T1)
+        sort_state = bodo.libs.stream_sort.init_stream_sort_state(
+            0,  # Op ID
+            limit,
+            offset,
+            ["A", "D"],
+            [True, True],
+            ["last", "last"],
+            ("A", "B", "C", "D"),
+        )
+        bodo.libs.query_profile_collector.start_pipeline(0)
+        while not (is_last):
+            T3 = bodo.hiframes.table.table_local_filter(
+                T1, slice((_iter * 4096), ((_iter + 1) * 4096))
+            )
+            is_last = (_iter * 4096) >= df_len
+            is_last = bodo.libs.stream_sort.sort_build_consume_batch(
+                sort_state, T3, is_last
+            )
+            _iter = _iter + 1
+        bodo.libs.query_profile_collector.end_pipeline(0, _iter)
+
+        is_last = False
+        _iter = 0
+        out_tb = bodo.libs.table_builder.init_table_builder_state(1)
+        bodo.libs.query_profile_collector.start_pipeline(1)
+        while not (is_last):
+            (T4, is_last) = bodo.libs.stream_sort.produce_output_batch(sort_state, True)
+            bodo.libs.table_builder.table_builder_append(out_tb, T4)
+            _iter = _iter + 1
+        bodo.libs.stream_sort.delete_stream_sort_state(sort_state)
+        T6 = bodo.libs.table_builder.table_builder_finalize(out_tb)
+        bodo.libs.query_profile_collector.end_pipeline(1, _iter)
+        index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)
+        df2 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_2)
+        bodo.libs.query_profile_collector.finalize()
+        return df2
+
+    with temp_env_override(
+        {"BODO_TRACING_LEVEL": "1", "BODO_TRACING_OUTPUT_DIR": tmp_path_rank0}
+    ):
+        _ = bodo.jit(distributed=["df"])(impl)(_get_dist_arg(input_df))
+
+    profile_path = get_query_profile_location(tmp_path_rank0, rank)
+    with open(profile_path, "r") as f:
+        profile_json = json.load(f)
+    comm.barrier()
+
+    operator_report = profile_json["operator_reports"]["0"]
+    # Verify build metrics
+    stage_1_metrics = operator_report["stage_1"]["metrics"]
+    build_metrics: list = stage_1_metrics
+    build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
+
+    # Global metrics only reported on rank 0
+    if rank == 0:
+        assert "finalize_num_chunks" in build_metrics_dict
+        assert build_metrics_dict["finalize_num_chunks"] > 0
+
+    # Metrics to expect and whether they are expected to be non-zero
+    for exp_metric, exp_nz in [
+        ("input_chunks_size_bytes_total", True),
+        ("n_input_chunks", not small_limit_case),
+        ("input_append_time", not small_limit_case),
+        ("sampling_process_input_time", not small_limit_case),
+        ("n_samples_taken", not small_limit_case),
+        ("final_budget_bytes", True),
+        ("global_dict_unification_time", True),
+        ("finalize_chunk_size", True),
+        ("finalize_num_chunks", True),
+        ("total_finalize_time", True),
+        ("global_builder_append_time", not small_limit_case),
+        ("get_bounds_total_time", not small_limit_case),
+        ("get_bounds_dict_unify_time", not small_limit_case),
+        ("get_bounds_gather_samples_time", not small_limit_case),
+        ("get_bounds_compute_bounds_time", not small_limit_case),
+        ("partition_chunks_total_time", not small_limit_case),
+        ("partition_chunks_pin_time", not small_limit_case),
+        ("partition_chunks_append_time", not small_limit_case),
+        ("partition_chunks_compute_dest_rank_time", not small_limit_case),
+        ("n_rows_after_shuffle", not small_limit_case),
+        ("ctb_sort_total_time", not small_limit_case),
+        ("n_leaf_level_merges", not small_limit_case),
+        ("leaf_level_merges_time", not small_limit_case),
+        ("n_chunk_merge_levels", not small_limit_case),
+        ("merge_chunks_total_time", not small_limit_case),
+        ("merge_chunks_make_heap_time", False),
+        ("merge_chunks_n_inmem", not limit_offset_case),
+        ("merge_chunks_inmem_concat_time", not limit_offset_case),
+        ("merge_chunks_inmem_sort_time", not limit_offset_case),
+        ("merge_chunks_output_append_time", not small_limit_case),
+        ("n_dict_builders", True),
+        ("dict_builders_unify_cache_id_misses", True),
+        ("dict_builders_unify_build_transpose_map_time", True),
+        ("dict_builders_unify_transpose_time", True),
+        ("n_sampling_buffer_rebuilds", False),
+        ("n_chunk_merges", False),
+        ("merge_chunks_pop_heap_time", False),
+        ("merge_chunks_push_heap_time", False),
+        ("dict_builders_unify_cache_length_misses", False),
+        ("shuffle_barrier_test_time", False),
+        # Shuffle related metrics that are expected to be non-zero
+        # only when there are multiple processes
+        ("shuffle_total_time", not small_limit_case and n_pes > 1),
+        ("shuffle_issend_time", not small_limit_case and n_pes > 1),
+        ("shuffle_send_done_check_time", not small_limit_case and n_pes > 1),
+        ("shuffle_n_send_done_checks", not small_limit_case and n_pes > 1),
+        ("shuffle_irecv_time", not small_limit_case and n_pes > 1),
+        ("shuffle_n_irecvs", not small_limit_case and n_pes > 1),
+        ("shuffle_recv_done_check_time", not small_limit_case and n_pes > 1),
+        ("shuffle_n_recv_done_checks", not small_limit_case and n_pes > 1),
+        ("shuffle_n_barrier_tests", not small_limit_case and n_pes > 1),
+        ("n_shuffle_send", not small_limit_case and n_pes > 1),
+        ("n_shuffle_recv", not small_limit_case and n_pes > 1),
+        ("shuffle_total_sent_nrows", not small_limit_case and n_pes > 1),
+        ("shuffle_total_recv_nrows", not small_limit_case and n_pes > 1),
+        ("shuffle_total_approx_sent_size_bytes", not small_limit_case and n_pes > 1),
+        ("shuffle_approx_sent_size_bytes_dicts", not small_limit_case and n_pes > 1),
+        ("shuffle_total_recv_size_bytes", not small_limit_case and n_pes > 1),
+        ("approx_recv_size_bytes_dicts", not small_limit_case and n_pes > 1),
+        ("dict_unification_time", not small_limit_case and n_pes > 1),
+    ]:
+        assert exp_metric in build_metrics_dict, exp_metric
+        if exp_nz:
+            assert build_metrics_dict[exp_metric] > 0, exp_metric
+
+    if limit_offset_case:
+        assert "is_limit_offset_case" in build_metrics_dict
+        assert build_metrics_dict["is_limit_offset_case"] == 1
+
+        assert "is_small_limit_case" in build_metrics_dict
+        assert build_metrics_dict["is_small_limit_case"] == int(small_limit_case)
+
+        if small_limit_case:
+            for exp_metric, exp_nz in [
+                ("topk_heap_append_chunk_time", True),
+                ("topk_heap_update_time", True),
+                ("small_limit_local_concat_time", True),
+                ("small_limit_gather_time", True),
+                ("small_limit_rank0_sort_time", False),
+                ("small_limit_rank0_output_append_time", False),
+            ]:
+                assert exp_metric in build_metrics_dict, exp_metric
+                if exp_nz:
+                    assert build_metrics_dict[exp_metric] > 0, exp_metric
+        else:
+            assert "compute_local_limit_time" in build_metrics_dict
+            assert build_metrics_dict["compute_local_limit_time"] > 0
