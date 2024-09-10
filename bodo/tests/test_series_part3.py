@@ -423,7 +423,7 @@ def test_series_apply_pandas_unsupported_method(memory_leak_check):
     """
 
     def impl1(S):
-        return S.apply("argmin")
+        return S.apply("mode")
 
     S = pd.Series(list(np.arange(100) + list(np.arange(100))))
     with pytest.raises(BodoError, match="user-defined function not supported"):
