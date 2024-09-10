@@ -1585,7 +1585,8 @@ static int64_t compute_offsets(int64_t i_start, int64_t bytes_read,
                 continue;
             cur_row++;
             // avoid counting the skipped row.
-            if (is_skiplist && cur_row == skiprows[skiprow_num]) {
+            if (is_skiplist && skiprow_num < skiprows_list_len &&
+                cur_row == skiprows[skiprow_num]) {
                 skiprow_num++;
                 continue;
             }
@@ -1662,7 +1663,7 @@ static void compute_skiprows_list_offsets(
             }
             rows_count++;
         }
-        if (skiplist_idx > skiprows_list_info->num_skiprows)
+        if (skiplist_idx >= skiprows_list_info->num_skiprows)
             break;
     }
     // If local_data is read and we still have rows to skip, add the
@@ -1816,12 +1817,12 @@ void read_file_info(const std::vector<std::string> &file_names,
                 // nrows total count
                 tracing::Event ev_nrows("compute_offsets_nrows", false);
                 ev_nrows.add_attribute("nrows", nrows);
-                compute_offsets(skipped_start_pos, bytes_read, local_data,
-                                row_separator, nrows, global_end, global_start,
-                                nrows_bytes,
-                                skiprows_list_info->is_skiprows_list,
-                                skiprows_list_info->skiprows.data(),
-                                nrows_cur_row, nrows_skiprow_idx, 0);
+                compute_offsets(
+                    skipped_start_pos, bytes_read, local_data, row_separator,
+                    nrows, global_end, global_start, nrows_bytes,
+                    skiprows_list_info->is_skiprows_list,
+                    skiprows_list_info->skiprows.data(), nrows_cur_row,
+                    nrows_skiprow_idx, skiprows_list_info->skiprows.size());
                 ev_nrows.finalize();
             }
             // 3. chunksize
@@ -2006,9 +2007,10 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
         // Set start_global to start of next section
         // start_global==0 (to handle case where first row is skipped so
         // local_read=0)
-        if ((local_to_read && skiplist_i < skiprows_list_len) ||
-            (start_global == 0))
+        if ((local_to_read || start_global == 0) &&
+            (size_t)(skiplist_i + 1) < read_start_offset.size()) {
             start_global = read_start_offset[skiplist_i + 1];
+        }
     }
     if (is_parallel)
         data_row_correction(mem_reader, row_separator);
