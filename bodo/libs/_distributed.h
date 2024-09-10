@@ -16,6 +16,17 @@
 
 #define ROOT_PE 0
 
+#define HANDLE_MPI_ERROR(CALL, USER_ERR_MSG_PREFIX)                           \
+    {                                                                         \
+        int err = CALL;                                                       \
+        if (err) {                                                            \
+            char err_msg[MPI_MAX_ERROR_STRING];                               \
+            MPI_Error_string(err, err_msg, nullptr);                          \
+            throw std::runtime_error(USER_ERR_MSG_PREFIX + std::string(" ") + \
+                                     std::string(err_msg));                   \
+        }                                                                     \
+    }
+
 // XXX same as distributed_api.py:Reduce_Type
 struct BODO_ReduceOps {
     enum ReduceOpsEnum {

@@ -378,7 +378,7 @@ def main(args):
         )
         metrics_file.write(f"Ran from cache: {cache_hit}\n".encode("utf-8"))
 
-    cache_loc = get_cache_loc_from_dispatcher(dispatcher)
+    cache_loc: str | None = get_cache_loc_from_dispatcher(dispatcher)
     if cache_loc and (bodo.get_rank() == 0):
         print(
             "[INFO] Binary {} {}".format(
@@ -396,6 +396,10 @@ def main(args):
             print(
                 f"[WARN] Expected SQL Plan to be cached at {plan_location}, but it wasn't found."
             )
+
+    mpi_version: str = MPI.Get_library_version()
+    if mpi_version and (bodo.get_rank() == 0):
+        print(f"[INFO] Using MPI Version: {mpi_version}")
 
     # Run the query if not compile only
     if not args.compile_only:

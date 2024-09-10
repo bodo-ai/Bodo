@@ -605,21 +605,29 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
         int flag;
         MPI_Status status;
 
-        int err = MPI_Iprobe(MPI_ANY_SOURCE, LENGTH_TAG, shuffle_comm, &flag,
-                             &status);
-        if (err) {
-            char err_msg[MPI_MAX_ERROR_STRING];
-            MPI_Error_string(err, err_msg, nullptr);
-            throw std::runtime_error("MPI error on MPI_Improbe: " +
-                                     std::string(err_msg));
-        }
+        // NOTE: We use Improbe instead of Iprobe intentionally. Iprobe can
+        // return true for the same message even when an Irecv for the message
+        // has been posted (until the receive has actually begun). This can
+        // cause hangs since we could end up posting two Irecvs for the same
+        // message. Therefore, for robustness, we use Improbe, which returns a
+        // message handle directly and exactly once.
+        // 'PostLensRecv' uses `Imrecv` which will start receive on the
+        // message using the message handle returned by Improbe.
+        // Reference:
+        // https://www.mpi-forum.org/docs/mpi-3.1/mpi31-report/node70.htm which
+        // states that "Unlike MPI_IPROBE, no other probe or receive operation
+        // may match the message returned by MPI_IMPROBE.".
+        MPI_Message m;
+        HANDLE_MPI_ERROR(MPI_Improbe(MPI_ANY_SOURCE, LENGTH_TAG, shuffle_comm,
+                                     &flag, &m, &status),
+                         "shuffle_irecv: MPI error on MPI_Improbe:")
         if (!flag) {
             break;
         }
 
         AsyncShuffleRecvState recv_state(status.MPI_SOURCE, in_table->schema());
 
-        recv_state.PostLensRecv(status, shuffle_comm);
+        recv_state.PostLensRecv(status, m);
         recv_states.push_back(std::move(recv_state));
     }
 
@@ -827,24 +835,20 @@ std::pair<bool, std::shared_ptr<table_info>> AsyncShuffleRecvState::recvDone(
     if (recv_requests.empty()) {
         // Try receiving the length again and see if we can populate the data
         // requests.
-        // TODO(aneesh) we also call TryRecvLensAndAllocArrs in shuffle_irecv
-        // but that isn't sufficient - if there's ever a case where we stop
-        // calling shuffle_irecv and attempt to call recvDone until outstanding
-        // requests are completed, it's possible that a request that hasn't yet
-        // recieved it's length will be stuck waiting forever.
-
         TryRecvLensAndAllocArrs(shuffle_comm);
         if (recv_requests.empty()) {
             return std::make_pair(false, nullptr);
         }
     }
 
-    // This could be optimzed by allocating the required size upfront and having
-    // the recv step fill it directly instead
-    // of each rank having its own array and inserting them all into a builder
+    // This could be optimized by allocating the required size upfront and
+    // having the recv step fill it directly instead of each rank having its own
+    // array and inserting them all into a builder
     int flag;
-    MPI_Testall(recv_requests.size(), recv_requests.data(), &flag,
-                MPI_STATUSES_IGNORE);
+    HANDLE_MPI_ERROR(
+        MPI_Testall(recv_requests.size(), recv_requests.data(), &flag,
+                    MPI_STATUSES_IGNORE),
+        "AsyncShuffleRecvState::recvDone: MPI Error on MPI_Testall:");
 
     std::shared_ptr<table_info> out_table = nullptr;
     if (flag) {
@@ -999,8 +1003,10 @@ void AsyncShuffleSendState::send_lengths(
             continue;
         }
         MPI_Request req;
-        MPI_Issend(rank_to_lens[rank].data(), rank_to_lens[rank].size(),
-                   MPI_UINT64_T, rank, LENGTH_TAG, shuffle_comm, &req);
+        HANDLE_MPI_ERROR(
+            MPI_Issend(rank_to_lens[rank].data(), rank_to_lens[rank].size(),
+                       MPI_UINT64_T, rank, LENGTH_TAG, shuffle_comm, &req),
+            "AsyncShuffleSendState::send_lengths: MPI error on MPI_Issend:");
         this->send_requests.push_back(req);
     }
 }
@@ -1023,7 +1029,9 @@ std::optional<std::vector<uint64_t>> AsyncShuffleRecvState::GetRecvLens(
     MPI_Comm shuffle_comm) {
     int flag;
     assert(this->lens_request != MPI_REQUEST_NULL);
-    MPI_Test(&this->lens_request, &flag, MPI_STATUS_IGNORE);
+    HANDLE_MPI_ERROR(
+        MPI_Test(&this->lens_request, &flag, MPI_STATUS_IGNORE),
+        "AsyncShuffleRecvState::GetRecvLens: MPI error on MPI_Test:");
     if (!flag) {
         return std::nullopt;
     }
@@ -1034,15 +1042,18 @@ std::optional<std::vector<uint64_t>> AsyncShuffleRecvState::GetRecvLens(
     return ret_val;
 }
 
-void AsyncShuffleRecvState::PostLensRecv(MPI_Status& status,
-                                         MPI_Comm shuffle_comm) {
+void AsyncShuffleRecvState::PostLensRecv(MPI_Status& status, MPI_Message& m) {
     assert(this->lens_request == MPI_REQUEST_NULL);
     int n_lens;
-    MPI_Get_count(&status, MPI_UINT64_T, &n_lens);
+    HANDLE_MPI_ERROR(
+        MPI_Get_count(&status, MPI_UINT64_T, &n_lens),
+        "AsyncShuffleRecvState::PostLensRecv: MPI error on MPI_Get_count:");
     this->recv_lens.resize(n_lens);
 
-    MPI_Irecv(this->recv_lens.data(), this->recv_lens.size(), MPI_UINT64_T,
-              status.MPI_SOURCE, 0, shuffle_comm, &this->lens_request);
+    HANDLE_MPI_ERROR(
+        MPI_Imrecv(this->recv_lens.data(), this->recv_lens.size(), MPI_UINT64_T,
+                   &m, &this->lens_request),
+        "AsyncShuffleRecvState::PostLensRecv: MPI error on MPI_Imrecv:");
 }
 
 void consume_completed_recvs(
