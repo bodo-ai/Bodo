@@ -20,7 +20,10 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.generic_pandas_coverage import generate_simple_series_impl
+from bodo.hiframes.generic_pandas_coverage import (
+    generate_series_to_df_impl,
+    generate_simple_series_impl,
+)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -39,6 +42,7 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.str_ext import str_findall_count
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     create_unsupported_overload,
     get_overload_const_int,
     get_overload_const_list,
@@ -465,7 +469,10 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
 )
 def overload_str_method_removeprefix(S, prefix):
     str_arg_check("removeprefix", "prefix", prefix)
-    scalar_text = " data_str = data[i]\n"
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(result, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += " data_str = data[i]\n"
     scalar_text += " if data_str.startswith(prefix):\n"
     scalar_text += "   result[i] = data_str[len(prefix):]\n"
     scalar_text += " else:\n"
@@ -489,13 +496,59 @@ def overload_str_method_casefold(S):
 )
 def overload_str_method_removesuffix(S, suffix):
     str_arg_check("removesuffix", "suffix", suffix)
-    scalar_text = " data_str = data[i]\n"
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(result, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += " data_str = data[i]\n"
     scalar_text += " if data_str.endswith(suffix):\n"
     scalar_text += "   result[i] = data_str[:-len(suffix)]\n"
     scalar_text += " else:\n"
     scalar_text += "   result[i] = data_str\n"
     return generate_simple_series_impl(
         ("S", "suffix"), (S, suffix), S.stype, scalar_text
+    )
+
+
+@overload_method(SeriesStrMethodType, "partition", inline="always", no_unliteral=True)
+def overload_str_method_partition(S, sep=" ", expand=True):
+    str_arg_check("partition", "sep", sep)
+    if not is_overload_constant_bool(expand):
+        raise_bodo_error(
+            "pd.Series.str.partition: requires expand to be a constant boolean"
+        )
+    unsupported_args = dict(expand=expand)
+    arg_defaults = dict(expand=True)
+    check_unsupported_args(
+        "Series.str.partition",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    # Returns a 3-column Dataframe
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res0, i)\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res1, i)\n"
+    scalar_text += "  bodo.libs.array_kernels.setna(res2, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += " data_str = data[i]\n"
+    scalar_text += " if sep in data_str:\n"
+    scalar_text += "  sep_idx = data_str.index(sep)\n"
+    scalar_text += "  res0[i] = data_str[:sep_idx]\n"
+    scalar_text += "  res1[i] = sep\n"
+    scalar_text += "  res2[i] = data_str[sep_idx+len(sep):]\n"
+    scalar_text += " else:\n"
+    scalar_text += "  res0[i] = data_str\n"
+    scalar_text += "  res1[i] = ''\n"
+    scalar_text += "  res2[i] = ''\n"
+    return generate_series_to_df_impl(
+        ("S", "sep", "expand"),
+        (None, "' '", "True"),
+        (S, sep, expand),
+        (0, 1, 2),
+        (S.stype.data, S.stype.data, S.stype.data),
+        scalar_text,
     )
 
 
@@ -1827,11 +1880,7 @@ unsupported_str_methods = {
     "encode",
     "findall",
     "fullmatch",
-    "index",
-    "match",
     "normalize",
-    "partition",
-    "rindex",
     "rpartition",
     "slice_replace",
     "rsplit",
