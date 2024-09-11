@@ -845,6 +845,7 @@ nav:
               - api_docs/pandas/series/sort_values.md
               - api_docs/pandas/series/std.md
               - api_docs/pandas/series/str.capitalize.md
+              - api_docs/pandas/series/str.casefold.md
               - api_docs/pandas/series/str.cat.md
               - api_docs/pandas/series/str.center.md
               - api_docs/pandas/series/str.contains.md
