@@ -5,7 +5,7 @@
 ### Supported Arguments None
 
 !!! note
-    - Series dtype must be of type `int`, `float`, `bool` or `datetime`
+    - Series dtype must be a numeric type
     - Bodo only accepts default values for `axis` and `skipna`
 
 ### Example Usage

@@ -843,11 +843,18 @@ def test_series_idxmax(series_val, memory_leak_check):
         ),
         pytest.param(
             pd.Series(
-                [Decimal(str((i + 7) % 5)) for i in range(10)],
+                [
+                    Decimal(
+                        "-"
+                        + str(((i + 7) ** 3) % 100) * 6
+                        + "."
+                        + str(((i + 7) ** 3) % 100) * 4
+                    )
+                    for i in range(100)
+                ],
                 dtype=pd.ArrowDtype(pa.decimal128(32, 12)),
             ),
             id="decimal",
-            marks=pytest.mark.skip("[BSE-3880]: Support argmin/argmax with Decimal"),
         ),
         pytest.param(
             pd.Series(["f", "a", "b", "c", "d", "e"], dtype=pd.StringDtype()),
@@ -879,9 +886,6 @@ def test_series_idxmax(series_val, memory_leak_check):
                 dtype="datetime64[ns]",
             ),
             id="datetime64ns",
-            marks=pytest.mark.skip(
-                "[BSE-3878] Support argmin/argmax with datetime64[ns]"
-            ),
         ),
         pytest.param(
             pd.Series(
@@ -894,37 +898,6 @@ def test_series_idxmax(series_val, memory_leak_check):
                 ]
             ),
             id="timestamp_w_tz",
-            marks=pytest.mark.skip(
-                "[BSE-3878] Support argmin/argmax with datetime64[ns]"
-            ),
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    pd.Timestamp(
-                        f"2000-01-01 12:00:00",
-                        tz="US/Central",
-                    ),
-                    pd.Timestamp(
-                        f"2000-01-01 12:00:00",
-                        tz="US/Pacific",
-                    ),
-                    pd.Timestamp(
-                        f"2000-01-01 12:00:00",
-                        tz="US/Alaska",
-                    ),
-                    pd.Timestamp(
-                        f"2000-01-01 12:00:00",
-                        tz="US/Eastern",
-                    ),
-                    pd.Timestamp(
-                        f"2000-01-01 12:00:00",
-                        tz="US/Mountain",
-                    ),
-                ]
-            ),
-            id="timestamp_w_tz_diff_timezones",
-            marks=pytest.mark.skip("[BSE-3878] Support argmin/argmax with timestamp"),
         ),
         pytest.param(
             pd.Series(
@@ -936,7 +909,6 @@ def test_series_idxmax(series_val, memory_leak_check):
                 ]
             ),
             id="timestamp",
-            marks=pytest.mark.skip("[BSE-3878] Support argmin/argmax with timestamp"),
         ),
     ],
 )
@@ -951,6 +923,66 @@ def test_series_argmin_max(S, is_argmin, memory_leak_check):
         check_func(test_argmin_impl, (S,))
     else:
         check_func(test_argmax_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "is_argmin", [pytest.param(True, id="argmin"), pytest.param(False, id="argmax")]
+)
+@pytest.mark.parametrize(
+    "precision, scale",
+    [
+        pytest.param(
+            38,
+            18,
+            id="p_38_s_18",
+        ),
+        pytest.param(38, 0, id="p_38_s_0"),
+        pytest.param(21, 15, id="p_21_s_15", marks=pytest.mark.slow),
+        pytest.param(18, 3, id="p_18_s_3", marks=pytest.mark.slow),
+        pytest.param(12, 11, id="p_12_s_11", marks=pytest.mark.slow),
+        pytest.param(9, 0, id="p_9_s_0", marks=pytest.mark.slow),
+    ],
+)
+def test_series_argmin_max_decimal(precision, scale, is_argmin, memory_leak_check):
+    """
+    Tests that argmin/max works on decimal series of varying scales/precisions
+    """
+
+    digits_before_decimal = precision - scale
+
+    # answers: argmin = 3, argmax = 92
+    S = pd.Series(
+        [
+            Decimal(
+                str(((i + 7) ** 3) % 100) * (digits_before_decimal // 2)
+                + "."
+                + str(((i + 7) ** 3) % 100) * (scale // 2)
+            )
+            for i in range(100)
+        ],
+        dtype=pd.ArrowDtype(pa.decimal128(precision, scale)),
+    )
+
+    # Test that the min/max value for that decimal at the specified scale / precision
+    max_string = "9" * digits_before_decimal + "." + "9" * scale
+    max_or_min_str = "-" + max_string if is_argmin else max_string
+    S_max_or_min = pd.Series(
+        [Decimal(max_or_min_str) for _ in range(15)],
+        dtype=pd.ArrowDtype(pa.decimal128(precision, scale)),
+    )
+
+    def test_argmin_impl(S):
+        return S.argmin()
+
+    def test_argmax_impl(S):
+        return S.argmax()
+
+    if is_argmin:
+        check_func(test_argmin_impl, (S,))
+        check_func(test_argmin_impl, (S_max_or_min,))
+    else:
+        check_func(test_argmax_impl, (S,))
+        check_func(test_argmax_impl, (S_max_or_min,))
 
 
 @pytest.mark.parametrize(
