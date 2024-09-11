@@ -1415,3 +1415,71 @@ def test_remove_prefix_suffix(data, substr, is_prefix):
     func = impl_prefix if is_prefix else impl_suffix
 
     check_func(func, (data, substr))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    "AAAAaaaAAA",
+                    "12 34",
+                    None,
+                    "Hello",
+                    None,
+                    np.nan,
+                    "good bye",
+                    "Hiß GoodBye1",
+                    "ßßßßßßßßß",
+                ]
+            ),
+            id="simple_str",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "Hello hiß!",
+                    "Hello hiß!",
+                    "Hello hiss",
+                    "Hello hiss",
+                    None,
+                    "goodbye",
+                    "GooDBYe",
+                ]
+            ),
+            id="duplicates",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    "아1, 오늘 저녁은 뭐먹지",
+                    "¿abc¡Y tú, quién te crees?",
+                    "ÕÕÕú¡úú,úũ¿ééé",
+                    "россия очень, холодная страна",
+                    np.nan,
+                    "@$!@*()$D" "مرحبا, العالم ، هذا هو بودو",
+                    "Γειά σου ,Κόσμε",
+                    "Español es agra,dable escuchar",
+                    "😀🐍,⚡😅😂",
+                    "🌶🍔,🏈💔💑💕",
+                    "𠁆𠁪,𠀓𠄩𠆶",
+                    np.nan,
+                    "🏈,💔,𠄩,😅\t\t",
+                    "🠂,🠋🢇🄐,🞧",
+                    "🢇🄐,🏈𠆶💑😅",
+                ]
+            ),
+            id="unicode",
+        ),
+    ],
+)
+def test_casefold(S, memory_leak_check):
+    """
+    Tests Series.str.casefold
+    """
+
+    def impl(S):
+        return S.str.casefold()
+
+    check_func(impl, (S,))
