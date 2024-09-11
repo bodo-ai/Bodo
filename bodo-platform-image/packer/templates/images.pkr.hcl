@@ -231,8 +231,8 @@ source "amazon-ebs" "aws-ebs-build" {
   }
   skip_create_ami = var.skip_create_image
   # This is a source image on top of that we are building our image
-  # Amazon Linux 2 Kernel 5.10 AMI 2.0.20221004
-  source_ami   = "ami-089a545a9ed9893b6"
+  # Amazon Linux 2023 AMI
+  source_ami   = "ami-09efc42336106d2f2"
   ssh_pty      = true
   ssh_username = var.aws_ssh_username
   tags = {
