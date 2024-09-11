@@ -106,6 +106,7 @@ ll.add_symbol("_dist_transpose_comm", hdist._dist_transpose_comm)
 ll.add_symbol("init_is_last_state", hdist.init_is_last_state)
 ll.add_symbol("delete_is_last_state", hdist.delete_is_last_state)
 ll.add_symbol("sync_is_last_non_blocking", hdist.sync_is_last_non_blocking)
+ll.add_symbol("decimal_reduce", hdist.decimal_reduce)
 
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
@@ -592,6 +593,11 @@ _timestamptz_reduce = types.ExternalFunction(
     types.void(types.int64, types.int64, types.voidptr, types.voidptr, types.boolean),
 )
 
+_decimal_reduce = types.ExternalFunction(
+    "decimal_reduce",
+    types.void(types.voidptr, types.voidptr, types.int32, types.int32) 
+)
+
 
 @numba.njit
 def dist_reduce(value, reduce_op):
@@ -632,12 +638,21 @@ def dist_reduce_impl(value, reduce_op):
             supported_typs.append(bodo.timedelta64ns)
             supported_typs.append(bodo.datetime_date_type)
             supported_typs.append(bodo.TimeType)
-        if target_typ not in supported_typs:  # pragma: no cover
+        if target_typ not in supported_typs and not isinstance(target_typ, bodo.Decimal128Type):  # pragma: no cover
             raise BodoError(
                 "argmin/argmax not supported for type {}".format(target_typ)
             )
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
+
+    if isinstance(target_typ, bodo.Decimal128Type):
+        def impl(value, reduce_op):  # pragma: no cover
+            in_ptr = value_to_ptr(value)
+            out_ptr = value_to_ptr(value)
+            _decimal_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
+            return load_val_ptr(out_ptr, value)
+        
+        return impl
 
     if isinstance(value, bodo.TimestampTZType):
         # This requires special handling because TimestampTZ's scalar

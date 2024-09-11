@@ -12,6 +12,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.hiframes.time_ext import TimeArrayType
+from bodo.libs.decimal_arr_ext import _str_to_decimal_scalar
 from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.utils.typing import decode_if_dict_array
@@ -116,6 +117,17 @@ def _get_type_max_value_overload(dtype):
     if dtype.dtype == types.bool_:
         return lambda dtype: True  # pragma: no cover
 
+    if isinstance(dtype, bodo.DecimalArrayType):
+        scale = dtype.dtype.scale
+        precision = dtype.dtype.precision
+
+        def impl(dtype):
+            decimal_string = "9" * (precision - scale) + "." + "9" * scale
+            decimal_val, _ = _str_to_decimal_scalar(decimal_string, precision, scale)
+            return decimal_val
+
+        return impl
+
     _dtype = dtype.dtype
     return lambda dtype: numba.cpython.builtins.get_type_max_value(
         _dtype
@@ -191,6 +203,17 @@ def _get_type_min_value_overload(dtype):
 
     if dtype.dtype == types.bool_:
         return lambda dtype: False  # pragma: no cover
+
+    if isinstance(dtype, bodo.DecimalArrayType):
+        scale = dtype.dtype.scale
+        precision = dtype.dtype.precision
+
+        def impl(dtype):
+            decimal_string = "-" + "9" * (precision - scale) + "." + "9" * scale
+            decimal_val, _ = _str_to_decimal_scalar(decimal_string, precision, scale)
+            return decimal_val
+
+        return impl
 
     _dtype = dtype.dtype
     return lambda dtype: numba.cpython.builtins.get_type_min_value(

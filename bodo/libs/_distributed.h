@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "_bodo_common.h"
+#include "_decimal_ext.h"
 
 #define ROOT_PE 0
 
@@ -67,6 +68,8 @@ static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
                                int64_t* out_timestamp, int64_t* out_offset,
                                bool is_max) __UNUSED__;
 static void dist_reduce(char* in_ptr, char* out_ptr, int op,
+                        int type_enum) __UNUSED__;
+static void decimal_reduce(char* in_ptr, char* out_ptr, int op,
                         int type_enum) __UNUSED__;
 template <typename Alloc>
 static void MPI_Allreduce_bool_or(std::vector<uint8_t, Alloc>& V) __UNUSED__;
@@ -341,6 +344,94 @@ static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
     *out_timestamp = *((int64_t*)out_val);
     int32_t out_offset32 = *((int32_t*)(out_val + sizeof(int64_t)));
     *out_offset = out_offset32;
+}
+
+/**
+ * @brief Custom reducer for argmax/argmin on decimal types. Note that for min/max we don't actually care abput the scale
+ * if everything is the same so just operates directly on the underlying int128's.
+ * 
+ * @param in The ptr to the current element (For argmax this is a an array of 3 uint64's: 1 for the index and 2 to 
+ * represent an int128/decimal value).
+ * @param out Currently reduced value, and the destination for the new reduced value.
+ * @param len number of elements.
+ * @param type the MPI datatype.
+ * @param is_max Whether we are doing an argmax or argmin.
+ */
+static void argmin_argmax_decimal(void* in, void* out, int* len,
+                               MPI_Datatype* type, bool is_max) {
+    uint64_t* in64 = (uint64_t*)in;
+    uint64_t* out64 = (uint64_t*)out;
+    
+    uint64_t in_index = in64[0];
+    uint64_t in_lo = in64[1];
+    uint64_t in_hi = in64[2];
+
+    uint64_t out_index = out64[0];
+    uint64_t out_lo = out64[1];
+    uint64_t out_hi = out64[2];
+
+    __int128 in_val = static_cast<__int128>(in_hi) << 64 | in_lo;
+    __int128 out_val = static_cast<__int128>(out_hi) << 64 | out_lo;
+
+    if (in_val == out_val) {
+        if (in_index < out_index)
+            out64[0] = in_index;
+        return;
+    }
+
+    bool in_is_greater = in_val > out_val;
+    if (in_is_greater == is_max) {
+        out64[0] = in_index;
+        out64[1] = in_lo;
+        out64[2] = in_hi;
+    }
+}
+
+static void argmin_decimal(void* in, void* out, int* len, MPI_Datatype* type) {
+    argmin_argmax_decimal(in, out, len, type, false);
+}
+
+static void argmax_decimal(void* in, void* out, int* len, MPI_Datatype* type) {
+    argmin_argmax_decimal(in, out, len, type, true);
+}
+
+static void decimal_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum) {
+    // only supports argmax/min for now
+    MPI_Op mpi_op = get_MPI_op(op_enum);
+    assert(mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC);
+    assert(type_enum == Bodo_CTypes::DECIMAL);
+
+    // create MPI OP corresponding to argmax/argmin for decimals
+    MPI_Op argcmp_decimal;
+    MPI_Op_create(mpi_op == MPI_MAXLOC ? argmax_decimal : argmin_decimal, 1, &argcmp_decimal);
+
+    // type consisting of an int64 index and a decimal (represented as 2 int64's)
+    MPI_Datatype index_decimal_type;
+    MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &index_decimal_type);
+    MPI_Type_commit(&index_decimal_type);
+
+    constexpr int struct_size = 3 * sizeof(uint64_t);
+    int mpi_struct_size;
+    MPI_Type_size(index_decimal_type, &mpi_struct_size);
+    assert(mpi_struct_size == struct_size);
+    
+    char in_val[struct_size];
+    char out_val[struct_size];
+
+    // the input will be aligned with the size of the decimal type, so there will be some padding after the int64.
+    int64_t index = *(int64_t*) (in_ptr);
+    __int128 val = *(__int128*) (in_ptr + sizeof(__int128));
+
+    // remove padding by representing the index, decimal struct as 3 int64's
+    memcpy(in_val, &index, sizeof(uint64_t));
+    memcpy(in_val + sizeof(uint64_t), &val, sizeof(__int128));
+    MPI_Allreduce(in_val, out_val, 1, index_decimal_type, argcmp_decimal, MPI_COMM_WORLD);
+
+    MPI_Op_free(&argcmp_decimal);
+    MPI_Type_free(&index_decimal_type);
+
+    // copy over the index into the result
+    memcpy(out_ptr, out_val, sizeof(uint64_t));
 }
 
 static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
@@ -645,6 +736,15 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
     }
     if (typ_enum == Bodo_CTypes::DATE) {
         typ_enum = Bodo_CTypes::INT32;
+    }
+    if (typ_enum == Bodo_CTypes::DECIMAL) { 
+        static MPI_Datatype decimal_index_mpi_type = MPI_DATATYPE_NULL;
+        if (decimal_index_mpi_type == MPI_DATATYPE_NULL) {
+            // two int64's representing the decimal and one representing the index
+            MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &decimal_index_mpi_type);
+            MPI_Type_commit(&decimal_index_mpi_type);
+        }
+        return decimal_index_mpi_type;
     }
     if (typ_enum < 0 || typ_enum > 9) {
         std::cerr << "Invalid MPI_Type"

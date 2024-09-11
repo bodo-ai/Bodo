@@ -1403,11 +1403,6 @@ def check_argmax_min_args(func_name, S):
 
         BodoError: When argument is not numeric/categorical with order supported.
     """
-    # TODO: [BSE-3878] Remove this check once we support timestamp with time zone.
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        S, f"Series.{func_name}()"
-    )
-
     # TODO: Make sure we handle the issue with numpy library leading to argmax
     # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L103
 
@@ -1426,7 +1421,13 @@ def check_argmax_min_args(func_name, S):
         )
         or isinstance(
             S.data,
-            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
+            (
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.CategoricalArrayType,
+                bodo.DecimalArrayType,
+                bodo.DatetimeArrayType,
+            ),
         )
         or S.data in [bodo.boolean_array_type, bodo.datetime_date_array_type]
     ):
@@ -1451,6 +1452,14 @@ def overload_series_argmin(S, axis=None, skipna=True):
 
     check_argmax_min_args("argmin", S)
 
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+
+        def impl(S, axis=None, skipna=True):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            return bodo.libs.array_kernels._nan_argmin(arr)
+
+        return impl
+
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         return bodo.libs.array_kernels._nan_argmin(arr)
@@ -1471,6 +1480,14 @@ def overload_series_argmax(S, axis=None, skipna=True):
     )
 
     check_argmax_min_args("argmax", S)
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+
+        def impl(S, axis=None, skipna=True):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            return bodo.libs.array_kernels._nan_argmax(arr)
+
+        return impl
 
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
