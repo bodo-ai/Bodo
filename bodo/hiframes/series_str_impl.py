@@ -475,6 +475,15 @@ def overload_str_method_removeprefix(S, prefix):
     )
 
 
+@overload_method(SeriesStrMethodType, "casefold", inline="always")
+def overload_str_method_casefold(S):
+    scalar_text = "if bodo.libs.array_kernels.isna(data, i):\n"
+    scalar_text += " bodo.libs.array_kernels.setna(result, i)\n"
+    scalar_text += " continue\n"
+    scalar_text += "result[i] = data[i].casefold()\n"
+    return generate_simple_series_impl(("S",), (S,), S.stype, scalar_text)
+
+
 @overload_method(
     SeriesStrMethodType, "removesuffix", inline="always", no_unliteral=True
 )
@@ -1814,7 +1823,6 @@ _install_catseries_unsupported()
 
 
 unsupported_str_methods = {
-    "casefold",
     "decode",
     "encode",
     "findall",
