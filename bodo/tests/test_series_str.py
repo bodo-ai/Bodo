@@ -1418,6 +1418,55 @@ def test_remove_prefix_suffix(data, substr, is_prefix):
 
 
 @pytest.mark.parametrize(
+    "expand",
+    [
+        pytest.param(True, id="with_expand"),
+        pytest.param(False, id="no_expand", marks=pytest.mark.skip("[BSE-3908]")),
+    ],
+)
+def test_partition(expand, memory_leak_check):
+    """
+    Tests pd.Series.str.partition.
+    """
+
+    data = pd.Series(
+        [
+            "alphabet soup  is delicious",
+            "hello,world",
+            None,
+            "sincerely, your's truest",
+            ",fizzbuzz ",
+            "alphabet soup  is delicious",
+            "alphabet soup  is delicious",
+            "alpha     beta    gamma",
+            "delta,,epsilon,,,,theta",
+            ",fizzbuzz ",
+            ",fizzbuzz ",
+            ",fizzbuzz ",
+        ]
+    )
+
+    def impl_default(S):
+        return S.str.partition()
+
+    def impl_seperator(S):
+        return S.str.partition(sep=",")
+
+    def impl_multichar_seperator(S):
+        return S.str.partition(sep="  ")
+
+    def impl_noexpand(S):
+        return S.str.partition(expand=False)
+
+    if expand:
+        check_func(impl_default, (data,))
+        check_func(impl_seperator, (data,))
+        check_func(impl_multichar_seperator, (data,))
+    else:
+        check_func(impl_noexpand, (data,))
+
+
+@pytest.mark.parametrize(
     "S",
     [
         pytest.param(

@@ -855,6 +855,7 @@ nav:
               - api_docs/pandas/series/str.extractall.md
               - api_docs/pandas/series/str.find.md
               - api_docs/pandas/series/str.get.md
+              - api_docs/pandas/series/str.index.md
               - api_docs/pandas/series/str.isalnum.md
               - api_docs/pandas/series/str.isalpha.md
               - api_docs/pandas/series/str.isdecimal.md
@@ -870,12 +871,14 @@ nav:
               - api_docs/pandas/series/str.lower.md
               - api_docs/pandas/series/str.lstrip.md
               - api_docs/pandas/series/str.pad.md
+              - api_docs/pandas/series/str.partition.md
               - api_docs/pandas/series/str.removeprefix.md
               - api_docs/pandas/series/str.removesuffix.md
               - api_docs/pandas/series/str.repeat.md
               - api_docs/pandas/series/str.replace.md
               - api_docs/pandas/series/str.restrip.md
               - api_docs/pandas/series/str.rfind.md
+              - api_docs/pandas/series/str.rindex.md
               - api_docs/pandas/series/str.rjist.md
               - api_docs/pandas/series/str.slice.md
               - api_docs/pandas/series/str.slice_replace.md
