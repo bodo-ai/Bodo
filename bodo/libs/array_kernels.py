@@ -4321,6 +4321,30 @@ def np_interp(x, xp, fp, left=None, right=None, period=None):
     return impl
 
 
+def is_index_decimal_value(indval):
+    return isinstance(indval, typing.builtins.IndexValueType) and isinstance(
+        indval.val_typ, bodo.Decimal128Type
+    )
+
+
+@overload(min)
+def overload_min_decimal_ival(indval1, indval2):
+    """
+    Max function for decimals that skips the isna check (assumes it is done caller)
+    """
+    if is_index_decimal_value(indval1) and is_index_decimal_value(indval2):
+
+        def min_impl(indval1, indval2):  # pragma no cover
+            if indval1.value > indval2.value:
+                return indval2
+            elif indval1.value == indval2.value:
+                if indval2.index < indval1.index:
+                    return indval2
+            return indval1
+
+        return min_impl
+
+
 def _nan_argmin(arr):  # pragma: no cover
     # Dummy function used for overload
     return
@@ -4337,9 +4361,12 @@ def _overload_nan_argmin(arr):
     # We check just the dtype because the previous function ensures
     # we are operating on 1D arrays
     if (
-        isinstance(arr, (IntegerArrayType, FloatingArrayType, DatetimeArrayType))
+        isinstance(
+            arr,
+            (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
+        )
         or arr in [boolean_array_type, datetime_date_array_type]
-        or arr.dtype == bodo.timedelta64ns
+        or arr.dtype in [bodo.timedelta64ns, bodo.datetime64ns]
         # Recent Numpy versions treat NA as min while pandas
         # skips NA values
         or isinstance(arr.dtype, types.Float)
@@ -4381,6 +4408,24 @@ def _overload_nan_argmin(arr):
     return lambda arr: arr.argmin()  # pragma: no cover
 
 
+@overload(max)
+def overload_max_decimal_ival(indval1, indval2):
+    """
+    Max function for decimals that skips the isna check (assumes it is done caller)
+    """
+    if is_index_decimal_value(indval1) and is_index_decimal_value(indval2):
+
+        def max_impl(indval1, indval2):  # pragma no cover
+            if indval1.value < indval2.value:
+                return indval2
+            elif indval1.value == indval2.value:
+                if indval2.index < indval1.index:
+                    return indval2
+            return indval1
+
+        return max_impl
+
+
 def _nan_argmax(arr):  # pragma: no cover
     # Dummy function used for overload
     return
@@ -4398,7 +4443,10 @@ def _overload_nan_argmax(arr):
     # we are operating on 1D arrays
 
     if (
-        isinstance(arr, (IntegerArrayType, FloatingArrayType, DatetimeArrayType))
+        isinstance(
+            arr,
+            (IntegerArrayType, FloatingArrayType, DatetimeArrayType, DecimalArrayType),
+        )
         or arr in [boolean_array_type, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
         # Recent Numpy versions treat NA as max while pandas

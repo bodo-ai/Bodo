@@ -719,6 +719,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, permutation_int);
     SetAttrStringFromVoidPtr(m, permutation_array_index);
     SetAttrStringFromVoidPtr(m, timestamptz_reduce);
+    SetAttrStringFromVoidPtr(m, decimal_reduce);
     SetAttrStringFromVoidPtr(m, _dist_transpose_comm);
     SetAttrStringFromVoidPtr(m, init_is_last_state);
     SetAttrStringFromVoidPtr(m, delete_is_last_state);
