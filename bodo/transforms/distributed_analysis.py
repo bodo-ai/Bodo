@@ -1588,6 +1588,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("series_fullmatch_regex", "bodo.hiframes.series_str_impl"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
