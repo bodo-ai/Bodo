@@ -101,7 +101,7 @@ def generate_simple_series_impl(
         )
     )
     out_arr_type = (
-        out_type.dtype
+        out_type.data
         if isinstance(out_type, bodo.hiframes.pd_series_ext.SeriesType)
         else out_type
     )
@@ -265,7 +265,7 @@ def generate_series_to_df_impl(
         )
     else:
         raise_bodo_error(
-            f"generate_simple_series_impl: unsupported input type {series_arg}"
+            f"generate_series_to_df_impl: unsupported input type {series_arg}"
         )
 
     is_dict_input = (
