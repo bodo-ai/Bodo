@@ -973,8 +973,6 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-    // XXX Missing not-parallel handling!
-
     std::vector<std::shared_ptr<table_info>> chunks;
     std::deque<TableAndRange> local_chunks = top_k.input_chunks;
 
@@ -993,13 +991,18 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
     }
     this->metrics.small_limit_local_concat_time += end_timer(start_concat);
 
-    // Send all data to rank 0 synchronously
-    time_pt start_gather = start_timer();
-    std::shared_ptr<table_info> collected_table =
-        gather_table(std::move(local_concat_tables), -1, false, parallel, 0);
-    this->metrics.small_limit_gather_time += end_timer(start_gather);
+    std::shared_ptr<table_info> collected_table;
+    if (this->parallel) {
+        // Send all data to rank 0 synchronously
+        time_pt start_gather = start_timer();
+        collected_table = gather_table(std::move(local_concat_tables), -1,
+                                       false, parallel, 0);
+        this->metrics.small_limit_gather_time += end_timer(start_gather);
+    } else {
+        collected_table = std::move(local_concat_tables);
+    }
 
-    if (myrank == 0) {
+    if (myrank == 0 || !this->parallel) {
         collected_table =
             UnifyDictionaryArrays(std::move(collected_table), dict_builders);
         time_pt start_sort = start_timer();
