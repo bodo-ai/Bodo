@@ -1034,7 +1034,7 @@ def str_contains_non_regex(arr, pat, case):  # pragma: no cover
 
 
 @numba.njit
-def str_match(arr, pat, case, flags, na):  # pragma: no cover
+def str_match(arr, pat, case, flags, na, do_full_match=False):  # pragma: no cover
     """Implement optimized string match for dictionary encoded arrays
 
     Args:
@@ -1050,8 +1050,13 @@ def str_match(arr, pat, case, flags, na):  # pragma: no cover
     out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
-    with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
-        dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
+    dict_arr_out = None
+    if do_full_match:
+        with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
+            dict_arr_out = dict_arr_S.array._str_fullmatch(pat, case, flags, na)
+    else:
+        with bodo.objmode(dict_arr_out=bodo.boolean_array_type):
+            dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
 
     for i in range(n_indices):
         if bodo.libs.array_kernels.isna(arr, i):

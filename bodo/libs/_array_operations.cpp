@@ -2161,6 +2161,8 @@ table_info* sample_table_py_entry(table_info* in_table, int64_t n, double frac,
 /**
  * Search for pattern in each input element using
  * boost::xpressive::regex_search(in, pattern)
+ * @tparam do_full_match if true, check that the entire input string is matched
+ * by the pattern.
  * @param[in] in_arr input array of string  elements
  * @param[in] case_sensitive bool whether pattern is case sensitive or not
  * @param[in] match_beginning bool whether the pattern starts at the beginning
@@ -2168,6 +2170,7 @@ table_info* sample_table_py_entry(table_info* in_table, int64_t n, double frac,
  * @param[out] out_arr output array of bools specifying whether the pattern
  *                      matched for corresponding in_arr element
  */
+template <bool do_full_match>
 void get_search_regex(std::shared_ptr<array_info> in_arr,
                       const bool case_sensitive, const bool match_beginning,
                       char const* const pat,
@@ -2204,9 +2207,18 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
             if (bit) {
                 const offset_t start_pos = data2[iRow];
                 const offset_t end_pos = data2[iRow + 1];
-                if (boost::xpressive::regex_search(data1 + start_pos,
-                                                   data1 + end_pos, m, pattern,
-                                                   match_flag)) {
+                // regex_match is true if the entire string matches the pattern
+                if (do_full_match && boost::xpressive::regex_match(
+                                         data1 + start_pos, data1 + end_pos, m,
+                                         pattern, match_flag)) {
+                    SetBitTo((uint8_t*)out_arr
+                                 ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
+                             iRow, true);
+                    num_match++;
+                } else if (!do_full_match &&
+                           boost::xpressive::regex_search(
+                               data1 + start_pos, data1 + end_pos, m, pattern,
+                               match_flag)) {
                     SetBitTo((uint8_t*)out_arr
                                  ->data1<bodo_array_type::NULLABLE_INT_BOOL>(),
                              iRow, true);
@@ -2238,8 +2250,8 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
 
         // Compute recursively on the dictionary
         // (dict_arr; which is just a string array).
-        get_search_regex(dict_arr, case_sensitive, match_beginning, pat,
-                         dict_arr_out);
+        get_search_regex<do_full_match>(dict_arr, case_sensitive,
+                                        match_beginning, pat, dict_arr_out);
 
         std::shared_ptr<array_info> indices_arr = in_arr->child_arrays[1];
 
@@ -2276,11 +2288,18 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
 
 void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
                                const bool match_beginning,
-                               char const* const pat, array_info* out_arr) {
+                               char const* const pat, array_info* out_arr,
+                               bool do_full_match) {
     try {
-        get_search_regex(std::shared_ptr<array_info>(in_arr), case_sensitive,
-                         match_beginning, pat,
-                         std::shared_ptr<array_info>(out_arr));
+        if (do_full_match) {
+            get_search_regex<true>(std::shared_ptr<array_info>(in_arr),
+                                   case_sensitive, match_beginning, pat,
+                                   std::shared_ptr<array_info>(out_arr));
+        } else {
+            get_search_regex<false>(std::shared_ptr<array_info>(in_arr),
+                                    case_sensitive, match_beginning, pat,
+                                    std::shared_ptr<array_info>(out_arr));
+        }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;

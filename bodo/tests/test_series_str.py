@@ -1532,3 +1532,42 @@ def test_casefold(S, memory_leak_check):
         return S.str.casefold()
 
     check_func(impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "case", [pytest.param(True, id="use_case"), pytest.param(False, id="ignore_case")]
+)
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        pytest.param("ab|abcdef", id="ab_or"),
+        pytest.param("ab.*", id="ab_kleene"),
+        pytest.param("[a-b | \d]+", id="letters_numbers"),
+        pytest.param("🏈.+", id="emoji"),
+        pytest.param(".*구림", id="korean"),
+    ],
+)
+def test_fullmatch(pattern, case, memory_leak_check):
+    S = pd.Series(
+        [
+            "abcdef",
+            "ab",
+            "abce",
+            np.nan,
+            "ABCDEf",
+            "AB!@#$S",
+            "¿abc¡Y tú, quién te cre\t\tes?",
+            "오늘도 피츠버그의 날씨는 매\t우, 구림",
+            np.nan,
+            "🏈,💔,𠄩,😅",
+            "大处着眼，小处着手。",
+            "🠂,🠋🢇🄐,🞧",
+            "abcd1234",
+            "россия очень, холодная страна",
+        ]
+    )
+
+    def test_impl(S):
+        return S.str.fullmatch(pattern, case=case)
+
+    check_func(test_impl, (S,))

@@ -308,6 +308,7 @@ table_info* sample_table_py_entry(table_info* in_table, int64_t n, double frac,
                                   bool replace, int64_t random_state,
                                   bool parallel);
 
+template <bool do_full_match>
 void get_search_regex(std::shared_ptr<array_info> in_arr,
                       const bool case_sensitive, const bool match_beginning,
                       char const* const pat,
@@ -316,7 +317,8 @@ void get_search_regex(std::shared_ptr<array_info> in_arr,
 // Python wrapper for get_search_regex
 void get_search_regex_py_entry(array_info* in_arr, const bool case_sensitive,
                                const bool match_beginning,
-                               char const* const pat, array_info* out_arr);
+                               char const* const pat, array_info* out_arr,
+                               bool do_full_match);
 
 /**
  * @brief C++ implementation of re.sub to replace each element in in_arr with

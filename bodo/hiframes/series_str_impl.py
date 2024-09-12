@@ -566,6 +566,13 @@ def series_match_regex(S, pat, case, flags, na):  # pragma: no cover
     return out_arr
 
 
+@numba.njit
+def series_fullmatch_regex(S, pat, case, flags, na):  # pragma: no cover
+    with bodo.objmode(out_arr=bodo.boolean_array_type):
+        out_arr = S.array._str_fullmatch(pat, case, flags, na)
+    return out_arr
+
+
 def is_regex_unsupported(pat):
     """Check if it's constant and any of the below patterns are in the regex-pattern."""
     # Based on https://docs.python.org/3/library/re.html,
@@ -670,17 +677,8 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     return impl
 
 
-@overload_method(SeriesStrMethodType, "match", inline="always", no_unliteral=True)
-def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
-    not_supported_arg_check("match", "na", na, np.nan)
-    str_arg_check("match", "pat", pat)
-    int_arg_check("match", "flags", flags)
-
-    # Error checking for case argument
-    if not is_overload_constant_bool(case):
-        raise BodoError(
-            "Series.str.match(): 'case' argument should be a constant boolean"
-        )
+def gen_str_match_impl(S_str, pat, do_full_match, flags):
+    """Generates an implementation of str.match or str.full_match depending on the do_full_match flag."""
     # Get value of re.IGNORECASE. It cannot be computed inside the impl
     # since this is a custom enum class (not regular Enum) and numba doesn't
     # support it. https://numba.readthedocs.io/en/stable/reference/pysupported.html#enum
@@ -694,12 +692,12 @@ def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
     func_text += "        name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
     if not is_regex_unsupported(pat) and flags == 0:
         func_text += "        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-        func_text += "        get_search_regex(arr, case, True, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
+        func_text += f"        get_search_regex(arr, case, True, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr, do_full_match={do_full_match})\n"
     # optimized version for dictionary encoded array
     elif S_str.stype.data == bodo.dict_str_arr_type:
-        func_text += "        out_arr = bodo.libs.dict_arr_ext.str_match(arr, pat, case, flags, na)\n"
+        func_text += f"        out_arr = bodo.libs.dict_arr_ext.str_match(arr, pat, case, flags, na, do_full_match={do_full_match})\n"
     else:
-        func_text += "        out_arr = series_match_regex(S, pat, case, flags, na)\n"
+        func_text += "        out_arr = series_match_impl(S, pat, case, flags, na)\n"
     func_text += (
         "        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
@@ -714,11 +712,44 @@ def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
             "np": np,
             "re_ignorecase_value": re_ignorecase_value,
             "get_search_regex": get_search_regex,
+            "series_match_impl": series_fullmatch_regex
+            if do_full_match
+            else series_match_regex,
         },
         loc_vars,
     )
     impl = loc_vars["impl"]
     return impl
+
+
+@overload_method(SeriesStrMethodType, "fullmatch", inline="always", no_unliteral=True)
+def overload_str_method_fullmatch(S_str, pat, case=True, flags=0, na=np.nan):
+    not_supported_arg_check("fullmatch", "na", na, np.nan)
+    str_arg_check("fullmatch", "pat", pat)
+    int_arg_check("fullmatch", "flags", flags)
+
+    # Error checking for case argument
+    if not is_overload_constant_bool(case):
+        raise BodoError(
+            "Series.str.fullmatch(): 'case' argument should be a constant boolean"
+        )
+
+    return gen_str_match_impl(S_str, pat, True, flags)
+
+
+@overload_method(SeriesStrMethodType, "match", inline="always", no_unliteral=True)
+def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
+    not_supported_arg_check("match", "na", na, np.nan)
+    str_arg_check("match", "pat", pat)
+    int_arg_check("match", "flags", flags)
+
+    # Error checking for case argument
+    if not is_overload_constant_bool(case):
+        raise BodoError(
+            "Series.str.match(): 'case' argument should be a constant boolean"
+        )
+
+    return gen_str_match_impl(S_str, pat, False, flags)
 
 
 @overload_method(SeriesStrMethodType, "cat", no_unliteral=True)
@@ -1879,7 +1910,6 @@ unsupported_str_methods = {
     "decode",
     "encode",
     "findall",
-    "fullmatch",
     "normalize",
     "rpartition",
     "slice_replace",
