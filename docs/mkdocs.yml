@@ -854,6 +854,7 @@ nav:
               - api_docs/pandas/series/str.extract.md
               - api_docs/pandas/series/str.extractall.md
               - api_docs/pandas/series/str.find.md
+              - api_docs/pandas/series/str.fullmatch.md
               - api_docs/pandas/series/str.get.md
               - api_docs/pandas/series/str.index.md
               - api_docs/pandas/series/str.isalnum.md
