@@ -6,6 +6,7 @@
     targets with the verbose flag.
 """
 import logging
+import sys
 
 from numba.extending import overload
 
@@ -17,7 +18,7 @@ _default_logger.setLevel(logging.DEBUG)
 
 
 # Create the default handler
-default_handler = logging.StreamHandler()
+default_handler = logging.StreamHandler(sys.stdout)
 default_handler.setLevel(logging.DEBUG)
 
 # create formatter
