@@ -2,6 +2,7 @@
 Numba monkey patches to fix issues related to Bodo. Should be imported before any
 other module in bodo package.
 """
+
 import copy
 import functools
 import hashlib
@@ -1932,12 +1933,15 @@ def CacheImpl__init__(self, py_func):
     abiflags = getattr(sys, "abiflags", "")
 
     # bodo change: use bodo's version to invalidate cache
-    from bodo import __version__ as bodo_version
-    from bodo import bodosql_use_streaming_plan as use_streaming
+    from bodo import (
+        __version__ as bodo_version,
+    )
+    from bodo import (
+        get_sql_config_str,
+    )
 
-    streaming_suffix = "streaming" if use_streaming else "nonstreaming"
-
-    self._filename_base = f"{self.get_filename_base(fullname, abiflags)}bodo{bodo_version}-{streaming_suffix}"
+    conf_str_hash = hashlib.md5(get_sql_config_str().encode()).hexdigest()
+    self._filename_base = f"{self.get_filename_base(fullname, abiflags)}bodo{bodo_version}-{conf_str_hash}"
 
 
 if _check_numba_change:  # pragma: no cover
@@ -3696,16 +3700,20 @@ def _Numpy_Rules_ufunc_handle_inputs(cls, ufunc, args, kws):
 
     # Hack: Bodo change to not match on Bytes
     args = [
-        a.as_array
-        if (isinstance(a, types.ArrayCompatible) and not isinstance(a, types.Bytes))
-        else a
+        (
+            a.as_array
+            if (isinstance(a, types.ArrayCompatible) and not isinstance(a, types.Bytes))
+            else a
+        )
         for a in args
     ]
     # Hack: Bodo change to not match on Bytes
     arg_ndims = [
-        a.ndim
-        if (isinstance(a, types.ArrayCompatible) and not isinstance(a, types.Bytes))
-        else 0
+        (
+            a.ndim
+            if (isinstance(a, types.ArrayCompatible) and not isinstance(a, types.Bytes))
+            else 0
+        )
         for a in args
     ]
     ndims = max(arg_ndims)
@@ -3731,9 +3739,11 @@ def _Numpy_Rules_ufunc_handle_inputs(cls, ufunc, args, kws):
     # Hack: Bodo change to not match on Bytes
     # find the kernel to use, based only in the input types (as does NumPy)
     base_types = [
-        x.dtype
-        if isinstance(x, types.ArrayCompatible) and not isinstance(x, types.Bytes)
-        else x
+        (
+            x.dtype
+            if isinstance(x, types.ArrayCompatible) and not isinstance(x, types.Bytes)
+            else x
+        )
         for x in args
     ]
 
@@ -3743,9 +3753,12 @@ def _Numpy_Rules_ufunc_handle_inputs(cls, ufunc, args, kws):
         layout = "C"
         # Hack: Bodo change to not match on Bytes
         layouts = [
-            x.layout
-            if isinstance(x, types.ArrayCompatible) and not isinstance(x, types.Bytes)
-            else ""
+            (
+                x.layout
+                if isinstance(x, types.ArrayCompatible)
+                and not isinstance(x, types.Bytes)
+                else ""
+            )
             for x in args
         ]
 
