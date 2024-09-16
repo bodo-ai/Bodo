@@ -1183,6 +1183,11 @@ class AbstractChunkedTableBuilder {
    public:
     /* Active chunk state */
 
+    // TODO Add an option to re-use the "active chunk" since some
+    // PushActiveChunk implementations make a copy of the data, which allows us
+    // to reset and reuse the buffers. Similarly, we can try to not shrink the
+    // buffers in these cases since the buffers will be reused.
+
     // Active chunk
     std::shared_ptr<table_info> active_chunk;
     // Number of rows inserted into the active chunk
