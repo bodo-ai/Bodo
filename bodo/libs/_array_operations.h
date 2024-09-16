@@ -409,5 +409,5 @@ bodo::vector<int64_t> get_sample_selection_vector(int64_t n_local,
 std::shared_ptr<table_info> compute_bounds_from_samples(
     std::shared_ptr<table_info> all_samples,
     std::shared_ptr<table_info> ref_table, int64_t n_key_t,
-    int64_t* vect_ascending, int64_t* na_position, int myrank, int n_pes,
-    bool parallel);
+    const int64_t* vect_ascending, const int64_t* na_position, int myrank,
+    int n_pes, bool parallel);
