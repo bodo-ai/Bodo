@@ -1728,10 +1728,10 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
     build_metrics: list = stage_1_metrics
     build_metrics_dict = {x["name"]: x["stat"] for x in build_metrics}
 
-    # Global metrics only reported on rank 0
     if rank == 0:
-        assert "finalize_num_chunks" in build_metrics_dict
-        assert build_metrics_dict["finalize_num_chunks"] > 0
+        # Global metric that will only be reported on rank 0
+        assert "final_bytes_per_row" in build_metrics_dict
+        assert build_metrics_dict["final_bytes_per_row"] > 0
 
     # Metrics to expect and whether they are expected to be non-zero
     for exp_metric, exp_nz in [
@@ -1742,10 +1742,10 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         ("n_samples_taken", not small_limit_case),
         ("final_budget_bytes", True),
         ("global_dict_unification_time", True),
-        ("finalize_chunk_size", True),
-        ("finalize_num_chunks", True),
+        ("merge_chunks_processing_chunk_size", not small_limit_case),
+        ("merge_chunks_K", not small_limit_case),
         ("total_finalize_time", True),
-        ("global_builder_append_time", not small_limit_case),
+        ("kway_merge_sorter_append_time", not small_limit_case),
         ("get_bounds_total_time", not small_limit_case),
         ("get_bounds_dict_unify_time", not small_limit_case),
         ("get_bounds_gather_samples_time", not small_limit_case),
@@ -1753,30 +1753,39 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         ("partition_chunks_total_time", not small_limit_case),
         ("partition_chunks_pin_time", not small_limit_case),
         ("partition_chunks_append_time", not small_limit_case),
+        ("partition_chunks_sort_time", not small_limit_case),
+        ("partition_chunks_sort_copy_time", not small_limit_case),
         ("partition_chunks_compute_dest_rank_time", not small_limit_case),
         ("n_rows_after_shuffle", not small_limit_case),
-        ("ctb_sort_total_time", not small_limit_case),
-        ("n_leaf_level_merges", not small_limit_case),
-        ("leaf_level_merges_time", not small_limit_case),
-        ("n_chunk_merge_levels", not small_limit_case),
-        ("merge_chunks_total_time", not small_limit_case),
+        ("kway_merge_sort_total_time", not small_limit_case),
+        ("n_leaf_level_merges", False),
+        ("leaf_level_merges_time", False),
+        ("n_merge_levels", False),
+        ("merge_chunks_total_time", False),
         ("merge_chunks_make_heap_time", False),
-        ("merge_chunks_n_inmem", not limit_offset_case),
-        ("merge_chunks_inmem_concat_time", not limit_offset_case),
-        ("merge_chunks_inmem_sort_time", not limit_offset_case),
-        ("merge_chunks_output_append_time", not small_limit_case),
+        ("merge_input_builder_finalize_time", not limit_offset_case),
+        ("merge_input_builder_total_sort_time", not limit_offset_case),
+        ("merge_input_builder_total_sort_copy_time", not limit_offset_case),
+        ("merge_n_input_chunks", not limit_offset_case),
+        ("merge_approx_input_chunks_total_bytes", not limit_offset_case),
+        ("performed_inmem_concat_sort", not limit_offset_case),
+        ("finalize_inmem_concat_time", False),
+        ("finalize_inmem_sort_time", False),
+        ("finalize_inmem_output_append_time", not limit_offset_case),
+        ("merge_chunks_output_append_time", False),
         ("n_dict_builders", True),
         ("dict_builders_unify_cache_id_misses", True),
         ("dict_builders_unify_build_transpose_map_time", True),
         ("dict_builders_unify_transpose_time", True),
         ("n_sampling_buffer_rebuilds", False),
-        ("n_chunk_merges", False),
+        ("n_non_leaf_level_chunk_merges", False),
         ("merge_chunks_pop_heap_time", False),
         ("merge_chunks_push_heap_time", False),
         ("dict_builders_unify_cache_length_misses", False),
         ("shuffle_barrier_test_time", False),
         # Shuffle related metrics that are expected to be non-zero
         # only when there are multiple processes
+        ("shuffle_chunk_size", not small_limit_case and n_pes > 1),
         ("shuffle_total_time", not small_limit_case and n_pes > 1),
         ("shuffle_issend_time", not small_limit_case and n_pes > 1),
         ("shuffle_send_done_check_time", not small_limit_case and n_pes > 1),
