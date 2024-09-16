@@ -595,7 +595,7 @@ _timestamptz_reduce = types.ExternalFunction(
 
 _decimal_reduce = types.ExternalFunction(
     "decimal_reduce",
-    types.void(types.voidptr, types.voidptr, types.int32, types.int32) 
+    types.void(types.int64, types.voidptr, types.voidptr, types.int32, types.int32),
 )
 
 
@@ -638,20 +638,26 @@ def dist_reduce_impl(value, reduce_op):
             supported_typs.append(bodo.timedelta64ns)
             supported_typs.append(bodo.datetime_date_type)
             supported_typs.append(bodo.TimeType)
-        if target_typ not in supported_typs and not isinstance(target_typ, bodo.Decimal128Type):  # pragma: no cover
+        if target_typ not in supported_typs and not isinstance(
+            target_typ, bodo.Decimal128Type
+        ):  # pragma: no cover
             raise BodoError(
                 "argmin/argmax not supported for type {}".format(target_typ)
             )
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
-    if isinstance(target_typ, bodo.Decimal128Type):
+    if isinstance(target_typ, bodo.Decimal128Type) and isinstance(
+        types.unliteral(value), IndexValueType
+    ):
+        # For index-value types, the data pointed too has different amounts of padding depending on machine type.
+        # as a workaround, we can pass the index separately.
         def impl(value, reduce_op):  # pragma: no cover
-            in_ptr = value_to_ptr(value)
+            in_ptr = value_to_ptr(value.value)
             out_ptr = value_to_ptr(value)
-            _decimal_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
+            _decimal_reduce(value.index, in_ptr, out_ptr, reduce_op, typ_enum)
             return load_val_ptr(out_ptr, value)
-        
+
         return impl
 
     if isinstance(value, bodo.TimestampTZType):
