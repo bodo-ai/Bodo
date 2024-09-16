@@ -145,6 +145,25 @@ bodosql_full_caching = os.environ.get("BODO_USE_PARTIAL_CACHING", "0") != "0"
 bodo_disable_streaming_window_sort = (
     os.environ.get("BODO_DISABLE_STREAMING_WINDOW_SORT", "0") != "0"
 )
+
+
+def get_sql_config_str() -> str:
+    """
+    Get a string that encapsulates all configurations relevant to compilation
+    of SQL queries.
+
+    Returns:
+        str: Configuration string
+    """
+    conf_str = (
+        f"{bodosql_use_streaming_plan=};{bodosql_streaming_batch_size=};{stream_loop_sync_iters=};{enable_snowflake_iceberg=};"
+        f"{enable_timestamp_tz=};{enable_runtime_join_filters=};{runtime_join_filters_copy_threshold=};{enable_streaming_sort=};"
+        f"{enable_streaming_sort_limit_offset=};{enable_theta_sketches=};{bodo_use_decimal=}"
+        f"{bodo_sql_style=};{bodosql_full_caching=};{bodo_disable_streaming_window_sort=};"
+    )
+    return conf_str
+
+
 # Should Bodo use the new Arrow Azure FileSystem implementation instead of
 # the old HDFS implementation.
 enable_azure_fs = os.environ.get("BODO_USE_AZURE_FS", "1") != "0"
