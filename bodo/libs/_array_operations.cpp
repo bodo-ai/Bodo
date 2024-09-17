@@ -213,20 +213,20 @@ bodo::vector<int64_t> get_sample_selection_vector(int64_t n_local,
  * then picks a row randomly from each block.
  *
  * @param local_sort Locally sorted table
- * @param n_key_t Number of sort keys
+ * @param n_keys Number of sort keys
  * @param n_loc_sample Number of samples to get
  * @param n_local Length of the table
  * @param parallel Only for tracing purposes
  * @return std::shared_ptr<table_info> Table with samples. Shape: n_loc_sample
- * rows, n_key_t columns
+ * rows, n_keys columns
  */
 std::shared_ptr<table_info> get_samples_from_table_local(
-    std::shared_ptr<table_info> local_sort, int64_t n_key_t,
+    std::shared_ptr<table_info> local_sort, int64_t n_keys,
     int64_t n_loc_sample, int64_t n_local, bool parallel) {
     tracing::Event ev("get_samples_from_table_local", parallel);
     std::shared_ptr<table_info> samples = RetrieveTable(
         std::move(local_sort),
-        get_sample_selection_vector(n_local, n_loc_sample), n_key_t);
+        get_sample_selection_vector(n_local, n_loc_sample), n_keys);
     return samples;
 }
 
@@ -236,7 +236,7 @@ std::shared_ptr<table_info> get_samples_from_table_local(
  * based on the total length of the table, number of ranks.
  *
  * @param local_sort Locally sorted table chunk.
- * @param n_key_t Number of sort keys.
+ * @param n_keys Number of sort keys.
  * @param n_pes Number of MPI ranks.
  * @param n_total Global table length.
  * @param n_local Local table length (=> length of local_sort)
@@ -246,10 +246,10 @@ std::shared_ptr<table_info> get_samples_from_table_local(
  * on all other ranks.
  */
 std::shared_ptr<table_info> get_samples_from_table_parallel(
-    std::shared_ptr<table_info> local_sort, int64_t n_key_t, int n_pes,
+    std::shared_ptr<table_info> local_sort, int64_t n_keys, int n_pes,
     int64_t n_total, int64_t n_local, bool parallel) {
     tracing::Event ev("get_samples_from_table_parallel", parallel);
-    ev.add_attribute("n_key_t", n_key_t);
+    ev.add_attribute("n_keys", n_keys);
     ev.add_attribute("n_local", n_local);
     ev.add_attribute("n_total", n_total);
 
@@ -258,12 +258,12 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 
     // Get n_loc_sample many local samples from the local sorted chunk
     std::shared_ptr<table_info> samples = get_samples_from_table_local(
-        std::move(local_sort), n_key_t, n_loc_sample, n_local, parallel);
+        std::move(local_sort), n_keys, n_loc_sample, n_local, parallel);
 
     // Collecting all samples
     bool all_gather = false;
     std::shared_ptr<table_info> all_samples =
-        gather_table(std::move(samples), n_key_t, all_gather, parallel);
+        gather_table(std::move(samples), n_keys, all_gather, parallel);
     return all_samples;
 }
 
@@ -274,7 +274,7 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 /**
  *   SORT VALUES
  *
- * Sorts the input table by the first n_key_t columns. Returns a list of indices
+ * Sorts the input table by the first n_keys columns. Returns a list of indices
  * into the input table that can be used to retrieve the sorted table. See
  * sort_values_table_local for a method that returns a sorted table.
  *
@@ -282,12 +282,11 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
  * tracing should be parallel or not)
  */
 bodo::vector<int64_t> sort_values_table_local_get_indices(
-    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    std::shared_ptr<table_info> in_table, size_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
     size_t start_offset, size_t n_rows, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("sort_values_table_local", is_parallel);
-    size_t n_key = size_t(n_key_t);
     bodo::vector<int64_t> ListIdx(n_rows, pool);
     for (size_t i = 0; i < n_rows; i++) {
         ListIdx[i] = start_offset + i;
@@ -295,7 +294,7 @@ bodo::vector<int64_t> sort_values_table_local_get_indices(
 
     // The comparison operator gets called many times by timsort so any overhead
     // can influence the sort time significantly
-    if (n_key == 1) {
+    if (n_keys == 1) {
         // comparison operator with less overhead than the general n_key > 1
         // case. We call KeyComparisonAsPython_Column directly without looping
         // through the keys, assume fixed values for some parameters and pass
@@ -326,7 +325,7 @@ bodo::vector<int64_t> sort_values_table_local_get_indices(
         const auto f = [&](size_t const& iRow1, size_t const& iRow2) -> bool {
             size_t shift_key1 = 0, shift_key2 = 0;
             bool test = KeyComparisonAsPython(
-                n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
+                n_keys, vect_ascending, in_table->columns, shift_key1, iRow1,
                 in_table->columns, shift_key2, iRow2, na_position);
             return test;
         };
@@ -339,7 +338,7 @@ bodo::vector<int64_t> sort_values_table_local_get_indices(
 /**
  *   SORT VALUES
  *
- * Sorts the input table by the first n_key_t columns.
+ * Sorts the input table by the first n_keys columns.
  *
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
@@ -393,7 +392,7 @@ std::shared_ptr<table_info> sort_values_table_local(
  * mainly needed for dict encoded string arrays. In those cases, it is important
  * for the dictionary in this reference table to be same as the dictionary of
  * the actual array.
- * @param n_key_t Number of key columns.
+ * @param n_keys Number of key columns.
  * @param vect_ascending Vector of booleans (one for each key column) describing
  * whether to sort in ascending order on the key columns.
  * @param na_position Vector of booleans (one for each key column) describing
@@ -406,7 +405,7 @@ std::shared_ptr<table_info> sort_values_table_local(
  */
 std::shared_ptr<table_info> compute_bounds_from_samples(
     std::shared_ptr<table_info> all_samples,
-    std::shared_ptr<table_info> ref_table, int64_t n_key_t,
+    std::shared_ptr<table_info> ref_table, int64_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, int myrank,
     int n_pes, bool parallel) {
     tracing::Event ev("compute_bounds_from_samples", parallel);
@@ -415,7 +414,7 @@ std::shared_ptr<table_info> compute_bounds_from_samples(
     std::shared_ptr<table_info> pre_bounds = nullptr;
     if (myrank == mpi_root) {
         std::shared_ptr<table_info> all_samples_sort = sort_values_table_local(
-            std::move(all_samples), n_key_t, vect_ascending, na_position,
+            std::move(all_samples), n_keys, vect_ascending, na_position,
             nullptr, parallel);
         int64_t n_samples = all_samples_sort->nrows();
         int64_t step = ceil(double(n_samples) / double(n_pes));
@@ -439,7 +438,7 @@ std::shared_ptr<table_info> compute_bounds_from_samples(
     // The underlying dictionary is the same for local_sort and pre_bounds
     // for the dict columns, as needed for broadcast_table.
     std::shared_ptr<table_info> bounds =
-        broadcast_table(std::move(ref_table), std::move(pre_bounds), n_key_t,
+        broadcast_table(std::move(ref_table), std::move(pre_bounds), n_keys,
                         parallel, mpi_root);
 
     return bounds;
@@ -450,7 +449,7 @@ std::shared_ptr<table_info> compute_bounds_from_samples(
  * sample of the data.
  *
  * @param local_sort locally sorted table
- * @param n_key_t number of sort keys
+ * @param n_keys number of sort keys
  * @param vect_ascending ascending/descending order for each key
  * @param na_position NA behavior (first or last) for each key
  * @param n_local number of local rows
@@ -462,26 +461,26 @@ std::shared_ptr<table_info> compute_bounds_from_samples(
  * @return std::shared_ptr<table_info> Bounds table with n_pes-1 rows.
  */
 std::shared_ptr<table_info> get_parallel_sort_bounds(
-    std::shared_ptr<table_info> local_sort, int64_t n_key_t,
+    std::shared_ptr<table_info> local_sort, int64_t n_keys,
     int64_t* vect_ascending, int64_t* na_position, int64_t n_local,
     int64_t n_total, int myrank, int n_pes, bool parallel) {
     tracing::Event ev("get_parallel_sort_bounds", parallel);
     // Compute samples from the locally sorted table.
     // (Filled on rank 0, empty on all other ranks)
     std::shared_ptr<table_info> all_samples = get_samples_from_table_parallel(
-        local_sort, n_key_t, n_pes, n_total, n_local, parallel);
+        local_sort, n_keys, n_pes, n_total, n_local, parallel);
 
     // Compute split bounds from the samples.
     // Output is broadcasted to all ranks.
     std::shared_ptr<table_info> bounds = compute_bounds_from_samples(
-        std::move(all_samples), std::move(local_sort), n_key_t, vect_ascending,
+        std::move(all_samples), std::move(local_sort), n_keys, vect_ascending,
         na_position, myrank, n_pes, parallel);
 
     return bounds;
 }
 
 std::shared_ptr<table_info> sort_values_table(
-    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    std::shared_ptr<table_info> in_table, int64_t n_keys,
     int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
     int64_t* out_n_rows, std::shared_ptr<table_info> bounds, bool parallel) {
     tracing::Event ev("sort_values_table", parallel);
@@ -515,7 +514,7 @@ std::shared_ptr<table_info> sort_values_table(
     // Want to keep dead keys only when we will perform a shuffle operation
     // later in the function
     std::shared_ptr<table_info> local_sort = sort_values_table_local(
-        std::move(in_table), n_key_t, vect_ascending, na_position,
+        std::move(in_table), n_keys, vect_ascending, na_position,
         (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
 
     if (!parallel) {
@@ -531,10 +530,10 @@ std::shared_ptr<table_info> sort_values_table(
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     if (bounds == nullptr) {
-        bounds = get_parallel_sort_bounds(local_sort, n_key_t, vect_ascending,
+        bounds = get_parallel_sort_bounds(local_sort, n_keys, vect_ascending,
                                           na_position, n_local, n_total, myrank,
                                           n_pes, parallel);
-    } else if (n_key_t != 1) {
+    } else if (n_keys != 1) {
         // throw error if more than one key since the rest of manual bounds
         // handling only supports one key cases
         throw std::runtime_error(
@@ -554,7 +553,7 @@ std::shared_ptr<table_info> sort_values_table(
         // is less than the current key. All destination keys should be less
         // than or equal its bound (k <= bounds[rank_id])
         while (rank_id < uint32_t(n_pes - 1) &&
-               KeyComparisonAsPython(n_key_t, vect_ascending, bounds->columns,
+               KeyComparisonAsPython(n_keys, vect_ascending, bounds->columns,
                                      shift_key2, rank_id, local_sort->columns,
                                      shift_key1, i, na_position)) {
             rank_id++;
@@ -579,19 +578,19 @@ std::shared_ptr<table_info> sort_values_table(
 
     // Final local sorting
     std::shared_ptr<table_info> ret_table = sort_values_table_local(
-        std::move(collected_table), n_key_t, vect_ascending, na_position,
+        std::move(collected_table), n_keys, vect_ascending, na_position,
         dead_keys, parallel);
     return ret_table;
 }
 
-table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
+table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_keys,
                                        int64_t* vect_ascending,
                                        int64_t* na_position, int64_t* dead_keys,
                                        int64_t* out_n_rows, table_info* bounds,
                                        bool parallel) {
     try {
         std::shared_ptr<table_info> out = sort_values_table(
-            std::shared_ptr<table_info>(in_table), n_key_t, vect_ascending,
+            std::shared_ptr<table_info>(in_table), n_keys, vect_ascending,
             na_position, dead_keys, out_n_rows,
             std::shared_ptr<table_info>(bounds), parallel);
         return new table_info(*out);
@@ -1001,7 +1000,7 @@ std::shared_ptr<array_info> get_parallel_sort_bounds_for_domain(
             // columns are just NULLs.
             std::shared_ptr<table_info> all_samples =
                 get_samples_from_table_parallel(
-                    std::move(dummy_table), /*n_key_t*/ 1, n_pes,
+                    std::move(dummy_table), /*n_keys*/ 1, n_pes,
                     n_total[table_idx], n_local[table_idx], parallel);
             std::shared_ptr<array_info> all_samples_arr =
                 all_samples->columns[0];
