@@ -42,7 +42,7 @@ void array_isin_py_entry(array_info* out_arr, array_info* in_arr,
  * @param parallel, true in case of parallel computation, false otherwise.
  */
 std::shared_ptr<table_info> sort_values_table(
-    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    std::shared_ptr<table_info> in_table, int64_t n_keys,
     int64_t* vect_ascending, int64_t* na_position, int64_t* dead_keys,
     int64_t* out_n_rows, std::shared_ptr<table_info> bounds, bool parallel);
 
@@ -65,7 +65,7 @@ std::shared_ptr<table_info> sort_values_table(
  Iceberg MERGE INTO.
  * @param parallel, true in case of parallel computation, false otherwise.
  */
-table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
+table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_keys,
                                        int64_t* vect_ascending,
                                        int64_t* na_position, int64_t* dead_keys,
                                        int64_t* out_n_rows, table_info* bounds,
@@ -84,7 +84,7 @@ table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
  * the sort_values_table_local function which internally does just that.
  *
  * @param in_table input table to sort
- * @param n_key_t number of columns to be considered as part of the sort key
+ * @param n_keys number of columns to be considered as part of the sort key
  * @param vect_ascending whether a column should be sorted as ascending or
  * descending
  * @param na_position controls where nulls should be sent per column (beginning
@@ -96,7 +96,7 @@ table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_key_t,
  * @param mm
  */
 bodo::vector<int64_t> sort_values_table_local_get_indices(
-    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    std::shared_ptr<table_info> in_table, size_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
     size_t start_offset, size_t n_rows,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -109,7 +109,7 @@ bodo::vector<int64_t> sort_values_table_local_get_indices(
  * effectively do a full copy of the input.
  */
 std::shared_ptr<table_info> sort_values_table_local(
-    std::shared_ptr<table_info> in_table, int64_t n_key_t,
+    std::shared_ptr<table_info> in_table, int64_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position,
     const int64_t* dead_keys, bool is_parallel,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -395,7 +395,7 @@ bodo::vector<int64_t> get_sample_selection_vector(int64_t n_local,
  * mainly needed for dict encoded string arrays. In those cases, it is important
  * for the dictionary in this reference table to be same as the dictionary of
  * the actual array.
- * @param n_key_t Number of key columns.
+ * @param n_keys Number of key columns.
  * @param vect_ascending Vector of booleans (one for each key column) describing
  * whether to sort in ascending order on the key columns.
  * @param na_position Vector of booleans (one for each key column) describing
@@ -408,6 +408,6 @@ bodo::vector<int64_t> get_sample_selection_vector(int64_t n_local,
  */
 std::shared_ptr<table_info> compute_bounds_from_samples(
     std::shared_ptr<table_info> all_samples,
-    std::shared_ptr<table_info> ref_table, int64_t n_key_t,
+    std::shared_ptr<table_info> ref_table, int64_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, int myrank,
     int n_pes, bool parallel);

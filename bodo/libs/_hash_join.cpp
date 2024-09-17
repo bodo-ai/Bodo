@@ -1666,7 +1666,7 @@ void hash_join_compute_tuples_helper(
 std::shared_ptr<table_info> hash_join_table_inner(
     std::shared_ptr<table_info> left_table,
     std::shared_ptr<table_info> right_table, bool left_parallel,
-    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
+    bool right_parallel, size_t n_keys, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
     bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
@@ -1683,15 +1683,14 @@ std::shared_ptr<table_info> hash_join_table_inner(
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     // Doing checks and basic assignments.
-    size_t n_key = size_t(n_key_t);
     size_t n_data_left = size_t(n_data_left_t);
     size_t n_data_right = size_t(n_data_right_t);
-    size_t n_tot_left = n_key + n_data_left;
-    size_t n_tot_right = n_key + n_data_right;
+    size_t n_tot_left = n_keys + n_data_left;
+    size_t n_tot_right = n_keys + n_data_right;
     // Check that the input is valid.
     // This ensures that the array type and dtype of key columns are the same
     // in both tables. This is an assumption we will use later in the code.
-    validate_equi_join_input(left_table, right_table, n_key, extra_data_col);
+    validate_equi_join_input(left_table, right_table, n_keys, extra_data_col);
 
     if (ev.is_tracing()) {
         ev.add_attribute("in_left_table_nrows",
@@ -1700,7 +1699,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
                          static_cast<size_t>(right_table->nrows()));
         ev.add_attribute("g_left_parallel", left_parallel);
         ev.add_attribute("g_right_parallel", right_parallel);
-        ev.add_attribute("g_n_key", n_key_t);
+        ev.add_attribute("g_n_key", n_keys);
         ev.add_attribute("g_n_data_cols_left", n_data_left_t);
         ev.add_attribute("g_n_data_cols_right", n_data_right_t);
         ev.add_attribute("g_is_left", is_left_outer);
@@ -1710,13 +1709,13 @@ std::shared_ptr<table_info> hash_join_table_inner(
     }
     // Handle dict encoding
     equi_join_keys_handle_dict_encoded(left_table, right_table, left_parallel,
-                                       right_parallel, n_key);
+                                       right_parallel, n_keys);
 
     auto [left_cond_func_cols_set, right_cond_func_cols_set] =
         create_non_equi_func_sets(
             left_table, right_table, cond_func_left_columns,
             cond_func_left_column_len, cond_func_right_columns,
-            cond_func_right_column_len, left_parallel, right_parallel, n_key);
+            cond_func_right_column_len, left_parallel, right_parallel, n_keys);
 
     // Now deciding how we handle the parallelization of the tables
     // and doing the allgather/shuffle exchanges as needed.
@@ -1741,7 +1740,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
           right_replicated] =
         equi_join_shuffle(left_table, right_table, is_left_outer,
                           is_right_outer, left_parallel, right_parallel, n_pes,
-                          n_key, is_na_equal);
+                          n_keys, is_na_equal);
     ev.add_attribute("g_left_replicated", left_replicated);
     ev.add_attribute("g_right_replicated", right_replicated);
 
@@ -1757,10 +1756,10 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // Now computing the hashes that will be used in the hash map
     // or compared to the hash map.
     //
-    std::shared_ptr<uint32_t[]> hashes_left =
-        hash_keys_table(work_left_table, n_key, SEED_HASH_JOIN, parallel_trace);
+    std::shared_ptr<uint32_t[]> hashes_left = hash_keys_table(
+        work_left_table, n_keys, SEED_HASH_JOIN, parallel_trace);
     std::shared_ptr<uint32_t[]> hashes_right = hash_keys_table(
-        work_right_table, n_key, SEED_HASH_JOIN, parallel_trace);
+        work_right_table, n_keys, SEED_HASH_JOIN, parallel_trace);
 
     bool build_is_left = select_build_table(n_rows_left, n_rows_right,
                                             is_left_outer, is_right_outer, ev);
@@ -1925,15 +1924,15 @@ std::shared_ptr<table_info> hash_join_table_inner(
     // General implementation with generic key comparator class.
     // Used for non-specialized cases.
 #ifndef EQ_JOIN_IMPL_ELSE_CASE
-#define EQ_JOIN_IMPL_ELSE_CASE                                               \
-    using JoinKeyType = joinHashFcts::KeyEqualHashJoinTable;                 \
-    JoinKeyType equal_fct{build_table_rows, n_key, build_table, probe_table, \
-                          is_na_equal};                                      \
+#define EQ_JOIN_IMPL_ELSE_CASE                                                \
+    using JoinKeyType = joinHashFcts::KeyEqualHashJoinTable;                  \
+    JoinKeyType equal_fct{build_table_rows, n_keys, build_table, probe_table, \
+                          is_na_equal};                                       \
     EQ_JOIN_IMPL_COMMON(JoinKeyType);
 #endif
 
     // Use faster specialized implementation for common 1 key cases.
-    if (n_key == 1) {
+    if (n_keys == 1) {
         std::shared_ptr<array_info> build_arr = build_table->columns[0];
         bodo_array_type::arr_type_enum build_arr_type = build_arr->arr_type;
         Bodo_CTypes::CTypeEnum build_dtype = build_arr->dtype;
@@ -1974,7 +1973,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
         if (!found_match) {
             EQ_JOIN_IMPL_ELSE_CASE;
         }
-    } else if (n_key == 2) {
+    } else if (n_keys == 2) {
         std::shared_ptr<array_info> build_arr1 = build_table->columns[0];
         std::shared_ptr<array_info> build_arr2 = build_table->columns[1];
         bodo_array_type::arr_type_enum build_arr_type1 = build_arr1->arr_type;
@@ -2190,7 +2189,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
 
     generate_col_last_use_info(
         last_col_use_left, last_col_use_right, work_left_table,
-        work_right_table, n_tot_left, n_tot_right, n_key, vect_same_key,
+        work_right_table, n_tot_left, n_tot_right, n_keys, vect_same_key,
         key_in_output, left_cond_func_cols_set, right_cond_func_cols_set,
         extra_data_col, is_join);
 
@@ -2234,7 +2233,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
     int idx = 0;
 
     // Insert the key columns
-    for (size_t i = 0; i < n_key; i++) {
+    for (size_t i = 0; i < n_keys; i++) {
         // Check if this key column is included.
         if (key_in_output[key_in_output_idx++]) {
             if (vect_same_key[i] == 1) {
@@ -2283,7 +2282,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
         }
     }
     // Insert the data columns
-    for (size_t i = n_key; i < n_tot_left; i++) {
+    for (size_t i = n_keys; i < n_tot_left; i++) {
         if (left_cond_func_cols_set->contains(i) &&
             !key_in_output[key_in_output_idx++]) {
             // If this data column is used in the non equality
@@ -2314,7 +2313,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
     tracing::Event ev_fill_right("fill_right", parallel_trace);
 
     // Insert right keys
-    for (size_t i = 0; i < n_key; i++) {
+    for (size_t i = 0; i < n_keys; i++) {
         // vect_same_key[i] == 0 means this key doesn't become a natural
         // join and get clobbered. The !is_join is unclear but seems to be
         // because DataFrame.join always merged with the index of the right
@@ -2342,7 +2341,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
         }
     }
     // Insert the data columns
-    for (size_t i = n_key; i < n_tot_right; i++) {
+    for (size_t i = n_keys; i < n_tot_right; i++) {
         if (right_cond_func_cols_set->contains(i) &&
             !key_in_output[key_in_output_idx++]) {
             // If this data column is used in the non equality
@@ -2429,7 +2428,7 @@ std::shared_ptr<table_info> hash_join_table_inner(
 
 table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
-    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
+    bool right_parallel, int64_t n_keys, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
     bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
@@ -2441,7 +2440,7 @@ table_info* hash_join_table(
         std::shared_ptr<table_info> out_table = hash_join_table_inner(
             std::shared_ptr<table_info>(left_table),
             std::shared_ptr<table_info>(right_table), left_parallel,
-            right_parallel, n_key_t, n_data_left_t, n_data_right_t,
+            right_parallel, n_keys, n_data_left_t, n_data_right_t,
             vect_same_key, key_in_output, use_nullable_arr_type, is_left_outer,
             is_right_outer, is_join, extra_data_col, indicator, is_na_equal,
             rebalance_if_skewed, cond_func, cond_func_left_columns,

@@ -82,7 +82,7 @@ typedef void (*cond_expr_fn_batch_t)(
  * @param right_table : the right table
  * @param left_parallel : whether the left table is parallel or not
  * @param right_parallel : whether the right table is parallel or not
- * @param n_key_t : the number of columns of keys on input
+ * @param n_keys : the number of columns of keys on input
  * @param n_data_left_t : the number of columns of data on the left
  * @param n_data_right_t : the number of columns of data on the right
  * @param vect_same_key : a vector of integers specifying if a key has the same
@@ -124,7 +124,7 @@ typedef void (*cond_expr_fn_batch_t)(
  */
 table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
-    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
+    bool right_parallel, int64_t n_keys, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* use_nullable_arr_type, bool is_left_outer, bool is_right_outer,
     bool is_join, bool extra_data_col, bool indicator, bool is_na_equal,
