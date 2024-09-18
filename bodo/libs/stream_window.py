@@ -1043,8 +1043,6 @@ def gen_window_build_consume_batch_impl(window_state: WindowStateType, table, is
     in_col_inds = MetaType(window_state.build_indices)
     n_table_cols = len(in_col_inds)
     casted_table_type, _ = window_state.derive_common_table_types()
-    if casted_table_type == types.unknown:
-        casted_table_type = table
 
     if window_state.is_sort_impl:
 
@@ -1144,11 +1142,8 @@ def gen_window_produce_output_batch_impl(window_state: WindowStateType, produce_
     """
     out_table_type = window_state.out_table_type
 
-    if out_table_type == types.unknown:
-        out_cols_arr = np.array([], dtype=np.int64)
-    else:
-        out_cols = window_state.cpp_output_table_to_py_table_indices
-        out_cols_arr = np.array(out_cols, dtype=np.int64)
+    out_cols = window_state.cpp_output_table_to_py_table_indices
+    out_cols_arr = np.array(out_cols, dtype=np.int64)
 
     if window_state.is_sort_impl:
 
@@ -1236,10 +1231,10 @@ class GroupbyProduceOutputInfer(AbstractTemplate):
         window_state = get_call_expr_arg(
             "window_produce_output_batch", args, kws, 0, "window_state"
         )
-        if window_state.build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "window_produce_output_batch: unknown table type in streaming state type"
-            )
+        StreamingStateType.ensure_known_inputs(
+            "window_produce_output_batch",
+            (window_state.build_table_type,),
+        )
         out_table_type = window_state.out_table_type
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types((out_table_type, types.bool_))

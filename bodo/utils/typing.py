@@ -80,7 +80,7 @@ def is_nullable(typ):
     )
 
 
-def is_nullable_ignore_sentinals(typ) -> bool:
+def is_nullable_ignore_sentinels(typ) -> bool:
     return bodo.utils.utils.is_array_typ(typ, False) and (
         not isinstance(typ, types.Array)
     )

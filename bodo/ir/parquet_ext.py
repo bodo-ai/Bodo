@@ -60,7 +60,7 @@ from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
     BodoError,
     FilenameType,
-    is_nullable_ignore_sentinals,
+    is_nullable_ignore_sentinels,
 )
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
@@ -712,9 +712,9 @@ def pq_reader_params(
     # type and check if that type is nullable.
     nullable_cols = [
         (
-            int(is_nullable_ignore_sentinals(out_types[col_indices_map[col_in_idx]]))
+            int(is_nullable_ignore_sentinels(out_types[col_indices_map[col_in_idx]]))
             if col_in_idx != index_column_index
-            else int(is_nullable_ignore_sentinals(index_column_type))
+            else int(is_nullable_ignore_sentinels(index_column_type))
         )
         for col_in_idx in selected_cols
     ]

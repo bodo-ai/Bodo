@@ -485,48 +485,42 @@ class GroupbyStateType(StreamingStateType):
         Returns:
             list[int]: Ordered list of indices.
         """
-        if self.build_table_type == types.unknown:
-            return []
-
         out_table_type = self.out_table_type
-        if out_table_type == types.unknown:
-            return []
-        else:
-            # TODO[BSE-645]: Support pruning output columns.
+        # TODO[BSE-645]: Support pruning output columns.
+        num_cols = len(out_table_type.arr_types)
+
+        if self.fnames != ("min_row_number_filter",):
+            # In the non-MRNF case, the mapping is trivial,
+            # i.e. no re-ordering of columns is required.
             num_cols = len(out_table_type.arr_types)
+            return list(range(num_cols))
+        else:
+            # In the MRNF case, we receive the output in the
+            # order:
+            # [<part_cols_to_keep>, <sort_cols_to_keep>, <remaining_cols>].
+            # We need to create a reverse map from this
+            # to self.mrnf_col_inds_keep.
 
-            if self.fnames != ("min_row_number_filter",):
-                # In the non-MRNF case, the mapping is trivial,
-                # i.e. no re-ordering of columns is required.
-                num_cols = len(out_table_type.arr_types)
-                return list(range(num_cols))
-            else:
-                # In the MRNF case, we receive the output in the
-                # order:
-                # [<part_cols_to_keep>, <sort_cols_to_keep>, <remaining_cols>].
-                # We need to create a reverse map from this
-                # to self.mrnf_col_inds_keep.
+            # First construct what the cpp output order would be:
+            cpp_out_order = []
+            seen_indices = set()
+            for idx in self.key_inds:
+                if idx in self.mrnf_col_inds_keep:
+                    cpp_out_order.append(idx)
+                    seen_indices.add(idx)
+            for idx in self.mrnf_sort_col_inds:
+                if idx in self.mrnf_col_inds_keep:
+                    cpp_out_order.append(idx)
+                    seen_indices.add(idx)
+            for idx in self.mrnf_col_inds_keep:
+                if idx not in seen_indices:
+                    cpp_out_order.append(idx)
 
-                # First construct what the cpp output order would be:
-                cpp_out_order = []
-                seen_indices = set()
-                for idx in self.key_inds:
-                    if idx in self.mrnf_col_inds_keep:
-                        cpp_out_order.append(idx)
-                        seen_indices.add(idx)
-                for idx in self.mrnf_sort_col_inds:
-                    if idx in self.mrnf_col_inds_keep:
-                        cpp_out_order.append(idx)
-                        seen_indices.add(idx)
-                for idx in self.mrnf_col_inds_keep:
-                    if idx not in seen_indices:
-                        cpp_out_order.append(idx)
-
-                # Now map the C++ order to the desired order:
-                cpp_table_to_py_map = [
-                    cpp_out_order.index(idx) for idx in self.mrnf_col_inds_keep
-                ]
-                return cpp_table_to_py_map
+            # Now map the C++ order to the desired order:
+            cpp_table_to_py_map = [
+                cpp_out_order.index(idx) for idx in self.mrnf_col_inds_keep
+            ]
+            return cpp_table_to_py_map
 
 
 register_model(GroupbyStateType)(models.OpaqueModel)
@@ -1404,8 +1398,6 @@ def gen_groupby_grouping_sets_build_consume_batch_impl(
     n_table_cols = len(in_col_inds)
 
     cast_table_type = grouping_sets_state.key_casted_table_type
-    if cast_table_type == types.unknown:
-        cast_table_type = table
 
     def impl_groupby_build_consume_batch(
         grouping_sets_state, table, is_last
@@ -1491,11 +1483,8 @@ def gen_groupby_produce_output_batch_impl(
     """
     out_table_type = groupby_state.out_table_type
 
-    if out_table_type == types.unknown:
-        out_cols_arr = np.array([], dtype=np.int64)
-    else:
-        out_cols = groupby_state.cpp_output_table_to_py_table_idx_map
-        out_cols_arr = np.array(out_cols, dtype=np.int64)
+    out_cols = groupby_state.cpp_output_table_to_py_table_idx_map
+    out_cols_arr = np.array(out_cols, dtype=np.int64)
 
     def impl_groupby_produce_output_batch(
         groupby_state,
@@ -1524,10 +1513,9 @@ class GroupbyProduceOutputInfer(AbstractTemplate):
         groupby_state = get_call_expr_arg(
             "groupby_produce_output_batch", args, kws, 0, "groupby_state"
         )
-        if groupby_state.build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "groupby_produce_output_batch: unknown table type in streaming groupby state type"
-            )
+        StreamingStateType.ensure_known_inputs(
+            "groupby_produce_output_batch", (groupby_state.build_table_type,)
+        )
         out_table_type = groupby_state.out_table_type
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types((out_table_type, types.bool_))
@@ -1596,11 +1584,8 @@ def gen_groupby_grouping_sets_produce_output_batch_impl(
     """
     out_table_type = grouping_sets_state.out_table_type
 
-    if out_table_type == types.unknown:
-        out_cols_arr = np.array([], dtype=np.int64)
-    else:
-        out_cols = grouping_sets_state.cpp_output_table_to_py_table_idx_map
-        out_cols_arr = np.array(out_cols, dtype=np.int64)
+    out_cols = grouping_sets_state.cpp_output_table_to_py_table_idx_map
+    out_cols_arr = np.array(out_cols, dtype=np.int64)
 
     def impl_groupby_grouping_sets_produce_output_batch(
         grouping_sets_state,
@@ -1633,10 +1618,10 @@ class GroupbyProduceGroupingSetsOutputInfer(AbstractTemplate):
             0,
             "grouping_sets_state",
         )
-        if grouping_sets_state.build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "groupby_grouping_sets_produce_output_batch: unknown table type in streaming grouping sets state type"
-            )
+        StreamingStateType.ensure_known_inputs(
+            "groupby_grouping_sets_produce_output_batch",
+            (grouping_sets_state.build_table_type,),
+        )
         out_table_type = grouping_sets_state.out_table_type
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types((out_table_type, types.bool_))
