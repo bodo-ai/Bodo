@@ -106,7 +106,12 @@ static std::pair<uint64_t, uint64_t> get_optimal_sort_chunk_size_and_k(
     if (char* max_k_env_ = std::getenv("BODO_STREAM_SORT_MAX_K")) {
         max_k = static_cast<uint64_t>(std::stoi(max_k_env_));
     }
-    assert(min_k >= 2);
+    if (min_k < 2) {
+        throw std::runtime_error(
+            fmt::format("get_optimal_sort_chunk_size_and_k: min_k must be >=2! "
+                        "Tried to set it to {}.",
+                        min_k));
+    }
 
     if (bytes_per_row_ <= 0 || mem_budget_bytes == 0) {
         return {min_chunk_size, min_k};
@@ -293,7 +298,11 @@ ExternalKWayMergeSorter::ExternalKWayMergeSorter(
                                       ? processing_chunk_size_
                                       : optimal_chunk_size;
     this->K = K_ != -1 ? K_ : optimal_k;
-    assert(this->K >= 2);
+    if (this->K < 2) {
+        throw std::runtime_error(fmt::format(
+            "ExternalKWayMergeSorter: K must be >=2! Tried to set it to {}.",
+            this->K));
+    }
     this->metrics.merge_chunks_K = this->K;
     this->metrics.merge_chunks_processing_chunk_size =
         this->processing_chunk_size;
