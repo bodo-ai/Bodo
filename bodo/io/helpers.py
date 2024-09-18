@@ -49,7 +49,7 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.typing import (
     BodoError,
-    is_nullable_ignore_sentinals,
+    is_nullable_ignore_sentinels,
     raise_bodo_error,
 )
 
@@ -356,7 +356,7 @@ def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
     """
 
     return (
-        is_nullable_ignore_sentinals(numba_type)
+        is_nullable_ignore_sentinels(numba_type)
         or isinstance(numba_type, bodo.DatetimeArrayType)
         or (
             isinstance(numba_type, types.Array)

@@ -64,7 +64,7 @@ from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
-    is_nullable_ignore_sentinals,
+    is_nullable_ignore_sentinels,
     is_overload_constant_str,
 )
 from bodo.utils.utils import (
@@ -124,11 +124,11 @@ class SnowflakeReadParams(NamedTuple):
         ]
 
         nullable_cols = [
-            int(is_nullable_ignore_sentinals(col_typs[i])) for i in out_used_cols
+            int(is_nullable_ignore_sentinels(col_typs[i])) for i in out_used_cols
         ]
         # Handle if we need to append an index
         if index_column_name:
-            nullable_cols.append(int(is_nullable_ignore_sentinals(index_column_type)))
+            nullable_cols.append(int(is_nullable_ignore_sentinels(index_column_type)))
         snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
         nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
 

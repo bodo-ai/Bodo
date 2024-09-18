@@ -57,7 +57,7 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
-    is_nullable_ignore_sentinals,
+    is_nullable_ignore_sentinels,
     raise_bodo_error,
 )
 from bodo.utils.utils import (
@@ -1252,7 +1252,7 @@ def _gen_iceberg_reader_chunked_py(
         out_pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
     ]
     nullable_cols = [
-        int(is_nullable_ignore_sentinals(col_typs[i])) for i in out_selected_cols
+        int(is_nullable_ignore_sentinels(col_typs[i])) for i in out_selected_cols
     ]
     source_selected_cols: list[int] = [
         source_pyarrow_schema.get_field_index(col_names[i]) for i in out_used_cols
@@ -1513,7 +1513,7 @@ def _gen_iceberg_reader_py(
     ]
     selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
     nullable_cols = [
-        int(is_nullable_ignore_sentinals(col_typs[i])) for i in selected_cols
+        int(is_nullable_ignore_sentinels(col_typs[i])) for i in selected_cols
     ]
 
     # pass indices to C++ of the selected string columns that are to be read
