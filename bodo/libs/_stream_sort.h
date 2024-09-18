@@ -704,7 +704,7 @@ struct StreamSortState {
             this->schema, this->dict_builders, this->n_keys,
             this->vect_ascending, this->na_position, this->dead_keys,
             this->mem_budget_bytes, this->bytes_per_row, -1, -1,
-            this->output_chunk_size, -this->kway_merge_k,
+            this->output_chunk_size, this->kway_merge_k,
             this->kway_merge_chunksize, this->enable_inmem_concat_sort, op_pool,
             op_mm);
     }
