@@ -1090,11 +1090,7 @@ def gen_init_join_state_impl(
     build_table_type = output_type.key_casted_build_table_type
     probe_table_type = output_type.key_casted_probe_table_type
 
-    if (
-        not is_overload_none(non_equi_condition)
-        and build_table_type != types.unknown
-        and probe_table_type != types.unknown
-    ):
+    if not is_overload_none(non_equi_condition):
         from bodo.ir.join import (
             add_join_gen_cond_cfunc_sym,
             gen_general_cond_cfunc,
@@ -1264,8 +1260,6 @@ def gen_join_build_consume_batch_impl(join_state, table, is_last):
     in_col_inds = MetaType(join_state.build_indices)
     n_table_cols = join_state.num_build_input_arrs
     cast_table_type = join_state.key_casted_build_table_type
-    if cast_table_type == types.unknown:
-        cast_table_type = table
 
     def impl_join_build_consume_batch(join_state, table, is_last):  # pragma: no cover
         cast_table = bodo.utils.table_utils.table_astype(
@@ -1803,8 +1797,6 @@ def gen_join_probe_consume_batch_impl(
     in_col_inds = MetaType(join_state.probe_indices)
     n_table_cols = join_state.num_probe_input_arrs
     cast_table_type = join_state.key_casted_probe_table_type
-    if cast_table_type == types.unknown:
-        cast_table_type = table
     out_table_type = join_state.output_type
 
     # Determine the live columns.
@@ -1856,14 +1848,10 @@ class JoinProbeConsumeBatchInfer(AbstractTemplate):
         join_state = get_call_expr_arg(
             "join_probe_consume_batch", args, kws, 0, "join_state"
         )
-        if (
-            join_state.build_table_type == types.unknown
-            or join_state.probe_table_type == types.unknown
-        ):
-            raise numba.NumbaError(
-                "join_probe_consume_batch: unknown table type in streaming join state type"
-            )
-
+        StreamingStateType.ensure_known_inputs(
+            "join_probe_consume_batch",
+            (join_state.build_table_type, join_state.probe_table_type),
+        )
         out_table_type = join_state.output_type
         # Output is (out_table, out_is_last, request_input)
         output_type = types.BaseTuple.from_types(

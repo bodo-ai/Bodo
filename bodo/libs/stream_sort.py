@@ -366,7 +366,7 @@ def gen_sort_build_consume_batch_impl(sort_state, table, is_last):
         table (table_type): build table batch
         is_last (bool): is last batch locally
     Returns:
-        bool: is last batch globally with possiblity of false negatives due to iterations between syncs
+        bool: is last batch globally with possibility of false negatives due to iterations between syncs
     """
     n_table_cols = len(sort_state.build_table_type.arr_types)
     in_col_inds = MetaType(tuple(sort_state.column_mapping))
@@ -433,7 +433,7 @@ def gen_produce_output_batch_impl(sort_state, produce_output):
         sort_state (SortState): C++ SortState pointer
         produce_output (bool): should produce output
     Returns:
-        bool: is last batch globally with possiblity of false negatives due to iterations between syncs
+        bool: is last batch globally with possibility of false negatives due to iterations between syncs
     """
     # Undo the mapping in column_mapping (move key columns from prefix back to
     # their original locations)
@@ -464,10 +464,10 @@ class SortFinalizeInfer(AbstractTemplate):
         sort_state = get_call_expr_arg(
             "produce_output_batch", args, kws, 0, "sort_state"
         )
-        if sort_state._build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "produce_output_batch: unknown table type in streaming sort state type"
-            )
+        StreamingStateType.ensure_known_inputs(
+            "produce_output_batch",
+            (sort_state._build_table_type,),
+        )
 
         # Output is (out_table, out_is_last)
         output_type = types.BaseTuple.from_types(

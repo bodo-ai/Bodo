@@ -269,10 +269,7 @@ def gen_init_table_builder_state_impl(
 ):
     """Initialize the C++ TableBuilderState pointer"""
     expected_state_type = unwrap_typeref(expected_state_type)
-    if is_overload_none(expected_state_type):
-        output_type = TableBuilderStateType()
-    else:
-        output_type = expected_state_type
+    output_type = expected_state_type
 
     arr_dtypes = output_type.arr_ctypes
     arr_array_types = output_type.arr_array_types
@@ -280,9 +277,7 @@ def gen_init_table_builder_state_impl(
     # We can just pass the length of the serialized types directly, since on the C++ side we immediately deserialize.
     n_arrs = len(arr_array_types)
 
-    if not is_overload_none(expected_state_type) and get_overload_const_bool(
-        use_chunked_builder
-    ):
+    if get_overload_const_bool(use_chunked_builder):
         assert (
             expected_state_type.is_chunked_builder
         ), "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
@@ -400,7 +395,7 @@ def gen_table_builder_append_impl(builder_state, table):
     n_table_cols = builder_state.num_input_arrs
     in_col_inds = MetaType(tuple(range(n_table_cols)))
 
-    if not is_overload_none(builder_state) and builder_state.is_chunked_builder:
+    if builder_state.is_chunked_builder:
 
         def impl(builder_state, table):  # pragma: no cover
             cpp_table = py_data_to_cpp_table(table, (), in_col_inds, n_table_cols)
@@ -486,11 +481,10 @@ class TableBuilderFinalizeInfer(AbstractTemplate):
         pysig = numba.core.utils.pysignature(table_builder_finalize)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         builder_state = unwrap_typeref(folded_args[0])
-        if builder_state._build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "table_builder_finalize: unknown table type in table builder"
-            )
-
+        StreamingStateType.ensure_known_inputs(
+            "table_builder_finalize",
+            (builder_state._build_table_type,),
+        )
         return signature(builder_state.build_table_type, *folded_args).replace(
             pysig=pysig
         )
@@ -517,7 +511,7 @@ def gen_table_builder_finalize_impl(builder_state):
     num_cols = len(out_table_type.arr_types)
     out_cols_arr = np.array(range(num_cols), dtype=np.int64)
 
-    if not is_overload_none(builder_state) and builder_state.is_chunked_builder:
+    if builder_state.is_chunked_builder:
         raise RuntimeError("Chunked table builder finalize not implemented")
     else:
 
@@ -587,10 +581,10 @@ class TableBuilderPopChunkInfer(AbstractTemplate):
         pysig = numba.core.utils.pysignature(table_builder_pop_chunk)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         builder_state = folded_args[0]
-        if builder_state._build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "table_builder_pop_chunk: unknown table type in table builder"
-            )
+        StreamingStateType.ensure_known_inputs(
+            "table_builder_pop_chunk",
+            (builder_state._build_table_type,),
+        )
         output_type = types.BaseTuple.from_types(
             (builder_state.build_table_type, types.bool_)
         )
@@ -621,7 +615,7 @@ def gen_table_builder_pop_chunk_impl(builder_state, produce_output=True):
     num_cols = len(out_table_type.arr_types)
     out_cols_arr = np.array(range(num_cols), dtype=np.int64)
 
-    if not is_overload_none(builder_state) and builder_state.is_chunked_builder:
+    if builder_state.is_chunked_builder:
 
         def impl(builder_state, produce_output=True):  # pragma: no cover
             out_cpp_table, is_last = _chunked_table_builder_pop_chunk(
@@ -634,7 +628,7 @@ def gen_table_builder_pop_chunk_impl(builder_state, produce_output=True):
             return out_table, is_last
 
     else:
-        raise RuntimeError("Chunked table builder finalize not implemented")
+        raise RuntimeError("TableBuildBuffer finalize not implemented")
 
     return impl
 
@@ -685,7 +679,7 @@ def _delete_table_builder_state(
 def delete_table_builder_state(builder_state):
     """Deletes the table builder state."""
 
-    if not is_overload_none(builder_state) and builder_state.is_chunked_builder:
+    if builder_state.is_chunked_builder:
 
         def impl(
             builder_state,
@@ -736,10 +730,10 @@ class TableBuilderGetDataInfer(AbstractTemplate):
         pysig = numba.core.utils.pysignature(table_builder_get_data)
         folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
         builder_state = folded_args[0]
-        if builder_state._build_table_type == types.unknown:
-            raise numba.NumbaError(
-                "table_builder_get_data: unknown table type in table builder"
-            )
+        StreamingStateType.ensure_known_inputs(
+            "table_builder_get_data",
+            (builder_state._build_table_type,),
+        )
         output_type = builder_state.build_table_type
         return signature(output_type, *folded_args).replace(pysig=pysig)
 

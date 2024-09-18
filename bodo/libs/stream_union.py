@@ -32,7 +32,7 @@ from bodo.utils.typing import (
     error_on_unsupported_streaming_arrays,
     get_common_scalar_dtype,
     get_overload_const_bool,
-    is_nullable_ignore_sentinals,
+    is_nullable_ignore_sentinels,
     is_overload_bool,
     is_overload_none,
     unwrap_typeref,
@@ -123,7 +123,7 @@ class UnionStateType(StreamingStateType):
             ]
             is_nullable_out_col = any(
                 col_type == bodo.null_array_type
-                or is_nullable_ignore_sentinals(col_type)
+                or is_nullable_ignore_sentinels(col_type)
                 for col_type in in_col_types
             )
 
@@ -298,10 +298,7 @@ def _union_cast_batch(union_state: UnionStateType, table: TableType):
         table_type: Casted table argument
     """
 
-    if (
-        union_state.out_table_type == table
-        or union_state.out_table_type == types.unknown
-    ):
+    if union_state.out_table_type == table:
         return lambda union_state, table: table
 
     py_table_typ: TableType = union_state.out_table_type  # type: ignore
