@@ -14,6 +14,7 @@
 #include "_query_profile_collector.h"
 #include "_shuffle.h"
 #include "_utils.h"
+#include "fmt/format.h"
 
 void IncrementalShuffleMetrics::add_to_metrics(
     std::vector<MetricBase>& metrics) {
@@ -845,10 +846,9 @@ std::pair<bool, std::shared_ptr<table_info>> AsyncShuffleRecvState::recvDone(
     // having the recv step fill it directly instead of each rank having its own
     // array and inserting them all into a builder
     int flag;
-    HANDLE_MPI_ERROR(
-        MPI_Testall(recv_requests.size(), recv_requests.data(), &flag,
-                    MPI_STATUSES_IGNORE),
-        "AsyncShuffleRecvState::recvDone: MPI Error on MPI_Testall:");
+    CHECK_MPI_TEST_ALL(
+        recv_requests, flag,
+        "[AsyncShuffleRecvState::recvDone] MPI Error on MPI_Testall: ");
 
     std::shared_ptr<table_info> out_table = nullptr;
     if (flag) {
