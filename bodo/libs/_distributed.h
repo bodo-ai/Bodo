@@ -17,15 +17,45 @@
 
 #define ROOT_PE 0
 
+// Helper macro to make an MPI call that returns an error code. In case of an
+// error, this raises a runtime_error (with MPI error details).
 #define HANDLE_MPI_ERROR(CALL, USER_ERR_MSG_PREFIX)                           \
     {                                                                         \
         int err = CALL;                                                       \
         if (err) {                                                            \
-            char err_msg[MPI_MAX_ERROR_STRING];                               \
-            MPI_Error_string(err, err_msg, nullptr);                          \
+            char err_msg[MPI_MAX_ERROR_STRING + 1];                           \
+            int err_msg_len = 0;                                              \
+            MPI_Error_string(err, err_msg, &err_msg_len);                     \
             throw std::runtime_error(USER_ERR_MSG_PREFIX + std::string(" ") + \
-                                     std::string(err_msg));                   \
+                                     std::string(err_msg, err_msg_len));      \
         }                                                                     \
+    }
+
+/**
+ * @brief Print (to std::cerr) and raise a detailed error for MPI_Testall with
+ * details about the top-level error as well as the individual status-es.
+ *
+ * @param err Top-level error code.
+ * @param req_status_arr List of status-es for each of the requests passed to
+ * MPI_Testall.
+ * @param user_err_prefix String to use as a prefix for the overall error
+ * message.
+ */
+void print_and_raise_detailed_mpi_test_all_err(
+    int err, const std::vector<MPI_Status>& req_status_arr,
+    const std::string_view user_err_prefix);
+
+// Helper macro for MPI_Testall. In case of an error, this prints and raises a
+// detailed error message about each of the individual status-es.
+#define CHECK_MPI_TEST_ALL(requests, flag, USER_ERR_MSG_PREFIX)         \
+    {                                                                   \
+        std::vector<MPI_Status> req_status_arr(requests.size());        \
+        int err = MPI_Testall(requests.size(), requests.data(), &flag,  \
+                              req_status_arr.data());                   \
+        if (err) {                                                      \
+            print_and_raise_detailed_mpi_test_all_err(                  \
+                err, req_status_arr, std::string(USER_ERR_MSG_PREFIX)); \
+        }                                                               \
     }
 
 // XXX same as distributed_api.py:Reduce_Type
