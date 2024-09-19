@@ -244,10 +244,8 @@ void ExternalKWayMergeSorterFinalizeMetrics::ExportMetrics(
     APPEND_TIMER_METRIC(finalize_inmem_concat_time);
     APPEND_TIMER_METRIC(finalize_inmem_sort_time);
     APPEND_TIMER_METRIC(finalize_inmem_output_append_time);
-    APPEND_STAT_METRIC(n_leaf_level_merges);
-    APPEND_TIMER_METRIC(leaf_level_merges_time);
     APPEND_STAT_METRIC(n_merge_levels);
-    APPEND_STAT_METRIC(n_non_leaf_level_chunk_merges);
+    APPEND_STAT_METRIC(n_chunk_merges);
     APPEND_TIMER_METRIC(merge_chunks_total_time);
     APPEND_TIMER_METRIC(merge_chunks_make_heap_time);
     APPEND_TIMER_METRIC(merge_chunks_output_append_time);
@@ -768,44 +766,18 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
     }
 
     std::vector<std::deque<TableAndRange>> sorted_chunks;
-    this->metrics.n_merge_levels++;
-    time_pt start_leaf_merge = start_timer();
-    bool is_last = (input_chunks.size() <= this->K);
+
+    // Insert the input chunks (already sorted) as single-element deques as the
+    // starting point.
     while (!input_chunks.empty()) {
-        std::vector<std::deque<TableAndRange>> chunks;
-        // Take this->K chunks at a time and put them each into a vector so
-        // that we can call MergeChunks, which expects a vector of vector of
-        // chunks. Each inner vector of chunks is expected to be sorted - a
-        // vector of a single sorted chunk is by definition, sorted.
-        for (size_t i = 0; i < this->K && !input_chunks.empty(); i++) {
-            chunks.push_back({input_chunks.back()});
-            input_chunks.pop_back();
-        }
-
-        if (is_last) {
-            if (this->sortlimits.has_value()) {
-                sorted_chunks.emplace_back(
-                    this->MergeChunks<true, true>(std::move(chunks)));
-            } else {
-                sorted_chunks.emplace_back(
-                    this->MergeChunks<true, false>(std::move(chunks)));
-            }
-        } else {
-            if (this->sortlimits.has_value()) {
-                sorted_chunks.emplace_back(
-                    this->MergeChunks<false, true>(std::move(chunks)));
-            } else {
-                sorted_chunks.emplace_back(
-                    this->MergeChunks<false, false>(std::move(chunks)));
-            }
-        }
-        this->metrics.n_leaf_level_merges++;
+        sorted_chunks.push_back({input_chunks.back()});
+        input_chunks.pop_back();
     }
-    this->metrics.leaf_level_merges_time += end_timer(start_leaf_merge);
 
+    // Now we will merge K chunks at a time at each level.
     while (sorted_chunks.size() > 1) {
         this->metrics.n_merge_levels++;
-        is_last = (sorted_chunks.size() <= this->K);
+        bool is_last = (sorted_chunks.size() <= this->K);
         std::vector<std::deque<TableAndRange>> next_sorted_chunks;
         // This loop takes this->K vectors and merges them into 1 on every
         // iteration.
@@ -836,7 +808,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
                             std::move(merge_input)));
                 }
             }
-            this->metrics.n_non_leaf_level_chunk_merges++;
+            this->metrics.n_chunk_merges++;
         }
 
         std::swap(sorted_chunks, next_sorted_chunks);

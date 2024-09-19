@@ -213,9 +213,7 @@ struct ExternalKWayMergeSorterFinalizeMetrics {
     time_t finalize_inmem_concat_time = 0;
     time_t finalize_inmem_sort_time = 0;
     time_t finalize_inmem_output_append_time = 0;
-    stat_t n_leaf_level_merges = 0;
-    time_t leaf_level_merges_time = 0;
-    stat_t n_non_leaf_level_chunk_merges = 0;
+    stat_t n_chunk_merges = 0;
     stat_t n_merge_levels = 0;
     time_t merge_chunks_total_time = 0;
     time_t merge_chunks_make_heap_time = 0;
