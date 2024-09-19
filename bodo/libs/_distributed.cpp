@@ -6,6 +6,7 @@
 #include <ctime>
 #include <fstream>
 #include <vector>
+#include "fmt/format.h"
 
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
     defined(CHECK_LICENSE_PLATFORM)
@@ -480,6 +481,44 @@ static int num_days_till_license_expiration(int exp_year, int exp_month,
 }
 
 #endif  // CHECK_LICENSE_EXPIRED) || CHECK_LICENSE_CORE_COUNT
+
+void print_and_raise_detailed_mpi_test_all_err(
+    int err, const std::vector<MPI_Status> &req_status_arr,
+    const std::string_view user_err_prefix) {
+    char testall_mpi_err_msg_[MPI_MAX_ERROR_STRING + 1];
+    int testall_mpi_err_msg_len = 0;
+    MPI_Error_string(err, testall_mpi_err_msg_, &testall_mpi_err_msg_len);
+
+    std::string overall_err_msg = fmt::format(
+        "{}MPI_Error Code: {}. "
+        "MPI_Error_string:\n\t{}\nIndividual Status Details:\n",
+        user_err_prefix, err,
+        std::string(testall_mpi_err_msg_, testall_mpi_err_msg_len));
+
+    for (size_t i = 0; i < req_status_arr.size(); i++) {
+        const MPI_Status &status = req_status_arr[i];
+        std::string mpi_err_msg;
+        if (status.MPI_ERROR == MPI_SUCCESS) {
+            mpi_err_msg = "MPI_SUCCESS";
+        } else if (status.MPI_ERROR == MPI_ERR_PENDING) {
+            mpi_err_msg = "MPI_ERR_PENDING";
+        } else {
+            char mpi_err_msg_[MPI_MAX_ERROR_STRING + 1];
+            int mpi_err_msg_len = 0;
+            MPI_Error_string(status.MPI_ERROR, mpi_err_msg_, &mpi_err_msg_len);
+            mpi_err_msg = std::string(mpi_err_msg_, mpi_err_msg_len);
+        }
+        overall_err_msg += fmt::format(
+            "\tStatus #{}: MPI_SOURCE: {}, MPI_TAG: {}, MPI_ERROR Code: "
+            "{}, MPI_Error_string:\n\t\t{}\n",
+            i, status.MPI_SOURCE, status.MPI_TAG, status.MPI_ERROR,
+            mpi_err_msg);
+    }
+
+    // Print the error message.
+    std::cerr << overall_err_msg << std::endl;
+    throw std::runtime_error(overall_err_msg);
+}
 
 void _dist_transpose_comm(char *output, char *input, int typ_enum,
                           int64_t n_loc_rows, int64_t n_cols) {

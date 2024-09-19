@@ -135,10 +135,9 @@ class AsyncShuffleSendState {
      */
     bool sendDone() {
         int flag;
-        HANDLE_MPI_ERROR(
-            MPI_Testall(send_requests.size(), send_requests.data(), &flag,
-                        MPI_STATUSES_IGNORE),
-            "AsyncShuffleSendState::sendDone: MPI error on MPI_Testall:");
+        CHECK_MPI_TEST_ALL(
+            send_requests, flag,
+            "[AsyncShuffleSendState::sendDone] MPI error on MPI_Testall: ")
         return flag;
     }
 
