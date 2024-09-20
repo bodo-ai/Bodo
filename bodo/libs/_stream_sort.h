@@ -434,6 +434,8 @@ struct StreamSortMetrics {
     stat_t shuffle_approx_sent_size_bytes_dicts = 0;
     stat_t shuffle_total_recv_size_bytes = 0;
     stat_t n_rows_after_shuffle = 0;
+    stat_t max_concurrent_sends = 0;
+    stat_t max_concurrent_recvs = 0;
     // We only get approx_recv_size_bytes_dicts and dict_unification_time
     // from this.
     // TODO(aneesh) Refactor to avoid using this object as is, instead having
@@ -577,10 +579,14 @@ struct StreamSortState {
     bool build_finalized = false;
 
     // These are only for unit testing purposes. -1 means selecting the optimal
-    // values based on the budget, etc.
+    // values based on the budget, number of ranks, etc.
     const int64_t kway_merge_chunksize = -1;
     const int64_t kway_merge_k = -1;
     const bool enable_inmem_concat_sort = true;
+    const int64_t shuffle_chunksize = -1;
+    // This will either be overridden or set to MPI_Comm_size during
+    // initialization.
+    const size_t shuffle_max_concurrent_sends;
 
     // Initialized during `FinalizeBuild` once all rows have been seen.
     int64_t bytes_per_row = -1;
@@ -628,7 +634,9 @@ struct StreamSortState {
                     size_t output_chunk_size_ = STREAMING_BATCH_SIZE,
                     int64_t kway_merge_chunk_size_ = -1,
                     int64_t kway_merge_k_ = -1,
-                    bool enable_inmem_concat_sort_ = true);
+                    bool enable_inmem_concat_sort_ = true,
+                    int64_t shuffle_chunksize_ = -1,
+                    int64_t shuffle_max_concurrent_sends_ = -1);
     /**
      * @brief Consume an unsorted table and use it for global sorting
      *

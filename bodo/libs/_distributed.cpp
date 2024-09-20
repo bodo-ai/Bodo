@@ -515,7 +515,10 @@ void print_and_raise_detailed_mpi_test_all_err(
             mpi_err_msg);
     }
 
-    // Print the error message.
+    // Sometimes long messages aren't propagated properly all the way to Python,
+    // so we also print the error message to be safe. A failure in MPI_Testall
+    // implies a bug in Bodo (and potentially a hard to reproduce one), so it
+    // should be rare.
     std::cerr << overall_err_msg << std::endl;
     throw std::runtime_error(overall_err_msg);
 }
