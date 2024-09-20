@@ -353,7 +353,7 @@ python_add_library(
     "bodo/transforms/fast_typer.cpp"
 )
 
-target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/")
+target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/")
 target_link_directories(native_typer PRIVATE ${PYARROW_LIB_DIR})
 target_link_libraries(native_typer PRIVATE fmt)
 install(TARGETS native_typer DESTINATION "bodo/transforms/")

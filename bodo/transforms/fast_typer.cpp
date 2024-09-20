@@ -2,10 +2,7 @@
 #include "fast_typer.h"
 #include <functional>
 #include <unordered_map>
-
-// Declaring unbox_args from Cython manually to work around Cython not
-// generating native_typer.h file (TODO: fix)
-std::vector<std::shared_ptr<bodo::Type>> unbox_args(PyObject*);
+#include "native_typer.h"
 
 namespace bodo {
 
