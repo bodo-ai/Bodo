@@ -51,3 +51,16 @@ jobs:
           which mvn
           cd BodoSQL/calcite_sql/
           mvn -B -U test
+        
+      # Publishing Test Results
+      # Always run both even if tests fail
+      - name: Publish Test Result Failures
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: 'BodoSQL/calcite_sql/bodosql-calcite-application/target/surefire-reports/TEST-*.xml'        
+      - name: Publish Test Results in Comment
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: success() || failure()
+        with:
+          files: 'BodoSQL/calcite_sql/bodosql-calcite-application/target/surefire-reports/TEST-*.xml'
