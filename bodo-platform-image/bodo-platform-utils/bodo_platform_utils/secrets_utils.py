@@ -1,14 +1,21 @@
+import json
+
+import boto3
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from mpi4py import MPI
-import boto3
-import json
-from bodo_platform_utils.config import WORKSPACE_UUID, REGION, CLOUD_PROVIDER, DEFAULT_SECRET_GROUP
-from bodo_platform_utils.utils_types import CloudProvider
+
+from bodo_platform_utils.config import (
+    BODO_PLATFORM_WORKSPACE_REGION,
+    BODO_PLATFORM_WORKSPACE_UUID,
+    BODO_PLATFORM_CLOUD_PROVIDER,
+    DEFAULT_SECRET_GROUP,
+)
+from bodo_platform_utils.types import CloudProvider
 
 
 def _get_ssm_parameter(parameter_name):
-    ssm_client = boto3.client("ssm", REGION)
+    ssm_client = boto3.client("ssm", BODO_PLATFORM_WORKSPACE_REGION)
     parameters = ssm_client.get_parameters(Names=[parameter_name], WithDecryption=True)
     params = parameters.get("Parameters", None)
     if params is None:
@@ -27,7 +34,7 @@ def _get_ssm_parameter(parameter_name):
 def _get_keyvault_secret(secret_name, keyvault_name: str = None, is_default=True):
     credentials = DefaultAzureCredential()
     if is_default:
-        keyvault_name = f"bodoaikv-{WORKSPACE_UUID[:12]}"
+        keyvault_name = f"bodoaikv-{BODO_PLATFORM_WORKSPACE_UUID[:12]}"
 
     if not keyvault_name:
         raise ValueError("Provide Azure keyvault name")
@@ -47,20 +54,20 @@ def get(name, secret_group=DEFAULT_SECRET_GROUP, _parallel=True):
     :return: JSON object containing the data
     """
 
-    if CLOUD_PROVIDER == CloudProvider.AWS:
-        parameter_name = f"/bodo/workspaces/{WORKSPACE_UUID}/secret-groups/{secret_group}/{name}"
+    if BODO_PLATFORM_CLOUD_PROVIDER == CloudProvider.AWS:
+        parameter_name = f"/bodo/workspaces/{BODO_PLATFORM_WORKSPACE_UUID}/secret-groups/{secret_group}/{name}"
         if _parallel:
             return _get_ssm_parameter_parallel(parameter_name)
 
         return _get_ssm_parameter(parameter_name)
 
-    elif CLOUD_PROVIDER == CloudProvider.AZURE:
+    elif BODO_PLATFORM_CLOUD_PROVIDER == CloudProvider.AZURE:
         if _parallel:
             return _get_keyvault_secret_parallel(name)
 
         return _get_keyvault_secret(name)
     else:
-        raise ValueError(f"Unrecognized Cloud Provider: {CLOUD_PROVIDER}")
+        raise ValueError(f"Unrecognized Cloud Provider: {BODO_PLATFORM_CLOUD_PROVIDER}")
 
 
 def _get_ssm_parameter_parallel(name):

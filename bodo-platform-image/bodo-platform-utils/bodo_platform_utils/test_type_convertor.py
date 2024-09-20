@@ -17,7 +17,7 @@ class TestTypeConverter:
         assert type(get_value_for_type({"type": "BOOL8", "value": "true"})) == np.bool_
 
     def test_bool8_none_conversion(self):
-        assert get_value_for_type({"type": "BOOL8", "value": None}) == None
+        assert get_value_for_type({"type": "BOOL8", "value": None}) is None
 
     def test_int64_conversion(self):
         assert get_value_for_type({"type": "INT64", "value": "123"}) == np.int64(123)

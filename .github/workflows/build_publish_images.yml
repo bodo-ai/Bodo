@@ -151,6 +151,7 @@ jobs:
             bodo-platform-utils/ \
             bodo-platform-extensions/ \
             bodo-platform-ipyparallel-kernel/ \
+            bodo-platform-sql-service \
             bodo-platform-ddl-service
 
       - name: Create Azure Image definition
