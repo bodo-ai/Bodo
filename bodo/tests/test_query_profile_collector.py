@@ -1795,6 +1795,8 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         ("shuffle_n_barrier_tests", not small_limit_case and n_pes > 1),
         ("n_shuffle_send", not small_limit_case and n_pes > 1),
         ("n_shuffle_recv", not small_limit_case and n_pes > 1),
+        ("max_concurrent_sends", not small_limit_case and n_pes > 1),
+        ("max_concurrent_recvs", not small_limit_case and n_pes > 1),
         ("shuffle_total_sent_nrows", not small_limit_case and n_pes > 1),
         ("shuffle_total_recv_nrows", not small_limit_case and n_pes > 1),
         ("shuffle_total_approx_sent_size_bytes", not small_limit_case and n_pes > 1),

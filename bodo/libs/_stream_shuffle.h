@@ -5,6 +5,7 @@
 #include "_distributed.h"
 #include "_query_profile_collector.h"
 #include "_table_builder.h"
+#include "fmt/format.h"
 
 #define DEFAULT_SHUFFLE_THRESHOLD 50 * 1024 * 1024  // 50MiB
 #define MIN_SHUFFLE_THRESHOLD 50 * 1024 * 1024      // 50MiB
@@ -18,8 +19,8 @@ constexpr float SHUFFLE_BUFFER_CUTOFF_MULTIPLIER = 3.0;
 // to clear
 constexpr float SHUFFLE_BUFFER_MIN_UTILIZATION = 0.5;
 
-// Tag for message sending the lengths of the outgoing arrays
-constexpr int LENGTH_TAG = 0;
+// Tag for message sending the metadata of the outgoing arrays.
+constexpr int SHUFFLE_METADATA_MSG_TAG = 0;
 
 // Streaming batch size. The default of 4096 should match the default of
 // bodosql_streaming_batch_size defined in __init__.py
@@ -120,12 +121,26 @@ class IncrementalShuffleMetrics {
 class AsyncShuffleSendState {
    public:
     /**
+     * @brief Construct a new send state.
+     *
+     * @param starting_msg_tag Starting message tag to use for posting the
+     * messages that send the data buffers.
+     */
+    explicit AsyncShuffleSendState(int starting_msg_tag_);
+
+    /**
+     * @brief Getter for starting_msg_tag.
+     *
+     * @return int
+     */
+    int get_starting_msg_tag() const { return this->starting_msg_tag; }
+
+    /**
      * @brief Post async sends to shuffle a table to other ranks
      * @param in_table Input table
      * @param comm_info MPI communication information
      * @param shuffle_comm MPI communicator for shuffle
      */
-
     void send(const std::shared_ptr<table_info>& in_table,
               mpi_comm_info& comm_info, MPI_Comm shuffle_comm);
 
@@ -163,8 +178,13 @@ class AsyncShuffleSendState {
     // Will be one array for simple types and more for nested/dictionary types.
     std::vector<std::shared_ptr<array_info>> send_arrs;
 
-    std::vector<std::vector<uint64_t>> rank_to_lens;
+    std::vector<std::vector<uint64_t>> rank_to_metadata_vec;
     std::vector<MPI_Request> send_requests;
+    // Starting message tag to use for posting the messages that send the data
+    // buffers. This enables sending multiple tables to ranks (as long as the
+    // sender, e.g. StreamSort, maintains sufficient state to not re-use tags
+    // for concurrent sends).
+    int starting_msg_tag = -1;
 
     /**
      * @brief Compute communication information for sending a table
@@ -183,9 +203,9 @@ class AsyncShuffleSendState {
      * from
      * @param shuffle_comm MPI communicator for shuffle
      */
-    void send_lengths(const std::shared_ptr<table_info>& in_table,
-                      mpi_comm_info& comm_info, comm_infos_t& comm_infos,
-                      MPI_Comm shuffle_comm);
+    void send_metadata(const std::shared_ptr<table_info>& in_table,
+                       mpi_comm_info& comm_info, comm_infos_t& comm_infos,
+                       MPI_Comm shuffle_comm);
 
     /**
      * @brief send array buffers for table to each rank
@@ -671,19 +691,20 @@ class AsyncShuffleRecvState {
         MPI_Comm shuffle_comm, IncrementalShuffleMetrics& metrics);
 
     /**
-     * @brief Post MPI_Imrecv call for lengths of incoming arrays
+     * @brief Post MPI_Imrecv call for metadata (starting msg tag and lengths of
+     * incoming arrays)
      * @param status MPI status object for probe of length message
      * @param m MPI_Message to recv length from
      */
-    void PostLensRecv(MPI_Status& status, MPI_Message& m);
+    void PostMetadataRecv(MPI_Status& status, MPI_Message& m);
 
     /**
-     * @brief test if the request posted by PostLensRecv is complete and if
-     * so, get the lengths and post receives for the data arrays.
+     * @brief test if the request posted by PostMetadataRecv is complete and if
+     * so, get the metadata and post receives for the data arrays.
      *
      * @param shuffle_comm MPI communicator for shuffle
      */
-    void TryRecvLensAndAllocArrs(MPI_Comm& shuffle_comm);
+    void TryRecvMetadataAndAllocArrs(MPI_Comm& shuffle_comm);
 
     /**
      * @brief Get total memory size of recv buffers in flight
@@ -700,20 +721,22 @@ class AsyncShuffleRecvState {
 
    private:
     /**
-     * @brief Return the lengths of incoming arrays
+     * @brief Return the metadata for the incoming arrays. The metadata consists
+     * of the starting MPI tag to post receives on as well as the lengths of the
+     * buffers.
      * @param shuffle_comm MPI communicator for shuffle
      * note that this function should only be called once
      * since it clears the underlying buffer
      */
-    std::optional<std::vector<uint64_t>> GetRecvLens(MPI_Comm shuffle_comm);
+    std::optional<std::vector<uint64_t>> GetRecvMetadata(MPI_Comm shuffle_comm);
 
     std::shared_ptr<array_info> finalize_receive_array(
         const std::shared_ptr<array_info>& arr,
         const std::shared_ptr<DictionaryBuilder>& dict_builder,
         std::vector<uint32_t>& data_lens_vec,
         IncrementalShuffleMetrics& metrics);
-    MPI_Request lens_request = MPI_REQUEST_NULL;
-    std::vector<uint64_t> recv_lens;
+    MPI_Request metadata_request = MPI_REQUEST_NULL;
+    std::vector<uint64_t> metadata_vec;
 };
 
 /**
@@ -990,11 +1013,14 @@ class IncrementalShuffleState {
  * @param hashes partition hashes for choosing target ranks
  * @param shuffle_comm MPI communicator for shuffle (each operator has to have
  its own)
+ * @param starting_msg_tag Starting message tag to use for posting the messages
+ that send the data buffers.
  */
-AsyncShuffleSendState shuffle_issend(std::shared_ptr<table_info> in_table,
-                                     const std::shared_ptr<uint32_t[]>& hashes,
-                                     const uint8_t* keep_row_bitmask,
-                                     MPI_Comm shuffle_comm);
+AsyncShuffleSendState shuffle_issend(
+    std::shared_ptr<table_info> in_table,
+    const std::shared_ptr<uint32_t[]>& hashes, const uint8_t* keep_row_bitmask,
+    MPI_Comm shuffle_comm,
+    int starting_msg_tag = (SHUFFLE_METADATA_MSG_TAG + 1));
 
 /**
  * @brief Checks for incoming shuffle messages using MPI probe and fills recieve
