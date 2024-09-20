@@ -197,6 +197,16 @@ IncrementalShuffleState::GetShuffleTableAndHashes() {
                            std::unique_ptr<uint8_t[]>(nullptr));
 }
 
+AsyncShuffleSendState::AsyncShuffleSendState(int starting_msg_tag_)
+    : starting_msg_tag(starting_msg_tag_) {
+    if (this->starting_msg_tag <= SHUFFLE_METADATA_MSG_TAG) {
+        throw std::runtime_error(
+            fmt::format("[AsyncShuffleSendState] Starting tag ({}) must be "
+                        "larger than SHUFFLE_METADATA_MSG_TAG ({})!",
+                        this->starting_msg_tag, SHUFFLE_METADATA_MSG_TAG));
+    }
+}
+
 #define SEND_SHUFFLE_DATA(ARR_TYPE, DTYPE)                                   \
     send_shuffle_data<ARR_TYPE, DTYPE>(                                      \
         shuffle_comm, comm_info, comm_info_iter, str_comm_info_iter, in_arr, \
@@ -557,35 +567,38 @@ std::unique_ptr<array_info> recv_shuffle_data_unknown_type(
 AsyncShuffleSendState shuffle_issend(std::shared_ptr<table_info> in_table,
                                      const std::shared_ptr<uint32_t[]>& hashes,
                                      const uint8_t* keep_row_bitmask,
-                                     MPI_Comm shuffle_comm) {
+                                     MPI_Comm shuffle_comm,
+                                     int starting_msg_tag) {
     mpi_comm_info comm_info(in_table->columns, hashes,
                             /*is_parallel*/ true, /*filter*/ nullptr,
                             keep_row_bitmask,
                             /*keep_filter_misses*/ false, /*send_only*/ true);
 
-    AsyncShuffleSendState send_state;
+    AsyncShuffleSendState send_state(starting_msg_tag);
     send_state.send(in_table, comm_info, shuffle_comm);
 
     return send_state;
 }
 
-void AsyncShuffleRecvState::TryRecvLensAndAllocArrs(MPI_Comm& shuffle_comm) {
+void AsyncShuffleRecvState::TryRecvMetadataAndAllocArrs(
+    MPI_Comm& shuffle_comm) {
     // Only post irecv if we haven't already
     if (!recv_requests.empty()) {
         return;
     }
-    std::optional<std::vector<uint64_t>> recv_lens_opt =
-        GetRecvLens(shuffle_comm);
+    std::optional<std::vector<uint64_t>> recv_metadata_opt =
+        GetRecvMetadata(shuffle_comm);
     // Only post irecv if we have received the lens
-    if (!recv_lens_opt.has_value()) {
+    if (!recv_metadata_opt.has_value()) {
         return;
     }
-    std::vector<uint64_t>& recv_lens = recv_lens_opt.value();
+    std::vector<uint64_t>& metadata_vec = recv_metadata_opt.value();
 
-    len_iter_t lens_iter = recv_lens.cbegin();
+    // In the metadata, the starting tag to use is the first element, followed
+    // by the lengths.
+    int curr_tag = metadata_vec.at(0);
+    len_iter_t lens_iter = metadata_vec.cbegin() + 1;
 
-    // Start with tag = 1 since tag = 0 is for the lengths
-    int curr_tag = 1;
     // Post irecv for all data
     for (uint64_t i = 0; i < schema->column_types.size(); i++) {
         std::unique_ptr<bodo::DataType>& data_type = schema->column_types[i];
@@ -619,8 +632,8 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
         // states that "Unlike MPI_IPROBE, no other probe or receive operation
         // may match the message returned by MPI_IMPROBE.".
         MPI_Message m;
-        HANDLE_MPI_ERROR(MPI_Improbe(MPI_ANY_SOURCE, LENGTH_TAG, shuffle_comm,
-                                     &flag, &m, &status),
+        HANDLE_MPI_ERROR(MPI_Improbe(MPI_ANY_SOURCE, SHUFFLE_METADATA_MSG_TAG,
+                                     shuffle_comm, &flag, &m, &status),
                          "shuffle_irecv: MPI error on MPI_Improbe:")
         if (!flag) {
             break;
@@ -628,14 +641,14 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
 
         AsyncShuffleRecvState recv_state(status.MPI_SOURCE, in_table->schema());
 
-        recv_state.PostLensRecv(status, m);
+        recv_state.PostMetadataRecv(status, m);
         recv_states.push_back(std::move(recv_state));
     }
 
     // TODO(aneesh) it seems like a weird API to have this happen in
     // shuffle_irecv instead of exclusively happening in recvDone
     for (auto& recv_state : recv_states) {
-        recv_state.TryRecvLensAndAllocArrs(shuffle_comm);
+        recv_state.TryRecvMetadataAndAllocArrs(shuffle_comm);
     }
 }
 
@@ -836,7 +849,7 @@ std::pair<bool, std::shared_ptr<table_info>> AsyncShuffleRecvState::recvDone(
     if (recv_requests.empty()) {
         // Try receiving the length again and see if we can populate the data
         // requests.
-        TryRecvLensAndAllocArrs(shuffle_comm);
+        TryRecvMetadataAndAllocArrs(shuffle_comm);
         if (recv_requests.empty()) {
             return std::make_pair(false, nullptr);
         }
@@ -882,7 +895,7 @@ void AsyncShuffleSendState::send(const std::shared_ptr<table_info>& in_table,
                                  mpi_comm_info& comm_info,
                                  MPI_Comm shuffle_comm) {
     comm_infos_t sub_comm_infos = this->compute_comm_infos(in_table, comm_info);
-    this->send_lengths(in_table, comm_info, sub_comm_infos, shuffle_comm);
+    this->send_metadata(in_table, comm_info, sub_comm_infos, shuffle_comm);
     this->send_arrays(in_table, comm_info, sub_comm_infos, shuffle_comm);
 }
 
@@ -936,7 +949,7 @@ AsyncShuffleSendState::comm_infos_t AsyncShuffleSendState::compute_comm_infos(
 /**
  * @brief Helper function to compute the lengths of the arrays in the supplied
  * array_info and it's children and store them in the rank_to_lens vector. Only
- * intended to be called by send_lengths.
+ * intended to be called by send_metadata.
  * @param in_arr The array_info for which to compute the lengths
  * @param rank_to_lens length vector for each rank
  * @param rank The rank for which to compute the lengths
@@ -982,10 +995,11 @@ void compute_lengths_helper(const std::shared_ptr<array_info>& in_arr,
     }
 }
 
-void AsyncShuffleSendState::send_lengths(
+void AsyncShuffleSendState::send_metadata(
     const std::shared_ptr<table_info>& in_table, mpi_comm_info& comm_info,
     comm_infos_t& sub_comm_infos, MPI_Comm shuffle_comm) {
-    this->rank_to_lens = std::vector<std::vector<uint64_t>>(comm_info.n_pes);
+    // Compute buffer lengths for each rank.
+    std::vector<std::vector<uint64_t>> rank_to_lens(comm_info.n_pes);
 
     for (int rank = 0; rank < comm_info.n_pes; rank++) {
         comm_info_iter_t comm_info_iter = std::get<0>(sub_comm_infos).cbegin();
@@ -997,23 +1011,36 @@ void AsyncShuffleSendState::send_lengths(
         }
     }
 
-    for (size_t rank = 0; rank < rank_to_lens.size(); rank++) {
+    // Construct and send the metadata message.
+    this->rank_to_metadata_vec =
+        std::vector<std::vector<uint64_t>>(comm_info.n_pes);
+    for (int rank = 0; rank < comm_info.n_pes; rank++) {
         // Don't send messages to ranks with no data
         if (rank_to_lens[rank][0] == 0) {
             continue;
         }
+
+        // The first element is the starting message tag. It will be followed by
+        // the message lengths.
+        this->rank_to_metadata_vec[rank] = {
+            static_cast<uint64_t>(this->starting_msg_tag)};
+        this->rank_to_metadata_vec[rank].insert(
+            this->rank_to_metadata_vec[rank].end(), rank_to_lens[rank].begin(),
+            rank_to_lens[rank].end());
+
         MPI_Request req;
         HANDLE_MPI_ERROR(
-            MPI_Issend(rank_to_lens[rank].data(), rank_to_lens[rank].size(),
-                       MPI_UINT64_T, rank, LENGTH_TAG, shuffle_comm, &req),
-            "AsyncShuffleSendState::send_lengths: MPI error on MPI_Issend:");
+            MPI_Issend(this->rank_to_metadata_vec[rank].data(),
+                       this->rank_to_metadata_vec[rank].size(), MPI_UINT64_T,
+                       rank, SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
+            "AsyncShuffleSendState::send_metadata: MPI error on MPI_Issend:");
         this->send_requests.push_back(req);
     }
 }
 void AsyncShuffleSendState::send_arrays(
     const std::shared_ptr<table_info>& in_table, mpi_comm_info& comm_info,
     AsyncShuffleSendState::comm_infos_t& comm_infos, MPI_Comm shuffle_comm) {
-    std::vector<int> curr_tags(comm_info.n_pes, 1);
+    std::vector<int> curr_tags(comm_info.n_pes, this->starting_msg_tag);
     comm_info_iter_t sub_comm_info_iter = std::get<0>(comm_infos).begin();
     str_comm_info_iter_t str_comm_info_iter = std::get<1>(comm_infos).begin();
     for (uint64_t i = 0; i < in_table->ncols(); i++) {
@@ -1025,35 +1052,36 @@ void AsyncShuffleSendState::send_arrays(
     }
 }
 
-std::optional<std::vector<uint64_t>> AsyncShuffleRecvState::GetRecvLens(
+std::optional<std::vector<uint64_t>> AsyncShuffleRecvState::GetRecvMetadata(
     MPI_Comm shuffle_comm) {
     int flag;
-    assert(this->lens_request != MPI_REQUEST_NULL);
+    assert(this->metadata_request != MPI_REQUEST_NULL);
     HANDLE_MPI_ERROR(
-        MPI_Test(&this->lens_request, &flag, MPI_STATUS_IGNORE),
-        "AsyncShuffleRecvState::GetRecvLens: MPI error on MPI_Test:");
+        MPI_Test(&this->metadata_request, &flag, MPI_STATUS_IGNORE),
+        "AsyncShuffleRecvState::GetRecvMetadata: MPI error on MPI_Test:");
     if (!flag) {
         return std::nullopt;
     }
-    this->lens_request = MPI_REQUEST_NULL;
+    this->metadata_request = MPI_REQUEST_NULL;
 
-    std::vector<uint64_t> ret_val = std::move(this->recv_lens);
-    this->recv_lens.clear();
+    std::vector<uint64_t> ret_val = std::move(this->metadata_vec);
+    this->metadata_vec.clear();
     return ret_val;
 }
 
-void AsyncShuffleRecvState::PostLensRecv(MPI_Status& status, MPI_Message& m) {
-    assert(this->lens_request == MPI_REQUEST_NULL);
-    int n_lens;
+void AsyncShuffleRecvState::PostMetadataRecv(MPI_Status& status,
+                                             MPI_Message& m) {
+    assert(this->metadata_request == MPI_REQUEST_NULL);
+    int md_size;
     HANDLE_MPI_ERROR(
-        MPI_Get_count(&status, MPI_UINT64_T, &n_lens),
-        "AsyncShuffleRecvState::PostLensRecv: MPI error on MPI_Get_count:");
-    this->recv_lens.resize(n_lens);
+        MPI_Get_count(&status, MPI_UINT64_T, &md_size),
+        "AsyncShuffleRecvState::PostMetadataRecv: MPI error on MPI_Get_count:");
+    this->metadata_vec.resize(md_size);
 
     HANDLE_MPI_ERROR(
-        MPI_Imrecv(this->recv_lens.data(), this->recv_lens.size(), MPI_UINT64_T,
-                   &m, &this->lens_request),
-        "AsyncShuffleRecvState::PostLensRecv: MPI error on MPI_Imrecv:");
+        MPI_Imrecv(this->metadata_vec.data(), this->metadata_vec.size(),
+                   MPI_UINT64_T, &m, &this->metadata_request),
+        "AsyncShuffleRecvState::PostMetadataRecv: MPI error on MPI_Imrecv:");
 }
 
 void consume_completed_recvs(

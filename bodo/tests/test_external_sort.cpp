@@ -6,7 +6,8 @@
 #include "fmt/format.h"
 #include "table_generator.hpp"
 
-static void unsort_vector(std::vector<int64_t>& data) {
+template <typename T>
+static void unsort_vector(std::vector<T>& data) {
     // Randomly shuffle the input
     const int seed = 1234;
     std::mt19937 gen(seed);
@@ -1089,6 +1090,118 @@ bodo::tests::suite external_sort_tests([] {
                 bodo::tests::check(
                     end ==
                     std::min(static_cast<int64_t>(limit + offset), n_elem));
+        }
+    });
+
+    // Stress test the chunked async shuffle. We test this by using a small
+    // shuffle chunk size and allowing it to have many concurrent sends at once.
+    bodo::tests::test("test_shuffle_stress", [] {
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        // Restrict to the 2 ranks case
+        if (n_pes != 2) {
+            return;
+        }
+
+        // Rank 0: 1001-2000 (2M rows), Rank 1: 0-1000 (2M rows).
+        // This will lead to a lot of data moving from rank 0 to 1 and
+        // vice-versa.
+        size_t n_elem = 2000000;
+        std::vector<int64_t> local_data_colA(n_elem);
+        std::vector<std::string> local_data_colB(n_elem);
+        int64_t left = myrank == 0 ? 1001 : 1;
+        for (size_t i = 0; i < n_elem; i++) {
+            local_data_colA[i] = left + (i % 1000);
+            local_data_colB[i] = std::to_string(local_data_colA[i]);
+        }
+        unsort_vector(local_data_colA);
+        unsort_vector(local_data_colB);
+
+        std::vector<int64_t> vect_ascending{1};
+        std::vector<int64_t> na_position{0};
+        std::vector<int64_t> schema_data_colA{};
+        std::vector<std::string> schema_data_colB{};
+        std::shared_ptr<table_info> schema_table = bodo::tests::cppToBodo(
+            {"A", "B"}, {false, true}, {}, std::move(schema_data_colA),
+            std::move(schema_data_colB));
+
+        // shuffle_chunk_size=100 and shuffle_max_concurrent_sends=1000 to force
+        // it to do a lot of small concurrent shuffles.
+        StreamSortState state(-1, 1, std::move(vect_ascending),
+                              std::move(na_position), schema_table->schema(),
+                              true, DEFAULT_SAMPLE_SIZE, STREAMING_BATCH_SIZE,
+                              -1, -1, true, /*shuffle_chunksize_*/ 100,
+                              /*shuffle_max_concurrent_sends_*/ 5000);
+
+        const size_t input_batch_size = STREAMING_BATCH_SIZE;
+        size_t index = 0;
+        while (index < n_elem) {
+            size_t right = std::min(index + input_batch_size, n_elem);
+            std::vector<int64_t> batch_colA;
+            std::vector<std::string> batch_colB;
+            batch_colA.insert(batch_colA.end(), local_data_colA.begin() + index,
+                              local_data_colA.begin() + right);
+            batch_colB.insert(batch_colB.end(), local_data_colB.begin() + index,
+                              local_data_colB.begin() + right);
+
+            std::shared_ptr<table_info> table = bodo::tests::cppToBodo(
+                {"A", "B"}, {false, true}, {}, std::move(batch_colA),
+                std::move(batch_colB));
+            state.ConsumeBatch(table);
+            index = right;
+        }
+
+        // This is where the shuffle will occur.
+        state.FinalizeBuild();
+
+        // Collect all output tables
+        bool done = false;
+        std::vector<std::shared_ptr<table_info>> output_tables;
+        while (!done) {
+            auto res = state.GetOutput();
+            done = res.second;
+            output_tables.push_back(res.first);
+        }
+
+        /// Verify some of the metrics
+        bodo::tests::check(state.metrics.shuffle_chunk_size == 100);
+        // Depending on the calculated bounds, the number should be around 20000
+        // on both.
+        bodo::tests::check(state.metrics.n_shuffle_send >= 19000);
+        bodo::tests::check(state.metrics.n_shuffle_recv >= 19000);
+        // Similarly, these should be around 2000000 on both ranks.
+        bodo::tests::check(state.metrics.shuffle_total_sent_nrows >= 1990000);
+        bodo::tests::check(state.metrics.shuffle_total_recv_nrows >= 1990000);
+        // It will typically be able to post all allowed (5000) sends, and have
+        // >500 receives inflight at once.
+        bodo::tests::check(state.metrics.max_concurrent_sends >= 4500);
+        bodo::tests::check(state.metrics.max_concurrent_recvs >= 500);
+
+        // Merge tables and get a single output array
+        std::shared_ptr<table_info> local_sorted_table =
+            concat_tables(std::move(output_tables));
+        std::shared_ptr<arrow::Array> arrow_arr =
+            to_arrow(local_sorted_table->columns[0]);
+        arrow::Int64Array* int_arr =
+            static_cast<arrow::Int64Array*>(arrow_arr.get());
+
+        int64_t max = int_arr->Value(int_arr->length() - 1);
+        // Get the maximum element from every rank
+        std::vector<int64_t> maximums(n_pes);
+        MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                      maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                      MPI_COMM_WORLD);
+
+        // Check that element 0 is the max value on the previous rank + 1
+        if (myrank != 0) {
+            bodo::tests::check(int_arr->Value(0) == (maximums[myrank - 1] + 1));
+        }
+
+        // Check that all values are increasing
+        for (int64_t i = 1; i < int_arr->length(); i++) {
+            bodo::tests::check(int_arr->Value(i) >= int_arr->Value(i - 1));
         }
     });
 

@@ -3,6 +3,7 @@
 #include <deque>
 #include <memory>
 #include <numeric>
+#include <unordered_set>
 #include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_chunked_table_builder.h"
@@ -39,19 +40,20 @@
 #define SORT_SMALL_LIMIT_OFFSET_CAP 16384
 
 /**
- * @brief Get the optimal sort shuffle chunk size based on the memory budget and
- * average size of each row.
+ * @brief Get the optimal sort shuffle chunk size based on the memory budget,
+ * average size of each row and the maximum number of chunks that might be
+ * inflight at once.
  *
  * @param bytes_per_row_ Average number of bytes per row. If this is -1 (i.e.
  * unknown), we return the min allowed chunk size.
  * @param mem_budget_bytes Available memory budget. If this is 0, we return the
  * min allowed chunk size.
- * @param n_pes Number of processes.
+ * @param max_inflight_sends Maximum number of concurrent send/recvs allowed.
  * @return uint64_t Optimal chunk size for shuffle.
  */
 static uint64_t get_optimal_sort_shuffle_chunk_size(int64_t bytes_per_row_,
                                                     uint64_t mem_budget_bytes,
-                                                    int n_pes) {
+                                                    size_t max_inflight_sends) {
     uint64_t min_chunk_size = DEFAULT_SORT_MIN_SHUFFLE_CHUNK_SIZE;
     if (char* min_chunk_size_env_ =
             std::getenv("BODO_STREAM_SORT_MIN_SHUFFLE_CHUNK_SIZE")) {
@@ -68,10 +70,10 @@ static uint64_t get_optimal_sort_shuffle_chunk_size(int64_t bytes_per_row_,
     uint64_t bytes_per_row = static_cast<uint64_t>(bytes_per_row_);
     // NOTE: We divide by 2 since we need to have sufficient memory for both
     // incoming and outgoing chunks.
-    uint64_t chunk_size =
-        std::min(std::max(mem_budget_bytes / (2 * n_pes * bytes_per_row),
-                          min_chunk_size),
-                 max_chunk_size);
+    uint64_t chunk_size = std::min(
+        std::max(mem_budget_bytes / (2 * max_inflight_sends * bytes_per_row),
+                 min_chunk_size),
+        max_chunk_size);
     return chunk_size;
 }
 
@@ -918,12 +920,37 @@ std::vector<std::shared_ptr<DictionaryBuilder>> create_dict_builders(
     return dict_builders;
 }
 
+/**
+ * @brief Get the maximum allowed concurrent sends/receives. If 'default_' is
+ * not -1, it will be used. If it is, we will check the
+ * 'BODO_STREAM_SORT_MAX_SHUFFLE_CONCURRENT_SENDS' env var. If that is also not
+ * set, we will return `n_pes - 1`. Note that the output will always be >=1.
+ *
+ * @param default_ Default value. This is used unless it's -1.
+ * @return size_t
+ */
+static size_t get_max_shuffle_concurrent_sends(int64_t default_) {
+    size_t max_concurrent_sends;
+    if (default_ != -1) {
+        max_concurrent_sends = default_;
+    } else if (char* max_concurrent_sends_env_ = std::getenv(
+                   "BODO_STREAM_SORT_MAX_SHUFFLE_CONCURRENT_SENDS")) {
+        max_concurrent_sends = std::stoi(max_concurrent_sends_env_);
+    } else {
+        int n_pes = 0;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        max_concurrent_sends = n_pes - 1;
+    }
+    return std::max(static_cast<size_t>(1), max_concurrent_sends);
+}
+
 StreamSortState::StreamSortState(
     int64_t op_id, int64_t n_keys, std::vector<int64_t>&& vect_ascending_,
     std::vector<int64_t>&& na_position_, std::shared_ptr<bodo::Schema> schema_,
     bool parallel, size_t sample_size, size_t output_chunk_size_,
     int64_t kway_merge_chunk_size_, int64_t kway_merge_k_,
-    bool enable_inmem_concat_sort_)
+    bool enable_inmem_concat_sort_, int64_t shuffle_chunksize_,
+    int64_t shuffle_max_concurrent_sends_)
     : op_id(op_id),
       n_keys(n_keys),
       vect_ascending(vect_ascending_),
@@ -933,6 +960,9 @@ StreamSortState::StreamSortState(
       kway_merge_chunksize(kway_merge_chunk_size_),
       kway_merge_k(kway_merge_k_),
       enable_inmem_concat_sort(enable_inmem_concat_sort_),
+      shuffle_chunksize(shuffle_chunksize_),
+      shuffle_max_concurrent_sends(
+          get_max_shuffle_concurrent_sends(shuffle_max_concurrent_sends_)),
       mem_budget_bytes(StreamSortState::GetBudget()),
       // Currently Operator pool and Memory manager are set to default
       // because not fully implemented. Can turn on during testing for
@@ -1142,8 +1172,13 @@ StreamSortState::PartitionChunksByRank(
     uint64_t global_min_mem_budget_bytes = this->mem_budget_bytes;
     MPI_Allreduce(&this->mem_budget_bytes, &global_min_mem_budget_bytes, 1,
                   MPI_UINT64_T, MPI_MIN, MPI_COMM_WORLD);
-    size_t shuffle_chunk_size_ = get_optimal_sort_shuffle_chunk_size(
-        this->bytes_per_row, global_min_mem_budget_bytes, n_pes);
+    // Use the optimal chunk size unless an override has been provided.
+    size_t shuffle_chunk_size_ =
+        this->shuffle_chunksize != -1
+            ? this->shuffle_chunksize
+            : get_optimal_sort_shuffle_chunk_size(
+                  this->bytes_per_row, global_min_mem_budget_bytes,
+                  this->shuffle_max_concurrent_sends);
     this->metrics.shuffle_chunk_size = shuffle_chunk_size_;
     for (int rank_id = 0; rank_id < n_pes; rank_id++) {
         rankToChunkedBuilders.emplace_back(
@@ -1341,6 +1376,30 @@ void StreamSortState::GlobalSort_NonParallel(
     }
 }
 
+/**
+ * @brief Get the max allowed MPI tag value.
+ * Ref:
+ * https://stackoverflow.com/questions/61662466/can-the-tag-of-mpi-send-be-a-long-int,
+ * https://www.intel.com/content/www/us/en/developer/articles/technical/large-mpi-tags-with-the-intel-mpi.html
+ *
+ * @return int
+ */
+static int get_max_allowed_tag_value() {
+    int flag = 0;
+    void* tag_ub;
+    HANDLE_MPI_ERROR(
+        MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
+        "[get_max_allowed_tag_value] MPI Error in MPI_Comm_get_attr:");
+    if (flag) {
+        // This value is typically in the 10s or 100s of millions.
+        return *(int*)tag_ub;
+    } else {
+        // If we cannot get it from MPI, use the value guaranteed by the MPI
+        // standard.
+        return 32767;
+    }
+}
+
 ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
     std::deque<std::shared_ptr<table_info>>&& local_chunks) {
     int n_pes, myrank;
@@ -1367,7 +1426,8 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
 
     time_pt start_shuffle = start_timer();
     std::vector<size_t> rankToCurrentChunk(n_pes);
-    std::vector<AsyncShuffleSendState> send_states;
+    // Tuple of destination rank and send_state.
+    std::vector<std::tuple<int, AsyncShuffleSendState>> send_states;
     std::vector<AsyncShuffleRecvState> recv_states;
 
     auto HaveChunksToSend = [&]() {
@@ -1388,6 +1448,53 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
     // If there's only a single rank, skip the loop below
     bool is_last = n_pes == 1;
 
+    // There may be multiple chunks in flight to the same destination rank. MPI
+    // does guarantee that messages will be *matched* in the order that they are
+    // sent, however, it doesn't guarantee that messages will *finish* receiving
+    // in the same order. Let's say two chunks are being sent from A to B. A
+    // will post the metadata (MD) message for the first chunk followed by its
+    // buffers. It will then post the MD message for the second chunk followed
+    // by its buffers. B will Improbe and get the first MD message and then the
+    // second MD message (in order, as guaranteed by the MPI standard). Let's
+    // say the Imrecv for the second MD message *finishes* first (permitted by
+    // MPI standard). Then, B will immediately post the IRecvs based on these
+    // lengths. In that case, these IRecvs (with lengths corresponding to the
+    // second chunk) will match the messages containing the buffers of the first
+    // chunk, leading to a size mismatch. To avoid this issue, we use a
+    // separate set of tags for each concurrent chunk. See BSE-3892 for more
+    // details.
+    std::vector<std::unordered_set<int>> ranks_to_inflight_tags(n_pes);
+
+    // 10000 should be more than enough tags for a single send.
+    // TODO Use std::max(10000, req_tags) based on the table schema for full
+    // robustness.
+    constexpr int TAG_OFFSET = 10000;
+    // Even the MPI standard guaranteed value (32767) is sufficient for posting
+    // 2 messages at once with our 10000 offset.
+    const int MAX_TAG = get_max_allowed_tag_value();
+    auto GetNextTagForRank = [&](int rank) {
+        for (int tag = (SHUFFLE_METADATA_MSG_TAG + 1);
+             tag < (MAX_TAG - TAG_OFFSET); tag += TAG_OFFSET) {
+            if (!ranks_to_inflight_tags[rank].contains(tag)) {
+                return tag;
+            }
+        }
+        return -1;
+    };
+
+    auto HaveChunksToSendToRankWithFreeTag = [&]() {
+        for (int i = 0; i < n_pes; i++) {
+            if (i == myrank) {
+                continue;
+            }
+            if (rankToCurrentChunk[i] < rankToChunks[i].size() &&
+                GetNextTagForRank(i) != -1) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Initialize every rank to send to their neighbor. This is to prevent the
     // situation where all ranks send to a single host simultaneously making it
     // harder to overlap IO and compute.
@@ -1400,11 +1507,17 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
     while (!is_last || have_chunks_to_send || !recv_states.empty() ||
            !send_states.empty()) {
         // Don't send unless the number of inflight sends is less than
-        // the number of ranks
-        while (have_chunks_to_send &&
-               send_states.size() < static_cast<size_t>(n_pes - 1)) {
-            if (rankToCurrentChunk[host_to_send_to] <
-                rankToChunks[host_to_send_to].size()) {
+        // the max allowed (n_pes - 1 by default) and there are chunks to send
+        // to a rank with remaining MPI tags.
+        // XXX TODO Since there is a max allowed chunk size, we could
+        // dynamically choose a larger 'shuffle_max_concurrent_sends' to fully
+        // utilize the available memory and allow more concurrent data transfer.
+        while ((send_states.size() < this->shuffle_max_concurrent_sends) &&
+               HaveChunksToSendToRankWithFreeTag()) {
+            int starting_msg_tag = GetNextTagForRank(host_to_send_to);
+            if ((rankToCurrentChunk[host_to_send_to] <
+                 rankToChunks[host_to_send_to].size()) &&
+                (starting_msg_tag != -1)) {
                 size_t chunk_id = rankToCurrentChunk[host_to_send_to];
                 std::shared_ptr<table_info> table_to_send =
                     std::move(rankToChunks[host_to_send_to][chunk_id]);
@@ -1424,9 +1537,12 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
                 // XXX shuffle_issend will make redundant copies of many of
                 // these buffers even though they can be reused as is. This is
                 // something to optimize.
-                send_states.emplace_back(
+                send_states.emplace_back(std::make_tuple(
+                    host_to_send_to,
                     shuffle_issend(std::move(table_to_send), std::move(hashes),
-                                   nullptr, MPI_COMM_WORLD));
+                                   nullptr, MPI_COMM_WORLD, starting_msg_tag)));
+                ranks_to_inflight_tags[host_to_send_to].insert(
+                    starting_msg_tag);
                 this->metrics.shuffle_issend_time += end_timer(start_issend);
                 this->metrics.n_shuffle_send++;
 
@@ -1440,19 +1556,31 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
                 // This loop is safe because we know that if `n_pes` was 1,
                 // we don't execute the outer loop
             } while (host_to_send_to == myrank);
-
-            // Check if we have any more buffers to send on the next
-            // iteration
-            have_chunks_to_send = HaveChunksToSend();
         }
+        this->metrics.max_concurrent_sends =
+            std::max(this->metrics.max_concurrent_sends,
+                     static_cast<int64_t>(send_states.size()));
+
+        // Check if we have any more buffers to send on the next
+        // iteration
+        have_chunks_to_send = HaveChunksToSend();
 
         // Remove send state if recv done
-        std::erase_if(send_states, [this](AsyncShuffleSendState& s) {
+        std::erase_if(send_states, [this, &ranks_to_inflight_tags](
+                                       std::tuple<int, AsyncShuffleSendState>&
+                                           dest_rank_send_state_tup) {
             time_pt start_send_done = start_timer();
-            bool done = s.sendDone();
+            auto& [dest_rank, send_state] = dest_rank_send_state_tup;
+            bool done = send_state.sendDone();
             this->metrics.shuffle_send_done_check_time +=
                 end_timer(start_send_done);
             this->metrics.shuffle_n_send_done_checks++;
+            if (done) {
+                // Remove the tag and make it available for re-use.
+                ranks_to_inflight_tags[dest_rank].erase(
+                    send_state.get_starting_msg_tag());
+            }
+
             return done;
         });
         if (!barrier_posted && send_states.empty() && !have_chunks_to_send) {
@@ -1460,7 +1588,7 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
             barrier_posted = true;
         }
 
-        if (recv_states.size() < static_cast<size_t>(n_pes - 1)) {
+        if (recv_states.size() < this->shuffle_max_concurrent_sends) {
             // Check if we can receive
             start_irecv = start_timer();
             size_t prev_recv_states_size = recv_states.size();
@@ -1473,6 +1601,10 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
             this->metrics.shuffle_irecv_time += end_timer(start_irecv);
             this->metrics.shuffle_n_irecvs++;
         }
+        this->metrics.max_concurrent_recvs =
+            std::max(this->metrics.max_concurrent_recvs,
+                     static_cast<int64_t>(recv_states.size()));
+
         // If we have any completed receives, add them to the builder
         std::erase_if(recv_states, [&](AsyncShuffleRecvState& s) {
             time_pt start_done = start_timer();
@@ -1643,6 +1775,8 @@ void StreamSortState::ReportBuildMetrics(std::vector<MetricBase>& metrics_out) {
     APPEND_STAT_METRIC(shuffle_approx_sent_size_bytes_dicts);
     APPEND_STAT_METRIC(shuffle_total_recv_size_bytes);
     APPEND_STAT_METRIC(n_rows_after_shuffle);
+    APPEND_STAT_METRIC(max_concurrent_sends);
+    APPEND_STAT_METRIC(max_concurrent_recvs);
     metrics_out.push_back(StatMetric(
         "approx_recv_size_bytes_dicts",
         this->metrics.ishuffle_metrics.approx_recv_size_bytes_dicts));
