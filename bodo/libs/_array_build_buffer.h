@@ -155,7 +155,8 @@ struct ArrayBuildBuffer {
         // Set size and copy offsets
         CHECK_ARROW_MEM(data_array->buffers[1]->SetSize(
                             (size + 1 + append_rows_sum) * sizeof(offset_t)),
-                        "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+                        "ArrayBuildBuffer::UnsafeAppendBatch[STRING]: SetSize "
+                        "(offsets) failed!");
         offset_t* curr_offsets = (offset_t*)this->data_array->data2<arr_type>();
         offset_t* in_offsets = (offset_t*)in_arr->data2<arr_type>();
         uint64_t offset_size = this->size;
@@ -174,7 +175,8 @@ struct ArrayBuildBuffer {
             // data_array->n_sub_elems() is correct because we set offsets above
             // and n_sub_elems is based on the offsets array
             data_array->buffers[0]->SetSize(this->data_array->n_sub_elems()),
-            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+            "ArrayBuildBuffer::UnsafeAppendBatch[STRING]: SetSize (data) "
+            "failed!");
         uint64_t character_size = this->size;
         for (uint64_t row_ind = 0; row_ind < in_arr->length; row_ind++) {
             // TODO If subsequent rows are to be appended, combine the memcpy
@@ -193,7 +195,8 @@ struct ArrayBuildBuffer {
         CHECK_ARROW_MEM(
             data_array->buffers[2]->SetSize(
                 arrow::bit_util::BytesForBits(size + append_rows_sum)),
-            "ArrayBuildBuffer::UnsafeAppendBatch: SetSize failed!");
+            "ArrayBuildBuffer::UnsafeAppendBatch[STRING]: SetSize (null "
+            "bitmask) failed!");
         uint8_t* out_bitmask =
             (uint8_t*)this->data_array->null_bitmask<arr_type>();
         const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<arr_type>();
@@ -1090,21 +1093,21 @@ struct ArrayBuildBuffer {
 
     /**
      * @brief Reserve enough space to be able to append the selected column
-     * of all finalized chunks of a ChunkedTableBuilder.
+     * of multiple table chunks (e.g. finalized chunks of a
+     * ChunkedTableBuilder).
      *
      * @param chunks The table chunks we must copy over.
      * @param array_idx Index of the array to reserve space for.
+     * @param input_is_unpinned Whether the input chunks are unpinned. If they
+     * are, they may be temporarily pinned for getting size information (e.g. in
+     * case of strings) and then unpinned back.
      */
     template <typename T>
         requires(
             std::is_same<T, std::vector<std::shared_ptr<table_info>>>::value ||
             std::is_same<T, std::deque<std::shared_ptr<table_info>>>::value)
-    void ReserveArrayChunks(const T& chunks, const size_t array_idx);
-
-    void ReserveArray(const std::vector<std::shared_ptr<table_info>>& chunks,
-                      const size_t array_idx);
-    void ReserveArray(const std::deque<std::shared_ptr<table_info>>& chunks,
-                      const size_t array_idx);
+    void ReserveArrayChunks(const T& chunks, const size_t array_idx,
+                            const bool input_is_unpinned);
 
     /**
      * @brief Reserved enouch space to append in_arr[row_idx] as a row.

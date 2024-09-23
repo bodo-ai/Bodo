@@ -1261,23 +1261,34 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
     bool is_parallel);
 
 /**
- * @brief concatenate tables vertically into a single table.
- * Input tables are assumed to have the same schema, and will
- * be fully deleted (decref arrays and delete pointers).
+ * @brief Concatenate tables vertically into a single table.
+ * Input tables are assumed to have the same schema.
  *
- * @param table_chunks input tables which are assumed to have the same schema
+ * @param table_chunks Input tables which are assumed to have the same schema.
+ * @param input_is_unpinned Whether the input chunks are unpinned. If so, we
+ * will pin them one at a time, append the contents to the output and then unpin
+ * them again. The same thing will be done during the buffer allocation process,
+ * in case the array needs to be temporarily pinned to calculate the size.
  * @return std::shared_ptr<table_info> concatenated table
  */
 std::shared_ptr<table_info> concat_tables(
-    const std::vector<std::shared_ptr<table_info>>& table_chunks);
+    const std::vector<std::shared_ptr<table_info>>& table_chunks,
+    const bool input_is_unpinned = false);
 
 /**
- * @brief same as concat_tables but takes in a dictaionary builder that the
+ * @brief Same as concat_tables but takes in a dictionary builder that the
  * input MUST already be merged with.
+ *
+ * @param table_chunks Input tables which are assumed to have the same schema.
+ * @param dict_builders Dictionary Builders to use that the input chunks are
+ * already unified with.
+ * @param input_is_unpinned (See previous)
+ * @return std::shared_ptr<table_info> concatenated table
  */
 std::shared_ptr<table_info> concat_tables(
     std::vector<std::shared_ptr<table_info>>&& table_chunks,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders);
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    const bool input_is_unpinned = false);
 
 /**
  * @brief Concatenate the arrays into a single array.

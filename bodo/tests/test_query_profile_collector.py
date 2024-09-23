@@ -1766,6 +1766,7 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         ("merge_input_builder_total_sort_copy_time", not limit_offset_case),
         ("merge_n_input_chunks", not limit_offset_case),
         ("merge_approx_input_chunks_total_bytes", not limit_offset_case),
+        ("merge_approx_max_input_chunk_size_bytes", not limit_offset_case),
         ("performed_inmem_concat_sort", not limit_offset_case),
         ("finalize_inmem_concat_time", False),
         ("finalize_inmem_sort_time", False),
