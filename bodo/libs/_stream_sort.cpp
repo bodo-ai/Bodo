@@ -242,6 +242,7 @@ void ExternalKWayMergeSorterFinalizeMetrics::ExportMetrics(
     APPEND_TIMER_METRIC(merge_input_builder_total_sort_copy_time);
     APPEND_STAT_METRIC(merge_n_input_chunks);
     APPEND_STAT_METRIC(merge_approx_input_chunks_total_bytes);
+    APPEND_STAT_METRIC(merge_approx_max_input_chunk_size_bytes);
     APPEND_STAT_METRIC(performed_inmem_concat_sort);
     APPEND_TIMER_METRIC(finalize_inmem_concat_time);
     APPEND_TIMER_METRIC(finalize_inmem_sort_time);
@@ -652,30 +653,30 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
     }
 
     uint64_t approx_input_chunks_total_bytes = 0;
+    uint64_t approx_max_input_chunk_size_bytes = 0;
     for (const auto& chunk : input_chunks) {
         // XXX String buffer sizes in the CTB buffers might be an
         // overestimate, so we might need to modify CTB buffers to set the size
         // correctly (e.g. use Reserve/SetSize instead of Resize, etc.).
-        approx_input_chunks_total_bytes +=
+        uint64_t chunk_size =
             table_local_memory_size(chunk.table, /*include_dict_size*/ false,
                                     /*approximate_string_size*/ true);
+        approx_input_chunks_total_bytes += chunk_size;
+        approx_max_input_chunk_size_bytes =
+            std::max(approx_max_input_chunk_size_bytes, chunk_size);
     }
     this->metrics.merge_approx_input_chunks_total_bytes =
         approx_input_chunks_total_bytes;
+    this->metrics.merge_approx_max_input_chunk_size_bytes =
+        approx_max_input_chunk_size_bytes;
 
     // If all 'input_chunks' fit in 0.5*mem_budget, then concat and sort
     // them. Similarly, if there's a single chunk, we know that it's already
     // sorted and we can simply output it (after chunking).
-    // Note that we require the table to fit in half the budget because sort
-    // will do a copy of the data. Since the sort is effectively implemented as
-    // a RetrieveTable call, we know that we will need at most twice the size of
-    // the table.
-    // XXX We can actually make this mem_budget instead of 0.5*mem_budget_bytes
-    // if we do the concat smartly, i.e. pin only chunk at a time. It needs some
-    // changes to how we reserve space since that code path in TBB currently
-    // pins arrays temporarily to calculate size. Alternatively, if we can sort
-    // on a list of tables, then we can skip the concat entirely, sort, and then
-    // append into the CTB directly.
+    // XXX TODO Technically we only need to ensure that all input chunks fit in
+    // (mem_budget_bytes - max_chunk_size_bytes), however, there were some
+    // regressions when doing that, particularly in the output append step. This
+    // is something to revisit.
     if (this->enable_inmem_concat_sort &&
         ((approx_input_chunks_total_bytes < (this->mem_budget_bytes / 2)) ||
          input_chunks.size() == 1)) {
@@ -699,15 +700,20 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
             std::iota(out_idxs.begin(), out_idxs.end(), 0);
         } else {
             time_pt start_concat = start_timer();
-            std::vector<std::shared_ptr<table_info>> tables;
-            tables.reserve(input_chunks.size());
+            std::vector<std::shared_ptr<table_info>> unpinned_tables;
+            unpinned_tables.reserve(input_chunks.size());
             for (auto& chunk : input_chunks) {
-                chunk.table->pin();
-                tables.push_back(std::move(chunk.table));
+                unpinned_tables.push_back(std::move(chunk.table));
             }
-
-            table = concat_tables(std::move(tables), this->dict_builders);
             input_chunks.clear();
+
+            // This will pin one chunk at a time, so the peak memory usage
+            // should fit within the budget.
+            // XXX If we can sort on a list of tables, then we can skip the
+            // concat entirely, sort, and then append into the CTB directly.
+            table =
+                concat_tables(std::move(unpinned_tables), this->dict_builders,
+                              /*input_is_unpinned*/ true);
             this->metrics.finalize_inmem_concat_time += end_timer(start_concat);
 
             // TODO [BSE-3773] This doesn't require concatenating all tables -

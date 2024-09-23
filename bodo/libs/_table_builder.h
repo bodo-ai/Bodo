@@ -156,8 +156,11 @@ struct TableBuildBuffer {
      * strings and nested arrays.
      *
      * @param chunks tables to append
+     * @param input_is_unpinned Are the chunks unpinned and need to be pinned in
+     * case we need to get size information.
      */
-    void ReserveTable(const std::vector<std::shared_ptr<table_info>>& chunks);
+    void ReserveTable(const std::vector<std::shared_ptr<table_info>>& chunks,
+                      const bool input_is_unpinned = false);
 
     /**
      * @brief Clear the buffers, i.e. set size to 0.

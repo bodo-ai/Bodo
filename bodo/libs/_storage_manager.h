@@ -15,10 +15,14 @@ class object;
 }  // namespace boost
 
 // TODO Tell the compiler that the branch is unlikely.
-#define CHECK_ARROW_MEM(expr, msg)                                      \
-    if (!(expr.ok())) {                                                 \
-        std::string err_msg = std::string(msg) + " " + expr.ToString(); \
-        throw std::runtime_error(err_msg);                              \
+#define CHECK_ARROW_MEM(expr, msg)                            \
+    {                                                         \
+        arrow::Status __status = expr;                        \
+        if (!__status.ok()) {                                 \
+            std::string err_msg =                             \
+                std::string(msg) + " " + __status.ToString(); \
+            throw std::runtime_error(err_msg);                \
+        }                                                     \
     }
 
 #define CHECK_ARROW_MEM_RET(expr, msg)                                      \

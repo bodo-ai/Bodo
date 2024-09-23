@@ -541,7 +541,8 @@ template <typename T>
     requires(std::is_same<T, std::vector<std::shared_ptr<table_info>>>::value ||
              std::is_same<T, std::deque<std::shared_ptr<table_info>>>::value)
 void ArrayBuildBuffer::ReserveArrayChunks(const T& chunks,
-                                          const size_t array_idx) {
+                                          const size_t array_idx,
+                                          const bool input_is_unpinned) {
     if (chunks.empty()) {
         return;
     }
@@ -568,26 +569,28 @@ void ArrayBuildBuffer::ReserveArrayChunks(const T& chunks,
             // TODO Remove pin/unpin requirement to get this information.
             // Looking at size_ of the buffers[0] might be sufficient
             // since we maintain that information correctly.
-            arr->pin();
+            if (input_is_unpinned) {
+                arr->pin();
+            }
             new_capacity_chars += arr->n_sub_elems();
-            arr->unpin();
+            if (input_is_unpinned) {
+                arr->unpin();
+            }
         }
 
         this->ReserveSpaceForStringAppend(new_capacity_chars);
     }
 }
 
-void ArrayBuildBuffer::ReserveArray(
+// Explicitly initialize the required templates for loader to be able to
+// find them statically.
+template void ArrayBuildBuffer::ReserveArrayChunks(
     const std::vector<std::shared_ptr<table_info>>& chunks,
-    const size_t array_idx) {
-    this->ReserveArrayChunks(chunks, array_idx);
-}
+    const size_t array_idx, const bool input_is_unpinned);
 
-void ArrayBuildBuffer::ReserveArray(
+template void ArrayBuildBuffer::ReserveArrayChunks(
     const std::deque<std::shared_ptr<table_info>>& chunks,
-    const size_t array_idx) {
-    this->ReserveArrayChunks(chunks, array_idx);
-}
+    const size_t array_idx, const bool input_is_unpinned);
 
 void ArrayBuildBuffer::ReserveArrayRow(
     const std::shared_ptr<array_info>& in_arr, size_t row_idx) {
