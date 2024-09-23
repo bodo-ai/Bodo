@@ -333,6 +333,14 @@ python_add_library(
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt)
+if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
+  target_compile_definitions(
+    memory_tester
+    PRIVATE
+    # Required when using boost::stacktrace for debugging
+    "BOOST_STACKTRACE_GNU_SOURCE_NOT_REQUIRED=1"
+  )
+endif()
 install(TARGETS memory_tester DESTINATION "bodo/tests/")
 
 

@@ -209,6 +209,7 @@ struct ExternalKWayMergeSorterFinalizeMetrics {
     time_t merge_input_builder_finalize_time = 0;
     stat_t merge_n_input_chunks = 0;
     stat_t merge_approx_input_chunks_total_bytes = 0;
+    stat_t merge_approx_max_input_chunk_size_bytes = 0;
     stat_t performed_inmem_concat_sort = 0;
     time_t finalize_inmem_concat_time = 0;
     time_t finalize_inmem_sort_time = 0;

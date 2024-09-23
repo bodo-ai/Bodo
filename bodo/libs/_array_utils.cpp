@@ -2428,16 +2428,9 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
     return {local_est, est};
 }
 
-/**
- * @brief concatenate tables vertically into a single table.
- * Input tables are assumed to have the same schema.
- *
- * @param table_chunks input tables which are assumed to have the
- * same schema
- * @return std::shared_ptr<table_info> concatenated table
- */
 std::shared_ptr<table_info> concat_tables(
-    const std::vector<std::shared_ptr<table_info>>& table_chunks) {
+    const std::vector<std::shared_ptr<table_info>>& table_chunks,
+    const bool input_is_unpinned) {
     assert(table_chunks.size() > 0);
 
     auto schema = table_chunks[0]->schema();
@@ -2450,15 +2443,21 @@ std::shared_ptr<table_info> concat_tables(
     }
 
     TableBuildBuffer table_builder(std::move(schema), dict_builders);
-    table_builder.ReserveTable(table_chunks);
+    table_builder.ReserveTable(table_chunks, input_is_unpinned);
 
     for (auto& table : table_chunks) {
+        if (input_is_unpinned) {
+            table->pin();
+        }
         std::shared_ptr<table_info> unified_table =
             unify_dictionary_arrays_helper(table, dict_builders, 0, false);
         // TODO(aneesh) we should take ownership of the vector passed in the
         // clear the pointer to the original table here to try to deallocate it
         // earlier.
         table_builder.UnsafeAppendBatch(std::move(unified_table));
+        if (input_is_unpinned) {
+            table->unpin();
+        }
     }
 
     return table_builder.data_table;
@@ -2484,13 +2483,20 @@ std::shared_ptr<array_info> concat_arrays(
 
 std::shared_ptr<table_info> concat_tables(
     std::vector<std::shared_ptr<table_info>>&& table_chunks,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders) {
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    const bool input_is_unpinned) {
     auto schema = table_chunks[0]->schema();
     TableBuildBuffer table_builder(std::move(schema), dict_builders);
-    table_builder.ReserveTable(table_chunks);
+    table_builder.ReserveTable(table_chunks, input_is_unpinned);
 
     for (auto& table : table_chunks) {
+        if (input_is_unpinned) {
+            table->pin();
+        }
         table_builder.UnsafeAppendBatch(table);
+        if (input_is_unpinned) {
+            table->unpin();
+        }
         table.reset();
     }
 

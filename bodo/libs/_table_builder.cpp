@@ -443,14 +443,16 @@ void TableBuildBuffer::ReserveTable(
 
 void TableBuildBuffer::ReserveTable(const ChunkedTableBuilder& chunked_tb) {
     for (size_t i = 0; i < this->data_table->ncols(); i++) {
-        array_buffers[i].ReserveArray(chunked_tb.chunks, i);
+        array_buffers[i].ReserveArrayChunks(chunked_tb.chunks, i,
+                                            /*input_is_unpinned*/ true);
     }
 }
 
 void TableBuildBuffer::ReserveTable(
-    const std::vector<std::shared_ptr<table_info>>& chunks) {
+    const std::vector<std::shared_ptr<table_info>>& chunks,
+    const bool input_is_unpinned) {
     for (size_t i = 0; i < this->data_table->ncols(); i++) {
-        array_buffers[i].ReserveArray(chunks, i);
+        array_buffers[i].ReserveArrayChunks(chunks, i, input_is_unpinned);
     }
 }
 
