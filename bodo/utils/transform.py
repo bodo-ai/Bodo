@@ -6,8 +6,8 @@ import itertools
 import math
 import operator
 import types as pytypes
+import typing as pt
 from collections import namedtuple
-from typing import Any, Callable, Dict, List, Optional
 
 import numba
 import numpy as np
@@ -488,17 +488,17 @@ numba.core.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 
 def compile_func_single_block(
-    func: Callable,
+    func: pt.Callable,
     args,
     ret_var: ir.Var,
     typing_info=None,
-    extra_globals: Optional[Dict[str, Any]] = None,
+    extra_globals: pt.Optional[dict[str, pt.Any]] = None,
     infer_types: bool = True,
     run_untyped_pass: bool = False,
     flags=None,
     replace_globals: bool = False,
     add_default_globals: bool = True,
-) -> List[ir.Stmt]:
+) -> list[ir.Stmt]:
     """compiles functions that are just a single basic block.
     Does not handle defaults, freevars etc.
     typing_info is a structure that has typingctx, typemap, calltypes
@@ -1601,8 +1601,8 @@ def get_const_arg(
     arg_name,
     loc,
     default=None,
-    err_msg: Optional[str] = None,
-    typ: Optional[str] = None,
+    err_msg: pt.Optional[str] = None,
+    typ: pt.Optional[str] = None,
     use_default: bool = False,
 ):
     """Get constant value for a function call argument. Raise error if the value is
@@ -1674,32 +1674,58 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name, add_if_missing=False):
         )  # pragma: no cover
 
 
+def set_ith_arg_to_omitted_value(
+    pass_info,
+    rhs: ir.Expr,
+    i: int,
+    new_value: pt.Any,
+    expected_existing_value: pt.Any,
+):
+    """
+    Sets the last argument of call expr 'rhs' to True, assuming that it is an Omitted
+    value with the given expected_existing_value. This is done by modifying pass_info's
+    typing information directly.
+
+    This is usually used for Bodo overloads that have an extra flag as last argument
+    to enable parallelism but more generic to allow communicating more complex parallelism
+    semantics, such as a tuple of values.
+
+    Args:
+        pass_info (_type_): The pass information used to grab the call type.
+        rhs (ir.Expr): The rhs call expression to modify.
+        i (int): The index of the argument to replace using Python integer indexing.
+        new_value (pt.Any): The new value for the last argument without wrapping the result
+          in any "optional".
+        expected_existing_value (pt.Any): The existing value of the last argument that
+          should be replaced. This is used for assertion check.
+    """
+    call_type = pass_info.calltypes.pop(rhs)
+    # normalize to simplify slicing.
+    pos_idx = i if i >= 0 else len(call_type.args) + i
+    assert call_type.args[pos_idx] == types.Omitted(
+        expected_existing_value
+    ), f"Omitted({expected_existing_value}) {pos_idx}th argument expected"
+    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
+        pass_info.typingctx,
+        call_type.args[:pos_idx]
+        + (types.Omitted(new_value),)
+        + call_type.args[pos_idx + 1 :],
+        {},
+    )
+
+
 def set_last_arg_to_true(pass_info, rhs):
     """set last argument of call expr 'rhs' to True, assuming that it is an Omitted
     arg with value of False.
     This is usually used for Bodo overloads that have an extra flag as last argument
     to enable parallelism.
     """
-    call_type = pass_info.calltypes.pop(rhs)
-    assert call_type.args[-1] == types.Omitted(
-        False
-    ), "Omitted(False) last argument expected"
-    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
-        pass_info.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
-    )
+    set_ith_arg_to_omitted_value(pass_info, rhs, -1, True, False)
 
 
 def set_2nd_to_last_arg_to_true(pass_info, rhs):
     """Same as above but sets second to last argument to True"""
-    call_type = pass_info.calltypes.pop(rhs)
-    assert call_type.args[-2] == types.Omitted(
-        False
-    ), "Omitted(False) second to last argument expected"
-    pass_info.calltypes[rhs] = pass_info.typemap[rhs.func.name].get_call_type(
-        pass_info.typingctx,
-        call_type.args[:-2] + (types.Omitted(True),) + (call_type.args[-1],),
-        {},
-    )
+    set_ith_arg_to_omitted_value(pass_info, rhs, -2, True, False)
 
 
 def avoid_udf_inline(py_func, arg_types, kw_types):
@@ -2127,8 +2153,8 @@ def _convert_const_key_dict(
 
 
 def get_runtime_join_filter_terms(
-    func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: Optional[ir.Expr]
-) -> Optional[list[tuple[ir.Var, tuple[int], tuple[int, int, str]]]]:
+    func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: pt.Optional[ir.Expr]
+) -> pt.Optional[list[tuple[ir.Var, tuple[int], tuple[int, int, str]]]]:
     """
     Takes a function IR and an expression for the runtime join filters argument to the function.
     Extracts the join state variables and column indices from the runtime join filters argument so
