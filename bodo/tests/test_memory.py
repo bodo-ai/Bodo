@@ -2097,7 +2097,7 @@ def test_larger_than_available_space_allocation_limit_ignored(capfd):
     # Trying to allocate 1MiB should fail
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Could not find an empty frame of required size!",
+        match=re.escape("Could not find an empty frame of required size (1048576)!"),
     ):
         _: BufferPoolAllocation = pool.allocate(1024 * 1024)
     # Verify that a warning was displayed on stderr before it raised the error
@@ -2204,7 +2204,7 @@ def test_allocate_cannot_evict_sufficient_bytes_no_enforcement(tmp_path: Path, c
     # Test for the frame not available case (we're out of 2MiB frames at this point):
     with pytest.raises(
         pyarrow.lib.ArrowMemoryError,
-        match="Could not find an empty frame of required size!",
+        match=re.escape("Could not find an empty frame of required size (2097152)!"),
     ):
         _: BufferPoolAllocation = pool.allocate(2 * 1024 * 1024)
     # Verify that a warning is displayed on stderr
