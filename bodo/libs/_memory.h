@@ -1011,6 +1011,12 @@ class BufferPool final : public IBufferPool {
      * @return ::arrow::Status
      */
     ::arrow::Status evict_handler(uint64_t bytes, const std::string& caller);
+
+    /**
+     * @brief Helper function for printing the stats to std::cerr.
+     *
+     */
+    void print_stats();
 };
 
 /// Helper Tools for using BufferPool in STL Containers
