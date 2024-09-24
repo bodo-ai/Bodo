@@ -13,6 +13,7 @@
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
 #include "_table_builder_utils.h"
+#include "_utils.h"
 #include "fmt/format.h"
 
 #define QUERY_PROFILE_SORT_INIT_STAGE_ID 0
@@ -275,8 +276,8 @@ ExternalKWayMergeSorter::ExternalKWayMergeSorter(
     const std::vector<int64_t>& dead_keys, uint64_t mem_budget_bytes_,
     int64_t bytes_per_row_, int64_t limit, int64_t offset,
     size_t output_chunk_size_, int64_t K_, int64_t processing_chunk_size_,
-    bool enable_inmem_concat_sort_, bodo::IBufferPool* const pool,
-    std::shared_ptr<::arrow::MemoryManager> mm)
+    bool enable_inmem_concat_sort_, bool debug_mode_,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
     : schema(schema),
       dict_builders(dict_builders_),
       n_keys(n_keys),
@@ -286,6 +287,7 @@ ExternalKWayMergeSorter::ExternalKWayMergeSorter(
       mem_budget_bytes(mem_budget_bytes_),
       output_chunk_size(output_chunk_size_),
       enable_inmem_concat_sort(enable_inmem_concat_sort_),
+      debug_mode(debug_mode_),
       comp(*this),
       pool(pool),
       mm(mm) {
@@ -622,6 +624,8 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
 
 std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
     bool reset_input_builder) {
+    const std::string DEBUG_LOG_PREFIX =
+        "[DEBUG] ExternalKWayMergeSorter::Finalize:";
     ScopedTimer timer(this->metrics.kway_merge_sort_total_time);
 
     // Finalize any active chunks.
@@ -670,6 +674,20 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
     this->metrics.merge_approx_max_input_chunk_size_bytes =
         approx_max_input_chunk_size_bytes;
 
+    if (this->debug_mode) {
+        std::cerr << fmt::format(
+                         "{} Number of Input Chunks: {}, Approximate Input "
+                         "Size: {}, Max Input Chunk Size: {}, Processing Chunk "
+                         "Size: {}, K: {}.",
+                         DEBUG_LOG_PREFIX, input_chunks.size(),
+                         BytesToHumanReadableString(
+                             approx_input_chunks_total_bytes),
+                         BytesToHumanReadableString(
+                             approx_max_input_chunk_size_bytes),
+                         this->processing_chunk_size, this->K)
+                  << std::endl;
+    }
+
     // If all 'input_chunks' fit in 0.5*mem_budget, then concat and sort
     // them. Similarly, if there's a single chunk, we know that it's already
     // sorted and we can simply output it (after chunking).
@@ -685,6 +703,12 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         // combined table. This avoids the extra overhead incurred by the
         // MergeChunks path.
         this->metrics.performed_inmem_concat_sort = 1;
+        if (this->debug_mode) {
+            std::cerr << fmt::format(
+                             "{}: Using in-memory concat-sort optimization.",
+                             DEBUG_LOG_PREFIX)
+                      << std::endl;
+        }
 
         std::shared_ptr<table_info> table;
         bodo::vector<int64_t> out_idxs;
@@ -731,6 +755,12 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
             this->metrics.finalize_inmem_sort_time += end_timer(start_sort);
         }
 
+        if (this->debug_mode) {
+            std::cerr << fmt::format(
+                             "{}: Appending sort result into output buffer.",
+                             DEBUG_LOG_PREFIX)
+                      << std::endl;
+        }
         time_pt start_append = start_timer();
         uint64_t n_cols = table->ncols();
         std::vector<uint64_t> col_inds;
@@ -787,6 +817,17 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         this->metrics.n_merge_levels++;
         bool is_last = (sorted_chunks.size() <= this->K);
         std::vector<std::deque<TableAndRange>> next_sorted_chunks;
+        if (this->debug_mode) {
+            std::cerr << fmt::format(
+                             "{}: Starting Merge Level {}. Number of Input "
+                             "Sorted Ranges: {}. Number of Range Merges so "
+                             "far: {}. Final Level: {}.",
+                             DEBUG_LOG_PREFIX, this->metrics.n_merge_levels,
+                             sorted_chunks.size(), this->metrics.n_chunk_merges,
+                             is_last ? "Yes" : "No")
+                      << std::endl;
+        }
+
         // This loop takes this->K vectors and merges them into 1 on every
         // iteration.
         for (size_t i = 0; i < sorted_chunks.size(); i += this->K) {
@@ -820,6 +861,15 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         }
 
         std::swap(sorted_chunks, next_sorted_chunks);
+    }
+
+    if (this->debug_mode) {
+        std::cerr << fmt::format(
+                         "{}: Finished Merge. Number of Levels: {}. Number of "
+                         "Range Merges: {}.",
+                         DEBUG_LOG_PREFIX, this->metrics.n_merge_levels,
+                         this->metrics.n_chunk_merges)
+                  << std::endl;
     }
 
     return sorted_chunks[0];
@@ -988,7 +1038,11 @@ StreamSortState::StreamSortState(
       builder(schema, dict_builders, STREAMING_BATCH_SIZE,
               DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, op_pool,
               op_mm),
-      reservoir_sampling_state(n_keys, sample_size, dict_builders, schema) {}
+      reservoir_sampling_state(n_keys, sample_size, dict_builders, schema) {
+    if (char* debug_mode_env_ = std::getenv("BODO_DEBUG_STREAM_SORT")) {
+        this->debug_mode = !std::strcmp(debug_mode_env_, "1");
+    }
+}
 
 StreamSortLimitOffsetState::StreamSortLimitOffsetState(
     int64_t op_id, int64_t n_keys, std::vector<int64_t>&& vect_ascending_,
@@ -1006,8 +1060,8 @@ StreamSortLimitOffsetState::StreamSortLimitOffsetState(
             this->mem_budget_bytes, -1,
             this->sortlimit.limit + this->sortlimit.offset, 0,
             this->output_chunk_size, this->kway_merge_k,
-            this->kway_merge_chunksize, this->enable_inmem_concat_sort, op_pool,
-            op_mm) {
+            this->kway_merge_chunksize, this->enable_inmem_concat_sort,
+            /*debug_mode_*/ false, op_pool, op_mm) {
     this->limit_small_flag = (sortlimit.sum() <= SORT_SMALL_LIMIT_OFFSET_CAP &&
                               enable_small_limit_optimization);
 }
@@ -1075,6 +1129,14 @@ void StreamSortState::FinalizeBuild() {
     OperatorComptroller::Default()->RequestAdditionalBudget(op_id, -1);
     this->mem_budget_bytes = this->GetBudget();
     this->metrics.input_chunks_size_bytes_total = this->row_info.first;
+
+    if (this->debug_mode) {
+        std::cerr
+            << fmt::format(
+                   "[DEBUG] StreamSortState::FinalizeBuild: Memory Budget: {}.",
+                   BytesToHumanReadableString(this->mem_budget_bytes))
+            << std::endl;
+    }
 
     // Make all dictionaries global
     time_pt start_dict_unif = start_timer();
@@ -1193,6 +1255,14 @@ StreamSortState::PartitionChunksByRank(
             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
 
+    if (this->debug_mode) {
+        std::cerr << fmt::format(
+                         "[DEBUG] StreamSortState::PartitionChunksByRank: "
+                         "Shuffle Chunk Size: {}.",
+                         shuffle_chunk_size_)
+                  << std::endl;
+    }
+
     // A vector containing all the possible ranks. This could be
     // std::ranges::iota_view, but it's not supported on all compilers yet.
     std::vector<int> ranks(n_pes);
@@ -1247,6 +1317,14 @@ StreamSortState::PartitionChunksByRank(
             rankToChunks[rank_id].push_back(std::move(chunk.table));
         }
     }
+
+    if (this->debug_mode) {
+        std::cerr << fmt::format(
+                         "[DEBUG] StreamSortState::PartitionChunksByRank: "
+                         "Finished range partitioning chunks for shuffle.")
+                  << std::endl;
+    }
+
     return rankToChunks;
 }
 
@@ -1501,6 +1579,12 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
         return false;
     };
 
+    if (this->debug_mode) {
+        std::cerr << "[DEBUG] StreamSortState::GlobalSort_Partition: Starting "
+                     "data shuffle."
+                  << std::endl;
+    }
+
     // Initialize every rank to send to their neighbor. This is to prevent the
     // situation where all ranks send to a single host simultaneously making it
     // harder to overlap IO and compute.
@@ -1647,6 +1731,19 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
     this->metrics.shuffle_total_time += end_timer(start_shuffle);
     this->metrics.n_rows_after_shuffle +=
         this->metrics.shuffle_total_recv_nrows;
+
+    if (this->debug_mode) {
+        std::cerr
+            << fmt::format(
+                   "[DEBUG] StreamSortState::GlobalSort_Partition: Finished "
+                   "data shuffle. Number of sent chunks: {}. Number of "
+                   "received chunks: {}. Number of rows after shuffle: {}. "
+                   "Total Shuffle Time: {}us.",
+                   this->metrics.n_shuffle_send, this->metrics.n_shuffle_recv,
+                   this->metrics.n_rows_after_shuffle,
+                   this->metrics.shuffle_total_time)
+            << std::endl;
+    }
 
     return kway_merge_sorter;
 }

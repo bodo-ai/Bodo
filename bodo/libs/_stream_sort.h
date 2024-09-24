@@ -248,6 +248,8 @@ struct ExternalKWayMergeSorter {
     // data fits in memory. Only for unit testing purposes.
     const bool enable_inmem_concat_sort = true;
 
+    const bool debug_mode = false;
+
     /**
      * Comparator for creating a heap of TableAndRange objects sorted by the
      * minimum values in the range. Does not pin the underlying table.
@@ -309,7 +311,7 @@ struct ExternalKWayMergeSorter {
         int64_t bytes_per_row_ = -1, int64_t limit = -1, int64_t offset = -1,
         size_t output_chunk_size_ = STREAMING_BATCH_SIZE, int64_t K_ = -1,
         int64_t processing_chunk_size_ = -1,
-        bool enable_inmem_concat_sort_ = true,
+        bool enable_inmem_concat_sort_ = true, bool debug_mode_ = false,
         bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
         std::shared_ptr<::arrow::MemoryManager> mm =
             bodo::default_buffer_memory_manager());
@@ -578,6 +580,7 @@ struct StreamSortState {
     const bool parallel = true;
     const size_t output_chunk_size = STREAMING_BATCH_SIZE;
     bool build_finalized = false;
+    bool debug_mode = false;
 
     // These are only for unit testing purposes. -1 means selecting the optimal
     // values based on the budget, number of ranks, etc.
@@ -712,8 +715,8 @@ struct StreamSortState {
             this->vect_ascending, this->na_position, this->dead_keys,
             this->mem_budget_bytes, this->bytes_per_row, -1, -1,
             this->output_chunk_size, this->kway_merge_k,
-            this->kway_merge_chunksize, this->enable_inmem_concat_sort, op_pool,
-            op_mm);
+            this->kway_merge_chunksize, this->enable_inmem_concat_sort,
+            this->debug_mode, op_pool, op_mm);
     }
 
     /// Report metrics for the build stage. The function is idempotent and
@@ -748,8 +751,8 @@ struct StreamSortLimitOffsetState : StreamSortState {
             this->vect_ascending, this->na_position, this->dead_keys,
             this->mem_budget_bytes, this->bytes_per_row, this->sortlimit.limit,
             this->sortlimit.offset, this->output_chunk_size, this->kway_merge_k,
-            this->kway_merge_chunksize, this->enable_inmem_concat_sort, op_pool,
-            op_mm);
+            this->kway_merge_chunksize, this->enable_inmem_concat_sort,
+            this->debug_mode, op_pool, op_mm);
     }
 
     // Override base class that adds limit / offset related logic
