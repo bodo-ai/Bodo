@@ -1280,8 +1280,9 @@ arrow::Result<bool> BufferPool::best_effort_evict_helper(const uint64_t bytes) {
         int64_t frame_idx =
             this->size_classes_[size_class_idx]->AllocateFrame(out);
         if (frame_idx == -1) {
-            return ::arrow::Status::OutOfMemory(
-                "Could not find an empty frame of required size!");
+            return ::arrow::Status::OutOfMemory(fmt::format(
+                "Could not find an empty frame of required size ({})!",
+                this->size_class_bytes_[size_class_idx]));
         }
 
         *out = this->size_classes_[size_class_idx]->getFrameAddress(frame_idx);
@@ -1789,6 +1790,74 @@ std::optional<std::tuple<uint64_t, uint64_t>> BufferPool::alloc_loc(
     }
 }
 
+void BufferPool::print_stats() {
+    // Top-level metrics
+    this->stats_.Print(stderr);
+
+    // Size Class Metrics
+    const char* COL_NAMES[8] = {
+        "SizeClass",     "Num Spilled", "Spill Time",   "Num Readback",
+        "Readback Time", "Num Madvise", "Madvise Time", "Unmapped Time",
+    };
+
+    std::vector<size_t> col_widths(8);
+    std::transform(std::begin(COL_NAMES), std::end(COL_NAMES),
+                   col_widths.begin(), strlen);
+
+    fmt::dynamic_format_arg_store<fmt::format_context> store;
+    store.push_back("");
+    for (const auto& x : col_widths)
+        store.push_back(x);
+
+    fmt::println(stderr, "{0:─^{1}}", " Size Class Metrics ",
+                 col_widths.size() * 3 +
+                     std::reduce(col_widths.begin(), col_widths.end()));
+    fmt::vprint(stderr,
+                "{0:─^{1}}─┬─{0:─^{2}}─┬─{0:─^{3}}─┬─{0:─^{4}}─┬─{0:─^{5}}"
+                "─┬─{0:─^{6}}─┬─{0:─^{7}}─┬─{0:─^{8}}─\n",
+                store);
+    fmt::println(stderr, "{} ", fmt::join(COL_NAMES, " │ "));
+    fmt::vprint(stderr,
+                "{0:─^{1}}─┼─{0:─^{2}}─┼─{0:─^{3}}─┼─{0:─^{4}}─┼─{0:─^{5}}"
+                "─┼─{0:─^{6}}─┼─{0:─^{7}}─┼─{0:─^{8}}─\n",
+                store);
+
+    for (const auto& s : size_classes_) {
+        fmt::println(stderr,
+                     "{0:<{1}} │ {2:>{3}} │ {4:>{5}} │ {6:>{7}} │ {8:>{9}} "
+                     "│ {10:>{11}} │ {12:>{13}} │ {14:>{15}} ",
+                     BytesToHumanReadableString(s->getBlockSize()),
+                     strlen(COL_NAMES[0]), s->stats_.total_blocks_spilled,
+                     strlen(COL_NAMES[1]), s->stats_.total_spilling_time,
+                     strlen(COL_NAMES[2]), s->stats_.total_blocks_readback,
+                     strlen(COL_NAMES[3]), s->stats_.total_readback_time,
+                     strlen(COL_NAMES[4]), s->stats_.total_advise_away_calls,
+                     strlen(COL_NAMES[5]), s->stats_.total_advise_away_time,
+                     strlen(COL_NAMES[6]), s->stats_.total_find_unmapped_time,
+                     strlen(COL_NAMES[7]));
+    }
+    fmt::vprint(stderr,
+                "{0:─^{1}}─┴─{0:─^{2}}─┴─{0:─^{3}}─┴─{0:─^{4}}─┴─{0:─^{5}}"
+                "─┴─{0:─^{6}}─┴─{0:─^{7}}─┴─{0:─^{8}}─\n",
+                store);
+    fmt::println(stderr, "");
+
+    // Storage managers' metrics
+    if (this->storage_managers_.size() > 0) {
+        std::vector<std::string_view> manager_names;
+        for (auto& manager : this->storage_managers_) {
+            manager_names.push_back(manager->storage_name);
+        }
+
+        std::vector<StorageManagerStats> stats;
+        for (auto& manager : this->storage_managers_) {
+            stats.push_back(manager->stats_);
+        }
+
+        PrintStorageManagerStats(stderr, manager_names, stats);
+    }
+}
+
 void BufferPool::Cleanup() {
     for (auto& manager : this->storage_managers_) {
         manager->Cleanup();
@@ -1801,71 +1870,7 @@ void BufferPool::Cleanup() {
                          ((this->options_.trace_level == 1) && (rank == 0));
 
     if (print_on_rank) {
-        this->stats_.Print(stderr);
-    }
-
-    if (print_on_rank) {
-        const char* COL_NAMES[8] = {
-            "SizeClass",     "Num Spilled", "Spill Time",   "Num Readback",
-            "Readback Time", "Num Madvise", "Madvise Time", "Unmapped Time",
-        };
-
-        std::vector<size_t> col_widths(8);
-        std::transform(std::begin(COL_NAMES), std::end(COL_NAMES),
-                       col_widths.begin(), strlen);
-
-        fmt::dynamic_format_arg_store<fmt::format_context> store;
-        store.push_back("");
-        for (const auto& x : col_widths)
-            store.push_back(x);
-
-        fmt::println(stderr, "{0:─^{1}}", " Size Class Metrics ",
-                     col_widths.size() * 3 +
-                         std::reduce(col_widths.begin(), col_widths.end()));
-        fmt::vprint(stderr,
-                    "{0:─^{1}}─┬─{0:─^{2}}─┬─{0:─^{3}}─┬─{0:─^{4}}─┬─{0:─^{5}}"
-                    "─┬─{0:─^{6}}─┬─{0:─^{7}}─┬─{0:─^{8}}─\n",
-                    store);
-        fmt::println(stderr, "{} ", fmt::join(COL_NAMES, " │ "));
-        fmt::vprint(stderr,
-                    "{0:─^{1}}─┼─{0:─^{2}}─┼─{0:─^{3}}─┼─{0:─^{4}}─┼─{0:─^{5}}"
-                    "─┼─{0:─^{6}}─┼─{0:─^{7}}─┼─{0:─^{8}}─\n",
-                    store);
-
-        for (const auto& s : size_classes_) {
-            fmt::println(
-                stderr,
-                "{0:<{1}} │ {2:>{3}} │ {4:>{5}} │ {6:>{7}} │ {8:>{9}} "
-                "│ {10:>{11}} │ {12:>{13}} │ {14:>{15}} ",
-                BytesToHumanReadableString(s->getBlockSize()),
-                strlen(COL_NAMES[0]), s->stats_.total_blocks_spilled,
-                strlen(COL_NAMES[1]), s->stats_.total_spilling_time,
-                strlen(COL_NAMES[2]), s->stats_.total_blocks_readback,
-                strlen(COL_NAMES[3]), s->stats_.total_readback_time,
-                strlen(COL_NAMES[4]), s->stats_.total_advise_away_calls,
-                strlen(COL_NAMES[5]), s->stats_.total_advise_away_time,
-                strlen(COL_NAMES[6]), s->stats_.total_find_unmapped_time,
-                strlen(COL_NAMES[7]));
-        }
-        fmt::vprint(stderr,
-                    "{0:─^{1}}─┴─{0:─^{2}}─┴─{0:─^{3}}─┴─{0:─^{4}}─┴─{0:─^{5}}"
-                    "─┴─{0:─^{6}}─┴─{0:─^{7}}─┴─{0:─^{8}}─\n",
-                    store);
-        fmt::println(stderr, "");
-    }
-
-    if (this->storage_managers_.size() > 0 && print_on_rank) {
-        std::vector<std::string_view> manager_names;
-        for (auto& manager : this->storage_managers_) {
-            manager_names.push_back(manager->storage_name);
-        }
-
-        std::vector<StorageManagerStats> stats;
-        for (auto& manager : this->storage_managers_) {
-            stats.push_back(manager->stats_);
-        }
-
-        PrintStorageManagerStats(stderr, manager_names, stats);
+        this->print_stats();
     }
 }
 
