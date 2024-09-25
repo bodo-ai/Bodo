@@ -30,7 +30,6 @@ from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
     check_unsupported_args,
-    create_unsupported_overload,
     raise_bodo_error,
 )
 
@@ -1178,6 +1177,7 @@ series_dt_unsupported_methods = {
     "tz_localize",
     "asfreq",
     "to_timestamp",
+    "as_unit",
 }
 
 series_dt_unsupported_attrs = {
@@ -1190,6 +1190,7 @@ series_dt_unsupported_attrs = {
     "qyear",
     "start_time",
     "end_time",
+    "unit",
 }
 
 
@@ -1198,15 +1199,13 @@ def _install_series_dt_unsupported():
 
     for attr_name in series_dt_unsupported_attrs:
         full_name = "Series.dt." + attr_name
-        overload_attribute(SeriesDatetimePropertiesType, attr_name)(
-            create_unsupported_overload(full_name)
+        bodo.overload_unsupported_attribute(
+            SeriesDatetimePropertiesType, attr_name, full_name
         )
 
     for fname in series_dt_unsupported_methods:
         full_name = "Series.dt." + fname
-        overload_method(SeriesDatetimePropertiesType, fname, no_unliteral=True)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesDatetimePropertiesType, fname, full_name)
 
 
 _install_series_dt_unsupported()

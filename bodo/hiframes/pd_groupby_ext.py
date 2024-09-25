@@ -25,7 +25,6 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
     overload_method,
     register_model,
 )
@@ -60,7 +59,6 @@ from bodo.utils.typing import (
     ColNamesMetaType,
     assert_bodo_error,
     check_unsupported_args,
-    create_unsupported_overload,
     dtype_to_array_type,
     get_index_data_arr_types,
     get_index_name_types,
@@ -2712,31 +2710,31 @@ def _install_groupby_unsupported():
     DataFrameGroupBy, and SeriesGroupBy types
     """
 
-    for fname in groupby_unsupported_attr:
-        overload_attribute(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+    for attr_name in groupby_unsupported_attr:
+        bodo.overload_unsupported_attribute(
+            DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
         )
 
     for fname in groupby_unsupported:
-        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+        bodo.overload_unsupported_method(
+            DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
     # TODO: Replace DataFrameGroupByType with SeriesGroupByType once we
     # have separate types.
-    for fname in series_only_unsupported_attrs:
-        overload_attribute(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"SeriesGroupBy.{fname}")
+    for attr_name in series_only_unsupported_attrs:
+        bodo.overload_unsupported_attribute(
+            DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
         )
 
     for fname in series_only_unsupported:
-        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"SeriesGroupBy.{fname}")
+        bodo.overload_unsupported_method(
+            DataFrameGroupByType, fname, f"SeriesGroupBy.{fname}"
         )
 
     for fname in dataframe_only_unsupported:
-        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+        bodo.overload_unsupported_method(
+            DataFrameGroupByType, fname, f"DataFrameGroupBy.{fname}"
         )
 
 
