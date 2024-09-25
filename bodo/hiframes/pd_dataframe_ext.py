@@ -31,7 +31,6 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
     overload_method,
     register_model,
 )
@@ -5382,6 +5381,7 @@ dataframe_unsupported = [
     "get",
     # Binary operator functions
     "add",
+    "__add__",
     "sub",
     "mul",
     "div",
@@ -5413,6 +5413,7 @@ dataframe_unsupported = [
     "agg",
     "aggregate",
     "map",
+    "applymap",
     "transform",
     "expanding",
     "ewm",
@@ -5478,7 +5479,7 @@ dataframe_unsupported = [
     "tz_convert",
     "tz_localize",
     # Plotting
-    # TODO: handle df.plot.x
+    # TODO [BSE-3957]: handle df.plot.x
     "boxplot",
     "hist",
     # Serialization / IO / conversion:
@@ -5497,6 +5498,8 @@ dataframe_unsupported = [
     "to_clipboard",
     "to_markdown",
     "to_xml",  # Not in the organized pd docs, putting it here
+    "to_orc",
+    "__dataframe__",
 ]
 
 dataframe_unsupported_attrs = [
@@ -5510,7 +5513,7 @@ dataframe_unsupported_attrs = [
     "sparse",
 ]
 
-# TODO: add propper error messaging for df.plot.x
+# TODO [BSE-3957]: add proper error messaging for df.plot.x
 
 
 def _install_pd_unsupported(mod_name, pd_unsupported):
@@ -5525,12 +5528,10 @@ def _install_dataframe_unsupported():
 
     for attr_name in dataframe_unsupported_attrs:
         full_name = "DataFrame." + attr_name
-        overload_attribute(DataFrameType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(DataFrameType, attr_name, full_name)
     for fname in dataframe_unsupported:
-        full_name = "DataFrame." + fname + "()"
-        overload_method(DataFrameType, fname)(create_unsupported_overload(full_name))
+        full_name = "DataFrame." + fname
+        bodo.overload_unsupported_method(DataFrameType, fname, full_name)
 
 
 # Run install unsupported for each module to ensure a correct error message.

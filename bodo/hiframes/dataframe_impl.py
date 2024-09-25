@@ -5927,7 +5927,7 @@ def overload_dataframe_plot(
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        raise BodoError("df.plot needs matplotllib which is not installed.")
+        raise BodoError("df.plot needs matplotlib which is not installed.")
     # Pandas behavior
     # This is based on testing. Nothing clear in the source code to indicate this.
     # When x is None, x is range(len(y))
