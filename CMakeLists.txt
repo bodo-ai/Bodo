@@ -195,6 +195,27 @@ cmake_print_variables(CONDA_LIB_DIR)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 
+
+# Vendor mpi4py
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
+  message(STATUS "Copying mpi4py to source directory")
+  file(COPY "$ENV{CONDA_PREFIX}/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages/mpi4py" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
+endif()
+message(STATUS "Copying mpi4py to wheel")
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
+
+# Vendor mpich
+if(DEFINED ENV{BODO_VENDOR_MPICH})
+  message(STATUS "Downloading mpich")
+    execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i  https://pypi.anaconda.org/mpi4py/simple)
+  execute_process(COMMAND unzip mpich-*.whl "mpich*.data/*" -d mpich-tmp-extract-dir)
+  file(GLOB MPICH_DATA_DIR "mpich-tmp-extract-dir/mpich-*.data/data/*")
+  file(COPY ${MPICH_DATA_DIR} DESTINATION "${SKBUILD_DATA_DIR}" FOLLOW_SYMLINK_CHAIN FILE_PERMISSIONS OWNER_EXECUTE GROUP_EXECUTE WORLD_EXECUTE OWNER_READ GROUP_READ WORLD_READ OWNER_WRITE GROUP_WRITE)
+  file(GLOB MPICH_WHEEL "mpich-*.whl")
+  file(REMOVE_RECURSE ${MPICH_WHEEL} mpich-tmp-extract-dir)
+  message(STATUS "Moved mpich to ${SKBUILD_DATA_DIR}")
+endif()
+
 # Find PyArrow Include Directory
 # TODO: Use Arrow Include Directory from Conda Instead
 execute_process(
@@ -232,6 +253,7 @@ add_custom_command(
 python_add_library(pyfs MODULE WITH_SOABI "bodo/io/pyfs.cpp")
 target_include_directories(pyfs PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyfs PRIVATE ${PYARROW_LIB_DIR})
+target_link_directories(pyfs PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(pyfs PRIVATE arrow arrow_python)
 install(TARGETS pyfs DESTINATION "bodo/io/")
 
@@ -249,6 +271,7 @@ set(pyarrow_wrappers_sources "bodo/io/pyarrow_wrappers.cpp" "bodo/io/arrow_compa
 python_add_library(pyarrow_wrappers MODULE WITH_SOABI "${pyarrow_wrappers_sources}")
 target_include_directories(pyarrow_wrappers PRIVATE ${BASE_INCLUDE_DIRS})
 target_link_directories(pyarrow_wrappers PRIVATE ${PYARROW_LIB_DIR})
+target_link_directories(pyarrow_wrappers PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(pyarrow_wrappers PRIVATE arrow arrow_python arrow_dataset)
 install(TARGETS pyarrow_wrappers DESTINATION "bodo/io/")
 
@@ -267,6 +290,7 @@ add_custom_command(
 python_add_library(_hdfs MODULE WITH_SOABI "bodo/io/_hdfs.cpp")
 target_include_directories(_hdfs PUBLIC ${BASE_INCLUDE_DIRS})
 target_link_directories(_hdfs PRIVATE ${PYARROW_LIB_DIR})
+target_link_directories(_hdfs PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(_hdfs PRIVATE arrow arrow_python)
 install(TARGETS _hdfs DESTINATION "bodo/io/")
 
@@ -288,6 +312,7 @@ add_custom_command(
 )
 
 python_add_library(tracing MODULE WITH_SOABI "bodo/utils/tracing.c")
+target_link_directories(tracing PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(tracing PRIVATE mpi)
 install(TARGETS tracing DESTINATION "bodo/utils/")
 
@@ -305,6 +330,7 @@ add_custom_command(
 python_add_library(memory MODULE WITH_SOABI "bodo/memory.cpp")
 target_include_directories(memory PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
 target_link_directories(memory PRIVATE ${PYARROW_LIB_DIR})
+target_link_directories(memory PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(memory PRIVATE arrow arrow_python)
 install(TARGETS memory DESTINATION "bodo/")
 
@@ -332,6 +358,7 @@ python_add_library(
 
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR})
+target_link_directories(memory_tester PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
@@ -363,6 +390,7 @@ python_add_library(
 
 target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/")
 target_link_directories(native_typer PRIVATE ${PYARROW_LIB_DIR})
+target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
 target_link_libraries(native_typer PRIVATE fmt)
 install(TARGETS native_typer DESTINATION "bodo/transforms/")
 
@@ -531,6 +559,7 @@ target_include_directories(
     "bodo/libs/HashLibs/TSL/robin-map"
     "bodo/libs/HashLibs/TSL/sparse-map"
 )
+target_link_directories(ext PRIVATE ${CONDA_LIB_DIR})
 
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -596,7 +625,9 @@ target_link_libraries(ext PRIVATE
   fftw3_mpi
   fftw3f_mpi
   m
-  fmt)
+  fmt
+  aws-cpp-sdk-core
+)
 
 set(IS_EXPIRED "$ENV{CHECK_LICENSE_EXPIRED}")
 set(IS_CORE_COUNT "$ENV{CHECK_LICENSE_CORE_COUNT}")

@@ -12,10 +12,10 @@ import numba
 import numpy as np
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
 import bodosql
+from bodo.mpi4py import MPI
 from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,

@@ -6,7 +6,6 @@ from uuid import uuid4
 import numba
 import numpy as np
 import pandas as pd
-from mpi4py import MPI
 from utils.utils import (
     checksum_str_df,
     drop_sf_table,
@@ -16,6 +15,7 @@ from utils.utils import (
 
 import bodo
 import bodo.io.snowflake
+from bodo.mpi4py import MPI
 
 comm = MPI.COMM_WORLD
 

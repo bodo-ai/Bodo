@@ -51,6 +51,7 @@ requirements:
     - cython <3.0
     - setuptools_scm >=8
     - scikit-build-core
+    - mpi4py =3.1.5
 
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
@@ -65,7 +66,6 @@ requirements:
     - h5py
     - mpich 4.1.2=h* # [not win]
     - msmpi # [win]
-    - mpi4py
     - vc # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
@@ -83,7 +83,6 @@ requirements:
     - numba =0.60.0
     - mpich 4.1.2=h* # [not win]
     - msmpi # [win]
-    - mpi4py
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*

@@ -73,8 +73,7 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
     Test different values for lead/lag with a pass through column,
     not keeping the input
     """
-    from mpi4py import MPI
-
+    from bodo.mpi4py import MPI
     from bodo.tests.utils import temp_env_override
 
     df = pd.DataFrame(

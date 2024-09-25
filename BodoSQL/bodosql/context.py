@@ -880,7 +880,7 @@ class BodoSQLContext:
         )
 
     def _create_planner_and_parse_query(self, sql: str, hide_credentials: bool):
-        from mpi4py import MPI
+        from bodo.mpi4py import MPI
 
         comm = MPI.COMM_WORLD
 
@@ -942,7 +942,7 @@ class BodoSQLContext:
         Returns:
             Tuple[str, Dict[str, Any]]: The generated code and the lowered global variables.
         """
-        from mpi4py import MPI
+        from bodo.mpi4py import MPI
 
         comm = MPI.COMM_WORLD
         func_text_or_err_msg = ""
@@ -1360,7 +1360,7 @@ class BodoSQLContext:
         Returns:
             pd.DataFrame: The result of the DDL query as a Pandas DataFrame.
         """
-        from mpi4py import MPI
+        from bodo.mpi4py import MPI
 
         comm = MPI.COMM_WORLD
         result = None

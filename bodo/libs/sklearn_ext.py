@@ -18,7 +18,6 @@ import sklearn.model_selection
 import sklearn.naive_bayes
 import sklearn.svm
 import sklearn.utils
-from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
     overload,
@@ -52,6 +51,7 @@ from bodo.libs.distributed_api import (
     get_nodes_first_ranks,
     get_num_nodes,
 )
+from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,

@@ -3,7 +3,7 @@ import json
 import boto3
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 
 from bodo_platform_utils.config import (
     BODO_PLATFORM_WORKSPACE_REGION,

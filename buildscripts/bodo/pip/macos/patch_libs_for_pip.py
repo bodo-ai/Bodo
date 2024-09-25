@@ -3,8 +3,25 @@ import os
 import shutil
 import zipfile
 from subprocess import check_call, check_output
+from zipfile import ZipFile, ZipInfo
 
 # This script modifies the load path of libmpi in the main Bodo extension
+
+
+class ZipFileWithPermissions(ZipFile):
+    """Custom ZipFile class handling file permissions.
+    https://stackoverflow.com/a/54748564"""
+
+    def _extract_member(self, member, targetpath, pwd):
+        if not isinstance(member, ZipInfo):
+            member = self.getinfo(member)
+
+        targetpath = super()._extract_member(member, targetpath, pwd)
+
+        attr = member.external_attr >> 16
+        if attr != 0:
+            os.chmod(targetpath, attr)
+        return targetpath
 
 
 def patch_lib(fpath):
@@ -58,7 +75,7 @@ def patch_libs(path):
 def patch_wheel(path):
     print("\nPATCHING", path)
     # unpack wheel in "whl_tmp" directory
-    with zipfile.ZipFile(path, "r") as z:
+    with ZipFileWithPermissions(path, "r") as z:
         z.extractall("whl_tmp")
 
     patch_libs("whl_tmp")

@@ -6,7 +6,7 @@ import warnings
 
 import numpy as np
 
-from mpi4py.libmpi cimport (
+from bodo.mpi4py.libmpi cimport (
     MPI_COMM_WORLD,
     MPI_Barrier,
     MPI_Comm_rank,
@@ -75,7 +75,7 @@ def reset(trace_fname=None):
 
 
 def start(trace_fname=None):
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
     comm = MPI.COMM_WORLD
     if comm.Get_rank() == 0:
         warnings.warn(TRACING_MEM_WARN, BodoWarning)
@@ -204,7 +204,7 @@ cdef generic_aggregate_func(object traces_all):
 
 
 cdef aggregate_events():
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
     comm = MPI.COMM_WORLD
     cdef int rank
     MPI_Comm_rank(MPI_COMM_WORLD, &rank)

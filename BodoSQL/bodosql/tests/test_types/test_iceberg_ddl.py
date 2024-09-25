@@ -6,11 +6,11 @@ import pytest
 # Add test harnesses when adding new catalogs.
 from ddltest_harness import DDLTestHarness
 from filesystem_test_harness import FilesystemTestHarness
-from mpi4py import MPI
 from tabular_test_harness import TabularTestHarness
 
 import bodo
 import bodosql
+from bodo.mpi4py import MPI
 from bodo.tests.utils import pytest_tabular
 from bodo.utils.typing import BodoError
 from bodosql.tests.utils import assert_equal_par, replace_type_varchar

@@ -5,13 +5,13 @@ from typing import Optional
 
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
 from bodo.io.stream_iceberg_write import (
     iceberg_writer_append_table,
     iceberg_writer_init,
 )
+from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,
 )

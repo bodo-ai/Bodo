@@ -4,7 +4,6 @@ import time
 
 import numba
 import numpy as np
-from mpi4py import MPI
 
 import bodo
 from bodo.libs.distributed_api import (
@@ -12,6 +11,7 @@ from bodo.libs.distributed_api import (
     get_host_ranks,
     get_nodes_first_ranks,
 )
+from bodo.mpi4py import MPI
 
 dl_status = None
 

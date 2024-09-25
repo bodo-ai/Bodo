@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 import pyarrow.fs as pafs
 import snowflake
-from mpi4py import MPI
 from pyspark.sql import SparkSession
 
 import bodo
+from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg
 
 BUCKET_NAME = "engine-e2e-tests-iceberg"

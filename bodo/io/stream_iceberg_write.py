@@ -7,7 +7,6 @@ import llvmlite.binding as ll
 import numba
 import pandas as pd
 from llvmlite import ir as lir
-from mpi4py import MPI
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
@@ -61,6 +60,7 @@ from bodo.libs.array import (
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.table_builder import TableBuilderStateType
+from bodo.mpi4py import MPI
 from bodo.utils import tracing
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (

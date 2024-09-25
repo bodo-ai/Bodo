@@ -2673,7 +2673,7 @@ def check_CSV_write(
     bodo_filename="bodo_out.csv",
     read_impl=None,
 ):
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

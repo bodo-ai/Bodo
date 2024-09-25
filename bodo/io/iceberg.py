@@ -26,7 +26,6 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import requests
-from mpi4py import MPI
 from numba.core import types
 from numba.extending import box, intrinsic, models, overload, register_model, unbox
 
@@ -65,6 +64,7 @@ from bodo.libs.array import (
 )
 from bodo.libs.bool_arr_ext import alloc_false_bool_array
 from bodo.libs.str_ext import unicode_to_utf8
+from bodo.mpi4py import MPI
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import run_rank0
@@ -3225,7 +3225,7 @@ def generate_data_file_info(
     Collect C++ Iceberg File Info to a single rank
     and process before handing off to the connector / committing functions
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     # Information we need:

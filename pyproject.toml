@@ -5,7 +5,8 @@ requires = [
     "scikit-build-core[pyproject]",
     "cython",
     "numpy>=1.24,<1.27",
-    "pyarrow==17.0.0"
+    "pyarrow==17.0.0",
+    "pip"
 ]
 build-backend = "scikit_build_core.build"
 
@@ -40,24 +41,11 @@ dependencies = [
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",
     "requests",
-
-    # These aren't on PYPI, so we need to install them from the URL
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp310-cp310-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.10'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp311-cp311-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.11'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp312-cp312-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.12'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp310-cp310-macosx_10_9_x86_64.whl ; sys_platform == 'darwin' and platform_machine == 'x86_64' and python_version == '3.10'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp311-cp311-macosx_10_9_x86_64.whl ; sys_platform == 'darwin' and platform_machine == 'x86_64' and python_version == '3.11'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp312-cp312-macosx_10_9_x86_64.whl ; sys_platform == 'darwin' and platform_machine == 'x86_64' and python_version == '3.12'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.10'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.11'",
-    "mpi4py@https://anaconda.org/mpi4py/mpi4py/3.1.5/download/mpi4py-3.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'",
-    "mpi4ch@https://anaconda.org/mpi4py/mpich/3.4.3/download/mpich-3.4.3-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl ; sys_platform == 'linux' and platform_machine == 'x86_64'",
-    "mpich@https://anaconda.org/mpi4py/mpich/3.4.3/download/mpich-3.4.3-py3-none-macosx_11_0_arm64.whl ; sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "mpich@https://anaconda.org/mpi4py/mpich/3.4.3/download/mpich-3.4.3-py3-none-macosx_10_9_x86_64.whl ; sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
 
 [project.optional-dependencies]
 HDF5 = ["h5py"]
+
 
 [project.urls]
 Homepage = "https://bodo.ai"
@@ -94,6 +82,9 @@ wheel.exclude = [
     "bodo/tests/*",
 ]
 
+[tool.scikit-build.cmake.define]
+MPICH_VERSION = "3.4.3"
+
 # When building for Conda, set different
 # arguments for CMake
 [[tool.scikit-build.overrides]]
@@ -118,7 +109,8 @@ exclude = 'demo/.*'
 unsafe-fixes = true
 lint.extend-select = [
     "I",  # isort
-    "C4"  # flake8-comprehensions
+    "C4",  # flake8-comprehensions
+    "TID",  # flake8-tidy-imports
 ]
 lint.ignore = [
     # Permanently Disabled Rules
@@ -178,18 +170,33 @@ exclude = [
     "BodoSQL/buildscripts/python_library_build/generate_libraries.py",
 ]
 
+[tool.ruff.lint.flake8-tidy-imports]
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"mpi4py".msg = "Use `bodo.mpi4py` instead of `mpi4py`"
+
 [tool.ruff.lint.isort]
 known-first-party = ["bodo", "bodosql", "BodoSQL/bodosql", "e2e-tests"]
 
 [tool.cibuildwheel]
 # Disable building PyPy wheels on all platforms
-skip = "pp*"
+# Disable building wheels for musllinux
+skip = ["pp*", "*musllinux*", "*i686*"]
+manylinux-x86_64-image = "427443013497.dkr.ecr.us-east-2.amazonaws.com/cibuildwheel-manylinux:latest"
+# Increase pip debugging output
+build-verbosity = 1
+
+[tool.cibuildwheel.linux]
+build-frontend = { name = "pip", args = ["--no-build-isolation"] }
+
+
+[tool.cibuildwheel.macos]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
 mpiexec -n 2 python -c '\
 import bodo 
 import pandas as pd
-pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
+if bodo.get_rank() == 0:
+    pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
 @bodo.jit
 def f():
     df = pd.read_parquet("test.parquet")
@@ -197,7 +204,7 @@ def f():
 assert f() == 6' && \
 
 # Check that only expected dylibs are included in the wheel
-LIB_WHITELIST="^(libc\\+\\+|libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkrb5support|libkrb5|libnghttp2|libssh2|libssl|libsz|libzstd|libz)\\.[0-9]+(\\.[0-9]+)*\\.dylib$"
+LIB_WHITELIST="^(libc\\+\\+|libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkrb5support|libkrb5|libnghttp2|libssh2|libssl|libsz|libzstd|libz|libaws-.*)(\\.[0-9]+)*\\.dylib$"
 DYLIBS_DIR="$(pip show  bodo | grep Location | awk -F 'Location: ' '{print $2}')/bodo/.dylibs" && \
 for file in $DYLIBS_DIR/*; do
     if [[ ! $(basename $file) =~ $LIB_WHITELIST ]]; then
