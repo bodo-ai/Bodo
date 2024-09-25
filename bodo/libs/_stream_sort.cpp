@@ -656,23 +656,37 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         return output;
     }
 
-    uint64_t approx_input_chunks_total_bytes = 0;
-    uint64_t approx_max_input_chunk_size_bytes = 0;
+    size_t approx_input_chunks_total_bytes = 0;
+    size_t approx_max_input_chunk_size_bytes = 0;
+    size_t num_input_rows = 0;
     for (const auto& chunk : input_chunks) {
         // XXX String buffer sizes in the CTB buffers might be an
         // overestimate, so we might need to modify CTB buffers to set the size
         // correctly (e.g. use Reserve/SetSize instead of Resize, etc.).
-        uint64_t chunk_size =
+        size_t chunk_size =
             table_local_memory_size(chunk.table, /*include_dict_size*/ false,
                                     /*approximate_string_size*/ true);
         approx_input_chunks_total_bytes += chunk_size;
         approx_max_input_chunk_size_bytes =
             std::max(approx_max_input_chunk_size_bytes, chunk_size);
+        num_input_rows += chunk.table->nrows();
     }
     this->metrics.merge_approx_input_chunks_total_bytes =
         approx_input_chunks_total_bytes;
     this->metrics.merge_approx_max_input_chunk_size_bytes =
         approx_max_input_chunk_size_bytes;
+
+    // Size of each index in the output of sort_values_table_local_get_indices
+    // called below.
+    // TODO(aneesh) allow using i32 (or smaller) when the number of rows would
+    // fit in an i32.
+    size_t index_size = sizeof(int64_t);
+    size_t index_vector_size = index_size * num_input_rows;
+    // The maximum length index vector we want to allocate
+    size_t max_index_vector_length = std::numeric_limits<int32_t>::max();
+
+    size_t approx_mem_usage =
+        2 * approx_input_chunks_total_bytes + index_vector_size;
 
     if (this->debug_mode) {
         std::cerr << fmt::format(
@@ -688,15 +702,16 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
                   << std::endl;
     }
 
-    // If all 'input_chunks' fit in 0.5*mem_budget, then concat and sort
-    // them. Similarly, if there's a single chunk, we know that it's already
-    // sorted and we can simply output it (after chunking).
+    // If all 'input_chunks' (plus space needed during sort) fit in mem_budget,
+    // then concat and sort them. Similarly, if there's a single chunk, we know
+    // that it's already sorted and we can simply output it (after chunking).
     // XXX TODO Technically we only need to ensure that all input chunks fit in
     // (mem_budget_bytes - max_chunk_size_bytes), however, there were some
     // regressions when doing that, particularly in the output append step. This
     // is something to revisit.
     if (this->enable_inmem_concat_sort &&
-        ((approx_input_chunks_total_bytes < (this->mem_budget_bytes / 2)) ||
+        (num_input_rows < max_index_vector_length) &&
+        ((approx_mem_usage < this->mem_budget_bytes) ||
          input_chunks.size() == 1)) {
         // This is an optimization for when the table fits in memory where
         // we concat all the chunks into a single table and sort the
@@ -1017,7 +1032,7 @@ StreamSortState::StreamSortState(
       kway_merge_k(kway_merge_k_),
       enable_inmem_concat_sort(enable_inmem_concat_sort_),
       shuffle_chunksize(shuffle_chunksize_),
-      shuffle_max_concurrent_sends(
+      shuffle_max_concurrent_msgs(
           get_max_shuffle_concurrent_sends(shuffle_max_concurrent_sends_)),
       mem_budget_bytes(StreamSortState::GetBudget()),
       // Currently Operator pool and Memory manager are set to default
@@ -1246,7 +1261,7 @@ StreamSortState::PartitionChunksByRank(
             ? this->shuffle_chunksize
             : get_optimal_sort_shuffle_chunk_size(
                   this->bytes_per_row, global_min_mem_budget_bytes,
-                  this->shuffle_max_concurrent_sends);
+                  this->shuffle_max_concurrent_msgs);
     this->metrics.shuffle_chunk_size = shuffle_chunk_size_;
     for (int rank_id = 0; rank_id < n_pes; rank_id++) {
         rankToChunkedBuilders.emplace_back(
@@ -1602,7 +1617,7 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
         // XXX TODO Since there is a max allowed chunk size, we could
         // dynamically choose a larger 'shuffle_max_concurrent_sends' to fully
         // utilize the available memory and allow more concurrent data transfer.
-        while ((send_states.size() < this->shuffle_max_concurrent_sends) &&
+        while ((send_states.size() < this->shuffle_max_concurrent_msgs) &&
                HaveChunksToSendToRankWithFreeTag()) {
             int starting_msg_tag = GetNextTagForRank(host_to_send_to);
             if ((rankToCurrentChunk[host_to_send_to] <
@@ -1678,14 +1693,14 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
             barrier_posted = true;
         }
 
-        if (recv_states.size() < this->shuffle_max_concurrent_sends) {
+        if (recv_states.size() < this->shuffle_max_concurrent_msgs) {
             // Check if we can receive
             start_irecv = start_timer();
             size_t prev_recv_states_size = recv_states.size();
             // XXX TODO Limit the number of receive states that can be posted
             // during this call (e.g. at most n_pes - 1).
-            shuffle_irecv(this->dummy_output_chunk, MPI_COMM_WORLD,
-                          recv_states);
+            shuffle_irecv(this->dummy_output_chunk, MPI_COMM_WORLD, recv_states,
+                          this->shuffle_max_concurrent_msgs);
             this->metrics.n_shuffle_recv +=
                 recv_states.size() - prev_recv_states_size;
             this->metrics.shuffle_irecv_time += end_timer(start_irecv);

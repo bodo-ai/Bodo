@@ -612,10 +612,10 @@ void AsyncShuffleRecvState::TryRecvMetadataAndAllocArrs(
 }
 
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
-                   std::vector<AsyncShuffleRecvState>& recv_states) {
+                   std::vector<AsyncShuffleRecvState>& recv_states,
+                   size_t max_recv_states) {
     assert(in_table->ncols() > 0);
-    // TODO: add output buffer size limit
-    while (true) {
+    while (recv_states.size() < max_recv_states) {
         int flag;
         MPI_Status status;
 

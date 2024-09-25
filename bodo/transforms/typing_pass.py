@@ -6020,7 +6020,7 @@ class TypingTransforms:
                     "  )\n"
                 )
 
-                args = []
+                args = tuple()
                 self._replace_state_definition(
                     func_text,
                     "impl",
