@@ -1120,6 +1120,16 @@ std::shared_ptr<table_info> ProjectTable(
     return std::make_shared<table_info>(out_arrs, in_table->nrows());
 }
 
+std::shared_ptr<table_info> ProjectTable(
+    std::shared_ptr<table_info> const in_table, size_t first_n_cols) {
+    std::vector<std::shared_ptr<array_info>> out_arrs;
+    for (size_t i = 0; i < std::min(first_n_cols, in_table->columns.size());
+         i++) {
+        out_arrs.emplace_back(in_table->columns[i]);
+    }
+    return std::make_shared<table_info>(out_arrs, in_table->nrows());
+}
+
 // @brief Compare the bitmap of two arrow arrays at a given position
 // @param na_position_bis True if NA should be considered greater than any value
 // @param arrow1 First array

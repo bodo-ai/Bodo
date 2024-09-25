@@ -134,6 +134,18 @@ struct TableBuildBuffer {
     void ReserveTable(const std::shared_ptr<table_info>& in_table);
 
     /**
+     * @brief Reserve enough space to append row_idx'th row on in_table to the
+     * buffer. This includes reserving space for variable-sized elements like
+     * strings.
+     *
+     * @param in_table Input table used for finding new buffer sizes to
+     * reserve.
+     * @param row_idx Index of the row to reserve space for.
+     */
+    void ReserveTableRow(const std::shared_ptr<table_info>& in_table,
+                         size_t row_idx);
+
+    /**
      * @brief Reserve enough space to hold size + new_data_len elements
      */
     void ReserveTableSize(const size_t new_data_len);

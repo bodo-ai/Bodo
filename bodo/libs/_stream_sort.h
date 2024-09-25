@@ -39,15 +39,19 @@ struct SortLimits {
 struct TableAndRange {
     // The data table - assumed to be sorted. Can be pinned or unpinned.
     std::shared_ptr<table_info> table;
-    // table with only 2 rows for the min and max of table - always pinned
-    std::shared_ptr<table_info> range;
     // Offset of the first row in the range table. This is to represent tables
     // where we only want the suffix of the table, and the first row of range
-    // (the min) is actully the `offset`th row of the table.
+    // (the min) is actually the `offset`th row of the table.
     int64_t offset;
+    // Table with only 2 rows for the min and max of table - always pinned.
+    // We use a TBB so that we don't need to reallocate when modifying the
+    // offset (which can be often during a K-way merge for instance).
+    TableBuildBuffer range;
 
-    TableAndRange(std::shared_ptr<table_info> table, int64_t n_keys,
-                  int64_t offset = 0);
+    TableAndRange(
+        std::shared_ptr<table_info> table, int64_t n_keys,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        int64_t offset = 0);
 
     /**
      * Update the offset into the table and adjust the range accordingly
@@ -109,7 +113,8 @@ struct ChunkedTableAndRangeBuilder : AbstractChunkedTableBuilder {
 
     void PushActiveChunk() final {
         // Get the range before we unpin the table
-        TableAndRange chunk{std::move(active_chunk), n_key};
+        TableAndRange chunk{std::move(active_chunk), n_key,
+                            this->dict_builders};
         chunk.table->unpin();
 
         chunks.emplace_back(std::move(chunk));
@@ -259,7 +264,8 @@ struct ExternalKWayMergeSorter {
 
         bool operator()(const TableAndRange& a, const TableAndRange& b) const {
             // Returns true if a.range[MIN] >= b.range[MIN]
-            return !builder.Compare(a.range, RANGE_MIN, b.range, RANGE_MIN);
+            return !builder.Compare(a.range.data_table, RANGE_MIN,
+                                    b.range.data_table, RANGE_MIN);
         }
     } comp;
 

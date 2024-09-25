@@ -2432,8 +2432,7 @@ void GroupbyOutputState::RedistributeWork() {
         if (recv_data->nrows() > 0) {
             // Unify with local dict-builders and append into the CTB.
             time_pt start_append = start_timer();
-            this->buffer.UnifyDictionariesAndAppend(recv_data,
-                                                    this->dict_builders);
+            this->buffer.UnifyDictionariesAndAppend(recv_data);
             this->metrics.shuffle_output_append_time += end_timer(start_append);
         }
     }

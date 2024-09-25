@@ -1,5 +1,4 @@
 #include "_array_build_buffer.h"
-#include "_chunked_table_builder.h"
 
 /* -------------------------- ArrayBuildBuffer ---------------------------- */
 

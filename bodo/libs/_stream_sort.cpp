@@ -5,6 +5,7 @@
 #include <numeric>
 #include <unordered_set>
 #include "_array_operations.h"
+#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_chunked_table_builder.h"
 #include "_dict_builder.h"
@@ -143,21 +144,37 @@ static std::pair<uint64_t, uint64_t> get_optimal_sort_chunk_size_and_k(
     return {optimal_chunk_size, optimal_k};
 }
 
-TableAndRange::TableAndRange(std::shared_ptr<table_info> table, int64_t n_keys,
-                             int64_t offset)
-    : table(table), offset(offset) {
+TableAndRange::TableAndRange(
+    std::shared_ptr<table_info> table, int64_t n_keys,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    int64_t offset)
+    : table(table),
+      offset(offset),
+      range(table->schema()->Project(n_keys), dict_builders) {
+    // Reserve 2 rows worth of space up front.
+    this->range.ReserveTableSize(2);
+
     // Note that we assume table is already sorted and pinned
-    UpdateOffset(n_keys, offset);
+    this->UpdateOffset(n_keys, offset);
 }
 
-void TableAndRange::UpdateOffset(int64_t n_keys, int64_t offset) {
+void TableAndRange::UpdateOffset(int64_t n_keys, int64_t offset_) {
     // Assumes table is pinned
-    this->offset = offset;
+    this->offset = offset_;
     uint64_t size = table->nrows();
-    // get the first and last row of the sorted chunk - note that we only
-    // get the columns for the keys since the rnage is only used for comparision
-    std::vector<int64_t> row_indices = {offset, (int64_t)size - 1};
-    range = RetrieveTable(table, row_indices, n_keys);
+
+    // XXX TODO Ideally we should do the following:
+    //   1. Store the max at index 0 (since it never changes)
+    //   2. Add a way to "decrement" from the bottom in TBB.
+    //   3. Only update the "offset"/"min" row entry.
+
+    // Get the first and last row of the sorted chunk - note that we only
+    // get the columns for the keys since the range is only used for comparision
+    range.Reset();  // This doesn't release memory
+    range.ReserveTableRow(this->table, offset_);
+    range.AppendRowKeys(this->table, offset_, n_keys);
+    range.ReserveTableRow(this->table, size - 1);
+    range.AppendRowKeys(this->table, size - 1, n_keys);
 }
 
 void SortedChunkedTableBuilder::PushActiveChunk() {
@@ -175,7 +192,8 @@ void SortedChunkedTableBuilder::PushActiveChunk() {
     this->sort_copy_time += end_timer(start_retr);
 
     // Get the range before we unpin the table
-    TableAndRange chunk{std::move(sorted_active_chunk), this->n_keys};
+    TableAndRange chunk{std::move(sorted_active_chunk), this->n_keys,
+                        this->dict_builders};
     chunk.table->unpin();
     this->chunks.emplace_back(std::move(chunk));
 }
@@ -415,8 +433,8 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
                 nrows = std::min(
                     nrows, static_cast<int64_t>(offset + sortlimit_.sum()));
             }
-            if (!Compare(sorted_chunks[0].front().range, RANGE_MIN,
-                         min.get().range, RANGE_MAX)) {
+            if (!Compare(sorted_chunks[0].front().range.data_table, RANGE_MIN,
+                         min.get().range.data_table, RANGE_MAX)) {
                 // We can append the whole table from offset onwards. If the
                 // offset is 0, then we just append the entire table
                 int64_t start_index =
@@ -450,12 +468,13 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
                         sortlimit_ -= 1;
                     }
                     offset++;
-                    if (offset < nrows) {
-                        min.get().UpdateOffset(n_keys, offset);
-                    }
                 } while (offset < nrows &&
-                         comp(sorted_chunks[0].front(), min) &&
+                         !Compare(sorted_chunks[0].front().range.data_table,
+                                  RANGE_MIN, min.get().table, offset) &&
                          (!has_limit_offset || sortlimit_.sum() > 0));
+                if (offset < nrows) {
+                    min.get().UpdateOffset(n_keys, offset);
+                }
 
                 // TODO(aneesh) If row_idx contains all rows in the chunk,
                 // we might want to directly append to the output without
