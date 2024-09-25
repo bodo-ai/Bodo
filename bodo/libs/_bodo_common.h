@@ -705,6 +705,24 @@ struct Schema {
      * @return std::string
      */
     std::string ToString();
+
+    /**
+     * @brief Return a new schema with only the first 'first_n' columns.
+     *
+     * @param first_n Number of columns to keep.
+     * @return std::unique_ptr<Schema> New schema.
+     */
+    std::unique_ptr<Schema> Project(size_t first_n) const;
+
+    /**
+     * @brief Same as the previous, except it provides the column indices to
+     * keep.
+     *
+     * @param column_indices Column indices to keep in the new schema.
+     * @return std::unique_ptr<Schema> New schema.
+     */
+    std::unique_ptr<Schema> Project(
+        const std::span<const int64_t> column_indices) const;
 };
 
 }  // namespace bodo

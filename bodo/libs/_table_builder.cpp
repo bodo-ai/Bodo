@@ -461,6 +461,16 @@ void TableBuildBuffer::ReserveTableSize(const size_t new_data_len) {
         array_buffers[i].ReserveSize(new_data_len);
     }
 }
+
+void TableBuildBuffer::ReserveTableRow(
+    const std::shared_ptr<table_info>& in_table, size_t row_idx) {
+    assert(in_table->columns.size() >= this->array_buffers.size());
+    for (size_t i = 0; i < this->array_buffers.size(); i++) {
+        std::shared_ptr<array_info>& in_arr = in_table->columns[i];
+        array_buffers[i].ReserveArrayRow(in_arr, row_idx);
+    }
+}
+
 void TableBuildBuffer::Reset() {
     for (size_t i = 0; i < array_buffers.size(); i++) {
         array_buffers[i].Reset();
