@@ -630,17 +630,16 @@ struct StreamSortState {
     StreamSortMetrics metrics;
     bool reported_build_metrics = false;
 
-    StreamSortState(int64_t op_id, int64_t n_keys,
-                    std::vector<int64_t>&& vect_ascending_,
-                    std::vector<int64_t>&& na_position_,
-                    std::shared_ptr<bodo::Schema> schema, bool parallel = true,
-                    size_t sample_size = DEFAULT_SAMPLE_SIZE,
-                    size_t output_chunk_size_ = STREAMING_BATCH_SIZE,
-                    int64_t kway_merge_chunk_size_ = -1,
-                    int64_t kway_merge_k_ = -1,
-                    bool enable_inmem_concat_sort_ = true,
-                    int64_t shuffle_chunksize_ = -1,
-                    int64_t shuffle_max_concurrent_sends_ = -1);
+    StreamSortState(
+        int64_t op_id, int64_t n_keys, std::vector<int64_t>&& vect_ascending_,
+        std::vector<int64_t>&& na_position_,
+        std::shared_ptr<bodo::Schema> schema, bool parallel = true,
+        size_t sample_size = DEFAULT_SAMPLE_SIZE,
+        size_t output_chunk_size_ = STREAMING_BATCH_SIZE,
+        int64_t kway_merge_chunk_size_ = -1, int64_t kway_merge_k_ = -1,
+        std::optional<bool> enable_inmem_concat_sort_ = std::nullopt,
+        int64_t shuffle_chunksize_ = -1,
+        int64_t shuffle_max_concurrent_sends_ = -1);
     /**
      * @brief Consume an unsorted table and use it for global sorting
      *
@@ -732,17 +731,15 @@ struct StreamSortLimitOffsetState : StreamSortState {
     SortLimits sortlimit;
     ExternalKWayMergeSorter top_k;
 
-    StreamSortLimitOffsetState(int64_t op_id, int64_t n_keys,
-                               std::vector<int64_t>&& vect_ascending_,
-                               std::vector<int64_t>&& na_position_,
-                               std::shared_ptr<bodo::Schema> schema,
-                               bool parallel = true, int64_t limit = -1,
-                               int64_t offset = -1,
-                               size_t output_chunk_size_ = STREAMING_BATCH_SIZE,
-                               int64_t kway_merge_chunk_size_ = -1,
-                               int64_t kway_merge_k_ = -1,
-                               bool enable_inmem_concat_sort_ = true,
-                               bool enable_small_limit_optimization = true);
+    StreamSortLimitOffsetState(
+        int64_t op_id, int64_t n_keys, std::vector<int64_t>&& vect_ascending_,
+        std::vector<int64_t>&& na_position_,
+        std::shared_ptr<bodo::Schema> schema, bool parallel = true,
+        int64_t limit = -1, int64_t offset = -1,
+        size_t output_chunk_size_ = STREAMING_BATCH_SIZE,
+        int64_t kway_merge_chunk_size_ = -1, int64_t kway_merge_k_ = -1,
+        std::optional<bool> enable_inmem_concat_sort_ = std::nullopt,
+        bool enable_small_limit_optimization = true);
 
     // Override base class to pass in limit / offset
     ExternalKWayMergeSorter GetKWayMergeSorter() const override {

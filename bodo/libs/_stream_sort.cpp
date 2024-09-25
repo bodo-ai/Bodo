@@ -720,7 +720,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         this->metrics.performed_inmem_concat_sort = 1;
         if (this->debug_mode) {
             std::cerr << fmt::format(
-                             "{}: Using in-memory concat-sort optimization.",
+                             "{} Using in-memory concat-sort optimization.",
                              DEBUG_LOG_PREFIX)
                       << std::endl;
         }
@@ -772,7 +772,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
 
         if (this->debug_mode) {
             std::cerr << fmt::format(
-                             "{}: Appending sort result into output buffer.",
+                             "{} Appending sort result into output buffer.",
                              DEBUG_LOG_PREFIX)
                       << std::endl;
         }
@@ -834,7 +834,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         std::vector<std::deque<TableAndRange>> next_sorted_chunks;
         if (this->debug_mode) {
             std::cerr << fmt::format(
-                             "{}: Starting Merge Level {}. Number of Input "
+                             "{} Starting Merge Level {}. Number of Input "
                              "Sorted Ranges: {}. Number of Range Merges so "
                              "far: {}. Final Level: {}.",
                              DEBUG_LOG_PREFIX, this->metrics.n_merge_levels,
@@ -880,7 +880,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
 
     if (this->debug_mode) {
         std::cerr << fmt::format(
-                         "{}: Finished Merge. Number of Levels: {}. Number of "
+                         "{} Finished Merge. Number of Levels: {}. Number of "
                          "Range Merges: {}.",
                          DEBUG_LOG_PREFIX, this->metrics.n_merge_levels,
                          this->metrics.n_chunk_merges)
@@ -992,18 +992,18 @@ std::vector<std::shared_ptr<DictionaryBuilder>> create_dict_builders(
 }
 
 /**
- * @brief Get the maximum allowed concurrent sends/receives. If 'default_' is
+ * @brief Get the maximum allowed concurrent sends/receives. If 'override' is
  * not -1, it will be used. If it is, we will check the
  * 'BODO_STREAM_SORT_MAX_SHUFFLE_CONCURRENT_SENDS' env var. If that is also not
  * set, we will return `n_pes - 1`. Note that the output will always be >=1.
  *
- * @param default_ Default value. This is used unless it's -1.
+ * @param override Override value. This is used unless it's -1.
  * @return size_t
  */
-static size_t get_max_shuffle_concurrent_sends(int64_t default_) {
+static size_t get_max_shuffle_concurrent_sends(int64_t override) {
     size_t max_concurrent_sends;
-    if (default_ != -1) {
-        max_concurrent_sends = default_;
+    if (override != -1) {
+        max_concurrent_sends = override;
     } else if (char* max_concurrent_sends_env_ = std::getenv(
                    "BODO_STREAM_SORT_MAX_SHUFFLE_CONCURRENT_SENDS")) {
         max_concurrent_sends = std::stoi(max_concurrent_sends_env_);
@@ -1015,12 +1015,35 @@ static size_t get_max_shuffle_concurrent_sends(int64_t default_) {
     return std::max(static_cast<size_t>(1), max_concurrent_sends);
 }
 
+/**
+ * @brief Helper function to determine whether or not to use the in-memory
+ * concat-sort optimization (if data fits in memory) during the final K-way
+ * merge. If 'override' is provided (i.e. not std::nullopt), it will be used. If
+ * it isn't, we will check the 'BODO_STREAM_SORT_DISABLE_INMEM_OPTIMIZATION' env
+ * var. If it is set to 1, we will return false, else return true (the default).
+ *
+ * @param override Override value.
+ * @return true
+ * @return false
+ */
+static bool get_enable_inmem_concat_sort(
+    std::optional<bool> override = std::nullopt) {
+    if (override.has_value()) {
+        return override.value();
+    } else if (char* disable_inmem_concat_sort_env_ =
+                   std::getenv("BODO_STREAM_SORT_DISABLE_INMEM_OPTIMIZATION")) {
+        // If set to 1, return 0 (i.e. false), else return true.
+        return std::strcmp(disable_inmem_concat_sort_env_, "1");
+    }
+    return true;
+}
+
 StreamSortState::StreamSortState(
     int64_t op_id, int64_t n_keys, std::vector<int64_t>&& vect_ascending_,
     std::vector<int64_t>&& na_position_, std::shared_ptr<bodo::Schema> schema_,
     bool parallel, size_t sample_size, size_t output_chunk_size_,
     int64_t kway_merge_chunk_size_, int64_t kway_merge_k_,
-    bool enable_inmem_concat_sort_, int64_t shuffle_chunksize_,
+    std::optional<bool> enable_inmem_concat_sort_, int64_t shuffle_chunksize_,
     int64_t shuffle_max_concurrent_sends_)
     : op_id(op_id),
       n_keys(n_keys),
@@ -1030,7 +1053,8 @@ StreamSortState::StreamSortState(
       output_chunk_size(output_chunk_size_),
       kway_merge_chunksize(kway_merge_chunk_size_),
       kway_merge_k(kway_merge_k_),
-      enable_inmem_concat_sort(enable_inmem_concat_sort_),
+      enable_inmem_concat_sort(
+          get_enable_inmem_concat_sort(enable_inmem_concat_sort_)),
       shuffle_chunksize(shuffle_chunksize_),
       shuffle_max_concurrent_msgs(
           get_max_shuffle_concurrent_sends(shuffle_max_concurrent_sends_)),
@@ -1064,7 +1088,8 @@ StreamSortLimitOffsetState::StreamSortLimitOffsetState(
     std::vector<int64_t>&& na_position_, std::shared_ptr<bodo::Schema> schema_,
     bool parallel, int64_t limit, int64_t offset, size_t output_chunk_size_,
     int64_t kway_merge_chunk_size_, int64_t kway_merge_k_,
-    bool enable_inmem_concat_sort_, bool enable_small_limit_optimization)
+    std::optional<bool> enable_inmem_concat_sort_,
+    bool enable_small_limit_optimization)
     : StreamSortState(
           op_id, n_keys, std::move(vect_ascending_), std::move(na_position_),
           std::move(schema_), parallel, DEFAULT_SAMPLE_SIZE, output_chunk_size_,
@@ -1255,6 +1280,8 @@ StreamSortState::PartitionChunksByRank(
     uint64_t global_min_mem_budget_bytes = this->mem_budget_bytes;
     MPI_Allreduce(&this->mem_budget_bytes, &global_min_mem_budget_bytes, 1,
                   MPI_UINT64_T, MPI_MIN, MPI_COMM_WORLD);
+    int myrank = -1;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     // Use the optimal chunk size unless an override has been provided.
     size_t shuffle_chunk_size_ =
         this->shuffle_chunksize != -1
@@ -1270,7 +1297,7 @@ StreamSortState::PartitionChunksByRank(
             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES);
     }
 
-    if (this->debug_mode) {
+    if (this->debug_mode && myrank == 0) {
         std::cerr << fmt::format(
                          "[DEBUG] StreamSortState::PartitionChunksByRank: "
                          "Shuffle Chunk Size: {}.",
