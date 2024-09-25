@@ -36,3 +36,74 @@ End User License Agreement
 17. **Government Restrictions.**  Any software or other programming provided by us in connection with this Agreement is commercial computer software as described in DFARS 252.227-7014(a)(1) and FAR 2.101.  If acquired by or on behalf of the United States Department of Defense or any component thereof, the United States Government acquires this commercial computer software and commercial computer software documentation subject to the terms of this Agreement as specified in DFARS 227.7202-3, Rights in Commercial Computer Software or Commercial Computer Software Documentation.  If acquired by or on behalf of any civilian agency, the United States Government acquires this commercial computer software and commercial computer software documentation subject to the terms of this Agreement as specified in FAR 12.212, Computer Software.
 18. **USA Patriot Act Notice.**  The U.S. federal USA Patriot Act ("**USA Patriot Act**") provides generally for the operator of a communication host and law enforcement to be able to monitor any content, upon request of the operator.  We anticipate fully complying with our obligations and availing ourselves of all rights under the USA Patriot Act.
 19. **General.**  Except for the payment of fees, if applicable, neither party will be liable for any failure or delay in performance under this Agreement which is due to any event beyond the reasonable control of such party, including without limitation, fire, explosion, unavailability of utilities or raw materials, Internet delays and failures, telecommunications failures, unavailability of components, labor difficulties, war, riot, act of God, export control regulation, laws, judgments or government instructions. This Agreement provides the entire agreement between the parties with regard to its subject matter. Except as provided below, this Agreement may not be amended without a writing signed by both parties.   We may, at any time and from time-to-time, change the terms of this Agreement. Any changes will be posted on our Web site. In addition, we may also send you a notice about the amended terms via email. If you do not accept the terms of any modification, your only recourse is to terminate this Agreement by sending a termination notice us before the effective date of the amendments. The termination will be effective on the date we receive the notice. The most current version of the Agreement will be available on our Web site and will supersede all previous versions of the Agreement. Your continued use of the Services will constitute your acceptance of the changes. This Agreement will be construed according to, and the rights of the parties will be governed by, the law of the State of California, without reference to its conflict of laws rules.  Any action at law or in equity arising out of or directly or indirectly relating to this Agreement may be instituted only in the Federal or state courts located in San Francisco, California.  You consent and submit to the personal jurisdiction of those courts for the purposes of any action related to this Agreement, and to extra-territorial service of process.  No action, regardless of form, arising out of this Agreement, may be brought by either party more than one (1) year after the cause of action has arisen. You may not assign this Agreement without the prior written consent of Bodo.  If any of the provisions of this Agreement are found or deemed by a court to be invalid or unenforceable, they will be severable from the remainder of this Agreement and will not cause the invalidity or unenforceability of the remainder of this Agreement. Neither party will by mere lapse of time without giving notice or taking other action hereunder be deemed to have waived any breach by the other party of any of the provisions of this Agreement.  The following provisions will survive termination or expiration of this Agreement:  4 (Proprietary Rights), 9 (Indemnification), 12 (Confidentiality), 13 (Limited Warranty; Exclusive Remedy);  14 (Disclaimer of Warranties), 15  (Limitation of Liability and Damages), 17 (Government Restrictions), 18 (USA Patriot Act Notice), and 19 (General Provisions).  This Agreement may be accepted in electronic form (e.g., by an electronic or other means of demonstrating assent) and your acceptance will be deemed binding between us. Neither of us will contest the validity or enforceability of this Agreement and any related documents, including under any applicable statute of frauds, because they were accepted or signed in electronic form. 
+
+Licenses for redistributed software
+======================================
+## Mpi4py
+Copyright (c) 2024, Lisandro Dalcin
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## Mpich
+
+				  COPYRIGHT
+
+The following is a notice of limited availability of the code, and disclaimer
+which must be included in the prologue of the code and in all source listings
+of the code.
+
+Copyright Notice
+1998--2020, Argonne National Laboratory
+
+Permission is hereby granted to use, reproduce, prepare derivative works, and
+to redistribute to others.  This software was authored by:
+
+Mathematics and Computer Science Division
+Argonne National Laboratory, Argonne IL 60439
+
+(and)
+
+Department of Computer Science
+University of Illinois at Urbana-Champaign
+
+
+			      GOVERNMENT LICENSE
+
+Portions of this material resulted from work developed under a U.S.
+Government Contract and are subject to the following license: the Government
+is granted for itself and others acting on its behalf a paid-up, nonexclusive,
+irrevocable worldwide license in this computer software to reproduce, prepare
+derivative works, and perform publicly and display publicly.
+
+				  DISCLAIMER
+
+This computer code material was prepared, in part, as an account of work
+sponsored by an agency of the United States Government.  Neither the United
+States, nor the University of Chicago, nor any of their employees, makes any
+warranty express or implied, or assumes any legal liability or responsibility
+for the accuracy, completeness, or usefulness of any information, apparatus,
+product, or process disclosed, or represents that its use would not infringe
+privately owned rights.
+
+			   EXTERNAL CONTRIBUTIONS
+
+Portions of this code have been contributed under the above license by:
+
+ * Intel Corporation
+ * Cray
+ * IBM Corporation
+ * Microsoft Corporation
+ * Mellanox Technologies Ltd.
+ * DataDirect Networks.
+ * Oak Ridge National Laboratory
+ * Sun Microsystems, Lustre group
+ * Dolphin Interconnect Solutions Inc.
+ * Institut Polytechnique de Bordeaux
+ * Quobyte Corporation
+

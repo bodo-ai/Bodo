@@ -17,12 +17,12 @@ import pandas as pd
 import psutil
 import pyarrow as pa
 import pytest
-from mpi4py import MPI
 from numba.core.runtime import rtsys
 from pyspark.sql import SparkSession
 
 import bodo
 import bodo.utils.allocation_tracking
+from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
 

@@ -7,9 +7,10 @@ import sys
 import typing as pt
 import warnings
 
-from mpi4py import MPI
 from py4j.java_collections import ListConverter, MapConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
+
+from bodo.mpi4py import MPI
 
 if pt.TYPE_CHECKING:
     from py4j.java_gateway import JavaClass

@@ -25,7 +25,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from mpi4py import MPI
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.ir_utils import build_definitions, find_callname, guard
@@ -33,6 +32,7 @@ from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
 import bodo
+from bodo.mpi4py import MPI
 from bodo.utils.typing import BodoWarning, dtype_to_array_type
 from bodo.utils.utils import (
     is_assign,
@@ -2265,7 +2265,7 @@ def _check_typing_issues(val):
     """Raises an error if there is a typing issue for value 'val'.
     Runs bodo typing on value and converts warnings to errors.
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     try:

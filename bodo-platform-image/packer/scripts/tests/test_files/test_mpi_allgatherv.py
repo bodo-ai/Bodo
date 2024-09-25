@@ -1,4 +1,4 @@
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 import numpy as np
 
 

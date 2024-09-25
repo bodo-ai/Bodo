@@ -1,6 +1,6 @@
 import ipyparallel as ipp
 import bodo_platform_ipyparallel_kernel as bpik
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 
 
 def mpi_example():

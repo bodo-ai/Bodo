@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
@@ -16,6 +15,7 @@ from bodo.libs.stream_join import (
     join_build_consume_batch,
     join_probe_consume_batch,
 )
+from bodo.mpi4py import MPI
 from bodo.tests.utils import pytest_mark_one_rank, set_broadcast_join, temp_env_override
 
 

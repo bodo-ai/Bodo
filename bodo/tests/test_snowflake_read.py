@@ -15,12 +15,12 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from mpi4py import MPI
 from numba.core import types
 
 import bodo
 import bodo.io.snowflake
 from bodo.libs.dict_arr_ext import is_dict_encoded
+from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,

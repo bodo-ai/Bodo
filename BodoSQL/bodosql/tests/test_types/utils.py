@@ -1,6 +1,5 @@
-from mpi4py import MPI
-
 import bodo
+from bodo.mpi4py import MPI
 from bodo.tests.utils import _test_equal_guard, gen_unique_table_id, reduce_sum
 
 

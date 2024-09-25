@@ -15,7 +15,7 @@ def _global_except_hook(exctype, value, traceback):
 
     import sys
     import time
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

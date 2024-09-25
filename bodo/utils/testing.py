@@ -88,8 +88,9 @@ def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
     """
     import uuid
 
-    from mpi4py import MPI
     from sqlalchemy import create_engine, text
+
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -135,7 +136,7 @@ def ensure_clean_snowflake_table(conn, table_name_prefix="test_table", parallel=
     """
     import uuid
 
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

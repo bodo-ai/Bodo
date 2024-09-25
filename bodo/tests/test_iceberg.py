@@ -18,12 +18,12 @@ import pyarrow.parquet as pq
 import pyspark.sql.types as spark_types
 import pytest
 import pytz
-from mpi4py import MPI
 from numba.core import types
 
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
 from bodo.io.iceberg import ICEBERG_FIELD_ID_MD_KEY
+from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import schema_evolution_eg_table, spark_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     BASE_NAME as PART_SORT_TABLE_BASE_NAME,

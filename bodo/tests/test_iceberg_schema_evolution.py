@@ -7,10 +7,10 @@ import pandas as pd
 import pyarrow as pa
 import pyspark.sql.types as spark_types
 import pytest
-from mpi4py import MPI
 
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
+from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers import spark_reader
 from bodo.tests.iceberg_database_helpers.part_sort_table import (
     SORT_ORDER as partsort_order,

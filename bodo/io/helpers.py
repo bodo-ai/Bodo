@@ -12,7 +12,6 @@ import numba
 import numpy as np
 import pyarrow as pa
 from llvmlite import ir as lir
-from mpi4py import MPI
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.extending import (
@@ -47,6 +46,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     is_nullable_ignore_sentinels,

@@ -8,10 +8,10 @@ import tempfile
 import numpy as np
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
 import bodosql
+from bodo.mpi4py import MPI
 from bodo.tests.utils import check_func
 from bodo.utils.testing import ensure_clean2
 
