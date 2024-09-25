@@ -590,7 +590,7 @@ struct StreamSortState {
     const int64_t shuffle_chunksize = -1;
     // This will either be overridden or set to MPI_Comm_size during
     // initialization.
-    const size_t shuffle_max_concurrent_sends;
+    const size_t shuffle_max_concurrent_msgs;
 
     // Initialized during `FinalizeBuild` once all rows have been seen.
     int64_t bytes_per_row = -1;
