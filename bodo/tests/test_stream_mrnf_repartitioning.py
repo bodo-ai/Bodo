@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
 from bodo.libs.stream_groupby import (
@@ -13,6 +12,7 @@ from bodo.libs.stream_groupby import (
     groupby_produce_output_batch,
     init_groupby_state,
 )
+from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg, pytest_mark_one_rank, temp_env_override
 from bodo.utils.typing import ColNamesMetaType, MetaType
 

@@ -18,7 +18,6 @@ import pyarrow as pa  # noqa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
-from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
     NativeValue,
@@ -49,6 +48,7 @@ from bodo.io.fs_io import (
 from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.distributed_api import get_end, get_start
+from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -1366,7 +1366,8 @@ def _add_categories_to_pq_dataset(pq_dataset):
     as '_category_info' attribute
     """
     import pyarrow as pa
-    from mpi4py import MPI
+
+    from bodo.mpi4py import MPI
 
     # NOTE: shouldn't be possible
     if len(pq_dataset.pieces) < 1:  # pragma: no cover
@@ -1512,7 +1513,7 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> s
       of values.
       If the ratio is less than READ_STR_AS_DICT_THRESHOLD we read as DICT.
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

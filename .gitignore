@@ -109,6 +109,9 @@ bodosql-protocol-mvn/
 # Sphinx documentation
 BodoSQL/docs/_build/
 
+# Vendored packages
+bodo/mpi4py**
+
 # Distribution / packaging
 BodoSQL/.Python
 BodoSQL/build/

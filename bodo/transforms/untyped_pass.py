@@ -3335,7 +3335,7 @@ def _get_json_df_type_from_file(
     path is invalid.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3404,7 +3404,7 @@ def _get_excel_df_type_from_file(
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
 
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3647,7 +3647,7 @@ def _get_sql_df_type_from_db(
         A large tuple containing: (#TODO: document this)
 
     """
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -3952,7 +3952,7 @@ def _get_csv_df_type_from_file(
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
 
-    from mpi4py import MPI
+    from bodo.mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 

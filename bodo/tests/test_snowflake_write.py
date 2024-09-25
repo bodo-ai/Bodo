@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
@@ -25,6 +24,7 @@ from bodo.io.snowflake_write import (
     snowflake_writer_append_table,
     snowflake_writer_init,
 )
+from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,

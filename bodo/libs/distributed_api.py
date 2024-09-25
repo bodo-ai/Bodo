@@ -13,7 +13,6 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from mpi4py import MPI
 from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
@@ -59,6 +58,7 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
+from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -1910,7 +1910,7 @@ def get_scatter_null_bytes_buff(
 def _bcast_dtype(data, root=MPI_ROOT):
     """broadcast data type from rank 0 using mpi4py"""
     try:
-        from mpi4py import MPI
+        from bodo.mpi4py import MPI
     except:  # pragma: no cover
         raise BodoError("mpi4py is required for scatterv")
 

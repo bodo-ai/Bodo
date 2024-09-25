@@ -7,3 +7,5 @@ echo "Removing bodo/io/pyfs.cpp"
 find . -name "pyfs.cpp" | xargs rm -f
 echo "Removing bodo/io/_hdfs.cpp"
 find . -name "_hdfs.cpp" | xargs rm -f
+echo "Removing mpi4py"
+find . -name "bodo/mpi4py" | xargs rm -rf

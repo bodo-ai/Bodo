@@ -4,7 +4,7 @@
 import argparse
 import os
 import time
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 
 import bodo
 import bodosql

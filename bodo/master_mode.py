@@ -229,7 +229,8 @@ def init_master_mode():  # pragma: no cover
     globals()["jit"] = jit
     # we only import cloudpickle and mpi4py if master mode is needed
     import cloudpickle
-    from mpi4py import MPI
+
+    from bodo.mpi4py import MPI
 
     globals()["pickle"] = cloudpickle
     globals()["MPI"] = MPI

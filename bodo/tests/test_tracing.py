@@ -4,9 +4,9 @@ import os
 from tempfile import TemporaryDirectory
 
 import pytest
-from mpi4py import MPI
 
 import bodo
+from bodo.mpi4py import MPI
 from bodo.utils import tracing
 from bodo.utils.tracing import TRACING_MEM_WARN
 from bodo.utils.typing import BodoWarning

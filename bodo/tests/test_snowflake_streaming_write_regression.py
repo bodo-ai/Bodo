@@ -7,7 +7,6 @@ import uuid
 
 import pandas as pd
 import pytest
-from mpi4py import MPI
 
 import bodo
 import bodo.io.snowflake
@@ -16,6 +15,7 @@ from bodo.io.snowflake_write import (
     snowflake_writer_append_table,
     snowflake_writer_init,
 )
+from bodo.mpi4py import MPI
 from bodo.tests.utils import (  # noqa
     get_snowflake_connection_string,
     pytest_perf_regression,

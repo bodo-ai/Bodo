@@ -46,6 +46,9 @@ dependencies:
   # Install avro to enable reading avro files in Iceberg testing.
   - avro
 
+  # Copied into bodo/mpi4py
+  - mpi4py ~= 3.1
+
   # Excel
   - xlrd
   - xlsxwriter
