@@ -1726,19 +1726,13 @@ timedelta_unsupported_methods = [
 # pandas.Timedelta.resolution
 
 
-def _intstall_pd_timedelta_unsupported():
-    from bodo.utils.typing import create_unsupported_overload
-
+def _install_pd_timedelta_unsupported():
     for attr_name in timedelta_unsupported_attrs:
         full_name = "pandas.Timedelta." + attr_name
-        overload_attribute(PDTimeDeltaType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(PDTimeDeltaType, attr_name, full_name)
     for fname in timedelta_unsupported_methods:
         full_name = "pandas.Timedelta." + fname
-        overload_method(PDTimeDeltaType, fname)(
-            create_unsupported_overload(full_name + "()")
-        )
+        bodo.overload_unsupported_method(PDTimeDeltaType, fname, full_name)
 
 
-_intstall_pd_timedelta_unsupported()
+_install_pd_timedelta_unsupported()

@@ -2992,18 +2992,12 @@ timestamp_unsupported_methods = [
 
 
 def _install_pd_timestamp_unsupported():
-    from bodo.utils.typing import create_unsupported_overload
-
     for attr_name in timestamp_unsupported_attrs:
         full_name = "pandas.Timestamp." + attr_name
-        overload_attribute(PandasTimestampType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(PandasTimestampType, attr_name, full_name)
     for fname in timestamp_unsupported_methods:
         full_name = "pandas.Timestamp." + fname
-        overload_method(PandasTimestampType, fname)(
-            create_unsupported_overload(full_name + "()")
-        )
+        bodo.overload_unsupported_method(PandasTimestampType, fname, full_name)
 
 
 _install_pd_timestamp_unsupported()

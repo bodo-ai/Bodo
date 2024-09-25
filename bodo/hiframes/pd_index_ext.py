@@ -48,7 +48,6 @@ from bodo.utils.typing import (
     BodoError,
     ColNamesMetaType,
     check_unsupported_args,
-    create_unsupported_overload,
     dtype_to_array_type,
     get_overload_const_func,
     get_overload_const_int,
@@ -6484,15 +6483,13 @@ def _install_index_unsupported():
     # install unsupported methods that are common to all idx types
     for fname in index_unsupported_methods:
         for format_str, typ in index_types:
-            overload_method(typ, fname, no_unliteral=True)(
-                create_unsupported_overload(format_str.format(fname + "()"))
-            )
+            bodo.overload_unsupported_method(typ, fname, format_str.format(fname))
 
     # install unsupported attributes that are common to all idx types
     for attr_name in index_unsupported_atrs:
         for format_str, typ in index_types:
-            overload_attribute(typ, attr_name, no_unliteral=True)(
-                create_unsupported_overload(format_str.format(attr_name))
+            bodo.overload_unsupported_attribute(
+                typ, attr_name, format_str.format(attr_name)
             )
 
     unsupported_attrs_list = [
@@ -6520,17 +6517,15 @@ def _install_index_unsupported():
     # install unsupported methods for the individual idx types
     for typ, cur_typ_unsupported_methods_list in unsupported_methods_list:
         format_str = idx_typ_to_format_str_map[typ]
-        for fn_name in cur_typ_unsupported_methods_list:
-            overload_method(typ, fn_name, no_unliteral=True)(
-                create_unsupported_overload(format_str.format(fn_name + "()"))
-            )
+        for fname in cur_typ_unsupported_methods_list:
+            bodo.overload_unsupported_method(typ, fname, format_str.format(fname))
 
     # install unsupported attributes for the individual idx types
     for typ, cur_typ_unsupported_attrs_list in unsupported_attrs_list:
         format_str = idx_typ_to_format_str_map[typ]
         for attr_name in cur_typ_unsupported_attrs_list:
-            overload_attribute(typ, attr_name, no_unliteral=True)(
-                create_unsupported_overload(format_str.format(attr_name))
+            bodo.overload_unsupported_attribute(
+                typ, attr_name, format_str.format(attr_name)
             )
 
 

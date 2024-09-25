@@ -15,7 +15,7 @@
 >>> @bodo.jit
 ... def f(df, id_vars, value_vars):
 ...   return df.melt(id_vars, value_vars)
->>> df = pd.DataFrame({"A": ["a", "b", "c"], 'B': [1, 3, 5], 'C': [2, 4, 6])
+>>> df = pd.DataFrame({"A": ["a", "b", "c"], 'B': [1, 3, 5], 'C': [2, 4, 6]})
 >>> f(df, ["A"], ["B", "C"])
     A variable  value
 0  a        B      1

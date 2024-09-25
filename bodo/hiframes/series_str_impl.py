@@ -43,7 +43,6 @@ from bodo.libs.str_ext import str_findall_count
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    create_unsupported_overload,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
@@ -1892,15 +1891,11 @@ def _install_catseries_unsupported():
 
     for attr_name in unsupported_cat_attrs:
         full_name = "Series.cat." + attr_name
-        overload_attribute(SeriesCatMethodType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(SeriesCatMethodType, attr_name, full_name)
 
     for fname in unsupported_cat_methods:
         full_name = "Series.cat." + fname
-        overload_method(SeriesCatMethodType, fname)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesCatMethodType, fname, full_name)
 
 
 _install_catseries_unsupported()
@@ -1912,7 +1907,6 @@ unsupported_str_methods = {
     "findall",
     "normalize",
     "rpartition",
-    "slice_replace",
     "rsplit",
     "translate",
     "wrap",
@@ -1925,9 +1919,7 @@ def _install_strseries_unsupported():
 
     for fname in unsupported_str_methods:
         full_name = "Series.str." + fname
-        overload_method(SeriesStrMethodType, fname)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesStrMethodType, fname, full_name)
 
 
 _install_strseries_unsupported()

@@ -16,15 +16,13 @@ from numba.extending import (
     NativeValue,
     box,
     models,
-    overload_attribute,
-    overload_method,
     register_model,
     typeof_impl,
     unbox,
 )
 
+import bodo
 from bodo.utils.typing import (
-    create_unsupported_overload,
     gen_objmode_attr_overload,
 )
 
@@ -155,15 +153,11 @@ def _install_logging_logger_unsupported_objects():
     # Installs overload for logger.Logger
     for attr_name in logging_logger_unsupported_attrs:
         full_name = "logging.Logger." + attr_name
-        overload_attribute(LoggingLoggerType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(LoggingLoggerType, attr_name, full_name)
 
     for fname in logging_logger_unsupported_methods:
         full_name = "logging.Logger." + fname
-        overload_method(LoggingLoggerType, fname)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(LoggingLoggerType, fname, full_name)
 
 
 _install_logging_logger_unsupported_objects()

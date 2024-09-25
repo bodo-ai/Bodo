@@ -19,7 +19,6 @@ from numba.extending import (
     lower_cast,
     models,
     overload,
-    overload_attribute,
     overload_method,
     register_model,
 )
@@ -39,7 +38,6 @@ from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    create_unsupported_overload,
     dtype_to_array_type,
     get_overload_const_str,
     get_overload_const_tuple,
@@ -1326,6 +1324,8 @@ series_unsupported_attrs = {
     "axes",
     "array",  # TODO: support
     "flags",
+    "list",
+    "struct",
     # Indexing, Iteration
     "at",
     # Computations / descriptive stats
@@ -1363,6 +1363,7 @@ series_unsupported_methods = (
     "transform",
     "expanding",
     "ewm",
+    "case_when",
     # Computations / descriptive stats
     "clip",
     "factorize",
@@ -1426,15 +1427,11 @@ def _install_series_unsupported():
 
     for attr_name in series_unsupported_attrs:
         full_name = "Series." + attr_name
-        overload_attribute(SeriesType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(SeriesType, attr_name, full_name)
 
     for fname in series_unsupported_methods:
         full_name = "Series." + fname
-        overload_method(SeriesType, fname, no_unliteral=True)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(SeriesType, fname, full_name)
 
 
 _install_series_unsupported()
@@ -1670,15 +1667,13 @@ def _install_heter_series_unsupported():
 
     for attr_name in heter_series_unsupported_attrs:
         full_name = "HeterogeneousSeries." + attr_name
-        overload_attribute(HeterogeneousSeriesType, attr_name)(
-            create_unsupported_overload(full_name)
+        bodo.overload_unsupported_attribute(
+            HeterogeneousSeriesType, attr_name, full_name
         )
 
     for fname in heter_series_unsupported_methods:
         full_name = "HeterogeneousSeries." + fname
-        overload_method(HeterogeneousSeriesType, fname, no_unliteral=True)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(HeterogeneousSeriesType, fname, full_name)
 
 
 _install_heter_series_unsupported()

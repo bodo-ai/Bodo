@@ -19,14 +19,13 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
-    overload_method,
     register_jitable,
     register_model,
     typeof_impl,
     unbox,
 )
 
+import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
@@ -1864,15 +1863,11 @@ def _install_date_offsets_unsupported():
 
     for attr_name in date_offset_unsupported_attrs:
         full_name = "pandas.tseries.offsets.DateOffset." + attr_name
-        overload_attribute(DateOffsetType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(MonthBeginType, attr_name, full_name)
 
-    for attr_name in date_offset_unsupported:
-        full_name = "pandas.tseries.offsets.DateOffset." + attr_name
-        overload_method(DateOffsetType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+    for fname in date_offset_unsupported:
+        full_name = "pandas.tseries.offsets.DateOffset." + fname
+        bodo.overload_unsupported_method(DateOffsetType, fname, full_name)
 
 
 def _install_month_begin_unsupported():
@@ -1881,15 +1876,11 @@ def _install_month_begin_unsupported():
 
     for attr_name in month_begin_unsupported_attrs:
         full_name = "pandas.tseries.offsets.MonthBegin." + attr_name
-        overload_attribute(MonthBeginType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(MonthBeginType, attr_name, full_name)
 
-    for attr_name in month_begin_unsupported:
+    for fname in month_begin_unsupported:
         full_name = "pandas.tseries.offsets.MonthBegin." + attr_name
-        overload_method(MonthBeginType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_method(MonthBeginType, fname, full_name)
 
 
 def _install_month_end_unsupported():
@@ -1898,13 +1889,11 @@ def _install_month_end_unsupported():
 
     for attr_name in date_offset_unsupported_attrs:
         full_name = "pandas.tseries.offsets.MonthEnd." + attr_name
-        overload_attribute(MonthEndType, attr_name)(
-            create_unsupported_overload(full_name)
-        )
+        bodo.overload_unsupported_attribute(MonthBeginType, attr_name, full_name)
 
-    for attr_name in date_offset_unsupported:
-        full_name = "pandas.tseries.offsets.MonthEnd." + attr_name
-        overload_method(MonthEndType, attr_name)(create_unsupported_overload(full_name))
+    for fname in date_offset_unsupported:
+        full_name = "pandas.tseries.offsets.MonthEnd." + fname
+        bodo.overload_unsupported_method(MonthBeginType, fname, full_name)
 
 
 def _install_week_unsupported():
@@ -1913,11 +1902,11 @@ def _install_week_unsupported():
 
     for attr_name in week_unsupported_attrs:
         full_name = "pandas.tseries.offsets.Week." + attr_name
-        overload_attribute(WeekType, attr_name)(create_unsupported_overload(full_name))
+        bodo.overload_unsupported_attribute(MonthBeginType, attr_name, full_name)
 
-    for attr_name in week_unsupported:
-        full_name = "pandas.tseries.offsets.Week." + attr_name
-        overload_method(WeekType, attr_name)(create_unsupported_overload(full_name))
+    for fname in week_unsupported:
+        full_name = "pandas.tseries.offsets.Week." + fname
+        bodo.overload_unsupported_method(WeekType, fname, full_name)
 
 
 def _install_offsets_unsupported():
