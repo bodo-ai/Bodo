@@ -1032,10 +1032,12 @@ AsyncShuffleSendState shuffle_issend(
  * @param shuffle_comm MPI communicator for shuffle (each operator has to have
  its own)
  * @param recv_states vector of recieve states to fill
-    * @param metrics IncrementalShuffleMetrics to update.
+ * @param max_recv_states maximum length recv_states is allowed to be before
+ * returning (default is effectively unbounded)
  */
 void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
-                   std::vector<AsyncShuffleRecvState>& recv_states);
+                   std::vector<AsyncShuffleRecvState>& recv_states,
+                   size_t max_recv_states = std::numeric_limits<size_t>::max());
 
 /**
  * @brief receive data from other ranks for shuffle
