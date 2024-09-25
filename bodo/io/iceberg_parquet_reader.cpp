@@ -1016,8 +1016,7 @@ class IcebergParquetReader : public ArrowReader {
                     // extremely small.
                     this->iceberg_reader_metrics.n_small_batches++;
                     time_pt unify_start = start_timer();
-                    this->out_batches->UnifyDictionariesAndAppend(
-                        bodo_table, dict_builders);
+                    this->out_batches->UnifyDictionariesAndAppend(bodo_table);
                     this->iceberg_reader_metrics.unify_append_small_time +=
                         end_timer(unify_start);
                 }
@@ -1130,8 +1129,7 @@ class IcebergParquetReader : public ArrowReader {
                     // extremely small.
                     this->iceberg_reader_metrics.n_small_batches++;
                     time_pt unify_start = start_timer();
-                    this->out_batches->UnifyDictionariesAndAppend(
-                        bodo_table, dict_builders);
+                    this->out_batches->UnifyDictionariesAndAppend(bodo_table);
                     this->iceberg_reader_metrics.unify_append_small_time +=
                         end_timer(unify_start);
                 }

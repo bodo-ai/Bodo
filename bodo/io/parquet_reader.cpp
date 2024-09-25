@@ -345,8 +345,7 @@ std::tuple<table_info*, bool, uint64_t> ParquetReader::read_inner_row_level() {
                 // then its likely more efficient to read the next full
                 // batch then to output a partial batch that could be
                 // extremely small.
-                this->out_batches->UnifyDictionariesAndAppend(bodo_table,
-                                                              dict_builders);
+                this->out_batches->UnifyDictionariesAndAppend(bodo_table);
             }
         }
         // Emit from the chunked table builder.

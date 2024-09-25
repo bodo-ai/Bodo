@@ -597,13 +597,14 @@ void ChunkedTableArrayBuilder::Reset() {
 
 AbstractChunkedTableBuilder::AbstractChunkedTableBuilder(
     const std::shared_ptr<bodo::Schema>& schema,
-    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+    const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
     size_t chunk_size, size_t max_resize_count_for_variable_size_dtypes_,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
     : active_chunk(alloc_table(schema, pool, mm)),
       active_chunk_capacity(chunk_size),
       max_resize_count_for_variable_size_dtypes(
           max_resize_count_for_variable_size_dtypes_),
+      dict_builders(dict_builders_),
       pool(pool),
       mm(mm) {
     assert(chunk_size > 0);
@@ -620,25 +621,6 @@ AbstractChunkedTableBuilder::AbstractChunkedTableBuilder(
         this->active_chunk, /*reuse_dictionaries*/ true, pool, mm);
 }
 
-/**
- * @brief Helper function to extract the DictBuilder objects
- * from the provided ChunkedTableArrayBuilders.
- *
- * @param array_builders ChunkedTableArrayBuilder to extract
- * the DictBuilders from.
- * @return std::vector<std::shared_ptr<DictionaryBuilder>>
- */
-std::vector<std::shared_ptr<DictionaryBuilder>>
-get_dict_builders_from_chunked_table_array_builders(
-    const std::vector<ChunkedTableArrayBuilder>& array_builders) {
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders(
-        array_builders.size());
-    for (size_t i = 0; i < array_builders.size(); i++) {
-        dict_builders[i] = array_builders[i].dict_builder;
-    }
-    return dict_builders;
-}
-
 void AbstractChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     // NOP in the empty chunk case
     if (this->active_chunk_size == 0) {
@@ -653,9 +635,6 @@ void AbstractChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
     // New active chunk
     std::shared_ptr<table_info> new_active_chunk = alloc_table_like(
         this->active_chunk, /*reuse_dictionaries*/ true, pool, mm);
-    std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders =
-        get_dict_builders_from_chunked_table_array_builders(
-            this->active_chunk_array_builders);
     this->PushActiveChunk();
     // Reset state for active chunk:
     this->active_chunk = std::move(new_active_chunk);
@@ -665,7 +644,7 @@ void AbstractChunkedTableBuilder::FinalizeActiveChunk(bool shrink_to_fit) {
         this->active_chunk->columns.size());
     for (size_t i = 0; i < this->active_chunk->columns.size(); i++) {
         this->active_chunk_array_builders.emplace_back(
-            this->active_chunk->columns[i], dict_builders[i],
+            this->active_chunk->columns[i], this->dict_builders[i],
             this->active_chunk_capacity,
             this->max_resize_count_for_variable_size_dtypes);
     }
@@ -1742,15 +1721,14 @@ bool AbstractChunkedTableBuilder::empty() const {
 }
 
 void AbstractChunkedTableBuilder::UnifyDictionariesAndAppend(
-    const std::shared_ptr<table_info>& in_table,
-    const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders) {
+    const std::shared_ptr<table_info>& in_table) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     out_arrs.reserve(in_table->ncols());
     for (uint64_t i = 0; i < in_table->ncols(); i++) {
         std::shared_ptr<array_info> col = this->dummy_output_chunk->columns[i];
-        if (dict_builders[i] != nullptr) {
-            out_arrs.emplace_back(
-                dict_builders[i]->UnifyDictionaryArray(in_table->columns[i]));
+        if (this->dict_builders[i] != nullptr) {
+            out_arrs.emplace_back(this->dict_builders[i]->UnifyDictionaryArray(
+                in_table->columns[i]));
         } else {
             out_arrs.emplace_back(in_table->columns[i]);
         }

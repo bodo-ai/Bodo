@@ -1206,6 +1206,9 @@ class AbstractChunkedTableBuilder {
     // no more rows left in the buffer.
     std::shared_ptr<table_info> dummy_output_chunk;
 
+    // Dictionary builders for the arrays. This is nullptr for non-dict columns.
+    const std::vector<std::shared_ptr<DictionaryBuilder>> dict_builders;
+
     // XXX In the future, we can keep track of the amount
     // of memory that has been allocated, etc. and use that to determine
     // when to stop building the active chunk.
@@ -1235,7 +1238,7 @@ class AbstractChunkedTableBuilder {
      * @brief Construct a new Chunked Table with the given bodo::Schema.
      *
      * @param schema Data types of the columns as a bodo::Schema
-     * @param dict_builders Dictionary builders to use for DICT arrays.
+     * @param dict_builders_ Dictionary builders to use for DICT arrays.
      * @param chunk_size Max number of rows allowed in each chunk.
      * @param max_resize_count_for_variable_size_dtypes How many times are
      * we allowed to resize (grow by 2x) buffers for variable size
@@ -1247,7 +1250,7 @@ class AbstractChunkedTableBuilder {
      */
     AbstractChunkedTableBuilder(
         const std::shared_ptr<bodo::Schema>& schema,
-        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders,
+        const std::vector<std::shared_ptr<DictionaryBuilder>>& dict_builders_,
         size_t chunk_size,
         size_t max_resize_count_for_variable_size_dtypes =
             DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES,
@@ -1375,8 +1378,7 @@ class AbstractChunkedTableBuilder {
      * @param in_table Input with string columns to convert
      */
     void UnifyDictionariesAndAppend(
-        const std::shared_ptr<table_info>& in_table,
-        const std::span<std::shared_ptr<DictionaryBuilder>> dict_builders);
+        const std::shared_ptr<table_info>& in_table);
 
    private:
     /**

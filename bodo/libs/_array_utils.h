@@ -408,6 +408,17 @@ std::shared_ptr<table_info> ProjectTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> column_indices);
 
+/**
+ * @brief Same as the previous function, except it takes the first
+ * 'first_n_cols' columns from the input table.
+ *
+ * @param in_table The input table to project.
+ * @param first_n_cols Number of columns for the projection.
+ * @return std::shared_ptr<table_info> The new table with the projected columns.
+ */
+std::shared_ptr<table_info> ProjectTable(
+    std::shared_ptr<table_info> const in_table, size_t first_n_cols);
+
 template <typename T, int dtype>
     requires std::integral<T>
 inline bool isnan_categorical(T const& val) {

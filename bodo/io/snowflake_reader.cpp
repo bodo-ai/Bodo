@@ -390,8 +390,7 @@ class SnowflakeReader : public ArrowReader {
                     next_recordbatch, next_recordbatch->num_rows());
                 this->metrics.arrow_rb_to_bodo_time +=
                     end_timer(start_arrow_to_bodo);
-                out_batches->UnifyDictionariesAndAppend(bodo_table,
-                                                        this->dict_builders);
+                out_batches->UnifyDictionariesAndAppend(bodo_table);
             }
             this->metrics.total_append_time += end_timer(start);
 

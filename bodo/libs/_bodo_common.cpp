@@ -518,6 +518,26 @@ std::string Schema::ToString() {
     return out;
 }
 
+std::unique_ptr<Schema> Schema::Project(size_t first_n) const {
+    std::vector<std::unique_ptr<DataType>> dtypes;
+    dtypes.reserve(first_n);
+    for (size_t i = 0; i < std::min(first_n, this->column_types.size()); i++) {
+        dtypes.push_back(this->column_types[i]->copy());
+    }
+    return std::make_unique<Schema>(std::move(dtypes));
+}
+
+std::unique_ptr<Schema> Schema::Project(
+    const std::span<const int64_t> column_indices) const {
+    std::vector<std::unique_ptr<DataType>> dtypes;
+    dtypes.reserve(column_indices.size());
+    for (int64_t col_idx : column_indices) {
+        assert(col_idx < this->column_types.size());
+        dtypes.push_back(this->column_types[col_idx]->copy());
+    }
+    return std::make_unique<Schema>(std::move(dtypes));
+}
+
 }  // namespace bodo
 
 // ---------------------------------------------------------------------------
