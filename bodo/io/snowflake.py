@@ -3030,7 +3030,7 @@ def connect_and_get_upload_info(conn_str: str):  # pragma: no cover
                         else:
                             parquet_path = f"abfs://{container_name}@{account_name}.dfs.core.windows.net/{path}/"
 
-                        if not ("BODO_PLATFORM_WORKSPACE_UUID" in os.environ):
+                        if "BODO_PLATFORM_WORKSPACE_UUID" not in os.environ:
                             # Since setting up Hadoop can be notoriously difficult, we warn the users that
                             # they may need to fall back to the PUT method manually in case of failure.
                             # Note that this shouldn't be an issue on our platform where Hadoop is set

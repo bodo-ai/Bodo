@@ -614,7 +614,7 @@ def test_validate_query(query, request, memory_leak_check):
         }
     )
 
-    if not "invalid" in request.node.name:
+    if "invalid" not in request.node.name:
         assert bc.validate_query(query)
     else:
         assert not bc.validate_query(query)
@@ -640,7 +640,7 @@ def test_fail_validate_also_fails_compile(query, request, memory_leak_check):
     )
 
     (compiles_flag, _compile_time, _error_message) = bc.validate_query_compiles(query)
-    if not "invalid" in request.node.name:
+    if "invalid" not in request.node.name:
         assert compiles_flag
     else:
         assert not compiles_flag
@@ -685,7 +685,6 @@ def test_fails_compile(query_text):
         "numba": numba,
         "time": time,
         "datetime": datetime,
-        "pd": pd,
     }
 
     try:

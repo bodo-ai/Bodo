@@ -2381,7 +2381,9 @@ def get_parfor_params_inner(parfor, pre_defs, options_fusion, fusion_info):
             after_fusion = "After fusion" if options_fusion else "With fusion disabled"
             print(
                 ("{}, parallel for-loop {} has " "nested Parfor(s) #{}.").format(
-                    after_fusion, parfor.id, n_parfors, parfor_ids
+                    after_fusion,
+                    parfor.id,
+                    n_parfors,
                 )
             )
         fusion_info[parfor.id] = list(parfor_ids)

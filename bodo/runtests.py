@@ -55,8 +55,8 @@ if "CODEBUILD_BUILD_ID" in os.environ:
         for marker in set(marker_groups.values()):
             print(
                 "{0}{1}: Group {1} for running distributed tests\n".format(
-                    indent, marker, file=f
-                )
+                    indent, marker
+                ),
             )
 
     with open("testtiming.json", "w") as f:

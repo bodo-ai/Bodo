@@ -73,7 +73,6 @@ string_funcs_map = {
     "repeat": "REPEAT",
     "translate": "TRANSLATE",
     "strtok": "STRTOK",
-    "split": "SPLIT_PART",
     "initcap": "INITCAP",
     "concat_ws": "CONCAT",
     "left": "LEFT",

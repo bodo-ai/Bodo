@@ -269,7 +269,7 @@ def parse_netlock_into_host_and_port_overload(netloc):
         # but I'm not sure how to do that and this works in Bodo,
         # so I'm not going to push my luck.
         match = re.match(r".*:\d+\Z", netloc)
-        if not (match is None):
+        if match is not None:
             port_splic_loc = netloc.rfind(":")
             return (netloc[:port_splic_loc], netloc[port_splic_loc + 1 :])
         else:

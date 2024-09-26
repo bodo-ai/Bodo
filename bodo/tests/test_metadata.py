@@ -186,7 +186,7 @@ def test_dtype_converter_literal_values(typ_val):
     # test python value
     converted_enum_list = _dtype_to_type_enum_list(typ_val)
     assert (
-        not (converted_enum_list is None)
+        converted_enum_list is not None
         and converted_enum_list[0] == SeriesDtypeEnum.Literal.value
         and converted_enum_list[1] == typ_val
     )
@@ -198,7 +198,7 @@ def test_dtype_converter_literal_values(typ_val):
         literal_typ = numba.types.literal(typ_val)
         converted_enum_list = _dtype_to_type_enum_list(literal_typ)
         assert (
-            not (converted_enum_list is None)
+            converted_enum_list is not None
             and converted_enum_list[0] == SeriesDtypeEnum.LiteralType.value
             and converted_enum_list[1] == typ_val
         )

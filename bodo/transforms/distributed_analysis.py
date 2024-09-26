@@ -201,7 +201,7 @@ class DistributedDiagnostics:
 
         printed_vars = set()
         for arr, a_dist in self.array_dists.items():
-            if not arr in self.array_locs:
+            if arr not in self.array_locs:
                 continue
             loc = self.array_locs[arr]
             if loc.filename == filename:
