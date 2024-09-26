@@ -295,9 +295,9 @@ class Obfuscator(ast.NodeTransformer):
         while True:
             newname = random_string(3, 5) + "__" + random_string(3, 5)
             if (
-                not newname in self.replacement_vars
-                and not newname in reserved_keywords
-                and not newname in self.fixed_names
+                newname not in self.replacement_vars
+                and newname not in reserved_keywords
+                and newname not in self.fixed_names
             ):
                 self.replacement_vars.add(newname)
                 return newname
@@ -307,14 +307,14 @@ class Obfuscator(ast.NodeTransformer):
             return None
 
         if self.processing_pass == 0:
-            if insert_as_replaceable and not name in reserved_keywords:
-                if not name in self.replace_vars:
+            if insert_as_replaceable and name not in reserved_keywords:
+                if name not in self.replace_vars:
                     newname = self.obfuscate_local(name)
                     self.replace_vars[name] = newname
             return name
         if name in self.fixed_names:
             return name
-        if not name in self.replace_vars:
+        if name not in self.replace_vars:
             return name
         # Check to make sure the name isn't reserved (i.e. an import name or func)
         # This must be done after the first pass to make sure there are no
@@ -381,8 +381,12 @@ class Obfuscator(ast.NodeTransformer):
         # can this occur?
 
         newName = self.mapping_var(True, node.name)
-        if (node.name != None and newName == None) or (node.name == None and newName != None):
-            raise Exception("Error in obfuscation: self.mapping_var should not map None to a variable name, or visa versa")
+        if (node.name != None and newName == None) or (
+            node.name == None and newName != None
+        ):
+            raise Exception(
+                "Error in obfuscation: self.mapping_var should not map None to a variable name, or visa versa"
+            )
 
         node.name = newName
         node.body = [self.visit(x) for x in node.body]

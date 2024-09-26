@@ -105,7 +105,7 @@ def test_date_casting_functions_case(
         {
             "FOO": dt_fn_dataframe_nullable["TABLE1"][date_casting_input_type].apply(
                 lambda val: scalar_to_date_equiv_fn(val)
-                if not (scalar_to_date_equiv_fn(val) is None)
+                if scalar_to_date_equiv_fn(val) is not None
                 and (scalar_to_date_equiv_fn(val) < pd.Timestamp("2013-01-03").date())
                 else None
             )

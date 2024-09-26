@@ -1011,7 +1011,7 @@ def test_df_apply_supported_types(df_value, memory_leak_check):
     df = df_value.apply(lambda row: row.repeat(2), axis=0)
 
     # Rename 1st column to A (if not already A)
-    if not "A" in df.columns:
+    if "A" not in df.columns:
         df.rename(columns={df.columns[0]: "A"}, inplace=True)
 
     check_func(test_impl, (df,), check_dtype=False)

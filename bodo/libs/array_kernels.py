@@ -1355,9 +1355,7 @@ def overload_sample_table_operation(
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # NOTE: C++ will delete table_total pointer
-    func_text += "  out_table = sample_table(table_total, n, frac, replace, random_state, parallel)\n".format(
-        count
-    )
+    func_text += "  out_table = sample_table(table_total, n, frac, replace, random_state, parallel)\n"
     for i_col in range(count):
         func_text += (
             "  out_arr_{} = array_from_cpp_table(out_table, {}, data[{}])\n".format(
