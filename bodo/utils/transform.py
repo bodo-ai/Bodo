@@ -5,7 +5,6 @@ Helper functions for transformations.
 import itertools
 import math
 import operator
-import types as pytypes
 import typing as pt
 from collections import namedtuple
 
@@ -422,14 +421,6 @@ def remove_hiframes(rhs, lives, call_list):
         # all conversion functions are side effect-free
         return True
 
-    # Check the name of the BodoSQL module to avoid importing bodosql.
-    if (
-        isinstance(call_list[-1], pytypes.ModuleType)
-        and call_list[-1].__name__ == "bodosql"
-    ):  # pragma: no cover
-        # all bodosql functions are side effect-free
-        return True
-
     # Check for all bodosql array kernels.
     if call_list[1:] == ["bodosql_array_kernels", "libs", bodo]:  # pragma: no cover
         # all bodosql array kernels are side effect-free
@@ -481,9 +472,12 @@ def remove_hiframes(rhs, lives, call_list):
     if len(call_tuple) == 1 and tuple in getattr(call_tuple[0], "__mro__", ()):
         return True
 
+    # Note: Numba will try the other call handlers if this returns False
     return False
 
 
+# Note: To register additional handling for removing unused functions
+# you can append to numba.core.ir_utils.remove_call_handlers.
 numba.core.ir_utils.remove_call_handlers.append(remove_hiframes)
 
 

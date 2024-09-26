@@ -1,6 +1,7 @@
 from .bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
 import bodosql.context_ext
 import bodosql.ddl_ext
+import bodosql.remove_pure_calls
 
 # Import BodoSQL types
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
