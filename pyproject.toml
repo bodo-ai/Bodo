@@ -197,6 +197,7 @@ import bodo
 import pandas as pd
 if bodo.get_rank() == 0:
     pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
+bodo.barrier()
 @bodo.jit
 def f():
     df = pd.read_parquet("test.parquet")
