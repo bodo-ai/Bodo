@@ -122,10 +122,7 @@ lint.ignore = [
     # PyFlakes (subset of Flake8)
     "F403",  # from {name} import * used; unable to detect undefined names
     "F405",  # {name} may be undefined, or defined from star imports
-    "F522",  # `.format` call has unused named argument(s): ...
-    "F523",  # `.format` call has unused arguments at position(s): ...
     "F541",  # f-string without any placeholders
-    "F601",  # Dictionary key literal {name} repeated
     "F811",  # Redefinition of unused {name} from line
     "F821",  # Undefined name {name}
     "F841",  # Local variable {name} is assigned to but never used
@@ -134,8 +131,6 @@ lint.ignore = [
     "E402",  # Module level import not at top of file
     "E711",  # Comparison to `None` should be `cond is not None`
     "E712",  # Comparison to `...` should be `cond is False` or `if not cond:`
-    "E713",  # Test for membership should be `not in`
-    "E714",  # Test for object identity should be `is not`
     "E722",  # Do not use bare `except`
     "E721",  # Do not compare types, use `isinstance()`
     "E731",  # Do not assign a `lambda` expression, use a `def`

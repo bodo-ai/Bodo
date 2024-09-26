@@ -772,7 +772,6 @@ class BodoSQLContext:
             "numba": numba,
             "time": time,
             "datetime": datetime,
-            "pd": pd,
             "bif": bodo.ir.filter,
         }
 
@@ -1051,7 +1050,6 @@ class BodoSQLContext:
                 "numba": numba,
                 "time": time,
                 "datetime": datetime,
-                "pd": pd,
                 "bif": bodo.ir.filter,
             }
 

@@ -874,7 +874,7 @@ def _gen_read_csv_objmode(
 
     # add idx col if needed
     if idx_col_typ == types.NPDatetime("ns"):
-        assert not idx_col_index is None
+        assert idx_col_index is not None
         date_inds_strs.append(str(idx_col_index))
 
     date_inds = ", ".join(date_inds_strs)
