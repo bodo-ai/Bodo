@@ -16,9 +16,10 @@ from llvmlite import ir as lir
 from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
-from numba.core.typing.templates import AbstractTemplate, infer_global
+from numba.core.typing.templates import AbstractTemplate, ConcreteTemplate, infer_global
 from numba.extending import (
     intrinsic,
+    lower_builtin,
     models,
     overload,
     register_jitable,
@@ -165,9 +166,14 @@ _get_time = types.ExternalFunction("get_time", types.float64())
 dist_time = types.ExternalFunction("dist_get_time", types.float64())
 
 
-@overload(time.time, no_unliteral=True)
-def overload_time_time():
-    return lambda: _get_time()
+@infer_global(time.time)
+class TimeInfer(ConcreteTemplate):
+    cases = [signature(types.float64)]
+
+
+@lower_builtin(time.time)
+def lower_time_time(context, builder, sig, args):
+    return context.compile_internal(builder, lambda: _get_time(), sig, args)
 
 
 @numba.generated_jit(nopython=True)
@@ -2936,42 +2942,52 @@ c_bcast = types.ExternalFunction(
 
 @numba.njit
 def bcast_scalar(val, root=MPI_ROOT):
-    return bcast_scalar_impl_jit(val, root)
-
-
-@numba.generated_jit(nopython=True)
-def bcast_scalar_impl_jit(val, root=MPI_ROOT):
     """broadcast for a scalar value.
     Assumes all ranks `val` has same type.
     """
-    val = types.unliteral(val)
-    # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
-    # Optional type
+    return bcast_scalar_impl(val, root)
 
-    if not (
-        isinstance(
-            val,
-            (
-                types.Integer,
-                types.Float,
-                bodo.PandasTimestampType,
-            ),
-        )
-        or val
-        in [
-            bodo.datetime64ns,
-            bodo.timedelta64ns,
-            bodo.string_type,
-            types.none,
-            types.bool_,
-            bodo.datetime_date_type,
-            bodo.timestamptz_type,
-        ]
-    ):
-        raise BodoError(
-            f"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timestamptz, timedelta64ns, string, None, or Bool. Found type {val}"
-        )
 
+def bcast_scalar_impl(val, root=MPI_ROOT):  # pragma: no cover
+    return
+
+
+@infer_global(bcast_scalar_impl)
+class BcastScalarInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        pysig = numba.core.utils.pysignature(bcast_scalar_impl)
+        folded_args = bodo.utils.transform.fold_argument_types(pysig, args, kws)
+        assert len(folded_args) == 2
+        val = args[0]
+
+        if not (
+            isinstance(
+                val,
+                (
+                    types.Integer,
+                    types.Float,
+                    bodo.PandasTimestampType,
+                ),
+            )
+            or val
+            in [
+                bodo.datetime64ns,
+                bodo.timedelta64ns,
+                bodo.string_type,
+                types.none,
+                types.bool_,
+                bodo.datetime_date_type,
+                bodo.timestamptz_type,
+            ]
+        ):
+            raise BodoError(
+                f"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timestamptz, timedelta64ns, string, None, or Bool. Found type {val}"
+            )
+
+        return signature(val, *folded_args)
+
+
+def gen_bcast_scalar_impl(val, root=MPI_ROOT):
     if val == types.none:
         return lambda val, root=MPI_ROOT: None
 
@@ -3078,6 +3094,12 @@ def bcast_scalar_impl_jit(val, root=MPI_ROOT):
     )
     bcast_scalar_impl = loc_vars["bcast_scalar_impl"]
     return bcast_scalar_impl
+
+
+@lower_builtin(bcast_scalar_impl, types.Any, types.VarArg(types.Any))
+def bcast_scalar_impl_any(context, builder, sig, args):
+    impl = gen_bcast_scalar_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @numba.njit

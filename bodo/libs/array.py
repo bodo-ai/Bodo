@@ -12,11 +12,12 @@ import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_cast
-from numba.core.typing.templates import signature
+from numba.core.typing.templates import AbstractTemplate, infer_global, signature
 from numba.cpython.listobj import ListInstance
 from numba.extending import (
     NativeValue,
     intrinsic,
+    lower_builtin,
     models,
     overload,
     register_model,
@@ -66,6 +67,7 @@ from bodo.utils.typing import (
     MetaType,
     decode_if_dict_array,
     get_overload_const_int,
+    is_overload_constant_int,
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
@@ -2371,8 +2373,45 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
     return table_type(py_table_type, py_table_type_t), codegen
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True, no_unliteral=True)
-def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):
+def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds, n_table_cols):
+    pass
+
+
+@infer_global(py_data_to_cpp_table)
+class PyDataToCppTableInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 4
+        py_table, extra_arrs_tup, _, n_table_cols_t = args
+
+        assert py_table == types.none or isinstance(py_table, bodo.TableType)
+        assert isinstance(extra_arrs_tup, types.BaseTuple)
+        assert all(
+            isinstance(t, types.ArrayCompatible) or t == types.none
+            for t in extra_arrs_tup
+        ), f"extra_arrs_tup must be a tuple of arrays or None, is {extra_arrs_tup}"
+
+        if not is_overload_constant_int(n_table_cols_t):
+            raise_bodo_error(
+                "py_data_to_cpp_table:: n_table_cols must be a constant integer"
+            )
+
+        return signature(table_type, *args)
+
+
+PyDataToCppTableInfer._no_unliteral = True
+
+
+@lower_builtin(py_data_to_cpp_table, types.VarArg(types.Any))
+def lower_py_data_to_cpp_table(context, builder, sig, args):
+    """lower table_filter() using gen_table_filter_impl above"""
+    impl = gen_py_data_to_cpp_table_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+def gen_py_data_to_cpp_table_impl(
+    py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t
+):
     """Convert Python data (table and arrays) to a C++ table.
     Args:
         py_table (TableType): Python table to convert

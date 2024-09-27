@@ -1,5 +1,6 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "fast_typer.h"
+
 #include <functional>
 #include <unordered_map>
 #include "native_typer.h"
@@ -20,7 +21,6 @@ std::shared_ptr<Signature> register_operator_infer(PyObject* args) {
 
 /**
  * @brief singleton registry of type inference functions
- *
  */
 class CallTyperRegistry {
    public:
