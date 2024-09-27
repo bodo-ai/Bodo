@@ -958,7 +958,7 @@ def get_call_type(self, context, args, kws):
                 if uselit:
                     sig = temp.apply(args, kws)
                 else:
-                    nolitargs = tuple([_unlit_non_poison(a) for a in args])
+                    nolitargs = tuple(_unlit_non_poison(a) for a in args)
                     nolitkws = {k: _unlit_non_poison(v) for k, v in kws.items()}
                     sig = temp.apply(nolitargs, nolitkws)
             except Exception as e:
@@ -1034,7 +1034,7 @@ def get_call_type2(self, context, args, kws):
         else:
             # if the unliteral_args and unliteral_kws are the same as the literal
             # ones, set up to not bother retrying
-            unliteral_args = tuple([_unlit_non_poison(a) for a in args])
+            unliteral_args = tuple(_unlit_non_poison(a) for a in args)
             unliteral_kws = {k: _unlit_non_poison(v) for k, v in kws.items()}
             skip = unliteral_args == args and kws == unliteral_kws
 
@@ -2046,8 +2046,8 @@ def convert_code_obj_to_function(code_obj, caller_ir):
         else:
             raise bodo.utils.typing.BodoError(msg.format(x), loc=code_obj.loc)
 
-    func_env = "\n".join(["\tc_%d = %s" % (i, x) for i, x in enumerate(freevars)])
-    func_clo = ",".join(["c_%d" % i for i in range(nfree)])
+    func_env = "\n".join("\tc_%d = %s" % (i, x) for i, x in enumerate(freevars))
+    func_clo = ",".join("c_%d" % i for i in range(nfree))
     co_varnames = list(fcode.co_varnames)
 
     # This is horrible. The code object knows about the number of args present
@@ -2070,7 +2070,7 @@ def convert_code_obj_to_function(code_obj, caller_ir):
         n_kwargs = len(kwarg_defaults_tup)
     nargs = n_allargs - n_kwargs
 
-    func_arg = ",".join(["%s" % (co_varnames[i]) for i in range(nargs)])
+    func_arg = ",".join("%s" % (co_varnames[i]) for i in range(nargs))
     if n_kwargs:
         kw_const = [
             "%s = %s" % (co_varnames[i + nargs], kwarg_defaults_tup[i])
@@ -2990,6 +2990,7 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
             )
         else:
             sig = typeinfer.resolve_call(fnty, pos_args, kw_args)
+
     except ForceLiteralArg as e:
         # Adjust for bound methods
         folding_args = (
@@ -5193,7 +5194,7 @@ def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
             "/troubleshoot.html#using-numba-s-direct-gdb-bindings-in-"
             "nopython-mode\n\nConflicting calls found at:\n %s"
         )
-        buf = "\n".join([x.strformat() for x in gdb_calls])
+        buf = "\n".join(x.strformat() for x in gdb_calls)
         raise errors.UnsupportedError(msg % buf)
 
 

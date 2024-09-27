@@ -507,21 +507,7 @@ def table_len_lower(context, builder, sig, args):
     done in a shared template for many different types.
     See LenTemplate.
     """
-    impl = table_len_overload(*sig.args)
-    return context.compile_internal(builder, impl, sig, args)
-
-
-def table_len_overload(T):
-    """
-    Implementation to compile for len(TableType)
-    """
-    if not isinstance(T, TableType):
-        return
-
-    def impl(T):  # pragma: no cover
-        return T._len
-
-    return impl
+    return context.compile_internal(builder, lambda T: T._len, sig, args)
 
 
 def local_len(x):
@@ -534,7 +520,18 @@ def local_len(x):
 
 # We can reuse the same overload internally
 # Since distributed pass rewrites __builtin__.len() only
-overload(local_len)(table_len_overload)
+@infer_global(local_len)
+class LocalLenInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert len(args) == 1 and not kws
+        if not isinstance(args[0], TableType):
+            raise BodoError("local_len() only supported for tables")
+        return signature(types.int64, args[0])
+
+
+@lower_builtin(local_len, TableType)
+def local_len_lower(context, builder, sig, args):
+    return context.compile_internal(builder, lambda T: T._len, sig, args)
 
 
 @lower_getattr(TableType, "shape")
