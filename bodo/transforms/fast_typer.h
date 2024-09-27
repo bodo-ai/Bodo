@@ -1,10 +1,11 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
 #pragma once
 
-#include <Python.h>
-#include <fmt/format.h>
 #include <string>
 #include <vector>
+
+#include <Python.h>
+#include <fmt/format.h>
 
 namespace bodo {
 

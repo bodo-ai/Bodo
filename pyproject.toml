@@ -157,6 +157,7 @@ exclude = [
 
     "demo/",
     "examples/",
+    "bodo/mpi4py/",
 
     # TODO: Skip specific rules for these files
     "bodo/__init__.py",
