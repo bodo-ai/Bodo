@@ -545,6 +545,6 @@ def test_heterogenous_series_unsupported_method(memory_leak_check):
         return df.apply(lambda row: row.any(), axis=1)
 
     df = pd.DataFrame({"A": [1, 2, 3, 4] * 5, "B": ["a", "c", "Er2w", ""] * 5})
-    err_msg = re.escape("HeterogeneousSeries.any not supported yet")
+    err_msg = re.escape("HeterogeneousSeries.any() not supported yet")
     with pytest.raises(BodoError, match=err_msg):
         test_impl(df)

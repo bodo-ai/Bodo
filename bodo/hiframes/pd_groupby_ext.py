@@ -2724,7 +2724,7 @@ def _install_groupby_unsupported():
     # have separate types.
     for attr_name in series_only_unsupported_attrs:
         bodo.overload_unsupported_attribute(
-            DataFrameGroupByType, attr_name, f"DataFrameGroupBy.{attr_name}"
+            DataFrameGroupByType, attr_name, f"SeriesGroupBy.{attr_name}"
         )
 
     for fname in series_only_unsupported:

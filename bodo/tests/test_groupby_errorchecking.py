@@ -2014,7 +2014,7 @@ def test_unsupported_attr(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).get_group()
 
-    msg = re.escape("DataFrameGroupBy.get_group not supported yet")
+    msg = re.escape("DataFrameGroupBy.get_group() not supported yet")
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(df)
@@ -2025,7 +2025,7 @@ def test_unsupported_series_method(memory_leak_check):
     def impl(S):
         return S.groupby(level=0).nlargest()
 
-    msg = re.escape("SeriesGroupBy.nlargest not supported yet")
+    msg = re.escape("SeriesGroupBy.nlargest() not supported yet")
     S = pd.Series([1, 2, 2])
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(S)
@@ -2047,7 +2047,7 @@ def test_unsupported_df_method(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).corrwith()
 
-    msg = re.escape("DataFrameGroupBy.corrwith not supported yet")
+    msg = re.escape("DataFrameGroupBy.corrwith() not supported yet")
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(df)
