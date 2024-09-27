@@ -6477,19 +6477,34 @@ for name, typ in index_types:
     idx_typ_to_format_str_map[typ] = name
 
 
+def _split_idx_format_str(format_str):
+    """splits format string from idx_typ_to_format_str_map into path_name, extra_info"""
+    if " " not in format_str:
+        return format_str, ""
+
+    path_name = format_str[: format_str.index(" ")]
+    extra_info = format_str[format_str.index(" ") :]
+
+    return path_name, extra_info
+
+
 def _install_index_unsupported():
     """install an overload that raises BodoError for unsupported methods of pd.Index"""
 
     # install unsupported methods that are common to all idx types
     for fname in index_unsupported_methods:
         for format_str, typ in index_types:
-            bodo.overload_unsupported_method(typ, fname, format_str.format(fname))
+            format_str, extra_info = _split_idx_format_str(format_str)
+            bodo.overload_unsupported_method(
+                typ, fname, format_str.format(fname), extra_info=extra_info
+            )
 
     # install unsupported attributes that are common to all idx types
     for attr_name in index_unsupported_atrs:
         for format_str, typ in index_types:
+            format_str, extra_info = _split_idx_format_str(format_str)
             bodo.overload_unsupported_attribute(
-                typ, attr_name, format_str.format(attr_name)
+                typ, attr_name, format_str.format(attr_name), extra_info=extra_info
             )
 
     unsupported_attrs_list = [
@@ -6518,14 +6533,18 @@ def _install_index_unsupported():
     for typ, cur_typ_unsupported_methods_list in unsupported_methods_list:
         format_str = idx_typ_to_format_str_map[typ]
         for fname in cur_typ_unsupported_methods_list:
-            bodo.overload_unsupported_method(typ, fname, format_str.format(fname))
+            format_str, extra_info = _split_idx_format_str(format_str)
+            bodo.overload_unsupported_method(
+                typ, fname, format_str.format(fname), extra_info=extra_info
+            )
 
     # install unsupported attributes for the individual idx types
     for typ, cur_typ_unsupported_attrs_list in unsupported_attrs_list:
         format_str = idx_typ_to_format_str_map[typ]
         for attr_name in cur_typ_unsupported_attrs_list:
+            format_str, extra_info = _split_idx_format_str(format_str)
             bodo.overload_unsupported_attribute(
-                typ, attr_name, format_str.format(attr_name)
+                typ, attr_name, format_str.format(attr_name), extra_info=extra_info
             )
 
 

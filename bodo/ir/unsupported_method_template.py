@@ -36,9 +36,12 @@ class _OverloadUnsupportedMethodTemplate(_UnsupportedTemplate, AttributeTemplate
         class UnsupportedMethodTemplate(numba.core.typing.templates.AbstractTemplate):
             key = (self.key, attr)
             path_name = self.path_name
+            extra_info = self.extra_info
 
             def generic(self, args, kws):
-                raise BodoError(f"{self.path_name} not supported yet.")
+                raise BodoError(
+                    f"{self.path_name}(){self.extra_info} not supported yet."
+                )
 
         return types.BoundFunction(UnsupportedMethodTemplate, typ)
 
@@ -53,10 +56,10 @@ class _OverloadUnsupportedAttributeTemplate(_UnsupportedTemplate, AttributeTempl
         if not self.is_matching_template(attr):
             return None
 
-        raise BodoError(f"{self.path_name} not supported yet.")
+        raise BodoError(f"{self.path_name}{self.extra_info} not supported yet.")
 
 
-def make_overload_unsupported_template(typ, base, attr, path_name):
+def make_overload_unsupported_template(typ, base, attr, path_name, extra_info):
     """
     Make a template class for attribute/method *attr* of *typ* that is not yet supported
     by Bodo.
@@ -64,20 +67,26 @@ def make_overload_unsupported_template(typ, base, attr, path_name):
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
     name = "OverloadUnsupportedAttributeTemplate_%s_%s" % (typ, attr)
     # Note the implementation cache is subclass-specific
-    dct = dict(key=typ, _attr=attr, path_name=path_name, metadata={})
+    dct = dict(
+        key=typ, _attr=attr, path_name=path_name, extra_info=extra_info, metadata={}
+    )
     obj = type(base)(name, (base,), dct)
     return obj
 
 
-def overload_unsupported_attribute(typ, attr, path_name):
+def overload_unsupported_attribute(typ, attr, path_name, extra_info=""):
     """Create an overload for attribute *attr* of *typ* which raises a BodoError"""
     base = _OverloadUnsupportedAttributeTemplate
-    template = make_overload_unsupported_template(typ, base, attr, path_name)
+    template = make_overload_unsupported_template(
+        typ, base, attr, path_name, extra_info
+    )
     infer_getattr(template)
 
 
-def overload_unsupported_method(typ, attr, path_name):
+def overload_unsupported_method(typ, attr, path_name, extra_info=""):
     """Create an overload for method *attr* of *typ* which raises a BodoError"""
     base = _OverloadUnsupportedMethodTemplate
-    template = make_overload_unsupported_template(typ, base, attr, path_name)
+    template = make_overload_unsupported_template(
+        typ, base, attr, path_name, extra_info
+    )
     infer_getattr(template)
