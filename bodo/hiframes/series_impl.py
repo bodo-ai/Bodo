@@ -42,6 +42,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     pd_timestamp_tz_naive_type,
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
+from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import (
     BinaryArrayType,
@@ -473,18 +474,19 @@ def overload_series_prod(
     return impl
 
 
-@overload_method(SeriesType, "any", inline="always", no_unliteral=True)
+@overload_method_declarative(
+    SeriesType,
+    "any",
+    path_name="pd.Series.any",
+    unsupported_args=["axis", "bool_only", "skipna", "level"],
+    description="""!!! note
+    Bodo does not accept any additional arguments for Numpy
+    compatibility""",
+    hyperlink="https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html",
+    inline="always",
+    no_unliteral=True,
+)
 def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
-    unsupported_args = dict(axis=axis, bool_only=bool_only, skipna=skipna, level=level)
-    arg_defaults = dict(axis=0, bool_only=None, skipna=True, level=None)
-    check_unsupported_args(
-        "Series.any",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="Series",
-    )
-
     # TODO [BE-2453]: Better errorchecking in general?
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.any()")
 
