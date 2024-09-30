@@ -284,6 +284,7 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
  * @brief Create a Numpy array by selecting elements from input array as
  * provided by index array in_arr_idxs.
  *
+ * @tparam IndexT type of index to retrieve, must be int32_t or int64_t
  * @param in_arr Numpy array with input data
  * @param in_arr_idxs array of indices into input array to create the output
  * array
@@ -295,8 +296,9 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
  * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<array_info> output data array as specified by input
  */
+template <typename IndexT>
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
-    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    std::shared_ptr<array_info> in_arr, const IndexT* in_arr_idxs,
     size_t nRowOut, bool use_nullable_arr = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
@@ -399,6 +401,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
  * @brief Create a nullable array by selecting elements from input array as
  * provided by index array in_arr_idxs.
  *
+ * @tparam IndexT type of index to retrieve, must be int32_t or int64_t
  * @param in_arr Nullable array with input data
  * @param in_arr_idxs array of indices into input array to create the output
  * array
@@ -408,8 +411,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
  * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<array_info> output data array as specified by input
  */
+template <typename IndexT>
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
-    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    std::shared_ptr<array_info> in_arr, const IndexT* in_arr_idxs,
     size_t nRowOut,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
@@ -508,6 +512,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
  * @brief Create a TimestampTZ array by selecting elements from input array as
  * provided by index array in_arr_idxs.
  *
+ * @tparam IndexT type of index to retrieve, must be int32_t or int64_t
  * @param in_arr TimestampTZ array with input data
  * @param in_arr_idxs array of indices into input array to create the output
  * array
@@ -517,8 +522,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_nullable(
  * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<array_info> output data array as specified by input
  */
+template <typename IndexT>
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_timestamptz(
-    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    std::shared_ptr<array_info> in_arr, const IndexT* in_arr_idxs,
     size_t nRowOut,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
@@ -548,8 +554,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_timestamptz(
     return out_arr;
 }
 
+template <typename IndexT>
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
-    std::shared_ptr<array_info> in_arr, const int64_t* in_arr_idxs,
+    std::shared_ptr<array_info> in_arr, const IndexT* in_arr_idxs,
     size_t nRowOut, bool use_nullable_arr,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
@@ -731,12 +738,21 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
 };
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
+    std::shared_ptr<array_info> in_arr, const std::span<const int32_t> ListIdx,
+    bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    return RetrieveArray_SingleColumn_F<int32_t>(
+        std::move(in_arr), ListIdx.data(), ListIdx.size(), use_nullable_arr,
+        pool, std::move(mm));
+}
+
+std::shared_ptr<array_info> RetrieveArray_SingleColumn(
     std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
     bool use_nullable_arr, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
-    return RetrieveArray_SingleColumn_F(std::move(in_arr), ListIdx.data(),
-                                        ListIdx.size(), use_nullable_arr, pool,
-                                        std::move(mm));
+    return RetrieveArray_SingleColumn_F<int64_t>(
+        std::move(in_arr), ListIdx.data(), ListIdx.size(), use_nullable_arr,
+        pool, std::move(mm));
 }
 
 std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
@@ -749,9 +765,9 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
         return nullptr;
     }
     size_t siz = idx_arr->length;
-    return RetrieveArray_SingleColumn_F(std::move(in_arr),
-                                        (int64_t*)idx_arr->data1(), siz,
-                                        use_nullable_arr, pool, std::move(mm));
+    return RetrieveArray_SingleColumn_F<int64_t>(
+        std::move(in_arr), (int64_t*)idx_arr->data1(), siz, use_nullable_arr,
+        pool, std::move(mm));
 }
 
 std::shared_ptr<array_info> RetrieveArray_TwoColumns(
@@ -1044,9 +1060,10 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
     return out_arr;
 }
 
-std::shared_ptr<table_info> RetrieveTable(
+template <typename IndexT>
+std::shared_ptr<table_info> DoRetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    const std::span<const int64_t> ListIdx, int const& n_cols_arg,
+    const std::span<const IndexT> ListIdx, int const& n_cols_arg,
     const bool use_nullable_arr, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
@@ -1069,9 +1086,28 @@ std::shared_ptr<table_info> RetrieveTable(
 
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
-    const std::span<const int64_t> rowInds,
-    std::vector<uint64_t> const& colInds, const bool use_nullable_arr,
-    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    const std::span<const int32_t> ListIdx, int const& n_cols_arg,
+    const bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    return DoRetrieveTable<int32_t>(in_table, ListIdx, n_cols_arg,
+                                    use_nullable_arr, pool, mm);
+}
+
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const int64_t> ListIdx, int const& n_cols_arg,
+    const bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    return DoRetrieveTable<int64_t>(in_table, ListIdx, n_cols_arg,
+                                    use_nullable_arr, pool, mm);
+}
+
+template <typename IndexT>
+std::shared_ptr<table_info> DoRetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const IndexT> rowInds, std::vector<uint64_t> const& colInds,
+    const bool use_nullable_arr, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
     std::vector<std::shared_ptr<array_info>> out_arrs;
     for (size_t i_col : colInds) {
         std::shared_ptr<array_info> in_arr = in_table->columns[i_col];
@@ -1082,6 +1118,24 @@ std::shared_ptr<table_info> RetrieveTable(
         reset_col_if_last_table_ref(in_table, i_col);
     }
     return std::make_shared<table_info>(out_arrs);
+}
+
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const int32_t> rowInds,
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    return DoRetrieveTable<int32_t>(in_table, rowInds, colInds,
+                                    use_nullable_arr, pool, mm);
+}
+
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const int64_t> rowInds,
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    return DoRetrieveTable<int64_t>(in_table, rowInds, colInds,
+                                    use_nullable_arr, pool, mm);
 }
 
 std::shared_ptr<table_info> RetrieveTable(
@@ -1522,14 +1576,14 @@ int KeyComparisonAsPython_Column_impl<bodo_array_type::MAP>(
     std::vector<std::shared_ptr<array_info>> key_col1{
         list1->child_arrays[0]->child_arrays[0]};
     auto key_table1 = std::make_shared<table_info>(std::move(key_col1));
-    auto sorted_idxs1 = sort_values_table_local_get_indices(
+    auto sorted_idxs1 = sort_values_table_local_get_indices<int64_t>(
         std::move(key_table1), 1, vect_ascending.data(), na_position.data(),
         false, start1, length1);
 
     std::vector<std::shared_ptr<array_info>> key_col2{
         list2->child_arrays[0]->child_arrays[0]};
     auto key_table2 = std::make_shared<table_info>(std::move(key_col2));
-    auto sorted_idxs2 = sort_values_table_local_get_indices(
+    auto sorted_idxs2 = sort_values_table_local_get_indices<int64_t>(
         std::move(key_table2), 1, vect_ascending.data(), na_position.data(),
         false, start2, length2);
 
