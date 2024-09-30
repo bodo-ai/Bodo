@@ -244,12 +244,12 @@ bool ChunkedTableArrayBuilder::CanResize() {
 
 template <bodo_array_type::arr_type_enum out_arr_type,
           bodo_array_type::arr_type_enum in_arr_type,
-          Bodo_CTypes::CTypeEnum dtype>
+          Bodo_CTypes::CTypeEnum dtype, typename IndexT>
     requires(out_arr_type == bodo_array_type::ARRAY_ITEM &&
              in_arr_type == bodo_array_type::ARRAY_ITEM)
 void ChunkedTableArrayBuilder::UnsafeAppendRows(
     const std::shared_ptr<array_info>& in_arr,
-    const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
+    const std::span<const IndexT> idxs, size_t idx_start, size_t idx_length) {
     offset_t* out_offsets = (offset_t*)this->data_array->data1<out_arr_type>();
     offset_t* in_offsets = (offset_t*)in_arr->data1<in_arr_type>();
 
@@ -282,12 +282,12 @@ void ChunkedTableArrayBuilder::UnsafeAppendRows(
 
 template <bodo_array_type::arr_type_enum out_arr_type,
           bodo_array_type::arr_type_enum in_arr_type,
-          Bodo_CTypes::CTypeEnum dtype>
+          Bodo_CTypes::CTypeEnum dtype, typename IndexT>
     requires(out_arr_type == bodo_array_type::MAP &&
              in_arr_type == bodo_array_type::MAP)
 void ChunkedTableArrayBuilder::UnsafeAppendRows(
     const std::shared_ptr<array_info>& in_arr,
-    const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
+    const std::span<const IndexT> idxs, size_t idx_start, size_t idx_length) {
     for (size_t i = 0; i < idx_length; i++) {
         int64_t row_idx = idxs[i + idx_start];
         // Append rows for child array
@@ -302,12 +302,12 @@ void ChunkedTableArrayBuilder::UnsafeAppendRows(
 
 template <bodo_array_type::arr_type_enum out_arr_type,
           bodo_array_type::arr_type_enum in_arr_type,
-          Bodo_CTypes::CTypeEnum dtype>
+          Bodo_CTypes::CTypeEnum dtype, typename IndexT>
     requires(out_arr_type == bodo_array_type::STRUCT &&
              in_arr_type == bodo_array_type::STRUCT)
 void ChunkedTableArrayBuilder::UnsafeAppendRows(
     const std::shared_ptr<array_info>& in_arr,
-    const std::span<const int64_t> idxs, size_t idx_start, size_t idx_length) {
+    const std::span<const IndexT> idxs, size_t idx_start, size_t idx_length) {
     uint8_t* out_bitmask =
         (uint8_t*)this->data_array->null_bitmask<out_arr_type>();
     const uint8_t* in_bitmask = (uint8_t*)in_arr->null_bitmask<in_arr_type>();
@@ -739,7 +739,20 @@ void AbstractChunkedTableBuilder::AppendBatch(
 
 void AbstractChunkedTableBuilder::AppendBatch(
     const std::shared_ptr<table_info>& in_table,
+    const std::span<const int32_t> idxs, const std::span<const uint64_t> cols) {
+    this->AppendBatch<int32_t>(in_table, idxs, cols);
+}
+
+void AbstractChunkedTableBuilder::AppendBatch(
+    const std::shared_ptr<table_info>& in_table,
     const std::span<const int64_t> idxs, const std::span<const uint64_t> cols) {
+    this->AppendBatch<int64_t>(in_table, idxs, cols);
+}
+
+template <typename IndexT>
+void AbstractChunkedTableBuilder::AppendBatch(
+    const std::shared_ptr<table_info>& in_table,
+    const std::span<const IndexT> idxs, const std::span<const uint64_t> cols) {
 #ifndef NUM_ROWS_CAN_APPEND_COL
 #define NUM_ROWS_CAN_APPEND_COL(ARR_TYPE)                                    \
     batch_length =                                                           \
@@ -1247,17 +1260,17 @@ void AbstractChunkedTableBuilder::AppendJoinOutput(
 #ifndef NUM_ROWS_CAN_APPEND_COL
 // The max value returned is batch_length so we don't need to do
 // a min here.
-#define NUM_ROWS_CAN_APPEND_COL(ARR_TYPE)                                    \
-    batch_length =                                                           \
-        this->active_chunk_array_builders[i_col].NumRowsCanAppend<ARR_TYPE>( \
-            col, idxs, curr_row, batch_length)
+#define NUM_ROWS_CAN_APPEND_COL(ARR_TYPE)                    \
+    batch_length = this->active_chunk_array_builders[i_col]  \
+                       .NumRowsCanAppend<ARR_TYPE, int64_t>( \
+                           col, idxs, curr_row, batch_length)
 #endif
 
 #ifndef APPEND_ROWS_COL
-#define APPEND_ROWS_COL(OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE)                  \
-    this->active_chunk_array_builders[i_col]                               \
-        .AppendRows<OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE>(col, idxs, curr_row, \
-                                                      batch_length)
+#define APPEND_ROWS_COL(OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE)       \
+    this->active_chunk_array_builders[i_col]                    \
+        .AppendRows<OUT_ARR_TYPE, IN_ARR_TYPE, DTYPE, int64_t>( \
+            col, idxs, curr_row, batch_length)
 #endif
 
     time_pt start = start_timer();

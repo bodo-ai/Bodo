@@ -179,11 +179,16 @@ void TableAndRange::UpdateOffset(int64_t n_keys, int64_t offset_) {
 
 void SortedChunkedTableBuilder::PushActiveChunk() {
     // Sort the active chunk to create a new sorted chunk.
+
+    // We will assume that row indices fit into 32 bits
+    assert(this->active_chunk->nrows() < std::numeric_limits<int32_t>::max());
+
     time_pt start_sort = start_timer();
-    bodo::vector<int64_t> sort_idx = sort_values_table_local_get_indices(
-        this->active_chunk, this->n_keys, this->vect_ascending.data(),
-        this->na_position.data(), /*is_parallel*/ false, /*start_offset*/ 0,
-        this->active_chunk->nrows(), this->pool, this->mm);
+    bodo::vector<int32_t> sort_idx =
+        sort_values_table_local_get_indices<int32_t>(
+            this->active_chunk, this->n_keys, this->vect_ascending.data(),
+            this->na_position.data(), /*is_parallel*/ false, /*start_offset*/ 0,
+            this->active_chunk->nrows(), this->pool, this->mm);
     this->sort_time += end_timer(start_sort);
     time_pt start_retr = start_timer();
     std::shared_ptr<table_info> sorted_active_chunk =
@@ -745,7 +750,6 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
         }
 
         std::shared_ptr<table_info> table;
-        bodo::vector<int64_t> out_idxs;
 
         if (input_chunks.size() == 1) {
             // If there's a single chunk, it's already sorted, so we can use it
@@ -754,8 +758,11 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
             table = chunk.table;
             table->pin();
             input_chunks.pop_front();
+            bodo::vector<int32_t> out_idxs;
             out_idxs.resize(table->nrows());
             std::iota(out_idxs.begin(), out_idxs.end(), 0);
+
+            return SelectRowsAndProduceOutputInMem(table, std::move(out_idxs));
         } else {
             time_pt start_concat = start_timer();
             std::vector<std::shared_ptr<table_info>> unpinned_tables;
@@ -782,59 +789,15 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
             // special version of RetrieveTable that can combine indices from
             // multiple tables together.
             time_pt start_sort = start_timer();
-            out_idxs = sort_values_table_local_get_indices(
-                table, this->n_keys, this->vect_ascending.data(),
-                this->na_position.data(), /*is_parallel*/ false,
-                /*start_offset*/ 0, table->nrows());
+            assert(table->nrows() < std::numeric_limits<int32_t>::max());
+            bodo::vector<int32_t> out_idxs =
+                sort_values_table_local_get_indices<int32_t>(
+                    table, this->n_keys, this->vect_ascending.data(),
+                    this->na_position.data(), /*is_parallel*/ false,
+                    /*start_offset*/ 0, table->nrows());
             this->metrics.finalize_inmem_sort_time += end_timer(start_sort);
+            return SelectRowsAndProduceOutputInMem(table, std::move(out_idxs));
         }
-
-        if (this->debug_mode) {
-            std::cerr << fmt::format(
-                             "{} Appending sort result into output buffer.",
-                             DEBUG_LOG_PREFIX)
-                      << std::endl;
-        }
-        time_pt start_append = start_timer();
-        uint64_t n_cols = table->ncols();
-        std::vector<uint64_t> col_inds;
-        for (int64_t i = 0; i < this->n_keys; i++) {
-            if (!this->dead_keys.empty() && this->dead_keys[i]) {
-                // If this is the last reference to this
-                // table, we can safely release reference (and potentially
-                // memory if any) for the dead keys at this point.
-                reset_col_if_last_table_ref(table, i);
-            } else {
-                col_inds.push_back(i);
-            }
-        }
-        for (uint64_t i = this->n_keys; i < n_cols; i++) {
-            col_inds.push_back(i);
-        }
-
-        ChunkedTableAndRangeBuilder out_table_builder(
-            this->n_keys, this->schema, this->dict_builders,
-            this->output_chunk_size,
-            DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, this->pool,
-            this->mm);
-
-        // Use a slice of 'out_idxs' (based on limit/offset) and append it into
-        // the CTB.
-        size_t offset_ =
-            this->sortlimits.has_value() ? this->sortlimits.value().offset : 0;
-        size_t limit_ = this->sortlimits.has_value()
-                            ? this->sortlimits.value().limit
-                            : out_idxs.size();
-        size_t left = std::min(out_idxs.size(), offset_);
-        size_t right = std::min(out_idxs.size(), left + limit_);
-        out_table_builder.AppendBatch(
-            std::move(table),
-            std::span(out_idxs.begin() + left, out_idxs.begin() + right),
-            col_inds);
-        out_table_builder.FinalizeActiveChunk();
-        this->metrics.finalize_inmem_output_append_time +=
-            end_timer(start_append);
-        return out_table_builder.chunks;
     }
 
     std::vector<std::deque<TableAndRange>> sorted_chunks;
@@ -908,6 +871,71 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
 
     return sorted_chunks[0];
 }
+
+template <typename IndexT>
+    requires(std::is_same<IndexT, int32_t>::value ||
+             std::is_same<IndexT, int64_t>::value)
+std::deque<TableAndRange>
+ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem(
+    std::shared_ptr<table_info> table, bodo::vector<IndexT>&& out_idxs) {
+    const std::string DEBUG_LOG_PREFIX =
+        "[DEBUG] ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem:";
+
+    time_pt start_append = start_timer();
+    uint64_t n_cols = table->ncols();
+    std::vector<uint64_t> col_inds;
+
+    if (this->debug_mode) {
+        std::cerr << fmt::format(
+                         "{}: Appending sort result into output buffer.",
+                         DEBUG_LOG_PREFIX)
+                  << std::endl;
+    }
+
+    for (int64_t i = 0; i < this->n_keys; i++) {
+        if (!this->dead_keys.empty() && this->dead_keys[i]) {
+            // If this is the last reference to this
+            // table, we can safely release reference (and potentially
+            // memory if any) for the dead keys at this point.
+            reset_col_if_last_table_ref(table, i);
+        } else {
+            col_inds.push_back(i);
+        }
+    }
+    for (uint64_t i = this->n_keys; i < n_cols; i++) {
+        col_inds.push_back(i);
+    }
+
+    ChunkedTableAndRangeBuilder out_table_builder(
+        this->n_keys, this->schema, this->dict_builders,
+        this->output_chunk_size,
+        DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, this->pool,
+        this->mm);
+
+    // Use a slice of 'out_idxs' (based on limit/offset) and append it into
+    // the CTB.
+    size_t offset_ =
+        this->sortlimits.has_value() ? this->sortlimits.value().offset : 0;
+    size_t limit_ = this->sortlimits.has_value()
+                        ? this->sortlimits.value().limit
+                        : out_idxs.size();
+    size_t left = std::min(out_idxs.size(), offset_);
+    size_t right = std::min(out_idxs.size(), left + limit_);
+    out_table_builder.AppendBatch(
+        std::move(table),
+        std::span(out_idxs.begin() + left, out_idxs.begin() + right), col_inds);
+    out_table_builder.FinalizeActiveChunk();
+    this->metrics.finalize_inmem_output_append_time += end_timer(start_append);
+    return out_table_builder.chunks;
+}
+
+// Explicit instantiaion of templates for linking
+template std::deque<TableAndRange>
+ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem(
+    std::shared_ptr<table_info> table, bodo::vector<int32_t>&& out_idxs);
+template std::deque<TableAndRange>
+ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem(
+    std::shared_ptr<table_info> table, bodo::vector<int64_t>&& out_idxs);
 
 double ReservoirSamplingState::random() { return dis(e); }
 
@@ -1428,9 +1456,10 @@ void StreamSortLimitOffsetState::SmallLimitOptim() {
         collected_table =
             UnifyDictionaryArrays(std::move(collected_table), dict_builders);
         time_pt start_sort = start_timer();
-        bodo::vector<int64_t> indices = sort_values_table_local_get_indices(
-            collected_table, n_keys, vect_ascending.data(), na_position.data(),
-            false, 0, collected_table->nrows());
+        bodo::vector<int64_t> indices =
+            sort_values_table_local_get_indices<int64_t>(
+                collected_table, n_keys, vect_ascending.data(),
+                na_position.data(), false, 0, collected_table->nrows());
         this->metrics.small_limit_rank0_sort_time += end_timer(start_sort);
 
         time_pt start_append = start_timer();

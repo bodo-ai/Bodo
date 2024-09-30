@@ -379,6 +379,12 @@ struct ExternalKWayMergeSorter {
     std::deque<TableAndRange> MergeChunks(
         std::vector<std::deque<TableAndRange>>&& sorted_chunks) /*const*/;
 
+    template <typename IndexT>
+        requires(std::is_same<IndexT, int32_t>::value ||
+                 std::is_same<IndexT, int64_t>::value)
+    std::deque<TableAndRange> SelectRowsAndProduceOutputInMem(
+        std::shared_ptr<table_info> table, bodo::vector<IndexT>&& out_idxs);
+
     // Number of rows per chunk
     size_t processing_chunk_size;
     // Maximum number of chunks that will be pinned simultaneously during
