@@ -271,23 +271,16 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 // PARALLEL SORT
 //
 
-/**
- *   SORT VALUES
- *
- * Sorts the input table by the first n_keys columns. Returns a list of indices
- * into the input table that can be used to retrieve the sorted table. See
- * sort_values_table_local for a method that returns a sorted table.
- *
- * @param is_parallel: true if data is distributed (used to indicate whether
- * tracing should be parallel or not)
- */
-bodo::vector<int64_t> sort_values_table_local_get_indices(
+template <typename IndexT>
+    requires(std::is_same<IndexT, int32_t>::value ||
+             std::is_same<IndexT, int64_t>::value)
+bodo::vector<IndexT> sort_values_table_local_get_indices(
     std::shared_ptr<table_info> in_table, size_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
     size_t start_offset, size_t n_rows, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
     tracing::Event ev("sort_values_table_local", is_parallel);
-    bodo::vector<int64_t> ListIdx(n_rows, pool);
+    bodo::vector<IndexT> ListIdx(n_rows, pool);
     for (size_t i = 0; i < n_rows; i++) {
         ListIdx[i] = start_offset + i;
     }
@@ -335,20 +328,35 @@ bodo::vector<int64_t> sort_values_table_local_get_indices(
     return ListIdx;
 }
 
+// Explicit instantiaion of templates for linking
+template bodo::vector<int32_t> sort_values_table_local_get_indices(
+    std::shared_ptr<table_info> in_table, size_t n_keys,
+    const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
+    size_t start_offset, size_t n_rows, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm);
+template bodo::vector<int64_t> sort_values_table_local_get_indices(
+    std::shared_ptr<table_info> in_table, size_t n_keys,
+    const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
+    size_t start_offset, size_t n_rows, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm);
+
 /**
  *   SORT VALUES
  *
- * Sorts the input table by the first n_keys columns.
+ * Sorts the input table by the first n_keys columns. Returns a list of indices
+ * into the input table that can be used to retrieve the sorted table. See
+ * sort_values_table_local for a method that returns a sorted table.
  *
  * @param is_parallel: true if data is distributed (used to indicate whether
  * tracing should be parallel or not)
  */
+template <typename IndexT>
 std::shared_ptr<table_info> sort_values_table_local(
     std::shared_ptr<table_info> in_table, int64_t n_key,
     const int64_t* vect_ascending, const int64_t* na_position,
     const int64_t* dead_keys, bool is_parallel, bodo::IBufferPool* const pool,
     std::shared_ptr<::arrow::MemoryManager> mm) {
-    bodo::vector<int64_t> ListIdx = sort_values_table_local_get_indices(
+    bodo::vector<IndexT> ListIdx = sort_values_table_local_get_indices<IndexT>(
         in_table, n_key, vect_ascending, na_position, is_parallel, 0,
         in_table->nrows(), pool, mm);
 
@@ -377,6 +385,30 @@ std::shared_ptr<table_info> sort_values_table_local(
     }
 
     return ret_table;
+}
+
+/**
+ *   SORT VALUES
+ *
+ * Sorts the input table by the first n_keys columns.
+ *
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
+ */
+std::shared_ptr<table_info> sort_values_table_local(
+    std::shared_ptr<table_info> in_table, int64_t n_key,
+    const int64_t* vect_ascending, const int64_t* na_position,
+    const int64_t* dead_keys, bool is_parallel, bodo::IBufferPool* const pool,
+    std::shared_ptr<::arrow::MemoryManager> mm) {
+    if (in_table->nrows() < std::numeric_limits<int32_t>::max()) {
+        return sort_values_table_local<int32_t>(in_table, n_key, vect_ascending,
+                                                na_position, dead_keys,
+                                                is_parallel, pool, mm);
+    }
+
+    return sort_values_table_local<int64_t>(in_table, n_key, vect_ascending,
+                                            na_position, dead_keys, is_parallel,
+                                            pool, mm);
 }
 
 /**

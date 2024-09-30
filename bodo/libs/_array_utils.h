@@ -6,6 +6,7 @@
 #include <set>
 #include <span>
 
+#include "_array_comparison.h"
 #include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
@@ -314,6 +315,12 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
  * @return one array
  */
 std::shared_ptr<array_info> RetrieveArray_SingleColumn(
+    std::shared_ptr<array_info> in_arr, const std::span<const int32_t> ListIdx,
+    bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+std::shared_ptr<array_info> RetrieveArray_SingleColumn(
     std::shared_ptr<array_info> in_arr, const std::span<const int64_t> ListIdx,
     bool use_nullable_arr = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -353,6 +360,13 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_arr(
  */
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
+    const std::span<const int32_t> ListIdx, int const& n_cols_arg = -1,
+    const bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> ListIdx, int const& n_cols_arg = -1,
     const bool use_nullable_arr = false,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
@@ -372,6 +386,13 @@ std::shared_ptr<table_info> RetrieveTable(
  * @param mm Memory manager associated with the pool.
  * @return std::shared_ptr<table_info> output table with selected rows/columns
  */
+std::shared_ptr<table_info> RetrieveTable(
+    std::shared_ptr<table_info> const in_table,
+    const std::span<const int32_t> rowInds,
+    std::vector<uint64_t> const& colInds, const bool use_nullable_arr = false,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
 std::shared_ptr<table_info> RetrieveTable(
     std::shared_ptr<table_info> const in_table,
     const std::span<const int64_t> rowInds,
@@ -565,14 +586,14 @@ bool TestEqualColumn(const std::shared_ptr<array_info>& arr1, int64_t pos1,
         std::vector<std::shared_ptr<array_info>> key_col1{
             list1->child_arrays[0]->child_arrays[0]};
         auto key_table1 = std::make_shared<table_info>(std::move(key_col1));
-        auto sorted_idxs1 = sort_values_table_local_get_indices(
+        auto sorted_idxs1 = sort_values_table_local_get_indices<int64_t>(
             std::move(key_table1), 1, vect_ascending.data(), na_position.data(),
             false, start1, length1);
 
         std::vector<std::shared_ptr<array_info>> key_col2{
             list2->child_arrays[0]};
         auto key_table2 = std::make_shared<table_info>(std::move(key_col2));
-        auto sorted_idxs2 = sort_values_table_local_get_indices(
+        auto sorted_idxs2 = sort_values_table_local_get_indices<int64_t>(
             std::move(key_table2), 1, vect_ascending.data(), na_position.data(),
             false, start2, length1);
 
@@ -1069,48 +1090,6 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         "_array_utils.h::NumericComparison: Invalid dtype put on input to "
         "NumericComparison.");
 }
-
-/** This code test keys if two keys are greater or equal
- * The code is done so as to give identical results to the Python comparison.
- * It is used that way because we assume that the left key have the same type as
- * the right keys. The shift is used to precise whether we use the left keys or
- * the right keys. 0 means that the columns are equals and 1,-1 that the keys
- * are different. Thus the test iterates over the columns and if one is
- * different then we can conclude. We consider all types of bodo_array_type.
- *
- * @param n_key the number of keys considered for the comparison
- * @param vect_ascending the vector of ascending values for the comparison
- * @param columns1 the list of columns of the first table
- * @param shift_key1 the column shift for the first key
- * @param iRow1 the row of the first key
- * @param columns2 the list of columns of the second table
- * @param shift_key2 the column for the second key
- * @param iRow2 the row of the second key
- * @param na_position: the vector of null locations. if true NaN values are
- * largest, if false smallest.
- * @return true if (shift_key1,iRow1) < (shift_key2,iRow2) , false otherwise
- */
-bool KeyComparisonAsPython(
-    size_t const& n_key, const int64_t* vect_ascending,
-    std::vector<std::shared_ptr<array_info>> const& columns1,
-    size_t const& shift_key1, size_t const& iRow1,
-    std::vector<std::shared_ptr<array_info>> const& columns2,
-    size_t const& shift_key2, size_t const& iRow2, const int64_t* na_position);
-
-/// Convinience wrapper that calls KeyComparisonAsPython with the shift_key
-/// parameters set to 0
-bool KeyComparisonAsPython(
-    size_t const& n_key, const int64_t* vect_ascending,
-    std::vector<std::shared_ptr<array_info>> const& columns1,
-    size_t const& iRow1,
-    std::vector<std::shared_ptr<array_info>> const& columns2,
-    size_t const& iRow2, const int64_t* na_position);
-
-int KeyComparisonAsPython_Column(bool const& na_position_bis,
-                                 const std::shared_ptr<array_info>& arr1,
-                                 size_t const& iRow1,
-                                 const std::shared_ptr<array_info>& arr2,
-                                 size_t const& iRow2);
 
 /**
  * @brief Create a null-bitmask that is a bitwise AND of the bitmasks of the

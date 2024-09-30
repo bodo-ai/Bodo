@@ -154,8 +154,9 @@ struct ChunkedTableArrayBuilder {
      */
     bool CanResize();
 
+    template <typename IndexT>
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         CASE_APPEND_ROWS(bodo_array_type::NUMPY, bodo_array_type::NUMPY)
         CASE_APPEND_ROWS(bodo_array_type::NULLABLE_INT_BOOL,
@@ -268,12 +269,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  dtype != Bodo_CTypes::_BOOL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1<out_arr_type>();
@@ -313,12 +314,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::TIMESTAMPTZ &&
                  in_arr_type == bodo_array_type::TIMESTAMPTZ &&
                  dtype == Bodo_CTypes::TIMESTAMPTZ)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         using T_utc = typename dtype_to_type<Bodo_CTypes::TIMESTAMPTZ>::type;
         using T_offset = typename dtype_to_type<Bodo_CTypes::INT16>::type;
@@ -365,12 +366,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  dtype == Bodo_CTypes::_BOOL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
         uint8_t* in_data = (uint8_t*)in_arr->data1<in_arr_type>();
@@ -410,12 +411,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  in_arr_type == bodo_array_type::NUMPY &&
                  dtype != Bodo_CTypes::_BOOL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1<out_arr_type>();
@@ -454,12 +455,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  in_arr_type == bodo_array_type::NUMPY &&
                  dtype == Bodo_CTypes::_BOOL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
         uint8_t* in_data = (uint8_t*)in_arr->data1<in_arr_type>();
@@ -497,12 +498,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NUMPY &&
                  !SQLNASentinelDtype<dtype>)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1<out_arr_type>();
@@ -534,12 +535,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  !SQLNASentinelDtype<dtype> && dtype != Bodo_CTypes::_BOOL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         using T = typename dtype_to_type<dtype>::type;
         T* out_data = (T*)this->data_array->data1<out_arr_type>();
@@ -579,12 +580,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  !SQLNASentinelDtype<dtype> && dtype == Bodo_CTypes::_BOOL)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         uint8_t* out_data = (uint8_t*)this->data_array->data1<out_arr_type>();
         uint8_t* in_data = (uint8_t*)in_arr->data1<in_arr_type>();
@@ -624,12 +625,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NUMPY &&
                  SQLNASentinelDtype<dtype>)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         // TODO: Remove when Timedelta can be nullable.
         using T = typename dtype_to_type<dtype>::type;
@@ -664,12 +665,12 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::NUMPY &&
                  in_arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
                  SQLNASentinelDtype<dtype>)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         // TODO: Remove when Timedelta can be nullable.
         using T = typename dtype_to_type<dtype>::type;
@@ -706,11 +707,11 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::STRING &&
                  in_arr_type == bodo_array_type::STRING)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         // Copy the offsets
         offset_t* curr_offsets =
@@ -763,11 +764,11 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::DICT &&
                  in_arr_type == bodo_array_type::DICT)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length) {
         if (!is_matching_dictionary(this->data_array->child_arrays[0],
                                     in_arr->child_arrays[0])) {
@@ -794,11 +795,11 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::ARRAY_ITEM &&
                  in_arr_type == bodo_array_type::ARRAY_ITEM)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length);
 
     /**
@@ -812,11 +813,11 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::MAP &&
                  in_arr_type == bodo_array_type::MAP)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length);
 
     /**
@@ -830,11 +831,11 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(out_arr_type == bodo_array_type::STRUCT &&
                  in_arr_type == bodo_array_type::STRUCT)
     void UnsafeAppendRows(const std::shared_ptr<array_info>& in_arr,
-                          const std::span<const int64_t> idxs, size_t idx_start,
+                          const std::span<const IndexT> idxs, size_t idx_start,
                           size_t idx_length);
 
     /**
@@ -852,11 +853,11 @@ struct ChunkedTableArrayBuilder {
      * @return size_t The number of rows that fit in the current chunk in the
      * interval [0, idx_length].
      */
-    template <bodo_array_type::arr_type_enum arr_type>
+    template <bodo_array_type::arr_type_enum arr_type, typename IndexT>
         requires(arr_type != bodo_array_type::STRING)
     size_t NumRowsCanAppendWithoutResizing(
         const std::shared_ptr<array_info>& in_arr,
-        const std::span<const int64_t> idxs, size_t idx_start,
+        const std::span<const IndexT> idxs, size_t idx_start,
         size_t idx_length) {
         return std::min(this->capacity - static_cast<size_t>(this->size),
                         idx_length);
@@ -877,11 +878,11 @@ struct ChunkedTableArrayBuilder {
      * @return size_t The number of rows that fit in the current chunk in the
      * interval [0, idx_length].
      */
-    template <bodo_array_type::arr_type_enum arr_type>
+    template <bodo_array_type::arr_type_enum arr_type, typename IndexT>
         requires(arr_type == bodo_array_type::STRING)
     size_t NumRowsCanAppendWithoutResizing(
         const std::shared_ptr<array_info>& in_arr,
-        const std::span<const int64_t> idxs, size_t idx_start,
+        const std::span<const IndexT> idxs, size_t idx_start,
         size_t idx_length) {
         // All types can only return at most as many rows as the capacity
         // allows.
@@ -923,10 +924,10 @@ struct ChunkedTableArrayBuilder {
      * @return size_t The number of rows that fit in the current chunk in the
      * interval [0, idx_length].
      */
-    template <bodo_array_type::arr_type_enum arr_type>
+    template <bodo_array_type::arr_type_enum arr_type, typename IndexT>
         requires(arr_type != bodo_array_type::STRING)
     size_t NumRowsCanAppend(const std::shared_ptr<array_info>& in_arr,
-                            const std::span<const int64_t> idxs,
+                            const std::span<const IndexT> idxs,
                             size_t idx_start, size_t idx_length) {
         return std::min(this->capacity - static_cast<size_t>(this->size),
                         idx_length);
@@ -947,10 +948,10 @@ struct ChunkedTableArrayBuilder {
      * @return size_t The number of rows that fit in the current chunk in the
      * interval [0, idx_length].
      */
-    template <bodo_array_type::arr_type_enum arr_type>
+    template <bodo_array_type::arr_type_enum arr_type, typename IndexT>
         requires(arr_type == bodo_array_type::STRING)
     size_t NumRowsCanAppend(const std::shared_ptr<array_info>& in_arr,
-                            const std::span<const int64_t> idxs,
+                            const std::span<const IndexT> idxs,
                             size_t idx_start, size_t idx_length) {
         // String is capped by memory and number of rows.
         size_t max_rows = std::min(
@@ -1012,10 +1013,10 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(in_arr_type != bodo_array_type::STRING)
     void AppendRows(const std::shared_ptr<array_info>& in_arr,
-                    const std::span<const int64_t> idxs, size_t idx_start,
+                    const std::span<const IndexT> idxs, size_t idx_start,
                     size_t idx_length) {
         bool can_append =
             idx_length == this->NumRowsCanAppendWithoutResizing<in_arr_type>(
@@ -1041,10 +1042,10 @@ struct ChunkedTableArrayBuilder {
      */
     template <bodo_array_type::arr_type_enum out_arr_type,
               bodo_array_type::arr_type_enum in_arr_type,
-              Bodo_CTypes::CTypeEnum dtype>
+              Bodo_CTypes::CTypeEnum dtype, typename IndexT>
         requires(in_arr_type == bodo_array_type::STRING)
     void AppendRows(const std::shared_ptr<array_info>& in_arr,
-                    const std::span<const int64_t> idxs, size_t idx_start,
+                    const std::span<const IndexT> idxs, size_t idx_start,
                     size_t idx_length) {
         // Fast path for most appends.
         if (idx_length == this->NumRowsCanAppendWithoutResizing<in_arr_type>(
@@ -1055,7 +1056,7 @@ struct ChunkedTableArrayBuilder {
             return;
         }
         // Check if it can be appended after resizing:
-        if (idx_length != this->NumRowsCanAppend<in_arr_type>(
+        if (idx_length != this->NumRowsCanAppend<in_arr_type, IndexT>(
                               in_arr, idxs, idx_start, idx_length)) {
             throw std::runtime_error(
                 "ChunkedTableArrayBuilder::AppendRow: Cannot append row!");
@@ -1309,6 +1310,10 @@ class AbstractChunkedTableBuilder {
                      const std::span<const int64_t> idxs,
                      const std::span<const uint64_t> cols);
 
+    void AppendBatch(const std::shared_ptr<table_info>& build_table,
+                     const std::span<const int32_t> idxs,
+                     const std::span<const uint64_t> cols);
+
     /**
      * @brief Similar to AppendRow, but specifically for
      * Join Output Buffer use case. In join computation, we collect
@@ -1381,6 +1386,11 @@ class AbstractChunkedTableBuilder {
         const std::shared_ptr<table_info>& in_table);
 
    private:
+    template <typename IndexT>
+    void AppendBatch(const std::shared_ptr<table_info>& build_table,
+                     const std::span<const IndexT> idxs,
+                     const std::span<const uint64_t> cols);
+
     /**
      * @brief number of chunks that are ready for output
      */
