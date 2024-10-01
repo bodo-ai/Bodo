@@ -6,7 +6,7 @@ set -exo pipefail
 # on Azure with MacOS
 if [[ "$CI_SOURCE" == "AWS" ]]; then
     # Load the env first because credstash is installed on conda
-    export PATH=$HOME/mambaforge/bin:$PATH
+    export PATH=$HOME/miniforge3/bin:$PATH
 
     source deactivate || true
 

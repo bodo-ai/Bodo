@@ -1,2 +1,2 @@
 PYTHON_VERSION: "{{ python_version }}"
-URL_MAMBAFORGE: https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh
+URL_MINIFORGE: https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh

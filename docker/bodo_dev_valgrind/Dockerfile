@@ -38,10 +38,10 @@ RUN set -e \
     && ln -s $(which pip3) /usr/local/bin/pip
 
 WORKDIR /root
-RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
-	&& chmod +x mambaforge.sh \
-	&& ./mambaforge.sh -b
-ENV PATH /root/mambaforge/bin:${PATH}
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O miniforge.sh \
+	&& chmod +x miniforge.sh \
+	&& ./miniforge.sh -b
+ENV PATH /root/miniforge3/bin:${PATH}
 
 # Creation of the BODODEV environment
 ADD buildscripts/envs/conda-lock.yml conda-lock.yml
