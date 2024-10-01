@@ -20,10 +20,10 @@ jobs:
   steps:
   - script: |
       set -exo pipefail
-      wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
-      chmod +x mambaforge.sh
-      bash mambaforge.sh -b
-      export PATH=$HOME/mambaforge/bin:$PATH
+      wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O miniforge.sh
+      chmod +x miniforge.sh
+      bash miniforge.sh -b
+      export PATH=$HOME/miniforge3/bin:$PATH
 
       mamba create -n $CONDA_ENV -y -c conda-forge conda-build anaconda-client curl python-libarchive-c setuptools_scm
     env:
@@ -36,7 +36,7 @@ jobs:
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
+      export PATH=$HOME/miniforge3/bin:$PATH
       source activate $CONDA_ENV
       set -x
 
@@ -50,7 +50,7 @@ jobs:
       conda build buildscripts/bodosql/conda-recipe -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-test
 
       # Copy Build Folder to Working Directory
-      cp -r $HOME/mambaforge/envs/$CONDA_ENV/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
+      cp -r $HOME/miniforge3/envs/$CONDA_ENV/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
     displayName: 'Build Conda Package'
@@ -75,7 +75,7 @@ jobs:
       ./buildscripts/bodosql/azure/publish_binary.sh $artifactory_channel
 
       # Copy Build Folder to Working Directory
-      cp -r $HOME/mambaforge/envs/${{ parameters.CONDA_ENV }}/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
+      cp -r $HOME/miniforge3/envs/${{ parameters.CONDA_ENV }}/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
     displayName: 'Publish BodoSQL Binary to Artifactory'

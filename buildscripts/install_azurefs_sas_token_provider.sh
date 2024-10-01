@@ -2,7 +2,7 @@
 set -exo pipefail
 
 if [[ "$CI_SOURCE" == "AWS" ]]; then
-    export PATH=$HOME/mambaforge/bin:$PATH
+    export PATH=$HOME/miniforge3/bin:$PATH
 
     # ---- Activate Conda Env ----
     # Deactivate if another script has already activated the env

@@ -3,17 +3,17 @@ set -exo pipefail
 
 unamestr=`uname`
 
-# Install Mambaforge
+# Install Miniforge
 if [[ "$unamestr" == 'Linux' ]]; then
-  wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
+  wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O miniforge.sh
 elif [[ "$unamestr" == 'Darwin' ]]; then
-  wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-MacOSX-x86_64.sh -O mambaforge.sh
+  wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh -O miniforge.sh
 else
   echo Error
 fi
-chmod +x mambaforge.sh
-./mambaforge.sh -b
-export PATH=$HOME/mambaforge/bin:$PATH
+chmod +x miniforge.sh
+./miniforge.sh -b
+export PATH=$HOME/miniforge3/bin:$PATH
 
 
 # ---- Create Conda Env ----

@@ -1,15 +1,15 @@
 ---
-- name: CONDA | Download mambaforge installation script
+- name: CONDA | Download miniforge installation script
   get_url:
-    url: "{{ URL_MAMBAFORGE }}"
-    dest: /tmp/mambaforge.sh
+    url: "{{ URL_MINIFORGE }}"
+    dest: /tmp/miniforge.sh
     mode: "0440"
   tags:
     - conda
 
-- name: CONDA | Install mambaforge
+- name: CONDA | Install miniforge
   command:
-    cmd: /bin/bash /tmp/mambaforge.sh -b -f -p /opt/conda
+    cmd: /bin/bash /tmp/miniforge.sh -b -f -p /opt/conda
     creates: /opt/conda
   tags:
     - conda

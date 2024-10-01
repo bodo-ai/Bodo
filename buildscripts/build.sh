@@ -5,7 +5,7 @@ set -eo pipefail
 # activated the env. This only happens on AWS and causes errors
 # on Azure with MacOS
 if [[ "$CI_SOURCE" == "AWS" ]]; then
-    export PATH=$HOME/mambaforge/bin:$PATH
+    export PATH=$HOME/miniforge3/bin:$PATH
     source deactivate || true
 
     set +x

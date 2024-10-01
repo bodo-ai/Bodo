@@ -9,7 +9,7 @@ set +x
 source deactivate || true
 
 # TODO: Do we need to activate here?
-export PATH=$HOME/mambaforge/bin:$PATH
+export PATH=$HOME/miniforge3/bin:$PATH
 # Run with || true in case this is called by a CI build that doesn't
 # use conda (Sonar)
 source activate $CONDA_ENV || true

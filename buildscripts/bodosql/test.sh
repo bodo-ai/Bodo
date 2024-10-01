@@ -8,7 +8,7 @@ set +x
 if [[ "$CI_SOURCE" == "AWS" ]]; then
     source deactivate || true
 fi
-export PATH=$HOME/mambaforge/bin:$PATH
+export PATH=$HOME/miniforge3/bin:$PATH
 source activate $CONDA_ENV
 set -x
 

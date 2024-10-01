@@ -31,11 +31,11 @@ jobs:
   # TODO: Use Micromamba when it supports remote_max_retries
   - script: |
       set -exo pipefail
-      curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh"
-      bash Mambaforge-$(uname)-$(uname -m).sh -b
-    displayName: 'Install Mambaforge'
+      curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+      bash Miniforge3-$(uname)-$(uname -m).sh -b
+    displayName: 'Install Miniforge'
 
-  - bash: echo "##vso[task.prependpath]$HOME/mambaforge/bin"
+  - bash: echo "##vso[task.prependpath]$HOME/miniforge3/bin"
     displayName: Add Mamba to PATH
 
   - script: |
