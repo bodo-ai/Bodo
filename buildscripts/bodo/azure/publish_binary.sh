@@ -11,7 +11,7 @@ TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
 # ARM builds use miniforge to cross compile instead of conda
-export PATH=$HOME/mambaforge/bin:$PATH
+export PATH=$HOME/miniforge3/bin:$PATH
 set +x
 source activate bodo_build
 set -x

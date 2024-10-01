@@ -1,7 +1,7 @@
 #!/bin/bash
 set -exo pipefail
 
-export PATH=$HOME/mambaforge/bin:$PATH
+export PATH=$HOME/miniforge3/bin:$PATH
 source activate $CONDA_ENV
 
 BODOSQL_CHANNEL_NAME=${1:-bodo-binary}

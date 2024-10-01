@@ -8,11 +8,11 @@ WORKDIR /root
 # https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#run
 RUN apt-get update && apt-get install -y wget bzip2 git vim && rm -rf /var/lib/apt/lists/*
 
-# Setup Mambaforge
-RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
-	&& chmod +x mambaforge.sh \
-	&& ./mambaforge.sh -b
-ENV PATH /root/mambaforge/bin:${PATH}
+# Setup Miniforge
+RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O miniforge.sh \
+	&& chmod +x miniforge.sh \
+	&& ./miniforge.sh -b
+ENV PATH /root/miniforge3/bin:${PATH}
 
 # Creation of the BODODEV environment
 ADD buildscripts/envs/conda-lock.yml conda-lock.yml
