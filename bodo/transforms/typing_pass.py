@@ -7959,12 +7959,12 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
         CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1
     ), "invalid bytecode version"
     # cannot handle cases that write to free variables
-    banned_ops = (dis.opname.index("STORE_DEREF"), dis.opname.index("LOAD_CLOSURE"))
+    banned_ops = (dis.opmap["STORE_DEREF"], dis.opmap["LOAD_CLOSURE"])
     # local variable access to be adjusted
     local_varname_ops = (
-        dis.opname.index("LOAD_FAST"),
-        dis.opname.index("STORE_FAST"),
-        dis.opname.index("DELETE_FAST"),
+        dis.opmap["LOAD_FAST"],
+        dis.opmap["STORE_FAST"],
+        dis.opmap["DELETE_FAST"],
     )
     n_new_args = len(freevar_arg_map)
 
@@ -7984,12 +7984,12 @@ def _replace_load_deref_code(code, freevar_arg_map, prev_argcount, prev_n_locals
         # function. We need to update LOAD_DEREF indices accordingly. See:
         # https://docs.python.org/3.11/library/dis.html#opcode-COPY_FREE_VARS
         # https://github.com/python/cpython/blob/cce6ba91b3a0111110d7e1db828bd6311d58a0a7/Python/ceval.c#L3206
-        if op == dis.opname.index("COPY_FREE_VARS"):
+        if "COPY_FREE_VARS" in dis.opmap and op == dis.opmap["COPY_FREE_VARS"]:
             freevar_arg_map = {k + prev_n_locals: v for k, v in freevar_arg_map.items()}
 
         # replace free variable load
-        if op == dis.opname.index("LOAD_DEREF") and arg in freevar_arg_map:
-            op = dis.opname.index("LOAD_FAST")
+        if op == dis.opmap["LOAD_DEREF"] and arg in freevar_arg_map:
+            op = dis.opmap["LOAD_FAST"]
             arg = freevar_arg_map[arg]
 
         new_code[i] = op
