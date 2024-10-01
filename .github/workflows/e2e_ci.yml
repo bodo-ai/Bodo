@@ -26,12 +26,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: mamba-org/setup-micromamba@v1
         with:
+          micromamba-version: '1.5.10-0'
           environment-name: ci-env
           environment-file: buildscripts/envs/conda-lock.yml
           # Include Dev Dependencies
           create-args: --category main --category dev
           cache-environment: true
-          cache-downloads: true
+          cache-downloads: false
           generate-run-shell: true
           init-shell: bash
           condarc: |
