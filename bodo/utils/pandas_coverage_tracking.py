@@ -5,9 +5,9 @@ This script will be run during the import bodo step if specified by _check_panda
 """
 import numba
 import requests
-from bs4 import BeautifulSoup
 from numba.core.target_extension import dispatcher_registry
 
+from bodo.pandas_compat import _check_pandas_change
 from bodo.utils import search_templates
 
 # URL of the Pandas API reference pages
@@ -32,6 +32,8 @@ urls = [
 
 
 def get_pandas_apis_from_url(url):
+    from bs4 import BeautifulSoup
+
     result = []
     # Send a GET request to the URL
     response = requests.get(url)
@@ -64,19 +66,20 @@ def get_all_pandas_apis():
     return result
 
 
-print("Checking Pandas API's for new methods/attributes, this may take a minute...")
-pandas_apis = get_all_pandas_apis()
-# We only target the CPU. The other option is Numba ufuncs
-disp = dispatcher_registry[numba.core.target_extension.CPU]
-typing_ctx = disp.targetdescr.typing_context
-# Probably not necessary to refresh
-typing_ctx.refresh()
+if _check_pandas_change:
+    print("Checking Pandas API's for new methods/attributes, this may take a minute...")
+    pandas_apis = get_all_pandas_apis()
+    # We only target the CPU. The other option is Numba ufuncs
+    disp = dispatcher_registry[numba.core.target_extension.CPU]
+    typing_ctx = disp.targetdescr.typing_context
+    # Probably not necessary to refresh
+    typing_ctx.refresh()
 
-search_templates.lookup_all(
-    pandas_apis,
-    typing_ctx,
-    types_dict=search_templates.bodo_pd_types_dict,
-    keys=[
-        "Series",
-    ],
-)
+    search_templates.lookup_all(
+        pandas_apis,
+        typing_ctx,
+        types_dict=search_templates.bodo_pd_types_dict,
+        keys=[
+            "Series",
+        ],
+    )

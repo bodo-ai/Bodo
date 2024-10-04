@@ -1,14 +1,16 @@
 # `pd.Series.any`
 
-[Link to external documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html)
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html)
 
-`pandas.Series.any(axis=0, bool_only=None, skipna=True, level=None)`
+`pandas.Series.any(axis=0, bool_only=None, skipna=True)`
 
 ### Supported Arguments:
  * `axis`: only supports default value `0`.
  * `bool_only`: only supports default value `None`.
  * `skipna`: only supports default value `True`.
- * `level`: only supports default value `None`.
+
+!!! note
+	Argument `bool_only` has default value `None` that's different than Pandas default.
 
 !!! note
     Bodo does not accept any additional arguments for Numpy

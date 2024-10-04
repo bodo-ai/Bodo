@@ -478,19 +478,20 @@ def overload_series_prod(
     SeriesType,
     "any",
     path_name="pd.Series.any",
-    unsupported_args=["axis", "bool_only", "skipna", "level"],
+    unsupported_args={"axis", "bool_only", "skipna"},
     description="""!!! note
     Bodo does not accept any additional arguments for Numpy
     compatibility""",
+    changed_defaults={"bool_only"},
     hyperlink="https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html",
     inline="always",
     no_unliteral=True,
 )
-def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
+def overload_series_any(S, axis=0, bool_only=None, skipna=True):
     # TODO [BE-2453]: Better errorchecking in general?
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.any()")
 
-    def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
+    def impl(S, axis=0, bool_only=None, skipna=True):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         return bodo.libs.array_ops.array_op_any(A)
 

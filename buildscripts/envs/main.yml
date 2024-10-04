@@ -42,7 +42,9 @@ dependencies:
   - matplotlib<=3.8.2
 
   # IO
-  - pyarrow =17.0.0
+  - bodo.ai/linux-64::pyarrow=17.0.0  #[linux64]
+  - pyarrow =17.0.0  #[osx64]
+  - pyarrow =17.0.0  #[osx-arm64]
   - fsspec >=2021.09
   # IO Optional
   - boto3
