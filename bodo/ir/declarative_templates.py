@@ -30,10 +30,11 @@ def replace_package_name(path):
     package_name = path_parts[0]
 
     if package_name in abrev_package_names:
-        path_parts[0] = abrev_package_names[package_name]
-        return ".".join(path_parts)
+        package_name = abrev_package_names[package_name]
+        path_parts[0] = package_name
+        return package_name, ".".join(path_parts)
 
-    return path
+    return package_name, path
 
 
 class DeclarativeTemplate(metaclass=ABCMeta):
@@ -49,22 +50,31 @@ class DeclarativeTemplate(metaclass=ABCMeta):
 class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTemplate):
     def document(self):
         title_str = f"# `{self.path_name}`"
-        params = list(utils.pysignature(self._overload_func).parameters.values())
-        params_str = ", ".join(map(str, params[1:]))
-        pysig_str = f"`{replace_package_name(self.path_name)}({params_str})`"
+        params_dict = utils.pysignature(self._overload_func).parameters
+        params_list = list(params_dict.values())
+        params_str = ", ".join(map(str, params_list[1:]))
+
+        package_name, full_path = replace_package_name(self.path_name)
+        pysig_str = f"`{full_path}({params_str})`"
+
         unsupported_args_str = "### Supported Arguments:"
-        for param in params[1:]:
+        for param in params_list[1:]:
             unsupported_args_str += f"\n * `{param.name}`"
             if param.name in self.unsupported_args:
                 unsupported_args_str += (
                     f": only supports default value `{param.default}`."
                 )
 
+        changed_defaults_str = ""
+        for changed_arg in self.changed_defaults:
+            default_value = params_dict[changed_arg].default
+            changed_defaults_str += f"!!! note\n\tArgument `{changed_arg}` has default value `{default_value}` that's different than {package_name.capitalize()} default.\n\n"
+
         description = self.description
         hyperlink_str = (
             ""
             if self.hyperlink is None
-            else f"[Link to external documentation]({self.hyperlink})\n\n"
+            else f"[Link to {package_name.capitalize()} documentation]({self.hyperlink})\n\n"
         )
 
         # extract example from existing doc for backcompatibility
@@ -84,11 +94,15 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             f.write(hyperlink_str)
             f.write(f"{pysig_str}\n\n")
             f.write(f"{unsupported_args_str}\n\n")
+            f.write(changed_defaults_str)
             f.write(f"{description}\n\n")
             f.write(example_str)
 
     def is_matching_template(self, attr):
         return self._attr == attr
+
+    def get_signature(self):
+        return utils.pysignature(self._overload_func)
 
     @classmethod
     def _check_unsupported_args(cls, kws):
@@ -167,6 +181,7 @@ def make_overload_declarative_template(
     path_name,
     unsupported_args,
     description,
+    changed_defaults=frozenset(),
     hyperlink=None,
     inline="never",
     prefer_literal=False,
@@ -192,6 +207,7 @@ def make_overload_declarative_template(
         prefer_literal=prefer_literal,
         _no_unliteral=no_unliteral,
         unsupported_args=unsupported_args,
+        changed_defaults=changed_defaults,
         description=description,
         hyperlink=hyperlink,
         metadata=kwargs,
@@ -201,14 +217,20 @@ def make_overload_declarative_template(
 
 
 def overload_method_declarative(
-    typ, attr, path_name, unsupported_args, description, hyperlink=None, **kwargs
+    typ,
+    attr,
+    path_name,
+    unsupported_args,
+    description,
+    changed_defaults=frozenset(),
+    hyperlink=None,
+    **kwargs,
 ):
     """Common code for overload_method and overload_classmethod"""
 
     def decorate(overload_func):
         copied_kwargs = kwargs.copy()
         base = _OverloadDeclarativeMethodTemplate
-
         # NOTE: _no_unliteral is a bodo specific attribute and is linked to changes in numba_compat.py
         template = make_overload_declarative_template(
             typ,
@@ -217,6 +239,7 @@ def overload_method_declarative(
             path_name,
             unsupported_args,
             description,
+            changed_defaults=changed_defaults,
             hyperlink=hyperlink,
             inline=copied_kwargs.pop("inline", "never"),
             prefer_literal=copied_kwargs.pop("prefer_literal", False),
