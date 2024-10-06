@@ -3,7 +3,6 @@ package com.bodosql.calcite.adapter.bodo
 import com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen
 import com.bodosql.calcite.application.BodoSQLCodegenException
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem
-import com.bodosql.calcite.application.utils.Utils
 import com.bodosql.calcite.codeGeneration.OperatorEmission
 import com.bodosql.calcite.codeGeneration.OutputtingPipelineEmission
 import com.bodosql.calcite.codeGeneration.OutputtingStageEmission
@@ -29,6 +28,7 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rex.RexNode
 import org.apache.calcite.sql.type.SqlTypeName
 import java.util.List
+import java.util.Locale
 
 class BodoPhysicalSort(
     cluster: RelOptCluster,
@@ -67,8 +67,7 @@ class BodoPhysicalSort(
                 typeName != SqlTypeName.INTEGER && typeName != SqlTypeName.BIGINT
             ) {
                 throw BodoSQLCodegenException(
-                    "Limit value must be an integer, value is of type: " +
-                        Utils.sqlTypenameToPandasTypename(typeName, true, fetchNode.type.precision),
+                    String.format(Locale.ROOT, "Limit value must be an integer, value is of type: %s", fetchNode.type.toString()),
                 )
             }
 
@@ -87,8 +86,7 @@ class BodoPhysicalSort(
                 typeName != SqlTypeName.INTEGER && typeName != SqlTypeName.BIGINT
             ) {
                 throw BodoSQLCodegenException(
-                    "Offset value must be an integer, value is of type: " +
-                        Utils.sqlTypenameToPandasTypename(typeName, true, offsetNode.type.precision),
+                    String.format(Locale.ROOT, "Offset value must be an integer, value is of type: %s", offsetNode.type.toString()),
                 )
             }
 
