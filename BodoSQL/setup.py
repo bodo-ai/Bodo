@@ -42,10 +42,7 @@ else:
 
 
 def build_libs(obj):
-    """Creates the generated library/tests, builds maven, and then calls the original run command"""
-    import buildscripts.python_library_build.write_generated_lib
-
-    buildscripts.python_library_build.write_generated_lib.generate_and_write_library()
+    """Builds maven, and then calls the original run command"""
     try:
         pom_dir = os.path.join("calcite_sql", "pom.xml")
         dmvn_repo = os.path.dirname("bodosql-protocol-mvn/")

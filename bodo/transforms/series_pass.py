@@ -2199,25 +2199,6 @@ class SeriesPass:
             assign.value = ir.Global(gb_name, pd.Timestamp(time_val), rhs.loc)
             return [assign]
 
-        # Inline sql_null_checking_pd_to_datetime_with_format calls on constant strings
-        # to avoid going to objmode
-        if (
-            fdef
-            == (
-                "sql_null_checking_pd_to_datetime_with_format",
-                "bodosql.libs.generated_lib",
-            )
-            and is_overload_constant_str(self.typemap[rhs.args[0].name])
-            and is_overload_constant_str(self.typemap[rhs.args[1].name])
-        ):
-            date_val = get_overload_const_str(self.typemap[rhs.args[0].name])
-            format_val = get_overload_const_str(self.typemap[rhs.args[1].name])
-            gb_name = f"_bodo_to_datetime_const_{ir_utils.next_label()}"
-            assign.value = ir.Global(
-                gb_name, pd.to_datetime(date_val, format=format_val), rhs.loc
-            )
-            return [assign]
-
         if fdef == ("argsort", "bodo.hiframes.series_impl"):
             lhs = assign.target
             data = rhs.args[0]
