@@ -79,9 +79,6 @@ azurefs-sas-token-provider/bodo_azurefs_sas_token_provider/jars
 
 #                                 --------BodoSQL--------
 
-#the current paths of the automatically generated library functions
-BodoSQL/bodosql/libs/generated_lib.py
-
 # Compiled class file
 BodoSQL/**/*.class
 
