@@ -165,11 +165,13 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
 
         // Store table name and base connection string in builder for prefetch gen
         // Note: Only when reading from a Snowflake-managed Iceberg table (using Snowflake catalog)
-        if (tableScanNode.getCatalogTable().getCatalog() is SnowflakeCatalog) {
-            var staticConExpr = relInput.generatePythonConnStr(ImmutableList.of("", ""))
-            staticConExpr =
-                if (staticConExpr is StringLiteral) StringLiteral("iceberg+${staticConExpr.arg}") else staticConExpr
-            ctx.builder().addSfIcebergTablePath(staticConExpr, tableScanNode.getCatalogTable().getQualifiedName())
+        if (ctx.streamingOptions().prefetchSFIceberg) {
+            if (tableScanNode.getCatalogTable().getCatalog() is SnowflakeCatalog) {
+                var staticConExpr = relInput.generatePythonConnStr(ImmutableList.of("", ""))
+                staticConExpr =
+                    if (staticConExpr is StringLiteral) StringLiteral("iceberg+${staticConExpr.arg}") else staticConExpr
+                ctx.builder().addSfIcebergTablePath(staticConExpr, tableScanNode.getCatalogTable().getQualifiedName())
+            }
         }
 
         val columnsArg = Expr.List(cols.map { v -> StringLiteral(v) })

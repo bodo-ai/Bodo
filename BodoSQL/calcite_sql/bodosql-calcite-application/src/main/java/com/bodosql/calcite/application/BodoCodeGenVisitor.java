@@ -197,7 +197,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
       List<RelDataType> dynamicParamTypes,
       Map<String, RelDataType> namedParamTypeMap,
       Map<Integer, Integer> idMapping,
-      boolean hideOperatorIDs) {
+      boolean hideOperatorIDs,
+      boolean prefetchSFIceberg) {
     super();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
@@ -209,7 +210,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     this.tracingLevel = tracingLevel;
     this.generatedCode = new Module.Builder(verboseLevel);
     this.generatedCode.setHideOperatorIDs(hideOperatorIDs);
-    this.streamingOptions = new StreamingOptions(batchSize);
+    this.streamingOptions = new StreamingOptions(batchSize, prefetchSFIceberg);
     this.dynamicParamTypes = dynamicParamTypes;
     this.namedParamTypeMap = namedParamTypeMap;
     this.generatedCode.setIDMapping(idMapping);

@@ -145,6 +145,9 @@ bodosql_full_caching = os.environ.get("BODO_USE_PARTIAL_CACHING", "0") != "0"
 bodo_disable_streaming_window_sort = (
     os.environ.get("BODO_DISABLE_STREAMING_WINDOW_SORT", "0") != "0"
 )
+# If enabled, generate a prefetch function call to load metadata paths for
+# Snowflake-managed Iceberg tables in the BodoSQL plan.
+prefetch_sf_iceberg = os.environ.get("BODO_PREFETCH_SF_ICEBERG", "0") != "0"
 
 
 def get_sql_config_str() -> str:

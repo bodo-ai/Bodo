@@ -1198,6 +1198,7 @@ class BodoSQLContext:
                 bodo.enable_streaming_sort_limit_offset,
                 bodo.bodo_sql_style,
                 bodo.bodosql_full_caching,
+                bodo.prefetch_sf_iceberg,
             )
         extra_args = () if self.default_tz is None else (self.default_tz,)
         generator = RelationalAlgebraGeneratorClass(
@@ -1214,6 +1215,7 @@ class BodoSQLContext:
             bodo.enable_streaming_sort_limit_offset,
             bodo.bodo_sql_style,
             bodo.bodosql_full_caching,
+            bodo.prefetch_sf_iceberg,
             *extra_args,
         )
         return generator
