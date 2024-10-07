@@ -454,6 +454,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_streaming_sort_limit_offset,
                     bodo.bodo_sql_style,
                     bodo.bodosql_full_caching,
+                    bodo.prefetch_sf_iceberg,
                 )
             else:
                 extra_args = (
@@ -476,6 +477,7 @@ def _gen_sql_plan_pd_func_text_and_lowered_globals(
                     bodo.enable_streaming_sort_limit_offset,
                     bodo.bodo_sql_style,
                     bodo.bodosql_full_caching,
+                    bodo.prefetch_sf_iceberg,
                     *extra_args,
                 )
         except Exception as e:
