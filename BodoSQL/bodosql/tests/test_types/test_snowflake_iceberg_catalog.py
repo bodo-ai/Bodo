@@ -57,20 +57,13 @@ def test_basic_read(memory_leak_check):
     )
 
     query = "SELECT A, B, C FROM BODOSQL_ICEBERG_READ_TEST"
-    stream = StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        check_func(
-            impl,
-            (bc, query),
-            py_output=py_out,
-            sort_output=True,
-            reset_index=True,
-        )
-        check_logger_msg(
-            stream,
-            'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
-        )
+    check_func(
+        impl,
+        (bc, query),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+    )
 
 
 @temp_env_override({"AWS_REGION": "us-east-1"})
@@ -667,3 +660,59 @@ def test_azure_basic_write(memory_leak_check):
         ), f"Table type is not as expected. Expected MANAGED but found {output_table_type}"
     finally:
         drop_snowflake_table(table_name, db, schema, user=3)
+
+
+@temp_env_override({"AWS_REGION": "us-east-1"})
+def test_prefetch_flag(memory_leak_check):
+    """
+    Test that if the prefetch flag is set, a prefetch occurs
+    TODO: [BSE-3977] There is a bug that causes the prefetch
+    to not be used when the query is compiled in the same process
+    """
+
+    old_prefetch_flag = bodo.prefetch_sf_iceberg
+
+    try:
+        bodo.prefetch_sf_iceberg = True
+
+        catalog = bodosql.SnowflakeCatalog(
+            os.environ["SF_USERNAME"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "TEST_DB",
+            connection_params={"schema": "PUBLIC", "role": "ACCOUNTADMIN"},
+            iceberg_volume="exvol",
+        )
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+
+        def impl(bc, query):
+            return bc.sql(query)
+
+        py_out = pd.DataFrame(
+            {
+                "A": ["ally", "bob", "cassie", "david", pd.NA],
+                "B": [10.5, -124.0, 11.11, 456.2, -8e2],
+                "C": [True, pd.NA, False, pd.NA, pd.NA],
+            }
+        )
+
+        query = "SELECT A, B, C FROM BODOSQL_ICEBERG_READ_TEST"
+        stream = StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=py_out,
+                sort_output=True,
+                reset_index=True,
+            )
+
+            check_logger_msg(
+                stream,
+                'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
+            )
+
+    finally:
+        bodo.prefetch_sf_iceberg = old_prefetch_flag

@@ -143,6 +143,9 @@ public class RelationalAlgebraGenerator {
   /** Should we use the covering expression approach to cache or only exact matches. */
   public static boolean coveringExpressionCaching = false;
 
+  /** Should we prefetch metadata location for Snowflake-managed Iceberg tables. */
+  public static boolean prefetchSFIceberg = false;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
    * list of BodoSqlSchemas.
@@ -195,7 +198,8 @@ public class RelationalAlgebraGenerator {
       boolean enableStreamingSort,
       boolean enableStreamingSortLimitOffset,
       String sqlStyle,
-      boolean coveringExpressionCaching) {
+      boolean coveringExpressionCaching,
+      boolean prefetchSFIceberg) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -217,6 +221,7 @@ public class RelationalAlgebraGenerator {
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
   }
 
   /** Constructor for the relational algebra generator class that takes in the default timezone. */
@@ -234,6 +239,7 @@ public class RelationalAlgebraGenerator {
       boolean enableStreamingSortLimitOffset,
       String sqlStyle,
       boolean coveringExpressionCaching,
+      boolean prefetchSFIceberg,
       String defaultTz) {
     this.catalog = null;
     this.plannerType = choosePlannerType(plannerType);
@@ -258,6 +264,7 @@ public class RelationalAlgebraGenerator {
     this.enableTimestampTz = enableTimestampTz;
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
   }
 
   /**
@@ -283,7 +290,8 @@ public class RelationalAlgebraGenerator {
       boolean enableStreamingSort,
       boolean enableStreamingSortLimitOffset,
       String sqlStyle,
-      boolean coveringExpressionCaching) {
+      boolean coveringExpressionCaching,
+      boolean prefetchSFIceberg) {
     this.catalog = catalog;
     this.plannerType = choosePlannerType(plannerType);
     this.verboseLevel = verboseLevel;
@@ -295,6 +303,7 @@ public class RelationalAlgebraGenerator {
     this.enableRuntimeJoinFilters = enableRuntimeJoinFilters;
     this.sqlStyle = sqlStyle;
     this.coveringExpressionCaching = coveringExpressionCaching;
+    this.prefetchSFIceberg = prefetchSFIceberg;
     System.setProperty("calcite.default.charset", "UTF-8");
     List<String> catalogDefaultSchema = catalog.getDefaultSchema(0);
     final @Nullable String currentDatabase;
@@ -557,7 +566,8 @@ public class RelationalAlgebraGenerator {
             dynamicTypes,
             namedParamTypes,
             Map.of(),
-            this.hideOperatorIDs);
+            this.hideOperatorIDs,
+            this.prefetchSFIceberg);
     codegen.generateDDLCode(ddlNode, new GenerateDDLTypes(this.planner.getTypeFactory()));
     return codegen.getGeneratedCode();
   }
@@ -601,7 +611,8 @@ public class RelationalAlgebraGenerator {
             dynamicTypes,
             namedParamTypes,
             v.getIDMapping(),
-            this.hideOperatorIDs);
+            this.hideOperatorIDs,
+            this.prefetchSFIceberg);
     codegen.go(rel);
     return codegen.getGeneratedCode();
   }
