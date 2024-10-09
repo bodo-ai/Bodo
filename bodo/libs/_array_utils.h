@@ -1158,6 +1158,17 @@ void DEBUG_PrintTable(std::ostream& os,
 void DEBUG_PrintUnorderedMap(std::ostream& os,
                              std::unordered_map<uint64_t, uint64_t> map);
 
+/**
+ * @brief Returns a string representation of a vector for debugging purposes.
+ * Only int32, int64, uint32 and uint64 vectors are supported.
+ *
+ * @tparam T Type of vector.
+ * @param vec Vector to convert
+ * @return std::string String representation of vector.
+ */
+template <typename T>
+std::string DEBUG_VectorToString(const std::vector<T>& vec);
+
 /** This is a function used for debugging.
  * It prints the nature of the columns of the tables
  *

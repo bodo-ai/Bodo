@@ -20,7 +20,6 @@
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
-#include "_window_compute.h"
 #include "arrow/util/bit_util.h"
 
 #define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
@@ -2768,7 +2767,7 @@ GroupbyState::GroupbyState(
                 // input batches
                 local_input_cols.push_back(nullptr);
                 in_arr_types.push_back(
-                    (in_schema_->column_types[physical_input_ind])->copy());
+                    (in_schema_->column_types.at(physical_input_ind))->copy());
             }
         }
         // Handle non-window functions.
@@ -4929,14 +4928,11 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
         // Determine the number of build columns because decimal arrays
         // can require additional entries.
         size_t n_build_columns = total_schema->ncols();
-        std::vector<std::unique_ptr<bodo::DataType>> key_types;
-        for (uint64_t i = 0; i < n_keys; i++) {
-            key_types.push_back(total_schema->column_types[i]->copy());
-        }
         // Generate the general keys schema for remapping the output from
         // grouping sets.
         std::unique_ptr<bodo::Schema> keys_schema =
-            std::make_unique<bodo::Schema>(std::move(key_types));
+            total_schema->Project(n_keys);
+
         // Generate the key dictionary builders for all group by states.
         std::vector<std::shared_ptr<DictionaryBuilder>> key_dict_builders(
             n_keys);
@@ -4968,13 +4964,6 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 num_skipped_columns += f_in_offsets[i + 1] - f_in_offsets[i];
             }
         }
-        bool allow_any_work_stealing = false;
-        // Compute the window information up front because there are never
-        // window functions.
-        std::vector<int32_t> window_ftypes(0, 0);
-        std::vector<bool> mrnf_sort_asc_vec(0, false);
-        std::vector<bool> mrnf_sort_na_vec(0, false);
-        std::vector<bool> cols_to_keep_vec(0, true);
 
         // Generate a grouping state for each grouping set and perform any
         // necessary remapping.
@@ -5053,11 +5042,14 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
             // Create the groupby state.
             groupby_states.push_back(std::make_unique<GroupbyState>(
                 std::make_unique<bodo::Schema>(std::move(kept_column_types)),
-                ftypes_vector, window_ftypes, f_in_offsets_vector,
-                remapped_f_in_cols, num_grouping_keys, mrnf_sort_asc_vec,
-                mrnf_sort_na_vec, cols_to_keep_vec, nullptr, output_batch_size,
-                parallel, sync_iter, sub_operator_id, op_pool_size_bytes,
-                allow_any_work_stealing, local_key_dict_builders));
+                ftypes_vector, /*window_ftypes_*/ std::vector<int32_t>{},
+                f_in_offsets_vector, remapped_f_in_cols, num_grouping_keys,
+                /*sort_asc_vec_*/ std::vector<bool>{},
+                /*sort_na_pos_*/ std::vector<bool>{},
+                /*cols_to_keep_bitmask_*/ std::vector<bool>{}, nullptr,
+                output_batch_size, parallel, sync_iter, sub_operator_id,
+                op_pool_size_bytes, /*allow_any_work_stealing*/ false,
+                local_key_dict_builders));
         }
         return new GroupingSetsState(
             std::move(keys_schema), std::move(groupby_states),

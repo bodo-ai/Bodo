@@ -153,6 +153,56 @@ def test_grouping_sets_subset(grouping_sets_inputs, memory_leak_check):
     check_query(query, ctx, None, check_dtype=False, expected_output=expected_output)
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
+            "SELECT A, SUM(B1) as SUM_B1, SUM(B2) as SUM_B2, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D, COUNT(DISTINCT(E)) as CD_E, COUNT(*) as COUNT_STAR FROM TABLE1 GROUP BY A",
+            id="no-overlap",
+        ),
+        pytest.param(
+            "SELECT A, SUM(B1) as SUM_B1, COUNT(DISTINCT(B1)) as CD_B1, SUM(B2) as SUM_B2, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D FROM TABLE1 GROUP BY A",
+            marks=pytest.mark.skip(reason="Bug in Grouping sets!"),
+            id="overlap-sum-sum",
+        ),
+        pytest.param(
+            "SELECT A, SUM(B1) as SUM_B1, COUNT(DISTINCT(B1)) as CD_B1, COUNT(*) as COUNT_STAR, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D FROM TABLE1 GROUP BY A",
+            marks=pytest.mark.skip(reason="Bug in Grouping sets!"),
+            id="overlap-sum-size",
+        ),
+    ],
+)
+def test_implicit_grouping_sets(query, spark_info, memory_leak_check):
+    """
+    Test use cases where a grouping set is implicitly generated because of
+    multiple COUNT(DISTINCT)s.
+    """
+
+    input_df = pd.DataFrame(
+        {
+            "A": np.array([1, 1, 2, 2, 4] * 10, dtype=np.int64),
+            "B1": pd.array(
+                [90, 283, 119, 34] * 11 + [39, 1124, 432, 534, 561, 523], dtype="Int64"
+            ),
+            "B2": pd.array(
+                [90, 283, 119, 214] * 11 + [39, 1124, 432, 534, 561, 523], dtype="Int64"
+            ),
+            "C": pd.array(
+                ["pol", "ert", "iop", "lkj", "sdf", "ewq"] * 8 + ["fgj", "mnb"]
+            ),
+            "D": pd.array(
+                [90, 283, 119, 34] * 11 + [39, 1124, 432, 534, 561, 523], dtype="Int64"
+            ),
+            "E": pd.array(
+                ["pol", "ert", "iop", "lkj", "sdf", "ewq"] * 8 + ["fgj", "mnb"]
+            ),
+        }
+    )
+
+    ctx = {"TABLE1": input_df}
+    check_query(query, ctx, spark_info, check_dtype=False, sort_output=True)
+
+
 def test_grouping_non_streaming(grouping_sets_inputs, memory_leak_check):
     """
     Tests the GROUPING function when taking the non-streaming code path.

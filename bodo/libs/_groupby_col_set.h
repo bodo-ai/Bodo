@@ -1,12 +1,10 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
 
-#include <algorithm>
 #include "_bodo_common.h"
 #include "_dict_builder.h"
 #include "_groupby.h"
 #include "_groupby_common.h"
-#include "_groupby_update.h"
 
 /**
  * This file declares the functions used to create "col sets"
@@ -322,6 +320,54 @@ class BasicColSet {
         update_cols;  // columns for update step
     std::vector<std::shared_ptr<array_info>>
         combine_cols;  // columns for combine step
+};
+
+/**
+ * @brief Column Set for the SIZE operation.
+ *
+ */
+class SizeColSet : public BasicColSet {
+   public:
+    // NOTE: We do not require an input column for Size since the grouping
+    // information will be sufficient for computing the output.
+    SizeColSet(bool combine_step, bool use_sql_rules);
+    virtual ~SizeColSet();
+
+    /**
+     * @brief Allocate a NUMPY INT64 array for storing the running output.
+     *
+     * @param num_groups number of groups found in the input table
+     * @param[in,out] out_cols vector of columns for the update/combine step.
+     * This method adds columns to this vector.
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
+     */
+    void alloc_running_value_columns(
+        size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+        bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+        std::shared_ptr<::arrow::MemoryManager> mm =
+            bodo::default_buffer_memory_manager()) override;
+
+    /**
+     * @brief For Size, input columns are not required, so this will be a NOP.
+     *
+     * @param new_in_cols
+     */
+    void setInCol(
+        std::vector<std::shared_ptr<array_info>> new_in_cols) override;
+
+    /**
+     * Perform update step for this column set. This will fill my columns with
+     * the result of the Size aggregation operation.
+     * @param grouping info calculated by GroupbyPipeline
+     * @param pool Memory pool to use for allocations during the execution of
+     * this function.
+     * @param mm Memory manager associated with the pool.
+     */
+    void update(const std::vector<grouping_info>& grp_infos,
+                bodo::IBufferPool* const pool,
+                std::shared_ptr<::arrow::MemoryManager> mm) override;
 };
 
 /**
