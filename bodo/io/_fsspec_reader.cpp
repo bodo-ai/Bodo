@@ -161,13 +161,35 @@ int32_t finalize_fsspec() {
     return 0;
 }
 
+/**
+ * @brief Wrapper around finalize_fsspec() to be called from Python (avoids
+ Numba JIT overhead and makes compiler debugging easier by eliminating extra
+ compilation)
+ *
+ */
+static PyObject *finalize_fsspec_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError,
+                        "finalize_fsspec() does not take arguments");
+        return NULL;
+    }
+    PyObject *ret_obj = PyLong_FromLong(finalize_fsspec());
+    return ret_obj;
+}
+
+static PyMethodDef ext_methods[] = {
+#define declmethod(func) \
+    { #func, (PyCFunction)func, METH_VARARGS, NULL }
+    declmethod(finalize_fsspec_py_wrapper),
+    {NULL},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_fsspec_reader(void) {
     PyObject *m;
-    MOD_DEF(m, "fsspec_reader", "No docs", NULL);
+    MOD_DEF(m, "fsspec_reader", "No docs", ext_methods);
     if (m == NULL)
         return NULL;
-
-    SetAttrStringFromVoidPtr(m, finalize_fsspec);
 
     return m;
 }
