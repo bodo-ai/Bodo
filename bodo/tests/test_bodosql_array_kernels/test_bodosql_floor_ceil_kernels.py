@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL numeric functions
-"""
+"""Test Bodo's array kernel utilities for BodoSQL numeric functions"""
 
 import pandas as pd
 import pytest

@@ -304,9 +304,7 @@ with open(args.output, "wt") as output:
                                         + [i, os.path.basename(qname), time]
                                     )
                                     output.flush()
-                            except KeyboardInterrupt:
-                                raise
-                            except:
+                            except Exception:
                                 writer.writerow(
                                     test._make_csv_row()
                                     + [i, os.path.basename(qname), "error"]

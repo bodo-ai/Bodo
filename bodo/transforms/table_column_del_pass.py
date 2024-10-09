@@ -4,6 +4,7 @@ Updates the function IR to include decref on individual columns
 when they are no longer used. This enables garbage collecting
 single columns when tables are represented by a single variable.
 """
+
 import copy
 import typing as pt
 from collections import defaultdict
@@ -341,9 +342,9 @@ class TableColumnDelPass:
                         # var and columns is not empty. See test_table_dead_var
                         updated = True
                         var_names.append(used_var_key[0])
-                        col_globals[
-                            f"cols_to_delete_{ctr}"
-                        ] = bodo.utils.typing.MetaType(tuple(sorted(columns)))
+                        col_globals[f"cols_to_delete_{ctr}"] = (
+                            bodo.utils.typing.MetaType(tuple(sorted(columns)))
+                        )
                         func_lines.append(
                             f"    del_column(arg{ctr}, cols_to_delete_{ctr})\n"
                         )
@@ -404,7 +405,7 @@ class TableColumnDelPass:
                                 deleted_cols = col_nums & cols
                             if deleted_cols:
                                 updated = True
-                                func_text = f"def del_columns(table_arg):\n"
+                                func_text = "def del_columns(table_arg):\n"
                                 # Track globals to pass for deleting columns. This
                                 # is one element but we pass a dict for consistency with
                                 # the block start case.
@@ -416,7 +417,7 @@ class TableColumnDelPass:
                                     )
                                 }
                                 func_text += (
-                                    f"    del_column(table_arg, cols_to_delete)\n"
+                                    "    del_column(table_arg, cols_to_delete)\n"
                                 )
                                 # Compile the function
                                 new_stmts = self._compile_del_column_function(
@@ -545,9 +546,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
     # keep track of potential aliases for tables.
     # key_type -> Set(key_type)
     equiv_vars = defaultdict(set)
-    table_col_use_map = (
-        {}
-    )  # { block offset -> dict(key_type -> tuple(set(used_column_numbers), use_all, cannot_del_cols)}
+    table_col_use_map = {}  # { block offset -> dict(key_type -> tuple(set(used_column_numbers), use_all, cannot_del_cols)}
     # See table filter note below regarding reverse order
     for offset in reversed(find_topo_order(blocks)):
         ir_block = blocks[offset]
@@ -879,9 +878,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                                 # trim logical column uses that are not in the table (are
                                 # in extra arrays argument)
                                 n_table_cols = len(typemap[rhs_table].arr_types)
-                                in_cols_set = set(
-                                    i for i in in_cols if i < n_table_cols
-                                )
+                                in_cols_set = {i for i in in_cols if i < n_table_cols}
                                 block_use_map[rhs_key] = (
                                     used_cols | in_cols_set,
                                     use_all,
@@ -918,9 +915,9 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         n_in_table_arrs = len(typemap[rhs_table].arr_types)
 
                         if lhs_use_all or lhs_cannot_del_cols:
-                            final_used_cols = set(
+                            final_used_cols = {
                                 i for i in in_col_inds if i < n_in_table_arrs
-                            )
+                            }
                         else:
                             final_used_cols = set()
                             for out_ind, in_ind in enumerate(in_col_inds):
@@ -1262,11 +1259,11 @@ def remove_dead_columns(
 
                     # set dead input arguments to None to enable dead code elimination
                     in_col_inds = typemap[rhs.args[2].name].instance_type.meta
-                    in_used_cols = set(
+                    in_used_cols = {
                         in_ind
                         for out_ind, in_ind in enumerate(in_col_inds)
                         if out_ind in used_columns
-                    )
+                    }
                     n_in_table_arrs = get_overload_const_int(typemap[rhs.args[3].name])
 
                     # Always use the table because we can prune all of the columns.

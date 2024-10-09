@@ -1,5 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test supported sklearn.feature_extraction.text models"""
+"""Test supported sklearn.feature_extraction.text models"""
 
 import numpy as np
 import pandas as pd

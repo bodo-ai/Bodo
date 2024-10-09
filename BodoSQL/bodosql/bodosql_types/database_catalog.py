@@ -3,6 +3,7 @@ Each implementing class should contain the relevant information to
 construct a Java object that can be used to load schema + table
 information from Java code.
 """
+
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 from abc import ABC, abstractmethod
 

@@ -1,14 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL numeric functions
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL numeric functions"""
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed
@@ -67,7 +65,7 @@ def test_trig_single_arg_funcs(arr, func, memory_leak_check):
     if func == "cot":
         # COT doesn't have a 1 to 1 numpy mapping.
         scalar_impl += (
-            f"    return np.divide(1, np.tan(elem)) if not pd.isna(elem) else None"
+            "    return np.divide(1, np.tan(elem)) if not pd.isna(elem) else None"
         )
         # We need to avoid divide by 0 issue
         arr = arr.copy()

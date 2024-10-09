@@ -1,5 +1,5 @@
-"""Support re module using object mode of Numba
-"""
+"""Support re module using object mode of Numba"""
+
 import operator
 import re
 

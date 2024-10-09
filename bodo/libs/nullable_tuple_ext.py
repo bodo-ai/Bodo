@@ -245,8 +245,8 @@ def nullable_tuple_eq(val1, val2):
         func_text += f"    if null1_{i} != null2_{i}:\n"
         func_text += "        return False\n"
         func_text += f"    if null1_{i} and (data1_{i} != data2_{i}):\n"
-        func_text += f"        return False\n"
-    func_text += f"    return True\n"
+        func_text += "        return False\n"
+    func_text += "    return True\n"
     local_vars = {}
     exec(func_text, {}, local_vars)
     impl = local_vars["impl"]
@@ -302,7 +302,7 @@ def _nullable_tuple_hash(nullable_tup):  # pragma: no cover
         func_text += f"    if not null_val_{i}:\n"
         func_text += f"        lane_{i} = hash(data_tup[{i}])\n"
         func_text += f"        if lane_{i} == numba.cpython.hashing._Py_uhash_t(-1):\n"
-        func_text += f"            return -1\n"
+        func_text += "            return -1\n"
         func_text += f"        acc += lane_{i} * _PyHASH_XXPRIME_2\n"
         func_text += "        acc = numba.cpython.hashing._PyHASH_XXROTATE(acc)\n"
         func_text += "        acc *= _PyHASH_XXPRIME_1\n"

@@ -2,6 +2,7 @@
 """
 Unittests for DataFrames
 """
+
 import datetime
 import os
 import sys
@@ -851,11 +852,12 @@ def test_df_apply_freevar(memory_leak_check):
     def impl2(df, a):
         d = 1
         e = 4
-        m = 3
+        m = 3  # noqa: F841
 
         def f(r, a):
             cmp = d + e + a
-            m = 5  # name conflict with caller
+            # name conflict with caller
+            m = 5  # noqa: F841
             if a == 0:
                 return False
             return r.A == cmp
@@ -1406,7 +1408,6 @@ def test_df_fillna_df_value(df_value):
     def impl(df, value):
         return df.fillna(value)
 
-    col = df_value.columns[0]
     df = df_value[[df_value.columns[0]]]
     value = df.dropna().iat[0, 0]
     check_func(impl, (df, value))

@@ -209,15 +209,11 @@ def _test_helper(
 
     assert_success = final_bytes_allocated == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    assert assert_success, f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
 
     assert_success = final_partition_state == expected_partition_state
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    assert assert_success, f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
 
     pd.testing.assert_frame_equal(
         global_output.sort_values(list(expected_out.columns)).reset_index(drop=True),

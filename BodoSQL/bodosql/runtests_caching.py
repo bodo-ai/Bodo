@@ -2,6 +2,7 @@
 """
 File used to run tests on CI.
 """
+
 import os
 import shutil
 import subprocess

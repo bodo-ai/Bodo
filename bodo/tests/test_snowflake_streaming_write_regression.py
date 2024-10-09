@@ -2,6 +2,7 @@
 """
 Tests for writing to Snowflake using Python APIs
 """
+
 import time
 import uuid
 
@@ -227,9 +228,9 @@ def test_streaming_write(
                 )
 
             t_end = time.time()
-            return df, t_end - t_start
+            return t_end - t_start
 
-        _, write_time = impl_write(conn_r, conn_w)
+        write_time = impl_write(conn_r, conn_w)
         print(f"Streaming R/W time={write_time:.3f}s")
 
     finally:
@@ -259,26 +260,6 @@ def test_nonstream_write(
     Test a simple use of non-streaming Snowflake writes by reading a table,
     writing the results, then reading again
     """
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "l_orderkey",
-            "l_partkey",
-            "l_suppkey",
-            "l_linenumber",
-            "l_quantity",
-            "l_extendedprice",
-            "l_discount",
-            "l_tax",
-            "l_returnflag",
-            "l_linestatus",
-            "l_shipdate",
-            "l_commitdate",
-            "l_receiptdate",
-            "l_shipinstruct",
-            "l_shipmode",
-            "l_comment",
-        )
-    )
 
     conn_r = bodo.tests.utils.get_snowflake_connection_string(
         "SNOWFLAKE_SAMPLE_DATA", table_name, user=snowflake_user

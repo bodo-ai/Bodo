@@ -7,6 +7,7 @@ with a goal of caching computation if a dictionary has already been encountered.
 For more information check the confluence design doc:
 https://bodo.atlassian.net/wiki/spaces/B/pages/1402175534/Dictionary+Encoding+Parfors
 """
+
 import llvmlite.binding as ll
 import numba
 from llvmlite import ir as lir
@@ -61,7 +62,7 @@ ll.add_symbol(
 
 class DictionaryEncodingStateType(types.Type):
     def __init__(self):
-        super().__init__(f"DictionaryEncodingStateType()")
+        super().__init__("DictionaryEncodingStateType()")
 
 
 dictionary_encoding_state_type = DictionaryEncodingStateType()

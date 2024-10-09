@@ -2,6 +2,7 @@
 """
 Tests for reading from Snowflake using streaming APIs
 """
+
 import io
 
 import numpy as np
@@ -33,7 +34,12 @@ def test_streaming_read_filter(memory_leak_check):
     def impl(conn):
         total_len = 0
 
-        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000, _bodo_read_as_table=True)  # type: ignore
+        reader = pd.read_sql(
+            "SELECT * FROM LINEITEM",
+            conn,
+            _bodo_chunksize=4000,
+            _bodo_read_as_table=True,
+        )  # type: ignore
         is_last_global = False
         while not is_last_global:
             T1, is_last = read_arrow_next(reader, True)
@@ -72,7 +78,12 @@ def test_streaming_read_agg(memory_leak_check):
     def impl(conn):
         total_max = 0
 
-        reader = pd.read_sql("SELECT * FROM LINEITEM", conn, _bodo_chunksize=4000, _bodo_read_as_table=True)  # type: ignore
+        reader = pd.read_sql(
+            "SELECT * FROM LINEITEM",
+            conn,
+            _bodo_chunksize=4000,
+            _bodo_read_as_table=True,
+        )  # type: ignore
         is_last_global = False
         while not is_last_global:
             table, is_last = read_arrow_next(reader, True)
@@ -144,7 +155,11 @@ def test_batched_read_limit_pushdown_query(memory_leak_check):
     def impl(conn):
         total_sum = 0
 
-        reader = pd.read_sql("SELECT * FROM LINEITEM ORDER BY L_PARTKEY LIMIT 100", conn, _bodo_chunksize=4000)  # type: ignore
+        reader = pd.read_sql(
+            "SELECT * FROM LINEITEM ORDER BY L_PARTKEY LIMIT 100",
+            conn,
+            _bodo_chunksize=4000,
+        )  # type: ignore
         while True:
             table, is_last = read_arrow_next(reader, True)
             total_sum += pd.Series(bodo.hiframes.table.get_table_data(table, 1)).sum()
@@ -184,7 +199,9 @@ def test_batched_read_dict_encoding(memory_leak_check):
         total_length = 0
         is_last_global = False
 
-        reader = pd.read_sql("SELECT l_shipmode FROM LINEITEM", conn, _bodo_chunksize=4000)  # type: ignore
+        reader = pd.read_sql(
+            "SELECT l_shipmode FROM LINEITEM", conn, _bodo_chunksize=4000
+        )  # type: ignore
         while not is_last_global:
             table, is_last = read_arrow_next(reader, True)
             total_length += (

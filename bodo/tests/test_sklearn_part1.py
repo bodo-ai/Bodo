@@ -1,5 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test supported sklearn.metrics methods"""
+"""Test supported sklearn.metrics methods"""
 
 import random
 

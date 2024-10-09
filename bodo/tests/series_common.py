@@ -1,7 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Common import file for Series test fixtures
+Common import file for Series test fixtures
 """
+
 import datetime
 from dataclasses import dataclass
 from decimal import Decimal

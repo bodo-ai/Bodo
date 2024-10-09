@@ -898,7 +898,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             def _str_helper(x):
                 if pd.isna(x):
                     return pd.NA
-                elif type(x) == float:
+                elif isinstance(x, float):
                     return "{:.6f}".format(x)
                 else:
                     return str(x)
@@ -958,7 +958,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
     def test_impl_int(df):
         return df.apply(lambda row: row.astype(int), axis=1)
 
-    def test_impl_float(df):
+    def test_impl_float(df):  # noqa: F841
         return df.apply(lambda row: row.astype("float"), axis=1)
 
     df_str = pd.DataFrame(
@@ -976,7 +976,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
             "C": ["1", None, "4"] * 2,
         }
     )
-    df_float = pd.DataFrame(
+    df_float = pd.DataFrame(  # noqa: F841
         {
             "A": pd.array([1, 2, 3] * 2, dtype="Int32"),
             "B": pd.array([4.3, np.nan, 1.2] * 2, dtype="float"),
@@ -988,7 +988,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
     def _str_helper(x):
         if pd.isna(x):
             return pd.NA
-        elif type(x) == float:
+        elif isinstance(x, float):
             return "{:.6f}".format(x)
         else:
             return str(x)
@@ -997,12 +997,12 @@ def test_heterogeneous_series_df_apply_astype_classes():
     # TODO: nullable bool
     bool_output = df_str.map(lambda x: bool(x) if not pd.isna(x) else pd.NA)
     int_output = df_int.map(lambda x: int(x) if not pd.isna(x) else pd.NA)
-    float_output = df_float.map(lambda x: float(x) if not pd.isna(x) else pd.NA)
 
     check_func(test_impl_str, (df_str,), py_output=str_output)
     check_func(test_impl_bool, (df_str,), py_output=bool_output)
     check_func(test_impl_int, (df_int,), py_output=int_output)
     # TODO: error with float32
+    # float_output = df_float.map(lambda x: float(x) if not pd.isna(x) else pd.NA)
     # check_func(test_impl_float, (df_float,), py_output=float_output)
 
 

@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Library of BodoSQL operators that don't have a Python equivalent
+Library of BodoSQL operators that don't have a Python equivalent
 """
 
 import numba

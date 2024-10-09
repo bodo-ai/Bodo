@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests bytecode changes that are unique to Bodo.
-"""
+"""Tests bytecode changes that are unique to Bodo."""
+
 import numba
 from numba.core import ir
 

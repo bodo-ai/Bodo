@@ -226,7 +226,7 @@ npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
  * @return Numpy object array of datetime.date
  * @param[in] n number of values
  * @param[in] data pointer to 64-bit values
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  */
 void* box_datetime_date_array(int64_t n, const int32_t* data,
                               const uint8_t* null_bitmap) {
@@ -382,7 +382,7 @@ const static int64_t _NANOS_PER_HOUR = 60 * _NANOS_PER_MINUTE;
  * @return Numpy object array of bodo.Time
  * @param[in] n number of values
  * @param[in] data pointer to 64-bit values
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  * @param[in] precision number of decimal places to use for Time values
  */
 void* box_time_array(int64_t n, const int64_t* data, const uint8_t* null_bitmap,
@@ -554,7 +554,7 @@ void unbox_time_array(PyObject* obj, int64_t n, int64_t* data,
  * @param[in] days_data pointer to 64-bit values for days
  * @param[in] seconds_data pointer to 64-bit values for seconds
  * @param[in] microseconds_data pointer to 64-bit values for microseconds
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  */
 void* box_datetime_timedelta_array(int64_t n, const int64_t* days_data,
                                    const int64_t* seconds_data,
@@ -947,7 +947,7 @@ void unbox_timestamptz_array(PyObject* obj, int64_t n, int64_t* data_ts,
  * @param[in] n number of values
  * @param[in] data timestamp pointer to 64-bit values
  * @param[in] data offset pointer to 64-bit values
- * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ * @param[in] null_bitmap bit vector representing nulls (Arrow format)
  */
 void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
                             const int16_t* data_offset,

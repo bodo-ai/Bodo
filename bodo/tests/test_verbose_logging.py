@@ -1,14 +1,15 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 """
-    Tests the logging done with the verbose JIT flag.
-    This set of tests is focused on log input, NOT
-    the correctness of the JIT code, which is presumed
-    to be tested elsewhere.
+Tests the logging done with the verbose JIT flag.
+This set of tests is focused on log input, NOT
+the correctness of the JIT code, which is presumed
+to be tested elsewhere.
 
-    All logs are written solely on rank 0, and tests are
-    written accordingly.
+All logs are written solely on rank 0, and tests are
+written accordingly.
 """
+
 import io
 import os
 

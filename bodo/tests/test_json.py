@@ -2,6 +2,7 @@
 """
 Test I/O for JSON files using pd.read_json()
 """
+
 import os
 import shutil
 import subprocess
@@ -245,10 +246,6 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
                         # pandas read single each json file in directory then concat
                         json_files = os.listdir(fname_arg)
                         assert len(json_files) > 0
-                        results = [
-                            read_impl(os.path.join(fname_arg, fname))
-                            for fname in json_files
-                        ]
                         bodo_res = pd.concat(
                             [
                                 read_impl(os.path.join(fname_arg, fname))
@@ -290,7 +287,14 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
         pd.DataFrame(
             {
                 "A": pd.date_range(start="2018-04-24", periods=12),
-                "B": ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。", "hi", "a123", ""]
+                "B": [
+                    "¡Y tú quién te crees?",
+                    "🐍⚡",
+                    "大处着眼，小处着手。",
+                    "hi",
+                    "a123",
+                    "",
+                ]
                 * 2,
                 "C": np.arange(12).astype(np.float64),
                 "D": [True, False, np.nan, False, False, True] * 2,
@@ -409,7 +413,7 @@ def test_json_write_read_simple_df(memory_leak_check):
     n = 10
     fname_file = "json_data.json"
     bodo.jit(write_impl)(n, fname_file)
-    py_output = df = pd.DataFrame(
+    py_output = pd.DataFrame(
         {
             "A": np.arange(n),
             "B": np.arange(n) % 2,

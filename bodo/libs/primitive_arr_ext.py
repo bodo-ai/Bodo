@@ -5,6 +5,7 @@ The goal is to avoid storing data pointer directly to allow meminfo pointer chan
 buffer pool manager. See:
 https://bodo.atlassian.net/browse/BSE-528
 """
+
 import operator
 
 import numba

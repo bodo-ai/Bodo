@@ -1,6 +1,6 @@
 # Copyright (C) 2019 Bodo Inc.
-"""Test df.query()
-"""
+"""Test df.query()"""
+
 import numpy as np
 import pandas as pd
 import pytest

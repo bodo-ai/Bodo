@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's string array data type
-"""
+"""Test Bodo's string array data type"""
+
 import numba
 import numpy as np
 import pandas as pd

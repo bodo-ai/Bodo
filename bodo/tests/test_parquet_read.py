@@ -519,7 +519,7 @@ def test_pq_multiIdx_errcheck(memory_leak_check):
     np.random.seed(0)
 
     def impl():
-        df = pd.read_parquet("multi_idx_parquet.pq")
+        pd.read_parquet("multi_idx_parquet.pq")
 
     try:
         if bodo.libs.distributed_api.get_rank() == 0:
@@ -1508,15 +1508,15 @@ def test_filter_pushdown_past_column_filters():
                 return df
 
             check_func(impl1, ())
-            check_logger_msg(stream, f"TODO")
+            check_logger_msg(stream, "TODO")
             stream.truncate(0)
             stream.seek(0)
             check_func(impl2, ())
-            check_logger_msg(stream, f"TODO")
+            check_logger_msg(stream, "TODO")
             stream.truncate(0)
             stream.seek(0)
             check_func(impl3, ())
-            check_logger_msg(stream, f"TODO")
+            check_logger_msg(stream, "TODO")
             stream.truncate(0)
             stream.seek(0)
             bodo.barrier()
@@ -2801,7 +2801,7 @@ def test_filter_pushdown_intermediate_comp_func(datapath, memory_leak_check):
     def impl(path):
         df = pd.read_parquet(path)
         c = None
-        unused_val = unused(20, c)
+        unused(20, c)
         y = used(10, c)
         return df[df["A"] == y]
 

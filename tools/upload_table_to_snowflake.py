@@ -112,5 +112,5 @@ snowflake_table_name = "OMEGA_SIX"
 
 if __name__ == "__main__":
     conn_str = get_conn_str()
-    df = pd.read_parquet(parquet_file_name)
-    upload_pq_to_sf(conn_str, df, parquet_file_name, snowflake_table_name)
+    df = pd.read_parquet(parquet_file_path)
+    upload_pq_to_sf(conn_str, df, parquet_file_path, snowflake_table_name)

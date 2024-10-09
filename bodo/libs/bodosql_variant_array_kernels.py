@@ -4,10 +4,11 @@ Implements BodoSQL array kernels related to VARIANT utilities
 """
 
 from numba.core import types
+from numba.extending import overload
 
 import bodo
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import gen_vectorized
 from bodo.libs.struct_arr_ext import StructType
 
 

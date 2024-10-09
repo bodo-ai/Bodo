@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test supported sklearn.linear_model models"""
+"""Test supported sklearn.linear_model models"""
+
 import time
 
 import numpy as np
@@ -182,7 +183,6 @@ def test_sgdc_predict_proba_log_proba(memory_leak_check):
     X_train = X[:splitN]
     y_train = y[:splitN]
     X_test = X[splitN:]
-    y_test = y[splitN:]
 
     # Create exact same model on all ranks using sklearn python implementation
     # That way, we can test predict_proba and predict_log_proba implementation

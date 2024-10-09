@@ -2,6 +2,7 @@
 """
 transforms the IR to handle bytecode issues in Python 3.10.
 """
+
 import operator
 
 import numba
@@ -361,7 +362,7 @@ def _build_new_build_map(func_ir, name, old_body, old_lineno, new_items):
     value_indexes = {}
     if len(literal_keys) == len(new_items):
         # All keys must be literals to have any literal values.
-        literal_value = {x: y for x, y in zip(literal_keys, values)}
+        literal_value = dict(zip(literal_keys, values))
         for i, k in enumerate(literal_keys):
             value_indexes[k] = i
     else:

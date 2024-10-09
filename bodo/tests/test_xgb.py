@@ -60,7 +60,6 @@ def test_xgb_feature_importances_():
     n_features = 50
     X_train = None
     y_train = None
-    X_test = None
     # Create exact same dataset on all ranks
     X, y = make_classification(
         n_samples=n_samples,

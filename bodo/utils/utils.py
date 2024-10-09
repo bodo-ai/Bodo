@@ -2,6 +2,7 @@
 """
 Collection of utility functions. Needs to be refactored in separate files.
 """
+
 import functools
 import hashlib
 import inspect
@@ -592,7 +593,7 @@ def is_distributable_tuple_typ(var_typ):
         or (
             BodoSQLContextType is not None
             and isinstance(var_typ, BodoSQLContextType)
-            and any([is_distributable_typ(df) for df in var_typ.dataframes])
+            and any(is_distributable_typ(df) for df in var_typ.dataframes)
         )
     )
 
@@ -615,7 +616,7 @@ def build_set_seen_na(A):
     # membership check
     # XXX using dict for now due to Numba's #4577
     def impl(A):  # pragma: no cover
-        s = dict()
+        s = {}
         seen_na = False
         for i in range(len(A)):
             if bodo.libs.array_kernels.isna(A, i):
@@ -922,61 +923,100 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
     # Dictionary-encoded arrays can be allocated if a reference array is provided to
     # reuse its dictionary
     if typ == bodo.dict_str_arr_type and not is_overload_none(dict_ref_arr):
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.dict_arr_ext.init_dict_arr(
-            dict_ref_arr._data,
-            bodo.libs.int_arr_ext.alloc_int_array(n, np.int32),
-            dict_ref_arr._has_global_dictionary,
-            dict_ref_arr._has_unique_local_dictionary,
-            dict_ref_arr._dict_id,
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.dict_arr_ext.init_dict_arr(
+                dict_ref_arr._data,
+                bodo.libs.int_arr_ext.alloc_int_array(n, np.int32),
+                dict_ref_arr._has_global_dictionary,
+                dict_ref_arr._has_unique_local_dictionary,
+                dict_ref_arr._dict_id,
+            )
         )
 
     # NOTE: creating regular string array for dictionary-encoded strings to get existing
     # code that doesn't support dict arr to work
     if is_str_arr_type(typ):
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.str_arr_ext.pre_alloc_string_array(
-            n, s[0]
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.str_arr_ext.pre_alloc_string_array(n, s[0])
         )  # pragma: no cover
 
     if typ == bodo.null_array_type:
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.null_arr_ext.init_null_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.null_arr_ext.init_null_array(n)
         )  # pragma: no cover
 
     if typ == bodo.binary_array_type:
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.binary_arr_ext.pre_alloc_binary_array(
-            n, s[0]
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.binary_arr_ext.pre_alloc_binary_array(n, s[0])
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
         if not is_overload_none(dict_ref_arr):
-            return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                n, s, bodo.libs.array_item_arr_ext.get_data(dict_ref_arr)
+            return (
+                lambda n,
+                t,
+                s=None,
+                dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+                    n, s, bodo.libs.array_item_arr_ext.get_data(dict_ref_arr)
+                )
             )  # pragma: no cover
 
         dtype = typ.dtype
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-            n, s, dtype
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+                n, s, dtype
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.struct_arr_ext.StructArrayType):
         dtypes = typ.data
         names = typ.names
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-            n, s, dtypes, names, dict_ref_arr
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
+                n, s, dtypes, names, dict_ref_arr
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.map_arr_ext.MapArrayType):
         struct_typ = bodo.libs.struct_arr_ext.StructArrayType(
             (typ.key_arr_type, typ.value_arr_type), ("key", "value")
         )
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.map_arr_ext.pre_alloc_map_array(
-            n, s, struct_typ, dict_ref_arr
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.map_arr_ext.pre_alloc_map_array(
+                n, s, struct_typ, dict_ref_arr
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.tuple_arr_ext.TupleArrayType):
         dtypes = typ.data
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(
-            n, s, dtypes
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(
+                n, s, dtypes
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
@@ -996,42 +1036,70 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
                 typ.dtype.categories, typ.dtype.data.data, is_ordered
             )
             new_cats_tup = MetaType(tuple(new_cats_arr))
-            return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-                n,
-                bodo.hiframes.pd_categorical_ext.init_cat_dtype(
-                    bodo.utils.conversion.index_from_array(new_cats_arr),
-                    is_ordered,
-                    int_type,
-                    new_cats_tup,
-                ),
+            return (
+                lambda n,
+                t,
+                s=None,
+                dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+                    n,
+                    bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                        bodo.utils.conversion.index_from_array(new_cats_arr),
+                        is_ordered,
+                        int_type,
+                        new_cats_tup,
+                    ),
+                )
             )  # pragma: no cover
         else:
-            return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-                n, t.dtype
+            return (
+                lambda n,
+                t,
+                s=None,
+                dict_ref_arr=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+                    n, t.dtype
+                )
             )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
+                n
+            )
         )  # pragma: no cover
 
     if isinstance(typ.dtype, bodo.hiframes.time_ext.TimeType):
         precision = typ.dtype.precision
 
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(
-            n, precision
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.time_ext.alloc_time_array(n, precision)
         )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(
+                n
+            )
         )  # pragma: no cover
 
     if isinstance(typ, DecimalArrayType):
         precision = typ.dtype.precision
         scale = typ.dtype.scale
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
-            n, precision, scale
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
+                n, precision, scale
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.DatetimeArrayType) or isinstance(
@@ -1042,39 +1110,61 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
         ),
     ):
         tz_literal = typ.tz
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
-            n, tz_literal
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                n, tz_literal
+            )
         )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.timestamptz_ext.TimestampTZArrayType):
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.hiframes.timestamptz_ext.alloc_timestamptz_array(n)
         )  # pragma: no cover
 
     dtype = numba.np.numpy_support.as_dtype(typ.dtype)
 
     # nullable int array
     if isinstance(typ, IntegerArrayType):
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.int_arr_ext.alloc_int_array(
-            n, dtype
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.int_arr_ext.alloc_int_array(n, dtype)
         )  # pragma: no cover
 
     # primitive array
     if isinstance(typ, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.primitive_arr_ext.alloc_primitive_array(
-            n, dtype
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.primitive_arr_ext.alloc_primitive_array(
+                n, dtype
+            )
         )  # pragma: no cover
 
     # nullable float array
     if isinstance(typ, FloatingArrayType):
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.float_arr_ext.alloc_float_array(
-            n, dtype
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.float_arr_ext.alloc_float_array(n, dtype)
         )  # pragma: no cover
 
     # nullable bool array
     if typ == boolean_array_type:
-        return lambda n, t, s=None, dict_ref_arr=None: bodo.libs.bool_arr_ext.alloc_bool_array(
-            n
+        return (
+            lambda n,
+            t,
+            s=None,
+            dict_ref_arr=None: bodo.libs.bool_arr_ext.alloc_bool_array(n)
         )  # pragma: no cover
 
     return lambda n, t, s=None, dict_ref_arr=None: np.empty(
@@ -1287,7 +1377,7 @@ def get_getsetitem_index_var(node, typemap, nodes):
         # literal type is preferred for uniform/easier getitem index match
         try:
             index_typ = types.literal(node.index)
-        except:
+        except Exception:
             index_typ = numba.typeof(node.index)
         index_var = ir.Var(
             node.value.scope, ir_utils.mk_unique_var("dummy_index"), node.loc
@@ -1620,7 +1710,7 @@ def lower_constant_dict(context, builder, typ, pyval):
     # fast path for cases that fit in arrays
     try:
         return lower_const_dict_fast_path(context, builder, typ, pyval)
-    except:
+    except Exception:
         pass
 
     # throw warning for large dicts in slow path since compilation can take long

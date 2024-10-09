@@ -2,6 +2,7 @@
 """
 Indexing support for Series objects, including loc/iloc/at/iat types.
 """
+
 import operator
 
 import numpy as np
@@ -380,9 +381,9 @@ def overload_series_iloc_setitem(I, idx, val):
         if isinstance(idx, types.SliceType):
 
             def impl_slice(I, idx, val):  # pragma: no cover
-                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[
-                    idx
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_slice
 
@@ -457,9 +458,9 @@ def overload_series_iloc_setitem(I, idx, val):
 
             def impl_arr(I, idx, val):  # pragma: no cover
                 idx_t = bodo.utils.conversion.coerce_to_array(idx)
-                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[
-                    idx_t
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_arr
 
@@ -684,7 +685,7 @@ def overload_series_getitem(S, idx):
                 return impl_str_getitem
             else:
                 raise BodoError(
-                    f"Cannot get Series value using a string, unless the index type is also string"
+                    "Cannot get Series value using a string, unless the index type is also string"
                 )
 
         # TODO: handle idx as SeriesType on array
@@ -757,9 +758,9 @@ def overload_series_setitem(S, idx, val):
         if isinstance(idx, types.SliceType):
 
             def impl_slice(S, idx, val):  # pragma: no cover
-                bodo.hiframes.pd_series_ext.get_series_data(S)[
-                    idx
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                bodo.hiframes.pd_series_ext.get_series_data(S)[idx] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_slice
 
@@ -781,9 +782,9 @@ def overload_series_setitem(S, idx, val):
 
             def impl_arr(S, idx, val):  # pragma: no cover
                 idx_t = bodo.utils.conversion.coerce_to_array(idx)
-                bodo.hiframes.pd_series_ext.get_series_data(S)[
-                    idx_t
-                ] = bodo.utils.conversion.coerce_to_array(val, False)
+                bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t] = (
+                    bodo.utils.conversion.coerce_to_array(val, False)
+                )
 
             return impl_arr
 

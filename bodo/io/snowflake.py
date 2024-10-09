@@ -670,14 +670,14 @@ def snowflake_connect(
         sf_cloud_region = "-".join(region_parts[1:]).lower()
         if platform_cloud_provider and platform_cloud_provider != sf_cloud_provider:
             warning = BodoWarning(
-                f"Performance Warning: The Snowflake warehouse and Bodo platform are on different cloud providers. "
+                "Performance Warning: The Snowflake warehouse and Bodo platform are on different cloud providers. "
                 + f"The Snowflake warehouse is located on {sf_cloud_provider}, but the Bodo cluster is located on {platform_cloud_provider}. "
                 + "For best performance we recommend using your cluster and Snowflake account in the same region with the same cloud provider."
             )
             warnings.warn(warning)
         elif platform_region_str != sf_cloud_region:
             warning = BodoWarning(
-                f"Performance Warning: The Snowflake warehouse and Bodo platform are in different cloud regions. "
+                "Performance Warning: The Snowflake warehouse and Bodo platform are in different cloud regions. "
                 + f"The Snowflake warehouse is located in {sf_cloud_region}, but the Bodo cluster is located in {platform_region_str}. "
                 + "For best performance we recommend using your cluster and Snowflake account in the same region with the same cloud provider."
             )
@@ -1389,7 +1389,7 @@ def can_table_be_system_sampled(cursor: "SnowflakeCursor", table_name: Optional[
             return False
         result.fetch_pandas_all()
         return True
-    except snowflake.connector.errors.ProgrammingError as e:
+    except snowflake.connector.errors.ProgrammingError:
         return False
 
 
@@ -2084,7 +2084,7 @@ def execute_query_helper(
             raise BodoError(
                 f"Batches returns from Snowflake don't match the expected format. Expected Arrow batches but got {type(batches[0])}"
             )
-    elif not all([isinstance(batch, ArrowResultBatch) for batch in batches]):
+    elif not all(isinstance(batch, ArrowResultBatch) for batch in batches):
         batches_types = [type(batch) for batch in batches]
         raise BodoError(
             f"Not all batch objects are ArrowResultBatches! batches types: {batches_types}"
@@ -2423,7 +2423,7 @@ def create_table_handle_exists(
 
         if create_table_info.table_properties is not None:
             warnings.warn(
-                f"\nTable properties is not supported in Snowflake. Ignored.\n"
+                "\nTable properties is not supported in Snowflake. Ignored.\n"
             )
 
     # Infer schema can return the columns out of order depending on the
@@ -2448,7 +2448,7 @@ def create_table_handle_exists(
     create_table_sql = f"{create_table_cmd} {location} ({create_table_columns}) "
     if table_comment != None:
         create_table_sql += f" COMMENT = $${table_comment}$$"
-    create_table_sql += f"/* io.snowflake.create_table_if_not_exists() */"
+    create_table_sql += "/* io.snowflake.create_table_if_not_exists() */"
     cursor.execute(create_table_sql, _is_internal=True)
     ev_create_table.finalize()
 

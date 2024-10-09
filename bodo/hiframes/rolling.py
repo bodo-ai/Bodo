@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""implementations of rolling window functions (sequential and parallel)
-"""
+"""implementations of rolling window functions (sequential and parallel)"""
+
 import numba
 import numpy as np
 import pandas as pd
@@ -92,8 +92,17 @@ def overload_rolling_fixed(
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, minp, center, parallel, func, raw
+        return (
+            lambda arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_fixed_apply(
+                arr, index_arr, win, minp, center, parallel, func, raw
+            )
         )  # pragma: no cover
 
     assert_bodo_error(is_overload_constant_str(fname))
@@ -117,21 +126,39 @@ def overload_rolling_fixed(
         # knows which function call to insert in the library
         kernel_func = register_jitable(loc_vars["kernel_func"])
 
-        return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_apply(
-            arr, index_arr, win, minp, center, parallel, kernel_func
+        return (
+            lambda arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_fixed_apply(
+                arr, index_arr, win, minp, center, parallel, kernel_func
+            )
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_fixed_linear_generic(
-        arr,
+    return (
+        lambda arr,
+        index_arr,
         win,
         minp,
         center,
-        parallel,
-        init_kernel,
-        add_kernel,
-        remove_kernel,
-        calc_kernel,
+        fname,
+        raw=True,
+        parallel=False: roll_fixed_linear_generic(
+            arr,
+            win,
+            minp,
+            center,
+            parallel,
+            init_kernel,
+            add_kernel,
+            remove_kernel,
+            calc_kernel,
+        )
     )  # pragma: no cover
 
 
@@ -143,8 +170,18 @@ def overload_rolling_variable(
     # UDF case
     if is_const_func_type(fname):
         func = _get_apply_func(fname)
-        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, minp, center, parallel, func, raw
+        return (
+            lambda arr,
+            on_arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_variable_apply(
+                arr, on_arr, index_arr, win, minp, center, parallel, func, raw
+            )
         )  # pragma: no cover
 
     assert_bodo_error(is_overload_constant_str(fname))
@@ -171,22 +208,42 @@ def overload_rolling_variable(
         # knows which function call to insert in the library
         kernel_func = register_jitable(loc_vars["kernel_func"])
 
-        return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_variable_apply(
-            arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
+        return (
+            lambda arr,
+            on_arr,
+            index_arr,
+            win,
+            minp,
+            center,
+            fname,
+            raw=True,
+            parallel=False: roll_variable_apply(
+                arr, on_arr, index_arr, win, minp, center, parallel, kernel_func
+            )
         )  # pragma: no cover
 
     init_kernel, add_kernel, remove_kernel, calc_kernel = linear_kernels[func_name]
-    return lambda arr, on_arr, index_arr, win, minp, center, fname, raw=True, parallel=False: roll_var_linear_generic(
-        arr,
+    return (
+        lambda arr,
         on_arr,
+        index_arr,
         win,
         minp,
         center,
-        parallel,
-        init_kernel,
-        add_kernel,
-        remove_kernel,
-        calc_kernel,
+        fname,
+        raw=True,
+        parallel=False: roll_var_linear_generic(
+            arr,
+            on_arr,
+            win,
+            minp,
+            center,
+            parallel,
+            init_kernel,
+            add_kernel,
+            remove_kernel,
+            calc_kernel,
+        )
     )  # pragma: no cover
 
 
@@ -667,7 +724,7 @@ def get_offset_nanos(w):  # pragma: no cover
     out = status = 0
     try:
         out = pd.tseries.frequencies.to_offset(w).nanos
-    except:
+    except Exception:
         status = 1
     return out, status
 

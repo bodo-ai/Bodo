@@ -2,7 +2,6 @@
 """
 Implements wrappers to call the C++ BodoSQL array kernels for SHA2 and other crypto functions.
 """
-import types
 
 import llvmlite.binding as ll
 import numba

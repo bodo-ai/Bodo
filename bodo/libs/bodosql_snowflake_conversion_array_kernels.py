@@ -10,7 +10,34 @@ from numba.extending import overload, register_jitable
 import bodo
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.timestamptz_ext import TimestampTZ
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    get_tz_if_exists,
+    is_valid_binary_arg,
+    is_valid_boolean_arg,
+    is_valid_date_arg,
+    is_valid_datetime_or_date_arg,
+    is_valid_decimal_arg,
+    is_valid_float_arg,
+    is_valid_int_arg,
+    is_valid_numeric_bool,
+    is_valid_string_arg,
+    is_valid_time_arg,
+    is_valid_timedelta_arg,
+    is_valid_timestamptz_arg,
+    is_valid_tz_aware_datetime_arg,
+    is_valid_tz_naive_datetime_arg,
+    unopt_argument,
+    verify_datetime_arg,
+    verify_datetime_arg_require_tz,
+    verify_int_arg,
+    verify_numeric_arg,
+    verify_string_arg,
+    verify_string_binary_arg,
+    verify_string_numeric_arg,
+    verify_time_or_datetime_arg_allow_tz,
+    verify_timestamp_tz_arg,
+)
 from bodo.utils.typing import (
     BodoError,
     get_literal_value,
@@ -104,9 +131,9 @@ def to_boolean_util(arr, _try, dict_encoding_state, func_id):
         prefix_code += "false_vals = {'false', 'f', 'no', 'n', 'off', '0'}"
     if is_string:
         scalar_text = "s = arg0.strip().lower()\n"
-        scalar_text += f"is_true_val = s in true_vals\n"
-        scalar_text += f"res[i] = is_true_val\n"
-        scalar_text += f"if not (is_true_val or s in false_vals):\n"
+        scalar_text += "is_true_val = s in true_vals\n"
+        scalar_text += "res[i] = is_true_val\n"
+        scalar_text += "if not (is_true_val or s in false_vals):\n"
         scalar_text += f"  {on_fail}\n"
     elif is_float:
         # TODO: fix this for float case (see above)
@@ -115,9 +142,9 @@ def to_boolean_util(arr, _try, dict_encoding_state, func_id):
         scalar_text = "if np.isinf(arg0) or np.isnan(arg0):\n"
         scalar_text += f"  {on_fail}\n"
         scalar_text += "else:\n"
-        scalar_text += f"  res[i] = bool(arg0)\n"
+        scalar_text += "  res[i] = bool(arg0)\n"
     else:
-        scalar_text = f"res[i] = bool(arg0)"
+        scalar_text = "res[i] = bool(arg0)"
 
     out_dtype = bodo.libs.bool_arr_ext.boolean_array_type
 
@@ -241,15 +268,15 @@ def create_date_cast_util(func, error_on_fail):
             scalar_text += "   if not was_successful:\n"
             scalar_text += f"        {error_str}\n"
             scalar_text += "   else:\n"
-            scalar_text += f"      res[i] = tmp_val\n"
+            scalar_text += "      res[i] = tmp_val\n"
 
         # For date just assign equality
         elif is_valid_date_arg(conversion_val):
-            scalar_text = f"res[i] = arg0\n"
+            scalar_text = "res[i] = arg0\n"
 
         # If a tz-aware timestamp, extract the date
         elif is_valid_tz_aware_datetime_arg(conversion_val):
-            scalar_text = f"res[i] = arg0.date()\n"
+            scalar_text = "res[i] = arg0.date()\n"
 
         # If a non-tz timestamp/datetime, round it down to the nearest day
         elif is_valid_datetime_or_date_arg(conversion_val):
@@ -257,7 +284,7 @@ def create_date_cast_util(func, error_on_fail):
 
         # If a tz timestamp, extract the date from the local timestamp
         elif is_valid_timestamptz_arg(conversion_val):
-            scalar_text = f"res[i] = arg0.local_timestamp().date()\n"
+            scalar_text = "res[i] = arg0.local_timestamp().date()\n"
 
         else:  # pragma: no cover
             raise raise_bodo_error(
@@ -433,7 +460,7 @@ def create_timestamp_cast_util(func, error_on_fail):
                     localize_str = f".tz_localize(None).tz_localize('{time_zone}')"
             else:
                 # LTZ -> NTZ
-                localize_str = f".tz_localize(None)"
+                localize_str = ".tz_localize(None)"
                 time_zone = None
 
         is_out_arr = bodo.utils.utils.is_array_typ(
@@ -463,7 +490,7 @@ def create_timestamp_cast_util(func, error_on_fail):
             https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
             handled by pd.to_datetime() in Bodo jit code.
 
-            It will also check if the string is convertable to int, IE '12345' or '-4321'
+            It will also check if the string is convertible to int, IE '12345' or '-4321'
             """
 
             # Conversion needs to be done incase arg0 is unichr array
@@ -503,7 +530,7 @@ def create_timestamp_cast_util(func, error_on_fail):
         elif conversion_val == bodo.null_array_type:
             # Note: We could just pass a null array, but this adds typing information
             # + validates the other arguments.
-            scalar_text = f"res[i] = None\n"
+            scalar_text = "res[i] = None\n"
         else:  # pragma: no cover
             raise raise_bodo_error(
                 f"Internal error: unsupported type passed to to_timestamp_util for argument conversion_val: {conversion_val}"
@@ -1221,7 +1248,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
     # Format string not supported
     if not is_overload_none(optional_format_string):  # pragma: no cover
         raise raise_bodo_error(
-            f"Internal error: Format string not supported for TO_DOUBLE / TRY_TO_DOUBLE"
+            "Internal error: Format string not supported for TO_DOUBLE / TRY_TO_DOUBLE"
         )
     elif is_decimal:
         if is_array_typ(val):
@@ -1234,7 +1261,7 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
             return impl
         else:
             scalar_text = (
-                f"res[i] = bodo.libs.decimal_arr_ext.decimal_to_float64(arg0)\n"
+                "res[i] = bodo.libs.decimal_arr_ext.decimal_to_float64(arg0)\n"
             )
     elif is_string:
         scalar_text = "arg0 = arg0.strip()\n"
@@ -1243,9 +1270,9 @@ def to_double_util(val, optional_format_string, _try, dict_encoding_state, func_
         scalar_text += "else:\n"
         scalar_text += f"  {on_fail}\n"
     elif is_float:  # pragma: no cover
-        scalar_text = f"res[i] = arg0\n"
+        scalar_text = "res[i] = arg0\n"
     elif is_int or is_bool:  # pragma: no cover
-        scalar_text = f"res[i] = np.float64(arg0)\n"
+        scalar_text = "res[i] = np.float64(arg0)\n"
     else:  # pragma: no cover
         raise raise_bodo_error(
             f"Internal error: unsupported type passed to to_double_util for argument val: {val}"
@@ -1743,7 +1770,7 @@ def overload_cast_str_to_tz_aware_util(arr, tz, dict_encoding_state, func_id):
     # tz can never be null
     propagate_null = [True, False, False, False]
     # Note: pd.to_datetime doesn't support tz as an argument.
-    scalar_text = f"res[i] = pd.to_datetime(arg0).tz_localize(arg1)"
+    scalar_text = "res[i] = pd.to_datetime(arg0).tz_localize(arg1)"
     tz = get_literal_value(tz)
     out_dtype = bodo.DatetimeArrayType(tz)
     use_dict_caching = not is_overload_none(dict_encoding_state)
@@ -1968,7 +1995,7 @@ def string_to_decimal_overload(expr, precision, scale, null_on_error):
                     # TODO: Verify this is enforced.
                     if not null_on_error:
                         raise BodoError(
-                            f"String value is out of range for decimal or doesn't parse properly"
+                            "String value is out of range for decimal or doesn't parse properly"
                         )
                     bodo.libs.array_kernels.setna(out_array, i)
                     continue
@@ -2305,7 +2332,7 @@ def convert_timezone_ntz_util(source_tz, target_tz, data):  # pragma: no cover
 def overload_convert_timezone_ntz_util(source_tz, target_tz, data):
     """
     Converts <data> from <source_tz> to <target_tz> timezone, as if
-    translating the wallclock time from a person in one part of the world
+    translating the wall clock time from a person in one part of the world
     to another part of the world in the same epoch moment.
 
     Args:
@@ -2382,7 +2409,7 @@ def convert_timezone_tz_util(target_tz, data):  # pragma: no cover
 @overload(convert_timezone_tz_util, no_unliteral=True)
 def overload_convert_timezone_tz_util(target_tz, data):
     """
-    Converts <data> to <target_tz> timezone, as if translating the wallclock time
+    Converts <data> to <target_tz> timezone, as if translating the wall clock time
     from a person in one part of the world to another part of the world in the
     same epoch moment.
 
@@ -2404,7 +2431,7 @@ def overload_convert_timezone_tz_util(target_tz, data):
     propagate_null = [True, True]
     out_dtype = bodo.timestamptz_array_type
     scalar_text = "current_target_offset = arg1.utc_timestamp.tz_localize(arg0).utcoffset().value // 60_000_000_000\n"
-    scalar_text += f"res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(arg1.utc_timestamp, current_target_offset)\n"
+    scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz(arg1.utc_timestamp, current_target_offset)\n"
 
     return gen_vectorized(
         arg_names,

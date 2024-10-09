@@ -1,4 +1,5 @@
-"""Support scikit-learn using object mode of Numba """
+"""Support scikit-learn using object mode of Numba"""
+
 import itertools
 import numbers
 import sys
@@ -2600,7 +2601,6 @@ def kmeans_fit_helper(
 
     hostname = MPI.Get_processor_name()
     nodename_ranks = get_host_ranks()
-    orig_njobs = m.n_jobs if hasattr(m, "n_jobs") else None
     orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
 
     # We run on only rank0, but we want that rank to use all the cores
@@ -4158,7 +4158,7 @@ def overload_preprocessing_one_hot_encoder_get_feature_names_out(
         input_features=None,
     ):  # pragma: no cover
         with bodo.objmode(out_features="string[:]"):
-            out_features = get_feature_names_out(input_features)
+            out_features = m.get_feature_names_out(input_features)
         return out_features
 
     return _preprocessing_one_hot_encoder_get_feature_names_out_impl
@@ -5741,9 +5741,9 @@ def overload_preprocessing_robust_scaler_fit(
     if is_overload_true(_is_data_distributed):
         # If distributed, then use native implementation
 
-        func_text = f"def preprocessing_robust_scaler_fit_impl(\n"
-        func_text += f"  m, X, y=None, _is_data_distributed=False\n"
-        func_text += f"):\n"
+        func_text = "def preprocessing_robust_scaler_fit_impl(\n"
+        func_text += "  m, X, y=None, _is_data_distributed=False\n"
+        func_text += "):\n"
 
         # In case a DataFrame was provided, convert it to a Numpy Array first.
         # This is required since we'll be looping over the columns, which
@@ -5751,63 +5751,63 @@ def overload_preprocessing_robust_scaler_fit(
         # TODO Add a compile time check that all columns are numeric since
         # `to_numpy` will error out otherwise anyway. [BE-52]
         if isinstance(X, DataFrameType):
-            func_text += f"  X = X.to_numpy()\n"
+            func_text += "  X = X.to_numpy()\n"
 
-        func_text += f"  with bodo.objmode(qrange_l='float64', qrange_r='float64'):\n"
-        func_text += f"    (qrange_l, qrange_r) = m.quantile_range\n"
-        func_text += f"  if not 0 <= qrange_l <= qrange_r <= 100:\n"
+        func_text += "  with bodo.objmode(qrange_l='float64', qrange_r='float64'):\n"
+        func_text += "    (qrange_l, qrange_r) = m.quantile_range\n"
+        func_text += "  if not 0 <= qrange_l <= qrange_r <= 100:\n"
         # scikit-learn throws the error: `"Invalid quantile range: %s" % str(self.quantile_range)`
         # but we cannot use format strings, so we use a slightly modified error message.
-        func_text += f"    raise ValueError(\n"
-        func_text += f"      'Invalid quantile range provided. Ensure that 0 <= quantile_range[0] <= quantile_range[1] <= 100.'\n"
-        func_text += f"    )\n"
-        func_text += f"  qrange_l, qrange_r = qrange_l / 100.0, qrange_r / 100.0\n"
-        func_text += f"  X = bodo.utils.conversion.coerce_to_array(X)\n"
-        func_text += f"  num_features = X.shape[1]\n"
-        func_text += f"  if m.with_scaling:\n"
-        func_text += f"    scales = np.zeros(num_features)\n"
-        func_text += f"  else:\n"
-        func_text += f"    scales = None\n"
-        func_text += f"  if m.with_centering:\n"
-        func_text += f"    centers = np.zeros(num_features)\n"
-        func_text += f"  else:\n"
-        func_text += f"    centers = None\n"
-        func_text += f"  if m.with_scaling or m.with_centering:\n"
+        func_text += "    raise ValueError(\n"
+        func_text += "      'Invalid quantile range provided. Ensure that 0 <= quantile_range[0] <= quantile_range[1] <= 100.'\n"
+        func_text += "    )\n"
+        func_text += "  qrange_l, qrange_r = qrange_l / 100.0, qrange_r / 100.0\n"
+        func_text += "  X = bodo.utils.conversion.coerce_to_array(X)\n"
+        func_text += "  num_features = X.shape[1]\n"
+        func_text += "  if m.with_scaling:\n"
+        func_text += "    scales = np.zeros(num_features)\n"
+        func_text += "  else:\n"
+        func_text += "    scales = None\n"
+        func_text += "  if m.with_centering:\n"
+        func_text += "    centers = np.zeros(num_features)\n"
+        func_text += "  else:\n"
+        func_text += "    centers = None\n"
+        func_text += "  if m.with_scaling or m.with_centering:\n"
         ## XXX Not sure if prange is useful here
-        func_text += f"    numba.parfors.parfor.init_prange()\n"
-        func_text += f"    for feature_idx in numba.parfors.parfor.internal_prange(num_features):\n"
-        func_text += f"      column_data = bodo.utils.conversion.ensure_contig_if_np(X[:, feature_idx])\n"
-        func_text += f"      if m.with_scaling:\n"
-        func_text += f"        q1 = bodo.libs.array_kernels.quantile_parallel(\n"
-        func_text += f"          column_data, qrange_l, 0\n"
-        func_text += f"        )\n"
-        func_text += f"        q2 = bodo.libs.array_kernels.quantile_parallel(\n"
-        func_text += f"          column_data, qrange_r, 0\n"
-        func_text += f"        )\n"
-        func_text += f"        scales[feature_idx] = q2 - q1\n"
-        func_text += f"      if m.with_centering:\n"
+        func_text += "    numba.parfors.parfor.init_prange()\n"
+        func_text += "    for feature_idx in numba.parfors.parfor.internal_prange(num_features):\n"
+        func_text += "      column_data = bodo.utils.conversion.ensure_contig_if_np(X[:, feature_idx])\n"
+        func_text += "      if m.with_scaling:\n"
+        func_text += "        q1 = bodo.libs.array_kernels.quantile_parallel(\n"
+        func_text += "          column_data, qrange_l, 0\n"
+        func_text += "        )\n"
+        func_text += "        q2 = bodo.libs.array_kernels.quantile_parallel(\n"
+        func_text += "          column_data, qrange_r, 0\n"
+        func_text += "        )\n"
+        func_text += "        scales[feature_idx] = q2 - q1\n"
+        func_text += "      if m.with_centering:\n"
         func_text += (
-            f"        centers[feature_idx] = bodo.libs.array_ops.array_op_median(\n"
+            "        centers[feature_idx] = bodo.libs.array_ops.array_op_median(\n"
         )
-        func_text += f"          column_data, True, True\n"
-        func_text += f"        )\n"
-        func_text += f"  if m.with_scaling:\n"
+        func_text += "          column_data, True, True\n"
+        func_text += "        )\n"
+        func_text += "  if m.with_scaling:\n"
         # Handle zeros (See sklearn.preprocessing._data._handle_zeros_in_scale)
         # RobustScaler.fit calls
         # `self.scale_ = _handle_zeros_in_scale(self.scale_, copy=False)`
         # which translates to:
-        func_text += f"    constant_mask = scales < 10 * np.finfo(scales.dtype).eps\n"
-        func_text += f"    scales[constant_mask] = 1.0\n"
-        func_text += f"    if m.unit_variance:\n"
-        func_text += f"      with bodo.objmode(adjust='float64'):\n"
+        func_text += "    constant_mask = scales < 10 * np.finfo(scales.dtype).eps\n"
+        func_text += "    scales[constant_mask] = 1.0\n"
+        func_text += "    if m.unit_variance:\n"
+        func_text += "      with bodo.objmode(adjust='float64'):\n"
         func_text += (
-            f"        adjust = stats.norm.ppf(qrange_r) - stats.norm.ppf(qrange_l)\n"
+            "        adjust = stats.norm.ppf(qrange_r) - stats.norm.ppf(qrange_l)\n"
         )
-        func_text += f"      scales = scales / adjust\n"
-        func_text += f"  with bodo.objmode():\n"
-        func_text += f"    m.center_ = centers\n"
-        func_text += f"    m.scale_ = scales\n"
-        func_text += f"  return m\n"
+        func_text += "      scales = scales / adjust\n"
+        func_text += "  with bodo.objmode():\n"
+        func_text += "    m.center_ = centers\n"
+        func_text += "    m.scale_ = scales\n"
+        func_text += "  return m\n"
 
         loc_vars = {}
         exec(

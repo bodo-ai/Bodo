@@ -2451,7 +2451,7 @@ def test_series_where_series(series_val, memory_leak_check):
 
     # TODO: support series.where with two categorical inputs
     if series_val.dtype.name == "category":
-        cat_err_msg = f"Series.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+        cat_err_msg = "Series.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
         with pytest.raises(BodoError, match=cat_err_msg):
             bodo.jit(test_impl)(series_val, cond, series_val)
         return
@@ -2511,7 +2511,7 @@ def test_series_mask_series(series_val, memory_leak_check):
 
     # TODO: support series.where with two categorical inputs
     if series_val.dtype.name == "category":
-        cat_err_msg = f"Series.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+        cat_err_msg = "Series.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
         with pytest.raises(BodoError, match=cat_err_msg):
             bodo.jit(test_impl)(series_val, cond, series_val)
         return
@@ -2805,7 +2805,6 @@ def test_cut():
         ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"],
         name="ABC",
     )
-    A = pd.date_range("2017-01-03", "2017-02-11")
     check_func(impl, (S, [1, 5, 20], True), check_dtype=False)
     # categorical types may be different in interval boundaries (int vs float)
     check_func(impl, (S, [1, 5, 20], False), check_dtype=False, check_categorical=False)
@@ -2814,6 +2813,7 @@ def test_cut():
     )
     check_func(impl, (S, 4, False), check_dtype=False)
     # TODO(ehsan): enable when DatetimeArray is supported [BE-1242]
+    # A = pd.date_range("2017-01-03", "2017-02-11")
     # check_func(impl, (A, 4, False), check_dtype=False)
 
 

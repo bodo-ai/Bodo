@@ -1,6 +1,5 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
-"""Test Bodo's Table Builder python interface
-"""
+"""Test Bodo's Table Builder python interface"""
 
 import numpy as np
 import pandas as pd

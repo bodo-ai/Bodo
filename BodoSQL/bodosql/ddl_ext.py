@@ -5,6 +5,7 @@ Eventually all DDL operations are actually executed by the planner
 in context.py, but this module provides the JIT interface for
 DDL operations.
 """
+
 from numba.extending import overload
 
 import bodo

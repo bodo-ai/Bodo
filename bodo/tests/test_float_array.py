@@ -207,7 +207,7 @@ INT_SCALAR = 1
 
 FLOAT_ARR = np.array([float(i) for i in range(30)], dtype=np.float32)
 
-INT_ARR = np.array([i for i in range(30)], dtype=np.int32)
+INT_ARR = np.array(list(range(30)), dtype=np.int32)
 
 NULLABLE_FLOAT_ARR = pd.array(
     [float(i) if i % 2 else None for i in range(30)],

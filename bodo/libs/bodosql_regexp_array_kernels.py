@@ -11,7 +11,13 @@ from numba.extending import register_jitable
 
 import bodo
 from bodo.libs.array import get_replace_regex, get_replace_regex_dict_state
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    unopt_argument,
+    verify_int_arg,
+    verify_scalar_string_arg,
+    verify_string_arg,
+)
 from bodo.libs.re_ext import init_const_pattern
 from bodo.utils.typing import (
     get_overload_const_int,
@@ -59,9 +65,9 @@ def posix_to_re(pattern):
     return pattern
 
 
-def make_flag_bitvector(flags):
+def make_flag_bit_vector(flags):
     """Transforms Snowflake a REGEXP flag string into the corresponding Python
-    regexp bitvector by or-ing together the correct flags. The important ones
+    regexp bit vector by or-ing together the correct flags. The important ones
     in this case are i, m and s, which correspond to regexp flags of the
     same name. If i and c are both in the string, ignore the i unless it
     comes after c.
@@ -367,7 +373,7 @@ def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_i
     propagate_null = [True] * 4 + [False] * 2
 
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
-    flag_bitvector = make_flag_bitvector(flag_str)
+    flag_bit_vector = make_flag_bit_vector(flag_str)
 
     prefix_code = "\n"
     scalar_text = ""
@@ -388,12 +394,12 @@ def regexp_count_util(arr, pattern, position, flags, dict_encoding_state, func_i
             # Generate the compile at compile time to avoid an extra objmode
             # step at runtime.
             extra_globals = {
-                "r": re.compile(converted_pattern, flag_bitvector),
+                "r": re.compile(converted_pattern, flag_bit_vector),
             }
             scalar_text += "res[i] = bodo.libs.re_ext.re_count(r, arg0[arg2-1:])"
     else:
-        extra_globals = {"flag_bitvector": flag_bitvector, "posix_to_re": posix_to_re}
-        scalar_text += "r = re.compile(posix_to_re(arg1), flag_bitvector)\n"
+        extra_globals = {"flag_bit_vector": flag_bit_vector, "posix_to_re": posix_to_re}
+        scalar_text += "r = re.compile(posix_to_re(arg1), flag_bit_vector)\n"
         scalar_text += "res[i] = bodo.libs.re_ext.re_count(r, arg0[arg2-1:])"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
@@ -488,7 +494,7 @@ def regexp_instr_util(
     converted_pattern = posix_to_re(pattern_str)
     n_groups = re.compile(pattern_str).groups
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
-    flag_bitvector = make_flag_bitvector(flag_str)
+    flag_bit_vector = make_flag_bit_vector(flag_str)
 
     prefix_code = "\n"
     scalar_text = ""
@@ -518,7 +524,7 @@ def regexp_instr_util(
     else:
         # Generate the compile at compile time to avoid an extra objmode
         # step at runtime.
-        extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
+        extra_globals = {"r": re.compile(converted_pattern, flag_bit_vector)}
         scalar_text += "arg0 = arg0[arg2-1:]\n"
         scalar_text += "res[i] = 0\n"
         scalar_text += "offset = arg2\n"
@@ -577,7 +583,7 @@ def regexp_like_util(arr, pattern, flags, dict_encoding_state, func_id):
     arg_types = [arr, pattern, flags, dict_encoding_state, func_id]
     propagate_null = [True] * 3 + [False] * 2
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
-    flag_bitvector = make_flag_bitvector(flag_str)
+    flag_bit_vector = make_flag_bit_vector(flag_str)
     extra_globals = None
 
     if bodo.utils.typing.is_overload_constant_str(pattern):
@@ -589,15 +595,15 @@ def regexp_like_util(arr, pattern, flags, dict_encoding_state, func_id):
         else:
             # Generate the compile at compile time to avoid an extra objmode
             # step at runtime.
-            extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
+            extra_globals = {"r": re.compile(converted_pattern, flag_bit_vector)}
             scalar_text = "if r.fullmatch(arg0) is None:\n"
             scalar_text += "   res[i] = False\n"
             scalar_text += "else:\n"
             scalar_text += "   res[i] = True\n"
     else:
-        extra_globals = {"flag_bitvector": flag_bitvector, "posix_to_re": posix_to_re}
+        extra_globals = {"flag_bit_vector": flag_bit_vector, "posix_to_re": posix_to_re}
         scalar_text = "converted_pattern = posix_to_re(arg1)\n"
-        scalar_text += "r = re.compile(converted_pattern, flag_bitvector)\n"
+        scalar_text += "r = re.compile(converted_pattern, flag_bit_vector)\n"
         scalar_text += "if r.fullmatch(arg0) is None:\n"
         scalar_text += "   res[i] = False\n"
         scalar_text += "else:\n"
@@ -700,7 +706,7 @@ def regexp_replace_util(
     ]
     propagate_null = [True] * 6 + [False, False]
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
-    flag_bitvector = make_flag_bitvector(flag_str)
+    flag_bit_vector = make_flag_bit_vector(flag_str)
 
     prefix_code = "\n"
     scalar_text = ""
@@ -734,7 +740,7 @@ def regexp_replace_util(
             and get_overload_const_int(position) == 1
             and is_overload_constant_int(occurrence)
             and get_overload_const_int(occurrence) == 0
-            and flag_bitvector == 0
+            and flag_bit_vector == 0
         ):
             # Optimized implementation just calls into C++ and has it handle the entire array.
             use_dict_caching = arr == bodo.dict_str_arr_type and not is_overload_none(
@@ -789,12 +795,12 @@ def regexp_replace_util(
         else:
             # Generate the compile at compile time to avoid an extra objmode
             # step at runtime.
-            extra_globals = {"r": re.compile(converted_pattern, flag_bitvector)}
+            extra_globals = {"r": re.compile(converted_pattern, flag_bit_vector)}
             scalar_text += _gen_regex_replace_body()
     else:
         # Non-constant pattern
-        extra_globals = {"flag_bitvector": flag_bitvector, "posix_to_re": posix_to_re}
-        scalar_text += "r = re.compile(posix_to_re(arg1), flag_bitvector)\n"
+        extra_globals = {"flag_bit_vector": flag_bit_vector, "posix_to_re": posix_to_re}
+        scalar_text += "r = re.compile(posix_to_re(arg1), flag_bit_vector)\n"
         scalar_text += _gen_regex_replace_body()
 
     out_dtype = bodo.string_array_type
@@ -879,7 +885,7 @@ def regexp_substr_util(
     converted_pattern = posix_to_re(pattern_str)
     n_groups = re.compile(pattern_str).groups
     flag_str = bodo.utils.typing.get_overload_const_str(flags)
-    flag_bitvector = make_flag_bitvector(flag_str)
+    flag_bit_vector = make_flag_bit_vector(flag_str)
 
     prefix_code = "\n"
     scalar_text = ""
@@ -905,7 +911,7 @@ def regexp_substr_util(
         # Generate the compile at compile time to avoid an extra objmode
         # step at runtime.
         extra_globals = {
-            "non_const_r": re.compile(converted_pattern, flag_bitvector),
+            "non_const_r": re.compile(converted_pattern, flag_bit_vector),
             "init_const_pattern": init_const_pattern,
         }
         prefix_code += (
@@ -917,7 +923,7 @@ def regexp_substr_util(
         #  the 'e' option was not also specified. The 'e' is implied.
         if "e" in flag_str and not is_overload_none(group):
             scalar_text += "matches = r.findall(arg0[arg2-1:])\n"
-            scalar_text += f"if len(matches) < arg3:\n"
+            scalar_text += "if len(matches) < arg3:\n"
             scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
             scalar_text += "else:\n"
             if n_groups == 1:

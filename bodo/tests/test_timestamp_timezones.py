@@ -235,7 +235,6 @@ def test_tz_tz_scalar_cmp(cmp_op, memory_leak_check):
     check_func(func, (ts, ts))
     ts2 = pd.Timestamp("1/4/2022", tz=timezone)
     # Check where they aren't equal
-    d = datetime.date(2022, 4, 3)
     check_func(func, (ts2, ts))
     check_func(func, (ts, ts2))
 

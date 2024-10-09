@@ -1,7 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test File for pd.tseries.offsets types.
+Test File for pd.tseries.offsets types.
 """
+
 import datetime
 
 import numpy as np
@@ -1367,7 +1368,6 @@ def test_date_offset_mul_int(memory_leak_check, offset_multiplier, date_offset_v
         # determine wether we add or substract based on `n`
         # and sign of multiplier
         multiplier_sign = 1 if offset_multiplier > 0 else -1
-        offset_sign = 1 if date_offset_value.n > 0 else -1
         add_flag, sign, nanoseconds = _get_flag_sign_dateoffset_pd(
             multiplier_sign * date_offset_value
         )

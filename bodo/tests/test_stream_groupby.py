@@ -871,7 +871,7 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
     num_cols = len(df.columns)
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
-    fnames = bodo.utils.typing.MetaType(tuple([fstr]) * (num_cols - 1))
+    fnames = bodo.utils.typing.MetaType((fstr,) * (num_cols - 1))
     f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     f_in_cols = bodo.utils.typing.MetaType(tuple(range(1, num_cols)))
 
@@ -1082,9 +1082,9 @@ def test_groupby_nested_array_key(df, expected_df, memory_leak_check):
     keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
-    fnames = bodo.utils.typing.MetaType(tuple())
+    fnames = bodo.utils.typing.MetaType(())
     f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
-    f_in_cols = bodo.utils.typing.MetaType(tuple())
+    f_in_cols = bodo.utils.typing.MetaType(())
 
     def test_groupby(df):
         groupby_state = init_groupby_state(
@@ -1162,9 +1162,9 @@ def test_groupby_timestamptz_key(memory_leak_check):
     keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
-    fnames = bodo.utils.typing.MetaType(tuple())
+    fnames = bodo.utils.typing.MetaType(())
     f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
-    f_in_cols = bodo.utils.typing.MetaType(tuple())
+    f_in_cols = bodo.utils.typing.MetaType(())
 
     def test_groupby(df):
         groupby_state = init_groupby_state(
@@ -1521,9 +1521,9 @@ def test_groupby_decimal_types(memory_leak_check):
     keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 5
-    fnames = bodo.utils.typing.MetaType(tuple())
+    fnames = bodo.utils.typing.MetaType(())
     f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
-    f_in_cols = bodo.utils.typing.MetaType(tuple())
+    f_in_cols = bodo.utils.typing.MetaType(())
 
     def test_groupby(df):
         groupby_state = init_groupby_state(

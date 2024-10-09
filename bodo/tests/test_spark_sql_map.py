@@ -7,7 +7,7 @@ column elements.
 Test names refer to the names of the spark function they map to.
 
 These will need to consist of tests for both Struct Array types
-and map array types, as both are represented with dictionaries 
+and map array types, as both are represented with dictionaries
 in Python.
 """
 

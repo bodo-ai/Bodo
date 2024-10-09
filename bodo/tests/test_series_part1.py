@@ -560,7 +560,6 @@ def test_datetime_series_between(memory_leak_check):
     S = pd.Series(datatime_arr)
     check_func(impl, (S,))
 
-    datatime_arr_nan = [datetime.datetime(year=2020, month=10, day=1), np.nan]
     S_with_nan = pd.Series(datatime_arr)
     check_func(impl, (S_with_nan,))
 

@@ -114,7 +114,7 @@ def aggregate_operator_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
             keys = set(
                 assert_keys_consistent([report[op][stage] for report in reports])
             )
-            assert keys <= set(["time", "output_row_count", "metrics"])
+            assert keys <= {"time", "output_row_count", "metrics"}
             if "time" in keys:
                 times = [report[op][stage]["time"] for report in reports]
                 agg_stage["time"] = {

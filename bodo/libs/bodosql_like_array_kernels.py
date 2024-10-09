@@ -2,14 +2,20 @@
 """
 Implements like array kernels that are specific to BodoSQL
 """
+
 import re
 from typing import Tuple
 
+import numpy as np
 from numba.core import types
 from numba.extending import overload, register_jitable
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    unopt_argument,
+    verify_string_arg,
+)
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_bool,
@@ -358,7 +364,7 @@ def overload_like_kernel(
     for i, arg in enumerate((arr, pattern, escape)):
         if isinstance(arg, types.optional):  # pragma: no cover
             return unopt_argument(
-                f"bodo.libs.bodosql_array_kernels.like_kernel",
+                "bodo.libs.bodosql_array_kernels.like_kernel",
                 [
                     "arr",
                     "pattern",

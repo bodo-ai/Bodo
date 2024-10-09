@@ -9,6 +9,7 @@ value:             [[1, 2], [3], None, [5, 4, 6], []]
 data:              [1, 2, 3, 5, 4, 6]
 offsets:           [0, 2, 3, 3, 6, 6]
 """
+
 import operator
 
 import numba
@@ -311,9 +312,7 @@ def pre_alloc_array_item_array_equiv(
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item_array = (
-    pre_alloc_array_item_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_libs_array_item_arr_ext_pre_alloc_array_item_array = pre_alloc_array_item_array_equiv
 
 
 def array_to_repeated_array_item_array(

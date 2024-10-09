@@ -3,8 +3,8 @@
 Implements miscellaneous array kernels that are specific to BodoSQL
 """
 
-
 import numba
+import numpy as np
 from llvmlite import ir
 from numba.core import cgutils, types
 from numba.core.typing import signature
@@ -12,7 +12,18 @@ from numba.cpython.randomimpl import get_next_int32, get_state_ptr
 from numba.extending import intrinsic, overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    get_common_broadcasted_type,
+    is_array_item_array,
+    is_valid_int_arg,
+    is_valid_SQL_object_arg,
+    is_valid_string_arg,
+    unopt_argument,
+    verify_boolean_arg,
+    verify_int_arg,
+    verify_int_float_arg,
+)
 from bodo.libs.bodosql_array_kernels import get_field
 from bodo.utils.typing import (
     get_overload_const_bool,
@@ -775,7 +786,7 @@ def nullif_util(arr0, arr1, dict_encoding_state, func_id):
         scalar_text += "else:\n"
         scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
 
-    out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF", supress_error=True)
+    out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF", suppress_error=True)
     if out_dtype is None:
         # If the types are incompatible but that wasn't caught by the type
         # checker in BodoSQL, then we must have VARIANT inputs. In that case,
@@ -820,12 +831,12 @@ def regr_valx_util(y, x):
 
     arg_names = ["y", "x"]
     arg_types = [y, x]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "res[i] = arg1"
 
     out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 def is_true(arr):  # pragma: no cover
@@ -981,7 +992,7 @@ def gen_random_int64(typingcontext):
     checks that are required for arbitrary values removed.
 
     The implementation obtains a pointer to the randomization state for
-    Python's random module (as opposed to the seperate pointer for numpy)
+    Python's random module (as opposed to the separate pointer for numpy)
     and uses it to generate two more random 32-bit integers which are
     then concatenated.
 
@@ -992,9 +1003,9 @@ def gen_random_int64(typingcontext):
     of random.randrange was not conducive to producing random integers
     from the entire domain of 64 bit integers due to several arithmetic
     checks that were in place to verify the inputs. These checks are useful
-    for arbitrary inputs which could be invalid, but in this case are unecessary
+    for arbitrary inputs which could be invalid, but in this case are unnecessary
     (because the constants are known) and harmful (because they cause an
-    overflow whcih in turn leads to invalid results)
+    overflow which in turn leads to invalid results)
     """
     int_ty = types.Integer.from_bitwidth(64, True)
 
@@ -1104,10 +1115,10 @@ def uniform_util(lo, hi, gen):
     scalar_text = "np.random.seed(arg2)\n"
 
     if lo_int and hi_int:
-        scalar_text += f"res[i] = np.random.randint(arg0, arg1+1)"
+        scalar_text += "res[i] = np.random.randint(arg0, arg1+1)"
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
     else:
-        scalar_text += f"res[i] = np.random.uniform(arg0, arg1)"
+        scalar_text += "res[i] = np.random.uniform(arg0, arg1)"
         out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
     return gen_vectorized(

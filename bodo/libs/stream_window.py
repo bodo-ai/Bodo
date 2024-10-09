@@ -2,6 +2,7 @@
 """
 Support for streaming window functions.
 """
+
 import typing as pt
 from functools import cached_property
 
@@ -255,7 +256,7 @@ class WindowStateType(StreamingStateType):
         if bodo.bodo_disable_streaming_window_sort:
             return False
         return all(
-            [name in self.sort_supporting_func_names() for name in self.func_names]
+            name in self.sort_supporting_func_names() for name in self.func_names
         )
 
     @staticmethod

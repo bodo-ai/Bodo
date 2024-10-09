@@ -1,7 +1,5 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
-"""Matrix data type implementation for np.matrix.
-"""
-
+"""Matrix data type implementation for np.matrix."""
 
 import operator
 

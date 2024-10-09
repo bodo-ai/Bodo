@@ -1,9 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test miscellaneous supported sklearn models and methods
-    Currently this file tests:
-    train_test_split, MultinomialNB, LinearSVC,
+"""Test miscellaneous supported sklearn models and methods
+Currently this file tests:
+train_test_split, MultinomialNB, LinearSVC,
 """
-
 
 import numpy as np
 import pandas as pd
@@ -285,7 +284,7 @@ def test_shuffle_random_state(data, random_state, memory_leak_check):
     """
 
     def impl(data, random_state):
-        out = shuffle(data, random_state=random_state)
+        shuffle(data, random_state=random_state)
 
     dist_impl = bodo.jit(distributed=["data"], cache=True)(impl)
 

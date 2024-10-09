@@ -2,6 +2,7 @@
 """
 BodoSQL utils used to help construct Python code.
 """
+
 import py4j
 
 from bodo.utils.typing import BodoError

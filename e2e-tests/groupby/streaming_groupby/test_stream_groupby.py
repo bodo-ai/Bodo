@@ -53,13 +53,16 @@ def test_stream_groupby(
     mem_size_mib,
     num_ranks,
 ):
-    with unpin_behavior(), temp_env_override(
-        {
-            "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": str(mem_size_mib)
-            if (mem_size_mib is not None)
-            else None,
-            "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
-        }
+    with (
+        unpin_behavior(),
+        temp_env_override(
+            {
+                "BODO_BUFFER_POOL_MEMORY_SIZE_MiB": str(mem_size_mib)
+                if (mem_size_mib is not None)
+                else None,
+                "BODO_DEBUG_STREAM_GROUPBY_PARTITIONING": "1",
+            }
+        ),
     ):
         pytest_working_dir = os.getcwd()
         try:

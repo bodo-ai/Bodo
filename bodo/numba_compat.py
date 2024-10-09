@@ -106,7 +106,7 @@ def generated_jit(
     """
     from numba.extending import overload
 
-    jit_options = dict()
+    jit_options = {}
     if pipeline_class is not None:
         jit_options["pipeline_class"] = pipeline_class
     jit_options["cache"] = cache
@@ -334,7 +334,7 @@ def find_potential_aliases(
     if alias_map is None:
         alias_map = {}
     if arg_aliases is None:
-        arg_aliases = set(a for a in args if not is_immutable_type(a, typemap))
+        arg_aliases = {a for a in args if not is_immutable_type(a, typemap)}
 
     # update definitions since they are not guaranteed to be up-to-date
     # FIXME keep definitions up-to-date to avoid the need for rebuilding
@@ -603,20 +603,20 @@ def make_overload_template(
     # Bodo change: added no_unliteral argument
     no_unliteral = kwargs.pop("no_unliteral", False)
     base = numba.core.typing.templates._OverloadFunctionTemplate
-    dct = dict(
-        key=func,
-        _overload_func=staticmethod(overload_func),
-        _impl_cache={},
-        _compiled_overloads={},
-        _jit_options=jit_options,
-        _strict=strict,
-        _inline=staticmethod(InlineOptions(inline)),
-        _inline_overloads={},
-        prefer_literal=prefer_literal,
+    dct = {
+        "key": func,
+        "_overload_func": staticmethod(overload_func),
+        "_impl_cache": {},
+        "_compiled_overloads": {},
+        "_jit_options": jit_options,
+        "_strict": strict,
+        "_inline": staticmethod(InlineOptions(inline)),
+        "_inline_overloads": {},
+        "prefer_literal": prefer_literal,
         # Bodo change: added no_unliteral argument
-        _no_unliteral=no_unliteral,
-        metadata=kwargs,
-    )
+        "_no_unliteral": no_unliteral,
+        "metadata": kwargs,
+    }
     return type(base)(name, (base,), dct)
 
 
@@ -718,18 +718,18 @@ def make_overload_attribute_template(
     # Bodo change: added _no_unliteral attribute
     no_unliteral = kwargs.pop("no_unliteral", False)
     # Note the implementation cache is subclass-specific
-    dct = dict(
-        key=typ,
-        _attr=attr,
-        _impl_cache={},
-        _inline=staticmethod(InlineOptions(inline)),
-        _inline_overloads={},
+    dct = {
+        "key": typ,
+        "_attr": attr,
+        "_impl_cache": {},
+        "_inline": staticmethod(InlineOptions(inline)),
+        "_inline_overloads": {},
         # Bodo change: added _no_unliteral argument
-        _no_unliteral=no_unliteral,
-        _overload_func=staticmethod(overload_func),
-        prefer_literal=prefer_literal,
-        metadata=kwargs,
-    )
+        "_no_unliteral": no_unliteral,
+        "_overload_func": staticmethod(overload_func),
+        "prefer_literal": prefer_literal,
+        "metadata": kwargs,
+    }
     obj = type(base)(name, (base,), dct)
     return obj
 
@@ -1455,11 +1455,11 @@ def compile(self, sig):
                 return cres.entry_point
 
             self._cache_misses[sig] += 1
-            ev_details = dict(
-                dispatcher=self,
-                args=args,
-                return_type=return_type,
-            )
+            ev_details = {
+                "dispatcher": self,
+                "args": args,
+                "return_type": return_type,
+            }
             with ev.trigger_event("numba:compile", data=ev_details):
                 try:
                     cres = self._compiler.compile(args, return_type)
@@ -2121,7 +2121,7 @@ def passmanager_run(self, state):
         except _EarlyPipelineCompletion as e:
             raise e
         # Bodo change
-        except bodo.utils.typing.BodoError as e:
+        except bodo.utils.typing.BodoError:
             raise
         except Exception as e:
             # TODO: [BE-486] environment variable developer_mode?
@@ -2209,7 +2209,7 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
         if isinstance(rhs, ir.Var) and rhs.name in defs:
             rhs = cyclic_lookup(rhs)
         if isinstance(rhs, ir.Expr):
-            in_vars = set(noncyclic_lookup(v, True).name for v in rhs.list_vars())
+            in_vars = {noncyclic_lookup(v, True).name for v in rhs.list_vars()}
             if name in in_vars:
                 # Bodo change: avoid raising error for concat reduction case
                 # opened issue to handle Bodo cases and raise proper errors: #1414
@@ -2718,7 +2718,7 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
         dist_spec,  # Bodo change: pass dist spec
     )
 
-    jit_class_dct = dict(class_type=class_type, __doc__=docstring)
+    jit_class_dct = {"class_type": class_type, "__doc__": docstring}
     jit_class_dct.update(jit_static_methods)
     cls = jitclass_base.JitClassType(cls.__name__, (cls,), jit_class_dct)
 
@@ -3255,7 +3255,7 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
             typeanns[k] = v_const
         except BodoError:
             raise
-        except:
+        except Exception:
             # recreate error messages similar to Numba
             msg = (
                 "The value must be a compile-time constant either as "
@@ -3263,7 +3263,7 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
                 "refers to a Bodo type."
             )
             if isinstance(v_const, ir.UndefinedType):
-                msg = f"not defined."
+                msg = "not defined."
                 if isinstance(v, ir.Global):
                     msg = f"Global {v.name!r} is not defined."
                 if isinstance(v, ir.FreeVar):
@@ -4084,7 +4084,7 @@ def remove_dead_parfor(
                 and stmt.value.args[1].name == parfor.index_var.name
             ):
                 continue
-            varnames = set(v.name for v in stmt.list_vars())
+            varnames = {v.name for v in stmt.list_vars()}
             rm_arrs = varnames & saved_arrs
             for a in rm_arrs:
                 first_block_saved_values.pop(a, None)
@@ -4211,9 +4211,9 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.parfors.parfor.remove_dead_parfor = remove_dead_parfor
-numba.core.ir_utils.remove_dead_extensions[
-    numba.parfors.parfor.Parfor
-] = remove_dead_parfor
+numba.core.ir_utils.remove_dead_extensions[numba.parfors.parfor.Parfor] = (
+    remove_dead_parfor
+)
 
 
 def simplify_parfor_body_CFG(blocks):
@@ -4372,11 +4372,11 @@ def _lifted_compile(self, sig):
             # Bodo change: avoid copy()
             cloned_func_ir = self.func_ir  # .copy()
 
-            ev_details = dict(
-                dispatcher=self,
-                args=args,
-                return_type=return_type,
-            )
+            ev_details = {
+                "dispatcher": self,
+                "args": args,
+                "return_type": return_type,
+            }
             with ev.trigger_event("numba:compile", data=ev_details):
                 cres = compiler.compile_ir(
                     typingctx=self.typingctx,
@@ -4536,7 +4536,6 @@ def make_constant_array(self, builder, typ, ary):
         # get pointer from the ary
         dataptr = ary.ctypes.data
         data = self.add_dynamic_addr(builder, dataptr, info=str(type(dataptr)))
-        rt_addr = self.add_dynamic_addr(builder, id(ary), info=str(type(ary)))
         # Bodo change: save constant array in target context to be added to function
         # overload metadata later
         self.global_arrays.append(ary)
@@ -4553,8 +4552,6 @@ def make_constant_array(self, builder, typ, ary):
         data = cgutils.global_constant(builder, ".const.array.data", consts)
         # Ensure correct data alignment (issue #1933)
         data.align = self.get_abi_alignment(datatype)
-        # No reference to parent ndarray
-        rt_addr = None
 
     # Handle shape
     llintp = self.get_value_type(types.intp)
@@ -6060,10 +6057,8 @@ def has_cross_iter_dep(
                     # If any indices are derived from an index is used then
                     # return True to say we can't fuse.
                     if all(
-                        [
-                            x.name in indices or x.name not in derived_from_indices
-                            for x in ind_seq
-                        ]
+                        x.name in indices or x.name not in derived_from_indices
+                        for x in ind_seq
                     ):
                         # Get position in index tuple where parfor indices used.
                         new_index_positions = [x.name in indices for x in ind_seq]
@@ -6207,10 +6202,8 @@ def has_cross_iter_dep(
                             # that call is doing so presume it is unsafe for fusion.
                             # Bodo Change: Check Bodo arrays in addition to Numba arrays.
                             if any(
-                                [
-                                    is_array_typ(typemap[x.name], True)
-                                    for x in stmt.value.list_vars()
-                                ]
+                                is_array_typ(typemap[x.name], True)
+                                for x in stmt.value.list_vars()
                             ):
                                 return (
                                     True,

@@ -2,6 +2,7 @@
 """
 Support for streaming union.
 """
+
 from functools import cached_property
 from typing import Tuple
 
@@ -535,8 +536,10 @@ def delete_union_state(union_state):
         )
 
     if union_state.all:
-        return lambda union_state: bodo.libs.table_builder._delete_chunked_table_builder_state(
-            union_state
+        return (
+            lambda union_state: bodo.libs.table_builder._delete_chunked_table_builder_state(
+                union_state
+            )
         )
     else:
         return lambda union_state: bodo.libs.stream_groupby.delete_groupby_state(

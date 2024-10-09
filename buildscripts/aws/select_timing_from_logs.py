@@ -1,8 +1,8 @@
 """
-    Script that runs on a logfile with all of the tests using pytest -vv --durations=0
-    and filters the log file to group together test timings. Alternatively, the logfile
-    can be produced by cating a series of log files, as the tests are already presumed
-    to lie in different regions.
+Script that runs on a logfile with all of the tests using pytest -vv --durations=0
+and filters the log file to group together test timings. Alternatively, the logfile
+can be produced by cating a series of log files, as the tests are already presumed
+to lie in different regions.
 """
 
 import argparse
@@ -86,7 +86,7 @@ def group_timings(function_dicts, groups):
     # Anything missing will run in group 0
     groups_dict = collections.defaultdict(lambda: 0)
     # Actually create the timing dict keys because want to take a min
-    timing_dict = dict()
+    timing_dict = {}
     for i in range(groups):
         timing_dict[str(i)] = 0.0
 

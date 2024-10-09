@@ -1,4 +1,5 @@
 """Utility functions for writing Bodo tests using tracing."""
+
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import json
 import os
@@ -18,7 +19,7 @@ class TracingContextManager:
     """
 
     def __init__(self):
-        self._tracing_events = list()
+        self._tracing_events = []
         self._old_trace_dev = os.environ.get("BODO_TRACE_DEV", None)
         # If we run on Azure nightly we need to decrypt the output of
         # any tracing. AGENT_NAME distinguishes Azure from AWS
@@ -68,7 +69,7 @@ class TracingContextManager:
             self._tracing_events = comm.bcast(tracing_events)
 
         # Map the event names to tracing locations
-        self._event_names = dict()
+        self._event_names = {}
         for i, x in enumerate(self._tracing_events):
             name = x["name"]
             if name not in self._event_names:

@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Numba extension support for time objects and their arrays.
-"""
+"""Numba extension support for time objects and their arrays."""
+
 import datetime
 import operator
 

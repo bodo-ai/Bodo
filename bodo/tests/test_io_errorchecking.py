@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests I/O error checking for CSV, Parquet, HDF5, etc.
-"""
+"""Tests I/O error checking for CSV, Parquet, HDF5, etc."""
 # TODO: Move error checking tests from test_io to here.
 
 import os

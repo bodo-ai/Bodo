@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the data sorting"""
+
 from collections import defaultdict
 from typing import List, Set, Tuple, Union
 
@@ -639,7 +640,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         ",".join("1" if i in dead_keys else "0" for i in range(key_count))
     )
     # single-element numpy array to return number of rows from C++
-    func_text += f"  total_rows_np = np.array([0], dtype=np.int64)\n"
+    func_text += "  total_rows_np = np.array([0], dtype=np.int64)\n"
     bounds_in = sort_node._bodo_chunk_bounds
     bounds_table = (
         "0"
@@ -683,7 +684,7 @@ def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
         func_text += f"  out_data = {out_rets_tup}\n"
 
     func_text += "  delete_table(out_cpp_table)\n"
-    func_text += f"  return out_data\n"
+    func_text += "  return out_data\n"
 
     return func_text, {
         "in_col_inds": MetaType(tuple(in_cpp_col_inds)),
@@ -797,7 +798,7 @@ def sort_table_column_use(
     ) = _compute_table_column_uses(lhs_key, table_col_use_map, equiv_vars)
 
     # key columns are always used in sorting
-    table_key_set = set(i for i in sort_node.key_inds if i < sort_node.num_table_arrays)
+    table_key_set = {i for i in sort_node.key_inds if i < sort_node.num_table_arrays}
 
     block_use_map[rhs_key] = (
         orig_used_cols | used_cols | table_key_set,
@@ -840,7 +841,7 @@ def sort_remove_dead_column(sort_node, column_live_map, equiv_vars, typemap):
 
     dead_columns = set(range(n_table_cols)) - used_columns
 
-    table_key_set = set(i for i in sort_node.key_inds if i < n_table_cols)
+    table_key_set = {i for i in sort_node.key_inds if i < n_table_cols}
     new_dead_keys = sort_node.dead_key_var_inds | (dead_columns & table_key_set)
     new_dead_vars = sort_node.dead_var_inds | (dead_columns - table_key_set)
     removed = (new_dead_keys != sort_node.dead_key_var_inds) | (

@@ -1,9 +1,9 @@
 """
-    Script used for automatically updating the batch portion of the
-    buildspec.yml file. This can be used either when the file need
-    to be updated (e.g. to increase the number of builds running
-    concurrently), or a new buildspec file needs to be constructed
-    (e.g. creating a new project for nightly tests).
+Script used for automatically updating the batch portion of the
+buildspec.yml file. This can be used either when the file need
+to be updated (e.g. to increase the number of builds running
+concurrently), or a new buildspec file needs to be constructed
+(e.g. creating a new project for nightly tests).
 """
 
 import argparse
@@ -17,15 +17,15 @@ CI_BUILDSPEC_FILENAME = "buildspec.yml"
 # Helper function for creating cross product of the provided values. From:
 # https://stackoverflow.com/questions/5228158/cartesian-product-of-a-dictionary-of-lists
 def dict_product(dict_to_merge):
-    return list(
+    return [
         dict(zip(dict_to_merge.keys(), values))
         for values in product(*dict_to_merge.values())
-    )
+    ]
 
 
 def generate_np2_vars(env_vars):
     """Helper function that creates the env vars for NP=2 tests."""
-    output_dict = dict()
+    output_dict = {}
     for key, value in env_vars.items():
         if key == "NP":
             output_dict[key] = [2]
@@ -68,7 +68,7 @@ def construct_batch_field(env_vars, image_path: str):
         vars_list.sort()
         identifier = image_name.replace(" ", "_") + "_" + "_".join(vars_list)
         # Now create the env dict portion
-        env_dict = dict()
+        env_dict = {}
         env_dict["compute-type"] = compute_type
         env_dict["image"] = image_path
         env_dict["variables"] = env_var_group
@@ -92,10 +92,10 @@ def add_precache(build_graph, image_path):
     compute_type = "BUILD_GENERAL1_LARGE"
     identifier = "linux_PRECACHE"
     # Now create the env dict portion
-    env_dict = dict()
+    env_dict = {}
     env_dict["compute-type"] = compute_type
     env_dict["image"] = image_path
-    env_dict["variables"] = dict()
+    env_dict["variables"] = {}
     build_graph.append(
         {"identifier": identifier, "env": env_dict, "buildspec": buildspec}
     )

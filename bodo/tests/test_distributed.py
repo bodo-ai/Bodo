@@ -389,10 +389,8 @@ def test_groupby_cumsum_dist(memory_leak_check):
     from bodo.utils.typing import ColNamesMetaType, MetaType
 
     global_2 = bodo.int32[::1]
-    global_3 = bodo.int32[::1]
     global_1 = bodo.int32[::1]
     global_6 = ColNamesMetaType(("EXPR$0", "EXPR$1", "__bodo_dummy__"))
-    global_4 = bodo.int32[::1]
     global_5 = MetaType((0, 1, 2))
 
     @bodo.jit
@@ -404,17 +402,6 @@ def test_groupby_cumsum_dist(memory_leak_check):
                 ),
                 "EXPR$1": bodo.utils.conversion.coerce_scalar_to_array(
                     np.int32(2), 1, global_2
-                ),
-            },
-            index=bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None),
-        )
-        df2 = pd.DataFrame(
-            {
-                "EXPR$0": bodo.utils.conversion.coerce_scalar_to_array(
-                    np.int32(1), 1, global_3
-                ),
-                "EXPR$1": bodo.utils.conversion.coerce_scalar_to_array(
-                    np.int32(2), 1, global_4
                 ),
             },
             index=bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None),

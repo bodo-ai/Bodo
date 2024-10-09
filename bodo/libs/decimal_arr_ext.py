@@ -7,6 +7,7 @@ value from [-999.99 to 999.99].
 The precision can be up to 38, the scale must be less or equal to precision.'
 'When infer schema from decimal.Decimal objects, it will be DecimalType(38, 18).'
 """
+
 import operator
 from decimal import Decimal
 from enum import Enum

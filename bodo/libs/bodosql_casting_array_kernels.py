@@ -3,12 +3,20 @@
 Implements a number of array kernels that handling casting functions for BodoSQL
 """
 
+import numba
 import numpy as np
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    is_valid_boolean_arg,
+    is_valid_float_arg,
+    is_valid_int_arg,
+    is_valid_string_arg,
+    unopt_argument,
+)
 from bodo.utils.typing import BodoError, is_overload_none
 
 
@@ -135,14 +143,14 @@ def create_cast_func_overload(func_name):
 
         func_text = "def impl(arr, dict_encoding_state=None, func_id=-1):\n"
         if func_name == "boolean":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True), dict_encoding_state, func_id)\n"
+            func_text += "  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True), dict_encoding_state, func_id)\n"
         elif func_name == "char":
             # TODO(Yipeng): Correctly support semi-structured type cast_char for scalar & vector with is_scalar parameter
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr, None, None)\n"
+            func_text += "  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr, None, None)\n"
         elif func_name == "date":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, dict_encoding_state, func_id)\n"
+            func_text += "  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, dict_encoding_state, func_id)\n"
         elif func_name == "timestamp":
-            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_timestamp_util(arr, None, None, 0, dict_encoding_state, func_id)\n"
+            func_text += "  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_timestamp_util(arr, None, None, 0, dict_encoding_state, func_id)\n"
         else:
             func_text += f"  return bodo.libs.bodosql_array_kernels.cast_{func_name}_util(arr, dict_encoding_state, func_id)"
 
@@ -209,7 +217,7 @@ def create_cast_util_overload(func_name):
                 scalar_text += "  else:\n"
                 scalar_text += "    ans = i_val\n"
                 if func_name == "int64":
-                    scalar_text += f"  res[i] = ans\n"
+                    scalar_text += "  res[i] = ans\n"
                 else:
                     scalar_text += f"  res[i] = {fname_to_equiv[func_name]}(ans)"
         elif func_name == "interval":
@@ -255,7 +263,7 @@ _install_cast_func_overloads(cast_funcs_utils_names)
 def round_to_int64(x):
     if isinstance(x, types.optional):
         return unopt_argument(
-            f"bodo.libs.bodosql_casting_array_kernels.round_to_int64", ["x"], 0
+            "bodo.libs.bodosql_casting_array_kernels.round_to_int64", ["x"], 0
         )
 
     def impl(x):
@@ -284,7 +292,7 @@ def round_to_int64_util(x, rounded_x):
     scalar_text += "if not is_valid:\n"
     scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
-    scalar_text += f"  res[i] = np.int64(arg1)\n"
+    scalar_text += "  res[i] = np.int64(arg1)\n"
 
     return gen_vectorized(
         arg_names,

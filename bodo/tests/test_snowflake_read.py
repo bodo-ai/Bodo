@@ -2,6 +2,7 @@
 """
 Tests for reading from Snowflake using Python APIs
 """
+
 import datetime
 import io
 import json
@@ -419,7 +420,7 @@ def test_variant_metadata_handling(cursor):
 
     assert len(pa_fields) == 7
     assert [f.name for f in pa_fields] == [f"V{i+1}" for i in range(7)]
-    assert all([f.nullable for f in pa_fields])
+    assert all(f.nullable for f in pa_fields)
 
     target_types = [
         pa.timestamp("ns"),
@@ -771,7 +772,7 @@ def test_snowflake_runtime_upcasting_int_to_int(
         "bodo.io.snowflake.get_schema",
         return_value=(
             bodo_schema,
-            set(["l_orderkey", "l_partkey", "l_suppkey"]),
+            {"l_orderkey", "l_partkey", "l_suppkey"},
             [],
             [],
             pa_schema,
@@ -854,7 +855,7 @@ def test_snowflake_runtime_upcasting_int_to_decimal(
         "bodo.io.snowflake.get_schema",
         return_value=(
             bodo_schema,
-            set(["l_orderkey", "l_partkey", "l_suppkey"]),
+            {"l_orderkey", "l_partkey", "l_suppkey"},
             [],
             [],
             pa_schema,
@@ -949,7 +950,7 @@ def test_snowflake_runtime_downcasting_ints_fail(mocker: "MockerFixture"):
                 ),
                 columns=("l_orderkey", "l_partkey", "l_suppkey"),
             ),
-            set(["l_orderkey", "l_partkey", "l_suppkey"]),
+            {"l_orderkey", "l_partkey", "l_suppkey"},
             [],
             [],
             pa.schema(
@@ -993,7 +994,7 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
                 ),
                 columns=("date_col", "tz_naive_col", "tz_aware_col"),
             ),
-            set(["date_col", "tz_naive_col", "tz_aware_col"]),
+            {"date_col", "tz_naive_col", "tz_aware_col"},
             [],
             [],
             pa.schema(
@@ -1041,7 +1042,7 @@ def test_snowflake_runtime_downcasting_decimal(mocker: "MockerFixture"):
                 ),
                 columns=("h", "i"),
             ),
-            set(["h", "i"]),
+            {"h", "i"},
             [],
             [],
             pa.schema(
@@ -1090,7 +1091,7 @@ def test_read_string_array_col(memory_leak_check):
         return df
 
     conn = get_snowflake_connection_string("TEST_DB", "PUBLIC")
-    query = rf"""
+    query = r"""
     SELECT * FROM (
         select null as A
         union all
@@ -2925,8 +2926,8 @@ def test_snowflake_timezones(memory_leak_check):
 
         # Note that we can't just write select *, since we normally rely on
         # BodoSQL to convert TIMESTAMP_TZ columns to VARIANT.
-        full_query = f"select TO_VARIANT(A) as A, B, C from tz_test"
-        partial_query = f"select B, C from tz_test"
+        full_query = "select TO_VARIANT(A) as A, B, C from tz_test"
+        partial_query = "select B, C from tz_test"
         # Loading just the non-tz columns should suceed.
         check_func(test_impl1, (full_query, conn), check_dtype=False)
         check_func(test_impl1, (partial_query, conn), check_dtype=False)
@@ -2974,7 +2975,7 @@ def test_snowflake_dead_node(memory_leak_check):
 
     def test_impl(query, conn):
         # This query should be optimized out.
-        df = pd.read_sql(query, conn)
+        pd.read_sql(query, conn)
         return 1
 
     db = "SNOWFLAKE_SAMPLE_DATA"
@@ -3083,7 +3084,7 @@ def test_dict_encoded_small_table(memory_leak_check):
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             check_func(impl, (query, conn), py_output=new_df)
-            check_logger_msg(stream, f"Columns ['a'] using dictionary encoding")
+            check_logger_msg(stream, "Columns ['a'] using dictionary encoding")
 
 
 def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
@@ -3295,7 +3296,7 @@ def test_disable_result_cache_session_param(memory_leak_check):
         ), f"USE_CACHED_RESULT is not the expected default ({str(old_value).lower()})"
 
         # Now set the user level parameter to True.
-        pd.read_sql(f"alter user set USE_CACHED_RESULT=True", conn)
+        pd.read_sql("alter user set USE_CACHED_RESULT=True", conn)
 
         # Verify that it's now set to True by default:
         result = get_use_cached_result_val()

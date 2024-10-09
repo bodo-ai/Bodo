@@ -196,22 +196,22 @@ def make_overload_declarative_template(
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
     name = "OverloadDeclarativeAttributeTemplate_%s_%s" % (typ, attr)
     # Note the implementation cache is subclass-specific
-    dct = dict(
-        key=typ,
-        _attr=attr,
-        path_name=path_name,
-        _impl_cache={},
-        _inline=staticmethod(InlineOptions(inline)),
-        _inline_overloads={},
-        _overload_func=staticmethod(overload_func),
-        prefer_literal=prefer_literal,
-        _no_unliteral=no_unliteral,
-        unsupported_args=unsupported_args,
-        changed_defaults=changed_defaults,
-        description=description,
-        hyperlink=hyperlink,
-        metadata=kwargs,
-    )
+    dct = {
+        "key": typ,
+        "_attr": attr,
+        "path_name": path_name,
+        "_impl_cache": {},
+        "_inline": staticmethod(InlineOptions(inline)),
+        "_inline_overloads": {},
+        "_overload_func": staticmethod(overload_func),
+        "prefer_literal": prefer_literal,
+        "_no_unliteral": no_unliteral,
+        "unsupported_args": unsupported_args,
+        "changed_defaults": changed_defaults,
+        "description": description,
+        "hyperlink": hyperlink,
+        "metadata": kwargs,
+    }
     obj = type(base)(name, (base,), dct)
     return obj
 

@@ -2,6 +2,7 @@
 """
 Basic E2E tests for each type of filter pushdown on Iceberg tables.
 """
+
 import io
 
 import numpy as np
@@ -265,7 +266,7 @@ def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
         bodo.jit(impl_filter_none)(
             ten_partition_table_name, ten_parition_conn, db_schema
         )
-        check_logger_msg(stream, f"Total number of files is 10. Reading 10 files:")
+        check_logger_msg(stream, "Total number of files is 10. Reading 10 files:")
         for i in range(10):
             check_logger_msg(stream, f"partition_col_1={i}")
 
@@ -275,8 +276,8 @@ def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
         bodo.jit(impl_filter_none)(
             many_partition_table_name, many_partition_conn, db_schema
         )
-        check_logger_msg(stream, f"Total number of files is 100. Reading 100 files:")
-        check_logger_msg(stream, f"partition_col_1=")
+        check_logger_msg(stream, "Total number of files is 100. Reading 100 files:")
+        check_logger_msg(stream, "partition_col_1=")
         check_logger_msg(stream, "... and 90 more")
 
     # Check that we don't list the files with log level 1
@@ -286,8 +287,8 @@ def test_filter_pushdown_logging_msg(iceberg_database, iceberg_table_conn):
         bodo.jit(impl_filter_none)(
             many_partition_table_name, many_partition_conn, db_schema
         )
-        check_logger_msg(stream, f"Total number of files is 100. Reading 100 files.")
-        check_logger_no_msg(stream, f"partition_col_1=")
+        check_logger_msg(stream, "Total number of files is 100. Reading 100 files.")
+        check_logger_no_msg(stream, "partition_col_1=")
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)

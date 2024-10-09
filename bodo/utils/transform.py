@@ -2,6 +2,7 @@
 """
 Helper functions for transformations.
 """
+
 import itertools
 import math
 import operator
@@ -570,7 +571,7 @@ def update_locs(node_list, loc):
 
 def get_stmt_defs(stmt):
     if is_assign(stmt):
-        return set([stmt.target.name])
+        return {stmt.target.name}
 
     if type(stmt) in numba.core.analysis.ir_extension_usedefs:
         def_func = numba.core.analysis.ir_extension_usedefs[type(stmt)]
@@ -1787,7 +1788,7 @@ def replace_func(
             # try to use a literal type if possible (as required by some overloads)
             try:
                 pass_info.typemap[d_var.name] = types.literal(default)
-            except:
+            except Exception:
                 pass_info.typemap[d_var.name] = numba.typeof(default)
             node = ir.Assign(ir.Const(default, loc), d_var, loc)
             pre_nodes.append(node)
@@ -2228,6 +2229,6 @@ def create_nested_run_pass_event(pass_name: str, state, pass_obj):
     # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/compiler_machinery.py#L307
     # Note we removed most of the event details because they are unused and some of our calls may not have all of
     # of the necessary information.
-    ev_details = dict(name=f"{pass_name} [...]")
+    ev_details = {"name": f"{pass_name} [...]"}
     with event.trigger_event("numba:run_pass", data=ev_details):
         pass_obj.run_pass(state)

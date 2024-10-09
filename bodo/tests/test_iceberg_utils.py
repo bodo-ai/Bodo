@@ -461,4 +461,4 @@ def test_pyarrow_to_iceberg_schema_unsupported(schema, expected_err):
     from bodo_iceberg_connector.schema_helper import pyarrow_to_iceberg_schema_str
 
     with pytest.raises(IcebergError, match=expected_err):
-        out_schema = pyarrow_to_iceberg_schema_str(schema)
+        pyarrow_to_iceberg_schema_str(schema)

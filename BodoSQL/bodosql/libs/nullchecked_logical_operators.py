@@ -1,7 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Library of BodoSQL functions used for performing "AND" and "OR" operations involving potentially null values
+Library of BodoSQL functions used for performing "AND" and "OR" operations involving potentially null values
 """
+
 import numba
 from numba import generated_jit
 

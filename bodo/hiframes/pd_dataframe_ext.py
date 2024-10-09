@@ -2,6 +2,7 @@
 """
 Implement pd.DataFrame typing and data model handling.
 """
+
 import json
 import operator
 import time
@@ -174,9 +175,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         self.is_table_format = is_table_format
         # If columns is None, we are determining the number of columns art runtime.
         if columns is None:
-            assert (
-                is_table_format
-            ), "Determining columns at runtime is only supported for DataFrame with table format"
+            assert is_table_format, "Determining columns at runtime is only supported for DataFrame with table format"
             # If we have columns determined at runtime, we change the arguments to create the table.
             self.table_type = TableType(tuple(data[:-1]), True)
         else:
@@ -562,8 +561,8 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         result_type = args[3] if len(args) > 3 else kws.pop("result_type", types.none)
         f_args = args[4] if len(args) > 4 else kws.pop("args", types.Tuple([]))
 
-        unsupported_args = dict(raw=raw, result_type=result_type)
-        merge_defaults = dict(raw=False, result_type=None)
+        unsupported_args = {"raw": raw, "result_type": result_type}
+        merge_defaults = {"raw": False, "result_type": None}
         check_unsupported_args(
             "Dataframe.apply",
             unsupported_args,
@@ -577,7 +576,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         if types.unliteral(func) == types.unicode_type:
             if not is_overload_constant_str(func):
                 raise BodoError(
-                    f"DataFrame.apply(): string argument (for builtins) must be a compile time constant"
+                    "DataFrame.apply(): string argument (for builtins) must be a compile time constant"
                 )
             is_udf = False
 
@@ -611,7 +610,6 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         # name_type = self.context.resolve_function_type(
         #     operator.getitem, (df.index, types.int64), {}
         # ).return_type
-        name_type = types.none
         # the Index has constant column name values
         index_type = HeterogeneousIndexType(
             types.BaseTuple.from_types(tuple(types.literal(c) for c in df.columns)),
@@ -1050,9 +1048,7 @@ def construct_dataframe(
     dataframe_payload.data = data_tup
     dataframe_payload.index = index_val
     if colnames is not None:
-        assert (
-            df_type.has_runtime_cols
-        ), "construct_dataframe can only provide colnames if columns are determined at runtime"
+        assert df_type.has_runtime_cols, "construct_dataframe can only provide colnames if columns are determined at runtime"
         dataframe_payload.columns = colnames
 
     # create meminfo and store payload
@@ -1104,7 +1100,7 @@ def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_index_t
     if isinstance(data_typ.dtype.arr_types, types.UniTuple):
         arr_types = [data_typ.dtype.arr_types.dtype] * len(data_typ.dtype.arr_types)
     else:
-        arr_types = [t for t in data_typ.dtype.arr_types]
+        arr_types = list(data_typ.dtype.arr_types)
 
     ret_typ = DataFrameType(
         tuple(arr_types + [colnames_index_typ]),
@@ -1148,8 +1144,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
 
     untyperefed_col_names_typ = unwrap_typeref(col_names_typ)
 
-    assert isinstance(untyperefed_col_names_typ, ColNamesMetaType) and isinstance(
-        untyperefed_col_names_typ.meta, tuple
+    assert (
+        isinstance(untyperefed_col_names_typ, ColNamesMetaType)
+        and isinstance(untyperefed_col_names_typ.meta, tuple)
     ), "Third argument to init_dataframe must be of type ColNamesMetaType, and must contain a tuple of column names"
     column_names = untyperefed_col_names_typ.meta
 
@@ -2886,27 +2883,27 @@ def concat_overload(
     axis = get_overload_const_int(axis)
     ignore_index = is_overload_true(ignore_index)
 
-    unsupported_args = dict(
-        join=join,
-        join_axes=join_axes,
-        keys=keys,
-        levels=levels,
-        names=names,
-        verify_integrity=verify_integrity,
-        sort=sort,
-        copy=copy,
-    )
+    unsupported_args = {
+        "join": join,
+        "join_axes": join_axes,
+        "keys": keys,
+        "levels": levels,
+        "names": names,
+        "verify_integrity": verify_integrity,
+        "sort": sort,
+        "copy": copy,
+    }
 
-    arg_defaults = dict(
-        join="outer",
-        join_axes=None,
-        keys=None,
-        levels=None,
-        names=None,
-        verify_integrity=False,
-        sort=None,
-        copy=True,
-    )
+    arg_defaults = {
+        "join": "outer",
+        "join_axes": None,
+        "keys": None,
+        "levels": None,
+        "names": None,
+        "verify_integrity": False,
+        "sort": None,
+        "copy": True,
+    }
     check_unsupported_args(
         "pandas.concat",
         unsupported_args,
@@ -3164,8 +3161,8 @@ def lower_sort_values_dummy(context, builder, sig, args):
 @overload_method(DataFrameType, "itertuples", inline="always", no_unliteral=True)
 def itertuples_overload(df, index=True, name="Pandas"):
     check_runtime_cols_unsupported(df, "DataFrame.itertuples()")
-    unsupported_args = dict(index=index, name=name)
-    arg_defaults = dict(index=True, name="Pandas")
+    unsupported_args = {"index": index, "name": name}
+    arg_defaults = {"index": True, "name": "Pandas"}
     check_unsupported_args(
         "DataFrame.itertuples",
         unsupported_args,
@@ -3467,7 +3464,7 @@ def pivot_impl(
                     )
 
     # Allocate the data arrays. If we have string data we use the info from the first pass
-    func_text += f"    ev_alloc.add_attribute('num_rows', n_rows)\n"
+    func_text += "    ev_alloc.add_attribute('num_rows', n_rows)\n"
     for i, data_arr_typ in enumerate(data_arr_typs):
         if is_str_arr_type(data_arr_typ):
             func_text += f"    data_arrs_{i} = [\n"
@@ -3476,7 +3473,7 @@ def pivot_impl(
             func_text += "        )\n"
             func_text += "        for i in range(n_cols)\n"
             func_text += "    ]\n"
-            func_text += f"    if tracing.is_tracing():\n"
+            func_text += "    if tracing.is_tracing():\n"
             func_text += "         for i in range(n_cols):\n"
             func_text += f"            ev_alloc.add_attribute('total_str_chars_out_column_{i}_' + str(i), total_lens_{i}[i])\n"
         else:
@@ -3530,9 +3527,9 @@ def pivot_impl(
     else:
         func_text += "    index = bodo.hiframes.pd_multi_index_ext.init_multi_index(unique_index_arr_tup, index_names_lit, None)\n"
         index_names_lit = tuple(index_names.meta)
-    func_text += f"    if tracing.is_tracing():\n"
-    func_text += f"        index_nbytes = index.nbytes\n"
-    func_text += f"        ev.add_attribute('index_nbytes', index_nbytes)\n"
+    func_text += "    if tracing.is_tracing():\n"
+    func_text += "        index_nbytes = index.nbytes\n"
+    func_text += "        ev.add_attribute('index_nbytes', index_nbytes)\n"
     if not has_compile_time_columns:
         columns_name_lit = columns_name.meta[0]
         # Convert the columns to a proper index. if they are not known at compile time.
@@ -3546,7 +3543,7 @@ def pivot_impl(
                 value_names_lit = np.array(value_names_lit, "int64")
             else:
                 raise BodoError(
-                    f"pivot(): column names selected for 'values' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
+                    "pivot(): column names selected for 'values' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
                 )
 
             if isinstance(value_names_lit.dtype, pd.StringDtype):
@@ -3599,8 +3596,8 @@ def pivot_impl(
         # Create the table type
         table_type = TableType(data_values)
         # Generate a table with constant types.
-        func_text += f"    table = bodo.hiframes.table.init_table(table_type, False)\n"
-        func_text += f"    table = bodo.hiframes.table.set_table_len(table, n_rows)\n"
+        func_text += "    table = bodo.hiframes.table.init_table(table_type, False)\n"
+        func_text += "    table = bodo.hiframes.table.set_table_len(table, n_rows)\n"
         for i, typ in enumerate(data_arr_typs):
             # We support constant columns with multiple values
             func_text += f"    table = bodo.hiframes.table.set_table_block(table, data_arrs_{i}, {table_type.type_to_blk[typ]})\n"
@@ -3821,7 +3818,7 @@ def to_parquet_overload(
     # time.
     if df.has_runtime_cols and not is_overload_none(partition_cols):
         raise BodoError(
-            f"DataFrame.to_parquet(): Providing 'partition_cols' on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
+            "DataFrame.to_parquet(): Providing 'partition_cols' on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
         )
 
     if not is_overload_none(engine) and get_overload_const_str(engine) not in (
@@ -4047,7 +4044,7 @@ def to_parquet_overload(
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path, parallel=_is_parallel)\n"
+    func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path, parallel=_is_parallel)\n"
     col_names_no_parts_arr = None
     if partition_cols:
         col_names_no_parts_arr = pd.array(
@@ -4357,7 +4354,7 @@ def to_sql_overload(
         if bodo.get_rank() == 0:
             warnings.warn(
                 BodoWarning(
-                    f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
+                    "DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
                 )
             )
 
@@ -4414,7 +4411,7 @@ def to_sql_overload(
     # XXX A lot of this is copied from the to_parquet impl, so might be good to refactor
 
     if df.is_table_format:
-        func_text += f"        py_table = get_dataframe_table(df)\n"
+        func_text += "        py_table = get_dataframe_table(df)\n"
         if not df.has_runtime_cols:
             output_arr_typ = types.none
             extra_globals.update({"output_arr_typ": output_arr_typ})
@@ -4433,7 +4430,7 @@ def to_sql_overload(
                 func_text += f"        arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
         func_text += f"        info_list = [{data_args}]\n"
-        func_text += f"        table = arr_info_list_to_table(info_list)\n"
+        func_text += "        table = arr_info_list_to_table(info_list)\n"
 
     # We don't write pandas metadata for Iceberg (at least for now)
     # Partition columns not supported through this API.
@@ -5259,7 +5256,7 @@ def overload_union_dataframes(
                         # If one column is dict encoded the other column must be a string
                         # or null array.
                         raise BodoError(
-                            f"Unable to union table with columns of incompatible types. Found types {col_dtype} and {other_col_dtype} in column {i}."
+                            f"Unable to union table with columns of incompatible types. Found types {col_typ} and {other_col_typ} in column {i}."
                         )
                     # If either array is dict encoded we want the output to be dict encoded.
                     new_col_types.append(bodo.dict_str_arr_type)
@@ -5310,8 +5307,8 @@ def overload_union_dataframes(
     df_args = ", ".join([f"arg{i}" for i in range(len(df_types))])
     # Step 3 call the C++ kernel
     func_text += f"  out_py_table = bodo.libs.array.union_tables(({df_args}, ), drop_duplicates, py_table_typ)\n"
-    func_text += f"  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((out_py_table,), bodo.hiframes.pd_index_ext.init_range_index(0, len(out_py_table), 1, None), output_colnames)\n"
-    func_text += f"  return out_df\n"
+    func_text += "  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe((out_py_table,), bodo.hiframes.pd_index_ext.init_range_index(0, len(out_py_table), 1, None), output_colnames)\n"
+    func_text += "  return out_df\n"
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl"]

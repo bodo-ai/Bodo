@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for array of map values.
-"""
+"""Tests for array of map values."""
 
 import numpy as np
 import pandas as pd
@@ -116,9 +115,7 @@ def test_map_apply(memory_leak_check):
     """
 
     def impl(df, keys):
-        return df["master_column"].apply(
-            lambda row: {x: y for x, y in zip(keys, row.split(","))}
-        )
+        return df["master_column"].apply(lambda row: dict(zip(keys, row.split(","))))
 
     df1 = pd.DataFrame(
         {"master_column": [",".join([str(i) for i in np.arange(10)])] * 15}

@@ -137,12 +137,13 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
             assert (
                 py_schema.colnames == pyarrow_schema.names
             ), "Iceberg Schema Field Names Should be Equal in PyArrow Schema"
-            assert py_schema.field_ids == [
-                int(f.metadata[b_ICEBERG_FIELD_ID_MD_KEY]) for f in pyarrow_schema
-            ], "Iceberg Field IDs should match the IDs in the metadata of the PyArrow Schema's fields"
-            assert py_schema.is_required == [
-                (not f.nullable) for f in pyarrow_schema
-            ], "Iceberg fields' 'required' property should match the nullability of the PyArrow Schema's fields"
+            assert (
+                py_schema.field_ids
+                == [int(f.metadata[b_ICEBERG_FIELD_ID_MD_KEY]) for f in pyarrow_schema]
+            ), "Iceberg Field IDs should match the IDs in the metadata of the PyArrow Schema's fields"
+            assert (
+                py_schema.is_required == [(not f.nullable) for f in pyarrow_schema]
+            ), "Iceberg fields' 'required' property should match the nullability of the PyArrow Schema's fields"
 
             pyarrow_types = [
                 pyarrow_schema.field(name) for name in pyarrow_schema.names

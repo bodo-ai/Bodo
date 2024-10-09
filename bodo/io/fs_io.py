@@ -2,6 +2,7 @@
 """
 S3 & Hadoop file system supports, and file system dependent calls
 """
+
 import glob
 import os
 import warnings
@@ -43,7 +44,7 @@ def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs
         try:  # Bodo change: try to open the file for random access first
             # We need random access to read parquet file metadata
             stream = self.fs.open_input_file(path)
-        except:  # pragma: no cover
+        except Exception:  # pragma: no cover
             stream = self.fs.open_input_stream(path)
     elif mode == "wb":  # pragma: no cover
         stream = self.fs.open_output_stream(path)
@@ -275,7 +276,7 @@ def s3_is_directory(fs, path):
         if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
             return True
         return False
-    except (FileNotFoundError, OSError) as e:
+    except (FileNotFoundError, OSError):
         raise
     except BodoError:  # pragma: no cover
         raise

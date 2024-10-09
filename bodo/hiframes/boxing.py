@@ -2,6 +2,7 @@
 """
 Boxing and unboxing support for DataFrame, Series, etc.
 """
+
 import datetime
 import decimal
 import warnings
@@ -519,7 +520,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
         # This is generally used to pass things like struct names, which are a part of the type.
         if len(typ_enum_list) == 1:  # pragma: no cover
             raise_bodo_error(
-                f"Unexpected Internal Error while converting typing metadata: Encountered 'Literal' internal enum value with no value following it. Please file the error here: https://github.com/Bodo-inc/Feedback"
+                "Unexpected Internal Error while converting typing metadata: Encountered 'Literal' internal enum value with no value following it. Please file the error here: https://github.com/Bodo-inc/Feedback"
             )
         lit_val = typ_enum_list[1]
         remainder = typ_enum_list[2:]
@@ -527,7 +528,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
     elif typ_enum_list[0] == SeriesDtypeEnum.LiteralType.value:
         if len(typ_enum_list) == 1:  # pragma: no cover
             raise_bodo_error(
-                f"Unexpected Internal Error while converting typing metadata: Encountered 'LiteralType' internal enum value with no value following it. Please file the error here: https://github.com/Bodo-inc/Feedback"
+                "Unexpected Internal Error while converting typing metadata: Encountered 'LiteralType' internal enum value with no value following it. Please file the error here: https://github.com/Bodo-inc/Feedback"
             )
         lit_val = typ_enum_list[1]
         remainder = typ_enum_list[2:]
@@ -929,7 +930,7 @@ def _infer_series_arr_type(S: pd.Series, array_metadata=None):
             arr_type = types.Array(arr_type.dtype, 1, "C")
 
         return arr_type
-    except:  # pragma: no cover
+    except Exception:  # pragma: no cover
         raise BodoError(f"data type {S.dtype} for column {S.name} not supported yet")
 
 

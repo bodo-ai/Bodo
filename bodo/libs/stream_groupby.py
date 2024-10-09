@@ -2,6 +2,7 @@
 """Support for streaming groupby (a.k.a. vectorized groupby).
 This file is mostly wrappers for C++ implementations.
 """
+
 from functools import cached_property
 from typing import Dict, List, Set, Tuple
 
@@ -732,8 +733,8 @@ def _get_init_groupby_state_type(
         if len(mrnf_sort_col_inds) > 0:
             # In the MRNF case, if there are indices in both the
             # partition and sort columns, then raise an error.
-            mrnf_sort_col_inds_set = set(list(mrnf_sort_col_inds))
-            key_inds_set = set(list(key_inds))
+            mrnf_sort_col_inds_set = set(mrnf_sort_col_inds)
+            key_inds_set = set(key_inds)
             common_inds = mrnf_sort_col_inds_set.intersection(key_inds_set)
             if len(common_inds) > 0:
                 raise BodoError(
@@ -795,7 +796,7 @@ def _get_init_groupby_state_type(
         partition_or_sort_col_set = set(
             list(output_type.key_inds) + list(output_type.mrnf_sort_col_inds)
         )
-        mrnf_col_inds_keep_set = set(list(output_type.mrnf_col_inds_keep))
+        mrnf_col_inds_keep_set = set(output_type.mrnf_col_inds_keep)
         for idx in range(n_cols):
             if (idx not in partition_or_sort_col_set) and (
                 idx not in mrnf_col_inds_keep_set

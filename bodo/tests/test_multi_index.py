@@ -84,8 +84,8 @@ def test_multi_index_head(memory_leak_check):
 
     df = pd.DataFrame(
         {
-            "A": [i for i in range(10)] * 70,
-            "B": [j for j in range(7)] * 100,
+            "A": list(range(10)) * 70,
+            "B": list(range(7)) * 100,
             "C": np.arange(700),
         }
     )

@@ -1,7 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL string functions
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL string functions"""
 
 import numpy as np
 import pandas as pd

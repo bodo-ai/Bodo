@@ -12,9 +12,14 @@ from numba.extending import overload
 
 import bodo
 import bodo.libs.uuid
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    is_overload_constant_bool,
+    is_valid_string_arg,
+    unopt_argument,
+)
 from bodo.libs.str_arr_ext import str_arr_set_na
-from bodo.utils.typing import is_overload_false
+from bodo.utils.typing import is_overload_false, raise_bodo_error
 
 
 def parse_url(data, permissive_flag=False):
@@ -76,21 +81,21 @@ def overload_parse_url_util(data, permissive_flag):
     scalar_text += "query_parameters_as_map = parse_query_into_map(query)\n"
     # Reordered to match snowflake's ordering for my own sanity
     # NOTE: urlparse doesn't exactly line up with snowflake's behavior:
-    # SF's scheme is always returned in uppercase, and SF omitts the first "/" in the path
+    # SF's scheme is always returned in uppercase, and SF omits the first "/" in the path
     scalar_text += "if len(path) > 0 and path[0] == '/':\n"
     scalar_text += "    path = path[1:]\n"
     scalar_text += "struct_values = (fragment, host, query_parameters_as_map, path, port, query, scheme)\n"
 
     # Convert empty strings into null values to match snowflake behavior.
-    scalar_text += f"null_vector = np.zeros(7, np.bool_)\n"
+    scalar_text += "null_vector = np.zeros(7, np.bool_)\n"
     scalar_text += "for substr, substr_idx in [(fragment, 0), (host, 1), (path, 3), (port, 4), (query, 5), (scheme, 6)]:\n"
     scalar_text += "    if substr == '':\n"
     scalar_text += "        null_vector[substr_idx] = True\n"
     # Convert empty dict into null value for query_parameters_as_map
     scalar_text += "if len(query_parameters_as_map._keys) == 0:\n"
     scalar_text += "    null_vector[2] = True\n"
-    scalar_text += f"struct_output = bodo.libs.struct_arr_ext.init_struct_with_nulls(struct_values, null_vector, struct_names)\n"
-    scalar_text += f"res[i] = struct_output\n"
+    scalar_text += "struct_output = bodo.libs.struct_arr_ext.init_struct_with_nulls(struct_values, null_vector, struct_names)\n"
+    scalar_text += "res[i] = struct_output\n"
 
     return gen_vectorized(
         arg_names,
@@ -119,14 +124,14 @@ def parse_query_into_map_overload(data):
     """
     Parses a query string of the form KEY1=VALUE1&KEY2=VALUE2&... into a dictionary.
 
-    When handling malformed query strings, this helper function aproximates the observed
+    When handling malformed query strings, this helper function approximates the observed
     behavior of the snowflake function PARSE_QUERY. IE:
 
     Ignore repeated &'s
     Repeated ?'s are treated as part of the key/value strings
     keys without values are assigned a value of null
     You can have a value without a key, the key will be empty string
-    Repeated key's will be assigned the last occuring value
+    Repeated key's will be assigned the last occurring value
     The leftmost "=" is used to split key/value pairs. all Subsequent "="'s are assumed to be part of the name of the value.
     back/forward slashes are considered part of the key/value names
 
@@ -143,7 +148,7 @@ def parse_query_into_map_overload(data):
 
     def impl(data):  # pragma: no cover
         keys_with_null_values = set()
-        key_value_map = dict()
+        key_value_map = {}
 
         for substr in data.split("&"):
             # Filter out empty substrings
@@ -270,8 +275,8 @@ def parse_netlock_into_host_and_port_overload(netloc):
         # so I'm not going to push my luck.
         match = re.match(r".*:\d+\Z", netloc)
         if match is not None:
-            port_splic_loc = netloc.rfind(":")
-            return (netloc[:port_splic_loc], netloc[port_splic_loc + 1 :])
+            port_split_loc = netloc.rfind(":")
+            return (netloc[:port_split_loc], netloc[port_split_loc + 1 :])
         else:
             return (netloc, "")
 

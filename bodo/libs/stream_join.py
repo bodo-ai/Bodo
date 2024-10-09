@@ -2,6 +2,7 @@
 """Support for streaming join (a.k.a. vectorized join).
 This file is mostly wrappers for C++ implementations.
 """
+
 from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Dict, List, Set, Tuple
@@ -278,16 +279,16 @@ class JoinStateType(StreamingStateType):
         assert len(input_types) > 0, "At least 1 key type must be provided"
         are_nullable = [is_nullable(t) for t in input_types]
         # Make sure arrays have the same nullability.
-        if any([nullable for nullable in are_nullable]):
+        if any(list(are_nullable)):
             input_types = [to_nullable_type(t) for t in input_types]
 
         # Check if all array types are the same.
-        if all([t == input_types[0] for t in input_types]):
+        if all(t == input_types[0] for t in input_types):
             return input_types[0]
 
         if isinstance(input_types[0], bodo.MapArrayType):
             assert all(
-                [isinstance(t, bodo.MapArrayType) for t in input_types]
+                isinstance(t, bodo.MapArrayType) for t in input_types
             ), f"StreamingHashJoin: Cannot unify Map array with non-Map arrays! {input_types=}"
             common_key_arr_type = JoinStateType._derive_common_key_type(
                 [t.key_arr_type for t in input_types]
@@ -299,7 +300,7 @@ class JoinStateType(StreamingStateType):
 
         if isinstance(input_types[0], bodo.ArrayItemArrayType):
             assert all(
-                [isinstance(t, bodo.ArrayItemArrayType) for t in input_types]
+                isinstance(t, bodo.ArrayItemArrayType) for t in input_types
             ), f"StreamingHashJoin: Cannot unify List array with non-List arrays! {input_types=}"
 
             common_element_type = JoinStateType._derive_common_key_type(
@@ -309,12 +310,12 @@ class JoinStateType(StreamingStateType):
 
         if isinstance(input_types[0], bodo.StructArrayType):
             assert all(
-                [isinstance(t, bodo.StructArrayType) for t in input_types]
+                isinstance(t, bodo.StructArrayType) for t in input_types
             ), f"StreamingHashJoin: Cannot unify Struct array with non-Struct arrays! {input_types=}"
             n_fields = len(input_types[0].data)
-            assert all([len(t.data) == n_fields for t in input_types])
+            assert all(len(t.data) == n_fields for t in input_types)
             field_names = input_types[0].names
-            assert all([t.names == field_names for t in input_types])
+            assert all(t.names == field_names for t in input_types)
 
             common_field_types = []
             for i in range(len(input_types[0].data)):
@@ -343,7 +344,7 @@ class JoinStateType(StreamingStateType):
         else:
             # If the inputs are all string or dict, return string.
             valid_str_types = (bodo.string_array_type, bodo.dict_str_arr_type)
-            if all([t in valid_str_types for t in input_types]):
+            if all(t in valid_str_types for t in input_types):
                 common_type = bodo.string_array_type
             else:
                 raise BodoError(
@@ -1405,7 +1406,7 @@ def _get_runtime_join_filter_info(
 
     # Bloom filter can only be applied when all key columns are present
     can_apply_bloom_filters = [
-        len(join_key_idxs_list) > 0 and all([(idx != -1) for idx in join_key_idxs_list])
+        len(join_key_idxs_list) > 0 and all((idx != -1) for idx in join_key_idxs_list)
         for join_key_idxs_list in join_key_idxs_lists
     ]
 
@@ -1587,7 +1588,7 @@ def overload_runtime_join_filter(
         for process_col_bitmask in process_col_bitmasks
     )
 
-    func_text = f"""
+    func_text = """
 def impl_runtime_join_filter(
     join_states, table, join_keys_idxs, process_col_bitmasks\n
 ):
@@ -1602,45 +1603,45 @@ def impl_runtime_join_filter(
     for i in range(num_filters):
         if can_apply_bloom_filters[i] or can_apply_col_filters[i]:
             # doing repeated casting could potentially become expensive
-            func_text += f"    cast_table = bodo.utils.table_utils.table_astype(\n"
+            func_text += "    cast_table = bodo.utils.table_utils.table_astype(\n"
             func_text += f"        cast_table, cast_table_types[{i}], False, False\n"
-            func_text += f"    )\n"
+            func_text += "    )\n"
             func_text += f"    cpp_table = bodo.libs.array.py_data_to_cpp_table(cast_table, (), col_inds_t, {n_cols})\n"
             func_text += (
-                f"    row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
+                "    row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
             )
-            func_text += f"    applied_any_filter = _runtime_join_filter(\n"
+            func_text += "    applied_any_filter = _runtime_join_filter(\n"
             func_text += f"        join_states[{i}],\n"
-            func_text += f"        cpp_table,\n"
-            func_text += f"        row_bitmask_arr,\n"
+            func_text += "        cpp_table,\n"
+            func_text += "        row_bitmask_arr,\n"
             func_text += f"        join_key_idxs_arrs[{i}],\n"
             func_text += f"        process_col_bitmask_arrs[{i}],\n"
-            func_text += f"        applied_any_filter,\n"
-            func_text += f"    )\n"
+            func_text += "        applied_any_filter,\n"
+            func_text += "    )\n"
 
             if materialize_after_each_filter:
-                func_text += f"    if applied_any_filter:\n"
-                func_text += f"        row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
+                func_text += "    if applied_any_filter:\n"
+                func_text += "        row_bitmask_arr = bodo.libs.array.array_to_info(row_bitmask)\n"
                 func_text += f"        cpp_table = bodo.libs.array.py_data_to_cpp_table(cast_table, (), col_inds_t, {n_cols})\n"
-                func_text += f"        cpp_table = bodo.libs.array._retrieve_table(\n"
-                func_text += f"            cpp_table, row_bitmask_arr\n"
-                func_text += f"        )\n"
+                func_text += "        cpp_table = bodo.libs.array._retrieve_table(\n"
+                func_text += "            cpp_table, row_bitmask_arr\n"
+                func_text += "        )\n"
                 func_text += (
-                    f"        cast_table = bodo.libs.array.cpp_table_to_py_table(\n"
+                    "        cast_table = bodo.libs.array.cpp_table_to_py_table(\n"
                 )
                 func_text += (
                     f"            cpp_table, col_ind_arr, cast_table_types[{i}], 0\n"
                 )
-                func_text += f"        )\n"
-                func_text += f"        bodo.libs.array.delete_table(cpp_table)\n"
+                func_text += "        )\n"
+                func_text += "        bodo.libs.array.delete_table(cpp_table)\n"
                 # reallocate the bitmask for the new table, reset applied_any_filter flag
-                func_text += f"        row_bitmask = bodo.libs.bool_arr_ext.alloc_true_bool_array(len(cast_table))\n"
-                func_text += f"        applied_any_filter = False\n"
+                func_text += "        row_bitmask = bodo.libs.bool_arr_ext.alloc_true_bool_array(len(cast_table))\n"
+                func_text += "        applied_any_filter = False\n"
             curr_table_idx = i
 
     # if we materialize after every step, then there is no need to materialize at the end
     if materialize_after_each_filter:
-        func_text += f"    return cast_table\n"
+        func_text += "    return cast_table\n"
     else:
         # if rows are filtered, do table materialization
         # otherwise just return the table

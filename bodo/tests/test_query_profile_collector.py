@@ -244,7 +244,7 @@ def test_groupby_row_count_collection(memory_leak_check):
         2,
     ]
 
-    keys_inds = bodo.utils.typing.MetaType(tuple([0]))
+    keys_inds = bodo.utils.typing.MetaType((0,))
     out_col_meta_l = ["key"] + [f"out_{i}" for i in range(len(func_names))]
     out_col_meta = bodo.utils.typing.ColNamesMetaType(tuple(out_col_meta_l))
     len_kept_cols = len(df.columns)
@@ -1375,17 +1375,11 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
         )
 
     build_stage1_metrics = stage_1["metrics"]
-    build_stage1_metrics_names: set[str] = set(
-        [x["name"] for x in build_stage1_metrics]
-    )
+    build_stage1_metrics_names: set[str] = {x["name"] for x in build_stage1_metrics}
     build_stage2_metrics = stage_2["metrics"]
-    build_stage2_metrics_names: set[str] = set(
-        [x["name"] for x in build_stage2_metrics]
-    )
+    build_stage2_metrics_names: set[str] = {x["name"] for x in build_stage2_metrics}
     build_stage3_metrics = stage_3["metrics"]
-    build_stage3_metrics_names: set[str] = set(
-        [x["name"] for x in build_stage3_metrics]
-    )
+    build_stage3_metrics_names: set[str] = {x["name"] for x in build_stage3_metrics}
     output_stage_metrics = stage_4["metrics"]
     output_metrics_dict = {x["name"]: x["stat"] for x in output_stage_metrics}
 

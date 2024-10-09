@@ -516,7 +516,13 @@ def test_dict_encoded_string_arrays(
     with pytest.raises(BodoError, match=r"must be a constant list of column names"):
 
         def impl4(table_name, conn, db_schema):
-            df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=True, _bodo_dict_encode_in_bodo=dict_encode_in_bodo)  # type: ignore
+            df = pd.read_sql_table(
+                table_name,
+                conn,
+                db_schema,
+                _bodo_read_as_dict=True,
+                _bodo_dict_encode_in_bodo=dict_encode_in_bodo,
+            )  # type: ignore
             return df
 
         bodo.jit(impl4)(table_name, conn, db_schema)
@@ -827,7 +833,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
                 raise ValueError(
                     f"Expected a column starting with A or B, got {col_name} instead."
                 )
-    except:
+    except Exception:
         passed = 0
     passed = reduce_sum(passed)
     assert passed == bodo.get_size(), "Datatype validation failed on one or more ranks."
@@ -877,7 +883,13 @@ def test_disable_dict_detection(iceberg_database, iceberg_table_conn):
 
     # Ensure that dict encoding is not reported during compilation for any columns other than B.
     def impl(table_name, conn, db_schema):
-        df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=["B"], _bodo_detect_dict_cols=False)  # type: ignore
+        df = pd.read_sql_table(
+            table_name,
+            conn,
+            db_schema,
+            _bodo_read_as_dict=["B"],
+            _bodo_detect_dict_cols=False,
+        )  # type: ignore
         return df
 
     table_name_type = numba.types.literal(table_name)
@@ -988,13 +1000,17 @@ def test_read_merge_into_cow_row_id_col(
     # Since Iceberg output is unordered, not guarantee that the row id values
     # are assigned to the same row. Thus, need to check them separately
     check_func(
-        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[0]["_BODO_ROW_ID"],  # type: ignore
+        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[
+            0
+        ]["_BODO_ROW_ID"],  # type: ignore
         (table_name, conn, db_schema),
         py_output=np.arange(out_len),
     )
 
     check_func(
-        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[0][["B", "E", "A"]],  # type: ignore
+        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[
+            0
+        ][["B", "E", "A"]],  # type: ignore
         (table_name, conn, db_schema),
         py_output=spark_out[["B", "E", "A"]],
         sort_output=True,
@@ -1171,7 +1187,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
             # Convert to a set because Bodo will only return unique file names
             files_set = set(files_frame["file_path"])
             # We use a sorted list for easier comparison
-            files_set = sorted(list(files_set))
+            files_set = sorted(files_set)
             # Load the snapshot id
             snapshot_frame = spark.sql(
                 f"""
@@ -1379,7 +1395,7 @@ def test_basic_write_replace(
         )
         assert (
             table_cmt is None
-        ), f"Expected table comment to be None, but actual comment is not None"
+        ), "Expected table comment to be None, but actual comment is not None"
     passed = comm.bcast(passed)
     assert passed == 1
 
@@ -1523,7 +1539,7 @@ def test_basic_write_new_append(
         )
         assert (
             table_cmt is None
-        ), f"Expected table comment to be None, but actual comment is not None"
+        ), "Expected table comment to be None, but actual comment is not None"
 
         passed = _test_equal_guard(
             bodo_out,
@@ -1657,7 +1673,7 @@ def _setup_test_iceberg_field_ids_in_pq_schema(
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), err
 
-    data_files_before_write = set([])
+    data_files_before_write = set()
     if bodo.get_rank() == 0 and mode in ("append", "replace"):
         data_files_before_write = set(
             glob.glob(
@@ -1878,7 +1894,7 @@ def test_iceberg_field_ids_in_pq_schema_append_to_schema_evolved_table(
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size(), err
 
-    data_files_before_write = set([])
+    data_files_before_write = set()
     if bodo.get_rank() == 0:
         data_files_before_write = set(
             glob.glob(
@@ -3216,7 +3232,7 @@ def test_write_part_sort_return_orig(
     """
 
     comm = MPI.COMM_WORLD
-    table_name = f"TEST_WRITE_SORTED_RETURN_ORIG_TABLE"
+    table_name = "TEST_WRITE_SORTED_RETURN_ORIG_TABLE"
     df, sql_schema = SIMPLE_TABLES_MAP[f"SIMPLE_{PART_SORT_TABLE_BASE_NAME}"]
     if use_dict_encoding_boxing:
         table_name += "_DICT_ENCODING"
@@ -3450,9 +3466,9 @@ def test_merge_into_cow_write_api_partitioned(
             )[0]
         ]
 
-        assert set(out_fnames) == set(
+        assert set(out_fnames) == {
             os.path.join(db_schema, table_name, "data", path) for path in new_paths
-        )
+        }
 
     except Exception as e:
         passed = False

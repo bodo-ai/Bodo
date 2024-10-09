@@ -2,6 +2,7 @@
 """
 Implements wrappers to call the C++ BodoSQL array kernels for LEAD/LAG.
 """
+
 import textwrap
 
 import llvmlite.binding as ll
@@ -71,7 +72,7 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
     """
 
     # Create substitutions dictionary for func_text
-    ctx = dict()
+    ctx = {}
     if isinstance(in_col, bodo.SeriesType):  # pragma: no cover
         in_col = in_col.data
         ctx["array_conv"] = "in_col = bodo.utils.conversion.coerce_to_array(in_col)"
@@ -87,22 +88,22 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
     if is_nullable(in_col):
         ctx["return_in_col_nullable"] = "return in_col"
     else:
-        ctx[
-            "return_in_col_nullable"
-        ] = "return bodo.utils.conversion.coerce_to_array(in_col, use_nullable_array=True)"
+        ctx["return_in_col_nullable"] = (
+            "return bodo.utils.conversion.coerce_to_array(in_col, use_nullable_array=True)"
+        )
 
     # Handle necessary conversions for certain input types.
     ctx["fill_val_post_call"] = ""
     if isinstance(default_fill_val, types.NoneType):  # pragma: no cover
         ctx["fill_val"] = "fill_val = 0"
     elif is_valid_string_arg(default_fill_val):  # pragma: no cover
-        ctx[
-            "fill_val"
-        ] = "(fill_val, fill_val_len) = bodo.libs.str_ext.unicode_to_utf8_and_len(default_fill_val)"
+        ctx["fill_val"] = (
+            "(fill_val, fill_val_len) = bodo.libs.str_ext.unicode_to_utf8_and_len(default_fill_val)"
+        )
     elif is_valid_binary_arg(default_fill_val):
-        ctx[
-            "fill_val"
-        ] = "(fill_val, fill_val_len) = (ptr_to_voidptr(default_fill_val._data), len(default_fill_val))"
+        ctx["fill_val"] = (
+            "(fill_val, fill_val_len) = (ptr_to_voidptr(default_fill_val._data), len(default_fill_val))"
+        )
     elif isinstance(default_fill_val, types.StringLiteral):
         raise_bodo_error("Lead/lag does not support StringLiteral.")
     else:
@@ -116,9 +117,9 @@ def lead_lag_seq(in_col, shift_amt, default_fill_val=None, ignore_nulls=False):
             or in_col == bodo.datetime_date_array_type
             else "default_arr.ctypes"
         )
-        ctx[
-            "fill_val"
-        ] = f"default_arr = bodo.utils.conversion.coerce_scalar_to_array(default_fill_val, 1, in_col); fill_val = {data_ptr}"
+        ctx["fill_val"] = (
+            f"default_arr = bodo.utils.conversion.coerce_scalar_to_array(default_fill_val, 1, in_col); fill_val = {data_ptr}"
+        )
         ctx["fill_val_post_call"] = "dummy_use(default_arr)"
     func_text = textwrap.dedent(
         f"""

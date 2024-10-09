@@ -2,6 +2,7 @@
 Helper script to dump the content of avro files for manual inspection.
 Avro is installed by default on the dev conda lock.
 """
+
 import sys
 
 from avro.datafile import DataFileReader

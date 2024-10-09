@@ -6,6 +6,7 @@ of tests ported from Numba and possibly modified to test inside Bodo.
 Most of these tests are designed to avoid the numba pipeline and instead just
 test the desired helper function.
 """
+
 import os
 
 import numba

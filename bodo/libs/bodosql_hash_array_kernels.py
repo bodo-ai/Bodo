@@ -23,7 +23,19 @@ from numba.cpython.unicode import _kind_to_byte_width
 from numba.extending import overload, register_jitable
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    is_valid_binary_arg,
+    is_valid_boolean_arg,
+    is_valid_date_arg,
+    is_valid_float_arg,
+    is_valid_int_arg,
+    is_valid_string_arg,
+    is_valid_time_arg,
+    is_valid_tz_aware_datetime_arg,
+    is_valid_tz_naive_datetime_arg,
+    unopt_argument,
+)
 from bodo.utils.typing import raise_bodo_error
 from bodo.utils.utils import is_array_typ
 
@@ -237,7 +249,7 @@ def overload_tuple_hash(tup):
     A modified version of _tuple_hash from the numba hashing implementation at
     https://github.com/numba/numba/blob/main/numba/cpython/hashing.py
 
-    This utility calls consistent_hash as a subroutine instead of bultin hash.
+    This utility calls consistent_hash as a subroutine instead of builtin hash.
     """
 
     def impl(tup):  # pragma: no cover

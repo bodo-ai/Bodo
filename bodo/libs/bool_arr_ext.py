@@ -3,6 +3,7 @@
 but nulls are stored in bit arrays (1 bit per value) similar to Arrow's nulls.
 Pandas converts boolean array to object when NAs are introduced.
 """
+
 import operator
 
 import llvmlite.binding as ll
@@ -1006,8 +1007,8 @@ def overload_bool_fillna(A, value=None, method=None, limit=None):
 
 @overload_method(BooleanArrayType, "all")
 def overload_bool_arr_all(A, skipna=True):
-    unsupported_args = dict(skipna=skipna)
-    default_args = dict(skipna=True)
+    unsupported_args = {"skipna": skipna}
+    default_args = {"skipna": True}
     check_unsupported_args(
         "BooleanArray.to_numpy",
         unsupported_args,
@@ -1036,8 +1037,8 @@ def overload_bool_arr_all(A, skipna=True):
 @overload_method(BooleanArrayType, "to_numpy", no_unliteral=True)
 def overload_bool_arr_to_numpy(A, dtype=None, copy=False, na_value=None):
     # TODO: support the proper default value for dtype and na_value
-    unsupported_args = dict(dtype=dtype, copy=copy, na_value=na_value)
-    default_args = dict(dtype=None, copy=False, na_value=None)
+    unsupported_args = {"dtype": dtype, "copy": copy, "na_value": na_value}
+    default_args = {"dtype": None, "copy": False, "na_value": None}
     check_unsupported_args(
         "BooleanArray.to_numpy",
         unsupported_args,

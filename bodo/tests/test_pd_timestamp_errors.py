@@ -3,7 +3,6 @@
 Tests for pd.Timestamp error checking
 """
 
-
 import re
 
 import pandas as pd

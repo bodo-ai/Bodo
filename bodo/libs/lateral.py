@@ -174,13 +174,11 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
         output_this,
     ) = outputs_tup
 
-    out_typs = tuple()
+    out_typs = ()
 
     output_seq_bool = get_overload_const_bool(output_seq)
     if output_seq_bool:  # pragma: no cover
-        raise_bodo_error(
-            f"lateral_flatten outputting value SEQ not currently supported"
-        )
+        raise_bodo_error("lateral_flatten outputting value SEQ not currently supported")
 
     output_key_bool = get_overload_const_bool(output_key)
     if output_key_bool:
@@ -190,13 +188,13 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
             out_typs += (explode_col_arg.key_arr_type,)
         else:  # pragma: no cover
             raise_bodo_error(
-                f"lateral_flatten outputting value KEY not currently supported unless using"
+                "lateral_flatten outputting value KEY not currently supported unless using"
             )
 
     output_path_bool = get_overload_const_bool(output_path)
     if output_path_bool:  # pragma: no cover
         raise_bodo_error(
-            f"lateral_flatten outputting value PATH not currently supported"
+            "lateral_flatten outputting value PATH not currently supported"
         )
 
     # If the index column is included in the output, add an extra column to store it
@@ -225,7 +223,7 @@ def overload_lateral_flatten(in_table, keep_cols, explode_col, outputs, outer):
         in_arr_types[i] for i in range(len(in_arr_types)) if i in keep_cols_tup
     )
 
-    out_col_inds = MetaType(tuple(list(range(len(out_typs)))))
+    out_col_inds = MetaType(tuple(range(len(out_typs))))
 
     # Create the table type returned by the lateral operation
     out_types_0 = TableType(out_typs)

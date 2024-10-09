@@ -2,6 +2,7 @@
 """
 Support for Series.str methods
 """
+
 import operator
 import re
 
@@ -515,8 +516,8 @@ def overload_str_method_partition(S, sep=" ", expand=True):
         raise_bodo_error(
             "pd.Series.str.partition: requires expand to be a constant boolean"
         )
-    unsupported_args = dict(expand=expand)
-    arg_defaults = dict(expand=True)
+    unsupported_args = {"expand": expand}
+    arg_defaults = {"expand": True}
     check_unsupported_args(
         "Series.str.partition",
         unsupported_args,
@@ -586,7 +587,7 @@ def is_regex_unsupported(pat):
     if is_overload_constant_str(pat):
         if isinstance(pat, types.StringLiteral):
             pat = pat.literal_value
-        return any([x in pat for x in unsupported_regex])
+        return any(x in pat for x in unsupported_regex)
     else:
         return True
 
@@ -1115,7 +1116,7 @@ def overload_str_method_repeat(S_str, repeats):
         return impl
     elif is_overload_constant_list(repeats):
         list_vals = get_overload_const_list(repeats)
-        legal_array_input = all([isinstance(val, int) for val in list_vals])
+        legal_array_input = all(isinstance(val, int) for val in list_vals)
     elif is_list_like_index_type(repeats) and isinstance(repeats.dtype, types.Integer):
         legal_array_input = True
     else:  # pragma: no cover

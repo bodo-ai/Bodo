@@ -558,9 +558,7 @@ def init_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical_array = (
-    init_categorical_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_init_categorical_array = init_categorical_array_equiv
 
 
 def alloc_categorical_array(n, cat_dtype):  # pragma: no cover
@@ -589,9 +587,7 @@ def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = (
-    alloc_categorical_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = alloc_categorical_array_equiv
 
 
 # using a function for getting data to enable extending various analysis
@@ -634,7 +630,7 @@ def build_replace_dicts(to_replace, value, categories):  # pragma: no cover
     mapping to yourself serve as a deletion. This results in 3 return values:
     category_dict, codes_arr, num_deleted
     """
-    return dict(), np.empty(len(categories) + 1), 0
+    return {}, np.empty(len(categories) + 1), 0
 
 
 @overload(build_replace_dicts, no_unliteral=True)
@@ -910,7 +906,7 @@ def get_label_dict_from_categories(vals):  # pragma: no cover
     """Generates the dictionairy mapping categorical values to their integer code value, from a
     collection of collection of categorical values that may contain dupliicates.
     """
-    labels = dict()
+    labels = {}
 
     curr_ind = 0
     for i in range(len(vals)):
@@ -928,7 +924,7 @@ def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
     """Generates the dictionairy mapping categorical values to their integer code value, from a
     collection of collection of categorical values containing no dupliicates.
     """
-    labels = dict()
+    labels = {}
     for i in range(len(vals)):
         val = vals[i]
         labels[val] = i
@@ -946,8 +942,8 @@ def pd_categorical_overload(
     dtype=None,
     fastpath=False,
 ):
-    unsupported_args = dict(fastpath=fastpath)
-    arg_defaults = dict(fastpath=False)
+    unsupported_args = {"fastpath": fastpath}
+    arg_defaults = {"fastpath": False}
     check_unsupported_args("pd.Categorical", unsupported_args, arg_defaults)
 
     # categorical dtype is provided

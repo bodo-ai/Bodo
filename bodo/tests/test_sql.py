@@ -46,7 +46,6 @@ def test_write_sql_aws(chunksize, memory_leak_check):
             bodo_impl(df_input, table_name, conn, chunksize)
             bodo.barrier()
             passed = 1
-            npes = bodo.get_size()
             if bodo.get_rank() == 0:
                 try:
                     df_load = pd.read_sql(f"SELECT * FROM {table_name}", conn)

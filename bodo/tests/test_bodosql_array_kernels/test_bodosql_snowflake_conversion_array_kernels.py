@@ -8,8 +8,7 @@ import pytest
 from pandas.api.types import is_float_dtype
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed

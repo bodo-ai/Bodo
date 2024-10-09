@@ -2,6 +2,7 @@
 """Nullable integer array corresponding to Pandas IntegerArray.
 However, nulls are stored in bit arrays similar to Arrow's arrays.
 """
+
 import operator
 
 import llvmlite.binding as ll
@@ -903,8 +904,8 @@ _install_unary_ops()
 @overload_method(IntegerArrayType, "sum", no_unliteral=True)
 def overload_int_arr_sum(A, skipna=True, min_count=0):
     """A.sum() for nullable integer arrays"""
-    unsupported_args = dict(skipna=skipna, min_count=min_count)
-    arg_defaults = dict(skipna=True, min_count=0)
+    unsupported_args = {"skipna": skipna, "min_count": min_count}
+    arg_defaults = {"skipna": True, "min_count": 0}
     check_unsupported_args("IntegerArray.sum", unsupported_args, arg_defaults)
 
     def impl(A, skipna=True, min_count=0):  # pragma: no cover

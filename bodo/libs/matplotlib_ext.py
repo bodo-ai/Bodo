@@ -149,6 +149,8 @@ def _install_mpl_types():
 
 
 _install_mpl_types()
+MplFigureType = this_module.MplFigureType
+MplAxesType = this_module.MplAxesType
 
 
 def generate_matplotlib_signature(return_typ, args, kws, obj_typ=None):

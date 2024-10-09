@@ -9,6 +9,7 @@ then we would have a file structure of
 MY_DATABASE/
     MY_SCHEMA.json -- contains MY_TABLE1
 """
+
 import argparse
 import json
 import os

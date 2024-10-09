@@ -2,6 +2,7 @@
 """
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
+
 import sys
 import typing as pt
 from abc import ABCMeta, abstractmethod
@@ -277,7 +278,7 @@ def connector_usedefs(node: Connector, use_set=None, def_set=None):
 def get_copies_connector(node: Connector, typemap):
     # csv/parquet/sql/json doesn't generate copies,
     # it just kills the output columns
-    kill_set = set(v.name for v in node.out_vars)
+    kill_set = {v.name for v in node.out_vars}
     return set(), kill_set
 
 
@@ -486,7 +487,7 @@ def base_connector_remove_dead_columns(
                 # For more information see:
                 # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
 
-                node.out_used_cols = list(sorted(used_columns))
+                node.out_used_cols = sorted(used_columns)
                 # Return that this table was updated
 
     # We return false in all cases, as no changes performed
@@ -529,9 +530,7 @@ def is_chunked_connector_table_parallel(node, array_dists, node_name):
     Returns if the parallel implementation should be used for
     a connector that returns an iterator
     """
-    assert (
-        node.is_streaming
-    ), f"is_chunked_connector_table_parallel: {node_name} must be a connector in streaming mode"
+    assert node.is_streaming, f"is_chunked_connector_table_parallel: {node_name} must be a connector in streaming mode"
 
     parallel = False
     if array_dists is not None:

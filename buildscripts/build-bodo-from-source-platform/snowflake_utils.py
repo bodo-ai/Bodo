@@ -52,7 +52,7 @@ def get_current_warehouse(con):
     Returns:
         str: Name of the current warehouse
     """
-    res = con.cursor().execute(f"select CURRENT_WAREHOUSE();")
+    res = con.cursor().execute("select CURRENT_WAREHOUSE();")
     res = res.fetchall()  # Return a list of tuples
     return res[0][0]
 
@@ -68,7 +68,7 @@ def list_databases(con):
     Returns:
         List of databases.
     """
-    result = con.cursor().execute(f"show databases;")
+    result = con.cursor().execute("show databases;")
     result = result.fetchall()
     return result
 
