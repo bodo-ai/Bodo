@@ -872,8 +872,13 @@ def test_groupby_nested_array_data(memory_leak_check, df, fstr):
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
     fnames = bodo.utils.typing.MetaType((fstr,) * (num_cols - 1))
-    f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
-    f_in_cols = bodo.utils.typing.MetaType(tuple(range(1, num_cols)))
+    if fstr == "size":
+        # 'size' doesn't need input columns.
+        f_in_offsets = f_in_offsets = bodo.utils.typing.MetaType(tuple([0] * num_cols))
+        f_in_cols = bodo.utils.typing.MetaType(tuple(range(0, 0)))
+    else:
+        f_in_offsets = bodo.utils.typing.MetaType(tuple(range(num_cols)))
+        f_in_cols = bodo.utils.typing.MetaType(tuple(range(1, num_cols)))
 
     def test_groupby(df):
         groupby_state = init_groupby_state(

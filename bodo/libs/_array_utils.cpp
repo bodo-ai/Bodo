@@ -2363,6 +2363,23 @@ void DEBUG_PrintUnorderedMap(std::ostream& os,
     }
 }
 
+template <typename T>
+std::string DEBUG_VectorToString(const std::vector<T>& vec) {
+    std::string str = "[";
+    for (const T& i : vec) {
+        str += fmt::format("{}, ", std::to_string(i));
+    }
+    str += "]";
+    return str;
+}
+
+// Explicitly initialize the required templates for loader to be able to
+// find them statically.
+template std::string DEBUG_VectorToString(const std::vector<int32_t>& vec);
+template std::string DEBUG_VectorToString(const std::vector<int64_t>& vec);
+template std::string DEBUG_VectorToString(const std::vector<uint32_t>& vec);
+template std::string DEBUG_VectorToString(const std::vector<uint64_t>& vec);
+
 void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<std::shared_ptr<array_info>> const& ListArr) {
     int nCol = ListArr.size();

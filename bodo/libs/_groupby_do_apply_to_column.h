@@ -34,6 +34,16 @@ void do_apply_to_column(
         bodo::default_buffer_memory_manager());
 
 /**
+ * @brief Apply the 'size'/'COUNT(*)' aggregation and populate 'out_col' based
+ * on the grouping info.
+ *
+ * @param[in, out] out_col output column
+ * @param grp_info Grouping information relating rows to the proper group.
+ */
+void do_apply_size(const std::shared_ptr<array_info>& out_col,
+                   const grouping_info& grp_info);
+
+/**
  * @brief Apply various idx*** operations to a set of N orderby
  * columns. Depending on the values of asc_vect and na_pos_vect
  * each column is performing one of the following operations:
