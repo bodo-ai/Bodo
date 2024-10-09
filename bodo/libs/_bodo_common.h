@@ -1287,6 +1287,18 @@ std::unique_ptr<array_info> alloc_array_item(
         bodo::default_buffer_memory_manager());
 
 /**
+ * @brief Allocate array_item_array with all nulls. The inner array is required
+ * for type stability, but may be of length 0.
+ *
+ */
+std::unique_ptr<array_info> alloc_array_item_all_nulls(
+    int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    int64_t extra_null_bytes = 0,
+    bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
+    const std::shared_ptr<::arrow::MemoryManager> mm =
+        bodo::default_buffer_memory_manager());
+
+/**
  * @brief Allocate a STRUCT array
  * @param length length of the STRUCT array
  * @param child_arrays child arrays of the STRUCT array
@@ -1350,6 +1362,7 @@ std::unique_ptr<array_info> alloc_string_array(
 
 std::unique_ptr<array_info> alloc_string_array_all_nulls(
     Bodo_CTypes::CTypeEnum typ_enum, int64_t length,
+    int64_t extra_null_bytes = 0,
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager());
