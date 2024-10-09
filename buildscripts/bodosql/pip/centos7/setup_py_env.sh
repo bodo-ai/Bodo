@@ -8,10 +8,10 @@ rm -rf /opt/python/cp311-cp311
 
 # Install Python packages required to build Bodo pip package. Install for all Python
 # versions that we support
-yum update -y
+dnf update -y
 # rpm -qa | grep java-1.8.0 | xargs yum -y remove
-yum install -y java-11-openjdk-devel
-yum install -y maven
+dnf install -y java-11-openjdk-devel
+dnf install -y maven
 alternatives --set java java-11-openjdk.x86_64
 alternatives --set javac java-11-openjdk.x86_64
 for PYBIN in /opt/python/cp*/bin; do

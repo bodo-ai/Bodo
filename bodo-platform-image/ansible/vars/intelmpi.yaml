@@ -1,4 +1,4 @@
-INTELMPI_INSTALL_LINK: "https://registrationcenter-download.intel.com/akdlm/irc_nas/18016/l_mpi_oneapi_p_2021.3.1.315_offline.sh"
-INTELMPI_SCRIPT: "l_mpi_oneapi_p_2021.3.1.315_offline.sh"
+INTELMPI_INSTALL_LINK: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/364c798c-4cad-4c01-82b5-e1edd1b476af/l_mpi_oneapi_p_2021.13.1.769_offline.sh"
+INTELMPI_SCRIPT: "l_mpi_oneapi_p_2021.13.1.769_offline.sh"
 
 MPIEXEC_PATH: "/opt/intel/oneapi/mpi/latest/bin/mpiexec"

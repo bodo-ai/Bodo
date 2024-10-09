@@ -133,8 +133,8 @@ To test the images with our platform when making changes to the images, do the f
 
 ## Source Image OS
 
-- AMI: Amazon Linux 2 (2.0.20221004.0)
-- VMI: CentOS (OpenLogic CentOS 7.9 Gen2)
+- AMI: RockyLinux 9 x86_64 
+- VMI: AlmaLinux 9 x86_64 
 
 ## Local build
 

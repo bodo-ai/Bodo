@@ -33,25 +33,30 @@
   tags:
     - worker_deps
 
+- name: WORKER_DEPS | Install Slurm Dependencies 
+  shell: |
+      dnf install -y mariadb-server mariadb-devel
+      dnf install -y netcat
+      dnf install -y rng-tools
+  tags:
+    - worker_deps
+
 - name: WORKER_DEPS | Install Slurm binaries
-  command:
-    cmd: |
-      yum install mariadb-server mariadb-devel netcat -y
-      yum install rng-tools -y
-      yum localinstall -y \
-        /tmp/slurm_bin/slurm-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-perlapi-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-devel-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-example-configs-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-slurmctld-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-slurmd-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-slurmdbd-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-libpmi-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-torque-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-openlava-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-contribs-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-pam_slurm-{{ slurm_version }}-1.amzn2.x86_64.rpm \
-        /tmp/slurm_bin/slurm-slurmrestd-{{ slurm_version }}-1.amzn2.x86_64.rpm
+  shell: |
+      dnf install -y \
+        /tmp/slurm_bin/slurm-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-perlapi-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-devel-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-example-configs-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmctld-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmd-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmdbd-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-libpmi-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-torque-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-openlava-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-contribs-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-pam_slurm-{{ slurm_version }}-1.el9.x86_64.rpm \
+        /tmp/slurm_bin/slurm-slurmrestd-{{ slurm_version }}-1.el9.x86_64.rpm
   tags:
     - worker_deps
 
@@ -80,6 +85,8 @@
     systemctl status mariadb
 
     mysql -e "GRANT ALL ON slurm_acct_db.* TO 'slurm'@'localhost' IDENTIFIED BY '1234' with grant option;"
+    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password;"
+    mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('');"
     mysql -e "SHOW VARIABLES LIKE 'have_innodb';"
     mysql -e "FLUSH PRIVILEGES;"
     mysql -e "CREATE DATABASE slurm_acct_db;"
