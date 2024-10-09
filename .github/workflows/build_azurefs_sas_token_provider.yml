@@ -1,0 +1,42 @@
+name: Build AzureFS-SAS-Token-Provider
+
+on:
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    runs-on: [self-hosted, small]
+    timeout-minutes: 240
+
+    env:
+      BODO_CHANNEL_NAME: 'bodo.ai'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup up Micromamba and Install Dependencies
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: sas_build
+          create-args: boa anaconda-client -c conda-forge
+          cache-environment: true
+          generate-run-shell: true
+          init-shell: bash
+          condarc: |
+            channels:
+              - conda-forge
+            remote_max_retries: 5
+            remote_backoff_factor: 60
+            aggressive_update_packages: []
+
+      - name: 'Set Secret File Permissions and Conda Build and Publish Bodo-AzureFS-SAS-Token-Provider Binary to Artifactory'
+        run: |
+          set -eo pipefail
+          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
+          sudo chmod a+r $HOME/secret_file
+
+          artifactory_channel="bodo.ai"
+          echo "artifactory_channel: $artifactory_channel"
+          ./buildscripts/azurefs-sas-token-provider/publish_binary.sh $artifactory_channel
+        shell: bash
