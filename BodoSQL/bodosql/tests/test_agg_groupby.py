@@ -632,7 +632,7 @@ def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
     """
 
     # Note that duplicate grouping sets do have an effect on the output
-    query = "select A, B, C, SUM(D) from table1 GROUP BY GROUPING SETS((A, B), (), (), (A, B), (C, B), (A))"
+    query = "select A, B, C, SUM(D), COUNT(*) from table1 GROUP BY GROUPING SETS((A, B), (), (), (A, B), (C, B), (A))"
 
     check_query(
         query,

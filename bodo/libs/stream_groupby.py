@@ -32,6 +32,7 @@ from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
     MetaType,
+    dtype_to_array_type,
     error_on_unsupported_streaming_arrays,
     is_overload_none,
     to_nullable_type,
@@ -437,21 +438,29 @@ class GroupbyStateType(StreamingStateType):
         out_arr_types = []
         if self.fnames != ("min_row_number_filter",):
             for i, f_name in enumerate(self.fnames):
-                if f_name != "grouping":
+                if f_name == "size":
+                    assert self.f_in_offsets[i + 1] == self.f_in_offsets[i]
+                elif f_name != "grouping":
                     assert (
                         self.f_in_offsets[i + 1] == self.f_in_offsets[i] + 1
                     ), "only functions with single input column expect grouping supported in streaming groupby currently"
-                # Note: Use f_in_cols because we need the original column location before reordering
-                # for C++.
-                in_type = self.build_table_type.arr_types[
-                    self.f_in_cols[self.f_in_offsets[i]]
-                ]
-                (
-                    out_type,
-                    err_msg,
-                ) = bodo.hiframes.pd_groupby_ext.get_groupby_output_dtype(
-                    in_type, f_name
-                )
+
+                out_type, err_msg = None, "ok"
+                if f_name == "size":
+                    # There's no input column
+                    out_type = dtype_to_array_type(types.int64)
+                else:
+                    # Note: Use f_in_cols because we need the original column location before reordering
+                    # for C++.
+                    in_type = self.build_table_type.arr_types[
+                        self.f_in_cols[self.f_in_offsets[i]]
+                    ]
+                    (
+                        out_type,
+                        err_msg,
+                    ) = bodo.hiframes.pd_groupby_ext.get_groupby_output_dtype(
+                        in_type, f_name
+                    )
                 assert err_msg == "ok", "Function typing failed in streaming groupby"
                 out_arr_types.append(out_type)
             return bodo.TableType(tuple(self.key_types + out_arr_types))
@@ -829,10 +838,13 @@ def _get_init_groupby_state_type(
             # If there are any semi-structured arrays, we only support first, count and size:
             supported_nested_agg_funcs = ["first", "count", "size"]
             for idx in output_type.f_in_offsets[i : i + 1]:
+                # 'size' doesn't require an input column, so we don't need to check the array type.
+                if output_type.fnames[i] == "size":
+                    continue
                 # Note: Use f_in_cols because we need the original column location before reordering
                 # for C++.
                 col_arr_type = output_type.build_table_type.arr_types[
-                    output_type.f_in_cols[output_type.f_in_offsets[idx]]
+                    output_type.f_in_cols[idx]
                 ]
                 if (
                     isinstance(

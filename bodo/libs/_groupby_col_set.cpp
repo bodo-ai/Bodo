@@ -14,6 +14,7 @@
 #include "_groupby_mode.h"
 #include "_groupby_update.h"
 #include "_window_compute.h"
+#include "fmt/format.h"
 
 /**
  * This file creates the "col set" infrastructure. A col set is the
@@ -95,6 +96,32 @@ const std::vector<std::shared_ptr<array_info>> BasicColSet::getOutputColumns() {
 
     std::shared_ptr<array_info> out_col = mycols->at(0);
     return {out_col};
+}
+
+// ############################### Size ##############################
+
+SizeColSet::SizeColSet(bool combine_step, bool use_sql_rules)
+    : BasicColSet(nullptr, Bodo_FTypes::size, combine_step, use_sql_rules) {}
+SizeColSet::~SizeColSet(){};
+
+void SizeColSet::alloc_running_value_columns(
+    size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
+    bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm) {
+    out_cols.push_back(alloc_array_top_level(
+        num_groups, 1, 1, bodo_array_type::NUMPY, Bodo_CTypes::INT64, -1, 0, 0,
+        false, false, false, pool, std::move(mm)));
+}
+
+void SizeColSet::setInCol(
+    std::vector<std::shared_ptr<array_info>> new_in_cols) { /*NOP*/
+}
+
+void SizeColSet::update(const std::vector<grouping_info>& grp_infos,
+                        bodo::IBufferPool* const pool,
+                        std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::vector<std::shared_ptr<array_info>> aux_cols;
+    aggfunc_output_initialize(update_cols[0], ftype, use_sql_rules);
+    do_apply_size(update_cols[0], grp_infos[0]);
 }
 
 // ############################## First ##############################
@@ -2086,6 +2113,13 @@ std::unique_ptr<BasicColSet> makeColSet(
         in_arr_types_vec) {
     BasicColSet* colset;
 
+    if (ftype != Bodo_FTypes::size && ftype != Bodo_FTypes::window &&
+        in_cols.size() == 0) {
+        throw std::runtime_error(fmt::format(
+            "Only 'size' and 'window' can have no input columns. Provided "
+            "ftype: {} must have one or more input columns.",
+            ftype));
+    }
     if ((ftype != Bodo_FTypes::window &&
          ftype != Bodo_FTypes::min_row_number_filter &&
          ftype != Bodo_FTypes::listagg && ftype != Bodo_FTypes::array_agg &&
@@ -2093,7 +2127,7 @@ std::unique_ptr<BasicColSet> makeColSet(
          ftype != Bodo_FTypes::percentile_cont &&
          ftype != Bodo_FTypes::percentile_disc &&
          ftype != Bodo_FTypes::object_agg) &&
-        in_cols.size() != 1) {
+        in_cols.size() > 1) {
         throw std::runtime_error(
             "Only listagg, array_agg, percentile_cont, percentile_disc, "
             "object_agg, window functions and min_row_number_filter can have "
@@ -2215,6 +2249,9 @@ std::unique_ptr<BasicColSet> makeColSet(
             break;
         case Bodo_FTypes::first:
             colset = new FirstColSet(in_cols[0], do_combine, use_sql_rules);
+            break;
+        case Bodo_FTypes::size:
+            colset = new SizeColSet(do_combine, use_sql_rules);
             break;
         default:
             colset =

@@ -2823,6 +2823,19 @@ void do_apply_to_column(const std::shared_ptr<array_info>& in_col,
         std::string(GetDtype_as_string(in_col->dtype)));
 }
 
+void do_apply_size(const std::shared_ptr<array_info>& out_col,
+                   const grouping_info& grp_info) {
+    assert(out_col->arr_type == bodo_array_type::NUMPY ||
+           out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL);
+    assert(out_col->length == grp_info.num_groups);
+    for (const int64_t& i_grp : grp_info.row_to_group) {
+        if (i_grp != -1) {
+            size_agg<int64_t, Bodo_CTypes::INT64>::apply(
+                getv<int64_t, bodo_array_type::NUMPY>(out_col, i_grp));
+        }
+    }
+}
+
 void idx_n_columns_apply(std::shared_ptr<array_info> out_arr,
                          std::vector<std::shared_ptr<array_info>>& orderby_arrs,
                          const std::vector<bool>& asc_vect,

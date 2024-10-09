@@ -948,8 +948,6 @@ public class AggCodeGen {
                   + aggCalls.get(i).getAggregation().getKind().toString()
                   + " instead.");
         }
-        cols.add(firstKeyColumnIndex);
-        length += 1;
       }
       offsets.add(new Expr.IntegerLiteral(length));
     }
