@@ -25,6 +25,7 @@ import numba.core.boxing
 import numba.core.inline_closurecall
 import numba.core.lowering
 import numba.core.runtime.context
+import numba.core.typed_passes
 import numba.core.typing.listdecl
 import numba.np.linalg
 import numba.np.ufunc.array_exprs as array_exprs
@@ -2911,7 +2912,7 @@ def _lower_call_ExternalFunction(self, fnty, expr, signature):
     from numba.core import funcdesc
 
     import bodo
-    from bodo.transforms.typeinfer import ExternalFunctionErrorChecked
+    from bodo.transforms.type_inference.typeinfer import ExternalFunctionErrorChecked
 
     # Handle a named external function
     self.debug_print("# external function")
@@ -2955,8 +2956,8 @@ numba.core.lowering.Lower._lower_call_ExternalFunction = _lower_call_ExternalFun
 
 
 def CallConstraint_resolve(self, typeinfer, typevars, fnty):
-    from bodo.transforms.native_typer import bodo_resolve_call
-    from bodo.transforms.typeinfer import BodoFunction
+    from bodo.transforms.type_inference.native_typer import bodo_resolve_call
+    from bodo.transforms.type_inference.typeinfer import BodoFunction
 
     assert fnty
     context = typeinfer.context
@@ -6599,3 +6600,90 @@ if _check_numba_change:  # pragma: no cover
 
 numba.core.typing.npydecl._sequence_of_arrays = _sequence_of_arrays
 numba.np.arrayobj._sequence_of_arrays = _sequence_of_arrays
+
+
+numba_type_inference_stage = numba.core.typed_passes.type_inference_stage
+
+
+# Bodo change: replace type inference with native version (with fallback to Numba)
+def type_inference_stage(
+    typingctx, targetctx, interp, args, return_type, locals={}, raise_errors=True
+):
+    import bodo
+    from bodo.transforms.type_inference.native_typer import bodo_type_inference
+
+    # Use Numba if native type inference is disabled
+    if not bodo.bodo_use_native_type_inference:
+        return numba_type_inference_stage(
+            typingctx, targetctx, interp, args, return_type, locals, raise_errors
+        )
+
+    try:
+        return bodo_type_inference(interp, args, return_type, locals, raise_errors)
+    except Exception as e:
+        if bodo.user_logging.get_verbose_level() >= 2:
+            bodo.user_logging.log_message(
+                "Native type inference: " + interp.func_id.func_name,
+                "Native type inference failed, falling back to Numba. Error:\n"
+                + str(e),
+            )
+
+        return numba_type_inference_stage(
+            typingctx, targetctx, interp, args, return_type, locals, raise_errors
+        )
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typed_passes.type_inference_stage)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "813ca762e544d8e70506cac5031581d7a2bf725c2af5321feed1b344459fd486"
+    ):
+        warnings.warn("numba.core.typed_passes.type_inference_stage has changed")
+
+
+numba.core.typed_passes.type_inference_stage = type_inference_stage
+
+
+# Add a hook for Bodo TypeManager in Numba's TypeManager to initialize Bodo native
+# typer's cast rules automatically (without reimplemeting rule handling, type graph, ...).
+# https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/typeconv/rules.py#L15
+# https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/typeconv/castgraph.py#L69
+# https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/typeconv/typeconv.py#L40
+def set_compatible(self, fromty, toty, by):
+    from numba.core.typeconv import _typeconv
+
+    from bodo.transforms.type_inference.native_typer import set_compatible_types
+
+    # Bodo change: add TypeManager hook
+    try:
+        set_compatible_types(fromty, toty, by)
+    except TypeError as e:
+        # skip types that are not supported in native typer yet
+        assert "unbox_type" in str(e), "set_compatible: invalid TypeError"
+
+    code = self._conversion_codes[by]
+    _typeconv.set_compatible(self._ptr, fromty._code, toty._code, code)
+    # Ensure the types don't die, otherwise they may be recreated with
+    # other type codes and pollute the hash table.
+    self._types.add(fromty)
+    self._types.add(toty)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typeconv.typeconv.TypeManager.set_compatible)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c88bb5e21b2916c86f9c040ab9611afde9eacb8b3be21b48f446c576562eab51"
+    ):
+        warnings.warn(
+            "numba.core.typeconv.typeconv.TypeManager.set_compatible has changed"
+        )
+
+
+numba.core.typeconv.typeconv.TypeManager.set_compatible = set_compatible
+
+# Reinitialize cast rules after installing hook (since first run is at Numba startup)
+numba.core.typeconv.rules._init_casting_rules(
+    numba.core.typeconv.rules.default_type_manager
+)

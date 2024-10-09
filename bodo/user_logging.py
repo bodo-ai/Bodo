@@ -74,15 +74,17 @@ def set_verbose_level(level):
     global _bodo_verbose_level
     if not isinstance(level, int) or level < 0:
         raise TypeError("set_verbose_level(): requires an integer level >= 0")
+
     _bodo_verbose_level = level
-    # If BodoSQL exists, enable logging there as as well.
-    try:
+
+    # If BodoSQL is imported, update its logging level as well.
+    # NOTE: Avoiding extra BodoSQL import if not imported already to reduce overheads.
+    # BodoSQL picks up the logging level during import.
+    # TODO: move to bodosql if possible
+    if "bodosql" in sys.modules:
         import bodosql.py4j_gateway
 
         bodosql.py4j_gateway.configure_java_logging(level)
-    except ImportError:
-        # Ignore if we don't have bodosql installed.
-        pass
 
 
 def restore_default_bodo_verbose_logger():
@@ -127,10 +129,12 @@ def log_message(header, msg, *args, **kws):
     Bodo only information on rank 0 to avoid issues with
     file collisions.
     """
-    import bodo
+    # NOTE: avoiding bodo.get_rank() which uses the compiler to allow using the logger
+    # inside the compiler
+    from bodo.mpi4py import MPI
 
     # Avoid putting a mutable value as a default argument.
-    if bodo.get_rank() == 0:
+    if MPI.COMM_WORLD.Get_rank() == 0:
         logger = get_current_bodo_verbose_logger()
         # Surround messages in some formatting
         equal_str = "\n" + ("=" * 80)

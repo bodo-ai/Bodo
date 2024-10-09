@@ -7,7 +7,7 @@ from numba.core import types
 
 import bodo
 from bodo.ext import query_profile_collector_cpp
-from bodo.transforms.typeinfer import ExternalFunctionErrorChecked
+from bodo.transforms.type_inference.typeinfer import ExternalFunctionErrorChecked
 
 ll.add_symbol(
     "init_query_profile_collector_py_entry",

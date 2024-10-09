@@ -611,9 +611,46 @@ int32_t sync_is_last_non_blocking(IsLastState *state, int32_t local_is_last) {
     }
 }
 
+/**
+ * @brief Wrapper around get_rank() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *get_rank_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "get_rank() does not take arguments");
+        return NULL;
+    }
+    PyObject *rank_obj = PyLong_FromLong(dist_get_rank());
+    return rank_obj;
+}
+
+/**
+ * @brief Wrapper around finalize() to be called from Python (avoids Numba JIT
+ overhead and makes compiler debugging easier by eliminating extra compilation)
+ *
+ */
+static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError, "finalize() does not take arguments");
+        return NULL;
+    }
+    PyObject *ret_obj = PyLong_FromLong(finalize());
+    return ret_obj;
+}
+
+static PyMethodDef ext_methods[] = {
+#define declmethod(func) \
+    { #func, (PyCFunction)func, METH_VARARGS, NULL }
+    declmethod(get_rank_py_wrapper),
+    declmethod(finalize_py_wrapper),
+    {NULL},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
-    MOD_DEF(m, "hdist", "No docs", NULL);
+    MOD_DEF(m, "hdist", "No docs", ext_methods);
     if (m == NULL)
         return NULL;
 
@@ -756,7 +793,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, c_alltoallv);
     SetAttrStringFromVoidPtr(m, c_alltoall);
     SetAttrStringFromVoidPtr(m, allgather);
-    SetAttrStringFromVoidPtr(m, finalize);
     SetAttrStringFromVoidPtr(m, oneD_reshape_shuffle);
     SetAttrStringFromVoidPtr(m, permutation_int);
     SetAttrStringFromVoidPtr(m, permutation_array_index);
