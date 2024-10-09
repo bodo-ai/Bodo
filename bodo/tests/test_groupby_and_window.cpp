@@ -62,14 +62,21 @@ std::shared_ptr<array_info> make_all_null_arr(size_t n) {
 }
 
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
-    requires(string_array<ArrType> || dict_array<ArrType> ||
-             array_item_array<ArrType>)
+    requires(string_array<ArrType>)
 std::shared_ptr<array_info> make_all_null_arr(size_t n) {
-    std::shared_ptr<array_info> arr = make_arr<ArrType, DType>(n);
-    for (size_t i = 0; i < n; i++) {
-        arr->set_null_bit(i, false);
-    }
-    return arr;
+    return alloc_string_array_all_nulls(DType, n);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(dict_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_dict_string_array_all_nulls(n);
+}
+
+template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>
+    requires(array_item_array<ArrType>)
+std::shared_ptr<array_info> make_all_null_arr(size_t n) {
+    return alloc_array_item_all_nulls(n, alloc_numpy(0, DType));
 }
 
 // Create an array of the desired type with all 0 elements. Only works

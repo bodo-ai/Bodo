@@ -715,6 +715,22 @@ std::unique_ptr<array_info> alloc_array_item(
         std::vector<std::shared_ptr<array_info>>({inner_arr}));
 }
 
+std::unique_ptr<array_info> alloc_array_item_all_nulls(
+    int64_t n_arrays, std::shared_ptr<array_info> inner_arr,
+    int64_t extra_null_bytes, bodo::IBufferPool* const pool,
+    const std::shared_ptr<::arrow::MemoryManager> mm) {
+    std::unique_ptr<array_info> arr = alloc_array_item(
+        n_arrays, inner_arr, extra_null_bytes, pool, std::move(mm));
+    int64_t n_bytes = ((n_arrays + 7) >> 3) + extra_null_bytes;
+    // set to all null
+    memset(arr->null_bitmask<bodo_array_type::ARRAY_ITEM>(), 0x00, n_bytes);
+    // set offsets to all 0
+    offset_t* offsets_ptr =
+        (offset_t*)arr->data1<bodo_array_type::ARRAY_ITEM>();
+    memset(offsets_ptr, 0, (n_arrays + 1) * sizeof(offset_t));
+    return arr;
+}
+
 std::unique_ptr<array_info> alloc_struct(
     int64_t length, std::vector<std::shared_ptr<array_info>> child_arrays,
     int64_t extra_null_bytes, bodo::IBufferPool* const pool,
