@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the groupby"""
+
 import ctypes
 import operator
 import types as pytypes
@@ -1350,9 +1351,9 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
     return [], post
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    Aggregate
-] = aggregate_array_analysis
+numba.parfors.array_analysis.array_analysis_extensions[Aggregate] = (
+    aggregate_array_analysis
+)
 
 
 def aggregate_distributed_analysis(aggregate_node, array_dists):
@@ -1398,9 +1399,9 @@ def aggregate_distributed_analysis(aggregate_node, array_dists):
         array_dists[col_var.name] = out_dist
 
 
-distributed_analysis.distributed_analysis_extensions[
-    Aggregate
-] = aggregate_distributed_analysis
+distributed_analysis.distributed_analysis_extensions[Aggregate] = (
+    aggregate_distributed_analysis
+)
 
 
 def build_agg_definitions(agg_node, definitions=None):
@@ -1979,9 +1980,7 @@ def gen_general_udf_cb(
     groupby.agg().
     """
     col_offset = n_keys
-    out_col_offsets = (
-        []
-    )  # offsets of general UDF output columns in the table received from C++
+    out_col_offsets = []  # offsets of general UDF output columns in the table received from C++
     for i, f in enumerate(allfuncs):
         if f.ftype == "gen_udf":
             out_col_offsets.append(col_offset)
@@ -2490,9 +2489,7 @@ def gen_top_level_agg_func(
                 ), "Internal error: Categorical output requires a groupby function with 1 input column"
                 in_col = in_cols[0]
             else:
-                assert (
-                    agg_node.return_key
-                ), "Internal error: groupby key output with unknown categoricals detected, but return_key is False"
+                assert agg_node.return_key, "Internal error: groupby key output with unknown categoricals detected, but return_key is False"
                 key_no = i - out_key_offset
                 in_col = agg_node.in_key_inds[key_no]
             unknown_cat_out_inds.append(i)
@@ -2638,9 +2635,9 @@ def agg_table_column_use(
             out_used_cols = {0}
 
     # key columns are always used
-    table_in_key_set = set(
+    table_in_key_set = {
         i for i in agg_node.in_key_inds if i < agg_node.n_in_table_arrays
-    )
+    }
 
     # get used input data columns
     in_used_cols = set()
@@ -3103,7 +3100,7 @@ def get_udf_func_struct(
             # First try to generate a regular UDF with one parfor and reduction
             # variables
             regular_udf_gen.add_udf(in_col_typ, func)
-        except:
+        except Exception:
             # Assume this UDF is a general function
             # NOTE that if there are general UDFs the groupby parallelization
             # will be less efficient

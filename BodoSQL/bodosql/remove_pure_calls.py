@@ -2,6 +2,7 @@
 """
 File used to handle the logic for BodoSQL specific calls in the BodoSQL package.
 """
+
 import typing as pt
 
 import numba.core.ir_utils

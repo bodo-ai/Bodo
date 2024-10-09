@@ -1,8 +1,9 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Checks the Library of BodoSQL functions that are used for performing "AND" and "OR"
-    operations involving potentially null values
+Checks the Library of BodoSQL functions that are used for performing "AND" and "OR"
+operations involving potentially null values
 """
+
 import pytest
 
 import bodo
@@ -15,9 +16,10 @@ def test_and_non_null_inputs():
     for a in [True, False]:
         for b in [True, False]:
             assert (
-                a and b
-            ) == bodosql.libs.nullchecked_logical_operators.mysql_nullchecking_scalar_and(
-                a, b
+                (a and b)
+                == bodosql.libs.nullchecked_logical_operators.mysql_nullchecking_scalar_and(
+                    a, b
+                )
             )
 
 
@@ -27,9 +29,10 @@ def test_or_non_null_inputs():
     for a in [True, False]:
         for b in [True, False]:
             assert (
-                a or b
-            ) == bodosql.libs.nullchecked_logical_operators.mysql_nullchecking_scalar_or(
-                a, b
+                (a or b)
+                == bodosql.libs.nullchecked_logical_operators.mysql_nullchecking_scalar_or(
+                    a, b
+                )
             )
 
 

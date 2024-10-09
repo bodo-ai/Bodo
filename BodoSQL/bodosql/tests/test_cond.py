@@ -2,6 +2,7 @@
 """
 Test correctness of SQL conditional functions on BodoSQL
 """
+
 import copy
 import datetime
 from decimal import Decimal
@@ -40,7 +41,7 @@ def test_coalesce_cols_basic(spark_info, basic_df, memory_leak_check):
 def test_coalesce_128_int(spark_info, memory_leak_check):
     """tests the coalesce function with a NUMBER(38, 18) column and integer
     scalars."""
-    query = f"select COALESCE(A, 1) from table1"
+    query = "select COALESCE(A, 1) from table1"
 
     @bodo.jit
     def make_d128_df():
@@ -68,7 +69,7 @@ def test_coalesce_128_int(spark_info, memory_leak_check):
 def test_coalesce_128_float(memory_leak_check):
     """tests the coalesce function with a NUMBER(38, 18) column and float
     scalars."""
-    query = f"select COALESCE(A, -0.1) from table1"
+    query = "select COALESCE(A, -0.1) from table1"
 
     @bodo.jit
     def make_d128_df():
@@ -105,7 +106,7 @@ def test_coalesce_128_float(memory_leak_check):
 
 def test_coalesce_timestamp_date(memory_leak_check):
     """Tests the coalesce function on a timestamp column and the current date"""
-    query = f"select COALESCE(A, current_date()) from table1"
+    query = "select COALESCE(A, current_date()) from table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -666,18 +667,16 @@ def test_ifnull_multitable(
 ):
     """Checks ifnull function with columns from multiple tables"""
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            or x in (np.float32, np.float64)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        or x in (np.float32, np.float64)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
@@ -829,26 +828,22 @@ def test_nullif_case(bodosql_nullable_numeric_types, spark_info, memory_leak_che
 def test_nullif_multi_table(join_dataframes, spark_info, memory_leak_check):
     """Checks nullif function with columns from multiple tables"""
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["X"]
     else:

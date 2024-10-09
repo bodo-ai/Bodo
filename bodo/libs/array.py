@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tools for handling bodo arrays, e.g. passing to C/C++ code
-"""
+"""Tools for handling bodo arrays, e.g. passing to C/C++ code"""
+
 import warnings
 from collections import defaultdict
 
@@ -2141,8 +2141,8 @@ def cpp_table_to_py_data(
     func_text = "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
 
     if isinstance(py_table_type, bodo.TableType):
-        func_text += f"  py_table = init_table(py_table_type, False)\n"
-        func_text += f"  py_table = set_table_len(py_table, n_rows_t)\n"
+        func_text += "  py_table = init_table(py_table_type, False)\n"
+        func_text += "  py_table = set_table_len(py_table, n_rows_t)\n"
 
         for typ, blk in py_table_type.type_to_blk.items():
             out_inds = [
@@ -2175,7 +2175,7 @@ def cpp_table_to_py_data(
             func_text += f"  for i in range(len(arr_list_{blk})):\n"
             func_text += f"    cpp_ind_{blk} = out_inds_{blk}[i]\n"
             func_text += f"    if cpp_ind_{blk} == -1:\n"
-            func_text += f"      continue\n"
+            func_text += "      continue\n"
             func_text += f"    arr_{blk} = array_from_cpp_table(cpp_table, cpp_ind_{blk}, {out_type})\n"
             func_text += f"    arr_list_{blk}[i] = arr_{blk}\n"
             func_text += (
@@ -2186,11 +2186,11 @@ def cpp_table_to_py_data(
         # regular array case
         out_ind = py_to_cpp_inds.get(0, -1)
         if out_ind != -1:
-            glbls[f"arr_typ_arg0"] = py_table_type
-            out_type = f"arr_typ_arg0"
+            glbls["arr_typ_arg0"] = py_table_type
+            out_type = "arr_typ_arg0"
             if type_has_unknown_cats(py_table_type):
                 if is_overload_none(unknown_cat_arrs_t):
-                    out_type = f"out_types_t[0]"
+                    out_type = "out_types_t[0]"
                 else:
                     out_type = f"unknown_cat_arrs_t[{cat_arr_inds[0]}]"
             func_text += (
@@ -2465,7 +2465,7 @@ def gen_py_data_to_cpp_table_impl(
             func_text += f"  for i in range(len(arr_list_{blk})):\n"
             func_text += f"    out_arr_ind_{blk} = out_inds_{blk}[i]\n"
             func_text += f"    if out_arr_ind_{blk} == -1:\n"
-            func_text += f"      continue\n"
+            func_text += "      continue\n"
             func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
             func_text += f"    ensure_column_unboxed(py_table, arr_list_{blk}, i, arr_ind_{blk})\n"
             func_text += f"    cpp_arr_list[out_arr_ind_{blk}] = array_to_info(arr_list_{blk}[i])\n"
@@ -2488,7 +2488,7 @@ def gen_py_data_to_cpp_table_impl(
                     f"  cpp_arr_list[{out_ind}] = array_to_info(extra_arrs_tup[{i}])\n"
                 )
 
-    func_text += f"  return arr_info_list_to_table(cpp_arr_list)\n"
+    func_text += "  return arr_info_list_to_table(cpp_arr_list)\n"
 
     glbls.update(
         {
@@ -2634,10 +2634,10 @@ def overload_union_tables(table_tup, drop_duplicates, out_table_typ, is_parallel
     tuple_inputs = ", ".join(tables)
     func_text += f"  out_cpp_table = bodo.libs.array.union_tables_cpp([{tuple_inputs}], drop_duplicates, is_parallel)\n"
     # Step 3 convert the C++ table to a Python table.
-    func_text += f"  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ, 0)\n"
+    func_text += "  out_py_table = bodo.libs.array.cpp_table_to_py_table(out_cpp_table, out_col_inds, out_table_typ, 0)\n"
     # Step 4 free the output C++ table without modifying the refcounts.
-    func_text += f"  bodo.libs.array.delete_table(out_cpp_table)\n"
-    func_text += f"  return out_py_table\n"
+    func_text += "  bodo.libs.array.delete_table(out_cpp_table)\n"
+    func_text += "  return out_py_table\n"
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl"]

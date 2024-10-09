@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Numba extension support for datetime.date objects and their arrays.
-"""
+"""Numba extension support for datetime.date objects and their arrays."""
+
 import datetime
 import operator
 import warnings
@@ -885,9 +885,7 @@ def alloc_datetime_date_array_equiv(self, scope, equiv_set, loc, args, kws):
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_date_array = (
-    alloc_datetime_date_array_equiv
-)
+ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_date_array = alloc_datetime_date_array_equiv
 
 
 @overload(operator.getitem, no_unliteral=True)
@@ -1032,8 +1030,9 @@ def create_cmp_op_overload(op):
         if lhs == datetime_date_type and rhs == datetime_date_type:
 
             def impl(lhs, rhs):  # pragma: no cover
-                ord, ord2 = cast_datetime_date_to_int(lhs), cast_datetime_date_to_int(
-                    rhs
+                ord, ord2 = (
+                    cast_datetime_date_to_int(lhs),
+                    cast_datetime_date_to_int(rhs),
                 )
                 return op(ord, ord2)
 

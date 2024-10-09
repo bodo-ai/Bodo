@@ -1,5 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests scikit-learn error checking for unsupported cases """
+"""Tests scikit-learn error checking for unsupported cases"""
 
 import numpy as np
 import pandas as pd

@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for array of list of fixed size items.
-"""
+"""Tests for array of list of fixed size items."""
+
 import datetime
 
 import numpy as np

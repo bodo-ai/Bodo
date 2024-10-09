@@ -144,7 +144,7 @@ def test_tpcxbb_q06(tpcxbb_data, spark_info, memory_leak_check):
         """
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
 
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,
@@ -244,7 +244,7 @@ def test_tpcxbb_q09(tpcxbb_data, spark_info, memory_leak_check):
 
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
 
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,
@@ -285,7 +285,7 @@ def test_tpcxbb_q11(tpcxbb_data, spark_info, memory_leak_check):
 
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
 
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,
@@ -329,7 +329,7 @@ def test_tpcxbb_q12(tpcxbb_data, spark_info, memory_leak_check):
 
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
 
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,
@@ -360,7 +360,7 @@ def test_tpcxbb_q14(tpcxbb_data, spark_info, memory_leak_check):
 		) sum_am_pm
 	"""
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,

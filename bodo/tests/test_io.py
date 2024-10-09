@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests I/O for CSV, NP IO, etc."""
+
 import io
 import os
 import subprocess
@@ -2577,7 +2578,6 @@ class TestIO(unittest.TestCase):
             data_structure.to_csv(fname)
 
         bodo_func = bodo.jit(test_impl)
-        n = 111
         hp_fname = "test_write_csv1_bodo.csv"
         pd_fname = "test_write_csv1_pd.csv"
         with ensure_clean(pd_fname), ensure_clean(hp_fname):

@@ -41,7 +41,6 @@ def deep_learning(X_train, y_train, X_test, y_test):
             bodo.get_rank(), len(X_train), len(y_train)
         )
     )
-    accuracy = 0.0
     if hvd.is_initialized():  # ranks not using horovod (e.g. non-gpu ranks) skip
         dataset = tf.data.Dataset.from_tensor_slices(
             (tf.expand_dims(X_train, 3), y_train)

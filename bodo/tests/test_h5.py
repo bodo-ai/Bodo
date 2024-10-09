@@ -214,7 +214,7 @@ def test_h5_remove_dead(datapath, memory_leak_check):
 
     def impl():
         f = h5py.File(fname, "r")
-        X = f["points"][:, :]
+        f["points"][:, :]
         f.close()
 
     bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)

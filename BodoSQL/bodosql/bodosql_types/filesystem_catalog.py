@@ -2,6 +2,7 @@
 catalog contains all information needed to connect use the Hadoop, POSIX or S3 Filesystem
 for organizing tables.
 """
+
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
 from numba.core import types
 from numba.extending import (

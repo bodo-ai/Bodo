@@ -1,7 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL string functions
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL string functions"""
 
 import uuid
 from builtins import round as py_round
@@ -12,8 +10,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
-from bodo.libs.bodosql_array_kernels import vectorized_sol
+from bodo.libs.bodosql_array_kernels import is_valid_string_arg, vectorized_sol
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,
@@ -648,7 +645,8 @@ def test_initcap(args, memory_leak_check):
     [
         pytest.param(
             pd.Series(
-                [" r 32r23 ", "   ", "3r", "", "R#2r3", "🟥🟧🟨🟩🟦🟪 foo 🟥🟧🟨🟩🟦🟪"] * 2
+                [" r 32r23 ", "   ", "3r", "", "R#2r3", "🟥🟧🟨🟩🟦🟪 foo 🟥🟧🟨🟩🟦🟪"]
+                * 2
                 + [None] * 4
             ).values,
             id="vector",
@@ -1412,7 +1410,9 @@ def test_repeat(args, memory_leak_check):
     [
         pytest.param(
             (
-                pd.Series(pd.array(["alphabet", "s🟦o🟦u🟦p", "is", "delicious", None])),
+                pd.Series(
+                    pd.array(["alphabet", "s🟦o🟦u🟦p", "is", "delicious", None])
+                ),
                 pd.Series(pd.array(["a", "", "4", "ic", " "])),
                 pd.Series(pd.array(["_", "X", "5", "", "."])),
             ),
@@ -1470,8 +1470,12 @@ def test_replace(args, memory_leak_check):
 
     # avoid Series conversion for scalar output
     if all(not isinstance(arg, pd.Series) for arg in args):
-        impl = lambda arr, to_replace, replace_with: bodo.libs.bodosql_array_kernels.replace(
-            arr, to_replace, replace_with
+        impl = (
+            lambda arr,
+            to_replace,
+            replace_with: bodo.libs.bodosql_array_kernels.replace(
+                arr, to_replace, replace_with
+            )
         )
 
     # Simulates REPLACE on a single row
@@ -2293,8 +2297,12 @@ def test_substring_index(args, memory_leak_check):
 
     # avoid Series conversion for scalar output
     if all(not isinstance(arg, pd.Series) for arg in args):
-        impl = lambda arr, delimiter, occurrences: bodo.libs.bodosql_array_kernels.substring_index(
-            arr, delimiter, occurrences
+        impl = (
+            lambda arr,
+            delimiter,
+            occurrences: bodo.libs.bodosql_array_kernels.substring_index(
+                arr, delimiter, occurrences
+            )
         )
 
     # Simulates SUBSTRING_INDEX on a single row

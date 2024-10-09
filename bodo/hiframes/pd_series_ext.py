@@ -1,7 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""
-Implement pd.Series typing and data model handling.
-"""
+"""Implement pd.Series typing and data model handling."""
+
 import operator
 
 import llvmlite.binding as ll
@@ -697,7 +696,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                 if types.unliteral(func) == types.unicode_type:
                     if not is_overload_constant_str(func):
                         raise BodoError(
-                            f"Series.apply(): string argument (for builtins) must be a compile time constant"
+                            "Series.apply(): string argument (for builtins) must be a compile time constant"
                         )
                     f_return_type = bodo.utils.transform.get_udf_str_return_type(
                         ary,
@@ -781,12 +780,8 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         kws.pop("arg", None)
         na_action = args[1] if len(args) > 1 else kws.pop("na_action", types.none)
 
-        unsupported_args = dict(
-            na_action=na_action,
-        )
-        map_defaults = dict(
-            na_action=None,
-        )
+        unsupported_args = {"na_action": na_action}
+        map_defaults = {"na_action": None}
         check_unsupported_args(
             "Series.map",
             unsupported_args,
@@ -811,12 +806,8 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         )
         f_args = args[2] if len(args) > 2 else kws.pop("args", None)
 
-        unsupported_args = dict(
-            convert_dtype=convert_dtype,
-        )
-        apply_defaults = dict(
-            convert_dtype=True,
-        )
+        unsupported_args = {"convert_dtype": convert_dtype}
+        apply_defaults = {"convert_dtype": True}
         check_unsupported_args(
             "Series.apply",
             unsupported_args,

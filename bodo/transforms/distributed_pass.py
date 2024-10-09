@@ -2,6 +2,7 @@
 """
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
+
 import copy
 import hashlib
 import inspect
@@ -2408,17 +2409,13 @@ class DistributedPass:
         if (
             fdef == ("fft2", "scipy.fftpack._basic")
             or fdef == ("fft2", "scipy.fft._basic")
-        ) and self._is_1D_or_1D_Var_arr(
-            rhs.args[0].name
-        ):  # pragma: no cover
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):  # pragma: no cover
             set_last_arg_to_true(self, assign.value)
             return [assign]
         if (
             fdef == ("fftshift", "numpy.fft")
             or fdef == ("fftshift", "scipy.fft._helper")
-        ) and self._is_1D_or_1D_Var_arr(
-            rhs.args[0].name
-        ):  # pragma: no cover
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):  # pragma: no cover
             set_last_arg_to_true(self, assign.value)
             return [assign]
 
@@ -3209,11 +3206,11 @@ class DistributedPass:
             # see if size_var is a 1D array's shape
             # it is already the local size, no need to transform
             var_def = guard(get_definition, self.func_ir, size_var)
-            oned_varnames = set(
+            oned_varnames = {
                 v
                 for v in self._dist_analysis.array_dists
                 if self._dist_analysis.array_dists[v] == Distribution.OneD
-            )
+            }
             if (
                 isinstance(var_def, ir.Expr)
                 and var_def.op == "getattr"
@@ -4022,7 +4019,7 @@ class DistributedPass:
         # (e.g. argmin)
         l_nest = parfor.loop_nests[0]
         ind_varname = l_nest.index_variable.name
-        ind_varnames = set((ind_varname,))
+        ind_varnames = {ind_varname}
         ind_used = False
 
         # traverse parfor body in topo order to find parfor index copies in ind_varnames
@@ -4045,9 +4042,9 @@ class DistributedPass:
                 ):
                     ind_varnames.add(stmt.target.name)
                     continue
-                if not self._is_array_access_stmt(stmt) and ind_varnames & set(
+                if not self._is_array_access_stmt(stmt) and ind_varnames & {
                     v.name for v in stmt.list_vars()
-                ):
+                }:
                     ind_used = True
                     dprint(
                         "index of 1D_Var pafor {} used in {}".format(parfor.id, stmt)
@@ -4549,9 +4546,7 @@ class DistributedPass:
         if isinstance(slice_var, slice):
             f_text = """def f(offset):
                 return slice({} - offset, {} - offset)
-            """.format(
-                slice_var.start, slice_var.stop
-            )
+            """.format(slice_var.start, slice_var.stop)
             loc = {}
             exec(f_text, {}, loc)
             f = loc["f"]

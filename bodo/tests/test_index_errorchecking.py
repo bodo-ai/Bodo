@@ -3,7 +3,6 @@
 Tests for pd.Index error checking
 """
 
-
 import re
 
 import numpy as np
@@ -29,7 +28,7 @@ from bodo.hiframes.pd_index_ext import (
     td_index_unsupported_methods,
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.tests.utils import pytest_pandas
+from bodo.tests.utils import check_func, pytest_pandas
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas

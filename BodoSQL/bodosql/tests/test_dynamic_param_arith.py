@@ -136,7 +136,7 @@ def test_string_binary_named(
     """
     Tests that binary operators work with string data and string named parameters
     """
-    query = f"""
+    query = """
         SELECT @a || A from table1
         """
     check_query(
@@ -158,7 +158,7 @@ def test_string_binary_bind(
     """
     Tests that binary operators work with string data and string bind variables
     """
-    query = f"SELECT ? || A as OUTPUT from table1"
+    query = "SELECT ? || A as OUTPUT from table1"
     bind_variables = (string_named_params["a"], string_named_params["b"])
     expected_output = pd.DataFrame(
         {

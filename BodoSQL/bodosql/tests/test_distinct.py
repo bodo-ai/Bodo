@@ -2,6 +2,7 @@
 """
 Test correctness of SQL queries containing distinct on BodoSQL
 """
+
 import pandas as pd
 import pytest
 
@@ -12,7 +13,7 @@ def test_distinct_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     """
     Tests distinct works in the simple case for numeric types
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A
         FROM
@@ -37,7 +38,7 @@ def test_distinct_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Tests distinct works in the simple case for boolean types
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A
         FROM
@@ -50,7 +51,7 @@ def test_distinct_str(bodosql_string_types, spark_info, memory_leak_check):
     """
     Tests distinct works in the simple case for string types
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A
         FROM
@@ -63,7 +64,7 @@ def test_distinct_binary(bodosql_binary_types, spark_info, memory_leak_check):
     """
     Tests distinct works in the simple case for binary types
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A
         FROM
@@ -76,7 +77,7 @@ def test_distinct_datetime(bodosql_datetime_types, spark_info, memory_leak_check
     """
     Tests distinct works in the simple case for datetime
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A
         FROM
@@ -89,7 +90,7 @@ def test_distinct_interval(bodosql_interval_types, memory_leak_check):
     """
     Tests distinct works in the simple case for timedelta
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A
         FROM
@@ -112,31 +113,27 @@ def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
     """
 
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A", "B", "C"]
     else:
         convert_columns_bytearray = None
-    query = f"""
+    query = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -175,7 +172,7 @@ def test_distinct_where_boolean(bodosql_boolean_types, spark_info, memory_leak_c
     """
     Test that distinct works with where restrictions for booleans
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A, B
         FROM
@@ -214,7 +211,7 @@ def test_is_distinct_from_nulls(
     """
     Test that IS DISTINCT FROM works with null columns/scalars
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     ctx = {"TABLE1": is_distinct_from_null_dfs}
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
@@ -223,7 +220,7 @@ def test_is_distinct_from_numeric(bodosql_numeric_types, spark_info, memory_leak
     """
     Test IS DISTINCT FROM for numeric types
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     check_query(
         query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
     )
@@ -235,7 +232,7 @@ def test_is_distinct_from_numeric_scalars(
     """
     Test IS DISTINCT FROM for numeric scalar types
     """
-    query = f"SELECT A IS DISTINCT FROM 1 FROM table1"
+    query = "SELECT A IS DISTINCT FROM 1 FROM table1"
     check_query(
         query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
     )
@@ -247,7 +244,7 @@ def test_is_not_distinct_from_datetime(
     """
     Test IS NOT DISTINCT FROM for datetime types
     """
-    query = f"SELECT A IS NOT DISTINCT FROM B FROM table1"
+    query = "SELECT A IS NOT DISTINCT FROM B FROM table1"
     check_query(
         query, bodosql_datetime_types, spark_info, check_dtype=False, check_names=False
     )
@@ -257,7 +254,7 @@ def test_is_not_distinct_from_date(bodosql_date_types, spark_info, memory_leak_c
     """
     Test IS NOT DISTINCT FROM for date types
     """
-    query = f"SELECT A IS NOT DISTINCT FROM B FROM table1"
+    query = "SELECT A IS NOT DISTINCT FROM B FROM table1"
     check_query(
         query, bodosql_date_types, spark_info, check_dtype=False, check_names=False
     )
@@ -267,7 +264,7 @@ def test_is_distinct_from_interval(bodosql_interval_types, memory_leak_check):
     """
     Test IS DISTINCT FROM for interval types
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     df = bodosql_interval_types["TABLE1"]
     check_query(
         query,
@@ -283,7 +280,7 @@ def test_is_distinct_from_boolean(bodosql_boolean_types, spark_info, memory_leak
     """
     Test IS DISTINCT FROM for boolean types
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     check_query(
         query, bodosql_boolean_types, spark_info, check_dtype=False, check_names=False
     )
@@ -293,7 +290,7 @@ def test_is_distinct_from_string(bodosql_string_types, spark_info, memory_leak_c
     """
     Test IS DISTINCT FROM for string types
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     check_query(
         query, bodosql_string_types, spark_info, check_dtype=False, check_names=False
     )
@@ -305,7 +302,7 @@ def test_is_distinct_from_nullable_numeric(
     """
     Test IS DISTINCT FROM for nullable_numeric types
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     check_query(
         query,
         bodosql_nullable_numeric_types,
@@ -319,7 +316,7 @@ def test_is_distinct_from_binary(bodosql_binary_types, spark_info, memory_leak_c
     """
     Test IS DISTINCT FROM for binary types
     """
-    query = f"SELECT A IS DISTINCT FROM B FROM table1"
+    query = "SELECT A IS DISTINCT FROM B FROM table1"
     check_query(
         query, bodosql_binary_types, spark_info, check_dtype=False, check_names=False
     )
@@ -331,7 +328,7 @@ def test_is_distinct_from_where_string(
     """
     Test IS DISTINCT FROM in the WHERE condition for string types
     """
-    query = f"SELECT DISTINCT A, B FROM table1 WHERE A IS DISTINCT FROM B"
+    query = "SELECT DISTINCT A, B FROM table1 WHERE A IS DISTINCT FROM B"
     check_query(
         query, bodosql_string_types, spark_info, check_dtype=False, check_names=False
     )
@@ -344,10 +341,10 @@ def test_is_distinct_from_case_nullable_numeric(
     Test IS DISTINCT FROM in a CASE expression for nullable numeric types
     """
     query = (
-        f"SELECT CASE WHEN A IS DISTINCT FROM B "
-        f"  THEN A IS DISTINCT FROM C "
-        f"  ELSE B IS NOT DISTINCT FROM C END "
-        f"FROM table1"
+        "SELECT CASE WHEN A IS DISTINCT FROM B "
+        "  THEN A IS DISTINCT FROM C "
+        "  ELSE B IS NOT DISTINCT FROM C END "
+        "FROM table1"
     )
     check_query(
         query,
@@ -362,5 +359,5 @@ def test_distinct_null(basic_df, spark_info, memory_leak_check):
     """
     Test DISTINCT with a null array
     """
-    query = f"SELECT DISTINCT A, NULL as B from table1"
+    query = "SELECT DISTINCT A, NULL as B from table1"
     check_query(query, basic_df, spark_info, check_dtype=False)

@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL hashing functions
-"""
+"""Test Bodo's array kernel utilities for BodoSQL hashing functions"""
 
 import datetime
 from decimal import Decimal
@@ -117,9 +116,7 @@ pytestmark = pytest_slow_unless_codegen
                 pd.Series([str(i**2)[-3:] for i in range(2**12)]),
                 "foo",
                 None,
-                pd.Series(
-                    [int(i**0.5) for i in range(2**12)], dtype=pd.Int32Dtype()
-                ),
+                pd.Series([int(i**0.5) for i in range(2**12)], dtype=pd.Int32Dtype()),
                 pd.Series(
                     [[b"foo", b"bar", b"fizz", b"buzz"][i % 4] for i in range(2**12)]
                 ),
@@ -220,18 +217,18 @@ def test_sql_hash_qualities(args, distinct, scalars, memory_leak_check):
     # not mess with the sign of the ratios.
     test_impl = f"def impl({params_str}):\n"
     test_impl += f"  H = pd.Series(bodo.libs.bodosql_array_kernels.sql_hash(({args_str}), scalars))\n"
-    test_impl += f"  distinct_hashes = pd.Series(H.unique())\n"
-    test_impl += f"  masks = []\n"
-    test_impl += f"  L = []\n"
-    test_impl += f"  for i in range(n):\n"
-    test_impl += f"    mask = pd.Series((distinct_hashes.values & (1 << i)) >> i)\n"
-    test_impl += f"    masks.append(mask)\n"
-    test_impl += f"    L.append(abs(mask.mean()))\n"
-    test_impl += f"  for i in range(n):\n"
-    test_impl += f"    for j in range(i+1, n):\n"
-    test_impl += f"      mask_both = pd.Series(masks[i] & masks[j])\n"
-    test_impl += f"      L.append(abs(mask_both.mean()))\n"
-    test_impl += f"  return len(distinct_hashes), pd.Series(L)\n"
+    test_impl += "  distinct_hashes = pd.Series(H.unique())\n"
+    test_impl += "  masks = []\n"
+    test_impl += "  L = []\n"
+    test_impl += "  for i in range(n):\n"
+    test_impl += "    mask = pd.Series((distinct_hashes.values & (1 << i)) >> i)\n"
+    test_impl += "    masks.append(mask)\n"
+    test_impl += "    L.append(abs(mask.mean()))\n"
+    test_impl += "  for i in range(n):\n"
+    test_impl += "    for j in range(i+1, n):\n"
+    test_impl += "      mask_both = pd.Series(masks[i] & masks[j])\n"
+    test_impl += "      L.append(abs(mask_both.mean()))\n"
+    test_impl += "  return len(distinct_hashes), pd.Series(L)\n"
     impl_vars = {}
     exec(
         test_impl,

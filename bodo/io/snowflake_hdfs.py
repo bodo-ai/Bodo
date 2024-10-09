@@ -45,7 +45,7 @@ os.environ["BODO_HDFS_CORE_SITE_LOC_DIR"] = HDFS_CORE_SITE_LOC_DIR.name
 # instead.
 try:
     import bodo_azurefs_sas_token_provider  # noqa: F401  isort:skip
-except:
+except ImportError:
     pass
 
 # Try set the core site path for the iceberg connector.
@@ -54,5 +54,5 @@ try:
     import bodo_iceberg_connector
 
     bodo_iceberg_connector.set_core_site_path(HDFS_CORE_SITE_LOC)
-except:
+except ImportError:
     pass

@@ -2,6 +2,7 @@
 """
 Utility functions for testing such as check_func() that tests a function.
 """
+
 import datetime
 import io
 import os
@@ -1316,7 +1317,7 @@ def _gather_output(bodo_output):
     try:
         _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
-    except Exception as e:
+    except Exception:
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
         if bodo.get_rank() == 0:
@@ -1350,10 +1351,8 @@ def _typeof(val):
         return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
-        [
-            isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
-            for i in range(len(val.columns))
-        ]
+        isinstance(val.iloc[:, i].dtype, pd.core.arrays.floating.FloatingDtype)
+        for i in range(len(val.columns))
     ):
         col_typs = []
         for i in range(len(val.columns)):
@@ -1594,10 +1593,10 @@ def check_timing_func(func, args):
     """Function for computing runtimes. First run is to get the code compiled and second
     run is to recompute with the compiled code"""
     bodo_func = bodo.jit(func)
-    the_res1 = bodo_func(*args)
+    bodo_func(*args)
     t1 = time.time()
-    the_res2 = bodo_func(*args)
-    t2 = time.time()
+    bodo_func(*args)
+    t2: float = time.time()
     delta_t = round(t2 - t1, 4)
     print("Time:", delta_t, end=" ")
     assert True
@@ -1626,7 +1625,7 @@ def string_list_ent(x):
     ):
         l_str = []
         if all(isinstance(elem, tuple) for elem in x):
-            return string_list_ent({k: v for k, v in x})
+            return string_list_ent(dict(x))
         for e_val in x:
             l_str.append(string_list_ent(e_val))
         return "[" + ",".join(l_str) + "]"
@@ -2722,8 +2721,8 @@ def generate_comparison_ops_func(op, check_na=False):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(a, b):\n"
     if check_na:
-        func_text += f"  if pd.isna(a) or pd.isna(b):\n"
-        func_text += f"    return None\n"
+        func_text += "  if pd.isna(a) or pd.isna(b):\n"
+        func_text += "    return None\n"
     func_text += f"  return a {op_str} b\n"
     loc_vars = {}
     exec(func_text, {"pd": pd}, loc_vars)
@@ -3004,7 +3003,7 @@ def pytest_slow_unless_changed(features):
             raise Exception(f"Invalid features: {features}")
         patterns.append(f"({known_features[feature]})")
     p = re.compile("|".join(patterns), re.I)
-    if compiler_files_were_changed or any([p.match(f) for f in files_changed]):
+    if compiler_files_were_changed or any(p.match(f) for f in files_changed):
         return []
     return [pytest.mark.slow]
 
@@ -3224,8 +3223,8 @@ def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool 
         df2 (pd.DataFrame): Second DataFrame.
     """
     # Output ordering is not defined so we sort.
-    df1 = df1.sort_values(by=[col for col in df1.columns])
-    df2 = df2.sort_values(by=[col for col in df2.columns])
+    df1 = df1.sort_values(by=list(df1.columns))
+    df2 = df2.sort_values(by=list(df2.columns))
     # Drop the index
     df1 = df1.reset_index(drop=True)
     df2 = df2.reset_index(drop=True)

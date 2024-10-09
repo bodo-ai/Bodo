@@ -81,7 +81,7 @@ iNaT = pd._libs.tslibs.iNaT
 NaT = types.NPDatetime("ns")("NaT")  # TODO: pd.NaT
 
 # used in the various index copy overloads for error checking
-idx_cpy_arg_defaults = dict(deep=False, dtype=None, names=None)
+idx_cpy_arg_defaults = {"deep": False, "dtype": None, "names": None}
 
 # maps index_types to a format string of how we refer to the index type in error messages.
 # for example:
@@ -89,7 +89,7 @@ idx_cpy_arg_defaults = dict(deep=False, dtype=None, names=None)
 # StringIndexType --> "pandas.Index.{} with string data"
 
 # Initialized at the bottom of this file, after all the index types have been declared
-idx_typ_to_format_str_map = dict()
+idx_typ_to_format_str_map = {}
 
 
 @typeof_impl.register(pd.Index)
@@ -130,7 +130,7 @@ def typeof_pd_index(val, c):
                 # dtype could be Numpy dtype
                 dtype = numba.np.numpy_support.from_dtype(val.dtype)
                 arr_type = types.Array(dtype, 1, "C")
-            except:
+            except numba.core.errors.NumbaNotImplementedError:
                 # we don't have the dtype default to int64
                 dtype = types.int64
                 arr_type = IntegerArrayType(dtype)
@@ -157,7 +157,7 @@ def typeof_pd_index(val, c):
                 # dtype could be Numpy dtype
                 dtype = numba.np.numpy_support.from_dtype(val.dtype)
                 arr_type = types.Array(dtype, 1, "C")
-            except:
+            except numba.core.errors.NumbaNotImplementedError:
                 # we don't have the dtype default to float64
                 dtype = types.float64
                 arr_type = FloatingArrayType(dtype)
@@ -265,7 +265,7 @@ make_attribute_wrapper(DatetimeIndexType, "dict", "_dict")
 
 @overload_method(DatetimeIndexType, "copy", no_unliteral=True)
 def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=None):
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[DatetimeIndexType].format("copy()")
     check_unsupported_args(
         "copy",
@@ -504,8 +504,8 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
     )
     tz = dti.dtype.tz if dti_is_tz_aware else None
     # TODO skipna = False
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "DatetimeIndex.min",
         unsupported_args,
@@ -548,8 +548,8 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
     )
     tz = dti.dtype.tz if dti_is_tz_aware else None
     # TODO skipna = False
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "DatetimeIndex.max",
         unsupported_args,
@@ -622,28 +622,28 @@ def pd_datetimeindex_overload(
         data, "pandas.DatetimeIndex()"
     )
 
-    unsupported_args = dict(
-        freq=freq,
-        tz=tz,
-        normalize=normalize,
-        closed=closed,
-        ambiguous=ambiguous,
-        dayfirst=dayfirst,
-        yearfirst=yearfirst,
-        dtype=dtype,
-        copy=copy,
-    )
-    arg_defaults = dict(
-        freq=None,
-        tz=None,
-        normalize=False,
-        closed=None,
-        ambiguous="raise",
-        dayfirst=False,
-        yearfirst=False,
-        dtype=None,
-        copy=False,
-    )
+    unsupported_args = {
+        "freq": freq,
+        "tz": tz,
+        "normalize": normalize,
+        "closed": closed,
+        "ambiguous": ambiguous,
+        "dayfirst": dayfirst,
+        "yearfirst": yearfirst,
+        "dtype": dtype,
+        "copy": copy,
+    }
+    arg_defaults = {
+        "freq": None,
+        "tz": None,
+        "normalize": False,
+        "closed": None,
+        "ambiguous": "raise",
+        "dayfirst": False,
+        "yearfirst": False,
+        "dtype": None,
+        "copy": False,
+    }
     check_unsupported_args(
         "pandas.DatetimeIndex",
         unsupported_args,
@@ -1025,8 +1025,8 @@ def pd_date_range_overload(
     # TODO: check/handle other input
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
 
-    unsupported_args = dict(tz=tz, normalize=normalize, closed=closed)
-    arg_defaults = dict(tz=None, normalize=False, closed=None)
+    unsupported_args = {"tz": tz, "normalize": normalize, "closed": closed}
+    arg_defaults = {"tz": None, "normalize": False, "closed": None}
     check_unsupported_args(
         "pandas.date_range",
         unsupported_args,
@@ -1457,7 +1457,7 @@ make_attribute_wrapper(TimedeltaIndexType, "dict", "_dict")
 
 @overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
 def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=None):
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[TimedeltaIndexType].format("copy()")
     check_unsupported_args(
         "TimedeltaIndex.copy",
@@ -1485,8 +1485,8 @@ def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=No
 
 @overload_method(TimedeltaIndexType, "min", inline="always", no_unliteral=True)
 def overload_timedelta_index_min(tdi, axis=None, skipna=True):
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "TimedeltaIndex.min",
         unsupported_args,
@@ -1518,8 +1518,8 @@ def overload_timedelta_index_min(tdi, axis=None, skipna=True):
 
 @overload_method(TimedeltaIndexType, "max", inline="always", no_unliteral=True)
 def overload_timedelta_index_max(tdi, axis=None, skipna=True):
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "TimedeltaIndex.max",
         unsupported_args,
@@ -1620,19 +1620,19 @@ def pd_timedelta_index_overload(
     if is_overload_none(data):
         raise BodoError("data argument in pd.TimedeltaIndex() expected")
 
-    unsupported_args = dict(
-        unit=unit,
-        freq=freq,
-        dtype=dtype,
-        copy=copy,
-    )
+    unsupported_args = {
+        "unit": unit,
+        "freq": freq,
+        "dtype": dtype,
+        "copy": copy,
+    }
 
-    arg_defaults = dict(
-        unit=None,
-        freq=None,
-        dtype=None,
-        copy=False,
-    )
+    arg_defaults = {
+        "unit": None,
+        "freq": None,
+        "dtype": None,
+        "copy": False,
+    }
 
     check_unsupported_args(
         "pandas.TimedeltaIndex",
@@ -1731,7 +1731,7 @@ make_attribute_wrapper(RangeIndexType, "name", "_name")
 
 @overload_method(RangeIndexType, "copy", no_unliteral=True)
 def overload_range_index_copy(A, name=None, deep=False, dtype=None, names=None):
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[RangeIndexType].format("copy()")
     check_unsupported_args(
         "RangeIndex.copy",
@@ -2067,7 +2067,7 @@ make_attribute_wrapper(PeriodIndexType, "dict", "_dict")
 @overload_method(PeriodIndexType, "copy", no_unliteral=True)
 def overload_period_index_copy(A, name=None, deep=False, dtype=None, names=None):
     freq = A.freq
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     err_str = idx_typ_to_format_str_map[PeriodIndexType].format("copy()")
     check_unsupported_args(
         "PeriodIndex.copy",
@@ -2394,7 +2394,7 @@ make_attribute_wrapper(CategoricalIndexType, "dict", "_dict")
 @overload_method(CategoricalIndexType, "copy", no_unliteral=True)
 def overload_categorical_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[CategoricalIndexType].format("copy()")
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     check_unsupported_args(
         "CategoricalIndex.copy",
         idx_cpy_unsupported_args,
@@ -2663,7 +2663,7 @@ make_attribute_wrapper(NumericIndexType, "dict", "_dict")
 @overload_method(NumericIndexType, "copy", no_unliteral=True)
 def overload_numeric_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[NumericIndexType].format("copy()")
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     check_unsupported_args(
         "Index.copy",
         idx_cpy_unsupported_args,
@@ -3046,7 +3046,7 @@ def overload_binary_string_index_copy(A, name=None, deep=False, dtype=None, name
     typ = type(A)
 
     err_str = idx_typ_to_format_str_map[typ].format("copy()")
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     check_unsupported_args(
         "Index.copy",
         idx_cpy_unsupported_args,
@@ -3224,8 +3224,8 @@ def overload_index_union(I, other, sort=None):
         pd.Index: the elements of both indices, in the order that they first
         ocurred, without any duplicates.
     """
-    unsupported_args = dict(sort=sort)
-    default_args = dict(sort=None)
+    unsupported_args = {"sort": sort}
+    default_args = {"sort": None}
     check_unsupported_args(
         "Index.union",
         unsupported_args,
@@ -3276,8 +3276,8 @@ def overload_index_intersection(I, other, sort=None):
     Returns:
         pd.Index: the elements of both indices, in sorted order.
     """
-    unsupported_args = dict(sort=sort)
-    default_args = dict(sort=None)
+    unsupported_args = {"sort": sort}
+    default_args = {"sort": None}
     check_unsupported_args(
         "Index.intersection",
         unsupported_args,
@@ -3333,8 +3333,8 @@ def overload_index_difference(I, other, sort=None):
     Returns:
         pd.Index: the elements I that are not in other, in sorted order.
     """
-    unsupported_args = dict(sort=sort)
-    default_args = dict(sort=None)
+    unsupported_args = {"sort": sort}
+    default_args = {"sort": None}
     check_unsupported_args(
         "Index.difference",
         unsupported_args,
@@ -3393,8 +3393,8 @@ def overload_index_symmetric_difference(I, other, result_name=None, sort=None):
     Returns:
         pd.Index: the elements I that are not in other, in sorted order.
     """
-    unsupported_args = dict(result_name=result_name, sort=sort)
-    default_args = dict(result_name=None, sort=None)
+    unsupported_args = {"result_name": result_name, "sort": sort}
+    default_args = {"result_name": None, "sort": None}
     check_unsupported_args(
         "Index.symmetric_difference",
         unsupported_args,
@@ -3443,8 +3443,12 @@ def overload_index_symmetric_difference(I, other, result_name=None, sort=None):
 @overload_method(DatetimeIndexType, "take", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "take", no_unliteral=True)
 def overload_index_take(I, indices, axis=0, allow_fill=True, fill_value=None):
-    unsupported_args = dict(axis=axis, allow_fill=allow_fill, fill_value=fill_value)
-    default_args = dict(axis=0, allow_fill=True, fill_value=None)
+    unsupported_args = {
+        "axis": axis,
+        "allow_fill": allow_fill,
+        "fill_value": fill_value,
+    }
+    default_args = {"axis": 0, "allow_fill": True, "fill_value": None}
     check_unsupported_args(
         "Index.take",
         unsupported_args,
@@ -3580,8 +3584,8 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     df.columns.get_loc(c). Only supports Index with unique values (scalar return).
     TODO(ehsan): use a proper hash engine like Pandas inside Index objects
     """
-    unsupported_args = dict(method=method, tolerance=tolerance)
-    arg_defaults = dict(method=None, tolerance=None)
+    unsupported_args = {"method": method, "tolerance": tolerance}
+    arg_defaults = {"method": None, "tolerance": None}
     check_unsupported_args(
         "Index.get_loc",
         unsupported_args,
@@ -3948,8 +3952,8 @@ def overload_index_all(I):
 )
 def overload_index_drop_duplicates(I, keep="first"):
     """Overload `Index.drop_duplicates` method for all index types."""
-    unsupported_args = dict(keep=keep)
-    arg_defaults = dict(keep="first")
+    unsupported_args = {"keep": keep}
+    arg_defaults = {"keep": "first"}
     check_unsupported_args(
         "Index.drop_duplicates",
         unsupported_args,
@@ -4042,12 +4046,12 @@ def overload_index_map(I, mapper, na_action=None):
     if not is_const_func_type(mapper):
         raise BodoError("Index.map(): 'mapper' should be a function")
 
-    unsupported_args = dict(
-        na_action=na_action,
-    )
-    map_defaults = dict(
-        na_action=None,
-    )
+    unsupported_args = {
+        "na_action": na_action,
+    }
+    map_defaults = {
+        "na_action": None,
+    }
     check_unsupported_args(
         "Index.map",
         unsupported_args,
@@ -4415,7 +4419,7 @@ make_attribute_wrapper(HeterogeneousIndexType, "name", "_name")
 @overload_method(HeterogeneousIndexType, "copy", no_unliteral=True)
 def overload_heter_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[HeterogeneousIndexType].format("copy()")
-    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    idx_cpy_unsupported_args = {"deep": deep, "dtype": dtype, "names": names}
     check_unsupported_args(
         "Index.copy",
         idx_cpy_unsupported_args,
@@ -4566,7 +4570,7 @@ def overload_index_to_series(I, index=None, name=None):
         or is_overload_none(name)
     ):
         raise_bodo_error(
-            f"Index.to_series(): only constant string/int are supported for argument name"
+            "Index.to_series(): only constant string/int are supported for argument name"
         )
 
     if is_overload_none(name):
@@ -4661,7 +4665,7 @@ def overload_index_to_frame(I, index=True, name=None):
             columns = ColNamesMetaType((get_overload_const_int(name),))
         else:
             raise_bodo_error(
-                f"Index.to_frame(): only constant string/int are supported for argument name"
+                "Index.to_frame(): only constant string/int are supported for argument name"
             )
 
     func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((data,), new_index, __col_name_meta_value)\n"
@@ -4780,8 +4784,8 @@ def overload_index_to_numpy(I, dtype=None, copy=False, na_value=None):
         np.ndarray: a numpy array with the same underlying values as I.
     """
 
-    unsupported_args = dict(dtype=dtype, na_value=na_value)
-    arg_defaults = dict(dtype=None, na_value=None)
+    unsupported_args = {"dtype": dtype, "na_value": na_value}
+    arg_defaults = {"dtype": None, "na_value": None}
     check_unsupported_args(
         "Index.to_numpy",
         unsupported_args,
@@ -4851,7 +4855,7 @@ def overload_index_to_list(I):
     if isinstance(I, RangeIndexType):
 
         def impl(I):  # pragma: no cover
-            l = list()
+            l = []
             for i in range(I._start, I._stop, I.step):
                 l.append(i)
             return l
@@ -4860,7 +4864,7 @@ def overload_index_to_list(I):
 
     # Supported for all Index types that have a supported iterator
     def impl(I):  # pragma: no cover
-        l = list()
+        l = []
         for i in range(len(I)):
             l.append(I[i])
         return l
@@ -5201,8 +5205,8 @@ def overload_index_min(I, axis=None, skipna=True):
     Returns:
         any: the minimum value of the Index
     """
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "Index.min",
         unsupported_args,
@@ -5249,8 +5253,8 @@ def overload_index_max(I, axis=None, skipna=True):
     Returns:
         any: the maximum value of the Index
     """
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "Index.max",
         unsupported_args,
@@ -5305,8 +5309,8 @@ def overload_index_argmin(I, axis=0, skipna=True):
     Returns:
         int: the location of the minimum value of the index
     """
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=0, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": 0, "skipna": True}
     check_unsupported_args(
         "Index.argmin",
         unsupported_args,
@@ -5360,8 +5364,8 @@ def overload_index_argmax(I, axis=0, skipna=True):
         int: the location of the maximum value of the index
     """
 
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=0, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": 0, "skipna": True}
     check_unsupported_args(
         "Index.argmax",
         unsupported_args,
@@ -5534,7 +5538,6 @@ def order_range(I, ascending):  # pragma: no cover
     # Otherwise, flip the step sign and calculate new start/end points
     else:
         start = I._start
-        stop = I._stop
         name = get_index_name(I)
         size = len(I)
         last_value = start + step * (size - 1)
@@ -5571,14 +5574,14 @@ def overload_index_sort_values(
     Returns:
         pd.Index: the Index with its values sorted.
     """
-    unsupported_args = dict(
-        return_indexer=return_indexer,
-        key=key,
-    )
-    arg_defaults = dict(
-        return_indexer=False,
-        key=None,
-    )
+    unsupported_args = {
+        "return_indexer": return_indexer,
+        "key": key,
+    }
+    arg_defaults = {
+        "return_indexer": False,
+        "key": None,
+    }
     check_unsupported_args(
         "Index.sort_values",
         unsupported_args,
@@ -5653,8 +5656,8 @@ def overload_index_argsort(I, axis=0, kind="quicksort", order=None):
         np.ndarray: the locations of each element in the original index
         if they were to be sorted.
     """
-    unsupported_args = dict(axis=axis, kind=kind, order=order)
-    arg_defaults = dict(axis=0, kind="quicksort", order=None)
+    unsupported_args = {"axis": axis, "kind": kind, "order": order}
+    arg_defaults = {"axis": 0, "kind": "quicksort", "order": None}
     check_unsupported_args(
         "Index.argsort",
         unsupported_args,
@@ -5738,7 +5741,7 @@ def overload_index_where(I, cond, other=np.nan):
     func_text += (
         f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
     )
-    func_text += f"  return constructor(out_arr, name)\n"
+    func_text += "  return constructor(out_arr, name)\n"
     loc_vars = {}
     constructor = (
         init_numeric_index
@@ -5806,7 +5809,7 @@ def overload_index_putmask(I, cond, other):
     func_text += (
         f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
     )
-    func_text += f"  return constructor(out_arr, name)\n"
+    func_text += "  return constructor(out_arr, name)\n"
     loc_vars = {}
     constructor = (
         init_numeric_index
@@ -5839,8 +5842,8 @@ def overload_index_repeat(I, repeats, axis=None):
         pd.Index: a version of I with its values repeated
     """
 
-    unsupported_args = dict(axis=axis)
-    arg_defaults = dict(axis=None)
+    unsupported_args = {"axis": axis}
+    arg_defaults = {"axis": None}
     check_unsupported_args(
         "Index.repeat",
         unsupported_args,

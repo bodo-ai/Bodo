@@ -2,6 +2,7 @@
 """
 Test correctness of SQL queries specific to Timestamp types on BodoSQL
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -559,7 +560,7 @@ def test_to_timestamp_ntz_utc_literal(timestamp_literal, memory_leak_check):
     ],
 )
 def test_date_part_epoch(table, answer, memory_leak_check):
-    query = f"SELECT DATE_PART(EPOCH_SECONDS, A) AS out1, DATE_PART(EPOCH_MILLISECONDS, A) AS out2, DATE_PART(EPOCH_MICROSECONDS, A) AS out3, DATE_PART(EPOCH_NANOSECONDS, A) AS out4 from table1"
+    query = "SELECT DATE_PART(EPOCH_SECONDS, A) AS out1, DATE_PART(EPOCH_MILLISECONDS, A) AS out2, DATE_PART(EPOCH_MICROSECONDS, A) AS out3, DATE_PART(EPOCH_NANOSECONDS, A) AS out4 from table1"
     ctx = {"TABLE1": table}
     check_query(query, ctx, None, expected_output=answer, check_dtype=False)
 
@@ -586,7 +587,7 @@ def test_date_part_epoch_case(memory_leak_check):
             "B": pd.array([True, True, True, False, False, True, False, True, True]),
         }
     )
-    query = f"SELECT CASE WHEN B THEN DATE_PART(EPOCH_SECONDS, A) ELSE -1 END AS out1 from table1"
+    query = "SELECT CASE WHEN B THEN DATE_PART(EPOCH_SECONDS, A) ELSE -1 END AS out1 from table1"
     ctx = {"TABLE1": table}
     answer = pd.DataFrame(
         {

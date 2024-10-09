@@ -868,7 +868,7 @@ def test_dataframe_iloc_bad_index(memory_leak_check):
 
 def test_non_numba_err(memory_leak_check):
     def test():
-        return x
+        return x  # noqa: F821
 
     with pytest.raises(
         numba.TypingError,
@@ -1181,7 +1181,7 @@ def test_invalid_replace_col_data(memory_leak_check):
         ValueError,
         match="DataFrameType.replace_col_type replaced column must be found in the DataFrameType",
     ):
-        new_dtype = infered_dtype.replace_col_type("C", bodo.string_array_type)
+        infered_dtype.replace_col_type("C", bodo.string_array_type)
 
 
 def test_dd_map_array_drop_subset(memory_leak_check):
@@ -1279,9 +1279,9 @@ def test_df_plot_submethods():
     df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
 
     def impl_1(df):
-        foo = df.plot.area()
+        df.plot.area()
 
-    err_msg1 = f"pandas.Dataframe.plot (the attribute, not the bound function) not yet supported"
+    err_msg1 = "pandas.Dataframe.plot (the attribute, not the bound function) not yet supported"
     with pytest.raises(
         BodoError,
         match=err_msg1,
@@ -1323,7 +1323,7 @@ def test_df_abs_err():
     """Tests that df.abs() throws a reasonable error on non numeric/timedelta dfs"""
 
     def impl():
-        foo = pd.DataFrame({"A": ["hi"]}).abs()
+        pd.DataFrame({"A": ["hi"]}).abs()
 
     with pytest.raises(
         BodoError,
@@ -1339,7 +1339,7 @@ def test_df_corr_err():
     """Tests that df.corr() throws a reasonable error for empty dataframe"""
 
     def impl():
-        foo = pd.DataFrame().corr()
+        pd.DataFrame().corr()
 
     with pytest.raises(
         BodoError,
@@ -1353,7 +1353,7 @@ def test_df_cov_err():
     """Tests that df.cov() throws a reasonable error for empty dataframe"""
 
     def impl():
-        foo = pd.DataFrame().cov()
+        pd.DataFrame().cov()
 
     with pytest.raises(
         BodoError,
@@ -1365,7 +1365,7 @@ def test_df_cov_err():
 @pytest.mark.slow
 def test_df_rolling_unsupported():
     def impl():
-        df = pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
+        pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
 
     err_msg = re.escape("pandas.core.window.rolling.Rolling.kurt() not supported yet")
     with pytest.raises(

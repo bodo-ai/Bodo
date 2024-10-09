@@ -465,7 +465,10 @@ def test_series_init_dict_non_const_keys():
 
     @bodo.jit
     def test_impl():
-        init_dict = dict()
+        # TODO: Bodo should not error here. It should optimize it to a constant,
+        # like done with:
+        # init_dict = {}; for i in range(10): init_dict[f"idx_{i}"] = 1
+        init_dict = dict()  # noqa: C408
         for i in range(10):
             init_dict[f"idx_{i}"] = 1
         return pd.Series(init_dict)

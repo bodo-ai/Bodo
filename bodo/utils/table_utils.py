@@ -94,9 +94,9 @@ def generate_mappable_table_func(
     func_text = "def impl(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
     if keep_input_typ:
         # We maintain the original types.
-        func_text += f"  out_table = bodo.hiframes.table.init_table(table, False)\n"
+        func_text += "  out_table = bodo.hiframes.table.init_table(table, False)\n"
         # XXX: Support changing length?
-        func_text += f"  l = len(table)\n"
+        func_text += "  l = len(table)\n"
     else:
         # We are converting to a common type.
         func_text += f"  out_list = bodo.hiframes.table.alloc_empty_list_type({num_cols}, lst_dtype)\n"
@@ -108,14 +108,14 @@ def generate_mappable_table_func(
         has_live_cols = len(used_cols_type) != 0
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_glbl"] = used_cols_data
-        kept_blks = set([table.block_nums[i] for i in used_cols_data])
-        func_text += f"  used_cols_set = set_wrapper(used_cols_glbl)\n"
+        kept_blks = {table.block_nums[i] for i in used_cols_data}
+        func_text += "  used_cols_set = set_wrapper(used_cols_glbl)\n"
     else:
-        func_text += f"  used_cols_set = None\n"
+        func_text += "  used_cols_set = None\n"
         used_cols_data = None
 
     # Select each block from the table
-    func_text += f"  bodo.hiframes.table.ensure_table_unboxed(table, used_cols_set)\n"
+    func_text += "  bodo.hiframes.table.ensure_table_unboxed(table, used_cols_set)\n"
     for blk in table.type_to_blk.values():
         func_text += (
             f"  blk_{blk} = bodo.hiframes.table.get_table_block(table, {blk})\n"
@@ -139,8 +139,8 @@ def generate_mappable_table_func(
             func_text += f"    col_loc = col_indices_{blk}[i]\n"
             # Skip any dead columns
             if used_cols_data is not None:
-                func_text += f"    if col_loc not in used_cols_set:\n"
-                func_text += f"        continue\n"
+                func_text += "    if col_loc not in used_cols_set:\n"
+                func_text += "        continue\n"
             # TODO: Support APIs that take additional arguments
             if keep_input_typ:
                 # If we are maintaining types reuse i
@@ -161,7 +161,7 @@ def generate_mappable_table_func(
             func_text += f"  out_table = bodo.hiframes.table.set_table_block(out_table, {out_list_name}, {blk})\n"
 
     if keep_input_typ:
-        func_text += f"  out_table = bodo.hiframes.table.set_table_len(out_table, l)\n"
+        func_text += "  out_table = bodo.hiframes.table.set_table_len(out_table, l)\n"
         func_text += "  return out_table\n"
     else:
         func_text += "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)\n"
@@ -327,26 +327,26 @@ def concat_tables(in_tables, used_cols=None):
         used_cols_type = used_cols.instance_type
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_vals"] = used_cols_data
-        kept_blks = set([table_type.block_nums[i] for i in used_cols_data])
+        kept_blks = {table_type.block_nums[i] for i in used_cols_data}
     else:
         used_cols_data = None
 
     func_text = "def table_concat_func(in_tables, used_cols=None):\n"
-    func_text += f"  T2 = init_table(table_type, False)\n"
-    func_text += f"  l = 0\n"
+    func_text += "  T2 = init_table(table_type, False)\n"
+    func_text += "  l = 0\n"
 
     # set table length using input lengths and return if no table column is used
     if used_cols_data is not None and len(used_cols_data) == 0:
-        func_text += f"  for T in in_tables:\n"
-        func_text += f"    l += len(T)\n"
-        func_text += f"  T2 = set_table_len(T2, l)\n"
-        func_text += f"  return T2\n"
+        func_text += "  for T in in_tables:\n"
+        func_text += "    l += len(T)\n"
+        func_text += "  T2 = set_table_len(T2, l)\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
         return loc_vars["table_concat_func"]
 
     if used_cols_data is not None:
-        func_text += f"  used_set = set_wrapper(used_cols_vals)\n"
+        func_text += "  used_set = set_wrapper(used_cols_vals)\n"
 
     for blk in table_type.type_to_blk.values():
         # allocate output block array list
@@ -377,8 +377,8 @@ def concat_tables(in_tables, used_cols=None):
             func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  T2 = set_table_len(T2, l)\n"
-    func_text += f"  return T2\n"
+    func_text += "  T2 = set_table_len(T2, l)\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -461,9 +461,9 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     func_text = "def impl_table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):\n"
 
     # Allocate the new table and set its length
-    func_text += f"  out_table = bodo.hiframes.table.init_table(new_table_typ, False)\n"
+    func_text += "  out_table = bodo.hiframes.table.init_table(new_table_typ, False)\n"
     func_text += (
-        f"  out_table = bodo.hiframes.table.set_table_len(out_table, len(table))\n"
+        "  out_table = bodo.hiframes.table.set_table_len(out_table, len(table))\n"
     )
     # Create the set of kept columns and changed cols.
     possible_cols = set(range(len(old_arr_typs)))
@@ -476,14 +476,14 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
         copied_cols = copied_cols & used_cols_set
         # Note: the used columns are shared between input and output
         # because astype cannot reorder columns.
-        kept_blks = set([table.block_nums[i] for i in used_cols_set])
+        kept_blks = {table.block_nums[i] for i in used_cols_set}
     else:
         used_cols_set = None
 
     # create a list of columns to cast for each pair of input/output
     # "cast_cols_{old_block_num}_{new_block_num}" is the list of columns being cast from old_block_num
     # -> new_block_num
-    changed_cols_dict = dict()
+    changed_cols_dict = {}
     for changed_col in changed_cols:
         old_block_num = table.block_nums[changed_col]
         new_block_num = new_table_typ.block_nums[changed_col]
@@ -510,7 +510,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
             func_text += f"  cast_cols_{orig_block_num}_{new_block_num}_set = set_wrapper(cast_cols_{orig_block_num}_{new_block_num})\n"
 
     glbls["copied_cols"] = np.array(list(copied_cols), dtype=np.int64)
-    func_text += f"  copied_cols_set = set_wrapper(copied_cols)\n"
+    func_text += "  copied_cols_set = set_wrapper(copied_cols)\n"
     # Generate the initial blocks for the output table.
     for new_table_array_typ, new_table_blk in new_table_typ.type_to_blk.items():
         glbls[f"typ_list_{new_table_blk}"] = types.List(new_table_array_typ)
@@ -531,7 +531,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
                 func_text += (
                     f"    if arr_ind_{orig_table_blk} not in copied_cols_set:\n"
                 )
-                func_text += f"      continue\n"
+                func_text += "      continue\n"
                 func_text += f"    bodo.hiframes.table.ensure_column_unboxed(table, arr_list_{orig_table_blk}, i, arr_ind_{orig_table_blk})\n"
                 # Map to the new physical location.
                 func_text += f"    out_idx_{new_table_blk}_{orig_table_blk} = new_idx_{orig_table_blk}[i]\n"
@@ -573,7 +573,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
                     func_text += f"    arr_ind_{orig_table_blk} = orig_arr_inds_{orig_table_blk}[i]\n"
                     # For each column, in the orig_table_blk, check if it is being cast to this output type
                     func_text += f"    if arr_ind_{orig_table_blk} not in cast_cols_{orig_table_blk}_{new_table_blk}_set:\n"
-                    func_text += f"      continue\n"
+                    func_text += "      continue\n"
                     func_text += f"    bodo.hiframes.table.ensure_column_unboxed(table, arr_list_{orig_table_blk}, i, arr_ind_{orig_table_blk})\n"
                     # Map to the new physical location.
                     func_text += f"    out_idx_{new_table_blk}_{orig_table_blk} = new_idx_{orig_table_blk}[i]\n"

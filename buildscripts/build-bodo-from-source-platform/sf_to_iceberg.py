@@ -8,6 +8,7 @@ python -u sf_to_iceberg.py -c <CREDS_FILE> -d SNOWFLAKE_SAMPLE_DATA -s TPCDS_SF1
 E3 example:
 python sf_to_iceberg.py -d E3_PROD -s CLIENT -do E3_PROD -so BODO -t TIER_FOUR -c e3_cred.json -e ICEBERG_STORAGE -r E3_PROD_ADMIN -tc CLIENT_ID WEEKDATE
 """
+
 import argparse
 import json
 import typing as pt

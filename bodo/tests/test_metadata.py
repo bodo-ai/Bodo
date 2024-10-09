@@ -488,14 +488,12 @@ def test_df_return_metadata(gen_func, use_func):
                 passed = 0
                 try:
                     use_func(out)
-                except:
+                except Exception:
                     passed = 1
             elif bodo.get_rank() == 0:
                 pass
 
-            fail_msg = (
-                f"use_func failed to throw an error when metadata was not present"
-            )
+            fail_msg = "use_func failed to throw an error when metadata was not present"
             n_passed = reduce_sum(passed)
             assert n_passed == bodo.get_size(), fail_msg
 
@@ -601,14 +599,12 @@ def test_series_return_metadata(gen_func, use_func):
                 passed = 0
                 try:
                     use_func(out)
-                except:
+                except Exception:
                     passed = 1
             elif bodo.get_rank() == 0:
                 pass
 
-            fail_msg = (
-                f"use_func failed to throw an error when metadata was not present"
-            )
+            fail_msg = "use_func failed to throw an error when metadata was not present"
             n_passed = reduce_sum(passed)
             assert n_passed == bodo.get_size(), fail_msg
 
@@ -679,7 +675,7 @@ def test_index_type_return(metadata_supported_index_types):
         try:
             ret_df = reset_idx(df_out)
             passed = 0
-        except:
+        except Exception:
             pass
 
         n_passed = reduce_sum(passed)
@@ -690,7 +686,7 @@ def test_index_type_return(metadata_supported_index_types):
         try:
             ret_series = reset_idx(series_out)
             passed = 0
-        except:
+        except Exception:
             pass
 
         n_passed = reduce_sum(passed)

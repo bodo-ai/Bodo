@@ -164,12 +164,15 @@ def _test_helper(
     expected_op_pool_budget_after_build: If not None, it must be a tuple that the value is expected
      to be in the middle of.
     """
-    with set_broadcast_join(broadcast), temp_env_override(
-        {
-            "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
-            # Enable partitioning even though spilling is not setup
-            "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
-        }
+    with (
+        set_broadcast_join(broadcast),
+        temp_env_override(
+            {
+                "BODO_DEBUG_STREAM_HASH_JOIN_PARTITIONING": "1",
+                # Enable partitioning even though spilling is not setup
+                "BODO_STREAM_HASH_JOIN_ENABLE_PARTITIONING": "1",
+            }
+        ),
     ):
         try:
             (
@@ -241,15 +244,11 @@ def _test_helper(
 
     assert_success = final_bytes_allocated == 0
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
+    assert assert_success, f"Final bytes allocated by the Operator BufferPool ({final_bytes_allocated}) is not 0!"
 
     assert_success = final_partition_state == expected_partition_state
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
+    assert assert_success, f"Final partition state ({final_partition_state}) is not as expected ({expected_partition_state})"
 
     assert_success = (expected_op_pool_budget_after_build is None) or (
         expected_op_pool_budget_after_build[0]
@@ -257,9 +256,7 @@ def _test_helper(
         <= expected_op_pool_budget_after_build[1]
     )
     assert_success = comm.allreduce(assert_success, op=MPI.LAND)
-    assert (
-        assert_success
-    ), f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
+    assert assert_success, f"Operator pool budget after build ({op_pool_budget_after_build}) is not as expected ({expected_op_pool_budget_after_build})"
 
 
 @pytest_mark_one_rank

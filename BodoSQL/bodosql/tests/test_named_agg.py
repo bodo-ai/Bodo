@@ -2,6 +2,7 @@
 """
 Test correctness of SQL queries that require Pandas NamedAgg syntax.
 """
+
 import pytest
 
 from bodosql.tests.utils import check_query

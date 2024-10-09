@@ -116,7 +116,7 @@ class BodoSqlPlanCache:
                 cache_loc = BodoSqlPlanCache.get_cache_loc(sql_query)
                 if (not cache_loc) and numba.core.config.DEBUG_CACHE:
                     print(
-                        f"[cache] sql plan caching not configured. Set the BODO_SQL_PLAN_CACHE_DIR environment variable to enable."
+                        "[cache] sql plan caching not configured. Set the BODO_SQL_PLAN_CACHE_DIR environment variable to enable."
                     )
                 if cache_loc:
                     with _open_for_write(cache_loc) as f:

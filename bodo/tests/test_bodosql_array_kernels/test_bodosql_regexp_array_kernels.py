@@ -1,15 +1,14 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL regexp functions
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL regexp functions"""
 
 import re
 
+import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed
@@ -274,14 +273,14 @@ def regexp_substr_instr_args(request):
 
 def snowflake_to_python_re(pattern, flags):
     """Transforms a snowflake pattern string and flag string into a Python
-    regexp string and flag bitvector using this mapping:
+    regexp string and flag bit vector using this mapping:
     https://github.com/micromatch/posix-character-classes
 
     Currently, errors are caused when a null terminator is inside of the
-    embedded stirng literals, so [:ascii:] and [:word:] start at character 1
+    embedded string literals, so [:ascii:] and [:word:] start at character 1
     instead of character 0."""
     pattern = bodo.libs.bodosql_array_kernels.posix_to_re(pattern)
-    flags = bodo.libs.bodosql_array_kernels.make_flag_bitvector(flags)
+    flags = bodo.libs.bodosql_array_kernels.make_flag_bit_vector(flags)
     return pattern, flags
 
 
@@ -352,15 +351,15 @@ def get_pattern_array(length):
         pytest.param(
             (
                 (r"[[:graph:]][[:cntrl:]][[:print:]]", "csaebcidcifsmgie"),
-                ("[\x21-\x7e][\x01-\x1F\x7f][\x20-\x7e]", re.M | re.S | re.I),
+                ("[\x21-\x7e][\x01-\x1f\x7f][\x20-\x7e]", re.M | re.S | re.I),
             ),
-            id="graph_ctrl_print_allflags_plus_garbage",
+            id="graph_ctrl_print_all_flags_plus_garbage",
         ),
     ],
 )
 def test_pattern_flag_conversions(args):
     """Verify that the conversion oracles correctly convert POSIX ERE character
-    classes to the equivalent form, and flag strings to the correct bitvector"""
+    classes to the equivalent form, and flag strings to the correct bit vector"""
     args, answers = args
     patternAnswer, flagAnswer = answers
     outputs = snowflake_to_python_re(*args)
@@ -397,7 +396,7 @@ def test_regexp_count(regexp_strings, regexp_like_count_args):
 
 
 def test_regexp_count_non_scalar(regexp_strings):
-    """Tests regexp_cout kernel with non-scalar pattern argument"""
+    """Tests regexp_count kernel with non-scalar pattern argument"""
 
     pattern = get_pattern_array(len(regexp_strings))
     flags = "i"
@@ -774,8 +773,8 @@ def test_regexp_substr(regexp_strings, regexp_substr_instr_args):
         ),
     ],
 )
-def test_regexp_replace_backreferences(args):
-    """Tests REGEXP_REPLACE with backreferences"""
+def test_regexp_replace_back_references(args):
+    """Tests REGEXP_REPLACE with back references"""
 
     def impl(arr, pattern, replacement, position, occurrence, flags):
         return pd.Series(

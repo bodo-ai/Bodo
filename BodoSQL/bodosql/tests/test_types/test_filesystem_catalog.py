@@ -2,6 +2,7 @@
 """
 Tests the core functionality with the file system catalog.
 """
+
 import os
 import tempfile
 
@@ -148,10 +149,10 @@ def test_default_schema_filesystem_parquet_write(memory_leak_check):
         bc1 = bodosql.BodoSQLContext(tables, catalog=catalog1)
         bc2 = bodosql.BodoSQLContext(tables, catalog=catalog2)
         # Write to the first location
-        write_query1 = f"create table OUT_TABLE as select * from TABLE1"
+        write_query1 = "create table OUT_TABLE as select * from TABLE1"
         check_func(write_impl, (bc1, write_query1), py_output=0, only_1DVar=True)
         # Write to the second location
-        write_query2 = f"create table OUT_TABLE as select * from TABLE2"
+        write_query2 = "create table OUT_TABLE as select * from TABLE2"
         check_func(write_impl, (bc2, write_query2), py_output=0, only_1DVar=True)
         # Read the table with pandas and validate the result.
         path1 = os.path.join(root, schema1, "OUT_TABLE")
@@ -189,7 +190,7 @@ def test_filesystem_parquet_write_no_schema(memory_leak_check):
         catalog = bodosql.FileSystemCatalog(root, "parquet")
         bc = bodosql.BodoSQLContext(tables, catalog=catalog)
         # Write the data.
-        write_query = f"create table OUT_TABLE as select * from TABLE1"
+        write_query = "create table OUT_TABLE as select * from TABLE1"
         check_func(write_impl, (bc, write_query), py_output=0, only_1DVar=True)
         # Read the table with pandas and validate the result.
         path = os.path.join(root, "OUT_TABLE")

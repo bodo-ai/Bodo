@@ -1,7 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL with dictionary encoding
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL with dictionary encoding"""
 
 import numpy as np
 import pandas as pd
@@ -9,7 +7,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
     check_func,
@@ -93,10 +91,10 @@ def test_dict_other_string_kernels(args):
             bodo.libs.bodosql_array_kernels.substring_index(arg0, arg1, arg2)
         ).str.capitalize()
 
-    # Simulates the relevent function on a single row (these are not quite
+    # Simulates the relevant function on a single row (these are not quite
     # accurate, but work for simple inputs like the ones in the parametrization)
     def scalar_fn(func, *args):
-        if any([(pd.isna(arg) or str(arg) == "None") for arg in args]):
+        if any((pd.isna(arg) or str(arg) == "None") for arg in args):
             return None
         args = list(args)
         args[0] = str(args[0])

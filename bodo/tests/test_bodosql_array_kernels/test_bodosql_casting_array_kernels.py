@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for casting
-"""
+"""Test Bodo's array kernel utilities for casting"""
+
 import datetime
 
 import numpy as np
@@ -9,7 +9,6 @@ import pytest
 from pandas.api.types import is_float_dtype, is_string_dtype
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
     str_to_bool,
@@ -56,11 +55,7 @@ pytestmark = pytest_slow_unless_codegen
             id="nullable_int64_array",
         ),
         pytest.param(
-            (
-                pd.Series(
-                    [2**-150, 2**130, (2 - 2**-24) * (2**-128)], dtype="float64"
-                ),
-            ),
+            (pd.Series([2**-150, 2**130, (2 - 2**-24) * (2**-128)], dtype="float64"),),
             id="float64_precision_array",
         ),
         pytest.param((pd.Series(["1", "2", "3", "4", "5"]),), id="str_int_array"),

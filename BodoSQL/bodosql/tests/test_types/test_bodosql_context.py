@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for user facing BodoSQL APIs.
-"""
+"""Tests for user facing BodoSQL APIs."""
 
 import datetime
 import os
@@ -688,8 +687,8 @@ def test_fails_compile(query_text):
     }
 
     try:
-        bc._functext_compile(query_text, dict(), glbls)
-    except Exception as e:
+        bc._functext_compile(query_text, {}, glbls)
+    except Exception:
         return
 
     raise Exception("Should have failed to compile")

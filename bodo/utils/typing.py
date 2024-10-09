@@ -2,6 +2,7 @@
 """
 Helper functions to enable typing.
 """
+
 import copy
 import itertools
 import operator
@@ -388,7 +389,7 @@ class FilenameModel(models.StructModel):
 
     def __init__(self, dmm, fe_type):
         val_model = dmm.lookup(bodo.typeof(fe_type.fname))
-        members = [(a, b) for a, b in zip(val_model._fields, val_model._members)]
+        members = list(zip(val_model._fields, val_model._members))
         super().__init__(dmm, fe_type, members)
 
 
@@ -425,7 +426,7 @@ def is_overload_constant_bool(val):
     return (
         isinstance(val, bool)
         or isinstance(val, types.BooleanLiteral)
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, bool)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, bool))
     )
 
 
@@ -437,7 +438,7 @@ def is_overload_constant_str(val):
     return (
         isinstance(val, str)
         or (isinstance(val, types.StringLiteral) and isinstance(val.literal_value, str))
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, str)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, str))
     )
 
 
@@ -447,7 +448,7 @@ def is_overload_constant_bytes(val):
         isinstance(val, bytes)
         # Numba doesn't have a coresponding literal type for byte literals
         # or (isinstance(val, types.BinaryLiteral) and isinstance(val.literal_value, bytes))
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, bytes)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, bytes))
     )
 
 
@@ -543,7 +544,7 @@ def is_overload_constant_nan(val):
 
 def is_overload_constant_float(val):
     return isinstance(val, float) or (
-        (isinstance(val, types.Omitted) and isinstance(val.value, float))
+        isinstance(val, types.Omitted) and isinstance(val.value, float)
     )
 
 
@@ -561,7 +562,7 @@ def is_overload_constant_int(val):
         or (
             isinstance(val, types.IntegerLiteral) and isinstance(val.literal_value, int)
         )
-        or ((isinstance(val, types.Omitted) and isinstance(val.value, int)))
+        or (isinstance(val, types.Omitted) and isinstance(val.value, int))
     )
 
 
@@ -988,13 +989,13 @@ def parse_dtype(dtype, func_name=None):
     # handle constructor functions, e.g. Series.astype(float)
     if isinstance(dtype, types.Function):
         # TODO: other constructor functions?
-        if dtype.key[0] == float:
+        if dtype.key[0] is float:
             dtype = types.StringLiteral("float")
-        elif dtype.key[0] == int:
+        elif dtype.key[0] is int:
             dtype = types.StringLiteral("int")
-        elif dtype.key[0] == bool:
+        elif dtype.key[0] is bool:
             dtype = types.StringLiteral("bool")
-        elif dtype.key[0] == str:
+        elif dtype.key[0] is str:
             dtype = bodo.string_type
 
     # Handle Pandas Int type directly. This can occur when
@@ -1046,7 +1047,7 @@ def parse_dtype(dtype, func_name=None):
         if d_str == "str":
             return bodo.string_type
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
-    except:
+    except Exception:
         pass
     if func_name is not None:
         raise BodoError(f"{func_name}(): invalid dtype {dtype}")
@@ -1717,7 +1718,7 @@ def types_equality_exists(t1, t2):
         # know it is a no-op.
         typing_context.resolve_function_type(operator.eq, (t1, t2), {})
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -1749,7 +1750,7 @@ def is_hashable_type(t):
     try:
         typing_context.resolve_function_type(hash, (t,), {})
         return True
-    except:  # pragma: no cover
+    except Exception:  # pragma: no cover
         return False
 
 
@@ -1914,7 +1915,7 @@ def get_common_scalar_dtype(
         )
         # If we get an object dtype we do not have a common type.
         # Otherwise, the types can be used together
-        if common_dtype != object:
+        if common_dtype is not object:
             return (numba.np.numpy_support.from_dtype(common_dtype), False)
 
     # If we have a Bodo or Numba type that isn't implemented in
@@ -2237,7 +2238,7 @@ def _gen_objmode_overload(
     func_text = f"def overload_impl({sig}):\n"
     func_text += f"    def impl({sig}):\n"
     if single_rank:
-        func_text += f"        if bodo.get_rank() == 0:\n"
+        func_text += "        if bodo.get_rank() == 0:\n"
         extra_indent = "    "
     else:
         extra_indent = ""
@@ -2247,8 +2248,8 @@ def _gen_objmode_overload(
         func_text += f"            {extra_indent}res = {call_str}({args})\n"
     else:
         func_text += f"            {extra_indent}res = {call_str}\n"
-    func_text += f"        return res\n"
-    func_text += f"    return impl\n"
+    func_text += "        return res\n"
+    func_text += "    return impl\n"
 
     loc_vars = {}
     # XXX For some reason numba needs a reference to the module or caching
@@ -2408,7 +2409,7 @@ def get_builtin_function_name(func):
 
 def construct_pysig(arg_names, defaults):
     """generate pysignature object for templates"""
-    func_text = f"def stub("
+    func_text = "def stub("
     for arg in arg_names:
         func_text += arg
         if arg in defaults:
@@ -2860,7 +2861,7 @@ def gen_bodosql_case_func(
     call_args = ", ".join(var_names)
     func_text += f"  return bodosql_case_kernel(({call_args},))\n"
 
-    inner_func_text = f"def bodosql_case_kernel(arrs):\n"
+    inner_func_text = "def bodosql_case_kernel(arrs):\n"
     for i, varname in enumerate(var_names):
         # Reuse the same variable name as the original query
         inner_func_text += f"  {varname} = arrs[{i}]\n"
@@ -3012,11 +3013,7 @@ def get_common_bodosql_integer_arr_type(
         types.ArrayCompatible: The output array with max bidwidth + correct nullability.
     """
     # Make sure arrays have the same nullability.
-    are_nullable = [is_nullable(arr_typ) for arr_typ in arr_typs]
-    if any([nullable for nullable in are_nullable]):
-        to_nullable = True
-    else:
-        to_nullable = False
+    to_nullable = any(is_nullable(arr_typ) for arr_typ in arr_typs)
     bitwidths = [arr_typ.dtype.bitwidth for arr_typ in arr_typs]
     max_bitwidth = max(bitwidths)
     typ_idx = bitwidths.index(max_bitwidth)

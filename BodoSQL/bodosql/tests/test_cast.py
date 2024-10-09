@@ -2,6 +2,7 @@
 """
 Test correctness of SQL cast queries on BodoSQL
 """
+
 import datetime
 
 import pandas as pd
@@ -229,52 +230,33 @@ def test_str_to_date(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check
 
 
 @pytest.mark.slow
-def test_like_to_like(basic_df, use_sf_cast_syntax, spark_info, memory_leak_check):
+@pytest.mark.parametrize(
+    "spark_query,sf_query",
+    [
+        ("SELECT CAST(5 AS Int)", "SELECT 5::Int"),
+        ("SELECT CAST(-45 AS Int)", "SELECT (-45)::Int"),
+        ("SELECT CAST(3.123 AS Float)", "SELECT 3.123::Float"),
+        pytest.param(
+            f"SELECT CAST(X'{b'HELLO'.hex()}' AS VARBINARY)",
+            f"SELECT X'{b'HELLO'.hex()}'::VARBINARY",
+            marks=pytest.mark.skip("[BE-957] Support Bytes.fromhex"),
+        ),
+    ],
+)
+def test_like_to_like(
+    spark_query, sf_query, basic_df, use_sf_cast_syntax, spark_info, memory_leak_check
+):
     """tests that you casting to the same type doesn't cause any weird issues"""
-    spark_query1 = "SELECT CAST(5 AS Int)"
-    spark_query2 = "SELECT CAST(-45 AS Int)"
-    spark_query3 = "SELECT CAST(3.123 AS Float)"
-    spark_query4 = f"SELECT CAST(X'{b'HELLO'.hex()}' AS VARBINARY)"
 
-    if use_sf_cast_syntax:
-        query1 = "SELECT 5::Int"
-        query2 = "SELECT (-45)::Int"
-        query3 = "SELECT 3.123::Float"
-        query4 = f"SELECT X'{b'HELLO'.hex()}'::VARBINARY"
-    else:
-        query1, query2, query3, query4 = (
-            spark_query1,
-            spark_query2,
-            spark_query3,
-            spark_query4,
-        )
-
+    query = sf_query if use_sf_cast_syntax else spark_query
     check_query(
-        query1,
+        query,
         basic_df,
         spark_info,
-        equivalent_spark_query=spark_query1,
+        equivalent_spark_query=spark_query,
         check_names=False,
         check_dtype=False,
     )
-    check_query(
-        query2,
-        basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query2,
-        check_names=False,
-        check_dtype=False,
-    )
-    check_query(
-        query3,
-        basic_df,
-        spark_info,
-        equivalent_spark_query=spark_query3,
-        check_names=False,
-        check_dtype=False,
-    )
-    # TODO: [BE-957] Support Bytes.fromhex]
-    # check_query(query4, basic_df, spark_info, equivalent_spark_query=spark_query4, check_names=False)
 
 
 @pytest.mark.skip("[BS-414] casting strings/string literals to Binary not supported")
@@ -550,11 +532,11 @@ def test_numeric_nullable_scalar_to_datetime(
 ):
     """Tests casting numeric scalars (from columns) to str types"""
     if use_sf_cast_syntax:
-        query = f"SELECT CASE WHEN B > 5 THEN A::TIMESTAMP ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
+        query = "SELECT CASE WHEN B > 5 THEN A::TIMESTAMP ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
     else:
-        query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS TIMESTAMP) ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
+        query = "SELECT CASE WHEN B > 5 THEN CAST(A AS TIMESTAMP) ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
 
-    spark_query = f"SELECT CASE WHEN B > 5 THEN CAST(A AS TIMESTAMP) ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
+    spark_query = "SELECT CASE WHEN B > 5 THEN CAST(A AS TIMESTAMP) ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
     check_query(
         query,
         bodosql_nullable_numeric_types,

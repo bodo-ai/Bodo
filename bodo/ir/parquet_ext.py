@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the parquet data access"""
+
 from typing import TYPE_CHECKING, Optional
 
 import llvmlite.binding as ll
@@ -195,7 +196,7 @@ class ParquetHandler:
             all_col_names: list[str] = list(table_types.keys())
             # Create a map for efficient index lookup
             all_col_names_map = {c: i for i, c in enumerate(all_col_names)}
-            col_types_total = [t for t in table_types.values()]
+            col_types_total = list(table_types.values())
 
             # TODO: allow specifying types of only selected columns
             col_names: list[str] = all_col_names if columns is None else columns
@@ -238,13 +239,11 @@ class ParquetHandler:
                 col_types[i] = convert_types[c]
 
         if chunksize is None:
-            out_types = col_types
             data_arrs = [
                 ir.Var(scope, mk_unique_var("pq_table"), loc),
                 ir.Var(scope, mk_unique_var("pq_index"), loc),
             ]
         else:
-            out_types = [ArrowReaderType(col_names, col_types)]
             data_arrs = [ir.Var(lhs.scope, mk_unique_var("arrow_iterator"), lhs.loc)]
 
         nodes = [
@@ -549,7 +548,7 @@ def pq_distributed_run(
         if remaining_unsupported:
             unsupported_list = sorted(remaining_unsupported)
             msg_list = [
-                f"pandas.read_parquet(): 1 or more columns found with Arrow types that are not supported in Bodo and could not be eliminated. "
+                "pandas.read_parquet(): 1 or more columns found with Arrow types that are not supported in Bodo and could not be eliminated. "
                 + "Please manually remove these columns from your read_parquet with the 'columns' argument. If these "
                 + "columns are needed, you will need to modify your dataset to use a supported type.",
                 "Unsupported Columns:",
@@ -804,7 +803,7 @@ def _gen_pq_reader_py(
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
-    func_text += f"    ev.add_attribute('g_fname', fname)\n"
+    func_text += "    ev.add_attribute('g_fname', fname)\n"
     func_text += f'    _, filters = get_filters_pyobject("[]", "{expr_filter_str}", ({extra_args}{comma}))\n'
     # convert the filename, which could be a string or a list of strings, to a
     # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
@@ -864,27 +863,27 @@ def _gen_pq_reader_py(
             f"        {len(selected_partition_cols)},\n"
         )
     else:
-        func_text += f"        0, 0, 0,\n"
+        func_text += "        0, 0, 0,\n"
     if len(str_as_dict_cols) > 0:
         # TODO pass array as global to function instead?
         func_text += f"        np.array({str_as_dict_cols}, dtype=np.int32).ctypes, {len(str_as_dict_cols)},\n"
     else:
-        func_text += f"        0, 0,\n"
-    func_text += f"        total_rows_np.ctypes,\n"
+        func_text += "        0, 0,\n"
+    func_text += "        total_rows_np.ctypes,\n"
     # The C++ code only needs a flag
     func_text += f"        {input_file_name_col is not None},\n"
     func_text += f"        {use_hive},\n"
-    func_text += f"    )\n"
-    func_text += f"    check_and_propagate_cpp_exception()\n"
+    func_text += "    )\n"
+    func_text += "    check_and_propagate_cpp_exception()\n"
 
-    func_text += f"    total_rows = total_rows_np[0]\n"
+    func_text += "    total_rows = total_rows_np[0]\n"
     # Compute the number of rows that are stored in your chunk of the data.
     # This is necessary because we may avoid reading any columns but may not
     # be able to do the head only optimization.
     if is_parallel:
-        func_text += f"    local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
+        func_text += "    local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
     else:
-        func_text += f"    local_rows = total_rows\n"
+        func_text += "    local_rows = total_rows\n"
 
     index_arr_type = index_column_type
     py_table_type = TableType(tuple(out_types))
@@ -939,15 +938,15 @@ def _gen_pq_reader_py(
         func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id}, 0)\n"
         if len(out_used_cols) == 0:
             # Set the table length using the total rows if don't load any columns
-            func_text += f"    T = set_table_len(T, local_rows)\n"
+            func_text += "    T = set_table_len(T, local_rows)\n"
     if index_column_index is None:
         func_text += "    index_arr = None\n"
     else:
         index_arr_ind = selected_cols_map[index_column_index]
         func_text += f"    index_arr = array_from_cpp_table(out_table, {index_arr_ind}, index_arr_type)\n"
-    func_text += f"    delete_table(out_table)\n"
-    func_text += f"    ev.finalize()\n"
-    func_text += f"    return (total_rows, T, index_arr)\n"
+    func_text += "    delete_table(out_table)\n"
+    func_text += "    ev.finalize()\n"
+    func_text += "    return (total_rows, T, index_arr)\n"
     loc_vars = {}
     glbs = {
         f"py_table_type_{call_id}": py_table_type,
@@ -1053,11 +1052,11 @@ def _gen_pq_reader_chunked_py(
     # single-element numpy array to return number of global rows from C++
     func_text += "\n".join(
         [
-            f"    pq_reader = pq_reader_init_py_entry(",
-            f"        fname_py,",
+            "    pq_reader = pq_reader_init_py_entry(",
+            "        fname_py,",
             f"        {is_parallel},",
-            f"        filters,",
-            f"        storage_options_py,",
+            "        filters,",
+            "        storage_options_py,",
             f"        pyarrow_schema_{call_id},",
             f"        {tot_rows_to_read},",
             f"        selected_cols_arr_{call_id}.ctypes,",
@@ -1073,13 +1072,13 @@ def _gen_pq_reader_chunked_py(
             f"        {len(selected_partition_cols)},\n"
         )
     else:
-        func_text += f"        0, 0, 0,\n"
+        func_text += "        0, 0, 0,\n"
 
     if len(str_as_dict_cols) > 0:
         # TODO pass array as global to function instead?
         func_text += f"        np.array({str_as_dict_cols}, dtype=np.int32).ctypes, {len(str_as_dict_cols)},\n"
     else:
-        func_text += f"        0, 0,\n"
+        func_text += "        0, 0,\n"
 
     func_text += (
         # The C++ code only needs a flag
@@ -1120,31 +1119,31 @@ def get_fname_pyobject(fname):
     return fname_py
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    ParquetReader
-] = bodo.ir.connector.connector_array_analysis
-distributed_analysis.distributed_analysis_extensions[
-    ParquetReader
-] = bodo.ir.connector.connector_distributed_analysis
+numba.parfors.array_analysis.array_analysis_extensions[ParquetReader] = (
+    bodo.ir.connector.connector_array_analysis
+)
+distributed_analysis.distributed_analysis_extensions[ParquetReader] = (
+    bodo.ir.connector.connector_distributed_analysis
+)
 typeinfer.typeinfer_extensions[ParquetReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[ParquetReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[ParquetReader] = remove_dead_pq
-numba.core.analysis.ir_extension_usedefs[
-    ParquetReader
-] = bodo.ir.connector.connector_usedefs
-ir_utils.copy_propagate_extensions[
-    ParquetReader
-] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[
-    ParquetReader
-] = bodo.ir.connector.apply_copies_connector
-ir_utils.build_defs_extensions[
-    ParquetReader
-] = bodo.ir.connector.build_connector_definitions
+numba.core.analysis.ir_extension_usedefs[ParquetReader] = (
+    bodo.ir.connector.connector_usedefs
+)
+ir_utils.copy_propagate_extensions[ParquetReader] = (
+    bodo.ir.connector.get_copies_connector
+)
+ir_utils.apply_copy_propagate_extensions[ParquetReader] = (
+    bodo.ir.connector.apply_copies_connector
+)
+ir_utils.build_defs_extensions[ParquetReader] = (
+    bodo.ir.connector.build_connector_definitions
+)
 remove_dead_column_extensions[ParquetReader] = pq_remove_dead_column
-ir_extension_table_column_use[
-    ParquetReader
-] = bodo.ir.connector.connector_table_column_use
+ir_extension_table_column_use[ParquetReader] = (
+    bodo.ir.connector.connector_table_column_use
+)
 distributed_pass.distributed_run_extensions[ParquetReader] = pq_distributed_run
 
 
@@ -1195,8 +1194,9 @@ def pq_reader_init_py_entry(
     op_id_t,
     arrow_reader_t,
 ):  # pragma: no cover
-    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
-        arrow_reader_t.instance_type, ArrowReaderType
+    assert (
+        isinstance(arrow_reader_t, types.TypeRef)
+        and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
     ), "pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
     assert (
         pyarrow_schema_t == pyarrow_schema_type

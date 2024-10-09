@@ -1,5 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test supported sklearn.cluster and sklearn.ensemble models"""
+"""Test supported sklearn.cluster and sklearn.ensemble models"""
 
 import time
 

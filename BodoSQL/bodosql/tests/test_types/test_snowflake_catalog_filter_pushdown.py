@@ -2,6 +2,7 @@
 """
 Tests filter pushdown with a Snowflake Catalog object.
 """
+
 import io
 import os
 import re
@@ -61,7 +62,7 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
             # Check for filter pushdown
             check_logger_msg(
                 stream,
-                f'WHERE "L_ORDERKEY" > 10 AND STARTSWITH("L_SHIPMODE", $$AIR$$)',
+                'WHERE "L_ORDERKEY" > 10 AND STARTSWITH("L_SHIPMODE", $$AIR$$)',
             )
 
     bc = bodosql.BodoSQLContext(
@@ -151,7 +152,7 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'FROM "TEST_DB"."PUBLIC"."BODOSQL_ALL_SUPPORTED" WHERE COALESCE("MYCOL2", CURRENT_DATE) > $$2022-01-01$$',
+            'FROM "TEST_DB"."PUBLIC"."BODOSQL_ALL_SUPPORTED" WHERE COALESCE("MYCOL2", CURRENT_DATE) > $$2022-01-01$$',
         )
 
 
@@ -366,7 +367,7 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
 
     # Note: We don't yet support casting with limit pushdown.
     py_output = pd.read_sql(
-        f"select mycol from PUBLIC.BODOSQL_ALL_SUPPORTED WHERE mycol = 'A' LIMIT 5",
+        "select mycol from PUBLIC.BODOSQL_ALL_SUPPORTED WHERE mycol = 'A' LIMIT 5",
         get_snowflake_connection_string("TEST_DB", "PUBLIC"),
     )
     py_output.columns = py_output.columns.str.upper()
@@ -1305,7 +1306,7 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'WHERE "B"',
+                'WHERE "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where b or c"
@@ -1387,7 +1388,7 @@ def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_ch
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'WHERE NOT "B"',
+                'WHERE NOT "B"',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not(b or c)"
@@ -1506,7 +1507,7 @@ def test_snowflake_not_comparison_pushdown(
             )
             check_logger_msg(
                 stream,
-                f'WHERE "B" = 3',
+                'WHERE "B" = 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query2 = f"Select a from {table_name} where not (b <= 3)"
@@ -1524,7 +1525,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'WHERE "B" > 3',
+                'WHERE "B" > 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query3 = f"Select a from {table_name} where not (b < 3)"
@@ -1542,7 +1543,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'WHERE "B" >= 3',
+                'WHERE "B" >= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query4 = f"Select a from {table_name} where not (b >= 3)"
@@ -1560,7 +1561,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'WHERE "B" < 3',
+                'WHERE "B" < 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query5 = f"Select a from {table_name} where not (b > 3)"
@@ -1578,7 +1579,7 @@ def test_snowflake_not_comparison_pushdown(
             # Pushdown happens in the planner. Check the timer message instead.
             check_logger_msg(
                 stream,
-                f'WHERE "B" <= 3',
+                'WHERE "B" <= 3',
             )
             check_logger_msg(stream, "Columns loaded ['a']")
         query6 = f"Select a from {table_name} where NOT((b > 3 OR b < 2) AND C)"
@@ -2363,7 +2364,7 @@ def test_with_arg_string_transform_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['a']")
+        check_logger_msg(stream, "Columns loaded ['a']")
         # Each function may have different number of args,
         # so we will just check that the SQL function got logged.
         check_logger_msg(
@@ -2470,7 +2471,7 @@ def test_nonregex_string_match_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['a']")
+        check_logger_msg(stream, "Columns loaded ['a']")
 
         check_logger_msg(
             stream,
@@ -2606,7 +2607,7 @@ def test_regex_string_match_functions(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['a']")
+        check_logger_msg(stream, "Columns loaded ['a']")
         if sql_function == "RLIKE":
             # RLIKE has a different syntax then the others, so we use a different check
             check_logger_msg(
@@ -2720,7 +2721,7 @@ def test_least_greatest(
             check_dtype=False,
         )
 
-        check_logger_msg(stream, f"Columns loaded ['float_col']")
+        check_logger_msg(stream, "Columns loaded ['float_col']")
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
@@ -2824,7 +2825,7 @@ def test_separate_database_read(test_db_snowflake_catalog, memory_leak_check):
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'WHERE "R_COMMENT" IS NOT NULL',
+            'WHERE "R_COMMENT" IS NOT NULL',
         )
 
 
@@ -2871,7 +2872,7 @@ def test_inline_view_filter_pushdown(test_db_snowflake_catalog, memory_leak_chec
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'WHERE "A" > 1',
+            'WHERE "A" > 1',
         )
 
 
@@ -2920,5 +2921,5 @@ def test_inline_filter_view_filter_pushdown(
         # Pushdown happens in the planner. Check the timer message instead.
         check_logger_msg(
             stream,
-            f'WHERE "A" > 1',
+            'WHERE "A" > 1',
         )

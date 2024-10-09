@@ -272,12 +272,12 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
         bc.sql(table_query)
         with schema_helper(conn, schema_2, create=True):
-            with pytest.raises(BodoError, match=f"Object 'TABLE1' not found"):
+            with pytest.raises(BodoError, match="Object 'TABLE1' not found"):
                 query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
                 bc.execute_ddl(query)
 
         # Test that the view validates if ran in the correct schema
-        py_output = pd.DataFrame({"STATUS": [f"View 'VIEW2' successfully created."]})
+        py_output = pd.DataFrame({"STATUS": ["View 'VIEW2' successfully created."]})
         query = (
             f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
         )
@@ -285,7 +285,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         assert_equal_par(bodo_output, py_output)
 
         # Column B does not exist - validation should fail
-        with pytest.raises(BodoError, match=f"Column 'B' not found"):
+        with pytest.raises(BodoError, match="Column 'B' not found"):
             query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
             bc.execute_ddl(query)
 
@@ -753,21 +753,15 @@ def test_drop_view_error_non_view(
     query_drop_view = f"DROP VIEW {if_exists_str} {view_name}"
     with table_helper(conn, view_name, create=True):
         # execute_ddl Version
-        with pytest.raises(
-            BodoError, match=f"Unable to drop Snowflake view from query"
-        ):
+        with pytest.raises(BodoError, match="Unable to drop Snowflake view from query"):
             bc.execute_ddl(query_drop_view)
 
         # Python Version
-        with pytest.raises(
-            BodoError, match=f"Unable to drop Snowflake view from query"
-        ):
+        with pytest.raises(BodoError, match="Unable to drop Snowflake view from query"):
             bc.sql(query_drop_view)
 
         # Jit Version
-        with pytest.raises(
-            BodoError, match=f"Unable to drop Snowflake view from query"
-        ):
+        with pytest.raises(BodoError, match="Unable to drop Snowflake view from query"):
             check_func_seq(
                 lambda bc, query: bc.sql(query),
                 (bc, query_drop_view),
@@ -803,7 +797,6 @@ def test_alter_table_rename(test_db_snowflake_catalog, memory_leak_check):
             pd.read_sql(
                 f"DROP TABLE IF EXISTS {table_name}_renamed", conn
             )  # Clean up if previously existed
-            case_insenstive_table_name = table_name.upper()
             # Execute ALTER TABLE query.
             query = f"ALTER TABLE {table_name} RENAME TO {table_name}_renamed"
             py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
@@ -846,7 +839,6 @@ def test_alter_table_rename_compound(test_db_snowflake_catalog, memory_leak_chec
             pd.read_sql(
                 f"DROP TABLE IF EXISTS {table_name}_renamed", conn
             )  # Clean up if previously existed
-            case_insenstive_table_name = table_name.upper()
             # Execute ALTER TABLE query.
             query = f"ALTER TABLE {schema}.{table_name} RENAME TO {schema}.{table_name}_renamed"
             py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
@@ -889,7 +881,6 @@ def test_alter_table_rename_diffschema(test_db_snowflake_catalog, memory_leak_ch
             pd.read_sql(
                 f"DROP TABLE IF EXISTS {table_name}_renamed", conn
             )  # Clean up if previously existed
-            case_insenstive_table_name = table_name.upper()
 
             # Rename into non-existent schema
             with pytest.raises(BodoError, match="does not exist or not authorized."):
@@ -939,7 +930,6 @@ def test_alter_table_rename_ifexists(test_db_snowflake_catalog, memory_leak_chec
             pd.read_sql(
                 f"DROP TABLE IF EXISTS {table_name}_renamed", conn
             )  # Clean up if previously existed
-            case_insenstive_table_name = table_name.upper()
             # Execute ALTER TABLE query with IF EXISTS option.
             query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_renamed"
             py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
@@ -1018,7 +1008,7 @@ def test_alter_table_rename_ifexists_not_found(
     query = f"ALTER TABLE IF EXISTS {table_name} RENAME TO {table_name}_renamed"
     py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
     bodo_output = impl(bc, query)
-    passed = assert_equal_par(bodo_output, py_output)
+    assert_equal_par(bodo_output, py_output)
 
 
 def test_alter_table_rename_alreadyexists(test_db_snowflake_catalog, memory_leak_check):
@@ -1044,7 +1034,6 @@ def test_alter_table_rename_alreadyexists(test_db_snowflake_catalog, memory_leak
             pd.read_sql(
                 f"DROP TABLE IF EXISTS {table_name}_renamed", conn
             )  # Clean up if previously existed
-            case_insenstive_table_name = table_name.upper()
             # Create another table
             bc.sql(f"CREATE OR REPLACE TABLE {table_name}_renamed AS SELECT 1 as A")
             # Execute ALTER TABLE query.
@@ -1065,9 +1054,6 @@ def test_alter_table_not_supported(test_db_snowflake_catalog, memory_leak_check)
     Tests that attempt to use not-yet supported ALTER TABLE operations.
     """
 
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-    conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
 
     @bodo.jit
@@ -1079,15 +1065,15 @@ def test_alter_table_not_supported(test_db_snowflake_catalog, memory_leak_check)
     #       "This DDL operation is not supported yet", but this requires
     #       changing more of the parser, so I think this is lower priority for now.
     with pytest.raises(BodoError, match="This DDL operation is currently unsupported"):
-        query = f"ALTER TABLE test1 SWAP WITH renamedTable"
+        query = "ALTER TABLE test1 SWAP WITH renamedTable"
         impl(bc, query)
 
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        query = f"ALTER TABLE test1 CLUSTER BY test2"
+        query = "ALTER TABLE test1 CLUSTER BY test2"
         impl(bc, query)
 
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        query = f"ALTER TABLE test1 SET test2"
+        query = "ALTER TABLE test1 SET test2"
         impl(bc, query)
 
 
@@ -1121,7 +1107,7 @@ def test_alter_view_rename(test_db_snowflake_catalog, memory_leak_check):
         pd.read_sql(
             "DROP VIEW IF EXISTS renamedView", conn
         )  # Clean up if previously existed
-        case_insenstive_view_name = view_name.upper()
+
         # Execute ALTER TABLE query.
         query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
         py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
@@ -1164,7 +1150,6 @@ def test_alter_view_rename_ifexists(test_db_snowflake_catalog, memory_leak_check
     bodo_output = pd.read_sql(query, conn)
 
     try:
-        case_insenstive_view_name = view_name.upper()
         # Execute ALTER TABLE query with IF EXISTS option.
         query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
         py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
@@ -1268,15 +1253,12 @@ def test_alter_view_rename_alreadyexists(test_db_snowflake_catalog, memory_leak_
     view_name = gen_unique_id("TEST_VIEW").upper()
 
     # Create views
-    bodo_output = pd.read_sql(
-        f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A", conn
-    )
-    bodo_output = pd.read_sql(
+    pd.read_sql(f"CREATE OR REPLACE VIEW {view_name} AS SELECT 'testview' as A", conn)
+    pd.read_sql(
         f"CREATE OR REPLACE VIEW {view_name}_renamed AS SELECT 'testview' as A", conn
     )
 
     try:
-        case_insenstive_view_name = view_name.upper()
         # Execute ALTER TABLE query.
         query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
         # This should now throw an error.
@@ -1291,9 +1273,6 @@ def test_alter_view_rename_alreadyexists(test_db_snowflake_catalog, memory_leak_
 # Unsupported operations tests
 def test_alter_view_not_supported(test_db_snowflake_catalog, memory_leak_check):
     """Tests that attempt to use not-yet supported ALTER VIEW operations."""
-    db = test_db_snowflake_catalog.database
-    schema = test_db_snowflake_catalog.connection_params["schema"]
-    conn = get_snowflake_connection_string(db, schema)
     bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
 
     @bodo.jit
@@ -1305,15 +1284,15 @@ def test_alter_view_not_supported(test_db_snowflake_catalog, memory_leak_check):
     #       "This DDL operation is not supported yet", but this requires
     #       changing more of the parser, so I think this is lower priority for now.
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        query = f"ALTER VIEW test1 SET COMMENT = 'test'"
+        query = "ALTER VIEW test1 SET COMMENT = 'test'"
         impl(bc, query)
 
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        query = f"ALTER VIEW test1 SET SECURE"
+        query = "ALTER VIEW test1 SET SECURE"
         impl(bc, query)
 
     with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
-        query = f"ALTER VIEW test1 SET SECURE"
+        query = "ALTER VIEW test1 SET SECURE"
         impl(bc, query)
 
 
@@ -2079,12 +2058,12 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
         bc.sql(table_query)
         with schema_helper(conn, schema_2, create=True):
-            with pytest.raises(BodoError, match=f"Object 'TABLE1' not found"):
+            with pytest.raises(BodoError, match="Object 'TABLE1' not found"):
                 query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
                 bc.execute_ddl(query)
 
         # Test that the view validates if ran in the correct schema
-        py_output = pd.DataFrame({"STATUS": [f"View 'VIEW2' successfully created."]})
+        py_output = pd.DataFrame({"STATUS": ["View 'VIEW2' successfully created."]})
         query = (
             f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
         )
@@ -2092,7 +2071,7 @@ def test_create_view_validates(test_db_snowflake_catalog, memory_leak_check):
         assert_equal_par(bodo_output, py_output)
 
         # Column B does not exist - validation should fail
-        with pytest.raises(BodoError, match=f"Column 'B' not found"):
+        with pytest.raises(BodoError, match="Column 'B' not found"):
             query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
             bc.execute_ddl(query)
 

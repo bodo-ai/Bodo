@@ -1,8 +1,9 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test file for tests related to alias operations. Some tests
-    looks at the plans that are generated and check correctness.
+Test file for tests related to alias operations. Some tests
+looks at the plans that are generated and check correctness.
 """
+
 import pandas as pd
 import pytest
 
@@ -61,26 +62,22 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
     Tests that the as operator is working correctly for aliasing columns
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["X"]
         convert_columns_bytearray2 = ["X", "Y"]
@@ -136,26 +133,22 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
     Tests that the as operator is working correctly for aliasing table names
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A"]
         convert_columns_bytearray2 = ["A", "B"]
@@ -211,26 +204,22 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
     Tests that aliasing that could be interpreted as cyclic works as intended
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["B", "C", "A"]
     else:
@@ -257,26 +246,22 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
     Tests that bodosql works correctly when the column names are aliased to table names
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["TABLE2", "TABLE1"]
     else:
@@ -302,26 +287,22 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
     Tests that bodosql works correctly when the table names are aliased to column names
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C", "A"]
     else:
@@ -347,26 +328,22 @@ def test_multi_table_renamed_projection(join_dataframes, spark_info, memory_leak
     behave as expected.
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A", "Y"]
         convert_columns_bytearray2 = ["Y", "B"]
@@ -408,26 +385,22 @@ def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
     Test that aliasing tables with the implicit syntax works as intended
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A"]
         convert_columns_bytearray2 = ["Y", "B"]

@@ -261,14 +261,14 @@ def box_snowflake_writer(typ, val, c):
     # is accessed from objmode. As a workaround, store the necessary attributes
     # into local variables in numba native code before entering objmode
     raise NotImplementedError(
-        f"Boxing is disabled for SnowflakeWriter mutable struct."
+        "Boxing is disabled for SnowflakeWriter mutable struct."
     )  # pragma: no cover
 
 
 @unbox(SnowflakeWriterType)
 def unbox_snowflake_writer(typ, val, c):
     raise NotImplementedError(
-        f"Unboxing is disabled for SnowflakeWriter mutable struct."
+        "Unboxing is disabled for SnowflakeWriter mutable struct."
     )  # pragma: no cover
 
 
@@ -551,8 +551,8 @@ def gen_snowflake_writer_append_table_impl_inner(
         )
     if not isinstance(col_names_meta.meta, tuple):  # pragma: no cover
         raise BodoError(
-            f"snowflake_writer_append_table: Expected col_names_meta "
-            f"to contain a tuple of column names"
+            "snowflake_writer_append_table: Expected col_names_meta "
+            "to contain a tuple of column names"
         )
 
     col_names_arr = pd.array(col_names_meta.meta)
@@ -614,7 +614,7 @@ def gen_snowflake_writer_append_table_impl_inner(
         )
         is_last = bodo.libs.distributed_api.sync_is_last(is_last, iter)
         # ===== Part 1: Accumulate batch in writer and compute total size
-        ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
+        ev_append_batch = tracing.Event("append_batch", is_parallel=True)
         table_builder_state = writer["batches"]
         bodo.libs.table_builder.table_builder_append(table_builder_state, table)
         table_bytes = bodo.libs.table_builder.table_builder_nbytes(table_builder_state)

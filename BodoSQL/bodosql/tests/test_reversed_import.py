@@ -1,8 +1,9 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test file that checks if a user imports bodosql before bodo
-    then queries still execute as expected.
+Test file that checks if a user imports bodosql before bodo
+then queries still execute as expected.
 """
+
 import bodosql  # noqa
 import pandas as pd
 import pytest

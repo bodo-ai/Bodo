@@ -2,6 +2,7 @@
 """
 Defines decorators of Bodo. Currently just @jit.
 """
+
 import hashlib
 import inspect
 import warnings
@@ -217,13 +218,13 @@ detail""",
 
     pivots = Option(
         type=dict,
-        default=dict(),
+        default={},
         doc="pivot values",
     )
 
     h5_types = Option(
         type=dict,
-        default=dict(),
+        default={},
         doc="HDF5 read data types",
     )
 

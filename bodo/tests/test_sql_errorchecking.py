@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests I/O error checking for SQL
-"""
+"""Tests I/O error checking for SQL"""
 # TODO: Move error checking tests from test_sql to here.
 
 import random
@@ -77,7 +76,6 @@ def test_to_sql_oracle():
         }
     )
     table_name = "to_sql_table"
-    df_input = df_in
     conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
     with pytest.raises(ValueError, match=re.escape("error in to_sql() operation")):
         bodo.jit(test_impl_write_sql)(df_in, table_name, conn)

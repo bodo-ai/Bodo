@@ -2,6 +2,7 @@
 """
 Tests for writing to Snowflake using Python APIs
 """
+
 import datetime
 import io
 import os
@@ -85,8 +86,8 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     try:
         if bodo.get_rank() == 0:
             show_stages_sql = (
-                f"SHOW STAGES "
-                f"/* tests.test_sql:test_snowflake_create_internal_stage() */"
+                "SHOW STAGES "
+                "/* tests.test_sql:test_snowflake_create_internal_stage() */"
             )
             all_stages = cursor.execute(show_stages_sql, _is_internal=True).fetchall()
             all_stage_names = [x[1] for x in all_stages]
@@ -150,8 +151,8 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     try:
         if bodo.get_rank() == 0:
             show_stages_sql = (
-                f"SHOW STAGES "
-                f"/* tests.test_sql:test_snowflake_drop_internal_stage() */"
+                "SHOW STAGES "
+                "/* tests.test_sql:test_snowflake_drop_internal_stage() */"
             )
             all_stages = cursor.execute(show_stages_sql, _is_internal=True).fetchall()
             all_stage_names = [x[1] for x in all_stages]
@@ -901,7 +902,7 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
     letters = string.ascii_letters
     list_string = [
         "".join(
-            rng.choice([x for x in letters])
+            rng.choice(list(letters))
             for i in range(rng.integers(low=10, high=100, size=1)[0])
         )
         for _ in range(df_len)
@@ -2240,7 +2241,7 @@ def test_aborted_detached_query(memory_leak_check):
     df = pd.read_sql("show parameters like 'ABORT_DETACHED_QUERY'", conn)
     old_value = df["value"].iloc[0]
     try:
-        pd.read_sql(f"alter user set ABORT_DETACHED_QUERY=True", conn)
+        pd.read_sql("alter user set ABORT_DETACHED_QUERY=True", conn)
         # Test the values of the session from snowflake_connect
         connection = bodo.io.snowflake.snowflake_connect(conn)
         cur = connection.cursor()

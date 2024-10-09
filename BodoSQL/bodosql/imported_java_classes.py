@@ -3,6 +3,7 @@
 Common location for importing all java classes from Py4j. This is used so they
 can be imported in multiple locations.
 """
+
 import bodo
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
@@ -43,9 +44,7 @@ if bodo.get_rank() == 0:
         FileSystemCatalogClass = (
             gateway.jvm.com.bodosql.calcite.catalog.FileSystemCatalog
         )
-        WriteTargetEnum = (
-            gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
-        )
+        WriteTargetEnum = gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
         TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
         BodoGlueCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.BodoGlueCatalog
     except Exception as e:

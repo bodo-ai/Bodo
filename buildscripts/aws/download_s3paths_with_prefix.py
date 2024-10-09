@@ -1,7 +1,7 @@
 """
-    Script to run on AWS Codebuild. It takes in a bucket and AWS prefix
-    and downloads all of the directories and files referenced, maintaining
-    the directory structure
+Script to run on AWS Codebuild. It takes in a bucket and AWS prefix
+and downloads all of the directories and files referenced, maintaining
+the directory structure
 """
 
 # Copied mostly from https://stackoverflow.com/questions/49772151/download-a-folder-from-s3-using-boto3

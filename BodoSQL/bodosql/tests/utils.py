@@ -1,6 +1,7 @@
 """
 Infrastructure used to test correctness.
 """
+
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
 import re
@@ -455,7 +456,7 @@ def check_query(
         rtol=rtol,
     )
 
-    result = dict()
+    result = {}
 
     if return_codegen or return_seq_dataframe:
         bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
@@ -915,7 +916,7 @@ def check_query_jit_1D(
     if is_out_distributed:
         try:
             bodosql_output = bodo.gatherv(bodosql_output)
-        except Exception as e:
+        except Exception:
             comm = MPI.COMM_WORLD
             bodosql_output_list = comm.gather(bodosql_output)
             if bodo.get_rank() == 0:
@@ -1009,7 +1010,7 @@ def check_query_jit_1DVar(
     if is_out_distributed:
         try:
             bodosql_output = bodo.gatherv(bodosql_output)
-        except Exception as e:
+        except Exception:
             comm = MPI.COMM_WORLD
             bodosql_output_list = comm.gather(bodosql_output)
             if bodo.get_rank() == 0:
@@ -1115,7 +1116,7 @@ def _run_jit_query(
     if session_tz is not None:
         func_text += f"        , default_tz={repr(session_tz)}\n"
     func_text += "    )\n"
-    func_text += f"    result = bc.sql(query, "
+    func_text += "    result = bc.sql(query, "
     if keys_list:
         func_text += "{"
         for key in keys_list:
@@ -1204,7 +1205,7 @@ def _check_query_equal(
                 # Workaround Pandas 2 Arrow setitem error by setting to an int first
                 bodosql_output.iloc[:, i] = 3
                 bodosql_output.iloc[:, i] = result
-            except Exception as e:
+            except Exception:
                 pass
 
     if convert_columns_to_pandas:
@@ -1362,17 +1363,15 @@ def convert_nullable_object(df):
     can interpret the results.
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.core.arrays.boolean.BooleanDtype,
-                    pd.StringDtype,
-                ),
-            )
-            for x in df.dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.core.arrays.boolean.BooleanDtype,
+                pd.StringDtype,
+            ),
+        )
+        for x in df.dtypes
     ):
         df = df.copy()
         for i, x in enumerate(df.dtypes):
@@ -1507,7 +1506,7 @@ def get_pyspark_literal(value, use_interval):
 
 
 def shrink_data(ctx, n, keys_to_shrink=None, keys_to_not_shrink=None):
-    output_dict = dict()
+    output_dict = {}
     if keys_to_shrink is None:
         keys_to_shrink = ctx.keys()
 
@@ -1577,7 +1576,7 @@ def create_pyspark_schema_from_dataframe(df):
 
 
 def make_tables_nullable(input_ctx):
-    output_ctx = dict()
+    output_ctx = {}
     np.random.seed(42)
 
     for table_name, table_value in input_ctx.items():

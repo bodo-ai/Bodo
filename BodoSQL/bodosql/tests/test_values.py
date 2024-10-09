@@ -2,6 +2,7 @@
 """
 Tests for the SQL Values syntax that require end to end testing.
 """
+
 import pandas as pd
 
 from bodo.tests.utils import pytest_slow_unless_codegen

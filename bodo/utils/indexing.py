@@ -2,6 +2,7 @@
 """
 Collection of utility functions for indexing implementation (getitem/setitem)
 """
+
 import operator
 
 import numba

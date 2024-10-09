@@ -1,7 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's Table data type
-"""
-
+"""Test Bodo's Table data type"""
 
 import io
 
@@ -174,7 +172,7 @@ def test_logical_table_to_table_dels(datapath, memory_leak_check):
     """
     Make sure table columns are deleted properly for logical_table_to_table() calls
     """
-    filename = datapath(f"many_columns.parquet")
+    filename = datapath("many_columns.parquet")
     col_inds = bodo.utils.typing.MetaType((2, 99, 11, 7))
     col_names = bodo.utils.typing.ColNamesMetaType(("C1", "C2", "C3", "C4"))
 

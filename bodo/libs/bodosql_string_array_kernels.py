@@ -10,7 +10,16 @@ from numba.extending import overload, register_jitable
 
 import bodo
 import bodo.libs.uuid
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    is_overload_constant_str,
+    is_valid_binary_arg,
+    unopt_argument,
+    verify_int_arg,
+    verify_int_float_arg,
+    verify_string_arg,
+    verify_string_binary_arg,
+)
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_bool,
@@ -18,6 +27,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_int,
     is_overload_none,
+    raise_bodo_error,
 )
 
 
@@ -707,13 +717,13 @@ def char_util(arr):
 @numba.generated_jit(nopython=True)
 def initcap_util(arr, delim, dict_encoding_state, func_id):
     """A dedicated kernel for the SQL function INITCAP which takes in a source
-    string (or column) and a delimeter string (or column) capitalizes the first
-    character and every character after the characters in the delimeter string.
+    string (or column) and a delimiter string (or column) capitalizes the first
+    character and every character after the characters in the delimiter string.
 
 
     Args:
         arr (string array/series/scalar): the string(s) being capitalized
-        delim (string array/series/scalar): the delimeter string(s) to capitalize
+        delim (string array/series/scalar): the delimiter string(s) to capitalize
         after
 
     Returns:
@@ -841,7 +851,7 @@ def min_edit_distance(s, t):  # pragma: no cover
 @register_jitable
 def min_edit_distance_with_max(s, t, maxDistance):  # pragma: no cover
     """Utility for finding the minimum edit distance between two scalar strings
-    when provided with a maximum distance. This is seperate from
+    when provided with a maximum distance. This is separate from
     min_edit_distance_without_max because it has extra checks inside of the
     loops. Algorithm derived from the following:
     https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
@@ -1338,9 +1348,9 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         verify_string_binary_arg(pad_string, func_name, f"{func_name.lower()}_string")
 
         if func_name == "LPAD":
-            pad_line = f"(arg2 * quotient) + arg2[:remainder] + arg0"
+            pad_line = "(arg2 * quotient) + arg2[:remainder] + arg0"
         elif func_name == "RPAD":
-            pad_line = f"arg0 + (arg2 * quotient) + arg2[:remainder]"
+            pad_line = "arg0 + (arg2 * quotient) + arg2[:remainder]"
 
         arg_names = ["arr", "length", "pad_string", "dict_encoding_state", "func_id"]
         arg_types = [arr, length, pad_string, dict_encoding_state, func_id]
@@ -2569,7 +2579,7 @@ def hex_encode_util(msg, case, dict_encoding_state, func_id):
 
     Args:
         msg (string scalar/column): The strings(s) to be encrypted.
-        case (integer): how to captitalize 1-f: 0 for lowercase, 1 for uppercase
+        case (integer): how to capitalize 1-f: 0 for lowercase, 1 for uppercase
 
 
     Returns:
@@ -2688,9 +2698,9 @@ def hex_decode_util(msg, _try, _is_str, dict_encoding_state, func_id):
     propagate_null = [True] + [False] * 4
     out_dtype = bodo.string_array_type if _is_str_bool else bodo.binary_array_type
     if _is_str_bool:
-        scalar_text = f"ans, success = bodo.libs.bodosql_crypto_funcs.hex_decode_string_algorithm(arg0)\n"
+        scalar_text = "ans, success = bodo.libs.bodosql_crypto_funcs.hex_decode_string_algorithm(arg0)\n"
     else:
-        scalar_text = f"ans, success = bodo.libs.bodosql_crypto_funcs.hex_decode_binary_algorithm(arg0)\n"
+        scalar_text = "ans, success = bodo.libs.bodosql_crypto_funcs.hex_decode_binary_algorithm(arg0)\n"
     scalar_text += "if success:\n"
     scalar_text += "  res[i] = ans\n"
     scalar_text += "else:\n"

@@ -1,8 +1,9 @@
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
-""" Get pandas apis from a list of pre-specified URLs and use apis to find
+"""Get pandas apis from a list of pre-specified URLs and use apis to find
 methods/attributes we are currently not supporting that lack proper error messages.
 This script will be run during the import bodo step if specified by _check_pandas_docs
 """
+
 import numba
 import requests
 from numba.core.target_extension import dispatcher_registry

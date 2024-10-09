@@ -3,6 +3,7 @@
 converts Series operations to array operations as much as possible
 to provide implementation and enable optimization.
 """
+
 import operator
 import sys
 import warnings
@@ -132,7 +133,7 @@ from bodo.utils.utils import (
     is_whole_slice,
 )
 
-ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
+ufunc_names = {f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs}
 
 
 _string_array_comp_ops = (
@@ -198,7 +199,7 @@ class SeriesPass:
         self.dataframe_pass._visited_updated_dataframes = set()
 
         # NOTE: this is iterating in topological order; we're popping from the reversed ordering.
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
+        work_list = [(l, blocks[l]) for l in reversed(topo_order)]
         changed = False
         while work_list:
             label, block = work_list.pop()
@@ -242,7 +243,8 @@ class SeriesPass:
                         # extra pass over the IR (reducing compilation time).
                         bodo.ir.csv_ext.check_node_typing(inst, self.typemap)
                 except BodoError as e:
-                    raise BodoError(self.curr_loc.strformat() + "\n" + str(e))
+                    msg = f"{self.curr_loc.strformat()}\n{str(e)}"
+                    raise BodoError(msg)
 
                 if isinstance(out_nodes, list):
                     new_body.extend(out_nodes)
@@ -958,9 +960,10 @@ class SeriesPass:
                 "bodosql.context_ext",
             ):
                 # Try import BodoSQL and check the type
+                # TODO: Remove from the main Bodo code base and handle by an extension
                 try:  # pragma: no cover
                     from bodosql.context_ext import BodoSQLContextType
-                except:
+                except ImportError:
                     # workaround: something that makes isinstance(type, BodoSQLContextType) always false
                     BodoSQLContextType = int
                 if isinstance(rhs_type, BodoSQLContextType):
@@ -1276,9 +1279,7 @@ class SeriesPass:
         ):
             impl = bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
                 rhs.fn
-            )(
-                typ1, typ2
-            )
+            )(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
         # datetime_date_array operations
@@ -3321,11 +3322,11 @@ class SeriesPass:
         # if axes is np.array, we convert to nested tuples
         # TODO: Replace with np.array when we can handle objs
         if func_name == "subplots" and isinstance(output_type[1], types.BaseTuple):
-            func_text += f"        fig, axes = res\n"
+            func_text += "        fig, axes = res\n"
             func_text += "        axes = tuple([tuple(elem) if isinstance(elem, np.ndarray) else elem for elem in axes])\n"
             func_text += "        res = (fig, axes)\n"
 
-        func_text += f"    return res\n"
+        func_text += "    return res\n"
         loc_vars = {}
         exec(func_text, {"matplotlib": matplotlib, "bodo": bodo, "np": np}, loc_vars)
         helper_func = numba.njit(loc_vars[f"helper_{func_name}"])
@@ -3643,7 +3644,7 @@ class SeriesPass:
                     impl,
                     [series_var],
                     pysig=numba.core.utils.pysignature(impl),
-                    kws=dict(),
+                    kws={},
                     # Some Series functions may require methods or
                     # attributes that need to be inlined by the full
                     # pipeline.
@@ -3695,7 +3696,7 @@ class SeriesPass:
             for i in range(n_out_cols):
                 func_text += f"    v{i} = v_vals[{i}]\n"
         else:
-            func_text += f"    v0 = v\n"
+            func_text += "    v0 = v\n"
         for i in range(n_out_cols):
             func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         glbls = {}

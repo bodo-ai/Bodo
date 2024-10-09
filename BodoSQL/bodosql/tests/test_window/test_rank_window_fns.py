@@ -82,7 +82,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
     where the input dtype and different combinatons of asc/desc & nulls
     first/last are parametrized so that each test can have total
     fusion into a single closure"""
-    is_binary = type(all_types_window_df["TABLE1"]["A"].iloc[0]) == bytes
+    is_binary = isinstance(all_types_window_df["TABLE1"]["A"].iloc[0], bytes)
     is_tz_aware = (
         getattr(all_types_window_df["TABLE1"]["A"].dtype, "tz", None) is not None
     )
@@ -268,7 +268,7 @@ def test_min_row_number_filter_complex(memory_leak_check, spark_info):
             "B": pd.array(
                 [["Alpha", "Alpha", "Beta", "", None][i % 5] for i in range(2000)]
             ),
-            "C": pd.array([i for i in range(2000)], dtype=pd.Int64Dtype()),
+            "C": pd.array(list(range(2000)), dtype=pd.Int64Dtype()),
             "D": pd.array(
                 [[1, -1, None][i % 3] for i in range(2000)], dtype=pd.Int64Dtype()
             ),
@@ -285,7 +285,7 @@ def test_min_row_number_filter_complex(memory_leak_check, spark_info):
             "I": pd.array(
                 [min(i % 6, i % 7, i % 11) for i in range(2000)], dtype=pd.Int64Dtype()
             ),
-            "J": pd.array([i for i in range(2000)], dtype=pd.Int64Dtype()),
+            "J": pd.array(list(range(2000)), dtype=pd.Int64Dtype()),
         }
     )
     ctx = {"TABLE1": df}
@@ -347,7 +347,6 @@ def test_mrnf_order_edgecases(
     def py_mrnf(x: pd.DataFrame):
         return x.sort_values(by=["C"], ascending=True, na_position="first").iloc[0]
 
-    expected_df = df.groupby(["B"], as_index=False, dropna=False).apply(py_mrnf)
     ctx = {"TABLE1": df}
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
@@ -363,7 +362,7 @@ def test_mrnf_all_ties(memory_leak_check):
             "C": pd.Series([True] * 100, dtype="bool"),
         }
     )
-    query = f"""
+    query = """
     SELECT
         B, C
     FROM
@@ -586,7 +585,7 @@ def test_row_number_filter_multicolumn(input_arrs, memory_leak_check):
     This function tests for various input combinations, including
     testing ascending/descending and nulls first/last.
     """
-    query = f"""
+    query = """
     SELECT
         F
     FROM
@@ -1049,7 +1048,7 @@ def ntile_df():
         {
             "ID": list(range(10010)),
             "A": [1] * 5005 + [2] * 5005,
-            "B": [i for i in range(5004)] + [None] + [i for i in range(5004)] + [None],
+            "B": list(range(5004)) + [None] + list(range(5004)) + [None],
             "C": ["socks", "shoes", None, "shirt", None] * 2002,
         }
     )

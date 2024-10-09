@@ -1,16 +1,15 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL JSON utilities
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL JSON utilities"""
 
 import json
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed
@@ -234,7 +233,7 @@ def test_parse_json(arg):
             for key in result:
                 result[key] = remove_whitespace(result[key]).replace("'", '"')
             return result
-        except:
+        except Exception:
             return None
 
     answer = vectorized_sol((arg,), parse_json_scalar_fn, None)

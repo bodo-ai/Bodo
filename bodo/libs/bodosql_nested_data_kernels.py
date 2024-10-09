@@ -3,12 +3,19 @@
 Implements BodoSQL array kernels related to ARRAY utilities
 """
 
-import types
-
 import numba
+from numba.core import types
+from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    is_array_item_array,
+    unopt_argument,
+    verify_array_arg,
+    verify_int_arg,
+    verify_string_arg,
+)
 from bodo.utils.typing import (
     dtype_to_array_type,
     get_overload_const_bool,
@@ -763,10 +770,10 @@ def array_to_string_util(arr, separator, is_scalar):  # pragma: no cover
 def overload_array_to_string_util(arr, separator, is_scalar):  # pragma: no cover
     """
     A dedicated kernel for the SQL function ARRAY_TO_STRING which takes in an
-           array, (or arrray column) and a separator string (or string column), then
+           array, (or array column) and a separator string (or string column), then
            casts the array to string and add separators
     Args:
-        arr (array scalar/array item array): the arrray(s) to be cast to string
+        arr (array scalar/array item array): the array(s) to be cast to string
         separator (string array/series/scalar): the separator to add to the string
     Returns:
         A string scalar/array: the result string(s)
@@ -838,7 +845,7 @@ def overload_array_size_util(arr, is_scalar):  # pragma: no cover
         arr (array scalar/array item array): the array(s) to get the size of
         is_scalar (bool literal): Whether this is called in a single row context, necessary
         to determine whether to return the length of a nested array or an array of the lengths
-        of it's children in a case statment
+        of it's children in a case statement
     Returns:
         An integer scalar/array: the result lengths
     """
@@ -856,7 +863,7 @@ def overload_array_size_util(arr, is_scalar):  # pragma: no cover
         and not is_array_item_array(arr)
         and not (bodo.utils.utils.is_array_typ(arr) and is_scalar)
     ):
-        # When not is_scalar only array item ararys are supported
+        # When not is_scalar only array item arrays are supported
         # When is_scalar then all arrays are supported
         raise_bodo_error(
             f"array_size(): unsupported for type {arr} when is_scalar={is_scalar}"

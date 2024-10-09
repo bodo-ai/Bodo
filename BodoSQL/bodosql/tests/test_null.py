@@ -4,7 +4,6 @@ Also tests that arithmatic and logical operators work with NULL values
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-
 import numpy as np
 import pandas as pd
 import pytest

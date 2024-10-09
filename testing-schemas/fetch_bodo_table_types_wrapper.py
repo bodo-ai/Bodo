@@ -6,6 +6,7 @@ DATABASE_NAME.SCHEMA_NAME.TABLE_NAME
 with one path on each line, and repeatedly calls
 fetch_bodo_schemas.py to update the schema information.
 """
+
 import argparse
 import os
 import subprocess

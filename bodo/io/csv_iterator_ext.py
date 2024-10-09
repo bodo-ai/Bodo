@@ -4,6 +4,7 @@ Class information for DataFrame iterators returned by pd.read_csv. This is used
 to handle situations in which pd.read_csv is used to return chunks with separate
 read calls instead of just a single read.
 """
+
 import llvmlite.binding as ll
 import numba
 import numpy as np  # noqa
@@ -214,7 +215,7 @@ def gen_read_csv_objmode(csv_iterator_type):
     glbls = globals()
     out_types = csv_iterator_type._out_types
     glbls[f"table_type_{call_id}"] = TableType(tuple(out_types))
-    glbls[f"idx_array_typ"] = csv_iterator_type._index_arr_typ
+    glbls["idx_array_typ"] = csv_iterator_type._index_arr_typ
     # We don't yet support removing columns from the source in the chunksize case
     out_used_cols = list(range(len(csv_iterator_type._usecols)))
     func_text += _gen_read_csv_objmode(
@@ -256,14 +257,14 @@ def gen_read_csv_objmode(csv_iterator_type):
     if index_ind is None:
         # Manually create the parallel range index at runtime
         # since this won't run through distributed pass
-        wrapper_func_text += f"  local_len = len(T)\n"
+        wrapper_func_text += "  local_len = len(T)\n"
         wrapper_func_text += "  total_size = local_len\n"
         wrapper_func_text += f"  if ({parallel_varname}):\n"
         wrapper_func_text += "    local_start = local_start + bodo.libs.distributed_api.dist_exscan(local_len, _op)\n"
         wrapper_func_text += (
             "    total_size = bodo.libs.distributed_api.dist_reduce(local_len, _op)\n"
         )
-        index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(local_start, local_start + local_len, 1, None)"
+        index_arg = "bodo.hiframes.pd_index_ext.init_range_index(local_start, local_start + local_len, 1, None)"
     else:
         # Total is garbage if we have an index column but must be returned
         wrapper_func_text += "  total_size = 0\n"

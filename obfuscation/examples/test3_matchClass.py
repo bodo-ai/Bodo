@@ -17,7 +17,6 @@ def f(x, y, z):
 
     some_arbitrary_variable = x + y + z
 
-
     match point:
         case Point2dSimple():
             return 1 + some_arbitrary_variable
@@ -26,6 +25,7 @@ def f(x, y, z):
 
     return None
 
+
 if __name__ == "__main__":
     print(f(1, 1, 1))
-    print(f(1,1,-1))
+    print(f(1, 1, -1))

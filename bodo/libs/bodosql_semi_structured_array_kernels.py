@@ -3,10 +3,11 @@
 Implements BodoSQL array kernels related to ARRAY utilities
 """
 
-import types
+from numba.core import types
+from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import raise_bodo_error
 from bodo.utils.utils import is_array_typ
 
 

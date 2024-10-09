@@ -1,9 +1,10 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test File for timedelta array types. Covers basic functionality of get_item
-    operations, but it is not comprehensive. It does not cover exception cases
-    or test extensively against None.
+Test File for timedelta array types. Covers basic functionality of get_item
+operations, but it is not comprehensive. It does not cover exception cases
+or test extensively against None.
 """
+
 import datetime
 
 import numpy as np

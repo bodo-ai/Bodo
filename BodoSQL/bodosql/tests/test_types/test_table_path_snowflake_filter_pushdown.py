@@ -2,6 +2,7 @@
 """
 Tests filter pushdown with a Snowflake SQL TablePath.
 """
+
 import io
 
 import pandas as pd

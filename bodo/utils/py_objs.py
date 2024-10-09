@@ -43,11 +43,11 @@ def install_py_obj_class(
     model_name = f"{class_name}Model" if model_name is None else model_name
 
     class_text = f"class {class_name}(types.Opaque):\n"
-    class_text += f"    def __init__(self):\n"
+    class_text += "    def __init__(self):\n"
     class_text += f"       types.Opaque.__init__(self, name='{class_name}')\n"
     # Implement the reduce method for pickling
     # https://stackoverflow.com/questions/11658511/pickling-dynamically-generated-classes
-    class_text += f"    def __reduce__(self):\n"
+    class_text += "    def __reduce__(self):\n"
     class_text += f"        return (types.Opaque, ('{class_name}',), self.__dict__)\n"
 
     locs = {}
@@ -67,12 +67,12 @@ def install_py_obj_class(
     # https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L248
     # https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L34
     class_text = f"class {model_name}(models.StructModel):\n"
-    class_text += f"    def __init__(self, dmm, fe_type):\n"
-    class_text += f"        members = [\n"
+    class_text += "    def __init__(self, dmm, fe_type):\n"
+    class_text += "        members = [\n"
     class_text += f"            ('meminfo', types.MemInfoPointer({types_name})),\n"
-    class_text += f"            ('pyobj', types.voidptr),\n"
-    class_text += f"        ]\n"
-    class_text += f"        models.StructModel.__init__(self, dmm, fe_type, members)\n"
+    class_text += "            ('pyobj', types.voidptr),\n"
+    class_text += "        ]\n"
+    class_text += "        models.StructModel.__init__(self, dmm, fe_type, members)\n"
 
     exec(
         class_text, {"types": types, "models": models, types_name: class_instance}, locs

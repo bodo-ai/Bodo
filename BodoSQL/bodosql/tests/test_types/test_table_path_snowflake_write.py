@@ -2,6 +2,7 @@
 """
 Tests write with a Snowflake SQL TablePath.
 """
+
 import datetime
 
 import numpy as np

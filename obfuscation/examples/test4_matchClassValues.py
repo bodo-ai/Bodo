@@ -1,12 +1,14 @@
 def f(x, y, z):
     class Point2dSimple(object):
         __match_args__ = ("x", "y")
+
         def __init__(self, x, y):
             self.x = x
             self.y = y
 
     class Point3d(object):
         __match_args__ = ("x", "y", "z")
+
         def __init__(self, x=-1, y=-1, z=-1):
             self.x = x
             self.y = y
@@ -31,6 +33,7 @@ def f(x, y, z):
 
     return None
 
+
 if __name__ == "__main__":
     print(f(1, 1, 1))
-    print(f(1,1,-1))
+    print(f(1, 1, -1))

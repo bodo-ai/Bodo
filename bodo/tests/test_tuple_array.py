@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for array of tuple values.
-"""
+"""Tests for array of tuple values."""
 
 import numpy as np
 import pytest

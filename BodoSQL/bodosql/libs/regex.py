@@ -1,8 +1,9 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Library of BodoSQL functions used in support SQL -> Python Regex
-    conversions.
+Library of BodoSQL functions used in support SQL -> Python Regex
+conversions.
 """
+
 import re
 
 import bodo

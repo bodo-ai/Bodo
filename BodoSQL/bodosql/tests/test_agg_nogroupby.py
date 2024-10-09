@@ -480,7 +480,7 @@ def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Tests having with a constant
     """
-    query = f"""
+    query = """
         SELECT
            MAX(A)
         FROM
@@ -1062,9 +1062,7 @@ def test_boolor_booland_boolxor_agg(func, results, memory_leak_check):
         )
     }
 
-    answer = pd.DataFrame(
-        {i: agg_res for i, agg_res in enumerate(results)}, index=np.arange(1)
-    )
+    answer = pd.DataFrame(dict(enumerate(results)), index=np.arange(1))
 
     check_query(
         query,

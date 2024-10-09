@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test drop_duplicate opration as called as df.drop_duplicates()
-"""
+"""Test drop_duplicate opration as called as df.drop_duplicates()"""
+
 import random
 from decimal import Decimal
 

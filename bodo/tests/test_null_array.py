@@ -4,6 +4,7 @@ Tests for the null array type, which is an array of all nulls
 that can be cast to any type. See null_arr_ext.py for the
 core implementation.
 """
+
 import datetime
 from decimal import Decimal
 

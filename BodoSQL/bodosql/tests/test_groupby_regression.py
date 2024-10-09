@@ -2,6 +2,7 @@
 Compares performance of streaming groupby vs non-streaming groupby.
 There are two test cases, one where every key is unique and one where the number of unique keys is small.
 """
+
 import time
 
 import pandas as pd

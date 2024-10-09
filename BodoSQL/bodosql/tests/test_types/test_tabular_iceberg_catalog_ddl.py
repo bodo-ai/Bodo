@@ -167,20 +167,18 @@ def test_create_view_validates(tabular_catalog, tabular_connection, memory_leak_
             table_query = f"CREATE OR REPLACE TABLE {schema_1}.TABLE1 AS SELECT 0 as A"
             bc.sql(table_query)
             with schema_helper(tabular_connection, schema_2, create=True):
-                with pytest.raises(BodoError, match=f"Object 'TABLE1' not found"):
+                with pytest.raises(BodoError, match="Object 'TABLE1' not found"):
                     query = f"CREATE OR REPLACE VIEW {schema_2}.VIEW2 AS SELECT A + 1 as A from TABLE1"
                     bc.execute_ddl(query)
 
             # Test that the view validates if ran in the correct schema
-            py_output = pd.DataFrame(
-                {"STATUS": [f"View 'VIEW2' successfully created."]}
-            )
+            py_output = pd.DataFrame({"STATUS": ["View 'VIEW2' successfully created."]})
             query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW2 AS SELECT A + 1 as A from TABLE1"
             bodo_output = bc.execute_ddl(query)
             assert_equal_par(bodo_output, py_output)
 
             # Column B does not exist - validation should fail
-            with pytest.raises(BodoError, match=f"Column 'B' not found"):
+            with pytest.raises(BodoError, match="Column 'B' not found"):
                 query = f"CREATE OR REPLACE VIEW {schema_1}.VIEW3 AS SELECT B + 1 as B from TABLE1"
                 bc.execute_ddl(query)
         finally:
@@ -418,7 +416,7 @@ def test_alter_view(tabular_catalog, tabular_connection, memory_leak_check):
 
         # Alter query
         query = f"ALTER VIEW {view_name} RENAME TO {view_name}_renamed"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = bc.execute_ddl(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -444,7 +442,7 @@ def test_alter_view_rename_ifexists(
 
         # Alter query
         query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = bc.execute_ddl(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -472,7 +470,7 @@ def test_alter_view_rename_not_found(
 
     # This should throw an error, saying the view does not exist or not authorized.
     with pytest.raises(BodoError, match="does not exist or not authorized"):
-        bodo_output = bc.execute_ddl(query)
+        bc.execute_ddl(query)
 
 
 @pytest_mark_one_rank
@@ -489,7 +487,7 @@ def test_alter_view_rename_ifexists_not_found(
 
     # Alter query
     query = f"ALTER VIEW IF EXISTS {view_name} RENAME TO {view_name}_renamed"
-    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
     bodo_output = bc.execute_ddl(query)
     assert_equal_par(bodo_output, py_output)
 
@@ -518,7 +516,7 @@ def test_alter_view_rename_to_existing(
 
         # This should throw an error, saying the view does not exist or not authorized.
         with pytest.raises(BodoError, match="already exists"):
-            bodo_output = bc.execute_ddl(query)
+            bc.execute_ddl(query)
 
     finally:
         # drop created view
@@ -540,7 +538,7 @@ def test_alter_table_on_view(tabular_catalog, tabular_connection, memory_leak_ch
 
         # Alter query
         query = f"ALTER TABLE {view_name} RENAME TO {view_name}_renamed"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
 
         bodo_output = bc.execute_ddl(query)
         assert_equal_par(bodo_output, py_output)
@@ -568,11 +566,10 @@ def test_alter_view_on_table(tabular_catalog, tabular_connection, memory_leak_ch
 
         # Alter VIEW query
         query = f"ALTER VIEW {table_name} RENAME TO {table_name}_renamed"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
 
         # This should throw an error, saying the view does not exist or not authorized.
         with pytest.raises(BodoError, match="View does not exist"):
-            bodo_output = bc.execute_ddl(query)
+            bc.execute_ddl(query)
 
     finally:
         # drop created table
@@ -592,21 +589,21 @@ def test_alter_unsupported_commands(
 
     # This should throw an error
     with pytest.raises(BodoError, match="Unable to parse"):
-        bodo_output = bc.execute_ddl(query)
+        bc.execute_ddl(query)
 
     # Unsupported query
     query = f"ALTER TABLE {table_name} SWAP WITH {table_name}_swap"
 
     # This should throw an error
     with pytest.raises(BodoError, match="currently unsupported"):
-        bodo_output = bc.execute_ddl(query)
+        bc.execute_ddl(query)
 
     # Unsupported query
     query = f"ALTER TABLE {table_name} CLUSTER BY junk_column"
 
     # This should throw an error
     with pytest.raises(BodoError, match="Unable to parse"):
-        bodo_output = bc.execute_ddl(query)
+        bc.execute_ddl(query)
 
 
 def check_row_exists(output, row):

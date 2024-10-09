@@ -318,10 +318,10 @@ def test_tabular_catalog_iceberg_write(
                 "" if column_comment[i] is None else f" comment '{column_comment[i]}'"
             )
             if i < len(column_comment) - 1:
-                column_comment_str += f", "
+                column_comment_str += ", "
         column_comment_str += ")"
     table_property = (
-        f"TBLPROPERTIES ('TBLPROPERTIES' = 'A', 'TEST_TBL' = 'T', 'TEST_TBL' = 'TRUE')"
+        "TBLPROPERTIES ('TBLPROPERTIES' = 'A', 'TEST_TBL' = 'T', 'TEST_TBL' = 'TRUE')"
         if table_properties
         else ""
     )
@@ -329,7 +329,7 @@ def test_tabular_catalog_iceberg_write(
         None if not table_properties else {"TBLPROPERTIES": "A", "TEST_TBL": "TRUE"}
     )
     table_comment = (
-        f"COMMENT = '{table_comments}'" if table_comments is not None else f""
+        f"COMMENT = '{table_comments}'" if table_comments is not None else ""
     )
 
     ctas_query = f"{construct} TABLE {schema}.{table_name} {column_comment_str} {table_comment} {table_property} AS SELECT * from __bodolocal__.table1"
@@ -376,7 +376,7 @@ def test_tabular_catalog_iceberg_write(
                     schema,
                     table_name,
                 )
-            except:
+            except Exception:
                 pass
         else:
             run_rank0(bic.delete_table)(

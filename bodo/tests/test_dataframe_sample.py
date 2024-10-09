@@ -2,6 +2,7 @@
 """
 Unittests for DataFrames
 """
+
 import random
 
 import numpy as np
@@ -34,7 +35,7 @@ def test_dataframe_sample_number(memory_leak_check):
 
     bodo_f = bodo.jit(all_args_distributed_block=True, all_returns_distributed=False)(f)
     n = 10
-    df = pd.DataFrame({"A": [x for x in range(n)]})
+    df = pd.DataFrame({"A": list(range(n))})
     py_output = f(df)
     df_loc = _get_dist_arg(df)
     assert bodo_f(df_loc) == py_output
@@ -97,7 +98,7 @@ def test_dataframe_sample_sorted(memory_leak_check):
         return df.sample(n=n, replace=False)
 
     n = 10
-    df = pd.DataFrame({"A": [x for x in range(n)]})
+    df = pd.DataFrame({"A": list(range(n))})
     check_func(f, (df, n), reset_index=True, sort_output=True)
 
 

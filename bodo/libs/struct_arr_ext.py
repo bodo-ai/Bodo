@@ -7,6 +7,7 @@ The values are stored in contiguous data arrays; one array per field. For exampl
 A:             ["AA", "B", "C"]
 B:             [1, 2, 4]
 """
+
 import operator
 
 import numba

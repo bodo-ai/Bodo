@@ -6,6 +6,7 @@ include timezone information.
 Note: Because Spark does not contain timezones we cannot
 compart with SparkSQL for correctness
 """
+
 import pandas as pd
 import pytest
 

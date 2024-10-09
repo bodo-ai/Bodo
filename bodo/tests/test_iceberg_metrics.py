@@ -6,6 +6,7 @@ minimum value, and maximum value. For nested data types it should compute
 these metrics for its child arrays, except that it omits the min/max. The
 exception to this is that struct arrays must match all fields.
 """
+
 import datetime
 import typing as pt
 from decimal import Decimal
@@ -224,11 +225,11 @@ def test_numeric_metrics(
         "B": b"\x01\x00\x00\x00\x00\x00\x00\x00",
         # Note: Float values are converted using a IEEE 754 converter
         # and remapped to little endian.
-        "C": b"\x00\x00\x00\xC0",
-        "D": b"\x00\x00\x00\x00\x00\x00\x2E\xC0",
+        "C": b"\x00\x00\x00\xc0",
+        "D": b"\x00\x00\x00\x00\x00\x00\x2e\xc0",
         # This value is manually calculated for Decimal(38, 18) by computing
         # 5 * 10^18 and converting to a 128 bit representation.
-        "E": b"\x00\x00\x00\x00\x00\x00\x00\x00\x45\x63\x91\x82\x44\xF4\x00\x00",
+        "E": b"\x00\x00\x00\x00\x00\x00\x00\x00\x45\x63\x91\x82\x44\xf4\x00\x00",
         # This value is manually calculated for Decimal(6, 3) by computing
         # 51 and converting to a 32 bit representation (smallest # of bytes required).
         "F": b"\x00\x00\x00\x33",
@@ -241,14 +242,14 @@ def test_numeric_metrics(
         "B": b"\x05\x00\x00\x00\x00\x00\x00\x00",
         # Note: Float values are converted using a IEEE 754 converter
         # and remapped to little endian.
-        "C": b"\x00\x00\xA8\x40",
+        "C": b"\x00\x00\xa8\x40",
         "D": b"\x00\x00\x00\x00\x00\x00\x27\x40",
         # This value is manually calculated for Decimal(38, 18) by computing
         # 5 * 10^18 and converting to a 128 bit representation.
-        "E": b"\x00\x00\x00\x00\x00\x00\x00\x00\x45\x63\x91\x82\x44\xF4\x00\x00",
+        "E": b"\x00\x00\x00\x00\x00\x00\x00\x00\x45\x63\x91\x82\x44\xf4\x00\x00",
         # This value is manually calculated for Decimal(6, 3) by computing
         # 980604 and converting to a 32 bit representation (smallest # of bytes required).
-        "F": b"\x00\x0E\xF6\x7C",
+        "F": b"\x00\x0e\xf6\x7c",
         # This value is manually calculated for Decimal(2, 1) by computing
         # 77 and converting to an 8 bit representation (smallest # of bytes required).
         "G": b"\x4d",
@@ -317,16 +318,16 @@ def test_datetime_metrics(
     # Note: Since the tests care about endianness we manually convert
     # to bytes to ensure portability.
     expected_lower_bounds = {
-        "A": b"\x98\x47\xF7\x7A\xD7\xB7\x05\x00",
-        "B": b"\x98\x67\x94\x2F\xDE\xB7\x05\x00",
-        "C": b"\xCB\x61\x84\xD6\x00\x00\x00\x00",
-        "D": b"\xC4\x48\x00\x00",
+        "A": b"\x98\x47\xf7\x7a\xd7\xb7\x05\x00",
+        "B": b"\x98\x67\x94\x2f\xde\xb7\x05\x00",
+        "C": b"\xcb\x61\x84\xd6\x00\x00\x00\x00",
+        "D": b"\xc4\x48\x00\x00",
     }
     expected_upper_bounds = {
-        "A": b"\x01\x00\x43\xE3\x1B\xB8\x05\x00",
-        "B": b"\x01\x20\xE0\x97\x22\xB8\x05\x00",
-        "C": b"\x60\x93\xEF\xEA\x13\x00\x00\x00",
-        "D": b"\xC7\x48\x00\x00",
+        "A": b"\x01\x00\x43\xe3\x1b\xb8\x05\x00",
+        "B": b"\x01\x20\xe0\x97\x22\xb8\x05\x00",
+        "C": b"\x60\x93\xef\xea\x13\x00\x00\x00",
+        "D": b"\xc7\x48\x00\x00",
     }
     validate_metrics(
         warehouse_loc,
@@ -454,12 +455,12 @@ def test_struct_metrics(
     expected_lower_bounds = {
         "A.f1": b"\x01\x00\x00\x00",
         "A.f2": "AAC".encode("utf-8"),
-        "A.f3": b"\xC4\x48\x00\x00",
+        "A.f3": b"\xc4\x48\x00\x00",
     }
     expected_upper_bounds = {
         "A.f1": b"\x05\x00\x00\x00",
         "A.f2": "AALR".encode("utf-8"),
-        "A.f3": b"\xC7\x48\x00\x00",
+        "A.f3": b"\xc7\x48\x00\x00",
     }
     validate_metrics(
         warehouse_loc,

@@ -93,9 +93,7 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
             ),
             "Y": pd.array(
                 [
-                    None
-                    if i % 7 == 3 or (i**2) % 9 == 7
-                    else Decimal(f"{i*i}.{i%10}")
+                    None if i % 7 == 3 or (i**2) % 9 == 7 else Decimal(f"{i*i}.{i%10}")
                     for i in range(n_rows)
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(38, 1)),
@@ -110,15 +108,9 @@ def test_two_arg_numeric_window_functions(memory_leak_check):
     answer = pd.DataFrame(
         {
             "IDX": range(n_rows),
-            "A": pd.array(
-                [partition_answers["A"][(i**2) % 9] for i in range(n_rows)]
-            ),
-            "B": pd.array(
-                [partition_answers["B"][(i**2) % 9] for i in range(n_rows)]
-            ),
-            "C": pd.array(
-                [partition_answers["C"][(i**2) % 9] for i in range(n_rows)]
-            ),
+            "A": pd.array([partition_answers["A"][(i**2) % 9] for i in range(n_rows)]),
+            "B": pd.array([partition_answers["B"][(i**2) % 9] for i in range(n_rows)]),
+            "C": pd.array([partition_answers["C"][(i**2) % 9] for i in range(n_rows)]),
             "D": pd.array([85161.45263951733 for i in range(n_rows)]),
             "E": pd.array([83523.7323964497 for i in range(n_rows)]),
             "F": pd.array([0.9686966438205089 for i in range(n_rows)]),
@@ -560,7 +552,7 @@ def test_simple_sum(df, spark_info, capfd):
 
     expected_log_message = "[DEBUG] WindowState::FinalizeBuild: Finished"
 
-    query = f"SELECT IDX, SUM(S) OVER (PARTITION BY P) as W FROM TABLE1"
+    query = "SELECT IDX, SUM(S) OVER (PARTITION BY P) as W FROM TABLE1"
 
     with temp_env_override(
         {

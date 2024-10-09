@@ -417,7 +417,16 @@ def test_str_replace(memory_leak_check):
         return pd.Series(A).str.replace("AB", "EE", regex=False)
 
     data1 = ["AB", None, "ABCD", "CDE", None, "ABBB", "ABB", "AC"]
-    data2 = ["피츠", None, "피츠뉴욕의", "뉴욕의", None, "뉴욕의뉴욕의", "피츠츠츠", "츠"]
+    data2 = [
+        "피츠",
+        None,
+        "피츠뉴욕의",
+        "뉴욕의",
+        None,
+        "뉴욕의뉴욕의",
+        "피츠츠츠",
+        "츠",
+    ]
     A1 = pa.array(data1, type=pa.dictionary(pa.int32(), pa.string()))
     A2 = pa.array(data2, type=pa.dictionary(pa.int32(), pa.string()))
 
@@ -425,7 +434,9 @@ def test_str_replace(memory_leak_check):
         impl1, (A1,), py_output=pd.Series(data1).str.replace("AB*", "EE", regex=True)
     )
     check_func(
-        impl2, (A2,), py_output=pd.Series(data2).str.replace("피츠*", "뉴욕의", regex=True)
+        impl2,
+        (A2,),
+        py_output=pd.Series(data2).str.replace("피츠*", "뉴욕의", regex=True),
     )
     check_func(
         impl3, (A1,), py_output=pd.Series(data1).str.replace("AB", "EE", regex=False)

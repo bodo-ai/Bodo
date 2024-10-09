@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test join operations like df.merge(), df.join(), pd.merge_asof() ...
-"""
+"""Test join operations like df.merge(), df.join(), pd.merge_asof() ..."""
+
 import io
 import os
 import random
@@ -1770,7 +1770,7 @@ def test_merge_multi_int_key(memory_leak_check):
 
     # test constant list inference for join keys
     def test_impl3(df1, df2):
-        df3 = df1.merge(df2, on=list(set(df1.columns) - set(["C"])))
+        df3 = df1.merge(df2, on=list(set(df1.columns) - {"C"}))
         return df3
 
     df1 = pd.DataFrame(
@@ -2010,7 +2010,6 @@ def test_merge_binary_key(memory_leak_check):
         {"key2": [b"baz", b"bar", b"baz"] * 3, "B": [b"b", b"zzz", b"ss"] * 3}
     )
 
-    bodo_func = bodo.jit(test_impl)
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -3848,7 +3847,7 @@ def test_join_deadcode_cleanup(memory_leak_check):
     """
 
     def test_impl(df1, df2):  # pragma: no cover
-        df3 = df1.merge(df2, on=["A"])
+        df1.merge(df2, on=["A"])
         return
 
     def test_impl_with_join(df1, df2):  # pragma: no cover

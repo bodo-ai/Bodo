@@ -4,7 +4,6 @@ Implements array operations for usage by DataFrames and Series
 such as count and max.
 """
 
-
 import numba
 import numpy as np
 import pandas as pd
@@ -908,7 +907,7 @@ def array_unique_vector_map(in_arr_tup):
         # Use a dummy dictionary comprehension to type the
         # dictionary. See the list example in:
         # https://numba.pydata.org/numba-doc/latest/user/troubleshoot.html#my-code-has-an-untyped-list-problem
-        func_text += f"  arr_map = {{in_arr[unused]: 0 for unused in range(0)}}\n"
+        func_text += "  arr_map = {in_arr[unused]: 0 for unused in range(0)}\n"
         func_text += "  map_vector = np.empty(n, np.int64)\n"
         func_text += "  is_na = 0\n"
         func_text += "  in_lst = []\n"
@@ -953,7 +952,7 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "    bodo.libs.array_kernels.setna(out_arr, n_rows - 1)\n"
         func_text += "  ev.add_attribute('n_map_entries', n_rows)\n"
         func_text += "  ev.finalize()\n"
-        func_text += f"  return (out_arr,), map_vector\n"
+        func_text += "  return (out_arr,), map_vector\n"
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np, "tracing": tracing}, loc_vars)

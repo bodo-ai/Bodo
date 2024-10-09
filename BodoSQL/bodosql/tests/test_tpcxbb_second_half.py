@@ -2,6 +2,7 @@
 """
 Test correctness of TPCxBB Benchmark on BodoSQL
 """
+
 import pytest
 
 from bodosql.tests.utils import check_query
@@ -10,9 +11,6 @@ from bodosql.tests.utils import check_query
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")
 @pytest.mark.slow
 def test_tpcxbb_q20(tpcxbb_data, spark_info, memory_leak_check):
-    N_CLUSTERS = 8
-    CLUSTER_ITERATIONS = 20
-    N_ITER = 5
     tpcxbb_query = """
         SELECT
             ss_customer_sk AS user_sk,
@@ -57,7 +55,7 @@ def test_tpcxbb_q20(tpcxbb_data, spark_info, memory_leak_check):
         ) returned ON ss_customer_sk=sr_customer_sk
     """
     tpcxbb_data_dict, pyspark_schemas = tpcxbb_data
-    result = check_query(
+    check_query(
         tpcxbb_query,
         tpcxbb_data_dict,
         spark_info,

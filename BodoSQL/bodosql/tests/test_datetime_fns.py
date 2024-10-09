@@ -2,6 +2,7 @@
 """
 Test correctness of SQL datetime functions with BodoSQL
 """
+
 import datetime
 
 import numpy as np
@@ -851,7 +852,7 @@ def test_sysdate_equivalents_case(sysdate_equiv_fns, spark_info, memory_leak_che
 def test_utc_date(basic_df, spark_info, memory_leak_check):
     """tests utc_date"""
 
-    query = f"SELECT A as A, UTC_DATE() as B from table1"
+    query = "SELECT A as A, UTC_DATE() as B from table1"
     expected_output = pd.DataFrame(
         {
             "A": basic_df["TABLE1"]["A"],
@@ -867,9 +868,8 @@ def test_utc_date(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.fixture(
-    params=
-    # check the values for which the format strings are the same
-    [
+    params=[
+        # check the values for which the format strings are the same
         (x, x)
         for x in [
             "%a",
@@ -1100,7 +1100,7 @@ def test_dayname_date_scalars(basic_df, memory_leak_check):
 
     # since dayname is a fn we defined, don't need to worry about calcite performing optimizations
     # Use basic_df so the input is expanded and we don't have to worry about empty arrays
-    query = f"SELECT DAYNAME(TO_DATE('2021-03-03')), DAYNAME(TO_DATE('2021-05-13')), DAYNAME(TO_DATE('2021-07-03'))"
+    query = "SELECT DAYNAME(TO_DATE('2021-03-03')), DAYNAME(TO_DATE('2021-05-13')), DAYNAME(TO_DATE('2021-07-03'))"
     outputs = pd.DataFrame({"A": ["Wed"], "B": ["Thu"], "C": ["Sat"]})
 
     check_query(
@@ -3173,7 +3173,7 @@ def test_date_trunc_day_part_handling(
     output = pd.DataFrame({"OUTPUT": []})
     with pytest.raises(
         Exception,
-        match=f"Unsupported unit for DATE_TRUNC with TIME input: ",
+        match="Unsupported unit for DATE_TRUNC with TIME input: ",
     ):
         check_query(
             query,
@@ -3294,7 +3294,7 @@ def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on columns.
     """
-    query = f"SELECT YEAROFWEEKISO(A) as A from table1"
+    query = "SELECT YEAROFWEEKISO(A) as A from table1"
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame({"A": tz_aware_df["TABLE1"]["A"].dt.year})
     check_query(
@@ -3310,7 +3310,7 @@ def test_yearofweekiso(dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on columns.
     """
-    query = f"SELECT YEAROFWEEKISO(TIMESTAMPS) as A from table1"
+    query = "SELECT YEAROFWEEKISO(TIMESTAMPS) as A from table1"
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
         {"A": dt_fn_dataframe["TABLE1"]["TIMESTAMPS"].dt.isocalendar().year}
@@ -3329,7 +3329,7 @@ def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on timezone-aware columns.
     """
-    query = f"SELECT YEAROFWEEKISO(A) as A from table1"
+    query = "SELECT YEAROFWEEKISO(A) as A from table1"
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
         {"A": tz_aware_df["TABLE1"]["A"].dt.isocalendar().year}
@@ -3347,7 +3347,7 @@ def test_yearofweekiso_scalar(dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on scalars.
     """
-    query = f"SELECT CASE WHEN YEAROFWEEKISO(TIMESTAMPS) > 2015 THEN 1 ELSE 0 END as A from table1"
+    query = "SELECT CASE WHEN YEAROFWEEKISO(TIMESTAMPS) > 2015 THEN 1 ELSE 0 END as A from table1"
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
         {
@@ -3371,7 +3371,7 @@ def test_tz_aware_yearofweekiso_scalar(tz_aware_df, memory_leak_check):
     Test Snowflake's yearofweekiso function on timezone-aware scalars.
     """
     query = (
-        f"SELECT CASE WHEN YEAROFWEEKISO(A) > 2015 THEN 1 ELSE 0 END as A from table1"
+        "SELECT CASE WHEN YEAROFWEEKISO(A) > 2015 THEN 1 ELSE 0 END as A from table1"
     )
     # Use expected output because this function isn't in SparkSQL
     expected_output = pd.DataFrame(
@@ -4357,7 +4357,7 @@ def test_date_from_parts(date_from_parts_data, use_case, memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
+    py_output = pd.DataFrame({0: pd.Series(list(answer))})
     check_query(
         query,
         ctx,
@@ -4411,7 +4411,7 @@ def test_date_from_float_parts(date_from_parts_float_data, use_case, memory_leak
         }
     )
     ctx = {"TABLE1": df}
-    py_output = pd.DataFrame({0: pd.Series([s for s in answer])})
+    py_output = pd.DataFrame({0: pd.Series(list(answer))})
     check_query(
         query,
         ctx,
@@ -4718,7 +4718,7 @@ def test_last_day_date_part(date_df, day_part_strings, memory_leak_check):
     if unit == "day" or unit == "dd":
         with pytest.raises(
             Exception,
-            match=f'Unsupported date/time unit "DAY" for function LAST_DAY',
+            match='Unsupported date/time unit "DAY" for function LAST_DAY',
         ):
             check_query(
                 query,
@@ -4742,7 +4742,7 @@ def test_last_day_time_part(date_df, time_part_strings, memory_leak_check):
     query = f"SELECT LAST_DAY(B, '{time_part_strings}') as output from table1"
     with pytest.raises(
         Exception,
-        match=f"Unsupported date/time unit .* for function LAST_DAY",
+        match="Unsupported date/time unit .* for function LAST_DAY",
     ):
         check_query(
             query,

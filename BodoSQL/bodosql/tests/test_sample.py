@@ -2,6 +2,7 @@
 """
 Test file for tests related to the SAMPLE/TABLESAMPLE operator.
 """
+
 import numpy as np
 import pandas as pd
 import pytest

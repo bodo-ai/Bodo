@@ -2,6 +2,7 @@
 """
 Support for Series.dt attributes and methods
 """
+
 import datetime
 import operator
 
@@ -545,8 +546,8 @@ def create_timedelta_freq_overload(method):
         is_tz_aware = isinstance(
             S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
         )
-        unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
-        floor_defaults = dict(ambiguous="raise", nonexistent="raise")
+        unsupported_args = {"ambiguous": ambiguous, "nonexistent": nonexistent}
+        floor_defaults = {"ambiguous": "raise", "nonexistent": "raise"}
         check_unsupported_args(
             f"Series.dt.{method}",
             unsupported_args,

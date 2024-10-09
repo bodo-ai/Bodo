@@ -1,6 +1,5 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
-"""Test Bodo's memory budget python interface
-"""
+"""Test Bodo's memory budget python interface"""
 
 import bodo
 import bodo.libs.table_builder

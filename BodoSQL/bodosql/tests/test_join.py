@@ -46,19 +46,15 @@ def test_join(
     # For nullable integers convert the pyspark output from
     # float to object
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         convert_float_nan = True
     else:
         convert_float_nan = False
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["B", "C", "D"]
     else:
@@ -82,27 +78,23 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
     """tests selecting from multiple tables based upon a where clause"""
 
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            or x in (np.float32, np.float64)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        or x in (np.float32, np.float64)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A", "B"]
     else:
@@ -123,19 +115,15 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     can be merged if aliased.
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         convert_float_nan = True
     else:
         convert_float_nan = False
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A1", "A2"]
     else:
@@ -163,19 +151,15 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
     # For nullable integers convert the pyspark output from
     # float to object
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         convert_float_nan = True
     else:
         convert_float_nan = False
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["B", "C", "D"]
     else:
@@ -199,18 +183,16 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
     will merge on a common column, rather than just merge the entire tables.
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            or x in (np.float32, np.float64)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        or x in (np.float32, np.float64)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
@@ -245,18 +227,16 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
         byte_array_cols = []
 
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            or x in (np.float32, np.float64)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        or x in (np.float32, np.float64)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
@@ -281,27 +261,23 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
 def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     """test all possible join types"""
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            or x in (np.float32, np.float64)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        or x in (np.float32, np.float64)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["B", "C", "D"]
     else:
@@ -322,27 +298,23 @@ def test_join_different_size_tables(
 ):
     """tests that join operations still works when the dataframes have different sizes"""
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            or x in (np.float32, np.float64)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        or x in (np.float32, np.float64)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["B", "C", "D"]
     else:
@@ -370,16 +342,14 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
     # the null values in table4.A shouldn't match to anything, and shouldn't raise an error
 
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["T1", "T2"]
     else:
         convert_columns_bytearray = None
 
-    query = f"""
+    query = """
     SELECT
         table3.Y as T1, table4.A as T2
     FROM
@@ -406,16 +376,14 @@ def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     # which we then use in the join condition for the top level join
     # assumedly, the null values in table4.A/B shouldn't match to anything, and shouldn't raise an error
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["T1", "T2"]
     else:
         convert_columns_bytearray = None
 
-    query = f"""
+    query = """
     SELECT
         table3.Y as T1, table4.A as T2
     FROM
@@ -439,7 +407,7 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
     # for context, the nested right join should create a number of null values in table4.A,
     # which we then use in the join condition for the top level join
     # assumedly, the null values in table4.A should match to anything, and shouldn't raise an error
-    query = f"""
+    query = """
     SELECT
         table3.Y as T1, table4.A as T2
     FROM
@@ -482,10 +450,8 @@ def test_multi_key_join_types(
     # when applying the filter.
     # TODO: Trim filter to just column not used in the key
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C", "D"]
     else:
@@ -506,15 +472,13 @@ def test_trimmed_multi_key_cond_inner_join(
 ):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C", "D"]
     else:
         convert_columns_bytearray = None
-    query = f"select C, D from table1 inner join table2 on table1.A = table2.A and table1.B < table2.B"
+    query = "select C, D from table1 inner join table2 on table1.A = table2.A and table1.B < table2.B"
     # Note: We don't check the generated code because column ordering isn't deterministic
     check_query(
         query,
@@ -697,7 +661,7 @@ def test_join_invalid_condition(memory_leak_check):
     """
     df1 = pd.DataFrame({"A": pd.array([2, 4, 3, None] * 4, dtype="Int64")})
     df2 = pd.DataFrame({"C": pd.array([1, None, 2] * 3, dtype="Int64")})
-    query1 = f"select * from ARG1 full outer join ARG2 on COALESCE(ARG1.A, ARG2.C) = 11"
+    query1 = "select * from ARG1 full outer join ARG2 on COALESCE(ARG1.A, ARG2.C) = 11"
     ctx = {
         "ARG1": df1,
         "ARG2": df2,
@@ -722,7 +686,7 @@ def test_join_broadcast_hint(memory_leak_check, capfd):
     """
     df1 = pd.DataFrame({"A": pd.array([2, 4, 3, None] * 4, dtype="Int64")})
     df2 = pd.DataFrame({"A": pd.array([1, None, 2] * 3, dtype="Int64")})
-    query = f"select /*+ broadcast(t1) */ t1.A as OUTPUT from table1 t1 join table2 t2 on t1.A = t2.A"
+    query = "select /*+ broadcast(t1) */ t1.A as OUTPUT from table1 t1 join table2 t2 on t1.A = t2.A"
     ctx = {
         "TABLE1": df1,
         "TABLE2": df2,

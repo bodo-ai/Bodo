@@ -2,6 +2,7 @@
 """
 Implement support for the various classes in pd.tseries.offsets.
 """
+
 import operator
 
 import llvmlite.binding as ll
@@ -1184,7 +1185,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
     if isinstance(lhs, CombinedIntervalType) and rhs == date_offset_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            intervals = [i for i in lhs.intervals]
+            intervals = list(lhs.intervals)
             intervals.append(rhs)
             return CombinedInterval(intervals)
 
@@ -1193,7 +1194,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
     if isinstance(lhs, CombinedIntervalType) and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            intervals = [i for i in lhs.intervals]
+            intervals = list(lhs.intervals)
             date_offset_rhs = pd.DateOffset(
                 days=rhs.days,
                 seconds=rhs.seconds,

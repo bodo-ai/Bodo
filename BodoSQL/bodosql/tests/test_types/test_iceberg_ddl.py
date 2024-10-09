@@ -224,7 +224,7 @@ def test_alter_table_rename(request, harness_name: str, ifExists: bool):
         bodo_output = harness.run_bodo_query(
             f"ALTER TABLE {ifExistsClause} {table_identifier} RENAME TO {new_table_identifier}"
         )
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         assert_equal_par(bodo_output, py_output)
 
         # Check renamed
@@ -252,7 +252,7 @@ def test_alter_table_rename_compound(request, harness_name: str):
         )
         # Verify no properties are set
         query = f"ALTER TABLE {table_identifier} RENAME TO {rename_table_identifier}"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -283,7 +283,7 @@ def test_alter_table_rename_diffschema(request, harness_name: str):
             query = (
                 f"ALTER TABLE {table_identifier} RENAME TO {rename_table_identifier}"
             )
-            py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+            py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
             bodo_output = harness.run_bodo_query(query)
             assert_equal_par(bodo_output, py_output)
 
@@ -291,7 +291,7 @@ def test_alter_table_rename_diffschema(request, harness_name: str):
             table_name + "_renamed", "BODOSQL_DDL_TESTS_ALTERNATE"
         )
         query = f"ALTER TABLE {table_identifier} RENAME TO {rename_table_identifier}"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -316,7 +316,7 @@ def test_alter_table_rename_not_found(request, harness_name: str):
     rename_table_identifier = harness.get_table_identifier(table_name + "_renamed")
     with pytest.raises(BodoError, match="does not exist or not authorized"):
         query = f"ALTER TABLE {table_identifier} RENAME TO {rename_table_identifier}"
-        bodo_output = harness.run_bodo_query(query)
+        harness.run_bodo_query(query)
 
 
 @pytest.mark.parametrize(
@@ -336,7 +336,7 @@ def test_alter_table_rename_ifexists_not_found(request, harness_name: str):
         f"ALTER TABLE IF EXISTS {table_identifier} RENAME TO {rename_table_identifier}"
     )
     bodo_output = harness.run_bodo_query(query)
-    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
     assert_equal_par(bodo_output, py_output)
 
 
@@ -365,7 +365,7 @@ def test_alter_table_rename_to_existing(request, harness_name: str):
 
         # Query
         with pytest.raises(BodoError, match="already exists"):
-            bodo_output = harness.run_bodo_query(
+            harness.run_bodo_query(
                 f"ALTER TABLE {table_identifier} RENAME TO {table_identifier_b}"
             )
     finally:
@@ -384,25 +384,25 @@ def test_alter_unsupported_commands(request, harness_name: str):
     """Tests that Bodo throws an error when running unsupported ALTER commands."""
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
     # Unsupported query
-    query = f"ALTER VIEW placeholder_name SET SECURE"
+    query = "ALTER VIEW placeholder_name SET SECURE"
 
     # This should throw an error
     with pytest.raises(BodoError, match="Unable to parse"):
-        bodo_output = harness.run_bodo_query(query)
+        harness.run_bodo_query(query)
 
     # Unsupported query
-    query = f"ALTER TABLE placeholder_name SWAP WITH placeholder_name_swap"
+    query = "ALTER TABLE placeholder_name SWAP WITH placeholder_name_swap"
 
     # This should throw an error
     with pytest.raises(BodoError, match="currently unsupported"):
-        bodo_output = harness.run_bodo_query(query)
+        harness.run_bodo_query(query)
 
     # Unsupported query
-    query = f"ALTER TABLE placeholder_name CLUSTER BY junk_column"
+    query = "ALTER TABLE placeholder_name CLUSTER BY junk_column"
 
     # This should throw an error
     with pytest.raises(BodoError, match="Unable to parse"):
-        bodo_output = harness.run_bodo_query(query)
+        harness.run_bodo_query(query)
 
 
 # ALTER TABLE SET PROPERTY
@@ -431,7 +431,7 @@ def test_alter_table_set_property(request, harness_name: str):
 
         # Set a property on the table
         query = f"ALTER TABLE {table_identifier} SET PROPERTY 'test_tag1'='test_value1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -442,7 +442,7 @@ def test_alter_table_set_property(request, harness_name: str):
 
         # Set multiple properties
         query = f"ALTER TABLE {table_identifier} SET PROPERTY 'test_tag2'='test_value2', 'test_tag3'='test_value3'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -473,26 +473,26 @@ def test_alter_table_set_property_rename(request, harness_name: str):
 
         # Create property
         query = f"ALTER TABLE {table_identifier} SET PROPERTY 'test_tag1'='test_value1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
         # Check it exists
         output = harness.show_table_properties(table_identifier)
-        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        test_row = {"key": "test_tag1", "value": "test_value1"}
         assert harness.check_row_exists(output, test_row)
 
         # Rename tag
         query = f"ALTER TABLE {table_identifier} SET PROPERTY 'test_tag1'='test_value2'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
         # Check that it was successfully renamed
         output = harness.show_table_properties(table_identifier)
-        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        test_row = {"key": "test_tag1", "value": "test_value1"}
         assert not harness.check_row_exists(output, test_row)
-        test_row = {"key": f"test_tag1", "value": f"test_value2"}
+        test_row = {"key": "test_tag1", "value": "test_value2"}
         assert harness.check_row_exists(output, test_row)
     finally:
         harness.drop_test_table(table_identifier)
@@ -511,23 +511,23 @@ def test_alter_table_set_property_error(request, harness_name: str):
     harness: DDLTestHarness = request.getfixturevalue(harness_name)
     # Invalid query
     with pytest.raises(BodoError, match="Unable to parse SQL Query"):
-        query = f"ALTER TABLE placeholder_table SET PROPERTY"
-        bodo_output = harness.run_bodo_query(query)
+        query = "ALTER TABLE placeholder_table SET PROPERTY"
+        harness.run_bodo_query(query)
 
     # Missing property value
     with pytest.raises(BodoError, match="Unable to parse SQL Query."):
-        query = f"ALTER TABLE placeholder_table SET PROPERTY 'key'"
-        bodo_output = harness.run_bodo_query(query)
+        query = "ALTER TABLE placeholder_table SET PROPERTY 'key'"
+        harness.run_bodo_query(query)
 
     # Invalid property key (non-string)
     with pytest.raises(BodoError, match="Unable to parse SQL Query."):
-        query = f"ALTER TABLE placeholder_table SET PROPERTY invalid_key = 'value'"
-        bodo_output = harness.run_bodo_query(query)
+        query = "ALTER TABLE placeholder_table SET PROPERTY invalid_key = 'value'"
+        harness.run_bodo_query(query)
 
     # Invalid property value (non-string)
     with pytest.raises(BodoError, match="Unable to parse SQL Query."):
-        query = f"ALTER TABLE placeholder_table SET PROPERTY 'key' = 123"
-        bodo_output = harness.run_bodo_query(query)
+        query = "ALTER TABLE placeholder_table SET PROPERTY 'key' = 123"
+        harness.run_bodo_query(query)
 
 
 # ALTER TABLE UNSET PROPERTY
@@ -552,7 +552,7 @@ def test_alter_table_unset_property(request, harness_name: str):
 
         # set 3 properties
         query = f"ALTER TABLE {table_identifier} SET PROPERTY 'test_tag1'='test_value1', 'test_tag2'='test_value2', 'test_tag3'='test_value3'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -564,23 +564,23 @@ def test_alter_table_unset_property(request, harness_name: str):
 
         # unset 1 property
         query = f"ALTER TABLE {table_identifier} UNSET PROPERTY 'test_tag1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
 
         # Check that properties were unset
         output = harness.show_table_properties(table_identifier)
-        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        test_row = {"key": "test_tag1", "value": "test_value1"}
         assert not harness.check_row_exists(output, test_row)
-        test_row = {"key": f"test_tag2", "value": f"test_value2"}
+        test_row = {"key": "test_tag2", "value": "test_value2"}
         assert harness.check_row_exists(output, test_row)
-        test_row = {"key": f"test_tag3", "value": f"test_value3"}
+        test_row = {"key": "test_tag3", "value": "test_value3"}
         assert harness.check_row_exists(output, test_row)
 
         # unset 2 properties
         query = (
             f"ALTER TABLE {table_identifier} UNSET PROPERTIES 'test_tag2', 'test_tag3'"
         )
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
 
         # Check that properties were unset
@@ -611,13 +611,13 @@ def test_alter_table_unset_property_error(request, harness_name: str):
         assert harness.check_table_exists(table_identifier)
         # set property
         query = f"ALTER TABLE {table_identifier} SET PROPERTY 'test_tag1'='test_value1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
         # Check that properties were set
         output = harness.show_table_properties(table_identifier)
-        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        test_row = {"key": "test_tag1", "value": "test_value1"}
         assert harness.check_row_exists(output, test_row)
 
         # unset non-existent property
@@ -627,13 +627,13 @@ def test_alter_table_unset_property_error(request, harness_name: str):
 
         # Unset non-existent property with IF EXISTS tag (should not error)
         query = f"ALTER TABLE {table_identifier} UNSET PROPERTY IF EXISTS 'nonexistent_tag', 'test_tag1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
         # Check that properties were unset
         output = harness.show_table_properties(table_identifier)
-        test_row = {"key": f"test_tag1", "value": f"test_value1"}
+        test_row = {"key": "test_tag1", "value": "test_value1"}
         assert not harness.check_row_exists(output, test_row)
 
     finally:
@@ -668,7 +668,7 @@ def test_alter_table_comment(request, harness_name: str):
 
         # Set comment
         query = f"ALTER TABLE {table_identifier} SET COMMENT 'test_comment1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -677,7 +677,7 @@ def test_alter_table_comment(request, harness_name: str):
 
         # Set empty comment while renaming
         query = f"ALTER TABLE {table_identifier} SET COMMENT ''"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -685,7 +685,7 @@ def test_alter_table_comment(request, harness_name: str):
 
         # Remove comment
         query = f"ALTER TABLE {table_identifier} UNSET COMMENT"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -777,7 +777,7 @@ def test_alter_table_add_column(request, harness_name: str):
         typeNames = list(sqlnode_type_names.keys())
         for t in typeNames:
             query = f'ALTER TABLE {table_identifier} add column COL_{t.translate(str.maketrans("(), ", "____"))} {t}'
-            py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+            py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
             bodo_output = harness.run_bodo_query(query)
             assert_equal_par(bodo_output, py_output)
 
@@ -822,7 +822,7 @@ def test_alter_table_add_column_ifnotexists(request, harness_name: str):
 
         # Preexisting column name with IF NOT EXISTS
         query = f"ALTER TABLE {table_identifier} add column IF NOT EXISTS A integer"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -880,7 +880,7 @@ def test_alter_table_drop_column(request, harness_name: str):
 
         # Drop top level column
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL1"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -896,7 +896,7 @@ def test_alter_table_drop_column(request, harness_name: str):
 
         # Drop nested column
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL2.X"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -911,7 +911,7 @@ def test_alter_table_drop_column(request, harness_name: str):
 
         # Drop top level column of nested column
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL2"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -923,7 +923,7 @@ def test_alter_table_drop_column(request, harness_name: str):
 
         # Drop multiple columns
         query = f"ALTER TABLE {table_identifier} DROP COLUMN TESTCOL3, TESTCOL4"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -980,19 +980,19 @@ def test_alter_table_drop_column_ifexists(request, harness_name: str):
 
         # Drop with IF EXISTS -- should not error
         query = f"ALTER TABLE {table_identifier} DROP COLUMN IF EXISTS TESTCOL3"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
         # Drop non-existent nested column with IF EXISTS -- should not error
         query = f"ALTER TABLE {table_identifier} DROP COLUMN IF EXISTS TESTCOL1.X"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
         # Drop columns now
         query = f"ALTER TABLE {table_identifier} DROP COLUMN IF EXISTS TESTCOL1"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -1054,7 +1054,7 @@ def test_alter_table_rename_column(request, harness_name: str):
         query = (
             f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1 TO TESTCOL1_RENAMED"
         )
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -1073,7 +1073,7 @@ def test_alter_table_rename_column(request, harness_name: str):
 
         # Rename again
         query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL1_RENAMED TO TESTCOL1_RENAMED2"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -1095,7 +1095,7 @@ def test_alter_table_rename_column(request, harness_name: str):
         # The nested field to be renamed should be specified using the dot syntax;
         # which will then be renamed to the new name (without changing the hierarchy).
         query = f"ALTER TABLE {table_identifier} RENAME COLUMN TESTCOL2.X TO X_RENAMED"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -1172,7 +1172,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
 
         # Change column comment
         query = f"ALTER TABLE {table_identifier} ALTER COLUMN TESTCOL1 COMMENT 'test_comment1'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -1190,7 +1190,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
 
         # Change column comment again
         query = f"ALTER TABLE {table_identifier} ALTER COLUMN TESTCOL1 COMMENT 'test_comment2'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -1208,7 +1208,7 @@ def test_alter_table_alter_column_comment(request, harness_name: str):
 
         # Comment on nested column (should do nothing)
         query = f"ALTER TABLE {table_identifier} ALTER COLUMN TESTCOL2.X COMMENT 'test_comment2'"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
         # Check
@@ -1259,7 +1259,7 @@ def test_alter_table_alter_column_dropnotnull(request, harness_name: str):
 
         # Change column to nullable
         query = f"ALTER TABLE {table_identifier} ALTER COLUMN A DROP NOT NULL"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 
@@ -1269,7 +1269,7 @@ def test_alter_table_alter_column_dropnotnull(request, harness_name: str):
 
         # Try changing an already nullable column
         query = f"ALTER TABLE {table_identifier} ALTER COLUMN A DROP NOT NULL"
-        py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+        py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
         bodo_output = harness.run_bodo_query(query)
         assert_equal_par(bodo_output, py_output)
 

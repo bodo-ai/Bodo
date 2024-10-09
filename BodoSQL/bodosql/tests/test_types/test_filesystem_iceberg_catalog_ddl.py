@@ -8,6 +8,7 @@ test_iceberg_ddl.py file, which uses the new DDLTestHarness system.
 New tests should be added to test_iceberg_ddl.py instead of this file,
 in order to be consistent with the new harness system.
 """
+
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -60,7 +61,6 @@ def create_simple_ddl_table(spark):
     """
     Creates a very basic table for testing DDL functionality.
     """
-    comm = MPI.COMM_WORLD
     table_name = gen_unique_id("SIMPLY_DDL_TABLE")
     df = pd.DataFrame({"A": [1, 2, 3]})
     sql_schema = [
@@ -375,7 +375,7 @@ def test_describe_table_compiles_jit(iceberg_filesystem_catalog, memory_leak_che
     """
     Verify that describe table compiles in JIT.
     """
-    query = f"DESCRIBE TABLE ANY_TABLE"
+    query = "DESCRIBE TABLE ANY_TABLE"
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
     bc.validate_query_compiles(query)
 
@@ -460,17 +460,17 @@ def test_iceberg_drop_view_unsupported_catalog_error_non_view(
     query_drop_view = f'DROP VIEW {if_exists_str} "{db_schema}"."{table_name}"'
     # execute_ddl Version
     with pytest.raises(
-        BodoError, match=f"DROP VIEW is unimplemented for the current catalog"
+        BodoError, match="DROP VIEW is unimplemented for the current catalog"
     ):
         bc.execute_ddl(query_drop_view)
     # Python Version
     with pytest.raises(
-        BodoError, match=f"DROP VIEW is unimplemented for the current catalog"
+        BodoError, match="DROP VIEW is unimplemented for the current catalog"
     ):
         bc.sql(query_drop_view)
     # Jit Version
     with pytest.raises(
-        BodoError, match=f"DROP VIEW is unimplemented for the current catalog"
+        BodoError, match="DROP VIEW is unimplemented for the current catalog"
     ):
         check_func_seq(
             lambda bc, query: bc.sql(query),

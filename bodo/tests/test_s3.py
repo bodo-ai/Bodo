@@ -794,7 +794,6 @@ def test_s3_np_fromfile_seq(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     def test_read():
         return np.fromfile("s3://bodo-test/test_np_arr_bodo_seq.dat", np.int64)
 
-    bodo_func = bodo.jit(test_read)
     check_func(test_read, (), py_output=test_np_arr)
 
 
@@ -869,7 +868,6 @@ def test_s3_np_fromfile_1D(minio_server_with_s3_envs, s3_bucket, test_np_arr):
     def test_read():
         return np.fromfile("s3://bodo-test/test_np_arr_bodo_1D.dat", np.int64)
 
-    bodo_func = bodo.jit(test_read)
     check_func(test_read, (), py_output=test_np_arr)
 
 
@@ -882,7 +880,6 @@ def test_s3_np_fromfile_1D_var(minio_server_with_s3_envs, s3_bucket, test_np_arr
     def test_read():
         return np.fromfile("s3://bodo-test/test_np_arr_bodo_1D_var.dat", np.int64)
 
-    bodo_func = bodo.jit(test_read)
     check_func(test_read, (), py_output=test_np_arr)
 
 

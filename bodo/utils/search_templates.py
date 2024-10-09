@@ -1,9 +1,10 @@
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Determines amount of coverage based on a list of APIs. This list of API's is assumed
-to be a text file where each line is a path which includes everything after the library 
+to be a text file where each line is a path which includes everything after the library
 for example: "Series.str.decode\n read_csv\n"
     usage: python -m bodo.utils.search_templates <path_to_apis>
 """
+
 import sys
 import warnings
 
@@ -240,7 +241,7 @@ def main(args):
     path_to_apis = args[1]
     with open(path_to_apis, "r") as f:
         pandas_apis = f.readlines()
-        pandas_apis = list(map(lambda x: x.strip(), pandas_apis))
+        pandas_apis = [x.strip() for x in pandas_apis]
 
     # We only target the CPU. The other option is Numba ufuncs
     disp = dispatcher_registry[numba.core.target_extension.CPU]

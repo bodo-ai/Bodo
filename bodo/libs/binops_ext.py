@@ -1,8 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Implementation of binary operators for the different types.
-    Currently implemented operators:
-        arith: add, sub, mul, truediv, floordiv, mod, pow
-        cmp: lt, le, eq, ne, ge, gt
+"""Implementation of binary operators for the different types.
+Currently implemented operators:
+    arith: add, sub, mul, truediv, floordiv, mod, pow
+    cmp: lt, le, eq, ne, ge, gt
 """
 
 import operator
@@ -115,7 +115,7 @@ class SeriesCmpOpTemplate(AbstractTemplate):
             ret_arr_typ = self.context.resolve_function_type(
                 self.key, recursed_args, {}
             ).return_type
-        except Exception as e:
+        except Exception:
             raise BodoError(error_msg)
         # If ret_arr_typ is a boolean TRUE for !=, False for ==, then this equality
         # check isn't supported on the array. As a result we raise a BodoError. There may
@@ -518,9 +518,7 @@ def create_overload_cmp_operator(op):
         ):
             return bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
                 op
-            )(
-                lhs, rhs
-            )
+            )(lhs, rhs)
 
         # datetime.date array
         # TODO: this will steal ops from can_cmp_date_datetime case, check if this causes error
@@ -649,7 +647,6 @@ def add_datetime_and_timedeltas(lhs, rhs):
     """Helper function to check types supported in datetime_timedelta_ext overload."""
 
     td_types = [datetime_timedelta_type, pd_timedelta_type]
-    lhs_types = [datetime_timedelta_type, pd_timedelta_type, datetime_datetime_type]
     deltas = lhs in td_types and rhs in td_types
     dt = (lhs == datetime_datetime_type and rhs in td_types) or (
         rhs == datetime_datetime_type and lhs in td_types

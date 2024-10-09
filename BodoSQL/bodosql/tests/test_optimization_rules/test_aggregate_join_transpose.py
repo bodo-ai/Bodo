@@ -2,6 +2,7 @@
 """
 Test correctness of the aggregate join transpose optimization rule used by BodoSQL
 """
+
 import pytest
 
 from bodosql.tests.utils import check_query

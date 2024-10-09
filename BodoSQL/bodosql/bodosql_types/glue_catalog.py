@@ -1,4 +1,4 @@
-"""Python and JIT class for describing a Glue Iceberg catalog. A Glue 
+"""Python and JIT class for describing a Glue Iceberg catalog. A Glue
 catalog contains all information needed to connect use Glue Iceberg catalog for organizing and modifying tables.
 """
 # Copyright (C) 2024 Bodo Inc. All rights reserved.

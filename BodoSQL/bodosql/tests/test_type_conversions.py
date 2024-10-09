@@ -2,6 +2,7 @@
 """
 Test correctness of SQL casting
 """
+
 import pandas as pd
 import pytest
 
@@ -104,7 +105,7 @@ def test_numeric_to_varchar_nullable(bodosql_nullable_numeric_types, memory_leak
     """
     Checks that casting strings to numeric values behaves as expected
     """
-    query = f"""
+    query = """
     SELECT
         CAST(A AS VARCHAR) as col
     FROM

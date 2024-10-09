@@ -304,7 +304,7 @@ class BodoTypeInference(PartialTypeInference):
         if None not in ret_types:
             try:
                 return_type = state.typingctx.unify_types(*ret_types)
-            except:
+            except Exception:
                 pass
             if return_type is None:
                 raise_bodo_error(
@@ -2211,7 +2211,9 @@ class TypingTransforms:
                 (left_colname and not right_colname)
                 or (right_colname and not left_colname)
             )
-            col: pt.Tuple[bif.Filter, types.ArrayCompatible] = left_colname if left_colname else right_colname  # type: ignore
+            col: pt.Tuple[bif.Filter, types.ArrayCompatible] = (
+                left_colname if left_colname else right_colname
+            )  # type: ignore
             colname, coltype = col
             scalar = rhs if left_colname else lhs
             # This is a defensive check, and isn't expected to be hit
@@ -2984,7 +2986,7 @@ class TypingTransforms:
             # Try import BodoSQL and check the type
             try:  # pragma: no cover
                 from bodosql.context_ext import BodoSQLContextType
-            except:
+            except ImportError:
                 # workaround: something that makes isinstance(type, BodoSQLContextType) always false
                 BodoSQLContextType = int
 
@@ -3025,7 +3027,7 @@ class TypingTransforms:
             func_name = "unknown"
             try:
                 func_name = self.typemap[rhs.func.name].literal_value.__name__
-            except:  # pragma: no cover
+            except Exception:  # pragma: no cover
                 pass
             raise BodoError(
                 f"Cannot call non-JIT function '{func_name}' from JIT function (convert to JIT or use objmode).",
@@ -3169,10 +3171,6 @@ class TypingTransforms:
         return nodes + [assign]
 
     def _run_binop(self, assign, rhs):
-        arg1_typ = self.typemap.get(rhs.lhs.name, None)
-        arg2_typ = self.typemap.get(rhs.rhs.name, None)
-        target_typ = self.typemap.get(assign.target.name, None)
-
         return [assign]
 
     def _run_call_dataframe(self, assign, rhs, df_var, func_name, label):
@@ -3409,7 +3407,7 @@ class TypingTransforms:
                         add_if_missing=True,
                     )
                     # Convert kws back to list of tuples for consistency
-                    new_rhs.kws = [(x, y) for x, y in new_rhs.kws.items()]
+                    new_rhs.kws = list(new_rhs.kws.items())
                     # Create a new assign to avoid mutating the IR
                     assign = ir.Assign(new_rhs, assign.target, assign.loc)
                     self.changed = True
@@ -3595,7 +3593,7 @@ class TypingTransforms:
         func_text += "  return df"
 
         loc_vars = {}
-        exec(func_text, dict(), loc_vars)
+        exec(func_text, {}, loc_vars)
         impl = loc_vars["impl"]
 
         # Don't pass the typing ctx, as many of the newly created variables won't be typed yet.
@@ -3800,7 +3798,7 @@ class TypingTransforms:
             """
             Extracts the con_str from the con arg
             """
-            err_msg = f"pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
+            err_msg = "pandas.read_sql_table(): 'con', if provided, must be a constant string or an IcebergConnectionType"
             con_type = self.typemap[con_arg.name]
 
             if isinstance(con_type, bodo.io.iceberg.IcebergConnectionType):
@@ -4088,9 +4086,7 @@ class TypingTransforms:
         )
 
         if columns_obj is not None:
-            name_to_type = {
-                name: typ for name, typ in zip(orig_col_names, orig_arr_types)
-            }
+            name_to_type = dict(zip(orig_col_names, orig_arr_types))
             col_names = columns_obj
             arr_types = [name_to_type[col] for col in col_names]
         else:
@@ -4399,19 +4395,15 @@ class TypingTransforms:
             ok = True
         elif isinstance(kw_default, tuple):
             ok = all(
-                [
-                    isinstance(guard(get_definition, self.func_ir, x), ir.Const)
-                    for x in kw_default
-                ]
+                isinstance(guard(get_definition, self.func_ir, x), ir.Const)
+                for x in kw_default
             )
         elif isinstance(kw_default, ir.Expr):
             if kw_default.op != "build_tuple":
                 return [assign]
             ok = all(
-                [
-                    isinstance(guard(get_definition, self.func_ir, x), ir.Const)
-                    for x in kw_default.items
-                ]
+                isinstance(guard(get_definition, self.func_ir, x), ir.Const)
+                for x in kw_default.items
             )
         if not ok:
             return [assign]
@@ -4479,7 +4471,7 @@ class TypingTransforms:
         # Pop the freevar indices in reverse order to ensure everything
         # stays in the same position
         # i.e. convert [0, 1, 2] to [2, 1, 0]
-        for i in reversed(sorted(freevar_inds)):
+        for i in sorted(freevar_inds, reverse=True):
             items.pop(i)
 
         new_co_varnames = (
@@ -5692,7 +5684,7 @@ class TypingTransforms:
                     "n_inputs",
                     "window_args",
                 ]
-                args = [x for x in window_def.args]
+                args = list(window_def.args)
                 # If there is a op_pool_size_bytes we need to include it in
                 # the function.
                 if op_pool_size_bytes_var is not None:
@@ -5840,7 +5832,7 @@ class TypingTransforms:
                 )
 
                 # Compile a new function with new state
-                func_text = f"""def impl(operator_id):
+                func_text = """def impl(operator_id):
                     return bodo.libs.stream_union.init_union_state(
                         operator_id,
                         all=_all,
@@ -6020,7 +6012,7 @@ class TypingTransforms:
                     "  )\n"
                 )
 
-                args = tuple()
+                args = ()
                 self._replace_state_definition(
                     func_text,
                     "impl",
@@ -6329,7 +6321,7 @@ class TypingTransforms:
 
         # Generate a chrome tracing event inside the Numba infrastructure for accurately
         # measuring the time spent in BodoSQL in compilation.
-        ev_details = dict(name=f"BodoSQL Planning: [...]")
+        ev_details = {"name": "BodoSQL Planning: [...]"}
         with event.trigger_event("numba:run_pass", data=ev_details):
             if func_name == "sql":
                 (

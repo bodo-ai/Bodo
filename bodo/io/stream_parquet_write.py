@@ -211,14 +211,14 @@ def box_parquet_writer(typ, val, c):
     # is accessed from objmode. As a workaround, store the necessary attributes
     # into local variables in numba native code before entering objmode
     raise NotImplementedError(
-        f"Boxing is disabled for ParquetWriter mutable struct."
+        "Boxing is disabled for ParquetWriter mutable struct."
     )  # pragma: no cover
 
 
 @unbox(ParquetWriterType)
 def unbox_parquet_writer(typ, val, c):
     raise NotImplementedError(
-        f"Unboxing is disabled for ParquetWriter mutable struct."
+        "Unboxing is disabled for ParquetWriter mutable struct."
     )  # pragma: no cover
 
 
@@ -422,8 +422,8 @@ def gen_parquet_writer_append_table_impl_inner(
         )
     if not isinstance(col_names_meta.meta, tuple):  # pragma: no cover
         raise BodoError(
-            f"parquet_writer_append_table: Expected col_names_meta "
-            f"to contain a tuple of column names"
+            "parquet_writer_append_table: Expected col_names_meta "
+            "to contain a tuple of column names"
         )
 
     py_table_typ = table
@@ -439,7 +439,7 @@ def gen_parquet_writer_append_table_impl_inner(
         )
 
         # ===== Part 1: Accumulate batch in writer and compute total size
-        ev_append_batch = tracing.Event(f"append_batch", is_parallel=True)
+        ev_append_batch = tracing.Event("append_batch", is_parallel=True)
         table_builder_state = writer["batches"]
         bodo.libs.table_builder.table_builder_append(table_builder_state, table)
         table_bytes = bodo.libs.table_builder.table_builder_nbytes(table_builder_state)

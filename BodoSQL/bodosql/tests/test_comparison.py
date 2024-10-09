@@ -2,6 +2,7 @@
 """
 Test correctness of SQL comparison operations on BodoSQL
 """
+
 import datetime
 from decimal import Decimal
 
@@ -215,7 +216,7 @@ def test_comparison_operators_within_table(
                                 ELSE 'F' END FROM table1"
     else:
         query = f"SELECT A, B, A {cmp_op} B FROM table1"
-    is_binary = type(comparison_df["TABLE1"]["A"].iloc[-1]) == bytes
+    is_binary = isinstance(comparison_df["TABLE1"]["A"].iloc[-1], bytes)
     convert_columns_bytearray = ["A", "B"] if is_binary else []
     check_query(
         query,
@@ -411,10 +412,8 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
         scalar_val1, scalar_val2 = (3, 4)
 
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
@@ -455,10 +454,8 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
         scalar_val1, scalar_val2 = (3, 4)
 
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
@@ -481,7 +478,7 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
 def test_between_date(spark_info, between_clause, memory_leak_check):
     query = f"""SELECT A {between_clause} DATE '1995-01-01'
                  AND DATE '1996-12-31' FROM table1"""
-    dataframe_dict = {
+    ctx = {
         "TABLE1": pd.DataFrame(
             {
                 "A": [
@@ -494,19 +491,12 @@ def test_between_date(spark_info, between_clause, memory_leak_check):
             }
         )
     }
-    if between_clause == "NOT BETWEEN":
-        spark_query = (
-            f"""SELECT (A < DATE '1995-01-01') OR (A > DATE '1996-12-31') FROM table1"""
-        )
-    else:
-        spark_query = None
     check_query(
         query,
-        dataframe_dict,
+        ctx,
         spark_info,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
     )
 
 
@@ -553,24 +543,11 @@ def test_between_int(
         WHERE
             table1.A {between_clause} 1 AND 3
     """
-
-    if between_clause == "NOT_BETWEEN":
-        spark_query = f"""
-        SELECT
-            table1.A
-        FROM
-            table1
-        WHERE
-            NOT (table1.A BETWEEN 1 AND 3)
-    """
-    else:
-        spark_query = None
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
     )
 
 
@@ -588,18 +565,6 @@ def test_between_str(
         WHERE
             table1.A {between_clause} 'a' AND 'z'
     """
-
-    if between_clause == "NOT_BETWEEN":
-        spark_query = f"""
-        SELECT
-            *
-        FROM
-            table1
-        WHERE
-            NOT (table1.A BETWEEN 'a' AND 'z')
-    """
-    else:
-        spark_query = None
 
     check_query(query, bodosql_string_types, spark_info, check_dtype=False)
 

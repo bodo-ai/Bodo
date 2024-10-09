@@ -2,6 +2,7 @@
 """
 Implements array kernels such as median and quantile.
 """
+
 import hashlib
 import inspect
 import math
@@ -718,8 +719,8 @@ def get_valid_entries_from_date_offset(
     else:
         func_text += f"  threshhold_date = initial_date {threshhold_str} offset\n"
     func_text += "  local_valid = 0\n"
-    func_text += f"  n = len(index_arr)\n"
-    func_text += f"  if n:\n"
+    func_text += "  n = len(index_arr)\n"
+    func_text += "  if n:\n"
     func_text += f"    if {last_val_check_str}:\n"
     func_text += "      loc_valid = n\n"
     func_text += "    else:\n"
@@ -1310,7 +1311,7 @@ def duplicated(data, parallel=False):
     func_text += (
         "    out = bodo.hiframes.pd_groupby_ext.reverse_shuffle(out, shuffle_info)\n"
     )
-    func_text += f"  delete_shuffle_info(shuffle_info)\n"
+    func_text += "  delete_shuffle_info(shuffle_info)\n"
     func_text += "  return out\n"
     loc_vars = {}
     exec(
@@ -1681,7 +1682,7 @@ def concat_overload(arr_list):
     ):
         struct_keys = arr_list.dtype.names
         func_text = "def struct_array_concat_impl(arr_list):\n"
-        func_text += f"    n_all = 0\n"
+        func_text += "    n_all = 0\n"
         for i in range(len(struct_keys)):
             func_text += f"    concat_list{i} = []\n"
         func_text += "    for A in arr_list:\n"
@@ -2268,11 +2269,9 @@ def concat_overload(arr_list):
     if isinstance(arr_list, types.Tuple):
         # Generate a simpler error message for multiple timezones.
         all_timestamp_data = all(
-            [
-                isinstance(typ, bodo.DatetimeArrayType)
-                or (isinstance(typ, types.Array) and typ.dtype == bodo.datetime64ns)
-                for typ in arr_list.types
-            ]
+            isinstance(typ, bodo.DatetimeArrayType)
+            or (isinstance(typ, types.Array) and typ.dtype == bodo.datetime64ns)
+            for typ in arr_list.types
         )
         if all_timestamp_data:
             raise BodoError(
@@ -3230,12 +3229,10 @@ def null_border_icomm(
         send_buff_value[0] = prev_value
 
     if rank != last_rank:
-        r_send_req1 = bodo.libs.distributed_api.isend(
+        bodo.libs.distributed_api.isend(
             send_buff_is_valid, 1, send_rank, comm_tag, True
         )
-        r_send_req2 = bodo.libs.distributed_api.isend(
-            send_buff_value, 1, send_rank, comm_tag, True
-        )
+        bodo.libs.distributed_api.isend(send_buff_value, 1, send_rank, comm_tag, True)
     return prev_is_valid, prev_value
 
 
@@ -3541,7 +3538,7 @@ def make_bitX_agg_fn(func_type):
             )
 
         func_text += "    if parallel:\n"
-        func_text += f"        non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)\n"
+        func_text += "        non_null = bodo.libs.distributed_api.dist_reduce(non_null, or_op)\n"
         func_text += f"        result = bodo.libs.distributed_api.dist_reduce(result, bit{func_type}_op)\n"
         func_text += "    if non_null:\n"
         func_text += "        return result\n"
@@ -3665,9 +3662,7 @@ def np_unique(A):
 def overload_union1d(A1, A2):
     if not bodo.utils.utils.is_array_typ(
         A1, False
-    ) or not bodo.utils.utils.is_array_typ(
-        A2, False
-    ):  # pragma: no cover
+    ) or not bodo.utils.utils.is_array_typ(A2, False):  # pragma: no cover
         return
 
     # TODO(Nick): Fix this to be proper typechecking.
@@ -3688,9 +3683,7 @@ def overload_union1d(A1, A2):
 def overload_intersect1d(A1, A2, assume_unique=False, return_indices=False):
     if not bodo.utils.utils.is_array_typ(
         A1, False
-    ) or not bodo.utils.utils.is_array_typ(
-        A2, False
-    ):  # pragma: no cover
+    ) or not bodo.utils.utils.is_array_typ(A2, False):  # pragma: no cover
         return
 
     args_dict = {
@@ -3791,9 +3784,7 @@ def intersection_mask(arr, parallel=False):  # pragma: no cover
 def overload_setdiff1d(A1, A2, assume_unique=False):
     if not bodo.utils.utils.is_array_typ(
         A1, False
-    ) or not bodo.utils.utils.is_array_typ(
-        A2, False
-    ):  # pragma: no cover
+    ) or not bodo.utils.utils.is_array_typ(A2, False):  # pragma: no cover
         return
 
     args_dict = {
@@ -4620,7 +4611,7 @@ def np_nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
             func_text += f"      res[i, j] = {calculation_text.format('x[i, j]')}\n"
         else:
             raise_bodo_error(f"nan_to_num not supported on {x.ndim}d array")
-        func_text += f"  return res"
+        func_text += "  return res"
     else:
         func_text += f"  return {calculation_text.format('x')}"
     loc_vars = {}

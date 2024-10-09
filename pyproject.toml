@@ -102,14 +102,11 @@ wheel.exclude = [
 ]
 
 # -------------------------------------- Dev Tools -------------------------------------- #
-[tool.black]
-exclude = 'demo/.*'
-
 [tool.ruff]
 unsafe-fixes = true
 lint.extend-select = [
-    "I",  # isort
-    "C4",  # flake8-comprehensions
+    "I",    # isort
+    "C4",   # flake8-comprehensions
     "TID",  # flake8-tidy-imports
 ]
 lint.ignore = [
@@ -119,35 +116,13 @@ lint.ignore = [
 
     # TODO: Gradually Enable in Next PR
 
-    # PyFlakes (subset of Flake8)
-    "F403",  # from {name} import * used; unable to detect undefined names
+    # Flake8 Rules
     "F405",  # {name} may be undefined, or defined from star imports
-    "F541",  # f-string without any placeholders
     "F811",  # Redefinition of unused {name} from line
-    "F821",  # Undefined name {name}
-    "F841",  # Local variable {name} is assigned to but never used
-
-    # PyCodeStyle (other subset of Flake8)
     "E402",  # Module level import not at top of file
     "E711",  # Comparison to `None` should be `cond is not None`
     "E712",  # Comparison to `...` should be `cond is False` or `if not cond:`
-    "E722",  # Do not use bare `except`
-    "E721",  # Do not compare types, use `isinstance()`
     "E731",  # Do not assign a `lambda` expression, use a `def`
-
-    # Flake8-Comprehensions
-    # It looks like these checks never actually worked
-    "C400",  # Unnecessary generator (rewrite as a `list` comprehension)
-    "C401",  # Unnecessary generator (rewrite as a `set` comprehension)
-    "C403",  # Unnecessary `list` comprehension (rewrite as a `set` comprehension)
-    "C405",  # Unnecessary `...` literal (rewrite as a `set` literal)
-    "C408",  # Unnecessary `dict` call (rewrite as a literal)
-    "C409",  # Unnecessary `...` literal passed to `tuple()` (rewrite as a `tuple` literal)
-    "C413",  # Unnecessary `...` call around `sorted()`
-    "C414",  # Unnecessary `list` call within `sorted()`
-    "C416",  # Unnecessary `list` comprehension (rewrite using `list()`)
-    "C417",  # Unnecessary `map` usage (rewrite using a generator expression)
-    "C419",  # Unnecessary list comprehension.
 ]
 exclude = [
     ".git/",
@@ -157,6 +132,8 @@ exclude = [
 
     "demo/",
     "examples/",
+    "BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources/com/bodosql/calcite/application/_generated_files/",
+    "bodo/numba_compat.py",
     "bodo/mpi4py/",
 
     # TODO: Skip specific rules for these files
@@ -173,6 +150,13 @@ exclude = [
 [tool.ruff.lint.isort]
 known-first-party = ["bodo", "bodosql", "BodoSQL/bodosql", "e2e-tests"]
 
+[tool.ruff.format]
+exclude = [
+    "BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources/com/bodosql/calcite/application/_generated_files/"
+]
+
+
+# ------------------------------------ CIBuildWheel ------------------------------------ #
 [tool.cibuildwheel]
 # Disable building PyPy wheels on all platforms
 # Disable building wheels for musllinux
@@ -184,12 +168,11 @@ build-verbosity = 1
 [tool.cibuildwheel.linux]
 build-frontend = { name = "pip", args = ["--no-build-isolation"] }
 
-
 [tool.cibuildwheel.macos]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
 mpiexec -n 2 python -c '\
-import bodo 
+import bodo
 import pandas as pd
 if bodo.get_rank() == 0:
     pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")

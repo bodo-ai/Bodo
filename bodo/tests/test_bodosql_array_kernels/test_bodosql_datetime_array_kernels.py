@@ -1,14 +1,15 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL date/time functions
-"""
+"""Test Bodo's array kernel utilities for BodoSQL date/time functions"""
+
 import datetime
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
+import pytz
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.libs.bodosql_datetime_array_kernels import (
     standardize_snowflake_date_time_part_compile_time,
@@ -671,8 +672,9 @@ def test_interval_add_date_interval_to_date(
         )
 
     if isinstance(date_input, datetime.date):
-        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.add_date_interval_to_date(
-            arr0, arr1
+        impl = (
+            lambda arr0,
+            arr1: bodo.libs.bodosql_array_kernels.add_date_interval_to_date(arr0, arr1)
         )
 
     def add_date_interval_date_scalar_fn(date, interval):
@@ -2301,8 +2303,11 @@ def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(ts_val, pd.Timestamp):
-        impl = lambda ts_val, date_offset: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
-            ts_val, date_offset
+        impl = (
+            lambda ts_val,
+            date_offset: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
+                ts_val, date_offset
+            )
         )
 
     date_offset = pd.DateOffset(months=-2)
@@ -2352,8 +2357,11 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(ts_val, pd.Timestamp):
-        impl = lambda ts_val, timedelta: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
-            ts_val, timedelta
+        impl = (
+            lambda ts_val,
+            timedelta: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
+                ts_val, timedelta
+            )
         )
 
     # Note we assume the days as the only unit in the expected output
@@ -2461,8 +2469,9 @@ def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(ts_input, pd.Timestamp):
-        impl = lambda datetime_part_strings, arr: bodo.libs.bodosql_array_kernels.date_trunc(
-            datetime_part_strings, arr
+        impl = (
+            lambda datetime_part_strings,
+            arr: bodo.libs.bodosql_array_kernels.date_trunc(datetime_part_strings, arr)
         )
 
     # Simulates date_trunc on a single row
@@ -2514,8 +2523,9 @@ def test_date_trunc_time(datetime_part_strings, time_input, memory_leak_check):
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(time_input, bodo.Time):
-        impl = lambda datetime_part_strings, arr: bodo.libs.bodosql_array_kernels.date_trunc(
-            datetime_part_strings, arr
+        impl = (
+            lambda datetime_part_strings,
+            arr: bodo.libs.bodosql_array_kernels.date_trunc(datetime_part_strings, arr)
         )
 
     # Simulates date_trunc on a single row
@@ -3120,19 +3130,35 @@ def test_construct_timestamp(
     args = (year, month, day, hour, minute, second, nanosecond)
     if not any(isinstance(arg, pd.Series) for arg in args):
         if has_time_zone:
-            impl = lambda year, month, day, hour, minute, second, nanosecond: bodo.libs.bodosql_array_kernels.construct_timestamp(
-                year,
+            impl = (
+                lambda year,
                 month,
                 day,
                 hour,
                 minute,
                 second,
-                nanosecond,
-                numba.literally("US/Eastern"),
+                nanosecond: bodo.libs.bodosql_array_kernels.construct_timestamp(
+                    year,
+                    month,
+                    day,
+                    hour,
+                    minute,
+                    second,
+                    nanosecond,
+                    numba.literally("US/Eastern"),
+                )
             )
         else:
-            impl = lambda year, month, day, hour, minute, second, nanosecond: bodo.libs.bodosql_array_kernels.construct_timestamp(
-                year, month, day, hour, minute, second, nanosecond, None
+            impl = (
+                lambda year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                nanosecond: bodo.libs.bodosql_array_kernels.construct_timestamp(
+                    year, month, day, hour, minute, second, nanosecond, None
+                )
             )
 
     tz = "US/Eastern" if has_time_zone else None

@@ -2,6 +2,7 @@
 """
 Test correctness of SQL aggregation operations with groupby on BodoSQL
 """
+
 import datetime
 
 import numpy as np
@@ -276,7 +277,7 @@ def test_having_repeat_numeric(bodosql_numeric_types, spark_info, memory_leak_ch
 def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     """test having clause in datetime queries"""
     check_query(
-        f"select count(B) from table1 group by a having count(b) > 2",
+        "select count(B) from table1 group by a having count(b) > 2",
         bodosql_datetime_types,
         spark_info,
         check_dtype=False,
@@ -292,7 +293,7 @@ def test_having_repeat_interval(bodosql_interval_types, memory_leak_check):
         expected_output[expected_output > 2].to_frame().reset_index(drop=True)
     )
     check_query(
-        f"select count(B) from table1 group by a having count(b) > 2",
+        "select count(B) from table1 group by a having count(b) > 2",
         bodosql_interval_types,
         None,
         check_dtype=False,
@@ -496,7 +497,7 @@ def test_having_boolean_agg_cond(bodosql_boolean_types, spark_info, memory_leak_
     """
     Tests groupby + having with aggregation in the condition
     """
-    query = f"""
+    query = """
         SELECT
            MAX(A)
         FROM
@@ -521,7 +522,7 @@ def test_having_boolean_groupby_cond(
     """
     Tests groupby + having using the groupby column in the having condtion
     """
-    query = f"""
+    query = """
         SELECT
            MAX(A)
         FROM
@@ -586,9 +587,9 @@ def test_cube(groupby_extension_table, spark_info, memory_leak_check):
     and CUBE(A, B, C) are both valid in snowflake and calcite.
     """
 
-    bodosql_query = f"select A, B, C, SUM(D) from table1 GROUP BY CUBE (A, B, C)"
+    bodosql_query = "select A, B, C, SUM(D) from table1 GROUP BY CUBE (A, B, C)"
     # SparkSQL syntax varies slightly
-    spark_query = f"select A, B, C, SUM(D) from table1 GROUP BY A, B, C WITH CUBE"
+    spark_query = "select A, B, C, SUM(D) from table1 GROUP BY A, B, C WITH CUBE"
 
     check_query(
         bodosql_query,
@@ -608,9 +609,9 @@ def test_rollup(groupby_extension_table, spark_info, memory_leak_check):
     and ROLLUP(A, B, C) are both valid in snowflake and calcite.
     """
 
-    bodosql_query = f"select A, B, C, SUM(D) from table1 GROUP BY ROLLUP(A, B, C)"
+    bodosql_query = "select A, B, C, SUM(D) from table1 GROUP BY ROLLUP(A, B, C)"
     # SparkSQL syntax varies slightly
-    spark_query = f"select A, B, C, SUM(D) from table1 GROUP BY A, B, C WITH ROLLUP"
+    spark_query = "select A, B, C, SUM(D) from table1 GROUP BY A, B, C WITH ROLLUP"
 
     check_query(
         bodosql_query,
@@ -631,7 +632,7 @@ def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
     """
 
     # Note that duplicate grouping sets do have an effect on the output
-    query = f"select A, B, C, SUM(D) from table1 GROUP BY GROUPING SETS((A, B), (), (), (A, B), (C, B), (A))"
+    query = "select A, B, C, SUM(D) from table1 GROUP BY GROUPING SETS((A, B), (), (), (A, B), (C, B), (A))"
 
     check_query(
         query,
@@ -646,9 +647,9 @@ def test_grouping_sets(groupby_extension_table, spark_info, memory_leak_check):
 def test_no_group_or_agg(groupby_extension_table, spark_info, memory_leak_check):
     """Tests the case in which we have at least one empty group with no aggregation"""
 
-    bodosql_query = f"select A, B from table1 GROUP BY rollup(A, B)"
+    bodosql_query = "select A, B from table1 GROUP BY rollup(A, B)"
     # SparkSQL syntax varies slightly
-    spark_query = f"select A, B from table1 GROUP BY A, B WITH ROLLUP"
+    spark_query = "select A, B from table1 GROUP BY A, B WITH ROLLUP"
 
     check_query(
         bodosql_query,
@@ -674,12 +675,12 @@ def test_nested_grouping_clauses(
     """
 
     bodosql_query = (
-        f"select * from table1 GROUP BY GROUPING SETS ((), rollup(A, D), cube(C, B))"
+        "select * from table1 GROUP BY GROUPING SETS ((), rollup(A, D), cube(C, B))"
     )
     # SparkSQL doesn't allow nested grouping sets
     # These grouping sets are the expanded version of the above
     # Note the duplicate grouping sets ARE required for correct behavior
-    spark_query = f"select * from table1 GROUP BY GROUPING SETS ((), (A, D), (A), (), (), (C), (B), (C, B))"
+    spark_query = "select * from table1 GROUP BY GROUPING SETS ((), (A, D), (A), (), (), (C), (B), (C, B))"
 
     check_query(
         bodosql_query,
@@ -1927,7 +1928,7 @@ def test_mixed_nested_agg(memory_leak_check):
     """
     Test the case where we have a mix of semi-structured and regular keys.
     """
-    query = f"SELECT A, AVG(B), COUNT(C), COUNT(D), SUM(E) from table1 GROUP BY A"
+    query = "SELECT A, AVG(B), COUNT(C), COUNT(D), SUM(E) from table1 GROUP BY A"
     ctx = {
         "TABLE1": pd.DataFrame(
             {
@@ -1964,7 +1965,7 @@ def test_mixed_nested_agg(memory_leak_check):
 
 
 def test_mixed_nested_agg_keys(memory_leak_check):
-    query = f"SELECT A, B, SUM(C) as C from table1 GROUP BY A, B"
+    query = "SELECT A, B, SUM(C) as C from table1 GROUP BY A, B"
     ctx = {
         "TABLE1": pd.DataFrame(
             {

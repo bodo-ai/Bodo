@@ -1,7 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for BodoSQL Snowflake date-related conversion functions"""
 
-
 import datetime
 
 import numpy as np
@@ -115,7 +114,7 @@ def test_to_boolean_valid_cols(
     spark_info, to_boolean_valid_test_dfs, memory_leak_check
 ):
     df = to_boolean_valid_test_dfs
-    query = f"SELECT TO_BOOLEAN(a) FROM table1"
+    query = "SELECT TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     if arr.apply(type).eq(str).any():
@@ -135,7 +134,7 @@ def test_to_boolean_valid_cols(
 
 def test_to_boolean_invalid_cols(spark_info, to_boolean_invalid_test_dfs):
     df = to_boolean_invalid_test_dfs
-    query = f"SELECT TO_BOOLEAN(a) FROM table1"
+    query = "SELECT TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
@@ -196,7 +195,7 @@ def test_to_boolean_scalars(spark_info, memory_leak_check):
 
 def test_try_to_boolean_cols(spark_info, to_boolean_all_test_dfs, memory_leak_check):
     df = to_boolean_all_test_dfs
-    query = f"SELECT TRY_TO_BOOLEAN(a) FROM table1"
+    query = "SELECT TRY_TO_BOOLEAN(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     is_str = arr.apply(type).eq(str).any()
@@ -592,9 +591,9 @@ def test_to_binary(calculation, binary_cast_data, memory_leak_check):
 def test_try_to_binary_invalid(memory_leak_check):
     """Verifies that TRY_TO_BINARY outputs NULL on malformed cases
     (non-hex characters or odd number of characters)"""
-    query = f"SELECT TRY_TO_BINARY(S) AS B FROM table1"
+    query = "SELECT TRY_TO_BINARY(S) AS B FROM table1"
     data = pd.Series(["AB", "ABC", "ABCD", "ABCDE", "GHI", "10", "101", "10 A"])
-    answer = pd.Series([b"\xAB", None, b"\xAB\xCD", None, None, b"\x10", None, None])
+    answer = pd.Series([b"\xab", None, b"\xab\xcd", None, None, b"\x10", None, None])
     ctx = {"TABLE1": pd.DataFrame({"S": data})}
     expected_output = pd.DataFrame({"B": answer})
     check_query(
@@ -610,7 +609,7 @@ def test_try_to_binary_invalid(memory_leak_check):
 def test_to_binary_error():
     """Verifies that TO_BINARY raises an exception on malformed cases
     (non-hex characters or odd number of characters)"""
-    query = f"SELECT TO_BINARY(S) FROM table1"
+    query = "SELECT TO_BINARY(S) FROM table1"
     data = pd.Series(["AB", "ABC", "ABCD", "ABCDE", "GHI", "10", "101", "10 A"])
     ctx = {"TABLE1": pd.DataFrame({"S": data})}
     with pytest.raises(ValueError):
@@ -718,7 +717,7 @@ def to_double_equiv(arr):
             return np.nan
         try:
             return np.float64(x)
-        except:
+        except Exception:
             return np.nan
 
     return arr.apply(_conv_to_double)
@@ -726,7 +725,7 @@ def to_double_equiv(arr):
 
 def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_check):
     df = to_double_valid_test_dfs
-    query = f"SELECT TO_DOUBLE(a) FROM table1"
+    query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     py_output = pd.DataFrame({"A": to_double_equiv(arr).astype("float64")})
@@ -742,7 +741,7 @@ def test_to_double_valid_cols(spark_info, to_double_valid_test_dfs, memory_leak_
 
 def test_to_double_invalid_cols(spark_info, to_double_invalid_test_dfs):
     df = to_double_invalid_test_dfs
-    query = f"SELECT TO_DOUBLE(a) FROM table1"
+    query = "SELECT TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     bc = bodosql.BodoSQLContext(ctx)
@@ -816,7 +815,7 @@ def test_to_double_scalars(spark_info, memory_leak_check):
 
 def test_try_to_double_cols(spark_info, to_double_all_test_dfs, memory_leak_check):
     df = to_double_all_test_dfs
-    query = f"SELECT TRY_TO_DOUBLE(a) FROM table1"
+    query = "SELECT TRY_TO_DOUBLE(a) FROM table1"
     ctx = {"TABLE1": df}
     arr = df[df.columns[0]]
     py_output = pd.DataFrame({"A": to_double_equiv(arr)})

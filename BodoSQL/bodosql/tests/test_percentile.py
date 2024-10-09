@@ -35,7 +35,7 @@ def percentile_df_data():
                 [None, None, 3.141592]
                 + [None, None, None]
                 + [100.0, -10.0, 0.0, -5.5]
-                + [i for i in range(100)]
+                + list(range(100))
                 + [-100.0, -10.0, 0.0, None, 10.0, 100.0],
                 dtype=np.float64,
             ),
@@ -159,9 +159,7 @@ SELECT
     PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY {0}) AS q90,
     PERCENTILE_CONT(1.0) WITHIN GROUP (ORDER BY {0}) AS q100
 FROM table1
-GROUP BY keys""".format(
-        col
-    )
+GROUP BY keys""".format(col)
 
     check_query(
         query,
@@ -189,9 +187,7 @@ SELECT
     PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY {0}) AS q90,
     PERCENTILE_DISC(1.0) WITHIN GROUP (ORDER BY {0}) AS q100
 FROM table1
-GROUP BY keys""".format(
-        col
-    )
+GROUP BY keys""".format(col)
 
     check_query(
         query,

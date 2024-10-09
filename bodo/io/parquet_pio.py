@@ -439,7 +439,7 @@ def glob(protocol: str, fs: pa.fs.FileSystem | None, path: str) -> list[str]:
 
     try:
         files = fs.glob(path)
-    except:  # pragma: no cover
+    except Exception:  # pragma: no cover
         raise BodoError(f"glob pattern expansion not supported for {protocol}")
 
     return files
@@ -537,13 +537,11 @@ def getfs(
 
 
 @pt.overload
-def parse_fpath(fpath: str) -> tuple[str, ParseResult, str]:
-    ...
+def parse_fpath(fpath: str) -> tuple[str, ParseResult, str]: ...
 
 
 @pt.overload
-def parse_fpath(fpath: list[str]) -> tuple[list[str], ParseResult, str]:
-    ...
+def parse_fpath(fpath: list[str]) -> tuple[list[str], ParseResult, str]: ...
 
 
 def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, str]:
@@ -593,15 +591,13 @@ def parse_fpath(fpath: str | list[str]) -> tuple[str | list[str], ParseResult, s
 @pt.overload
 def get_fpath_without_protocol_prefix(
     fpath: str, protocol: str, parsed_url: ParseResult
-) -> tuple[str, str]:
-    ...
+) -> tuple[str, str]: ...
 
 
 @pt.overload
 def get_fpath_without_protocol_prefix(
     fpath: list[str], protocol: str, parsed_url: ParseResult
-) -> tuple[list[str], str]:
-    ...
+) -> tuple[list[str], str]: ...
 
 
 def get_fpath_without_protocol_prefix(
@@ -826,7 +822,7 @@ def unify_schemas_across_ranks(dataset: ParquetDataset, total_rows_chunk: int):
     if comm.allreduce(error is not None, op=MPI.LOR):
         for error in comm.allgather(error):
             if error:
-                msg = f"Schema in some files were different.\n" + str(error)
+                msg = f"Schema in some files were different.\n{str(error)}"
                 raise BodoError(msg)
     ev.finalize()
 
@@ -937,7 +933,7 @@ def populate_row_counts_in_pq_dataset_pieces(
                         [dataset.schema, file_schema], "permissive"
                     )
                 except Exception as e:
-                    msg = f"Schema in {piece} was different.\n" + str(e)
+                    msg = f"Schema in {piece} was different.\n{str(e)}"
                     raise BodoError(msg)
 
             t0 = time.time()
@@ -1471,7 +1467,7 @@ def _pa_schemas_match(pa_schema1: pa.Schema, pa_schema2: pa.Schema) -> bool:
     # check type matches
     try:
         unify_schemas([pa_schema1, pa_schema2])
-    except:
+    except Exception:
         return False
 
     return True

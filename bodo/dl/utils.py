@@ -1,5 +1,5 @@
-"""Support distributed deep learning with Horovod
-"""
+"""Support distributed deep learning with Horovod"""
+
 import time
 
 import numba

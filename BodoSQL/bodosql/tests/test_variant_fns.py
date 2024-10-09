@@ -2,6 +2,7 @@
 """
 Test correctness of nested data functions with BodoSQL
 """
+
 import pandas as pd
 import pyarrow as pa
 import pytest

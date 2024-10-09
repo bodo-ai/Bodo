@@ -350,7 +350,7 @@ def test_datetime_date_hash(memory_leak_check):
     date3 = datetime.date(2004, 1, 1)
 
     def impl(date1, date2, date3):
-        d = dict()
+        d = {}
         d[date1] = 1
         d[date2] = 2
         d[date3] = 3
@@ -366,7 +366,7 @@ def test_datetime_timedelta_hash(memory_leak_check):
     td3 = datetime.timedelta(1)
 
     def impl(td1, td2, td3):
-        d = dict()
+        d = {}
         d[td1] = 1
         d[td2] = 2
         d[td3] = 3
@@ -1296,14 +1296,15 @@ def test_dt64_astype_str(memory_leak_check):
         ]
         * 4
     ).dt.floor("s")
-    arr = S.values
 
-    # array implementation is currently failing, see BE-1388
     check_func(test_impl1, (S,))
-    # check_func(test_impl1, (arr,))
     check_func(test_impl2, (S,))
-    # check_func(test_impl2, (arr,))
     check_func(test_scalar_impl, (S[0],))
+
+    # TODO: array implementation is currently failing, see BE-1388
+    # arr = S.values
+    # check_func(test_impl1, (arr,))
+    # check_func(test_impl2, (arr,))
 
 
 @pytest.mark.slow
@@ -2593,7 +2594,7 @@ def test_today_rank_consistent(memory_leak_check):
     res = impl()
     results = bodo.allgatherv(np.array([res]))
     assert all(
-        [r == results[0] for r in results]
+        r == results[0] for r in results
     ), "Results are not consistent across ranks"
 
 
@@ -2609,7 +2610,7 @@ def test_now_date_wrapper_rank_consistent(memory_leak_check):
     res = impl()
     results = bodo.allgatherv(np.array([res]))
     assert all(
-        [r == results[0] for r in results]
+        r == results[0] for r in results
     ), "Results are not consistent across ranks"
 
 
@@ -2625,5 +2626,5 @@ def test_now_impl_consistent(memory_leak_check):
     res = impl()
     results = bodo.allgatherv(np.array([res]))
     assert all(
-        [r == results[0] for r in results]
+        r == results[0] for r in results
     ), "Results are not consistent across ranks"

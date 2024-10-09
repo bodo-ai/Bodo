@@ -1,10 +1,10 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test miscellaneous supported sklearn models and methods
-    Currently this file tests:
-    Robust Scaler
-    The Robust Scaler tests need to be done across two files (this and test_sklearn_part4)
-    due to the large ammount of test_robust_scalar tests,
-    which can cause OOM issues on nightly due to numba caching artifacts.
+"""Test miscellaneous supported sklearn models and methods
+Currently this file tests:
+Robust Scaler
+The Robust Scaler tests need to be done across two files (this and test_sklearn_part4)
+due to the large ammount of test_robust_scalar tests,
+which can cause OOM issues on nightly due to numba caching artifacts.
 """
 
 import pytest

@@ -243,7 +243,7 @@ def gen_vectorized(
         are_arrays = [bodo.utils.utils.is_array_typ(typ) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
-        [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
+        propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none
     )
     # Construct a dictionary encoded output from a non-dictionary encoded input
     # if the 'V'/'?' arguments in synthesize_dict_if_vector are arrays and the
@@ -372,7 +372,7 @@ def gen_vectorized(
                 # we need to set the values appropriately.
                 func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
                 if may_cause_duplicate_dict_array_values:
-                    func_text += f"   is_dict_unique = False\n"
+                    func_text += "   is_dict_unique = False\n"
                 else:
                     func_text += f"   is_dict_unique = {arg_names[dict_encoded_arg]}._has_unique_local_dictionary\n"
 
@@ -446,9 +446,9 @@ def gen_vectorized(
                 # for multiple iterations (based on cache_dict_id). If so, we check the state to
                 # see if we can skip the computation. Otherwise we generate the result as normal
                 # and update the dictionary encoding state.
-                func_text += f"   use_cached_value = False\n"
+                func_text += "   use_cached_value = False\n"
                 func_text += f"   cached_dict_length = bodo.libs.stream_dict_encoding.state_contains_dict_array({dict_encoding_state_name}, {func_id_name}, cache_dict_id)\n"
-                func_text += f"   if cached_dict_length == n:\n"
+                func_text += "   if cached_dict_length == n:\n"
                 func_text += "      res, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(\n"
                 func_text += f"         {dict_encoding_state_name},\n"
                 func_text += f"         {func_id_name},\n"
@@ -462,7 +462,7 @@ def gen_vectorized(
                 # How many elements do we iterate over? If we're not propogating
                 # nulls, we need to account for the fact that the cached length is
                 # off by 1 since we prepended a NULL the first time.
-                non_cached_text += f"   vec_iter_end = vec_iter_end - vec_iter_start\n"
+                non_cached_text += "   vec_iter_end = vec_iter_end - vec_iter_start\n"
                 if not propagate_null[dict_encoded_arg]:
                     non_cached_text += "   if cached_dict_length >= 0:\n"
                     non_cached_text += "     vec_iter_end -= 1\n"
@@ -476,11 +476,11 @@ def gen_vectorized(
                     non_cached_text += f"   {arr_name} = bodo.libs.array_kernels.concat([bodo.libs.array_kernels.gen_na_array(1, {arr_name}), {arr_name}])\n"
             # adding one extra element in dictionary for null output if necessary
             if out_dtype == bodo.string_array_type:
-                non_cached_text += f"   res = bodo.libs.str_arr_ext.pre_alloc_string_array(vec_iter_end, -1)\n"
+                non_cached_text += "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(vec_iter_end, -1)\n"
             else:
-                non_cached_text += f"   res = bodo.utils.utils.alloc_type(vec_iter_end, out_dtype, (-1,))\n"
+                non_cached_text += "   res = bodo.utils.utils.alloc_type(vec_iter_end, out_dtype, (-1,))\n"
 
-            non_cached_text += f"   for i in range(vec_iter_end):\n"
+            non_cached_text += "   for i in range(vec_iter_end):\n"
         else:
             if res_list:
                 non_cached_text += "   res = []\n"
@@ -497,7 +497,7 @@ def gen_vectorized(
         # If the argument types imply that every row is null, then just set each
         # row of the output array to null
         if out_null:
-            non_cached_text += f"      bodo.libs.array_kernels.setna(res, i)\n"
+            non_cached_text += "      bodo.libs.array_kernels.setna(res, i)\n"
 
         else:
             # For each column that propagates nulls, add an isna check (and
@@ -542,27 +542,27 @@ def gen_vectorized(
             non_cached_text += "         out_dtype,\n"
             non_cached_text += "      )\n"
             non_cached_text += (
-                f"      res = bodo.libs.array_kernels.concat([old_res, res])\n"
+                "      res = bodo.libs.array_kernels.concat([old_res, res])\n"
             )
 
             # If we're not extending an old dictionary, generate the new dict id
             # and insert the set_array call. This populates the cache with the
             # result for the next time this kernel is called.
-            non_cached_text += f"   else:\n"
+            non_cached_text += "   else:\n"
             if out_dtype == bodo.string_array_type:
                 non_cached_text += (
-                    f"      new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
+                    "      new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(n)\n"
                 )
             else:
-                non_cached_text += f"      new_dict_id = -1\n"
+                non_cached_text += "      new_dict_id = -1\n"
             # Cache the newly computed results
             non_cached_text += "   bodo.libs.stream_dict_encoding.set_array(\n"
             non_cached_text += f"      {dict_encoding_state_name},\n"
             non_cached_text += f"      {func_id_name},\n"
-            non_cached_text += f"      cache_dict_id,\n"
-            non_cached_text += f"      n,\n"
-            non_cached_text += f"      res,\n"
-            non_cached_text += f"      new_dict_id,\n"
+            non_cached_text += "      cache_dict_id,\n"
+            non_cached_text += "      n,\n"
+            non_cached_text += "      res,\n"
+            non_cached_text += "      new_dict_id,\n"
             non_cached_text += "   )\n"
 
         # Insert the caching else path into the func_text.
@@ -776,7 +776,7 @@ def unopt_argument(
         func_text = f"def impl({', '.join(header_list)}):\n"
         func_text += f"   if {arg_names[i]}[{container_arg}] is None:\n"
         func_text += f"      return {func_name}({', '.join(total_args1)})\n"
-        func_text += f"   else:\n"
+        func_text += "   else:\n"
         func_text += f"      return {func_name}({', '.join(total_args2)})\n"
     else:
         # In this path we just replace individual arguments.
@@ -796,7 +796,7 @@ def unopt_argument(
         func_text = f"def impl({', '.join(header_list)}):\n"
         func_text += f"   if {arg_names[i]} is None:\n"
         func_text += f"      return {func_name}({', '.join(args1)})\n"
-        func_text += f"   else:\n"
+        func_text += "   else:\n"
         func_text += f"      return {func_name}({', '.join(args2)})\n"
 
     loc_vars = {}
@@ -1530,7 +1530,7 @@ def verify_time_or_datetime_arg_forbid_tz(arg, f_name, a_name):  # pragma: no co
         )
 
 
-def get_common_broadcasted_type(arg_types, func_name, supress_error=False):
+def get_common_broadcasted_type(arg_types, func_name, suppress_error=False):
     """Takes in a list of types from arrays/Series/scalars, verifies that they
     have a common underlying scalar type, and if so returns the corresponding
     array type (+ ensures that it is nullable). Assumes scalar Nones coerce to any
@@ -1539,7 +1539,7 @@ def get_common_broadcasted_type(arg_types, func_name, supress_error=False):
     Args:
         arg_types (dtype list/tuple): the types of the arrays/Series/scalars being checked
         func_name (string): the name of the function being compiled
-        supress_error (boolean): if True, don't return an error if the types are incompatible and return None instead
+        suppress_error (boolean): if True, don't return an error if the types are incompatible and return None instead
 
     Returns:
         dtype: the common underlying dtype of the inputted types. If all inputs are
@@ -1593,7 +1593,7 @@ def get_common_broadcasted_type(arg_types, func_name, supress_error=False):
             scalar_dtypes, allow_downcast=True
         )
         if common_dtype is None:
-            if supress_error:
+            if suppress_error:
                 return None
             raise_bodo_error(
                 f"Cannot call {func_name} on columns with different dtypes: {scalar_dtypes}"
@@ -1833,8 +1833,8 @@ def gen_windowed(
     # and the NaN counter is incremented
     if propagate_nan and enter_block is not None:
         new_enter_block = f"if {any_arr_is_nan('entering')}:\n"
-        new_enter_block += f"   nan_counter += 1\n"
-        new_enter_block += f"else:\n"
+        new_enter_block += "   nan_counter += 1\n"
+        new_enter_block += "else:\n"
         new_enter_block += indent_block(enter_block, 3)
         enter_block = new_enter_block
 
@@ -1842,17 +1842,17 @@ def gen_windowed(
     # and the NaN counter is decremented
     if propagate_nan and exit_block is not None:
         new_exit_block = f"if {any_arr_is_nan('exiting')}:\n"
-        new_exit_block += f"   nan_counter -= 1\n"
-        new_exit_block += f"else:\n"
+        new_exit_block += "   nan_counter -= 1\n"
+        new_exit_block += "else:\n"
         new_exit_block += indent_block(exit_block, 3)
         exit_block = new_exit_block
 
     # Modify calculate_block so that if any of the inputs are NaN, this row is
     # automatically NaN
     if propagate_nan:
-        new_calculate_block = f"if nan_counter > 0:\n"
-        new_calculate_block += f"   res[i] = np.nan\n"
-        new_calculate_block += f"else:\n"
+        new_calculate_block = "if nan_counter > 0:\n"
+        new_calculate_block += "   res[i] = np.nan\n"
+        new_calculate_block += "else:\n"
         new_calculate_block += indent_block(calculate_block, 3)
         calculate_block = new_calculate_block
 

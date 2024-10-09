@@ -2,6 +2,7 @@
 """
 Support for PySpark APIs in Bodo JIT functions
 """
+
 from collections import namedtuple
 
 import numba
@@ -194,7 +195,7 @@ class RowType(types.BaseNamedTuple):
 @register_model(RowType)
 class RowModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [(f, t) for f, t in zip(fe_type.fields, fe_type.types)]
+        members = list(zip(fe_type.fields, fe_type.types))
         super(RowModel, self).__init__(dmm, fe_type, members)
 
 
@@ -365,7 +366,7 @@ def overload_create_df(
     columns = data.dtype.fields
     n_cols = len(data.dtype.types)
     func_text = "def impl(sp_session, data, schema=None, samplingRatio=None, verifySchema=True):\n"
-    func_text += f"  n = len(data)\n"
+    func_text += "  n = len(data)\n"
 
     # allocate data arrays
     arr_types = []
@@ -375,8 +376,8 @@ def overload_create_df(
         arr_types.append(arr_typ)
 
     # fill data arrays
-    func_text += f"  for i in range(n):\n"
-    func_text += f"    r = data[i]\n"
+    func_text += "  for i in range(n):\n"
+    func_text += "    r = data[i]\n"
     for i in range(n_cols):
         func_text += (
             f"    A{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(r[{i}])\n"
@@ -390,8 +391,8 @@ def overload_create_df(
         "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
     )
     func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, __col_name_meta_value_create_df)\n"
-    func_text += f"  pdf = bodo.scatterv(pdf)\n"
-    func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
+    func_text += "  pdf = bodo.scatterv(pdf)\n"
+    func_text += "  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
     loc_vars = {}
     _global = {
         "bodo": bodo,
@@ -546,7 +547,7 @@ def _gen_init_spark_df(func_text, out_data, out_col_names):
         "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
     )
     func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, __col_name_meta_value_init_spark_df)\n"
-    func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
+    func_text += "  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
 
     loc_vars = {}
     _global = {
@@ -567,11 +568,11 @@ def overload_show(spark_df, n=20, truncate=True, vertical=False):
     https://github.com/apache/spark/blob/e8631660ecf316e4333210650d1f40b5912fb11b/python/pyspark/sql/dataframe.py#L442
     https://github.com/apache/spark/blob/34284c06496cd621792c0f9dfc90435da0ab9eb5/sql/core/src/main/scala/org/apache/spark/sql/Dataset.scala#L335
     """
-    unsupported_args = dict(
-        truncate=truncate,
-        vertical=vertical,
-    )
-    arg_defaults = dict(truncate=True, vertical=False)
+    unsupported_args = {
+        "truncate": truncate,
+        "vertical": vertical,
+    }
+    arg_defaults = {"truncate": True, "vertical": False}
     check_unsupported_args("SparkDataFrameType.show", unsupported_args, arg_defaults)
 
     def impl(spark_df, n=20, truncate=True, vertical=False):  # pragma: no cover
@@ -666,7 +667,7 @@ def overload_dataframe_columns(spark_df):
     """support 'columns' attribute which returns a string list of column names"""
     # embedding column names in generated function instead of returning a freevar since
     # there is no constant lowering for lists in Numba (TODO: support)
-    col_names = list(str(a) for a in spark_df.df.columns)
+    col_names = [str(a) for a in spark_df.df.columns]
     func_text = "def impl(spark_df):\n"
     func_text += f"  return {col_names}\n"
     loc_vars = {}

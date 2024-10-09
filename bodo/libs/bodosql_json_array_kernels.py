@@ -7,10 +7,14 @@ from typing import List, Tuple, Union
 
 import numba
 from numba.core import types
-from numba.extending import register_jitable
+from numba.extending import overload, register_jitable
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    unopt_argument,
+    verify_string_arg,
+)
 from bodo.utils.typing import (
     get_overload_const_bool,
     get_overload_const_str,
@@ -346,7 +350,7 @@ def json_extract_path_text_util(data, path):
 def parse_quoted_string(path: str, i: int) -> Tuple[int, str, str]:  # pragma: no cover:
     """Parse a string starting at position i
 
-    Note that both single and double quoted strings are suppported.
+    Note that both single and double quoted strings are supported.
 
     Args:
         path: the path being parsed
@@ -650,7 +654,7 @@ def parse_and_extract_json_string(
         data = new_data.strip()
 
     if invalid_data:
-        raise ValueError(f"JSON extraction: malformed string cannot be parsed")
+        raise ValueError("JSON extraction: malformed string cannot be parsed")
 
     # Special case for strings - we parse the string into a SQL string
     if data[0] == '"' or data[0] == "'":
@@ -705,7 +709,7 @@ def overload_get_path_util(data, path, is_scalar):
         raise ValueError(err_msg)
 
     func_text = "def impl(data, path, is_scalar):\n"
-    func_text += f"  tmp0 = data\n"
+    func_text += "  tmp0 = data\n"
     for i, (target_index, target_key) in enumerate(path_parts):
         if target_index >= 0:
             func_text += f"  tmp{i + 1} = bodo.libs.bodosql_array_kernels.arr_get(tmp{i}, {target_index}, is_scalar_arr={is_scalar_bool})\n"
@@ -804,8 +808,8 @@ def overload_get_field_util(data, field, is_scalar, ignore_case):
         else:
             out_dtype = json_type.data[field_pos]
             scalar_text += f"if bodo.libs.struct_arr_ext.is_field_value_null(arg0, {repr(key_str)}):\n"
-            scalar_text += f"  bodo.libs.array_kernels.setna(res, i)\n"
-            scalar_text += f"else:\n"
+            scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "else:\n"
             scalar_text += f"  res[i] = arg0[{repr(key_str)}]\n"
     elif map_mode:
         out_dtype = bodo.utils.typing.to_nullable_type(json_type.value_arr_type)

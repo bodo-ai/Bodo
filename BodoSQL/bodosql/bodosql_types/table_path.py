@@ -62,26 +62,26 @@ def check_tablepath_constant_arguments(
     if file_type == "sql":
         if conn_str is None:
             raise BodoError(
-                f"bodosql.TablePath(): `conn_str` is required for the `sql` `file_type`."
+                "bodosql.TablePath(): `conn_str` is required for the `sql` `file_type`."
             )
         elif not isinstance(conn_str, str):
-            raise BodoError(f"bodosql.TablePath(): `conn_str` must be a string")
+            raise BodoError("bodosql.TablePath(): `conn_str` must be a string")
         db_type, _ = bodo.ir.sql_ext.parse_dbtype(conn_str)
         if db_type == "iceberg":
             if db_schema is None:
                 raise BodoError(
-                    f"bodosql.TablePath(): `db_schema` is required for iceberg database type."
+                    "bodosql.TablePath(): `db_schema` is required for iceberg database type."
                 )
             elif not isinstance(db_schema, str):
-                raise BodoError(f"bodosql.TablePath(): `db_schema` must be a string.")
+                raise BodoError("bodosql.TablePath(): `db_schema` must be a string.")
 
     elif conn_str is not None:
         raise BodoError(
-            f"bodosql.TablePath(): `conn_str` is only supported for the `sql` `file_type`."
+            "bodosql.TablePath(): `conn_str` is only supported for the `sql` `file_type`."
         )
     if not isinstance(reorder_io, bool):
         raise BodoError(
-            f"bodosql.TablePath(): `reorder_io` must be a boolean if provided."
+            "bodosql.TablePath(): `reorder_io` must be a boolean if provided."
         )
 
     if not (
@@ -92,12 +92,12 @@ def check_tablepath_constant_arguments(
         )
     ):
         raise BodoError(
-            f"bodosql.TablePath(): `bodo_read_as_dict` must be a constant list of strings if provided."
+            "bodosql.TablePath(): `bodo_read_as_dict` must be a constant list of strings if provided."
         )
 
     if not ((statistics_file is None) or (isinstance(statistics_file, str))):
         raise BodoError(
-            f"bodosql.TablePath(): `statistics_file` must be a constant string if provided."
+            "bodosql.TablePath(): `statistics_file` must be a constant string if provided."
         )
 
 
@@ -521,24 +521,24 @@ def init_table_path(
         raise_bodo_error("bodosql.TablePath(): 'file_type' must be a constant string")
     if not (is_overload_none(conn_str_typ) or is_overload_constant_str(conn_str_typ)):
         raise_bodo_error(
-            f"bodosql.TablePath(): `conn_str` must be a constant string if provided"
+            "bodosql.TablePath(): `conn_str` must be a constant string if provided"
         )
     if not (
         is_overload_none(reorder_io_typ) or is_overload_constant_bool(reorder_io_typ)
     ):
         raise_bodo_error(
-            f"bodosql.TablePath(): `reorder_io` must be a constant boolean."
+            "bodosql.TablePath(): `reorder_io` must be a constant boolean."
         )
     if not (is_overload_none(db_schema) or is_overload_constant_str(db_schema)):
         raise_bodo_error(
-            f"bodosql.TablePath(): `db_schema` must be a constant string if provided."
+            "bodosql.TablePath(): `db_schema` must be a constant string if provided."
         )
     if not (
         is_overload_none(bodo_read_as_dict_typ)
         or is_overload_constant_list(bodo_read_as_dict_typ)
     ):
         raise_bodo_error(
-            f"bodosql.TablePath(): `_bodo_read_as_dict_typ` must be a constant list of strings if provided."
+            "bodosql.TablePath(): `_bodo_read_as_dict_typ` must be a constant list of strings if provided."
         )
 
     # Extract the literal values

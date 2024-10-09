@@ -1,8 +1,9 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test File for pd_timedelta types. Covers basic functionality of boxing, unboxing,
-    lowering, fields and methods.
+Test File for pd_timedelta types. Covers basic functionality of boxing, unboxing,
+lowering, fields and methods.
 """
+
 import datetime
 
 import numpy as np
@@ -184,7 +185,7 @@ def test_hash(memory_leak_check):
     td3 = pd.Timedelta(1)
 
     def impl(td1, td2, td3):
-        d = dict()
+        d = {}
         d[td1] = 1
         d[td2] = 2
         d[td3] = 3

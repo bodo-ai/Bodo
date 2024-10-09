@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the join and merge"""
+
 from collections import defaultdict
 from itertools import chain
 from typing import (
@@ -290,8 +291,8 @@ class Join(ir.Stmt):
             self.right_var_map[INDEX_SENTINEL] = right_index_loc
 
         # Create a set of keys future lookups
-        self.left_key_set = set(self.left_var_map[c] for c in left_keys)
-        self.right_key_set = set(self.right_var_map[c] for c in right_keys)
+        self.left_key_set = {self.left_var_map[c] for c in left_keys}
+        self.right_key_set = {self.right_var_map[c] for c in right_keys}
 
         if gen_cond_expr:
             # find columns used in general join condition to avoid removing them in rm dead
@@ -299,16 +300,16 @@ class Join(ir.Stmt):
             # like (left.A)) != (right.B) will look like both A and A) are left key columns
             # based on this check, even though only A) is. Fixing this requires a more detailed
             # refactoring of the parsing.
-            self.left_cond_cols = set(
+            self.left_cond_cols = {
                 self.left_var_map[c]
                 for c in left_col_names
                 if f"(left.{c})" in gen_cond_expr
-            )
-            self.right_cond_cols = set(
+            }
+            self.right_cond_cols = {
                 self.right_var_map[c]
                 for c in right_col_names
                 if f"(right.{c})" in gen_cond_expr
-            )
+            }
         else:
             self.left_cond_cols = set()
             self.right_cond_cols = set()
@@ -965,20 +966,18 @@ def join_table_column_use(
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
             # Map the used columns from output to left
-            left_used_cols = set(
-                [
-                    join_node.out_to_input_col_map[i][1]
-                    for i in used_cols
-                    if join_node.out_to_input_col_map[i][0] == "left"
-                ]
-            )
+            left_used_cols = {
+                join_node.out_to_input_col_map[i][1]
+                for i in used_cols
+                if join_node.out_to_input_col_map[i][0] == "left"
+            }
 
             # key columns are always used in join
-            left_key_cols = set(
+            left_key_cols = {
                 i
                 for i in (join_node.left_key_set | join_node.left_cond_cols)
                 if i < join_node.n_left_table_cols
-            )
+            }
 
             # Update the dead columns for the left
             if not (use_all or cannot_del_cols):
@@ -1005,20 +1004,18 @@ def join_table_column_use(
         # skip if input already uses all columns or cannot delete the table
         if not (orig_use_all or orig_cannot_del_cols):
             # Map the used columns from output to right
-            right_used_cols = set(
-                [
-                    join_node.out_to_input_col_map[i][1]
-                    for i in used_cols
-                    if join_node.out_to_input_col_map[i][0] == "right"
-                ]
-            )
+            right_used_cols = {
+                join_node.out_to_input_col_map[i][1]
+                for i in used_cols
+                if join_node.out_to_input_col_map[i][0] == "right"
+            }
 
             # key columns are always used in join
-            right_key_cols = set(
+            right_key_cols = {
                 i
                 for i in (join_node.right_key_set | join_node.right_cond_cols)
                 if i < join_node.n_right_table_cols
-            )
+            }
 
             # Update the dead columns for the right
             if not (use_all or cannot_del_cols):
@@ -1070,7 +1067,7 @@ def get_copies_join(join_node, typemap):
     data flow analysis. Join doesn't generate any
     copies, it just kills the output columns.
     """
-    kill_set = set(v.name for v in join_node.get_live_out_vars())
+    kill_set = {v.name for v in join_node.get_live_out_vars()}
     return set(), kill_set
 
 
@@ -2149,7 +2146,7 @@ def gen_general_cond_cfunc(
 
     if compute_in_batch:
         func_text += f"      set_bit_to(match_arr, i, {expr})\n"
-        func_text += f"      i += 1\n"
+        func_text += "      i += 1\n"
     else:
         func_text += f"  return {expr}"
 
@@ -2265,9 +2262,9 @@ def _replace_column_accesses(
             else:
                 func_text += f"{indent}{na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
 
-            table_getitem_funcs[
-                na_check_fname
-            ] = bodo.libs.array._gen_row_na_check_intrinsic(array_typ, physical_ind)
+            table_getitem_funcs[na_check_fname] = (
+                bodo.libs.array._gen_row_na_check_intrinsic(array_typ, physical_ind)
+            )
             expr = expr.replace(na_cname, na_val_varname)
 
         # only append the column if it is not an (equality) key
@@ -2526,7 +2523,7 @@ def _gen_join_cpp_call(
         func_text += "    cfunc_cond = 0\n"
 
     # single-element numpy array to return number of global rows from C++
-    func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
+    func_text += "    total_rows_np = np.array([0], dtype=np.int64)\n"
 
     if join_node.point_interval_join_info is not None:
         left_col_types = [left_other_types[k] for k in left_col_nums]
@@ -2652,14 +2649,14 @@ def _gen_join_cpp_call(
     out_types = "(py_table_type, index_col_type)"
     func_text += f"    out_data = cpp_table_to_py_data(out_table, out_col_inds, {out_types}, total_rows_np[0], {join_node.n_out_table_cols})\n"
     if join_node.has_live_out_table_var:
-        func_text += f"    T = out_data[0]\n"
+        func_text += "    T = out_data[0]\n"
     else:
-        func_text += f"    T = None\n"
+        func_text += "    T = None\n"
     if join_node.has_live_out_index_var:
         idx = 1 if join_node.has_live_out_table_var else 0
         func_text += f"    index_var = out_data[{idx}]\n"
     else:
-        func_text += f"    index_var = None\n"
+        func_text += "    index_var = None\n"
 
     glbs["py_table_type"] = out_table_type
     glbs["index_col_type"] = index_col_type
@@ -2721,7 +2718,7 @@ def _gen_join_cpp_call(
                 index_typ = typ
                 index_changed = True
         if table_changed:
-            func_text += f"    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
+            func_text += "    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
             # Determine the types that must be loaded.
             pre_cast_table_type = bodo.TableType(tuple(table_arrs))
             # Update the table types
@@ -2732,10 +2729,10 @@ def _gen_join_cpp_call(
             glbs["index_col_type"] = index_typ
             glbs["index_cast_type"] = index_col_type
             func_text += (
-                f"    index_var = bodo.utils.utils.astype(index_var, index_cast_type)\n"
+                "    index_var = bodo.utils.utils.astype(index_var, index_cast_type)\n"
             )
-    func_text += f"    out_table = T\n"
-    func_text += f"    out_index = index_var\n"
+    func_text += "    out_table = T\n"
+    func_text += "    out_index = index_var\n"
     return func_text
 
 

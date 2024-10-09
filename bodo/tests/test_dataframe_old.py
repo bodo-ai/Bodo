@@ -2,6 +2,7 @@
 """Old tests for DataFrame values which can be useful since they are different and may
 expose corner cases.
 """
+
 import unittest
 
 import numpy as np
@@ -126,7 +127,6 @@ class TestDataFrame(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        n = 11
         data = np.arange(9).reshape(3, 3)
         pd.testing.assert_frame_equal(
             bodo_func(data.copy()), test_impl(data.copy()), check_column_type=False
@@ -554,7 +554,7 @@ class TestDataFrame(unittest.TestCase):
     def test_df_apply(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n)})
-            B = df.apply(lambda r: r.A + r.B, axis=1)
+            df.apply(lambda r: r.A + r.B, axis=1)
             return df.B.sum()
 
         n = 121
@@ -564,7 +564,7 @@ class TestDataFrame(unittest.TestCase):
     def test_df_apply_branch(self):
         def test_impl(n):
             df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n)})
-            B = df.apply(lambda r: r.A < 10 and r.B > 20, axis=1)
+            df.apply(lambda r: r.A < 10 and r.B > 20, axis=1)
             return df.B.sum()
 
         n = 121
