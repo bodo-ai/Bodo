@@ -151,8 +151,7 @@ jobs:
             bodo-platform-utils/ \
             bodo-platform-extensions/ \
             bodo-platform-ipyparallel-kernel/ \
-            bodo-platform-sql-service \
-            bodo-platform-ddl-service
+            bodo-platform-sql-service 
 
       - name: Create Azure Image definition
         # For event that is not workflow, we skip the image creation in the build step,
