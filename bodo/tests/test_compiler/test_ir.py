@@ -34,11 +34,11 @@ def test_rhs():
 
     def impl(a):
         # Constant
-        b = 1
+        b = 1  # noqa: F841
         # Variable & arg
-        c = a
+        c = a  # noqa: F841
         # Global
-        d = GLOBAL
+        d = GLOBAL  # noqa: F841
         # TODO: Freevar
 
     compare_ir_str(impl)
@@ -57,9 +57,9 @@ def test_simple_exprs():
         # CallExpr
         b = bool(a)
         # BuildTupleExpr
-        e = (a, b)
+        e = (a, b)  # noqa: F841
         # BuildListExpr
-        f = [a, b]
+        f = [a, b]  # noqa: F841
         # TODO: PairFirst and PairSecond
 
     compare_ir_str(impl)
@@ -73,16 +73,16 @@ def test_container_exprs():
         # GetIterExpr
         it = iter(l)
         # IterNextExpr
-        out = next(it)
+        out = next(it)  # noqa: F841
         # TODO: ExhaustIterExpr
         # GetAttrExpr
-        b = l.append
+        b = l.append  # noqa: F841
         # GetItemExpr
-        c = l[a]
+        c = l[a]  # noqa: F841
         # TODO: TypedGetItemExpr
         # StaticGetItemExpr
-        d = l[0]
-        e = l[:2]
+        d = l[0]  # noqa: F841
+        e = l[:2]  # noqa: F841
         # TODO: CastExpr?
 
     compare_ir_str(impl)
