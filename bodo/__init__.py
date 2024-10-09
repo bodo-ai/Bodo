@@ -182,6 +182,10 @@ sql_plan_cache_loc = os.environ.get("BODO_SQL_PLAN_CACHE_DIR")
 
 # -------------------------- End SQL Caching Config --------------------------
 
+bodo_use_native_type_inference = (
+    os.environ.get("BODO_NATIVE_TYPE_INFERENCE_ENABLED", "0") != "0"
+)
+
 tracing_level = int(os.environ.get("BODO_TRACING_LEVEL", "1"))
 
 # For pip version of Bodo:

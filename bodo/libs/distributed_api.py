@@ -116,6 +116,9 @@ mpi_req_numba_type = getattr(types, "int" + str(8 * hdist.mpi_req_num_bytes))
 MPI_ROOT = 0
 ANY_SOURCE = np.int32(hdist.ANY_SOURCE)
 
+# Wrapper for getting process rank from C (MPI rank currently)
+get_rank = hdist.get_rank_py_wrapper
+
 
 # XXX same as _distributed.h::BODO_ReduceOps::ReduceOpsEnum
 class Reduce_Type(Enum):
@@ -144,10 +147,18 @@ _dist_transpose_comm = types.ExternalFunction(
 )
 
 
-@numba.njit
-def get_rank():  # pragma: no cover
-    """wrapper for getting process rank (MPI rank currently)"""
-    return _get_rank()
+@lower_builtin(
+    get_rank,
+)
+def lower_get_rank(context, builder, sig, args):
+    fnty = lir.FunctionType(
+        lir.IntType(32),
+        [],
+    )
+    fn_typ = cgutils.get_or_insert_function(builder.module, fnty, name="c_get_rank")
+    out = builder.call(fn_typ, args)
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return out
 
 
 @numba.njit
@@ -4194,26 +4205,12 @@ def dist_permutation_array_index(
 
 from bodo.io import fsspec_reader, hdfs_reader
 
-ll.add_symbol("finalize", hdist.finalize)
-finalize = types.ExternalFunction("finalize", types.int32())
-
-ll.add_symbol("finalize_fsspec", fsspec_reader.finalize_fsspec)
-finalize_fsspec = types.ExternalFunction("finalize_fsspec", types.int32())
+finalize = hdist.finalize_py_wrapper
+finalize_fsspec = fsspec_reader.finalize_fsspec_py_wrapper
+disconnect_hdfs_py_wrapper = hdfs_reader.disconnect_hdfs_py_wrapper
 
 ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
 disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
-
-
-def _check_for_cpp_errors():
-    pass
-
-
-@overload(_check_for_cpp_errors)
-def overload_check_for_cpp_errors():
-    """wrapper to call check_and_propagate_cpp_exception()
-    Avoids errors when JIT is disabled since intrinsics throw errors in non-JIT mode.
-    """
-    return lambda: check_and_propagate_cpp_exception()  # pragma: no cover
 
 
 @numba.njit
@@ -4227,12 +4224,10 @@ def disconnect_hdfs_njit():  # pragma: no cover
     disconnect_hdfs()
 
 
-@numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_fsspec()
-    _check_for_cpp_errors()
-    disconnect_hdfs()
+    disconnect_hdfs_py_wrapper()
 
 
 def flush_stdout():

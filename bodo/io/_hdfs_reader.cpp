@@ -250,9 +250,33 @@ void hdfs_open_file(const char *fname,
 // #undef CHECK_ARROW
 // #undef CHECK_ARROW_AND_ASSIGN
 
+/**
+ * @brief Wrapper around disconnect_hdfs() to be called from Python (avoids
+ Numba JIT overhead and makes compiler debugging easier by eliminating extra
+ compilation)
+ *
+ */
+static PyObject *disconnect_hdfs_py_wrapper(PyObject *self, PyObject *args) {
+    if (PyTuple_Size(args) != 0) {
+        PyErr_SetString(PyExc_TypeError,
+                        "disconnect_hdfs() does not take arguments");
+        return NULL;
+    }
+    PyObject *ret_obj = PyLong_FromLong(disconnect_hdfs());
+    return ret_obj;
+}
+
+static PyMethodDef ext_methods[] = {
+#define declmethod(func) \
+    { #func, (PyCFunction)func, METH_VARARGS, NULL }
+    declmethod(disconnect_hdfs_py_wrapper),
+    {NULL},
+#undef declmethod
+};
+
 PyMODINIT_FUNC PyInit_hdfs_reader(void) {
     PyObject *m;
-    MOD_DEF(m, "hdfs_reader", "No docs", NULL);
+    MOD_DEF(m, "hdfs_reader", "No docs", ext_methods);
     if (m == NULL)
         return NULL;
 
