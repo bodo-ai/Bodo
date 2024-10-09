@@ -79,13 +79,6 @@
   tags:
     - bodo
 
-- name: BODO | Install Bodo Platform DDL Service
-  command:
-    chdir: "/tmp/bodo-platform-ddl-service/"
-    cmd: "/bin/bash bodo-ddl.install"
-  tags:
-    - bodo
-
 - name: BODO | Install Bodo Platform SQL Service
   command:
     chdir: "/tmp/bodo-platform-sql-service/"
@@ -101,6 +94,6 @@
 
 - name: BODO | Clean /tmp Folder
   command:
-    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions /tmp/bodo-platform-ipyparallel-kernel /tmp/bodo-platform-ddl-service /tmp/bodo-platform-sql-service"
+    cmd: "rm -r /tmp/bodo-platform-packages.tar.gz /tmp/bodo-platform-utils /tmp/bodo-platform-extensions /tmp/bodo-platform-ipyparallel-kernel /tmp/bodo-platform-sql-service"
   tags:
     - bodo
