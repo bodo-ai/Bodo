@@ -29,7 +29,7 @@ variable "ami_regions" {
 
 variable "aws_ssh_username" {
   type    = string
-  default = "ec2-user"
+  default = "rocky"
 }
 
 variable "aws_access_key_id" {
@@ -204,7 +204,7 @@ packer {
 source "amazon-ebs" "aws-ebs-build" {
   ami_block_device_mappings {
     delete_on_termination = true
-    device_name           = "/dev/xvda"
+    device_name           = "/dev/sda1"
     volume_size           = "50"
     volume_type           = "gp3"
   }
@@ -214,10 +214,10 @@ source "amazon-ebs" "aws-ebs-build" {
   associate_public_ip_address = true
   communicator                = "ssh"
   encrypt_boot                = false
-  instance_type               = "t3a.medium"
+  instance_type               = "c7i.large"
   launch_block_device_mappings {
     delete_on_termination = true
-    device_name           = "/dev/xvda"
+    device_name           = "/dev/sda1"
     volume_size           = 50
     volume_type           = "gp3"
   }
@@ -231,8 +231,8 @@ source "amazon-ebs" "aws-ebs-build" {
   }
   skip_create_ami = var.skip_create_image
   # This is a source image on top of that we are building our image
-  # Amazon Linux 2023 AMI
-  source_ami   = "ami-09efc42336106d2f2"
+  # Rocky Linux 9
+  source_ami   = "ami-0508b16bdd1180544"
   ssh_pty      = true
   ssh_username = var.aws_ssh_username
   tags = {
@@ -256,12 +256,12 @@ source "azure-arm" "azure-arm-build" {
   client_id       = var.azure_client_id
   client_secret   = var.azure_client_secret
   communicator    = "ssh"
-  image_offer     = "CentOS"
-  image_publisher = "OpenLogic"
+  image_offer     = "almalinux-x86_64"
+  image_publisher = "almalinux"
 
   # This is a source image on top of that we are building our image
-  # Linux (OpenLogic CentOS 7.9 Gen2)
-  image_sku          = "7_9-gen2"
+  # AlmaLinux OS x86_64 (9.4.2024080501 Gen2)
+  image_sku          = "9-gen2"
   location           = var.azure_location
   managed_image_name = local.image_name
   # This is on the bodo.ai Azure account (not ehsanbodo account)
@@ -287,6 +287,7 @@ source "azure-arm" "azure-arm-build" {
   ssh_username    = var.azure_ssh_username
   subscription_id = var.azure_subscription_id
   vm_size         = "Standard_D2_v5"
+  os_disk_size_gb = 50
 }
 
 # a build block invokes sources and runs provisioning steps on them. The
@@ -299,12 +300,16 @@ build {
     execute_command = "{{ .Vars }} sudo -S -E bash '{{ .Path }}'"
     only            = ["amazon-ebs.aws-ebs-build"]
     scripts         = ["${var.scripts_dir}/ami_precondition.sh"]
+    expect_disconnect = true
+    pause_after = "2m"
+    skip_clean = true
   }
 
   provisioner "shell" {
-    execute_command = "{{ .Vars }} sudo -S -E bash '{{ .Path }}'"
-    only            = ["azure-arm.azure-arm-build"]
-    scripts         = ["${var.scripts_dir}/vm_precondition.sh"]
+    execute_command  = "{{ .Vars }} sudo -S -E bash '{{ .Path }}'"
+    only             = ["azure-arm.azure-arm-build"]
+    environment_vars = ["PACKER_USER=${var.azure_ssh_username}"]
+    scripts          = ["${var.scripts_dir}/vm_precondition.sh"]
   }
 
   provisioner "file" {
@@ -348,8 +353,8 @@ build {
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E sh '{{ .Path }}'"
     inline = [
       "rpm --import https://packages.microsoft.com/keys/microsoft.asc",
-      "sh -c 'echo -e \"[azure-cli]\nname=Azure CLI\nbaseurl=https://packages.microsoft.com/yumrepos/azure-cli\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\" > /etc/yum.repos.d/azure-cli.repo'",
-      "sudo yum update -y", "sudo yum install -y azure-cli"
+      "sudo dnf install -y https://packages.microsoft.com/config/rhel/9.0/packages-microsoft-prod.rpm",
+      "sudo dnf install -y azure-cli"
     ]
     inline_shebang = "/bin/sh -xe"
     only           = ["azure-arm.azure-arm-build"]

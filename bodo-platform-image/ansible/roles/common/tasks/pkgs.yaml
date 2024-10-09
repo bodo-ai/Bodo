@@ -1,6 +1,6 @@
 ---
 - name: COMMON | Install common packages.
-  yum:
+  dnf:
     name: "{{ COMMON_PACKAGES }}"
     state: installed
   tags:
