@@ -102,7 +102,6 @@ def test_ucx_not_installed(pip_packages, conda_packages):
     ), "UCX Package Installed in Python, DELETE them!"
 
 
-@pytest.mark.skip
 def test_bodo_arrow_fork_installed(conda_packages):
     pkgs = [
         "libarrow",
@@ -212,7 +211,7 @@ def test_connectors(connector, pip_packages, conda_packages):
         ("ipyparallel", "8.6.1"),
         ("ipywidgets", "8.1.1"),
         ("bodo-azurefs-sas-token-provider", "1.0"),
-        ("pandas", "2.2.2"),
+        ("pandas", "2.2.3"),
     ],
 )
 def test_versions(package, expected_version, conda_packages):
