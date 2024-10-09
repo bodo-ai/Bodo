@@ -1,7 +1,7 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 
-"""E2E and unit tests for the polar_format function.
-"""
+"""E2E and unit tests for the polar_format function."""
+
 import numpy as np
 import pytest
 from numpy import arccosh, cos, dot, pi, sqrt
@@ -405,32 +405,32 @@ def test_fftshift_error(memory_leak_check):
             id="column_repeat-multiple",
         ),
         pytest.param(
-            np.array([i for i in range(2048)]),
+            np.array(list(range(2048))),
             (1, 1),
             id="dimension_upcast_with_transpose-a",
         ),
         pytest.param(
-            np.array([i for i in range(2048)]),
+            np.array(list(range(2048))),
             (2, 1),
             id="dimension_upcast_with_transpose-b",
         ),
         pytest.param(
-            np.array([i for i in range(2048)]),
+            np.array(list(range(2048))),
             (3, 1),
             id="dimension_upcast_with_transpose-c",
         ),
         pytest.param(
-            np.array([i for i in range(2048)]),
+            np.array(list(range(2048))),
             (13, 1),
             id="dimension_upcast_with_transpose-d",
         ),
         pytest.param(
-            np.array([i for i in range(2048)]),
+            np.array(list(range(2048))),
             (47, 1),
             id="dimension_upcast_with_transpose-e",
         ),
         pytest.param(
-            np.array([i for i in range(2048)]),
+            np.array(list(range(2048))),
             (1950, 1),
             id="dimension_upcast_with_transpose-f",
         ),

@@ -1,16 +1,15 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL numeric functions
-"""
+"""Test Bodo's array kernel utilities for BodoSQL numeric functions"""
 
 import math
 import operator
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
@@ -465,7 +464,7 @@ def test_conv(args):
             return None
 
     conv_answer = vectorized_sol(args, conv_scalar_fn, pd.StringDtype())
-    if any([isinstance(args[i], pd.Series) for i in range(len(args))]):
+    if any(isinstance(args[i], pd.Series) for i in range(len(args))):
         conv_answer = conv_answer.values
 
     check_func(
@@ -894,8 +893,13 @@ def test_width_bucket(args):
 
     # avoid Series conversion for scalar output
     if all(not isinstance(arg, pd.Series) for arg in args):
-        impl = lambda arr, min_val, max_val, num_buckets: bodo.libs.bodosql_array_kernels.width_bucket(
-            arr, min_val, max_val, num_buckets
+        impl = (
+            lambda arr,
+            min_val,
+            max_val,
+            num_buckets: bodo.libs.bodosql_array_kernels.width_bucket(
+                arr, min_val, max_val, num_buckets
+            )
         )
 
     def wb_scalar_fn(arr, mnv, mxv, nb):
@@ -1422,9 +1426,9 @@ def test_numeric_double_arg_funcs(arr0, arr1, func):
     # Simulates numeric func on a single row
     # Mod with divisor of 0 returns None in Bodo, but vanilla np.mod or % will throw an error.
     scalar_impl = "def impl(elem0, elem1):\n"
-    scalar_impl += f"    if pd.isna(elem0) or pd.isna(elem1):\n"
-    scalar_impl += f"        return None\n"
-    scalar_impl += f"    else:\n"
+    scalar_impl += "    if pd.isna(elem0) or pd.isna(elem1):\n"
+    scalar_impl += "        return None\n"
+    scalar_impl += "    else:\n"
     scalar_impl += f"        return {double_arg_np_map[func]}(elem0, elem1)"
     scalar_vars = {}
     exec(scalar_impl, {"np": np, "pd": pd}, scalar_vars)

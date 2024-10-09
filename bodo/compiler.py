@@ -2,6 +2,7 @@
 """
 Defines Bodo's compiler pipeline.
 """
+
 import os
 import warnings
 from collections import namedtuple
@@ -229,7 +230,7 @@ def _convert_bodo_dispatcher_to_udf(rhs, func_ir):
 
             mod = importlib.import_module(func_mod)
             func_val = getattr(mod, func_name)
-        except:
+        except Exception:
             return
 
     # replace regular bodo compiler pipeline with bodo udf pipeline
@@ -493,7 +494,7 @@ def bodo_overload_inline_pass(func_ir, typingctx, targetctx, typemap, calltypes)
     pass_info = PassInfo(func_ir, typemap)
 
     blocks = func_ir.blocks
-    work_list = list((l, blocks[l]) for l in reversed(blocks.keys()))
+    work_list = [(l, blocks[l]) for l in reversed(blocks.keys())]
     while work_list:
         label, block = work_list.pop()
         new_body = []
@@ -644,7 +645,7 @@ class BodoDumpDistDiagnosticsPass(AnalysisPass):
         env_name = "BODO_DISTRIBUTED_DIAGNOSTICS"
         try:
             diag_level = int(os.environ[env_name])
-        except:
+        except Exception:
             pass
 
         if diag_level > 0 and "distributed_diagnostics" in state.metadata:

@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Old dataframe/series tests
-"""
+"""Old dataframe/series tests"""
+
 import os
 import unittest
 
@@ -793,7 +793,7 @@ class TestHiFrames(unittest.TestCase):
         B = np.array([3, 4, 5, 6])
         bodo_func = bodo.jit(distributed=["A", "B", "df2"])(test_impl)
         start, end = get_start_end(len(A))
-        df2 = bodo_func(A[start:end], B[start:end])
+        bodo_func(A[start:end], B[start:end])
         # TODO:
         # pd.testing.assert_frame_equal(
         #     bodo_func(A[start:end], B[start:end]), test_impl(A, B))

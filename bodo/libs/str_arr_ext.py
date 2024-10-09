@@ -6,6 +6,7 @@ value:             ['a', 'bc', '', 'abc', None, 'bb']
 data:              [a, b, c, a, b, c, b, b]
 offsets:           [0, 1, 3, 3, 6, 6, 8]
 """
+
 import glob
 import operator
 from enum import Enum
@@ -2318,7 +2319,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
     # same dtype case with str. Here we opt to cause both dict
     # and regular string arrays maintain the same type.
-    if isinstance(dtype, types.Function) and dtype.key[0] == str:
+    if isinstance(dtype, types.Function) and dtype.key[0] is str:
         # no need to copy since our StringArray is immutable
         return lambda A, dtype, copy=True: A  # pragma: no cover
 

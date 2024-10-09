@@ -101,7 +101,7 @@ def test_semi_structured_data(df, datapath: DataPath):
     fp_pandas = datapath("pandas.pq", check_exists=False)
     write = lambda df: df.to_parquet(fp_bodo)
     distributions = {
-        "sequential": [lambda x, *args: x, [], dict()],
+        "sequential": [lambda x, *args: x, [], {}],
         "1d-distributed": [
             _get_dist_arg,
             [False],
@@ -498,6 +498,7 @@ def test_write_parquet_empty_chunks(memory_leak_check):
         bodo.barrier()
         if bodo.get_rank() == 0:
             df = pd.read_parquet(write_filename)
+            pd.testing.assert_frame_equal(df, pd.DataFrame({"A": np.arange(n)}))
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
@@ -817,7 +818,7 @@ def test_tz_to_parquet(memory_leak_check):
                 assert isinstance(
                     metadata_field, dict
                 ), f"incorrect metadata field for column {col_name}"
-                fields = [(k, v) for k, v in metadata_field.items()]
+                fields = list(metadata_field.items())
                 assert fields == [
                     ("timezone", result.dtypes[col_index].tz.zone)
                 ], f"incorrect metadata field for column {col_name}"

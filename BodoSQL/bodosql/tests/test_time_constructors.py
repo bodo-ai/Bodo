@@ -2,6 +2,7 @@
 """
 Test SQL `time` support (constructor functions)
 """
+
 import pandas as pd
 import pytest
 

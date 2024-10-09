@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL window/aggregation functions
-"""
+"""Test Bodo's array kernel utilities for BodoSQL window/aggregation functions"""
 
 import datetime
 import math
@@ -56,7 +55,7 @@ def gaussian_distribution(n, seed):
     [
         pytest.param(pd.Series([math.tan(i) for i in range(30000)]), id="tangent"),
         pytest.param(
-            pd.Series([i for i in range(30000)], dtype=pd.Int32Dtype()),
+            pd.Series(list(range(30000)), dtype=pd.Int32Dtype()),
             id="linear_no_null",
         ),
         pytest.param(
@@ -661,7 +660,7 @@ def window_kernel_numeric_data():
         ),
         "float64_nonan": pd.Series(np.arange(500, dtype=np.float64)),
         "float64_nan": nullable_float_arr_maker(
-            [i for i in range(100)],
+            list(range(100)),
             [i**2 for i in range(10)],
             [i**3 + 5 for i in range(5)],
         ),

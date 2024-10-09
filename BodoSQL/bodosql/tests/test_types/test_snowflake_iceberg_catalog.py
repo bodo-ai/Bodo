@@ -284,7 +284,7 @@ def test_snowflake_catalog_iceberg_write(memory_leak_check):
         if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
-            except:
+            except Exception:
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)

@@ -3,7 +3,6 @@ Test that various numeric builtin functions are properly supported in BODOSQL
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-
 from decimal import Decimal
 
 import numpy as np
@@ -241,7 +240,7 @@ def test_width_bucket_scalars(spark_info, memory_leak_check):
         }
     )
     ctx = {"TABLE0": t0}
-    query = f"SELECT CASE WHEN A <= 0.0 THEN WIDTH_BUCKET(-A, B, C, D) ELSE WIDTH_BUCKET(A, B, C, 2*D) END FROM table0"
+    query = "SELECT CASE WHEN A <= 0.0 THEN WIDTH_BUCKET(-A, B, C, D) ELSE WIDTH_BUCKET(A, B, C, 2*D) END FROM table0"
     check_query(
         query,
         ctx,
@@ -396,9 +395,9 @@ def test_haversine_scalars(spark_info, memory_leak_check):
         )
     }
     query = (
-        f"select case when A < 0.0 then haversine(A, B, C, D) else 0.0 end from table0"
+        "select case when A < 0.0 then haversine(A, B, C, D) else 0.0 end from table0"
     )
-    equiv_query = f"SELECT CASE WHEN A < 0.0 THEN 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C) - RADIANS(A)) / 2),2) + (COS(RADIANS(A)) * COS(RADIANS(C)) * POW(SIN((RADIANS(D) - RADIANS(B)) / 2),2)))) ELSE 0.0 END FROM table0"
+    equiv_query = "SELECT CASE WHEN A < 0.0 THEN 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C) - RADIANS(A)) / 2),2) + (COS(RADIANS(A)) * COS(RADIANS(C)) * POW(SIN((RADIANS(D) - RADIANS(B)) / 2),2)))) ELSE 0.0 END FROM table0"
     check_query(
         query,
         ctx,
@@ -464,8 +463,8 @@ def test_haversine_calc(spark_info, memory_leak_check):
             }
         )
     }
-    query = f"select haversine(A + B, B - C, C + D, D - A) from table0"
-    equiv_query = f"SELECT 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C + D) - RADIANS(A + B)) / 2),2) + (COS(RADIANS(A + B)) * COS(RADIANS(C + D)) * POW(SIN((RADIANS(D - A) - RADIANS(B - C)) / 2),2)))) FROM table0"
+    query = "select haversine(A + B, B - C, C + D, D - A) from table0"
+    equiv_query = "SELECT 2 * 6371 * ASIN(SQRT(POW(SIN((RADIANS(C + D) - RADIANS(A + B)) / 2),2) + (COS(RADIANS(A + B)) * COS(RADIANS(C + D)) * POW(SIN((RADIANS(D - A) - RADIANS(B - C)) / 2),2)))) FROM table0"
     check_query(
         query,
         ctx,
@@ -632,7 +631,6 @@ def test_uniform_determinism(memory_leak_check):
     outputs for the hardcoded input seeds.
     """
     query = "SELECT UNIFORM(0, 100, A) FROM table1"
-    n = 10**6
     ctx = {"TABLE1": pd.DataFrame({"A": [1, 2, 3, 1000] * 10})}
     answer = pd.DataFrame({0: [37, 40, 24, 51] * 10})
     check_query(
@@ -981,7 +979,7 @@ def test_to_number_columns(fn_name):
     df = pd.DataFrame(
         {
             "A": [str(i) for i in range(30)],
-            "B": [i for i in range(30)],
+            "B": list(range(30)),
             "C": [float(i) + 0.2 for i in range(30)],
         }
     )

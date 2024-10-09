@@ -34,7 +34,7 @@ $$
   SELECT JAVASCRIPT_ADD_ONE_WRAPPER(n)
 $$
 
-create or replace function test_regex_udf(A varchar) RETURNS DOUBLE LANGUAGE JAVASCRIPT AS 
+create or replace function test_regex_udf(A varchar) RETURNS DOUBLE LANGUAGE JAVASCRIPT AS
 $$
 try {
 return parseInt(A.match(/(\d+).*?(\d+).*?(\d+)/)[2]);
@@ -43,6 +43,7 @@ return parseInt(A.match(/(\d+).*?(\d+).*?(\d+)/)[2]);
 }
 $$
 """
+
 import datetime
 
 import numpy as np
@@ -77,17 +78,17 @@ def test_javascript_udf_no_args_return_int(memory_leak_check):
     Test a simple UDF without arguments that returns an integer value.
     """
     body = MetaType("return 2 + 1")
-    args = MetaType(tuple())
+    args = MetaType(())
     ret_type = IntegerArrayType(bodo.int32)
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
-        out_arr = execute_javascript_udf(f, tuple())
+        out_arr = execute_javascript_udf(f, ())
         delete_javascript_udf(f)
         return out_arr
 
     expected_output = 3
-    check_func(f, tuple(), py_output=expected_output)
+    check_func(f, (), py_output=expected_output)
 
 
 def test_javascript_interleaved_execution(memory_leak_check):
@@ -96,22 +97,22 @@ def test_javascript_interleaved_execution(memory_leak_check):
     """
     body_a = MetaType("return 2 + 1")
     body_b = MetaType("return 2 + 2")
-    args = MetaType(tuple())
+    args = MetaType(())
     ret_type = IntegerArrayType(bodo.int32)
 
     def f():
         a = create_javascript_udf(body_a, args, ret_type)
         b = create_javascript_udf(body_b, args, ret_type)
-        out_1 = execute_javascript_udf(a, tuple())
-        out_2 = execute_javascript_udf(b, tuple())
-        out_3 = execute_javascript_udf(a, tuple())
-        out_4 = execute_javascript_udf(b, tuple())
+        out_1 = execute_javascript_udf(a, ())
+        out_2 = execute_javascript_udf(b, ())
+        out_3 = execute_javascript_udf(a, ())
+        out_4 = execute_javascript_udf(b, ())
         delete_javascript_udf(a)
         delete_javascript_udf(b)
         return out_1, out_2, out_3, out_4
 
     expected_output = (3, 4, 3, 4)
-    check_func(f, tuple(), py_output=expected_output)
+    check_func(f, (), py_output=expected_output)
 
 
 def test_javascript_udf_single_arg_return_int(memory_leak_check):
@@ -372,13 +373,13 @@ def test_javascript_invalid_body(memory_leak_check):
     Test a UDF with an invalid body and check if an exception is raised.
     """
     body = MetaType("return 2 + '")
-    args = MetaType(tuple())
+    args = MetaType(())
     ret_type = IntegerArrayType(bodo.int32)
 
     @bodo.jit
     def f():
         f = create_javascript_udf(body, args, ret_type)
-        out = execute_javascript_udf(f, tuple())
+        out = execute_javascript_udf(f, ())
         delete_javascript_udf(f)
         return out
 
@@ -391,13 +392,13 @@ def test_javascript_throws_exception(memory_leak_check):
     Test a UDF that throws an exception and check if the exception is raised.
     """
     body = MetaType("throw 'error_string'")
-    args = MetaType(tuple())
+    args = MetaType(())
     ret_type = IntegerArrayType(bodo.int32)
 
     @bodo.jit
     def f():
         f = create_javascript_udf(body, args, ret_type)
-        out = execute_javascript_udf(f, tuple())
+        out = execute_javascript_udf(f, ())
         delete_javascript_udf(f)
         return out
 
@@ -407,17 +408,17 @@ def test_javascript_throws_exception(memory_leak_check):
 
 def test_javascript_unicode_in_body(memory_leak_check):
     body = MetaType("return 'hëllo'")
-    args = MetaType(tuple())
+    args = MetaType(())
     ret_type = bodo.string_array_type
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
-        out_arr = execute_javascript_udf(f, tuple())
+        out_arr = execute_javascript_udf(f, ())
         delete_javascript_udf(f)
         return out_arr
 
     expected_output = "hëllo"
-    check_func(f, tuple(), py_output=expected_output)
+    check_func(f, (), py_output=expected_output)
 
 
 @pytest.fixture
@@ -810,15 +811,15 @@ def test_javascript_return(body_text, ret_type, expected_output, memory_leak_che
     Test a UDF that returns a value for all supported types.
     """
     body = MetaType(body_text)
-    args = MetaType(tuple())
+    args = MetaType(())
 
     def f():
         f = create_javascript_udf(body, args, ret_type)
-        out_arr = execute_javascript_udf(f, tuple())
+        out_arr = execute_javascript_udf(f, ())
         delete_javascript_udf(f)
         return out_arr
 
-    check_func(f, tuple(), py_output=expected_output)
+    check_func(f, (), py_output=expected_output)
 
 
 def test_javascript(test_db_snowflake_catalog, memory_leak_check):

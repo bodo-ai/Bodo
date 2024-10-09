@@ -2,6 +2,7 @@
 """
 Test correctness of the filter into join optimization rule used by BodoSQL
 """
+
 import pytest
 
 from bodosql.tests.utils import check_query

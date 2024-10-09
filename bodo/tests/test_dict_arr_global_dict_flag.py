@@ -88,7 +88,7 @@ def test_dict_enc_ops_set_global_dict_flag(args, memory_leak_check):
     values in the data array correctly set _has_unique_local_dictionary=False
     and keeps _has_global_dictionary=True"""
     fn_name, fn_args, named_params, input_arr = args
-    args_str = ", ".join([repr(x) for x in fn_args] + [x for x in named_params])
+    args_str = ", ".join([repr(x) for x in fn_args] + list(named_params))
     func_text = (
         "def bodo_impl(A):\n"
         "  global_A = drop_duplicates_local_dictionary(A, False)\n"
@@ -357,7 +357,7 @@ def test_bodosql_array_kernels(args, memory_leak_check):
     inputs/outputs.
     """
     fn_name, fn_args, named_params, input_arr = args
-    args_str = ", ".join([repr(x) for x in fn_args] + [x for x in named_params])
+    args_str = ", ".join([repr(x) for x in fn_args] + list(named_params))
     func_text = (
         "def bodo_impl(A):\n"
         "  global_A = drop_duplicates_local_dictionary(A.values, False)\n"

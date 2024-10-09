@@ -675,12 +675,12 @@ def _gen_pd_func_str_for_query(
     for k, v in globalsToLower.items():
         returned_func_text = returned_func_text.replace(str(k), str(v))
 
-    executed_func_text = f"def impl(bodo_sql_context):\n"
+    executed_func_text = "def impl(bodo_sql_context):\n"
     # This doesn't work if we have triple quotes within the generated code
     # This currently isn't an issue, but I'm making note of it just in case
     executed_func_text += f'  return """{returned_func_text}"""'
-    loc_vars = dict()
-    imports = dict()
+    loc_vars = {}
+    imports = {}
     exec(
         executed_func_text,
         imports,

@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
             try:
                 result = s3.get_object(Bucket=s3_bucket, Key=s3_key)
-            except:
+            except Exception:
                 print("Logs could not be found for ", build, file=sys.stderr)
                 continue
 

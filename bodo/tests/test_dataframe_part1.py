@@ -2,6 +2,7 @@
 """
 Unittests for DataFrames
 """
+
 import datetime
 import operator
 import random
@@ -1122,7 +1123,7 @@ def test_df_dtypes(df_value):
     py_output = df_value.dtypes
     df_type = bodo.typeof(df_value)
     for i in range(len(df_value.columns)):
-        if py_output.iloc[i] == object:
+        if py_output.iloc[i] == np.object_:
             if df_type.data[i] == bodo.boolean_array_type:
                 py_output.iloc[i] = pd.BooleanDtype()
             if df_type.data[i] in (bodo.string_array_type, bodo.dict_str_arr_type):
@@ -1315,7 +1316,6 @@ def test_df_rename(memory_leak_check):
         return df
 
     def impl6(df):
-        p = True
         df.rename(columns={"B": "bb", "C": "cc"}, errors=1)
         return df
 
@@ -2034,7 +2034,7 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
     # in either Pandas or Bodo, we need to check the error message.
     for i, dtype in enumerate(df_value.dtypes):
         # This isn't supported in Pandas with BooleanArrays
-        if dtype == object and is_bool_object_series(df_value[df_value.columns[i]]):
+        if dtype is object and is_bool_object_series(df_value[df_value.columns[i]]):
             gen_output = True
 
         # This isn't supported in Pandas
@@ -2126,7 +2126,7 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
     # in either Pandas or Bodo, we need to check the error message.
     for i, dtype in enumerate(df_value.dtypes):
         # This isn't supported in Pandas with BooleanArrays
-        if dtype == object and is_bool_object_series(df_value[df_value.columns[i]]):
+        if dtype is object and is_bool_object_series(df_value[df_value.columns[i]]):
             gen_output = True
 
         # This isn't supported in Pandas

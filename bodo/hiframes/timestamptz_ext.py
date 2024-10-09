@@ -389,7 +389,7 @@ def create_cmp_op_overload(op):
 
 class TimestampTZArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
-        super(TimestampTZArrayType, self).__init__(name=f"TimestampTZArrayType()")
+        super(TimestampTZArrayType, self).__init__(name="TimestampTZArrayType()")
 
     @property
     def as_array(self):

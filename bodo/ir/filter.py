@@ -10,6 +10,7 @@ number of arguments.
 
 The keys are the name of the BodoSQL kernel.
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
@@ -380,7 +381,7 @@ def build_filter_from_ir(filter_var: ir.Var, fir: ir.FunctionIR, typemap) -> Fil
                 f"Building Filter from IR Failed, Unknown Filter Func: {path}.{name}"
             )
         case None:
-            raise ValueError(f"Building Filter from IR Failed, Undefined Filter Def")
+            raise ValueError("Building Filter from IR Failed, Undefined Filter Def")
 
 
 def get_filter_predicate_compute_func(col_val) -> str:

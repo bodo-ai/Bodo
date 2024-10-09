@@ -2,6 +2,7 @@
 """
 Test correctness of nested data functions with BodoSQL
 """
+
 import datetime
 
 import numpy as np
@@ -2308,7 +2309,7 @@ def test_array_index_stress_test(memory_leak_check):
     Stress test for Test Array indexing works correctly with different data type
     """
 
-    query = f"""
+    query = """
     SELECT
         GET(ARRAY_CONSTRUCT(ARRAY_CONSTRUCT(GET(ARRAY_CONSTRUCT(0), 0))[ARRAY_CONSTRUCT(0)[0]]), 0) as out_col_1,
         arr_col[arr_col[arr_col[arr_col[arr_col[0]]]] + 1] as out_col_2,
@@ -2352,7 +2353,7 @@ def test_array_index_empty(memory_leak_check):
     Test that indexing into an empty array throws a reasonable error
     """
 
-    query = f"""
+    query = """
     SELECT
         arr_col[0] as out_col
     from
@@ -2390,7 +2391,7 @@ def test_array_index_out_of_bounds(memory_leak_check):
     Test that indexing out of bounds throws a reasonable error.
     """
 
-    query = f"""
+    query = """
     SELECT
         arr_col[2] as out_col
     from
@@ -2444,7 +2445,7 @@ def test_index_variant_invalid(expr, syntax, memory_leak_check):
     struct nor array (should return null).
     """
 
-    arr_expr = f"TO_VARIANT(input_col)"
+    arr_expr = "TO_VARIANT(input_col)"
     idx_call = f"{arr_expr}[{expr}]" if syntax else f"GET({arr_expr}, {expr})"
 
     query = f"SELECT CASE WHEN {idx_call} IS NULL THEN 'A' ELSE 'B' END as OUT_COL FROM TABLE1"
@@ -2607,7 +2608,7 @@ def test_map_index_nested(memory_leak_check):
         "TABLE1": nested_nested_df,
     }
 
-    query = f"""
+    query = """
     SELECT
         GET(A, 'value')['A']['X'] as out_col_1,
         GET(A['value']['A'], 'W') as out_col_2
@@ -2736,9 +2737,9 @@ def test_get_ignore_case(sql_object_array_values, with_case, memory_leak_check):
     """
 
     if with_case:
-        query = f"SELECT CASE WHEN A['id'] > 0 THEN GET_IGNORE_CASE(A, 'VaLUe') ELSE NULL END as out_col FROM TABLE1"
+        query = "SELECT CASE WHEN A['id'] > 0 THEN GET_IGNORE_CASE(A, 'VaLUe') ELSE NULL END as out_col FROM TABLE1"
     else:
-        query = f"SELECT GET_IGNORE_CASE(A, 'vAlUE') as out_col FROM TABLE1"
+        query = "SELECT GET_IGNORE_CASE(A, 'vAlUE') as out_col FROM TABLE1"
 
     input_col = sql_object_array_values["TABLE1"]["A"]
     output_col = []

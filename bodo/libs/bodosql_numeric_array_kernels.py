@@ -3,13 +3,25 @@
 Implements numerical array kernels that are specific to BodoSQL
 """
 
+import math
 
 import numba
+import numpy as np
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_coerced,
+    gen_vectorized,
+    get_common_broadcasted_type,
+    is_valid_int_arg,
+    unopt_argument,
+    verify_int_arg,
+    verify_int_float_arg,
+    verify_numeric_arg,
+    verify_string_arg,
+)
 from bodo.utils.typing import (
     get_overload_const_int,
     is_overload_constant_int,
@@ -144,7 +156,7 @@ double_arg_funcs = (
     "ROUND",
 )
 
-single_arg_funcs = set(a[2] for a in funcs_utils_names if a[2] not in double_arg_funcs)
+single_arg_funcs = {a[2] for a in funcs_utils_names if a[2] not in double_arg_funcs}
 
 _float = {
     16: types.float16,
@@ -329,9 +341,9 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
                     scalar_text += "if arg0 > 20 or np.abs(np.int64(arg0)) != arg0:\n"
                     scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
                     scalar_text += "else:\n"
-                    scalar_text += f"  res[i] = np.math.factorial(np.int64(arg0))"
+                    scalar_text += "  res[i] = np.math.factorial(np.int64(arg0))"
                 elif func_name == "LN":
-                    scalar_text += f"res[i] = np.log(arg0)"
+                    scalar_text += "res[i] = np.log(arg0)"
                 else:
                     scalar_text += f"res[i] = np.{func_name.lower()}(arg0)"
             else:
@@ -557,8 +569,7 @@ def overload_round_decimal(arr, round_scale):
         raise_bodo_error("round_decimal: arr must be a decimal array or scalar")
     if not (
         # We will enforce round_scale to be a compile-time constant integer.
-        is_overload_none(round_scale)
-        or is_overload_constant_int(round_scale)
+        is_overload_none(round_scale) or is_overload_constant_int(round_scale)
     ):  # pragma: no cover
         raise_bodo_error("round_decimal: round_scale must be an integer literal")
 
@@ -631,8 +642,7 @@ def overload_trunc_decimal(arr, round_scale):
         raise_bodo_error("trunc_decimal: arr must be a decimal array or scalar")
     if not (
         # We will enforce round_scale to be a compile-time constant integer.
-        is_overload_none(round_scale)
-        or is_overload_constant_int(round_scale)
+        is_overload_none(round_scale) or is_overload_constant_int(round_scale)
     ):
         raise_bodo_error("trunc_decimal: round_scale must be an integer literal")
 
@@ -1109,7 +1119,7 @@ def getbit(A, B):
 def haversine(lat1, lon1, lat2, lon2):
     """
     Handles cases where HAVERSINE receives optional arguments and forwards
-    to the appropriate version of the real implementaiton.
+    to the appropriate version of the real implementation.
     """
     args = [lat1, lon1, lat2, lon2]
     for i in range(4):
@@ -1130,7 +1140,7 @@ def haversine(lat1, lon1, lat2, lon2):
 def div0(arr, divisor):
     """
     Handles cases where DIV0 receives optional arguments and forwards
-    to the appropriate version of the real implementaiton.
+    to the appropriate version of the real implementation.
 
     This function also handles the logic to appropriately redirect to the
     correct div0 implementation (decimal vs. non-decimal) based on the
@@ -1186,7 +1196,7 @@ def div0(arr, divisor):
                 and isinstance(args[arg_idx].dtype, types.Integer)
             ):
                 return gen_coerced(
-                    f"bodo.libs.bodosql_array_kernels.div0",
+                    "bodo.libs.bodosql_array_kernels.div0",
                     "bodo.libs.decimal_arr_ext.int_to_decimal({})",
                     arg_names,
                     arg_idx,
@@ -1197,7 +1207,7 @@ def div0(arr, divisor):
             f"DIV0 not supported between operands of type {arr} and {divisor}"
         )
 
-    # No arguments are decimals, and we can use the standard implmentation.
+    # No arguments are decimals, and we can use the standard implementation.
     else:
 
         def impl(arr, divisor):  # pragma: no cover
@@ -1406,7 +1416,7 @@ def bitshiftright_util(A, B):
             scalar_type = A
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(scalar_type)
 
-    scalar_text = f"res[i] = arg0 >> arg1\n"
+    scalar_text = "res[i] = arg0 >> arg1\n"
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -1528,7 +1538,7 @@ def haversine_util(lat1, lon1, lat2, lon2):
 
     arg_names = ["lat1", "lon1", "lat2", "lon2"]
     arg_types = [lat1, lon1, lat2, lon2]
-    propogate_null = [True] * 4
+    propagate_null = [True] * 4
     scalar_text = "arg0, arg1, arg2, arg3 = map(np.radians, (arg0, arg1, arg2, arg3))\n"
     dlat = "(arg2 - arg0) * 0.5"
     dlon = "(arg3 - arg1) * 0.5"
@@ -1538,7 +1548,7 @@ def haversine_util(lat1, lon1, lat2, lon2):
 
     out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -1551,12 +1561,12 @@ def div0_util(arr, divisor):
 
     arg_names = ["arr", "divisor"]
     arg_types = [arr, divisor]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "res[i] = arg0 / arg1 if arg1 else 0\n"
 
     out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -1591,18 +1601,18 @@ def div0_decimal_util(arr, divisor):
     else:
         arg_names = ["arr", "divisor"]
         arg_types = [arr, divisor]
-        propogate_null = [True] * 2
+        propagate_null = [True] * 2
 
         p, s = bodo.libs.decimal_arr_ext.decimal_division_output_precision_scale(
             arr.precision, arr.scale, divisor.precision, divisor.scale
         )
         out_dtype = bodo.DecimalArrayType(p, s)
         # Call divide_decimal_scalars with do_div0=True
-        scalar_text = f"res[i] = bodo.libs.decimal_arr_ext.divide_decimal_scalars(arg0, arg1, True)"
+        scalar_text = "res[i] = bodo.libs.decimal_arr_ext.divide_decimal_scalars(arg0, arg1, True)"
         return gen_vectorized(
             arg_names,
             arg_types,
-            propogate_null,
+            propagate_null,
             scalar_text,
             out_dtype,
         )
@@ -2036,11 +2046,11 @@ def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
             if cast_arr0:
                 arg0_str = f"{cast_name}(arg0)"
             else:
-                arg0_str = f"arg0"
+                arg0_str = "arg0"
             if cast_arr1:
                 arg1_str = f"{cast_name}(arg1)"
             else:
-                arg1_str = f"arg1"
+                arg1_str = "arg1"
             # cast the output in case the operation causes type promotion.
             if func_name != "modulo_numeric":
                 scalar_text = (

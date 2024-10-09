@@ -104,7 +104,8 @@ datetime64_col = pd.Series(
 )
 tz_aware_col = pd.Series(
     [
-        None if 1 / math.cos(i) < -1
+        None
+        if 1 / math.cos(i) < -1
         # Assign random values to make the timestamps different
         else pd.Timestamp(
             year=2022,
@@ -145,7 +146,7 @@ def col_to_window_df(cols):
                 "W1": [round(i * 8 / n) for i in range(n)],
                 "W2": [i % 7 for i in range(n)],
                 "W3": [round(math.tan(i)) for i in range(n)],
-                "W4": [i for i in range(n)],
+                "W4": list(range(n)),
                 **cols,
             }
         )

@@ -134,7 +134,7 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
             id="date",
         ),
         pytest.param(
-            pd.array([i for i in range(1000)], dtype=pd.Int32Dtype), -1, -1, id="int"
+            pd.array(list(range(1000)), dtype=pd.Int32Dtype), -1, -1, id="int"
         ),
         pytest.param(
             pd.array(
@@ -189,7 +189,7 @@ def test_lead_lag_shift(func, shift_amt, spark_info, capfd):
         ),
         pytest.param(
             pd.array([bytes(i) for i in range(1000)]),
-            b"\xC0\xFF\xEE",
+            b"\xc0\xff\xee",
             "X'C0FFEE'",
             id="binary",
         ),
@@ -243,7 +243,7 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
     query = (
         f"SELECT LEAD(C,10, {default_str}) OVER (PARTITION BY A ORDER BY B) FROM TABLE1"
     )
-    query_no_default = f"SELECT LEAD(C,10) OVER (PARTITION BY A ORDER BY B) FROM TABLE1"
+    query_no_default = "SELECT LEAD(C,10) OVER (PARTITION BY A ORDER BY B) FROM TABLE1"
 
     old_use_decimal = bodo.bodo_use_decimal
     try:

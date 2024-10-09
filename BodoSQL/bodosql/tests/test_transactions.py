@@ -1,5 +1,5 @@
 """
-Test transaction support in BodoSQL. Right now, transactions are no-op, 
+Test transaction support in BodoSQL. Right now, transactions are no-op,
 so we just test them as is. In the future, they need to be tied to the
 storage / catalog, and the tests will need to be updated and moved
 accordingly.
@@ -20,7 +20,7 @@ def test_begin(extension, memory_leak_check):
 
     query = f"BEGIN {extension}"
     bc = bodosql.BodoSQLContext()
-    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
 
     # execute_ddl Version
     bodo_output = bc.execute_ddl(query)
@@ -42,7 +42,7 @@ def test_commit(extension, memory_leak_check):
 
     query = f"COMMIT {extension}"
     bc = bodosql.BodoSQLContext()
-    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
 
     # execute_ddl Version
     bodo_output = bc.execute_ddl(query)
@@ -64,7 +64,7 @@ def test_rollback(extension, memory_leak_check):
 
     query = f"BEGIN {extension}"
     bc = bodosql.BodoSQLContext()
-    py_output = pd.DataFrame({"STATUS": [f"Statement executed successfully."]})
+    py_output = pd.DataFrame({"STATUS": ["Statement executed successfully."]})
 
     # execute_ddl Version
     bodo_output = bc.execute_ddl(query)

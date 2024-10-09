@@ -2,6 +2,7 @@
 """
 Test correctness of the LISTAGG SQL aggregation operations with and without groupby for BodoSQL
 """
+
 import pandas as pd
 import pytest
 

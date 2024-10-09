@@ -2,6 +2,7 @@
 API used to translate Java BodoParquetInfo objects into
 Python Objects usable inside Bodo.
 """
+
 import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -115,7 +116,7 @@ def _has_uri_scheme(path: str):
     """return True of path has a URI scheme, e.g. file://, s3://, etc."""
     try:
         return urlparse(path).scheme != ""
-    except:
+    except Exception:
         return False
 
 

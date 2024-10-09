@@ -14,12 +14,12 @@ from bodo.utils.typing import MetaType
 )
 def test_javascript_udf_error_if_not_in_build():
     body = MetaType("return 2 + 1")
-    args = MetaType(tuple())
+    args = MetaType(())
     ret_type = IntegerArrayType(bodo.int64)
 
     @bodo.jit
     def f():
-        f = create_javascript_udf(body, args, ret_type)
+        create_javascript_udf(body, args, ret_type)
 
     with pytest.raises(
         Exception,

@@ -2,6 +2,7 @@
 """
 Test correctness of BodoSQL operations that handle streaming data.
 """
+
 import io
 
 import pytest

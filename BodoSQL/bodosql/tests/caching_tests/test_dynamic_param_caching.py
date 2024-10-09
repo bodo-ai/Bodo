@@ -4,7 +4,6 @@ Test that Dynamic Parameters are cached properly in both
 sequential and parallel code.
 """
 
-
 import numpy as np
 
 import bodosql

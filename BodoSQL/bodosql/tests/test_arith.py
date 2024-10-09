@@ -3,7 +3,6 @@
 Test correctness of SQL arithmetic operations on BodoSQL
 """
 
-
 import pandas as pd
 import pytest
 

@@ -2,7 +2,11 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    unopt_argument,
+    verify_int_float_arg,
+)
 
 
 def acos(arr):  # pragma: no cover

@@ -149,7 +149,7 @@ def test_merge_into_non_existing_table(
     @bodo.jit
     def impl(bc):
         bc.sql(
-            f"MERGE INTO I_DO_NOT_EXIST AS t USING source AS s "
+            "MERGE INTO I_DO_NOT_EXIST AS t USING source AS s "
             "ON t.id = s.id "
             "WHEN NOT MATCHED THEN "
             "  INSERT (id, dep) values (s.id, s.dep)",
@@ -911,8 +911,9 @@ def test_merge_with_null_action_conditions(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY v")
 
-    expected_rows = pd.DataFrame({"ID": [1, 2], "V": ["v1", "v2"]}), pd.DataFrame(
-        {"ID": [2], "V": ["v2"]}
+    expected_rows = (
+        pd.DataFrame({"ID": [1, 2], "V": ["v1", "v2"]}),
+        pd.DataFrame({"ID": [2], "V": ["v2"]}),
     )
     check_func(
         impl1,

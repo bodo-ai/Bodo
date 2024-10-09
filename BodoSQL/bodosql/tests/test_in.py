@@ -3,7 +3,6 @@
 Tests correctness of the In and Not In operations in BodoSQL
 """
 
-
 import pandas as pd
 import pytest
 
@@ -83,9 +82,7 @@ def test_not_in_scalar_literals(basic_df, spark_info, memory_leak_check):
 def test_in_list_one_literal(basic_df, spark_info, memory_leak_check):
     """tests the in operation when comparing a column against a list of a single literal"""
     query = "SELECT A in (1) from table1"
-    output = check_query(
-        query, basic_df, spark_info, check_names=False, check_dtype=False
-    )
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 @pytest.mark.slow

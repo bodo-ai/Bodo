@@ -3,6 +3,7 @@
 pass organized. This contains information about all
 table operations for optimizations.
 """
+
 from typing import Dict, Tuple
 
 from numba.core import ir, types
@@ -133,7 +134,7 @@ def get_table_used_columns(
         # extra arrays (arg 1). Non-table indices need to be removed.
         used_cols = typemap[call_expr.args[2].name].instance_type.meta
         n_table_cols = len(typemap[call_expr.args[0].name].arr_types)
-        return set(i for i in used_cols if i < n_table_cols)
+        return {i for i in used_cols if i < n_table_cols}
 
     # NOTE: get_table_used_columns() is called only when first input of
     # logical_table_to_table() is a table
@@ -151,7 +152,7 @@ def get_table_used_columns(
                     in_used_cols.add(in_ind)
             return in_used_cols
         else:
-            return set(i for i in in_col_inds if i < n_in_table_arrs)
+            return {i for i in in_col_inds if i < n_in_table_arrs}
 
     # If we don't have information about which columns this operation
     # kills, we return to None to indicate we must decref any remaining

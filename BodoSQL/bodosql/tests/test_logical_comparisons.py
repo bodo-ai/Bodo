@@ -2,6 +2,7 @@
 """
 Test correctness of SQL queries containing orderby on BodoSQL
 """
+
 import pytest
 
 from bodosql.tests.utils import check_query

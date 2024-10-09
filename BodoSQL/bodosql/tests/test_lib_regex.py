@@ -2,6 +2,7 @@
 """
 Test correctness of bodosql.libs.regex functions
 """
+
 import re
 
 import pytest

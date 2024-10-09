@@ -73,7 +73,7 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     # create table data
     target_table = pd.DataFrame(
         {
-            "ID": pd.Series([i for i in range(10)], dtype=np.int32),
+            "ID": pd.Series(list(range(10)), dtype=np.int32),
         }
         | bodo_datatype_cols
     )
@@ -124,7 +124,7 @@ def test_merge_into_bodo_datatypes_as_values(iceberg_database, iceberg_table_con
     def impl(bc, query):
         bc.sql(query)
 
-        return bc.sql(f"SELECT * FROM target_table ORDER BY id")
+        return bc.sql("SELECT * FROM target_table ORDER BY id")
 
     check_func(
         impl,
@@ -204,7 +204,7 @@ def test_merge_into_bodo_datatypes_as_expr(
     def impl(bc, query):
         bc.sql(query)
 
-        return bc.sql(f"SELECT * FROM target_table")
+        return bc.sql("SELECT * FROM target_table")
 
     check_func(
         impl,

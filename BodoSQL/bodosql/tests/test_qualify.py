@@ -199,7 +199,7 @@ def test_qualify_timedelta(
     Tests QUALIFY works on windowed aggregations when both bounds are specified on timedelta types.
     """
 
-    query = f"SELECT P, I from table1 QUALIFY MIN(TD) OVER (PARTITION BY P) >= INTERVAL '1' DAYS"
+    query = "SELECT P, I from table1 QUALIFY MIN(TD) OVER (PARTITION BY P) >= INTERVAL '1' DAYS"
     df = pd.DataFrame(
         {
             "P": [1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1],
@@ -404,11 +404,11 @@ def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
 
     ctx = {"TABLE1": table1}
 
-    bodosql_query1 = f"SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1 QUALIFY w < 10"
+    bodosql_query1 = "SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1 QUALIFY w < 10"
     bodosql_query2 = f"SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 QUALIFY x in ({bodosql_query1})"
     bodosql_query = bodosql_query2
 
-    spark_query_1 = f"SELECT * FROM (SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1) WHERE w < 10"
+    spark_query_1 = "SELECT * FROM (SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1) WHERE w < 10"
     spark_query_2 = f"SELECT * FROM (SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 ) WHERE x in ({spark_query_1})"
     spark_query = spark_query_2
 

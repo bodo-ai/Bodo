@@ -2,6 +2,7 @@
 """
 Basic E2E tests for each type of filter pushdown on Iceberg tables.
 """
+
 import io
 import string
 from datetime import date

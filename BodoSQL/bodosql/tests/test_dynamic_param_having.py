@@ -16,7 +16,7 @@ def test_named_param_int_having(
     """
     Tests that having works with integer data and integer named parameters
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A)
         FROM
@@ -43,7 +43,7 @@ def test_bind_variables_int_having(
     """
     Tests that having works with integer data and integer bind variables
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A) as OUTPUT
         FROM
@@ -76,7 +76,7 @@ def test_named_param_float_having(
     """
     Tests that having works with numeric data and float named parameters
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A)
         FROM
@@ -103,7 +103,7 @@ def test_bind_variables_float_having(
     """
     Tests that having works with numeric data and float bind variables
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A) as OUTPUT
         FROM
@@ -136,7 +136,7 @@ def test_named_param_string_having(
     """
     Tests that having works with string data and string named parameters
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A)
         FROM
@@ -163,7 +163,7 @@ def test_bind_variables_string_having(
     """
     Tests that having works with string data and string bind variables
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A) as OUTPUT
         FROM
@@ -195,7 +195,7 @@ def test_named_param_datetime_having(
     """
     Tests that having works with datetime data and timestamp named parameters
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A)
         FROM
@@ -221,7 +221,7 @@ def test_bind_variables_datetime_having(
     """
     Tests that having works with Timestamp data and Timestamp bind variables
     """
-    query = f"""
+    query = """
         SELECT
             COUNT(A) as OUTPUT
         FROM

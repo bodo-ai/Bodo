@@ -7,6 +7,7 @@ The implementation uses an array(struct) array underneath similar to Spark and A
 For example: [{1: 2.1, 3: 1.1}, {5: -1.0}]
 [[{"key": 1, "value" 2.1}, {"key": 3, "value": 1.1}], [{"key": 5, "value": -1.0}]]
 """
+
 import operator
 
 import numba
@@ -163,9 +164,9 @@ def alias_ext_init_map_arr(lhs_name, args, alias_map, arg_aliases):
     numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.core.ir_utils.alias_func_extensions[
-    ("init_map_arr", "bodo.libs.map_arr_ext")
-] = alias_ext_init_map_arr
+numba.core.ir_utils.alias_func_extensions[("init_map_arr", "bodo.libs.map_arr_ext")] = (
+    alias_ext_init_map_arr
+)
 
 
 def pre_alloc_map_array(

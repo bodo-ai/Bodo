@@ -1,12 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 """Test sort_values opration as called as df.sort_values()
-   The C++ implementation uses the timsort which is a stable sort algorithm.
-   Therefore, in the test we use mergesort, which guarantees that the equality
-   tests can be made sensibly.
-   ---
-   The alternative is to use reset_index=True so that possible difference in sorting
-   would be eliminated.
+The C++ implementation uses the timsort which is a stable sort algorithm.
+Therefore, in the test we use mergesort, which guarantees that the equality
+tests can be made sensibly.
+---
+The alternative is to use reset_index=True so that possible difference in sorting
+would be eliminated.
 """
 
 import os
@@ -993,9 +993,7 @@ def test_sort_values_list_inference(memory_leak_check):
     """
 
     def impl(df):
-        return df.sort_values(
-            by=list(set(df.columns) - set(["B", "C"])), kind="mergesort"
-        )
+        return df.sort_values(by=list(set(df.columns) - {"B", "C"}), kind="mergesort")
 
     df = pd.DataFrame(
         {
@@ -1943,7 +1941,7 @@ def test_sort_for_interval_join_err_checking():
         BodoError,
         match=r"sort_values\(\): _bodo_chunk_bounds with at most 2 keys must be provided when _bodo_interval_sort=True",
     ):
-        out = impl(_get_dist_arg(df), "A", bounds)
+        impl(_get_dist_arg(df), "A", bounds)
 
     # 2. Number of keys is >2
     df = pd.DataFrame(
@@ -1958,7 +1956,7 @@ def test_sort_for_interval_join_err_checking():
         BodoError,
         match=r"sort_values\(\): When using _bodo_interval_sort, you must specify at most 2 keys",
     ):
-        out = impl(_get_dist_arg(df), ["A", "B", "C"], bounds)
+        impl(_get_dist_arg(df), ["A", "B", "C"], bounds)
 
     # 3. ascending is not true (both singular and list case)
     @bodo.jit(distributed=["df"])
@@ -1974,7 +1972,7 @@ def test_sort_for_interval_join_err_checking():
         BodoError,
         match=r"sort_values\(\): 'ascending' parameter must be true when using _bodo_interval_sort",
     ):
-        out = impl2(_get_dist_arg(df), ["A", "B"], bounds)
+        impl2(_get_dist_arg(df), ["A", "B"], bounds)
 
     @bodo.jit(distributed=["df"])
     def impl3(df, by, bounds):
@@ -1989,7 +1987,7 @@ def test_sort_for_interval_join_err_checking():
         BodoError,
         match=r"sort_values\(\): Every value in 'ascending' must be true when using _bodo_interval_sort",
     ):
-        out = impl3(_get_dist_arg(df), ["A", "B"], bounds)
+        impl3(_get_dist_arg(df), ["A", "B"], bounds)
 
     # 4. na_position is not 'last' (both singular and list case)
     @bodo.jit(distributed=["df"])
@@ -2005,7 +2003,7 @@ def test_sort_for_interval_join_err_checking():
         BodoError,
         match=r"sort_values\(\): na_position must be 'last' when using _bodo_interval_sort",
     ):
-        out = impl4(_get_dist_arg(df), ["A", "B"], bounds)
+        impl4(_get_dist_arg(df), ["A", "B"], bounds)
 
     @bodo.jit(distributed=["df"])
     def impl5(df, by, bounds):
@@ -2020,7 +2018,7 @@ def test_sort_for_interval_join_err_checking():
         BodoError,
         match=r"sort_values\(\): Every value in na_position must be 'last' when using _bodo_interval_sort",
     ):
-        out = impl5(_get_dist_arg(df), ["A", "B"], bounds)
+        impl5(_get_dist_arg(df), ["A", "B"], bounds)
 
 
 @pytest.mark.slow

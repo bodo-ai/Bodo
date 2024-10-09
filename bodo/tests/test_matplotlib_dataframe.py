@@ -1,8 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Tests for Matplotlib support inside Bodo. Matplotlib
-    generally requires comparing visuals, so we write all
-    results to images,
+Tests for Matplotlib support inside Bodo. Matplotlib
+generally requires comparing visuals, so we write all
+results to images,
 """
 
 from .test_matplotlib import bodo_check_figures_equal

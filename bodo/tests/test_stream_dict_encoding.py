@@ -2,6 +2,7 @@
 These tests are focused on the core correctness of the state operations
 and any SQL APIs requiring additional testing.
 """
+
 import textwrap
 from typing import Tuple
 

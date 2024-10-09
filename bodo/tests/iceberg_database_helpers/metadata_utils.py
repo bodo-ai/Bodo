@@ -2,6 +2,7 @@
 """
 Helpers for testing functionality involving Iceberg metadata.
 """
+
 import json
 import os
 import re

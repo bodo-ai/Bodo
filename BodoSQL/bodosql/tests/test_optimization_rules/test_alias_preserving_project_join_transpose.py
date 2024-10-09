@@ -2,6 +2,7 @@
 """
 Test correctness of the alias_preserving_project_join_transpose optimization rule used by BodoSQL
 """
+
 import pytest
 
 from bodosql.tests.utils import check_query

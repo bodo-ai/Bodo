@@ -1,8 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL variadic functions
-"""
+"""Test Bodo's array kernel utilities for BodoSQL variadic functions"""
 
 import datetime
+import re
 from decimal import Decimal
 
 import numpy as np
@@ -12,7 +12,6 @@ import pytest
 from numba.core import types
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
@@ -21,7 +20,7 @@ from bodo.tests.utils import (
     find_nested_dispatcher_and_args,
     pytest_slow_unless_codegen,
 )
-from bodo.utils.typing import ColNamesMetaType, MetaType
+from bodo.utils.typing import BodoError, ColNamesMetaType, MetaType
 
 # Skip unless any library or BodoSQL codegen or files were changed
 pytestmark = pytest_slow_unless_codegen
@@ -2234,9 +2233,7 @@ def test_object_construct_keep_null(values, keys, scalars, answer, memory_leak_c
                 datetime.date(2023, 1, 14),
                 pd.Series(
                     [
-                        None
-                        if i % 2 == 1
-                        else datetime.date.fromordinal(738534 + 2**i)
+                        None if i % 2 == 1 else datetime.date.fromordinal(738534 + 2**i)
                         for i in range(10)
                     ]
                 ).values,

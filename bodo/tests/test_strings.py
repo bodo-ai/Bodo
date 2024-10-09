@@ -1147,7 +1147,9 @@ class TestString(unittest.TestCase):
             return S[0], S[1], S[2]
 
         bodo_func = bodo.jit(test_impl)
-        S = pd.Series(["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"])
+        S = pd.Series(
+            ["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"]
+        )
         self.assertEqual(bodo_func(S), test_impl(S))
 
     def test_encode_unicode1(self):

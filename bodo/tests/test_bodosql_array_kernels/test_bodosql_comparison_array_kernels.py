@@ -1,6 +1,6 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL comparison operations
-"""
+"""Test Bodo's array kernel utilities for BodoSQL comparison operations"""
+
 import operator
 
 import numpy as np
@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 

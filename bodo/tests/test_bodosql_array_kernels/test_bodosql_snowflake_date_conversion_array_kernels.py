@@ -1,13 +1,20 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for BodoSQL numeric functions"""
 
+import datetime
 
+import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_array_kernels import vectorized_sol
+from bodo.libs.bodosql_snowflake_conversion_array_kernels import (
+    convert_snowflake_date_format_str_to_py_format,
+    number_to_datetime,
+)
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
 # Skip unless any library or BodoSQL codegen or files were changed
@@ -933,7 +940,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
                     "Thu, 21 Dec 2000 16:01:07.123456789 +0200",
                     "Thu, 21 Dec 2000 04:01:07 PM +0200",
                     "Thu, 21 Dec 2000 04:01:07.123456789 PM +0200",
-                    # This example is modifed to have a non-zero offset
+                    # This example is modified to have a non-zero offset
                     "Mon Jul 08 18:09:51 +0700 2013",
                 ],
                 pd.StringDtype(),

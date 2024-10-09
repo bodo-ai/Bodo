@@ -420,7 +420,6 @@ class Obfuscator(ast.NodeTransformer):
         node = self._remove_docstring(node)
         # The function name itself is set to fixed because it can be potentially part of the API.
         self.insert_fixed_names(node.name)
-        n_decorator = len(node.decorator_list)
         for earg in node.args.args:
             # The arguments are set to fixed because they are either default ones or
             # have their name of significance in say decorator functions.

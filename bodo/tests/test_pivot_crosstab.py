@@ -487,7 +487,7 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -495,7 +495,7 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=1000)),
             }
         ),
@@ -503,15 +503,15 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
-                "C": pd.array(([i for i in range(9)] + [None]) * 100, dtype="Int32"),
+                "B": list(range(10)) * 100,
+                "C": pd.array((list(range(9)) + [None]) * 100, dtype="Int32"),
             }
         ),
         # String Index
         pd.DataFrame(
             {
                 "A": [str(i) for i in range(1000)],
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -519,7 +519,7 @@ def test_pivot_invalid_types(memory_leak_check):
         pd.DataFrame(
             {
                 "A": np.arange(1000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": [str(i) for i in range(1000, 2000)],
             }
         ),
@@ -597,7 +597,7 @@ def test_pivot_basic(df, memory_leak_check):
             {
                 "A": np.arange(1000),
                 "B": np.arange(1000),
-                "C": pd.array(([i for i in range(9)] + [None]) * 100, dtype="Int32"),
+                "C": pd.array((list(range(9)) + [None]) * 100, dtype="Int32"),
             }
         ),
         # String Index
@@ -653,7 +653,7 @@ def test_pivot_empty(df, memory_leak_check):
         # Basic DataFrame with NAs to insert
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
+                "A": list(range(3)) * 5,
                 "B": [str(i) for i in range(5)] * 3,
                 "C": np.arange(1000, 1015),
             }
@@ -661,26 +661,26 @@ def test_pivot_empty(df, memory_leak_check):
         # Integer column names
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": np.arange(1000, 1015),
             }
         ),
         # Timestamp values
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=15)),
             }
         ),
         # Nullable Integer Values
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": pd.array(
-                    [i for i in range(11)] + [None, None, None, None], dtype="Int32"
+                    list(range(11)) + [None, None, None, None], dtype="Int32"
                 ),
             }
         ),
@@ -688,15 +688,15 @@ def test_pivot_empty(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [str(i) for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "B": list(range(5)) * 3,
                 "C": np.arange(1000, 1015),
             }
         ),
         # String values
         pd.DataFrame(
             {
-                "A": [i for i in range(3)] * 5,
-                "B": [i for i in range(5)] * 3,
+                "A": list(range(3)) * 5,
+                "B": list(range(5)) * 3,
                 "C": [str(i) for i in range(1000, 1015)],
             }
         ),
@@ -737,9 +737,9 @@ def test_pivot_full(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": pd.array(
-                    [i for i in range(996)] + [None, None, None, None], dtype="Int32"
+                    list(range(996)) + [None, None, None, None], dtype="Int32"
                 ),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -747,7 +747,7 @@ def test_pivot_full(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": pd.array(
-                    [i for i in range(996)] + [None, None, None, None], dtype="Int32"
+                    list(range(996)) + [None, None, None, None], dtype="Int32"
                 ),
                 "B": np.arange(1000),
                 "C": np.arange(1000, 2000),
@@ -757,7 +757,7 @@ def test_pivot_full(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": pd.array([0, 1, None] * 5, dtype="Int32"),
-                "B": [i for i in range(5)] * 3,
+                "B": list(range(5)) * 3,
                 "C": np.arange(1000, 1015),
             }
         ),
@@ -796,16 +796,16 @@ def test_pivot_na_index(df, memory_leak_check):
         # Normal case
         pd.DataFrame(
             {
-                "A": [i for i in range(5)] * 4,
-                "B": [i for i in range(2)] * 10,
+                "A": list(range(5)) * 4,
+                "B": list(range(2)) * 10,
                 "C": np.arange(20),
             }
         ),
         # String data
         pd.DataFrame(
             {
-                "A": [i for i in range(5)] * 4,
-                "B": [i for i in range(2)] * 10,
+                "A": list(range(5)) * 4,
+                "B": list(range(2)) * 10,
                 "C": [str(i) for i in range(20)],
             }
         ),
@@ -1124,7 +1124,7 @@ def test_pivot_table_multiple_values_string(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "D": [str(i) for i in range(2000, 3000)],
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": [str(i) for i in range(1000, 2000)],
             }
         ),
@@ -1133,7 +1133,7 @@ def test_pivot_table_multiple_values_string(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "D": np.arange(2000, 3000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -1417,7 +1417,7 @@ def test_pd_pivot_multi_values(memory_leak_check):
             {
                 "C": np.arange(1000),
                 "B": [str(i) for i in range(2000, 3000)],
-                "D": [i for i in range(10)] * 100,
+                "D": list(range(10)) * 100,
                 "A": [str(i) for i in range(1000, 2000)],
             }
         ),
@@ -1426,7 +1426,7 @@ def test_pd_pivot_multi_values(memory_leak_check):
             {
                 "A": np.arange(1000),
                 "D": np.arange(2000, 3000),
-                "B": [i for i in range(10)] * 100,
+                "B": list(range(10)) * 100,
                 "C": np.arange(1000, 2000),
             }
         ),
@@ -1522,7 +1522,7 @@ def test_pivot_table_multiple_index(pivot_dataframes, memory_leak_check):
                 "B": [str(i) for i in range(10)] * 100,
                 "C": np.arange(1000, 2000),
             },
-            index=pd.Index([i for i in range(500)] * 2, name="my_index_name"),
+            index=pd.Index(list(range(500)) * 2, name="my_index_name"),
         ),
     ],
 )

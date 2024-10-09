@@ -1,7 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-""" Test miscellaneous supported sklearn models and methods
-    Currently this file tests:
-    MultinomialNB, OneHotEncoder, LabelEncoder, MinMaxScaler, StandardScaler
+"""Test miscellaneous supported sklearn models and methods
+Currently this file tests:
+MultinomialNB, OneHotEncoder, LabelEncoder, MinMaxScaler, StandardScaler
 """
 
 import random
@@ -576,9 +576,9 @@ def test_standard_scaler_sparse_error(data, copy, with_mean, with_std):
         # Test that sparse matrices cannot be centered
         error_str = "Cannot center sparse matrices: pass `with_mean=False` instead."
         with pytest.raises(ValueError, match=error_str):
-            py_output = test_fit(data[0])
+            test_fit(data[0])
         with pytest.raises(ValueError, match=error_str):
-            bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+            bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
 
     if with_std:
         # In bodo's implementation, `with_std=True` causes an underlying call to fit
@@ -586,7 +586,7 @@ def test_standard_scaler_sparse_error(data, copy, with_mean, with_std):
         # above when X is a sparse matrix
         error_str = "Cannot center sparse matrices: pass `with_mean=False` instead."
         with pytest.raises(ValueError, match=error_str):
-            bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+            bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
 
 
 # ---------------------MaxAbsScaler Tests--------------------

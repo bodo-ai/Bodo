@@ -459,7 +459,7 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
             )
             return None"""
 
-        loc_vars = dict()
+        loc_vars = {}
         exec(
             func_text,
             {
@@ -1307,9 +1307,9 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 f"  T2 = set_table_block(T2, out_arr_list_{input_blk}, {output_blk})\n"
             )
         func_text += (
-            f"  length = T._len if bodo.get_rank() == root or allgather else 0\n"
-            f"  T2 = set_table_len(T2, length)\n"
-            f"  return T2\n"
+            "  length = T._len if bodo.get_rank() == root or allgather else 0\n"
+            "  T2 = set_table_len(T2, length)\n"
+            "  return T2\n"
         )
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
@@ -1624,7 +1624,7 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     if TablePathType is not None and isinstance(data, TablePathType):
         # Table Path info is all compile time so we return the same data.
         func_text = f"def impl_table_path(data, allgather=False, warn_if_rep=True, root={MPI_ROOT}):\n"
-        func_text += f"  return data\n"
+        func_text += "  return data\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         impl_table_path = loc_vars["impl_table_path"]
@@ -1917,7 +1917,7 @@ def _bcast_dtype(data, root=MPI_ROOT):
     """broadcast data type from rank 0 using mpi4py"""
     try:
         from bodo.mpi4py import MPI
-    except:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         raise BodoError("mpi4py is required for scatterv")
 
     comm = MPI.COMM_WORLD
@@ -2093,9 +2093,7 @@ def get_value_for_type(dtype):  # pragma: no cover
     if isinstance(dtype, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         arrs = tuple(get_value_for_type(t) for t in dtype.data)
         index = get_value_for_type(dtype.index)
-        return pd.DataFrame(
-            {name: arr for name, arr in zip(dtype.columns, arrs)}, index
-        )
+        return pd.DataFrame(dict(zip(dtype.columns, arrs)), index)
 
     if isinstance(dtype, CategoricalArrayType):
         return pd.Categorical.from_codes([0], dtype.dtype.categories)
@@ -2273,7 +2271,7 @@ def scatterv_impl_jit(data, send_counts=None, warn_if_dist=True):
 
             return recv_arr"""
 
-        loc_vars = dict()
+        loc_vars = {}
         exec(
             func_text,
             {
@@ -2733,8 +2731,8 @@ def scatterv_impl_jit(data, send_counts=None, warn_if_dist=True):
             func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
             func_text += f"    l = len(out_arr_{blk})\n"
             func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-        func_text += f"  T2 = set_table_len(T2, l)\n"
-        func_text += f"  return T2\n"
+        func_text += "  T2 = set_table_len(T2, l)\n"
+        func_text += "  return T2\n"
 
         glbls.update(
             {
@@ -3711,35 +3709,56 @@ def alltoallv(
     ):
         # TODO: Move boolean_array_type to its own section because we use 1 bit per boolean
         # TODO: Send the null bitmap
-        return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
-            send_data._data.ctypes,
-            out_data._data.ctypes,
-            send_counts.ctypes,
-            recv_counts.ctypes,
-            send_disp.ctypes,
-            recv_disp.ctypes,
-            typ_enum,
+        return (
+            lambda send_data,
+            out_data,
+            send_counts,
+            recv_counts,
+            send_disp,
+            recv_disp: c_alltoallv(
+                send_data._data.ctypes,
+                out_data._data.ctypes,
+                send_counts.ctypes,
+                recv_counts.ctypes,
+                send_disp.ctypes,
+                recv_disp.ctypes,
+                typ_enum,
+            )
         )  # pragma: no cover
 
     if isinstance(send_data, bodo.CategoricalArrayType):
-        return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
-            send_data.codes.ctypes,
-            out_data.codes.ctypes,
+        return (
+            lambda send_data,
+            out_data,
+            send_counts,
+            recv_counts,
+            send_disp,
+            recv_disp: c_alltoallv(
+                send_data.codes.ctypes,
+                out_data.codes.ctypes,
+                send_counts.ctypes,
+                recv_counts.ctypes,
+                send_disp.ctypes,
+                recv_disp.ctypes,
+                typ_enum,
+            )
+        )  # pragma: no cover
+
+    return (
+        lambda send_data,
+        out_data,
+        send_counts,
+        recv_counts,
+        send_disp,
+        recv_disp: c_alltoallv(
+            send_data.ctypes,
+            out_data.ctypes,
             send_counts.ctypes,
             recv_counts.ctypes,
             send_disp.ctypes,
             recv_disp.ctypes,
             typ_enum,
-        )  # pragma: no cover
-
-    return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
-        send_data.ctypes,
-        out_data.ctypes,
-        send_counts.ctypes,
-        recv_counts.ctypes,
-        send_disp.ctypes,
-        recv_disp.ctypes,
-        typ_enum,
+        )
     )  # pragma: no cover
 
 

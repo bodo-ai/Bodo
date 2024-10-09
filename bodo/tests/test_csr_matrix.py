@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Tests for scipy.sparse.csr_matrix data structure
-"""
+"""Tests for scipy.sparse.csr_matrix data structure"""
 
 import numpy as np
 import pytest

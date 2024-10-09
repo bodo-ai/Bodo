@@ -3,6 +3,7 @@
 transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
+
 import datetime
 import itertools
 import sys
@@ -525,7 +526,7 @@ class UntypedPass:
         if (
             rhs.attr == "fromhex"
             and isinstance(val_def, ir.Global)
-            and val_def.value == bytes
+            and val_def.value is bytes
         ):
             return compile_func_single_block(
                 eval("lambda: bodo.libs.binary_arr_ext.bytes_fromhex"),
@@ -717,7 +718,7 @@ class UntypedPass:
                     block.body[:-1]
                     + compile_func_single_block(
                         eval(
-                            f"lambda A, t: bodo.utils.typing.check_objmode_output_type(A, t)"
+                            "lambda A, t: bodo.utils.typing.check_objmode_output_type(A, t)"
                         ),
                         [last_node.value, type_var_in],
                         new_var,
@@ -1477,7 +1478,7 @@ class UntypedPass:
         # Per Pandas documentation (header: int, list of int, default ‘infer’)
         if header not in ("infer", 0, None):
             raise BodoError(
-                f"pd.read_csv() 'header' should be one of 'infer', 0, or None",
+                "pd.read_csv() 'header' should be one of 'infer', 0, or None",
                 loc=rhs.loc,
             )
 
@@ -1698,7 +1699,7 @@ class UntypedPass:
             )
         if escapechar == "\n":
             raise BodoError(
-                f"pd.read_csv(): newline as 'escapechar' is not supported.", loc=rhs.loc
+                "pd.read_csv(): newline as 'escapechar' is not supported.", loc=rhs.loc
             )
 
         # Pandas default is True but Bodo is False
@@ -1844,29 +1845,27 @@ class UntypedPass:
             ("_bodo_read_as_dict", None),
         )
         # Arguments that are supported
-        supported_args = set(
-            (
-                "filepath_or_buffer",
-                "sep",
-                "delimiter",
-                "header",
-                "names",
-                "index_col",
-                "usecols",
-                "dtype",
-                "skiprows",
-                "nrows",
-                "parse_dates",
-                "chunksize",
-                "compression",
-                "low_memory",
-                "_bodo_upcast_to_float64",
-                "escapechar",
-                "storage_options",
-                "sample_nrows",
-                "_bodo_read_as_dict",
-            )
-        )
+        supported_args = {
+            "filepath_or_buffer",
+            "sep",
+            "delimiter",
+            "header",
+            "names",
+            "index_col",
+            "usecols",
+            "dtype",
+            "skiprows",
+            "nrows",
+            "parse_dates",
+            "chunksize",
+            "compression",
+            "low_memory",
+            "_bodo_upcast_to_float64",
+            "escapechar",
+            "storage_options",
+            "sample_nrows",
+            "_bodo_read_as_dict",
+        }
         # Iterate through the provided args. If an argument is in the supported_args,
         # skip it. Otherwise we check that the value matches the default value.
         unsupported_args = []
@@ -2364,7 +2363,7 @@ class UntypedPass:
                 "Currently only supports orient = 'records'".format(orient)
             )
 
-        if type(lines) != bool:
+        if type(lines) is not bool:
             raise BodoError(
                 "pd.read_json() lines = {} is not supported."
                 "lines must be of type bool.".format(lines)
@@ -2642,7 +2641,7 @@ class UntypedPass:
         if not use_index or index_col is None:
             assert n_cols > 0
             index_arg = (
-                f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
             )
 
         elif isinstance(index_col, dict):
@@ -3139,7 +3138,7 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     """get array type from type value 't' specified in calls like read_csv()
     e.g. "str" -> string_array_type
     """
-    if t == object:
+    if t is object:
         # TODO: Add a link to IO dtype documentation when available
         raise BodoError(
             f"{func_name}() 'dtype' does not support object dtype.", loc=loc
@@ -3178,10 +3177,10 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         typ = types.Array(typ, 1, "C")
         return typ
 
-    if t == int:
+    if t is int:
         return types.Array(types.int64, 1, "C")
 
-    if t == float:
+    if t is float:
         return types.Array(types.float64, 1, "C")
 
     # categorical type
@@ -3205,10 +3204,8 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     try:
         dtype = numba.np.numpy_support.from_dtype(t)
         return types.Array(dtype, 1, "C")
-    except:
-        pass
-
-    raise BodoError(f"{func_name}() 'dtype' does not support {t}", loc=loc)
+    except Exception:
+        raise BodoError(f"{func_name}() 'dtype' does not support {t}", loc=loc)
 
 
 def _get_col_ind_from_name_or_ind(c, col_names_map):
@@ -3574,7 +3571,7 @@ def _get_sql_types_arr_colnames(
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
-    col_names = [c for c in df_type.columns]
+    col_names = list(df_type.columns)
 
     # date columns
     date_cols = []
@@ -3661,7 +3658,7 @@ def _get_sql_df_type_from_db(
         if bodo.get_rank() == 0:
             warnings.warn(
                 BodoWarning(
-                    f"_bodo_read_as_dict is only supported when reading from Snowflake."
+                    "_bodo_read_as_dict is only supported when reading from Snowflake."
                 )
             )
 

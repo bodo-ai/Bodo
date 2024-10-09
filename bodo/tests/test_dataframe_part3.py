@@ -1086,12 +1086,12 @@ def test_df_mask_where_df(df_value, memory_leak_check):
     if "category" in df_value.dtypes.apply(str).values:
         with pytest.raises(
             BodoError,
-            match=f"DataFrame.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
+            match="DataFrame.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
         ):
             bodo.jit(test_where)(df_value, cond, df_value)
         with pytest.raises(
             BodoError,
-            match=f"DataFrame.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
+            match="DataFrame.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
         ):
             bodo.jit(test_mask)(df_value, cond, df_value)
         return
@@ -1173,7 +1173,7 @@ def test_df_mask_where_series_other(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match=f"DataFrame.where.* series and 'other' must share a common type.",
+        match="DataFrame.where.* series and 'other' must share a common type.",
     ):
         check_func(
             test_where,
@@ -1183,7 +1183,7 @@ def test_df_mask_where_series_other(memory_leak_check):
         )
     with pytest.raises(
         BodoError,
-        match=f"DataFrame.mask.* series and 'other' must share a common type.",
+        match="DataFrame.mask.* series and 'other' must share a common type.",
     ):
         check_func(
             test_mask,
@@ -1635,7 +1635,7 @@ def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
         nbytes_list.append(total_int_data + null_bytes)
         nbytes_list.append(total_float_data)
         # Rows: 0, 14, 21, 57 contain null data
-        null_data_rows = set([0, 14, 21, 57])
+        null_data_rows = {0, 14, 21, 57}
         # Calculate the data field
         total_string_data = sum(
             [

@@ -34,8 +34,8 @@ def test_like_ilike_non_literal_pattern(
     """
     tests that like and ilike works for non-literal patterns
     """
-    query1 = f"select A from table1 where A like lower('H%' || 'o')"
-    query2 = f"select A from table1 where A ilike upper('H%' || 'o')"
+    query1 = "select A from table1 where A like lower('H%' || 'o')"
+    query2 = "select A from table1 where A ilike upper('H%' || 'o')"
     check_query(
         query1,
         bodosql_string_types,
@@ -45,7 +45,7 @@ def test_like_ilike_non_literal_pattern(
         query2,
         bodosql_string_types,
         spark_info,
-        equivalent_spark_query=f"select A from table1 where lower(A) like lower('H%' || 'o')",
+        equivalent_spark_query="select A from table1 where lower(A) like lower('H%' || 'o')",
     )
 
 
@@ -60,8 +60,8 @@ def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
         }
     )
     ctx = {"TABLE1": df}
-    query1 = f"select A from table1 where A like B"
-    query2 = f"select A from table1 where A ilike B"
+    query1 = "select A from table1 where A like B"
+    query2 = "select A from table1 where A ilike B"
     check_query(
         query1,
         ctx,
@@ -71,7 +71,7 @@ def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
         query2,
         ctx,
         spark_info,
-        equivalent_spark_query=f"select A from table1 where lower(A) like lower(B)",
+        equivalent_spark_query="select A from table1 where lower(A) like lower(B)",
     )
 
 
@@ -174,8 +174,8 @@ def test_like_ilike_arr_escape(memory_leak_check):
     )
     ctx = {"TABLE1": df}
     expected_output = df[["A"]]
-    query1 = f"select A from table1 where A like B escape C"
-    query2 = f"select A from table1 where A ilike B escape C"
+    query1 = "select A from table1 where A like B escape C"
+    query2 = "select A from table1 where A ilike B escape C"
     check_query(
         query1,
         ctx,
@@ -292,7 +292,7 @@ def test_nested_upper_lower(bodosql_string_types, spark_info, memory_leak_check)
     Tests that lower/upper calls nest properly
     """
     check_query(
-        f"select lower(upper(lower(upper(A)))) from table1",
+        "select lower(upper(lower(upper(A)))) from table1",
         bodosql_string_types,
         spark_info,
         check_names=False,

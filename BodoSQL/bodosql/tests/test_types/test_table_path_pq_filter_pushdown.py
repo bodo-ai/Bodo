@@ -2,6 +2,7 @@
 """
 Tests filter pushdown with a parquet TablePath.
 """
+
 import io
 
 import pandas as pd
@@ -1634,7 +1635,7 @@ def test_reverse_filter_pushdown(datapath, memory_leak_check):
         }
     )
 
-    test_query = f"""
+    test_query = """
         select L_ORDERKEY from table1 t1
         WHERE REVERSE(t1.L_SHIPMODE) = 'PIHS'
     """

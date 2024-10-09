@@ -622,7 +622,7 @@ def test_data_col_correctness(memory_leak_check):
         MetaType((0, 1, 2)),
         MetaType((0, 1, 2)),
         40,
-        ColNamesMetaType(tuple(list(df.columns))),
+        ColNamesMetaType(tuple(df.columns)),
     )
 
 
@@ -659,7 +659,7 @@ def test_mrnf_no_order(memory_leak_check):
         MetaType((0, 1)),
         MetaType((0, 1)),
         40,
-        ColNamesMetaType(tuple(list(df.columns))),
+        ColNamesMetaType(tuple(df.columns)),
     )
 
 
@@ -1004,16 +1004,12 @@ def test_mrnf_shuffle_reduction(n_unique_keys, memory_leak_check):
     col_names = list(df.columns)
     n_sort_cols = 1
     sort_cols_list = ["B"]
-    key_inds_list = [0]
     sort_inds_list = [i + 1 for i in range(n_sort_cols)]
     sort_asc_list = [True] * n_sort_cols
     sort_na_list = [True] * n_sort_cols
     keep_inds_list = list(range(n_cols))
     f_in_cols_list = list(range(1, n_cols))
     f_in_offsets_list = [0, n_cols - 1]
-    expected_keys = []
-    seen_keys = set()
-    expected_vals = []
 
     def py_mrnf(x: pd.DataFrame):
         return x.sort_values(

@@ -3056,7 +3056,7 @@ def test_local_spill_file(tmp_path: Path):
     assert pool.bytes_pinned() == 0
     assert pool.bytes_allocated() == 0
     # Make sure free deletes any spill files as well
-    assert len(list(elem for elem in tmp_path.iterdir() if elem.is_file())) == 0
+    assert len([elem for elem in tmp_path.iterdir() if elem.is_file()]) == 0
 
     # Cleanup
     pool.cleanup()

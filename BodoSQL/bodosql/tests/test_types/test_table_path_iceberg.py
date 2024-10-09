@@ -4,6 +4,7 @@ Tests that TablePath can work when supplied iceberg tables.
 
 Mostly reuses tests/fixtures from the engine, but using bodosql's TablePath
 """
+
 import io
 
 import pandas as pd

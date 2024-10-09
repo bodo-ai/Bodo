@@ -22,7 +22,7 @@ class IcebergAwsCredentialsProviderType(types.Type):
 
     def __init__(self):  # pragma: no cover
         super(IcebergAwsCredentialsProviderType, self).__init__(
-            name=f"IcebergAwsCredentialsProvider()"
+            name="IcebergAwsCredentialsProvider()"
         )
 
 

@@ -4,13 +4,26 @@ Implements array kernels that are specific to BodoSQL which have a variable
 number of arguments
 """
 
+import numba
 import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    gen_vectorized,
+    get_common_broadcasted_type,
+    get_tz_if_exists,
+    is_valid_date_arg,
+    is_valid_datetime_or_date_arg,
+    is_valid_tz_aware_datetime_arg,
+    is_valid_tz_naive_datetime_arg,
+    unopt_argument,
+    verify_binary_arg,
+    verify_string_arg,
+    verify_string_binary_arg,
+)
 from bodo.utils.typing import (
     get_common_scalar_dtype,
     get_overload_const_bool,
@@ -20,6 +33,7 @@ from bodo.utils.typing import (
     is_bin_arr_type,
     is_overload_constant_bool,
     is_overload_constant_list,
+    is_overload_constant_str,
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
@@ -316,7 +330,7 @@ def detect_coalesce_casting(arg_types, arg_names):
     Returns:
         Tuple[boolean, optional dtype, optional string]: a boolean indicating
         whether the list of types matches one of the special cases described above,
-        the dtype htat the resulting array should have, and a multiline string
+        the dtype that the resulting array should have, and a multiline string
         containing the prefix code required to cast all of the arguments
         that need to be upcasted for the COALESCE to work.
     """
@@ -478,7 +492,7 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
                 prefix_code += f"num_strings += len(old_data{i - dead_offset})\n"
                 prefix_code += f"num_chars += bodo.libs.str_arr_ext.num_total_chars(old_data{i - dead_offset})\n"
             else:
-                prefix_code += f"num_strings += 1\n"
+                prefix_code += "num_strings += 1\n"
                 # Scalar needs to be utf8 encoded for the number of characters
                 prefix_code += (
                     f"num_chars += bodo.libs.str_ext.unicode_to_utf8_len(A{i})\n"
@@ -685,8 +699,8 @@ def decode_util(A, dict_encoding_state, func_id):
             match_code = "   bodo.libs.array_kernels.setna(res, i)\n"
         elif bodo.utils.utils.is_array_typ(A[i + 1]):
             match_code = f"   if bodo.libs.array_kernels.isna({arg_names[i+1]}, i):\n"
-            match_code += f"      bodo.libs.array_kernels.setna(res, i)\n"
-            match_code += f"   else:\n"
+            match_code += "      bodo.libs.array_kernels.setna(res, i)\n"
+            match_code += "   else:\n"
             match_code += f"      res[i] = arg{i+1}\n"
         else:
             match_code = f"   res[i] = arg{i+1}\n"
@@ -934,7 +948,7 @@ def overload_object_filter_keys_util(A, keep_keys, scalars):
                 f"null_vector = np.array([{', '.join(nulls)}], dtype=np.bool_)\n"
             )
         else:
-            scalar_text = f"null_vector = np.empty(0, dtype=np.bool_)\n"
+            scalar_text = "null_vector = np.empty(0, dtype=np.bool_)\n"
         scalar_text += f"res[i] = bodo.libs.struct_arr_ext.init_struct_with_nulls(({', '.join(data)}{',' if len(data) else ''}), null_vector, names)"
         out_dtype = bodo.StructArrayType(tuple(dtypes), tuple(names))
         extra_globals["names"] = bodo.utils.typing.ColNamesMetaType(tuple(names))
@@ -1179,7 +1193,7 @@ def least_greatest_codegen(A, is_greatest, dict_encoding_state, func_id):
 
     # If only 1 column is passed, set result to be the same as input.
     if len(A) == 1:
-        scalar_text = f"  res[i] = A0[i]\n"
+        scalar_text = "  res[i] = A0[i]\n"
     else:
         scalar_text = f"  res[i] = {func}(({func_args}))\n"
 
@@ -1356,7 +1370,7 @@ def overload_row_number(df, by, ascending, na_position):
     # Calculate the "bounds" for each ranks. It's really just a cumulative sum of
     # the length of the chunks on all the ranks. We will later use this to shuffle
     # data back as part of 'sort_index'.
-    func_text += f"   index_bounds = bodo.libs.distributed_api.get_chunk_bounds(bodo.utils.conversion.coerce_to_array(df2.index))\n"
+    func_text += "   index_bounds = bodo.libs.distributed_api.get_chunk_bounds(bodo.utils.conversion.coerce_to_array(df2.index))\n"
     func_text += f"   df3 = df2.sort_values(by={by_list}, ascending={asc_list}, na_position={na_list})\n"
     func_text += "   rows = np.arange(1, n+1)\n"
     func_text += (
@@ -1475,11 +1489,11 @@ def overload_array_construct(A, scalar_tup):
         elif optionals[i]:
             scalar_text += f"if arg{i} is None:\n"
             scalar_text += f"   bodo.libs.array_kernels.setna(inner_arr, {i})\n"
-            scalar_text += f"else:\n"
+            scalar_text += "else:\n"
             scalar_text += f"   inner_arr[{i}] = arg{i}\n"
         else:
             scalar_text += f"inner_arr[{i}] = arg{i}\n"
-    scalar_text += f"res[i] = inner_arr"
+    scalar_text += "res[i] = inner_arr"
 
     are_arrays = [not is_scalar for is_scalar in are_scalars]
 

@@ -2,11 +2,12 @@
 """
 Implements comparison operation array kernels that are specific to BodoSQL
 """
+
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import gen_vectorized, unopt_argument
 from bodo.utils.typing import is_overload_none
 
 

@@ -252,26 +252,26 @@ def json_distributed_run(
     return nodes
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    JsonReader
-] = bodo.ir.connector.connector_array_analysis
-distributed_analysis.distributed_analysis_extensions[
-    JsonReader
-] = bodo.ir.connector.connector_distributed_analysis
+numba.parfors.array_analysis.array_analysis_extensions[JsonReader] = (
+    bodo.ir.connector.connector_array_analysis
+)
+distributed_analysis.distributed_analysis_extensions[JsonReader] = (
+    bodo.ir.connector.connector_distributed_analysis
+)
 typeinfer.typeinfer_extensions[JsonReader] = bodo.ir.connector.connector_typeinfer
 # add call to visit json variable
 ir_utils.visit_vars_extensions[JsonReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[JsonReader] = remove_dead_json
-numba.core.analysis.ir_extension_usedefs[
-    JsonReader
-] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[JsonReader] = (
+    bodo.ir.connector.connector_usedefs
+)
 ir_utils.copy_propagate_extensions[JsonReader] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[
-    JsonReader
-] = bodo.ir.connector.apply_copies_connector
-ir_utils.build_defs_extensions[
-    JsonReader
-] = bodo.ir.connector.build_connector_definitions
+ir_utils.apply_copy_propagate_extensions[JsonReader] = (
+    bodo.ir.connector.apply_copies_connector
+)
+ir_utils.build_defs_extensions[JsonReader] = (
+    bodo.ir.connector.build_connector_definitions
+)
 distributed_pass.distributed_run_extensions[JsonReader] = json_distributed_run
 
 # XXX: temporary fix pending Numba's #3378
@@ -296,9 +296,6 @@ def _gen_json_reader_py(
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
-    date_inds = ", ".join(
-        str(i) for i, t in enumerate(col_typs) if t.dtype == types.NPDatetime("ns")
-    )
     typ_strs = ", ".join(
         [
             "{}='{}'".format(s_cname, bodo.ir.csv_ext._get_dtype_str(t))

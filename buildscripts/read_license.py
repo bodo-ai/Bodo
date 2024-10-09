@@ -23,7 +23,6 @@ def read_license(license_fname):
 
     header_arr = array.array("i", msg[:4])  # read header as integer
     header = header_arr[0]
-    total_len = header & HEADER_LEN_MASK
     license_type = header >> 16
 
     if license_type == REGULAR_LIC_TYPE:

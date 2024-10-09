@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Support for MultiIndex type of Pandas
-"""
+"""Support for MultiIndex type of Pandas"""
+
 import operator
 
 import numba
@@ -197,8 +197,8 @@ def unbox_multi_index(typ, val, c):
 
 def from_product_error_checking(iterables, sortorder, names):
     fname = "pandas.MultiIndex.from_product"
-    unsupported_args = dict(sortorder=sortorder)
-    arg_defaults = dict(sortorder=None)
+    unsupported_args = {"sortorder": sortorder}
+    arg_defaults = {"sortorder": None}
     check_unsupported_args(
         fname,
         unsupported_args,

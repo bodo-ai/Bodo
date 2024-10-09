@@ -153,7 +153,7 @@ def test_iceberg_tabular_write_basic(
 
         check_func(
             read,
-            tuple([table_name]),
+            (table_name,),
             py_output=bodo.allgatherv(dist_df),
             sort_output=True,
             reset_index=True,

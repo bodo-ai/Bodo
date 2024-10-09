@@ -60,18 +60,16 @@ def gen_change_part_column_tables(input_tables: list[str]):
     for table in input_tables:
         # Skip tables that partition by year when the base table is PRIMITIVES since their is no other timestamp column to partition by
         if "PRIMITIVES" in table and any(
-            [
-                part.col_name == "A"
-                and part.transform in ("months", "years", "days", "hours")
-                for part in PARTITION_TABLE_NAME_MAP[table][1]
-            ]
+            part.col_name == "A"
+            and part.transform in ("months", "years", "days", "hours")
+            for part in PARTITION_TABLE_NAME_MAP[table][1]
         ):
             continue
         b_part = [
             part for part in PARTITION_TABLE_NAME_MAP[table][1] if part.col_name == "B"
         ]
         if (
-            any([part.transform == "hours" for part in b_part])
+            any(part.transform == "hours" for part in b_part)
             and SIMPLE_TABLE_MAP[f"SIMPLE_{PARTITION_TABLE_NAME_MAP[table][0]}"][1][0][
                 1
             ]

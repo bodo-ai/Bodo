@@ -67,9 +67,13 @@ def make_overload_unsupported_template(typ, base, attr, path_name, extra_info):
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
     name = "OverloadUnsupportedAttributeTemplate_%s_%s" % (typ, attr)
     # Note the implementation cache is subclass-specific
-    dct = dict(
-        key=typ, _attr=attr, path_name=path_name, extra_info=extra_info, metadata={}
-    )
+    dct = {
+        "key": typ,
+        "_attr": attr,
+        "path_name": path_name,
+        "extra_info": extra_info,
+        "metadata": {},
+    }
     obj = type(base)(name, (base,), dct)
     return obj
 

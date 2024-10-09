@@ -41,12 +41,12 @@ def worker_loop():  # pragma: no cover
     # this is where all the workers (processes != MASTER) enter a loop to
     # wait for and execute commands from master
     assert bodo.get_rank() != MASTER_RANK
-    comm = MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD  # noqa: F821
     while True:
         command = comm.bcast(None, root=MASTER_RANK)
         if command[0] == "exec":
             # unpickle the python function (this is not the dispatcher)
-            pyfunc = pickle.loads(command[1])
+            pyfunc = pickle.loads(command[1])  # noqa: F821
 
             for objname, obj in list(pyfunc.__globals__.items()):
                 if isinstance(obj, MasterModeDispatcher):
@@ -122,7 +122,7 @@ def master_wrapper(func, *args, **kwargs):  # pragma: no cover
     # bodo function might call other bodo functions and only the top-level one
     # should execute this wrapper
 
-    comm = MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD  # noqa: F821
 
     # first determine which of the received arguments need to be
     # scattered or broadcast to workers
@@ -159,7 +159,7 @@ def master_wrapper(func, *args, **kwargs):  # pragma: no cover
     # data. Some of these globals could be bodo functions (encapsulated inside
     # MasterModeDispatcher). MasterModeDispatcher has custom (un)pickle code
     # which is executed by cloudpickle
-    pickled_func = pickle.dumps(func.py_func)
+    pickled_func = pickle.dumps(func.py_func)  # noqa: F821
     # broadcast the execute command to workers
     comm.bcast(["exec", pickled_func, pos_arg_distribution, kwargs_distribution])
 

@@ -32,8 +32,7 @@ os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
 
 # Similar to Pandas
 class DataPath(Protocol):
-    def __call__(self, *args: str, check_exists: bool = True) -> str:
-        ...
+    def __call__(self, *args: str, check_exists: bool = True) -> str: ...
 
 
 @pytest.fixture(scope="session")
@@ -457,7 +456,7 @@ def hdfs_dir(hadoop_server, datapath):
         hdfs.create_dir("/bodo-test/int_nulls_multi.pq")
         prefix = datapath("int_nulls_multi.pq")
         pat = prefix + "/*.snappy.parquet"
-        int_nulls_multi_parts = [f for f in glob.glob(pat)]
+        int_nulls_multi_parts = list(glob.glob(pat))
         for path in int_nulls_multi_parts:
             fname = path[len(prefix) + 1 :]
             fname = "/{}/int_nulls_multi.pq/{}".format(dir_name, fname)
@@ -466,7 +465,7 @@ def hdfs_dir(hadoop_server, datapath):
         hdfs.create_dir("/bodo-test/example_single.json")
         prefix = datapath("example_single.json")
         pat = prefix + "/*.json"
-        example_single_parts = [f for f in glob.glob(pat)]
+        example_single_parts = list(glob.glob(pat))
         for path in example_single_parts:
             fname = path[len(prefix) + 1 :]
             fname = "/{}/example_single.json/{}".format(dir_name, fname)
@@ -475,7 +474,7 @@ def hdfs_dir(hadoop_server, datapath):
         hdfs.create_dir("/bodo-test/example_multi.json")
         prefix = datapath("example_multi.json")
         pat = prefix + "/*.json"
-        example_multi_parts = [f for f in glob.glob(pat)]
+        example_multi_parts = list(glob.glob(pat))
         for path in example_multi_parts:
             fname = path[len(prefix) + 1 :]
             fname = "/{}/example_multi.json/{}".format(dir_name, fname)
@@ -516,7 +515,7 @@ def pytest_addoption(parser):
     # Minor check
     try:
         parser.addoption("--is_cached", action="store_true", default=False)
-    except:
+    except Exception:
         pass
 
 
@@ -905,7 +904,7 @@ def tabular_connection(request):
 
 
 def pytest_runtest_setup(item):
-    tabular = len([mark for mark in item.iter_markers(name="tabular")])
+    tabular = len(list(item.iter_markers(name="tabular")))
     if tabular:
         if "TABULAR_CREDENTIAL" not in os.environ or "AGENT_NAME" not in os.environ:
             pytest.skip("Tabular tests must be run on Azure CI")

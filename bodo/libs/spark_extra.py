@@ -1,4 +1,5 @@
-""" Support for Spark parity functions in objmode """
+"""Support for Spark parity functions in objmode"""
+
 import math
 import zlib
 
@@ -19,5 +20,5 @@ try:
     import scipy.special
 
     gen_objmode_func_overload(scipy.special.factorial, "int64")
-except:
+except ImportError:
     pass

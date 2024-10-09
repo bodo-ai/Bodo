@@ -5,15 +5,24 @@ Specifically, window/aggregation array kernels that do not concern window
 frames.
 """
 
-
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    bit_agg_type_inference,
+    gen_windowed,
+    is_valid_binary_arg,
+    is_valid_float_arg,
+    is_valid_string_arg,
+    make_slice_window_agg,
+    verify_int_float_arg,
+    verify_numeric_arg,
+)
 from bodo.utils.typing import (
     get_overload_const_bool,
     get_overload_const_str,
@@ -419,7 +428,7 @@ def overload_windowed_count_star(n, lower_bound, upper_bound):
 
 @numba.generated_jit(nopython=True)
 def windowed_count_if(S, lower_bound, upper_bound):
-    """Optimized implemention for the window function version of `count_if`. For every ith row in the
+    """Optimized implementation for the window function version of `count_if`. For every ith row in the
     input array, define a window frame, formed by the inclusive range [i+lower_bound, i+upper_bound].
     In this window frame, count the number of True values. This count is the ith element of the result.
 
@@ -536,10 +545,10 @@ def make_windowed_variance_stddev_function(name, method, ddof):
 
         if ddof == 0:
             calculate_block = f"if in_window == {ddof + 1}:\n"
-            calculate_block += f"   res[i] = 0.0\n"
+            calculate_block += "   res[i] = 0.0\n"
         else:
             calculate_block = f"if in_window <= {ddof}:\n"
-            calculate_block += f"   res[i] = None\n"
+            calculate_block += "   res[i] = None\n"
         calculation = f"((e2 - (e1 ** 2) / in_window) / (in_window - {ddof}))"
         if method == "std":
             calculation += " ** 0.5"

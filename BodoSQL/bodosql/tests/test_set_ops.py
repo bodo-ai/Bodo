@@ -2,6 +2,7 @@
 """
 Test correctness of SQL set like operations, namely UNION, INTERSECT, and EXCEPT
 """
+
 from decimal import Decimal
 
 import numpy as np

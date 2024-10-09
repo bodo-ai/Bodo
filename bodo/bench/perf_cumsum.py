@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Measure performance of various operations that uses the unordered_map/unordered_set
-"""
+"""Measure performance of various operations that uses the unordered_map/unordered_set"""
+
 import random
 
 import numpy as np

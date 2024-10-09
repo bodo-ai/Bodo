@@ -204,7 +204,7 @@ def test_try_to_date_invalid_strings(tz_aware_df, memory_leak_check):
     )
 
     ctx = {"TABLE1": df}
-    query = f"SELECT TRY_TO_DATE(timestamps) as dates from table1"
+    query = "SELECT TRY_TO_DATE(timestamps) as dates from table1"
 
     check_query(
         query,

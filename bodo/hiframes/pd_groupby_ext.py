@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Support for Pandas Groupby operations
-"""
+"""Support for Pandas Groupby operations"""
+
 import operator
 from enum import Enum
 from typing import Dict, List, Tuple, Union
@@ -455,7 +455,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             return types.Array(types.int64, 1, "C"), "ok"
         return (
             None,
-            f"For count_if, only boolean columns are allowed",
+            "For count_if, only boolean columns are allowed",
         )
     elif func_name == "listagg":
         # For listagg, output is always string, even if the input is dict encoded.
@@ -463,7 +463,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None, other_args=No
             return string_array_type, "ok"
         return (
             None,
-            f"For listagg, only string columns are allowed",
+            "For listagg, only string columns are allowed",
         )
     elif func_name in {"array_agg", "array_agg_distinct"}:
         # For array_agg, output is a nested array where the internal arrays' dtypes
@@ -656,8 +656,8 @@ def get_agg_typ(
         # arguments passed to ngroup(ascending=True)
         kws = dict(kws) if kws else {}
         ascending = args[0] if len(args) > 0 else kws.pop("ascending", True)
-        unsupported_args = dict(ascending=ascending)
-        arg_defaults = dict(ascending=True)
+        unsupported_args = {"ascending": ascending}
+        arg_defaults = {"ascending": True}
         check_unsupported_args(
             f"Groupby.{func_name}",
             unsupported_args,
@@ -700,7 +700,7 @@ def get_agg_typ(
                     if out_dtype != ArrayItemArrayType(string_array_type):
                         out_dtype = dtype_to_array_type(out_dtype)
                     err_msg = "ok"
-                except:
+                except Exception:
                     raise_bodo_error(
                         "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
                         "is unsupported/not a valid input type for user defined function".format(
@@ -718,10 +718,11 @@ def get_agg_typ(
                         args[0] if len(args) > 0 else kws.pop("numeric_only", False)
                     )
                     min_count = args[1] if len(args) > 1 else kws.pop("min_count", -1)
-                    unsupported_args = dict(
-                        numeric_only=numeric_only, min_count=min_count
-                    )
-                    arg_defaults = dict(numeric_only=False, min_count=-1)
+                    unsupported_args = {
+                        "numeric_only": numeric_only,
+                        "min_count": min_count,
+                    }
+                    arg_defaults = {"numeric_only": False, "min_count": -1}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -738,10 +739,11 @@ def get_agg_typ(
                         args[0] if len(args) > 0 else kws.pop("numeric_only", True)
                     )
                     min_count = args[1] if len(args) > 1 else kws.pop("min_count", 0)
-                    unsupported_args = dict(
-                        numeric_only=numeric_only, min_count=min_count
-                    )
-                    arg_defaults = dict(numeric_only=True, min_count=0)
+                    unsupported_args = {
+                        "numeric_only": numeric_only,
+                        "min_count": min_count,
+                    }
+                    arg_defaults = {"numeric_only": True, "min_count": 0}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -756,8 +758,8 @@ def get_agg_typ(
                     numeric_only = (
                         args[0] if len(args) > 0 else kws.pop("numeric_only", True)
                     )
-                    unsupported_args = dict(numeric_only=numeric_only)
-                    arg_defaults = dict(numeric_only=True)
+                    unsupported_args = {"numeric_only": numeric_only}
+                    arg_defaults = {"numeric_only": True}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -771,8 +773,8 @@ def get_agg_typ(
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     axis = args[0] if len(args) > 0 else kws.pop("axis", 0)
                     skipna = args[1] if len(args) > 1 else kws.pop("skipna", True)
-                    unsupported_args = dict(axis=axis, skipna=skipna)
-                    arg_defaults = dict(axis=0, skipna=True)
+                    unsupported_args = {"axis": axis, "skipna": skipna}
+                    arg_defaults = {"axis": 0, "skipna": True}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -785,8 +787,8 @@ def get_agg_typ(
                     # pop arguments from kws or args
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     ddof = args[0] if len(args) > 0 else kws.pop("ddof", 1)
-                    unsupported_args = dict(ddof=ddof)
-                    arg_defaults = dict(ddof=1)
+                    unsupported_args = {"ddof": ddof}
+                    arg_defaults = {"ddof": 1}
                     check_unsupported_args(
                         f"Groupby.{func_name}",
                         unsupported_args,
@@ -798,7 +800,8 @@ def get_agg_typ(
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws or args
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
-                    dropna = args[0] if len(args) > 0 else kws.pop("dropna", 1)
+                    if len(args) == 0:
+                        kws.pop("dropna", None)
                     check_args_kwargs(func_name, 1, args, kws)
                 elif func_name == "head":
                     # pop arguments from kws or args
@@ -1140,7 +1143,7 @@ def resolve_named_agg_literals(kws):
         in_col_names.append(get_literal_value(out_tuple[0]))
         f_vals.append(get_literal_value(out_tuple[1]))
         if len(out_tuple) == 2:
-            additional_args.append(tuple())
+            additional_args.append(())
         else:
             additional_args.append(get_literal_value(out_tuple[2]))
 
@@ -1406,9 +1409,10 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
         axis = args[0] if len(args) > 0 else kws.pop("axis", 0)
         numeric_only = args[1] if len(args) > 1 else kws.pop("numeric_only", False)
-        skipna = args[2] if len(args) > 2 else kws.pop("skipna", 1)
-        unsupported_args = dict(axis=axis, numeric_only=numeric_only)
-        arg_defaults = dict(axis=0, numeric_only=False)
+        if len(args) <= 2:
+            kws.pop("skipna", None)
+        unsupported_args = {"axis": axis, "numeric_only": numeric_only}
+        arg_defaults = {"axis": 0, "numeric_only": False}
         check_unsupported_args(
             f"Groupby.{name_operation}",
             unsupported_args,
@@ -1420,12 +1424,13 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
     elif name_operation == "shift":
         # pop arguments from kws or args
         # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
-        periods = args[0] if len(args) > 0 else kws.pop("periods", 1)
+        if len(args) == 0:
+            kws.pop("periods", None)
         freq = args[1] if len(args) > 1 else kws.pop("freq", None)
         axis = args[2] if len(args) > 2 else kws.pop("axis", 0)
         fill_value = args[3] if len(args) > 3 else kws.pop("fill_value", None)
-        unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
-        arg_defaults = dict(freq=None, axis=0, fill_value=None)
+        unsupported_args = {"freq": freq, "axis": axis, "fill_value": fill_value}
+        arg_defaults = {"freq": None, "axis": 0, "fill_value": None}
         check_unsupported_args(
             f"Groupby.{name_operation}",
             unsupported_args,
@@ -1440,10 +1445,10 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         transform_func = args[0] if len(args) > 0 else kws.pop("func", None)
         engine = kws.pop("engine", None)
         engine_kwargs = kws.pop("engine_kwargs", None)
-        unsupported_args = dict(engine=engine, engine_kwargs=engine_kwargs)
-        arg_defaults = dict(engine=None, engine_kwargs=None)
+        unsupported_args = {"engine": engine, "engine_kwargs": engine_kwargs}
+        arg_defaults = {"engine": None, "engine_kwargs": None}
         check_unsupported_args(
-            f"Groupby.transform",
+            "Groupby.transform",
             unsupported_args,
             arg_defaults,
             package_name="pandas",
@@ -2482,7 +2487,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
     for i in range(n_cols):
         func_text += f"  in_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
 
-    func_text += f"  in_index_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
+    func_text += "  in_index_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
 
     func_text += "  info_list = [{}, {}, {}]\n".format(
         ", ".join(f"array_to_info(keys[{i}])" for i in range(n_keys)),
@@ -2615,8 +2620,13 @@ def overload_reverse_shuffle(data, shuffle_info):
 def groupby_value_counts(
     grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True
 ):
-    unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
-    arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
+    unsupported_args = {
+        "normalize": normalize,
+        "sort": sort,
+        "bins": bins,
+        "dropna": dropna,
+    }
+    arg_defaults = {"normalize": False, "sort": True, "bins": None, "dropna": True}
     check_unsupported_args(
         "Groupby.value_counts",
         unsupported_args,
@@ -2635,7 +2645,7 @@ def groupby_value_counts(
     ascending_val = get_overload_const_bool(ascending)
 
     # df.groupby("X")["Y"].value_counts() => df.groupby("X")["Y"].apply(lambda S : S.value_counts())
-    func_text = f"def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
+    func_text = "def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
     # TODO: [BE-635] Use S.rename_axis
     udf = f"lambda S: S.value_counts(ascending={ascending_val})"
     func_text += f"    return grp.apply({udf})\n"

@@ -2,6 +2,7 @@
 catalog contains all information needed to connect to a Snowflake account
 in Java and load relevant schema information.
 """
+
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 from copy import deepcopy
 from typing import Dict, Optional
@@ -76,10 +77,7 @@ def _validate_constructor_args(
             f"SnowflakeCatalog(): 'database' argument must be a constant string. Found {type(database)}."
         )
     is_str_dict = isinstance(connection_params, dict) and all(
-        [
-            isinstance(k, str) and isinstance(v, str)
-            for k, v in connection_params.items()
-        ]
+        isinstance(k, str) and isinstance(v, str) for k, v in connection_params.items()
     )
     if not (connection_params is None or is_str_dict):
         raise BodoError(

@@ -3,6 +3,7 @@
 Test correctness of the filter optimization rules to extract common
 predicates from a join.
 """
+
 import pandas as pd
 import pytest
 

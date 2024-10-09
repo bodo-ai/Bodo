@@ -504,7 +504,7 @@ def test_create_table_timing_debug_message(
         if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
-            except:
+            except Exception:
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)
@@ -791,7 +791,7 @@ def test_default_table_type(
         if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
-            except:
+            except Exception:
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)
@@ -996,7 +996,7 @@ def test_snowflake_catalog_create_table_transient(memory_leak_check):
         if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
-            except:
+            except Exception:
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)
@@ -1068,7 +1068,7 @@ def test_snowflake_catalog_create_table_does_not_already_exists(
         if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
-            except:
+            except Exception:
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)
@@ -1226,7 +1226,7 @@ def test_snowflake_catalog_simple_rewrite(
         if exception_occurred_in_test_body:
             try:
                 drop_snowflake_table(table_name, db, schema)
-            except:
+            except Exception:
                 pass
         else:
             drop_snowflake_table(table_name, db, schema)
@@ -1461,7 +1461,7 @@ def test_snowflake_catalog_create_table_orderby_with():
     ORDER BY clauses simultaneously.
     """
 
-    base_query = f"""
+    base_query = """
     with part_two as (
         select 'foo' as p_partkey from (VALUES (1, 2, 3))
     )
@@ -1473,9 +1473,9 @@ def test_snowflake_catalog_create_table_orderby_with():
         p_partkey
     """
 
-    ctas_query = f"CREATE OR REPLACE TABLE WILL_THROW_ERROR AS (\n" + base_query + ")"
+    ctas_query = f"CREATE OR REPLACE TABLE WILL_THROW_ERROR AS (\n{base_query})"
 
-    bc = bodosql.BodoSQLContext(dict())
+    bc = bodosql.BodoSQLContext({})
 
     @bodo.jit
     def bodo_impl(bc, query):
@@ -1495,9 +1495,9 @@ def test_snowflake_catalog_create_table_orderby_with():
 @pytest.mark.parametrize(
     "table_name_qualifier",
     [
-        f"SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER",
-        f"TPCH_SF1.CUSTOMER",
-        f"CUSTOMER",
+        "SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER",
+        "TPCH_SF1.CUSTOMER",
+        "CUSTOMER",
     ],
 )
 def test_snowflake_catalog_fully_qualified(
@@ -1880,7 +1880,7 @@ def test_snowflake_catalog_create_table_like(
         # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
         # to reduce the demand on Snowflake.
         if bodo.get_rank() == 0:
-            expected_output = pd.read_sql(f"select * from LINEITEM1 LIMIT 0", conn_str)
+            expected_output = pd.read_sql("select * from LINEITEM1 LIMIT 0", conn_str)
             expected_output.columns = expected_output.columns.str.upper()
             output_df = pd.read_sql(f"select * from {output_table_name}", conn_str)
             output_df.columns = output_df.columns.str.upper()
@@ -2658,7 +2658,6 @@ def test_stream_unification_opt(test_db_snowflake_catalog, memory_leak_check):
     snowflake_writer_init() and init_table_builder_state() to true after a join
     """
     catalog = test_db_snowflake_catalog
-    db = test_db_snowflake_catalog.database
     schema = test_db_snowflake_catalog.connection_params["schema"]
     bc = bodosql.BodoSQLContext(catalog=catalog)
 
@@ -3378,7 +3377,7 @@ def test_write_timestamptz(test_db_snowflake_catalog, memory_leak_check):
             return bc.sql(query)
 
         # Create an empty table with a timestamptz column
-        table_query = f"SELECT TO_TIMESTAMP_TZ(VALUE) as A from table(flatten([]))"
+        table_query = "SELECT TO_TIMESTAMP_TZ(VALUE) as A from table(flatten([]))"
         with create_snowflake_table_from_select_query(
             table_query, "timestamptz_test", db, schema
         ) as table_name:
@@ -3440,11 +3439,13 @@ def test_write_timestamptz_ctas(test_db_snowflake_catalog, memory_leak_check):
             def impl(bc, query):
                 return bc.sql(query)
 
-            query = f"CREATE OR REPLACE TABLE {bodo_write_tablename} AS (SELECT A FROM TZ_TEST)"
+            query = (
+                f"CREATE OR REPLACE TABLE {write_table_name} AS (SELECT A FROM TZ_TEST)"
+            )
             check_func(impl, (bc, query), only_1D=True, py_output=None)
 
-            output = bodo.jit()(impl)(bc, f"SELECT * FROM {bodo_write_tablename}")
-            expected = bodo.jit()(impl)(bc, f"SELECT A FROM TZ_TEST")
+            output = bodo.jit()(impl)(bc, f"SELECT * FROM {write_table_name}")
+            expected = bodo.jit()(impl)(bc, "SELECT A FROM TZ_TEST")
             assert_tables_equal(output, expected)
 
 
@@ -3457,9 +3458,9 @@ def test_snowflake_catalog_read_and_sum_decimal(
     bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
 
     query = """
-    SELECT MOD(SS_STORE_SK, 10) as key, SUM(SS_NET_PAID) as total 
+    SELECT MOD(SS_STORE_SK, 10) as key, SUM(SS_NET_PAID) as total
     FROM (
-        SELECT * 
+        SELECT *
         FROM SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.STORE_SALES
         LIMIT 100
         )

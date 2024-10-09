@@ -1,5 +1,6 @@
 # Copyright (C) 2023 Bodo Inc. All rights reserved.
 """Interface to C++ TableBuilderState/ChunkedTableBuilderState"""
+
 from functools import cached_property
 from typing import List
 
@@ -278,9 +279,7 @@ def gen_init_table_builder_state_impl(
     n_arrs = len(arr_array_types)
 
     if get_overload_const_bool(use_chunked_builder):
-        assert (
-            expected_state_type.is_chunked_builder
-        ), "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
+        assert expected_state_type.is_chunked_builder, "Error in init_table_builder_state: expected_state_type.is_chunked_builder must be True if use_chunked_builder is True"
 
         def impl(
             operator_id,

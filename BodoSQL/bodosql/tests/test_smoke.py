@@ -3,7 +3,6 @@
 Smoke tests for BodoSQL covering each major query feature
 """
 
-
 import numpy as np
 import pandas as pd
 import pyarrow as pa

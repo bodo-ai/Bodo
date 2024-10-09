@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""CSR Matrix data type implementation for scipy.sparse.csr_matrix
-"""
+"""CSR Matrix data type implementation for scipy.sparse.csr_matrix"""
 
 import operator
 

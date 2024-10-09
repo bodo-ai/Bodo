@@ -4,6 +4,7 @@ File that contains the main functionality for the Iceberg
 integration within the Bodo repo. This does not contain the
 main IR transformation.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -419,7 +420,7 @@ class ThetaSketchCollectionType(types.Type):
 
     def __init__(self):  # pragma: no cover
         super(ThetaSketchCollectionType, self).__init__(
-            name=f"ThetaSketchCollectionType(r)"
+            name="ThetaSketchCollectionType(r)"
         )
 
 
@@ -639,7 +640,7 @@ class IcebergSchemaGroup:
                 }
 
                 read_fields: list[pa.Field] = []
-                iceberg_field_ids_in_schema_group_sub_fields: set[int] = set([])
+                iceberg_field_ids_in_schema_group_sub_fields: set[int] = set()
                 # Sub-fields start at index 1.
                 for i in range(1, len(iceberg_field_ids)):
                     sub_field_iceberg_field_id: int = (
@@ -1755,9 +1756,7 @@ def get_row_counts_for_schema_group(
                     file_schema, schema_group.read_schema
                 )
             except Exception as e:
-                msg = f"Schema of file {pq_info.orig_path} is not compatible.\n" + str(
-                    e
-                )
+                msg = f"Schema of file {pq_info.orig_path} is not compatible.\n{str(e)}"
                 raise BodoError(msg)
 
     ## 2. Perform filtering to get row counts and construct the IcebergPieces.
@@ -2275,8 +2274,8 @@ def distribute_pieces(pieces: list[IcebergPiece]) -> list[IcebergPiece]:
     n_pes: int = comm.Get_size()
 
     # Sort the pieces
-    sorted_pieces: list[IcebergPiece] = list(
-        sorted(pieces, key=lambda p: (p._bodo_num_rows, p.path))
+    sorted_pieces: list[IcebergPiece] = sorted(
+        pieces, key=lambda p: (p._bodo_num_rows, p.path)
     )
 
     pieces_myrank: list[IcebergPiece] = []
@@ -2297,9 +2296,7 @@ def distribute_pieces(pieces: list[IcebergPiece]) -> list[IcebergPiece]:
         heapq.heappush(rank_heap, (least_rows + piece_nrows, rank))
 
     # Sort by schema_group_idx before returning
-    pieces_myrank = list(
-        sorted(pieces_myrank, key=lambda p: (p.schema_group_idx, p.path))
-    )
+    pieces_myrank = sorted(pieces_myrank, key=lambda p: (p.schema_group_idx, p.path))
 
     return pieces_myrank
 
@@ -3117,7 +3114,7 @@ def get_table_details_before_write(
                 # (https://github.com/pandas-dev/pandas/blob/4bfe3d07b4858144c219b9346329027024102ab6/pandas/io/sql.py#L833)
                 # but using values not known at compile time, in Exceptions
                 # doesn't seem to work with Numba
-                raise ValueError(f"Table already exists.")
+                raise ValueError("Table already exists.")
 
             if already_exists:
                 mode = if_exists
@@ -3852,7 +3849,7 @@ def iceberg_merge_cow_py(
         func_text += "        is_parallel,\n"
         func_text += "    )\n"
 
-        locals = dict()
+        locals = {}
         globals = {
             "bodo": bodo,
             "array_to_info": array_to_info,
@@ -3920,7 +3917,7 @@ def iceberg_merge_cow(
             catalog_uri, bearer_token, warehouse = conf
 
     if not already_exists:
-        raise ValueError(f"Iceberg MERGE INTO: Table does not exist at write")
+        raise ValueError("Iceberg MERGE INTO: Table does not exist at write")
 
     arrow_fs = None
     if catalog_uri and bearer_token and warehouse:

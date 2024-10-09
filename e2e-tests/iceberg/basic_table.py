@@ -249,11 +249,11 @@ if __name__ == "__main__":
                 if isinstance(write_test_func, numba.core.dispatcher.Dispatcher):
                     assert (
                         write_test_func._cache_hits[write_test_func.signatures[0]] == 1
-                    ), f"ERROR: Bodo did not load write function from cache"
+                    ), "ERROR: Bodo did not load write function from cache"
                 if isinstance(read_test_func, numba.core.dispatcher.Dispatcher):
                     assert (
                         read_test_func._cache_hits[read_test_func.signatures[0]] == 1
-                    ), f"ERROR: Bodo did not load read function from cache"
+                    ), "ERROR: Bodo did not load read function from cache"
 
             passed += 1
             print(f"Finished {key} Test successfully...")

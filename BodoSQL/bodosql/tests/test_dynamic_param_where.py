@@ -277,7 +277,7 @@ def test_named_param_tzaware_timestamp_compare(
     """
     Tests that comparison operators work with datetime data and tz aware timestamp named parameters.
     """
-    query = f"""
+    query = """
         SELECT
             A
         FROM
@@ -304,7 +304,7 @@ def test_bind_variable_tz_aware_compare(
     """
     Tests that comparison operators work with datetime data and tz aware timestamp bind variables.
     """
-    query = f"""
+    query = """
         SELECT
             A
         FROM

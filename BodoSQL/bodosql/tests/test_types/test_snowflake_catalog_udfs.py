@@ -194,6 +194,7 @@ SELECT input_value
 $$;
 
 """
+
 import datetime
 import io
 

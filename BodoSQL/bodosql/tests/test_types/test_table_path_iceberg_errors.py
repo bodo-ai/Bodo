@@ -4,6 +4,7 @@ Tests that Bodosql throws reasonable errors when supplied iceberg tables.
 
 Reuses several fixtures from the engine, but using bodosql's TablePath
 """
+
 import re
 
 import pytest
@@ -35,7 +36,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
         )
         + ".*",
     ):
-        bc = bodosql.BodoSQLContext(
+        bodosql.BodoSQLContext(
             {
                 "iceberg_tbl": bodosql.TablePath(
                     "SIMPLE_STRING_TABLE",
@@ -51,7 +52,7 @@ def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):
         + re.escape("bodosql.TablePath(): `db_schema` must be a string")
         + ".*",
     ):
-        bc = bodosql.BodoSQLContext(
+        bodosql.BodoSQLContext(
             {
                 "iceberg_tbl": bodosql.TablePath(
                     "SIMPLE_STRING_TABLE",
@@ -81,7 +82,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
     ):
 
         def impl():
-            bc = bodosql.BodoSQLContext(
+            bodosql.BodoSQLContext(
                 {
                     "iceberg_tbl": bodosql.TablePath(
                         "SIMPLE_STRING_TABLE",
@@ -101,7 +102,7 @@ def test_iceberg_tablepath_errors_jit(iceberg_database, iceberg_table_conn):
     ):
 
         def impl():
-            bc = bodosql.BodoSQLContext(
+            bodosql.BodoSQLContext(
                 {
                     "iceberg_tbl": bodosql.TablePath(
                         "SIMPLE_STRING_TABLE",
@@ -129,7 +130,7 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
         BodoError,
         match=".*" + re.escape("No such Iceberg table found") + ".*",
     ):
-        bc = bodosql.BodoSQLContext(
+        bodosql.BodoSQLContext(
             {
                 "ICEBERG_TBL": bodosql.TablePath(
                     "does_not_exist", "sql", conn_str=conn, db_schema=db_schema
@@ -154,4 +155,4 @@ def test_iceberg_tablepath_DNE(iceberg_database, iceberg_table_conn):
             )
             return bc.sql("SELECT * FROM iceberg_tbl")
 
-        bc = test_func(conn, db_schema)
+        test_func(conn, db_schema)

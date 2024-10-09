@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""typing for rolling window functions
-"""
+"""typing for rolling window functions"""
+
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
 from numba.core.typing.templates import (
@@ -132,8 +132,8 @@ def df_rolling_overload(
     closed=None,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.rolling()")
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
-    arg_defaults = dict(win_type=None, axis=0, closed=None)
+    unsupported_args = {"win_type": win_type, "axis": axis, "closed": closed}
+    arg_defaults = {"win_type": None, "axis": 0, "closed": None}
     check_unsupported_args(
         "DataFrame.rolling",
         unsupported_args,
@@ -172,8 +172,8 @@ def overload_series_rolling(
     axis=0,
     closed=None,
 ):
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
-    arg_defaults = dict(win_type=None, axis=0, closed=None)
+    unsupported_args = {"win_type": win_type, "axis": axis, "closed": closed}
+    arg_defaults = {"win_type": None, "axis": 0, "closed": None}
     check_unsupported_args(
         "Series.rolling",
         unsupported_args,
@@ -307,10 +307,13 @@ def _gen_df_rolling_out_data(rolling):
 def overload_rolling_apply(
     rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None
 ):
-    unsupported_args = dict(
-        engine=engine, engine_kwargs=engine_kwargs, args=args, kwargs=kwargs
-    )
-    arg_defaults = dict(engine=None, engine_kwargs=None, args=None, kwargs=None)
+    unsupported_args = {
+        "engine": engine,
+        "engine_kwargs": engine_kwargs,
+        "args": args,
+        "kwargs": kwargs,
+    }
+    arg_defaults = {"engine": None, "engine_kwargs": None, "args": None, "kwargs": None}
     check_unsupported_args(
         "Rolling.apply",
         unsupported_args,
@@ -344,8 +347,13 @@ def groupby_rolling_overload(
     closed=None,
     method="single",
 ):
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed, method=method)
-    arg_defaults = dict(win_type=None, axis=0, closed=None, method="single")
+    unsupported_args = {
+        "win_type": win_type,
+        "axis": axis,
+        "closed": closed,
+        "method": method,
+    }
+    arg_defaults = {"win_type": None, "axis": 0, "closed": None, "method": "single"}
     check_unsupported_args(
         "GroupBy.rolling",
         unsupported_args,
@@ -435,7 +443,7 @@ def _gen_rolling_impl(rolling, fname, other=None):
         name = "bodo.hiframes.pd_series_ext.get_series_name(df)"
     elif is_out_series:
         # name of the only output column (excluding 'on' column)
-        c = (set(out_cols) - set([rolling.on])).pop()
+        c = (set(out_cols) - {rolling.on}).pop()
         name = f"'{c}'" if isinstance(c, str) else str(c)
     header += f"  name = {name}\n"
     header += "  window = rolling.window\n"
@@ -443,12 +451,12 @@ def _gen_rolling_impl(rolling, fname, other=None):
     header += "  minp = rolling.min_periods\n"
     header += f"  on_arr = {on_arr}\n"
     if fname == "apply":
-        header += f"  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+        header += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
     else:
         header += f"  func = '{fname}'\n"
         # no need to pass index array
-        header += f"  index_arr = None\n"
-        header += f"  raw = False\n"
+        header += "  index_arr = None\n"
+        header += "  raw = False\n"
 
     if is_out_series:
         header += f"  return bodo.hiframes.pd_series_ext.init_series({data_args}, index, name)"

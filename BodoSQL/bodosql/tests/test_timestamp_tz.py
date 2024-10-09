@@ -625,7 +625,7 @@ def test_timestamp_tz_ordering(timestamp_tz_data, memory_leak_check):
     """
     Tests that sorting works correctly on timestamp_tz data
     """
-    query = f"SELECT I, T FROM TABLE1 ORDER BY T ASC NULLS LAST, I"
+    query = "SELECT I, T FROM TABLE1 ORDER BY T ASC NULLS LAST, I"
     ctx = {"TABLE1": timestamp_tz_data}
     expected_output = timestamp_tz_data.iloc[[3, 4, 5, 0, 7, 2, 1, 6], :]
     check_query(
@@ -681,7 +681,7 @@ def test_timestamp_tz_groupby(expanded_timestamp_tz_data, memory_leak_check):
     """
     Tests grouping by TIMESTAMP_TZ keys.
     """
-    query = f"SELECT T, SUM(I) as S FROM TABLE1 GROUP BY T"
+    query = "SELECT T, SUM(I) as S FROM TABLE1 GROUP BY T"
     ctx = {"TABLE1": pd.concat([expanded_timestamp_tz_data] * 5)}
     expected_output = pd.DataFrame(
         {
@@ -917,7 +917,7 @@ def test_casting_type_to_tz(data_col, session_tz, answer, memory_leak_check):
 
     TODO: support TRY_TO_TIMESTAMP_TZ
     """
-    query = f"SELECT I, TO_TIMESTAMP_TZ(T) as A FROM TABLE1"
+    query = "SELECT I, TO_TIMESTAMP_TZ(T) as A FROM TABLE1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {

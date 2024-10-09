@@ -3,6 +3,7 @@
 Helper functions and classes to simplify Template Generation
 for Bodo classes.
 """
+
 import numba
 from numba.core.typing.templates import AttributeTemplate
 

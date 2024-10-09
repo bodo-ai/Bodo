@@ -2,6 +2,7 @@
 """Array implementation for null array type. This is an array that contains
 all null values and can be cast to any other array type.
 """
+
 import operator
 
 import numba

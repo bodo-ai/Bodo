@@ -33,9 +33,8 @@ class Net(nn.Module):
 
 
 def train(model, train_loader, train_sampler, optimizer, epoch, cuda):
-    log_interval = 10
     model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for _, (data, target) in enumerate(train_loader):
         if cuda:
             data, target = data.cuda(), target.cuda()
         optimizer.zero_grad()

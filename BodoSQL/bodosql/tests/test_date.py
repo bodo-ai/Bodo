@@ -2,6 +2,7 @@
 """
 Test SQL `date` support
 """
+
 import datetime
 
 import pandas as pd

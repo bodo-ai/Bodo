@@ -2,6 +2,7 @@
 """Support for streaming sort (external sort) This file is mostly wrappers for
 C++ implementations.
 """
+
 from functools import cached_property
 from typing import List
 
@@ -258,7 +259,6 @@ def gen_init_stream_sort_state_impl(
 ):
     """Initialize the C++ TableBuilderState pointer"""
     output_type = unwrap_typeref(expected_state_type)
-    n_table_cols = output_type.num_input_arrs
 
     asc_cols_ = get_overload_const_list(asc_cols)
     asc_cols_ = [int(asc) for asc in asc_cols_]

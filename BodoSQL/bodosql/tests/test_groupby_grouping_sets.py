@@ -4,6 +4,7 @@ Tests correctness of various grouping sets operations, either
 by directly generating queries using grouping sets or via query
 that after 1 or more transformations results in grouping sets.
 """
+
 import numpy as np
 import pandas as pd
 import pytest

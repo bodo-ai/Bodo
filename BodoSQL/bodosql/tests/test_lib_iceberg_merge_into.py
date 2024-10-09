@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -23,8 +24,14 @@ from bodo.tests.utils import (
     gen_random_string_binary_array,
 )
 from bodo.utils.typing import BodoError
-from bodosql.libs.iceberg_merge_into import *
-from bodosql.tests.named_params_common import *
+from bodosql.libs.iceberg_merge_into import (
+    DELETE_ENUM,
+    INSERT_ENUM,
+    MERGE_ACTION_ENUM_COL_NAME,
+    ROW_ID_COL_NAME,
+    UPDATE_ENUM,
+    do_delta_merge_with_target,
+)
 
 small_df_len = 12
 
@@ -309,7 +316,7 @@ def test_do_delta_merge_failure():
         BodoError,
         match="Error in MERGE INTO: Found multiple actions to apply to the same row in the target table",
     ):
-        out_val = do_delta_merge_with_target(target_df, delta_df)
+        do_delta_merge_with_target(target_df, delta_df)
 
 
 @pytest.mark.slow

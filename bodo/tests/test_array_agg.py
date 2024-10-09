@@ -98,9 +98,7 @@ from bodo.tests.utils import check_func, nullable_float_arr_maker
             (
                 pd.Series(
                     [
-                        None
-                        if i % 3 == 0
-                        else datetime.date.fromordinal(737500 + i**2)
+                        None if i % 3 == 0 else datetime.date.fromordinal(737500 + i**2)
                         for i in range(40)
                     ]
                 ),

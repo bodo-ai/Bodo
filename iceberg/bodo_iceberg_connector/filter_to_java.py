@@ -7,6 +7,7 @@ to construct expressions. However, Java code is responsible
 for constructing the proper filter pushdown expression,
 including considering any Iceberg transformations.
 """
+
 import abc
 import datetime
 import typing as pt

@@ -432,19 +432,21 @@ def compute_df_types(df_list, is_bodo_type):
                         iceberg_table_name, pruned_conn_str, db_schema
                     )
                 else:
-                    type_info = bodo.transforms.untyped_pass._get_sql_types_arr_colnames(
-                        f"{file_path}",
-                        const_conn_str,
-                        # _bodo_read_as_dict
-                        None,
-                        ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
-                        ir.Loc("dummy_loc", -1),
-                        # is_table_input
-                        True,
-                        False,
-                        # downcast_decimal_to_double
-                        False,
-                        convert_snowflake_column_names=False,
+                    type_info = (
+                        bodo.transforms.untyped_pass._get_sql_types_arr_colnames(
+                            f"{file_path}",
+                            const_conn_str,
+                            # _bodo_read_as_dict
+                            None,
+                            ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
+                            ir.Loc("dummy_loc", -1),
+                            # is_table_input
+                            True,
+                            False,
+                            # downcast_decimal_to_double
+                            False,
+                            convert_snowflake_column_names=False,
+                        )
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.
@@ -660,13 +662,11 @@ class BodoSQLContext:
         self.tables = tables
         self.default_tz = default_tz
         # Check types
-        if any([not isinstance(key, str) for key in self.tables.keys()]):
+        if any(not isinstance(key, str) for key in self.tables.keys()):
             raise BodoError("BodoSQLContext(): 'table' keys must be strings")
         if any(
-            [
-                not isinstance(value, (pd.DataFrame, TablePath))
-                for value in self.tables.values()
-            ]
+            not isinstance(value, (pd.DataFrame, TablePath))
+            for value in self.tables.values()
         ):
             raise BodoError(
                 "BodoSQLContext(): 'table' values must be DataFrames or TablePaths"
@@ -716,9 +716,7 @@ class BodoSQLContext:
         """
         try:
             t1 = time.time()
-            compiled_cpu_dispatcher = self._compile(
-                sql, params_dict, dynamic_params_list
-            )
+            self._compile(sql, params_dict, dynamic_params_list)
             compile_time = time.time() - t1
             compiles_flag = True
             error_message = "No error"
@@ -737,7 +735,7 @@ class BodoSQLContext:
         import bodosql
 
         if params_dict is None:
-            params_dict = dict()
+            params_dict = {}
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
@@ -813,9 +811,9 @@ class BodoSQLContext:
         but does not actually compile the query in Bodo.
         """
         try:
-            code = self.convert_to_pandas(sql)
+            self.convert_to_pandas(sql)
             executable_flag = True
-        except:
+        except Exception:
             executable_flag = False
 
         return executable_flag
@@ -825,7 +823,7 @@ class BodoSQLContext:
     ):
         """converts SQL code to Pandas"""
         if params_dict is None:
-            params_dict = dict()
+            params_dict = {}
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
@@ -1015,7 +1013,7 @@ class BodoSQLContext:
         import bodosql
 
         if params_dict is None:
-            params_dict = dict()
+            params_dict = {}
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
@@ -1093,7 +1091,7 @@ class BodoSQLContext:
         as a Python string.
         """
         if params_dict is None:
-            params_dict = dict()
+            params_dict = {}
 
         dynamic_params_list = _ensure_dynamic_params_list(dynamic_params_list)
 
@@ -1379,7 +1377,7 @@ class BodoSQLContext:
             try:
                 ddl_result = generator.executeDDL(sql)
                 # Convert the output to a DataFrame.
-                column_names = [x for x in ddl_result.getColumnNames()]
+                column_names = list(ddl_result.getColumnNames())
                 data = [
                     pd.array(column, dtype=object)
                     for column in ddl_result.getColumnValues()

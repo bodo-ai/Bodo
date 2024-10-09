@@ -3,6 +3,7 @@
 Script to convert the parquet file containing the queries with their relevant costs
 into a directory of SQL files.
 """
+
 import argparse
 import os
 

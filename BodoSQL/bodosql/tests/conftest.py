@@ -1772,10 +1772,6 @@ def pytest_collection_modifyitems(items):
             if module_to_run == item.module.__name__.split(".")[-1] + ".py":
                 item.add_marker(pytest.mark.single_mod)
 
-    # Gets the last byte of hashing the test name. The hash function doesn't
-    # matter as long as it distributes tests reasonably well across all the
-    # buckets.
-    get_last_byte_of_hash = lambda x: hashlib.sha1(x.encode("utf-8")).digest()[-1]
     for item in items:
         hash_ = bodo.tests.conftest.get_last_byte_of_test_hash(item)
         # Divide the tests evenly so larger tests like TPCH

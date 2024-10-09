@@ -1,6 +1,7 @@
 """
 Test using BodoSQL inside Bodo JIT functions
 """
+
 import pandas as pd
 
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
@@ -41,7 +42,7 @@ def test_df_type_error():
     def small_reproducer(df):
         df["TEST"] = pd.Series([123] * 10)
         bc = bodosql.BodoSQLContext({"DF1": df})
-        df2 = bc.sql("""select test from df1""")
+        bc.sql("select test from df1")
 
     df = pd.DataFrame({"A": [1] * 10})
 

@@ -2,6 +2,7 @@
 """
 Test correctness of SQL ANY and ALL clauses.
 """
+
 import pandas as pd
 import pytest
 

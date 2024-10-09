@@ -116,10 +116,8 @@ def test_project_null(memory_leak_check):
 def test_select_multi_table(join_dataframes, spark_info, memory_leak_check):
     """test selecting columns from multiple tables"""
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C", "D"]
     else:
@@ -136,10 +134,8 @@ def test_select_multi_table(join_dataframes, spark_info, memory_leak_check):
 def test_select_multi_table_order_by(join_dataframes, spark_info, memory_leak_check):
     """test selecting and sorting columns from multiple tables"""
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C", "D"]
     else:
@@ -245,26 +241,22 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
     tests that the select and from operators are working correctly for simple cases
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray1 = ["A", "B"]
         convert_columns_bytearray2 = ["A", "D"]
@@ -305,19 +297,15 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
     Tests that simple nested SQL queries using only select and from work as intended
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A", "C"]
     else:
@@ -346,19 +334,15 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
     Tests that heavily nested SQL queries using only select and from work as intended
     """
     if any(
-        [
-            isinstance(x, pd.core.arrays.integer.IntegerDtype)
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(x, pd.core.arrays.integer.IntegerDtype)
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A"]
     else:

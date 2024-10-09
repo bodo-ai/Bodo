@@ -2,6 +2,7 @@
 """
 Tests correctness of the 'Greatest' keyword in BodoSQL
 """
+
 import numpy as np
 import pandas as pd
 import pytest

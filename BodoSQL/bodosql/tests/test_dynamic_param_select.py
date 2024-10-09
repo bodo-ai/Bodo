@@ -3,7 +3,6 @@
 Test that Dynamic Parameters can be used in select expressions.
 """
 
-
 import numpy as np
 import pandas as pd
 
@@ -19,7 +18,7 @@ def test_select_named_param(
     """
     Tests that selects works with named parameters
     """
-    query = f"""
+    query = """
         SELECT
             @a as col1, @b as col2
         FROM
@@ -53,7 +52,7 @@ def test_named_param_mixed_column_scalar(
     """
     Tests that a mix of named parameters and columns work as expected.
     """
-    query = f"""
+    query = """
         SELECT
             @a as col1, B as col2
         FROM
@@ -87,7 +86,7 @@ def test_select_bind_variables(
     """
     Tests that selects works with bind variables.
     """
-    query = f"""
+    query = """
         SELECT
             ? as COL1, ? as COL2
         FROM
@@ -117,7 +116,7 @@ def test_bind_variables_mixed_column_scalar(
     """
     Tests that a mix of bind variables and columns work as expected.
     """
-    query = f"""
+    query = """
         SELECT
             ? as COL1, B as col2
         FROM

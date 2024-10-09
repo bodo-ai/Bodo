@@ -2,6 +2,7 @@
 """Table data type for storing dataframe column arrays. Supports storing many columns
 (e.g. >10k) efficiently.
 """
+
 import operator
 from collections import defaultdict
 from functools import cached_property
@@ -901,11 +902,11 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
         "out_table_typ": out_table_typ,
     }
     func_text = "def set_table_data(table, ind, arr, used_cols=None):\n"
-    func_text += f"  T2 = init_table(out_table_typ, False)\n"
+    func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
-    func_text += f"  T2 = set_table_len(T2, len(table))\n"
+    func_text += "  T2 = set_table_len(T2, len(table))\n"
     # Copy the parent for lazy unboxing.
-    func_text += f"  T2 = set_table_parent(T2, table)\n"
+    func_text += "  T2 = set_table_parent(T2, table)\n"
     for typ, blk in out_table_typ.type_to_blk.items():
         if typ in table.type_to_blk:
             orig_table_blk = table.type_to_blk[typ]
@@ -939,8 +940,8 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
                     func_text += f"    out_idx = out_idxs_{blk}[i]\n"
                     if removes_arr:
                         # If we remove any array we need to check for -1
-                        func_text += f"    if out_idx == -1:\n"
-                        func_text += f"      continue\n"
+                        func_text += "    if out_idx == -1:\n"
+                        func_text += "      continue\n"
                     func_text += (
                         f"    out_arr_list_{blk}[out_idx] = arr_list_{blk}[i]\n"
                     )
@@ -957,7 +958,7 @@ def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False)
                 # Assign the array if it exists
                 func_text += f"  out_arr_list_{blk}[0] = arr\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -1030,9 +1031,9 @@ def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
 
 
-numba.core.ir_utils.alias_func_extensions[
-    ("get_table_data", "bodo.hiframes.table")
-] = alias_ext_dummy_func
+numba.core.ir_utils.alias_func_extensions[("get_table_data", "bodo.hiframes.table")] = (
+    alias_ext_dummy_func
+)
 
 
 def get_table_data_equiv(self, scope, equiv_set, loc, args, kws):
@@ -1464,26 +1465,26 @@ def gen_table_filter_impl(T, idx, used_cols=None):
         used_cols_type = used_cols.instance_type
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_vals"] = used_cols_data
-        kept_blks = set([T.block_nums[i] for i in used_cols_data])
+        kept_blks = {T.block_nums[i] for i in used_cols_data}
     else:
         used_cols_data = None
 
     func_text = "def table_filter_func(T, idx, used_cols=None):\n"
-    func_text += f"  T2 = init_table(T, False)\n"
-    func_text += f"  l = 0\n"
+    func_text += "  T2 = init_table(T, False)\n"
+    func_text += "  l = 0\n"
 
     # set table length using index value and return if no table column is used
     if used_cols_data is not None and len(used_cols_data) == 0:
         # avoiding _get_idx_num_true in the general case below since it has extra overhead
-        func_text += f"  l = _get_idx_num_true(idx, len(T))\n"
-        func_text += f"  T2 = set_table_len(T2, l)\n"
-        func_text += f"  return T2\n"
+        func_text += "  l = _get_idx_num_true(idx, len(T))\n"
+        func_text += "  T2 = set_table_len(T2, l)\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
         return loc_vars["table_filter_func"]
 
     if used_cols_data is not None:
-        func_text += f"  used_set = set_wrapper(used_cols_vals)\n"
+        func_text += "  used_set = set_wrapper(used_cols_vals)\n"
     for blk in T.type_to_blk.values():
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
         func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
@@ -1502,8 +1503,8 @@ def gen_table_filter_impl(T, idx, used_cols=None):
                 f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
             )
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  T2 = set_table_len(T2, l)\n"
-    func_text += f"  return T2\n"
+    func_text += "  T2 = set_table_len(T2, l)\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -1609,24 +1610,24 @@ def gen_table_subset_impl(T, idx, copy_arrs, used_cols=None):
         skip_cols = False
     # Compute a mapping of columns before removing
     # dropped columns.
-    moved_cols_map = {i: c for i, c in enumerate(cols_subset)}
+    moved_cols_map = dict(enumerate(cols_subset))
 
     func_text = "def table_subset(T, idx, copy_arrs, used_cols=None):\n"
-    func_text += f"  T2 = init_table(out_table_typ, False)\n"
+    func_text += "  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
-    func_text += f"  T2 = set_table_len(T2, len(T))\n"
+    func_text += "  T2 = set_table_len(T2, len(T))\n"
 
     # set table length using index value and return if no table column is used
     if skip_cols and len(kept_cols_set) == 0:
         # If all columns are dead just return the table.
-        func_text += f"  return T2\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
         return loc_vars["table_subset"]
 
     if skip_cols:
         # Create a set for filtering
-        func_text += f"  kept_cols_set = set_wrapper(kept_cols)\n"
+        func_text += "  kept_cols_set = set_wrapper(kept_cols)\n"
 
     # Use the output table to only generate code per output
     # type. Here we iterate over the output type and list of
@@ -1700,7 +1701,7 @@ def gen_table_subset_impl(T, idx, copy_arrs, used_cols=None):
             suffix = ".copy()" if make_copy else ""
             func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[physical_idx_{blk}]{suffix}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -1921,26 +1922,26 @@ def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
     func_text += f"  out_arr_list_{out_table_block} = alloc_list_like(input_str_arr_list, {len(string_array_physical_offset_in_output_block) + len(dict_enc_string_array_physical_offset_in_output_block)}, True)\n"
 
     # handle string arrays
-    func_text += f"  for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):\n"
+    func_text += "  for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):\n"
     func_text += (
         f"    arr_ind_str = arr_inds_{input_string_ary_blk}[input_str_ary_idx]\n"
     )
-    func_text += f"    ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)\n"
-    func_text += f"    out_arr_str = input_str_arr_list[input_str_ary_idx]\n"
+    func_text += "    ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)\n"
+    func_text += "    out_arr_str = input_str_arr_list[input_str_ary_idx]\n"
     if is_gatherv:
-        func_text += f"    out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)\n"
+        func_text += "    out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)\n"
 
     func_text += (
         f"    out_arr_list_{out_table_block}[output_str_arr_offset] = out_arr_str\n"
     )
 
     # handle dict encoded string arrays
-    func_text += f"  for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):\n"
+    func_text += "  for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):\n"
     func_text += f"    arr_ind_dict_enc_str = arr_inds_{input_dict_encoded_string_ary_blk}[input_dict_enc_str_ary_idx]\n"
-    func_text += f"    ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)\n"
-    func_text += f"    out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])\n"
+    func_text += "    ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)\n"
+    func_text += "    out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])\n"
     if is_gatherv:
-        func_text += f"    out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)\n"
+        func_text += "    out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)\n"
 
     func_text += f"    out_arr_list_{out_table_block}[output_dict_enc_str_arr_offset] = out_arr_dict_enc_str\n"
 
@@ -1962,8 +1963,8 @@ def decode_if_dict_table(T):
     all columns are alive (i.e. before write).
     """
     func_text = "def impl(T):\n"
-    func_text += f"  T2 = init_table(T, True)\n"
-    func_text += f"  l = len(T)\n"
+    func_text += "  T2 = init_table(T, True)\n"
+    func_text += "  l = len(T)\n"
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
@@ -2026,8 +2027,8 @@ def decode_if_dict_table(T):
         func_text += (
             f"  T2 = set_table_block(T2, out_arr_list_{input_blk}, {output_blk})\n"
         )
-    func_text += f"  T2 = set_table_len(T2, l)\n"
-    func_text += f"  return T2\n"
+    func_text += "  T2 = set_table_len(T2, l)\n"
+    func_text += "  return T2\n"
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
@@ -2131,7 +2132,7 @@ def gen_create_empty_table_impl(table_type):
         )
         func_text += f"  table = set_table_block(table, out_arr_list_{blk}, {blk})\n"
 
-    func_text += f"  return table\n"
+    func_text += "  return table\n"
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl_create_empty_table"]
@@ -2281,20 +2282,20 @@ def gen_logical_table_to_table_impl(
     func_text = "def impl_logical_table_to_table(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
     if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
         func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
-    func_text += f"  T1 = in_table_t\n"
-    func_text += f"  T2 = init_table(out_table_type, False)\n"
-    func_text += f"  T2 = set_table_len(T2, len(T1))\n"
+    func_text += "  T1 = in_table_t\n"
+    func_text += "  T2 = init_table(out_table_type, False)\n"
+    func_text += "  T2 = set_table_len(T2, len(T1))\n"
 
     # If all columns are dead just return the table (only table length is used).
     if skip_cols and len(kept_cols) == 0:
-        func_text += f"  return T2\n"
+        func_text += "  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
         return loc_vars["impl_logical_table_to_table"]
 
     # Create a set for column filtering
     if skip_cols:
-        func_text += f"  kept_cols_set = set_wrapper(kept_cols)\n"
+        func_text += "  kept_cols_set = set_wrapper(kept_cols)\n"
 
     for typ, blk in out_table_type.type_to_blk.items():
         glbls[f"arr_list_typ_{blk}"] = types.List(typ)
@@ -2325,7 +2326,7 @@ def gen_logical_table_to_table_impl(
             func_text += f"  for i in range(len(out_arr_list_{blk})):\n"
             func_text += f"    in_offset_{blk} = in_idxs_{blk}[i]\n"
             func_text += f"    if in_offset_{blk} == -1:\n"
-            func_text += f"      continue\n"
+            func_text += "      continue\n"
             func_text += f"    in_arr_ind_{blk} = in_arr_inds_{blk}[i]\n"
             if skip_cols:
                 func_text += (
@@ -2345,7 +2346,7 @@ def gen_logical_table_to_table_impl(
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
 
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     glbls.update(
         {
@@ -2430,8 +2431,8 @@ def _logical_tuple_table_to_table_codegen(
     func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
     if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
         func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
-    func_text += f"  T1 = in_table_t\n"
-    func_text += f"  T2 = init_table(out_table_type, False)\n"
+    func_text += "  T1 = in_table_t\n"
+    func_text += "  T2 = init_table(out_table_type, False)\n"
     func_text += f"  T2 = set_table_len(T2, len({len_arr}))\n"
     glbls = {}
 
@@ -2452,7 +2453,7 @@ def _logical_tuple_table_to_table_codegen(
 
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
 
-    func_text += f"  return T2\n"
+    func_text += "  return T2\n"
 
     glbls.update(
         {

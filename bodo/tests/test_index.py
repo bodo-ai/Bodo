@@ -2,6 +2,7 @@
 """
 Tests for pd.Index functionality
 """
+
 import datetime
 import operator
 
@@ -2402,14 +2403,14 @@ def test_map(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([i for i in range(100)]),
+        pd.Index(list(range(100))),
         pytest.param(
-            pd.Index([i for i in range(100)], dtype="UInt64"), marks=pytest.mark.slow
+            pd.Index(list(range(100)), dtype="UInt64"), marks=pytest.mark.slow
         ),
         pytest.param(
-            pd.Index([i for i in range(100)], dtype="float64"), marks=pytest.mark.slow
+            pd.Index(list(range(100)), dtype="float64"), marks=pytest.mark.slow
         ),
-        pd.Index([i for i in range(100, -1, -1)]),
+        pd.Index(list(range(100, -1, -1))),
         pd.Index([1, 4, 3, 2, 5, 6, 4]),
         pytest.param(
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=10),
@@ -2482,7 +2483,7 @@ def test_range_index_dce(memory_leak_check):
             {"EXPR$0": S0.max(), "__bodo_dummy__1": S1.max()},
             index=pd.RangeIndex(0, 1, 1, name="my_copied_name"),
         )
-        df3 = df2[((df2["__bodo_dummy__1"] != 200))]
+        df3 = df2[(df2["__bodo_dummy__1"] != 200)]
         df4 = df3.loc[
             :,
             [

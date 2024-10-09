@@ -13,7 +13,28 @@ from numba.extending import overload, register_jitable
 import bodo
 from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.pd_offsets_ext import CombinedIntervalType
-from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.libs.bodosql_array_kernel_utils import (
+    convert_numeric_to_int,
+    gen_vectorized,
+    get_tz_if_exists,
+    is_valid_date_arg,
+    is_valid_time_arg,
+    is_valid_timestamptz_arg,
+    is_valid_tz_aware_datetime_arg,
+    unopt_argument,
+    verify_date_arg,
+    verify_date_or_datetime_arg_forbid_tz,
+    verify_datetime_arg,
+    verify_datetime_arg_allow_tz,
+    verify_datetime_arg_require_tz,
+    verify_int_arg,
+    verify_int_float_arg,
+    verify_sql_interval,
+    verify_string_arg,
+    verify_td_arg,
+    verify_time_or_datetime_arg_allow_tz,
+    verify_timestamp_arg_allow_tz,
+)
 from bodo.libs.pd_datetime_arr_ext import (
     python_timezone_from_bodo_timezone_info,
 )
@@ -734,10 +755,10 @@ def add_interval_util(start_dt, interval):
                 .values
             )
             extra_globals = {"trans": trans, "deltas": deltas}
-            scalar_text += f"start_value = arg0.value\n"
+            scalar_text += "start_value = arg0.value\n"
             # Wrap the interval in a pd.Timedelta if dealing with an array of intervals
             if bodo.utils.utils.is_array_typ(interval, True):
-                scalar_text += f"arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
+                scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
             scalar_text += "end_value = start_value + arg1.value\n"
             scalar_text += (
                 "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
@@ -747,7 +768,7 @@ def add_interval_util(start_dt, interval):
             )
             scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
             scalar_text += "arg1 = pd.Timedelta(end_value - start_value + offset)\n"
-        scalar_text += f"res[i] = arg0 + arg1\n"
+        scalar_text += "res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
     elif is_valid_timestamptz_arg(start_dt):
         # For TIMESTAMP_TZ, add the timedelta to the local timestamp, then create
@@ -758,7 +779,7 @@ def add_interval_util(start_dt, interval):
             "local_ts = bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)\n"
         )
         scalar_text += "new_local_ts = local_ts + arg1\n"
-        scalar_text += f"res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(new_local_ts, arg0.offset_minutes)\n"
+        scalar_text += "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(new_local_ts, arg0.offset_minutes)\n"
         out_dtype = bodo.timestamptz_array_type
     else:
         # For regular timestamps, perform the standard arithmetic on the datetime and
@@ -1031,10 +1052,10 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             #  as if it were zero)
             if unit in ("months", "quarters", "years"):
                 if unit == "quarters":
-                    scalar_text = f"td = pd.DateOffset(months=3*arg0)\n"
+                    scalar_text = "td = pd.DateOffset(months=3*arg0)\n"
                 else:
                     scalar_text = f"td = pd.DateOffset({unit}=arg0)\n"
-                scalar_text += f"start_value = arg1.value\n"
+                scalar_text += "start_value = arg1.value\n"
                 scalar_text += "end_value = (pd.Timestamp(arg1.value) + td).value\n"
                 if bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone):
                     scalar_text += "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
@@ -1062,7 +1083,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                 else:
                     scalar_text = f"td = pd.Timedelta({unit}=arg0)\n"
                 if bodo.hiframes.pd_timestamp_ext.tz_has_transition_times(time_zone):
-                    scalar_text += f"start_value = arg1.value\n"
+                    scalar_text += "start_value = arg1.value\n"
                     scalar_text += "end_value = start_value + td.value\n"
                     scalar_text += "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
                     scalar_text += "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
@@ -1070,7 +1091,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                     scalar_text += "td = pd.Timedelta(td.value + offset)\n"
 
             # Add the calculated timedelta to the original timestamp
-            scalar_text += f"res[i] = arg1 + td\n"
+            scalar_text += "res[i] = arg1 + td\n"
 
             out_dtype = bodo.DatetimeArrayType(time_zone)
 
@@ -1315,7 +1336,7 @@ def get_nanosecond_util(arr):  # pragma: no cover
 
 def create_dt_extract_fn_overload(fn_name):  # pragma: no cover
     def overload_func(arr):
-        """Handles cases where this dt extraction function recieves optional
+        """Handles cases where this dt extraction function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         if isinstance(arr, types.optional):
             return unopt_argument(
@@ -1395,7 +1416,7 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
         ms_str = "microsecond // 1000" if not is_valid_time_arg(arr) else "millisecond"
         us_str = "microsecond % 1000" if not is_valid_time_arg(arr) else "microsecond"
 
-        # The specifications of how kernel should extract the relevent value
+        # The specifications of how kernel should extract the relevant value
         # if the input is a date type
         date_format_strings = {
             "get_year": "arg0.year",
@@ -1406,7 +1427,7 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "dayofweekiso": "arg0.weekday() + 1",
             "dayofyear": "bodo.hiframes.datetime_date_ext._day_of_year(arg0.year, arg0.month, arg0.day)",
         }
-        # The specifications of how kernel should extract the relevent value
+        # The specifications of how kernel should extract the relevant value
         # if the input is a time or timestamp type
         other_format_strings = {
             "get_year": f"{unwrap_str}(arg0).year",
@@ -1523,7 +1544,7 @@ def get_iso_weeks_between_years(year0, year1):  # pragma: no cover
         year0 (integer): the first year
         year1 (integer): the second year
 
-    Returns: the number of ISO weeks betwen year0 and year1
+    Returns: the number of ISO weeks between year0 and year1
     """
     sign = 1
     if year1 < year0:
@@ -1665,8 +1686,8 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
             "mo_diff": f"{second_arg}.month - {first_arg}.month",
             "y0, w0, _": f"{first_arg}.isocalendar()",
             "y1, w1, _": f"{second_arg}.isocalendar()",
-            "iso_yr_diff": f"bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years(y0, y1)",
-            "wk_diff": f"w1 - w0",
+            "iso_yr_diff": "bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years(y0, y1)",
+            "wk_diff": "w1 - w0",
             "da_diff": f"(pd.Timestamp({second_arg}.year, {second_arg}.month, {second_arg}.day) - pd.Timestamp({first_arg}.year, {first_arg}.month, {first_arg}.day)).days",
             "ns_diff": f"{second_arg}.value - {first_arg}.value",
         }
@@ -1972,7 +1993,7 @@ def overload_date_trunc_util(
             # In the tz-naive array case we have to convert the Timestamp to dt64
             scalar_text += f"res[i] = {unbox_str}(out_val)\n"
         else:
-            scalar_text += f"res[i] = out_val\n"
+            scalar_text += "res[i] = out_val\n"
 
     return gen_vectorized(
         arg_names,
@@ -2154,7 +2175,9 @@ def overload_timestamp_tz_from_parts_util(
     scalar_text += (
         f"offset = ts.tz_localize('{tz}').utcoffset().value // 60_000_000_000\n"
     )
-    scalar_text += f"res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(ts, offset)"
+    scalar_text += (
+        "res[i] = bodo.hiframes.timestamptz_ext.init_timestamptz_from_local(ts, offset)"
+    )
 
     out_dtype = bodo.timestamptz_array_type
 
@@ -2199,7 +2222,7 @@ def date_from_parts_util(year, month, day):
     scalar_text = "months, month_overflow = 1 + ((arg1 - 1) % 12), (arg1 - 1) // 12\n"
     scalar_text += "date = datetime.date(arg0+month_overflow, months, 1)\n"
     scalar_text += "date = date + datetime.timedelta(days=arg2-1)\n"
-    scalar_text += f"res[i] = date"
+    scalar_text += "res[i] = date"
 
     out_dtype = DatetimeDateArrayType()
 
@@ -2288,10 +2311,10 @@ def dayname_util(arr):
     arg_types = [arr]
     propagate_null = [True]
     if is_valid_date_arg(arr):
-        scalar_text = f"val = day_of_week_dict_arr[arg0.weekday()]\n"
+        scalar_text = "val = day_of_week_dict_arr[arg0.weekday()]\n"
     else:
         scalar_text = f"val = {unwrap_str}(arg0).day_name()\n"
-    scalar_text += f"res[i] = val[:3]\n"
+    scalar_text += "res[i] = val[:3]\n"
 
     out_dtype = bodo.string_array_type
 
@@ -2312,7 +2335,7 @@ def dayname_util(arr):
 
     synthesize_dict_setup_text = "dict_res = day_of_week_dict_arr"
     if is_valid_date_arg(arr):
-        synthesize_dict_scalar_text = f"res[i] = arg0.weekday()"
+        synthesize_dict_scalar_text = "res[i] = arg0.weekday()"
     else:
         synthesize_dict_scalar_text = f"res[i] = {unwrap_str}(arg0).dayofweek"
 
@@ -2416,10 +2439,10 @@ def monthname_util(arr):
             "mons = ('January', 'February', 'March', 'April', 'May', 'June', "
             "'July', 'August', 'September', 'October', 'November', 'December')\n"
         )
-        scalar_text += f"val = mons[arg0.month - 1]\n"
+        scalar_text += "val = mons[arg0.month - 1]\n"
     else:
         scalar_text = f"val = {unwrap_str}(arg0).month_name()\n"
-    scalar_text += f"res[i] = val[:3]\n"
+    scalar_text += "res[i] = val[:3]\n"
     out_dtype = bodo.string_array_type
 
     # If the input is an array or date object, make the output dictionary encoded
@@ -2489,7 +2512,7 @@ def next_day_util(arr0, arr1):
     )
     # Note: Snowflake removes leading whitespace and ignore any characters aside from the first two
     # values, case insensitive. https://docs.snowflake.com/en/sql-reference/functions/next_day.html#arguments
-    scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
+    scalar_text = "arg1_trimmed = arg1.lstrip()[:2].lower()\n"
     if is_timestamp_tz:
         arg0_timestamp = "bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)"
     elif is_input_tz_aware:
@@ -2499,7 +2522,7 @@ def next_day_util(arr0, arr1):
     else:
         arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
-    scalar_text += f"res[i] = new_timestamp.date()\n"
+    scalar_text += "res[i] = new_timestamp.date()\n"
 
     out_dtype = DatetimeDateArrayType()
 
@@ -2543,7 +2566,7 @@ def previous_day_util(arr0, arr1):
     )
     # Note: Snowflake removes leading whitespace and ignore any characters aside from the first two
     # values, case insensitive. https://docs.snowflake.com/en/sql-reference/functions/previous_day.html#arguments
-    scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
+    scalar_text = "arg1_trimmed = arg1.lstrip()[:2].lower()\n"
     if is_timestamp_tz:
         arg0_timestamp = "bodo.hiframes.timestamptz_ext.get_local_timestamp(arg0)"
     elif is_input_tz_aware:
@@ -2553,7 +2576,7 @@ def previous_day_util(arr0, arr1):
     else:
         arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
     scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
-    scalar_text += f"res[i] = new_timestamp.date()\n"
+    scalar_text += "res[i] = new_timestamp.date()\n"
 
     out_dtype = DatetimeDateArrayType()
 
@@ -2880,10 +2903,10 @@ def overload_to_seconds_util(arr):
         # Note if the input is an array then we just operate directly on datetime64
         # to avoid Timestamp boxing.
         scalar_text = (
-            f"  in_value = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg0)\n"
+            "  in_value = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg0)\n"
         )
     else:
-        scalar_text = f"  in_value = arg0.value\n"
+        scalar_text = "  in_value = arg0.value\n"
     # Note: This function just calculates the seconds since via UTC time, so this is
     # accurate for all timezones.
     scalar_text += (
@@ -3094,7 +3117,7 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
             )
         out_dtype = bodo.date_offset_type
         # all year to month intervals are based on month
-        scalar_text = f"res[i] = pd.DateOffset(months=arg0._months * arg1)\n"
+        scalar_text = "res[i] = pd.DateOffset(months=arg0._months * arg1)\n"
     else:
         out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
 
@@ -3682,7 +3705,7 @@ def overload_get_timezone_offset_util(arr, unit):
             extra_globals = {"trans": trans, "deltas": deltas}
             # Implementation
             scalar_text += f"arg0 = {box_str}(arg0)\n"
-            scalar_text += f"start_value = arg0.value\n"
+            scalar_text += "start_value = arg0.value\n"
             scalar_text += (
                 "idx = np.searchsorted(trans, arg0.value, side='right') - 1\n"
             )
@@ -3698,11 +3721,11 @@ def overload_get_timezone_offset_util(arr, unit):
                 scalar_text += "  final_offset = np.floor(float_offset)\n"
             else:
                 # Remove the hours
-                scalar_text += f"final_offset = minute_offset % 60\n"
+                scalar_text += "final_offset = minute_offset % 60\n"
                 # Python modulo converts - number to +
-                scalar_text += f"if nanoseconds_offset < 0:\n"
+                scalar_text += "if nanoseconds_offset < 0:\n"
                 scalar_text += f"  final_offset = final_offset - {modulo}\n"
-            scalar_text += f"res[i] = final_offset\n"
+            scalar_text += "res[i] = final_offset\n"
 
     arg_names = ["arr", "unit"]
     arg_types = [arr, unit]
@@ -3895,7 +3918,7 @@ def weekofyear_util(arr, week_start, week_of_year_policy):
     else:
         scalar_text = f"arg0 = {unwrap_str}(arg0).tz_localize(None)\n"
 
-    scalar_text += f"start_day = max(0, arg1 - 1)\n"
+    scalar_text += "start_day = max(0, arg1 - 1)\n"
 
     if get_overload_const_int(week_of_year_policy) == 1:
         scalar_text += (
@@ -4000,7 +4023,7 @@ def yearofweek_util(arr, week_start, week_of_year_policy):
     else:
         scalar_text = f"arg0 = {box_str}(arg0).tz_localize(None)\n"
 
-    scalar_text += f"start_day = max(0, arg1 - 1)\n"
+    scalar_text += "start_day = max(0, arg1 - 1)\n"
 
     if get_overload_const_int(week_of_year_policy) == 1:
         scalar_text += (
@@ -4091,14 +4114,14 @@ def add_months_util(dt0, num_months):
 
     # # If the input date is the last day of the month,
     # # the output date also must be the last day of the month
-    scalar_text += f"if (arg0.is_month_end and not (arg0 + pd.DateOffset(months=arg1)).is_month_end):\n"
+    scalar_text += "if (arg0.is_month_end and not (arg0 + pd.DateOffset(months=arg1)).is_month_end):\n"
     scalar_text += "  new_arg = arg0 + pd.DateOffset(months=arg1) + pd.tseries.offsets.MonthEnd()\n"
     scalar_text += "else:\n"
     scalar_text += "  new_arg = arg0 + pd.DateOffset(months=arg1)\n"
 
     if time_zone is not None:
         out_dtype = bodo.DatetimeArrayType(time_zone)
-        scalar_text += f"res[i] = new_arg\n"
+        scalar_text += "res[i] = new_arg\n"
     else:
         if is_valid_date_arg(dt0):
             out_dtype = bodo.datetime_date_array_type

@@ -1297,7 +1297,6 @@ def test_random_binary_sum_min_max_first_last(memory_leak_check):
         # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
         eList_C = []
         for i in range(n):
-            len_str = random.randint(1, 10)
             val_A = random.randint(1, 10)
             val_B = bytes(random.randint(1, 10))
             eList_A.append(val_A)
@@ -2142,13 +2141,6 @@ def test_agg_select_col(memory_leak_check):
     df_int = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1], "B": [1, 2, 3, 4, 5, 6, 7]})
     df_float = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2]}
-    )
-    df_str = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": ["a", "b", "c", "c", "b", "c", "a"],
-            "C": gen_nonascii_list(7),
-        }
     )
     check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
     check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
@@ -4229,12 +4221,12 @@ def test_max_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].max()
         return A
 
-    def impl2(n):
+    def impl2(n):  # noqa: F841
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].max()
         return A
 
-    df_bool = pd.DataFrame(
+    df_bool = pd.DataFrame(  # noqa: F841
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
             "B": [True, np.nan, False, True, np.nan, False, False, True],
@@ -4248,10 +4240,8 @@ def test_max_one_col(test_df, memory_leak_check):
         check_dtype = False
 
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
-
-
-#    check_func(impl1, (df_bool,), sort_output=True)
-#    check_func(impl2, (11,))
+    # check_func(impl1, (df_bool,), sort_output=True)
+    # check_func(impl2, (11,))
 
 
 @pytest.mark.slow
@@ -5740,7 +5730,7 @@ def test_const_list_inference(memory_leak_check):
         return df.groupby(["A"] + ["B"]).sum()
 
     def impl2(df):
-        return df.groupby(list(set(df.columns) - set(["A", "C"]))).sum()
+        return df.groupby(list(set(df.columns) - {"A", "C"})).sum()
 
     # test df schema change by setting a column
     def impl3(n):
@@ -6027,7 +6017,7 @@ def test_groupby_shift_unknown_cats(memory_leak_check):
         }
     )
 
-    df3 = pd.DataFrame(
+    df3 = pd.DataFrame(  # noqa: F841
         {
             "A": [1, 1, 1, 4, 5],
             "B": np.array([2, 3, 4, 5, 8], dtype=np.uint8),
@@ -6214,14 +6204,11 @@ def test_groupby_shift_main(periods):
 
     siz = 10
     datetime_arr_1 = pd.date_range("1917-01-01", periods=siz)
-    datetime_arr_2 = pd.date_range("2017-01-01", periods=siz)
-    timedelta_arr = datetime_arr_1 - datetime_arr_2
     date_arr = datetime_arr_1.date
     df1_datetime = pd.DataFrame(
         {"A": [1, 2, 1, 4, 5, 6, 4, 6, 6, 1], "B": datetime_arr_1}
     )
     df1_date = pd.DataFrame({"A": np.arange(siz), "B": date_arr})
-    df1_timedelta = pd.DataFrame({"A": np.arange(siz), "B": timedelta_arr})
 
     check_func(impl2, (df1_datetime,))
     check_func(impl3, (df1_datetime,))

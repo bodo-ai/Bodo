@@ -2,6 +2,7 @@
 """
 Test correctness of SQL case queries on BodoSQL
 """
+
 import pandas as pd
 import pytest
 from numba.core import ir
@@ -214,8 +215,8 @@ def test_case_agg_groupby(basic_df, spark_info, memory_leak_check):
     """
     Test a case statement with an aggregate function applied to each group.
     """
-    query1 = f"Select Case WHEN A >= 2 THEN Sum(B) ELSE 0 END as CASERES FROM table1 Group By A"
-    query2 = f"Select Case WHEN A >= 2 THEN Count(B) ELSE 0 END as CASERES FROM table1 Group By A"
+    query1 = "Select Case WHEN A >= 2 THEN Sum(B) ELSE 0 END as CASERES FROM table1 Group By A"
+    query2 = "Select Case WHEN A >= 2 THEN Count(B) ELSE 0 END as CASERES FROM table1 Group By A"
     check_query(query1, basic_df, spark_info, check_dtype=False)
     check_query(query2, basic_df, spark_info, check_dtype=False)
 
@@ -242,7 +243,7 @@ def test_case_no_else_clause_columns(basic_df, spark_info, memory_leak_check):
     """
     Test a case statement that doesn't have an else clause whose values are columns
     """
-    query = f"Select Case WHEN A >= 2 THEN A WHEN A < 0 THEN B END FROM table1"
+    query = "Select Case WHEN A >= 2 THEN A WHEN A < 0 THEN B END FROM table1"
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
 
 
@@ -278,7 +279,7 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
         # is not inlined.
         old_threshold = bodo.COMPLEX_CASE_THRESHOLD
         bodo.COMPLEX_CASE_THRESHOLD = 1
-        query = f"Select B, Case WHEN A = 1 THEN 1 WHEN A = 2 THEN 2 WHEN B > 6 THEN 3 ELSE NULL END as CASERES FROM table1"
+        query = "Select B, Case WHEN A = 1 THEN 1 WHEN A = 2 THEN 2 WHEN B > 6 THEN 3 ELSE NULL END as CASERES FROM table1"
         check_query(
             query,
             basic_df,

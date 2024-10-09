@@ -245,7 +245,7 @@ def merge_sorted_dataframes(target_df: DataFrameType, delta_df: DataFrameType):
         MERGE_ACTION_ENUM_COL_NAME
     ]
 
-    func_text = f"def impl(target_df, delta_df):\n"
+    func_text = "def impl(target_df, delta_df):\n"
     func_text += "  target_df_len = len(target_df)\n"
     func_text += "  delta_df_len = len(delta_df)\n"
 

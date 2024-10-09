@@ -288,9 +288,7 @@ def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
         func_text = """def f(n):
             A = np.arange(0, n, 1, np.{})
             return A.{}()
-        """.format(
-            dtype, func
-        )
+        """.format(dtype, func)
         loc_vars = {}
         exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
         test_impl = loc_vars["f"]
@@ -313,9 +311,7 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
     ):
         func_text = """def f(A):
             return A.{}()
-        """.format(
-            func
-        )
+        """.format(func)
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         test_impl = loc_vars["f"]
@@ -356,9 +352,7 @@ def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
         func_text = """def f(A):
             A = A[A>5]
             return A.{}()
-        """.format(
-            func
-        )
+        """.format(func)
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         test_impl = loc_vars["f"]
@@ -385,9 +379,7 @@ def test_array_reduce(memory_leak_check):
                 for i in numba.prange(n):
                     A {} B
                 return A
-        """.format(
-            typ, typ, op
-        )
+        """.format(typ, typ, op)
         loc_vars = {}
         exec(func_text, {"np": np, "numba": numba, "bodo": bodo}, loc_vars)
         test_impl = loc_vars["f"]
@@ -674,7 +666,7 @@ def test_permuted_array_indexing(memory_leak_check):
     for arr_len in [11, 111, 128, 120]:
         hpat_A, hpat_B = hpat_func1(arr_len)
         python_A, python_B = python_one_dim(arr_len, r)
-        rank_bounds = self._rank_bounds(arr_len)
+        rank_bounds = _rank_bounds(arr_len)
         np.testing.assert_allclose(hpat_A, python_A[slice(*rank_bounds)])
         np.testing.assert_allclose(hpat_B, python_B[slice(*rank_bounds)])
 
@@ -1329,25 +1321,23 @@ def test_parfor_empty_entry_block(memory_leak_check):
                 if b
                 else (
                     False
-                    if ((c > 12))
+                    if (c > 12)
                     else (
                         False
-                        if ((d == "hello"))
+                        if (d == "hello")
                         else (
                             False
-                            if ((e == "hello"))
+                            if (e == "hello")
                             else (
                                 False
-                                if ((f > pd.Timestamp("2021-10-14 00:00:00")))
+                                if (f > pd.Timestamp("2021-10-14 00:00:00"))
                                 else (
                                     False
-                                    if ((g > pd.Timestamp("2021-10-14 00:00:00")))
+                                    if (g > pd.Timestamp("2021-10-14 00:00:00"))
                                     else (
-                                        (
-                                            None
-                                            if (pd.isna(table1_A[i]))
-                                            else ((table1_A[i] > 1))
-                                        )
+                                        None
+                                        if (pd.isna(table1_A[i]))
+                                        else (table1_A[i] > 1)
                                     )
                                 )
                             )

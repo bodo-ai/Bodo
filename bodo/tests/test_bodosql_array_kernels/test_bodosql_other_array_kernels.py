@@ -1,16 +1,14 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL miscellaneous functions
-"""
-
+"""Test Bodo's array kernel utilities for BodoSQL miscellaneous functions"""
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.bodosql_array_kernels import *
 from bodo.libs.bodosql_array_kernels import vectorized_sol
 from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 
@@ -456,8 +454,12 @@ def test_nvl2(args, memory_leak_check):
 
     # avoid Series conversion for scalar output
     if all(not isinstance(arg, pd.Series) for arg in args):
-        impl = lambda arr, not_null_branch, null_branch: bodo.libs.bodosql_array_kernels.nvl2(
-            arr, not_null_branch, null_branch
+        impl = (
+            lambda arr,
+            not_null_branch,
+            null_branch: bodo.libs.bodosql_array_kernels.nvl2(
+                arr, not_null_branch, null_branch
+            )
         )
 
     # Simulates NVL2 on a single row

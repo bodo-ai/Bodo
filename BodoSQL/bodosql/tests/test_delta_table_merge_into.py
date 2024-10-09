@@ -8,7 +8,6 @@ This file should not be extended, as it contains a significant amount of code th
 dedicated to testing MERGE INTO plan generation within BodoSQL.
 """
 
-
 import itertools
 import random
 
@@ -52,9 +51,9 @@ using_cond_one = "SOURCE_TABLE as SOURCE_TABLE"
 target_one_source_one_condition_one_matched_rows = source_df_one.merge(
     target_df_one, left_on="X", right_on="A"
 )
-target_one_source_one_condition_one_matched_rows[
-    ROW_ID_COL_NAME
-] = target_one_source_one_condition_one_matched_rows["A"]
+target_one_source_one_condition_one_matched_rows[ROW_ID_COL_NAME] = (
+    target_one_source_one_condition_one_matched_rows["A"]
+)
 target_one_source_one_condition_one_not_matched_rows = pd.DataFrame(
     {"X": [20], "Y": [-4], "Z": [-8], ROW_ID_COL_NAME: [None]}
 )

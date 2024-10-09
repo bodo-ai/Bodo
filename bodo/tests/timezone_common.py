@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Common fixtures used for timezone testing."""
+
 import datetime
 
 import pandas as pd

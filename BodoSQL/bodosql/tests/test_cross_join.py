@@ -42,16 +42,14 @@ def test_nested_cross_join(join_dataframes, spark_info, memory_leak_check):
     and with nullable values in one or more tables"""
 
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["T1", "T2", "T3"]
     else:
         convert_columns_bytearray = None
 
-    query = f"""
+    query = """
     SELECT
         table3.Y as T1, table4.A as T2, table4.C as T3
     FROM
@@ -78,10 +76,8 @@ def test_cross_join_select_star(join_dataframes, spark_info, memory_leak_check):
     """
 
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         # Have to skip, as we can't cast the columns without explicitly providing the names
         # (BodoSQL will assign temp column names)
@@ -102,10 +98,8 @@ def test_cross_join_select_filter(join_dataframes, spark_info, memory_leak_check
     """
 
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["C1", "C2"]
     else:
@@ -130,16 +124,14 @@ def test_nested_cross_join_with_filter_select_star(
     and with nullable values in one or more tables, with filters and select star's"""
 
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["T1", "T2"]
     else:
         convert_columns_bytearray = None
 
-    query = f"""
+    query = """
     SELECT
         table4.Y as T1, table4.A as T2
     FROM

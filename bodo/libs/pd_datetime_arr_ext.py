@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """DatetimeArray extension for Pandas DatetimeArray with timezone support."""
+
 import datetime
 import operator
 from typing import Any, Union
@@ -43,7 +44,7 @@ from bodo.utils.typing import (
 
 
 @register_jitable
-def build_dt_valid_bitmap(ts: npt.NDArray["timestamp64"]):  # pragma: no cover
+def build_dt_valid_bitmap(ts: npt.NDArray["np.datetime64"]):  # pragma: no cover
     nbytes = bitmap_size(len(ts))
     nulls_arr = np.empty(nbytes, np.uint8)
 

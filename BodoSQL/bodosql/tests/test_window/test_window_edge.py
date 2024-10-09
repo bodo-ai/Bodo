@@ -138,11 +138,11 @@ def test_window_case(uint8_window_df, spark_info):
             (f"AVG(A) OVER ({window1A}) < 4.0", "'A-'"),
             (f"AVG(A) OVER ({window2}) > 6.0", "'B+'"),
             (f"AVG(A) OVER ({window2}) < 4.0", "'B-'"),
-            (None, f"'C'"),
+            (None, "'C'"),
         ],
         [
-            (f"A < 5", f"COUNT(A) OVER ({window2})"),
-            (f"A >= 5", f"COUNT(A) OVER ({window1A})"),
+            ("A < 5", f"COUNT(A) OVER ({window2})"),
+            ("A >= 5", f"COUNT(A) OVER ({window1A})"),
             (None, f"LEAD(A, 3) OVER ({window1B})"),
         ],
     ]
@@ -155,7 +155,7 @@ def test_window_case(uint8_window_df, spark_info):
                 new_case += f"WHEN {args[0]} THEN {args[1]} "
         cases.append(f"CASE {new_case} END")
     query = f"SELECT W4, {', '.join(cases)} FROM table1"
-    pandas_code = check_query(
+    _ = check_query(
         query,
         uint8_window_df,
         spark_info,

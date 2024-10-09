@@ -1,4 +1,5 @@
-"""Test Spark parity functions that are in objmode """
+"""Test Spark parity functions that are in objmode"""
+
 import zlib
 
 import pytest

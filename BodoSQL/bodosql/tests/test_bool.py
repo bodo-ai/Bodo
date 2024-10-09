@@ -2,6 +2,7 @@
 """
 Test correctness of SQL boolean functions on BodoSQL
 """
+
 import datetime
 
 import pandas as pd

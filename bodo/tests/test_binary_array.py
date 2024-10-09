@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's binary array data type
-"""
+"""Test Bodo's binary array data type"""
 
 import numpy as np
 import pandas as pd

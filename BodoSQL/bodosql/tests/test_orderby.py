@@ -2,6 +2,7 @@
 """
 Test correctness of SQL queries containing orderby on BodoSQL
 """
+
 import pandas as pd
 import pytest
 
@@ -130,7 +131,7 @@ def test_orderby_bool(bodosql_boolean_types, memory_leak_check):
     """
     Tests orderby works in the simple case for boolean types
     """
-    query = f"""
+    query = """
         SELECT
              A, B, C
         FROM
@@ -138,7 +139,7 @@ def test_orderby_bool(bodosql_boolean_types, memory_leak_check):
         ORDER BY
             A, B, C
         """
-    query2 = f"""
+    query2 = """
         SELECT
              A, B, C
         FROM
@@ -181,7 +182,7 @@ def test_orderby_str(bodosql_string_types, spark_info, memory_leak_check):
     Tests orderby works in the simple case for string types
     Note: We include A to resolve ties.
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -189,7 +190,7 @@ def test_orderby_str(bodosql_string_types, spark_info, memory_leak_check):
         ORDER BY
             B, A
         """
-    query2 = f"""
+    query2 = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -205,7 +206,7 @@ def test_orderby_binary(bodosql_binary_types, memory_leak_check):
     """
     Tests orderby works in the simple case for binary types
     """
-    query = f"""
+    query = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -235,7 +236,7 @@ def test_orderby_datetime(bodosql_datetime_types, memory_leak_check):
     """
     Tests orderby works in the simple case for datetime types
     """
-    query1 = f"""
+    query1 = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -243,7 +244,7 @@ def test_orderby_datetime(bodosql_datetime_types, memory_leak_check):
         ORDER BY
             A, B, C
         """
-    query2 = f"""
+    query2 = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -275,7 +276,7 @@ def test_orderby_interval(bodosql_interval_types, memory_leak_check):
     """
     Tests orderby works in the simple case for timedelta types
     """
-    query1 = f"""
+    query1 = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -283,7 +284,7 @@ def test_orderby_interval(bodosql_interval_types, memory_leak_check):
         ORDER BY
             A
         """
-    query2 = f"""
+    query2 = """
         SELECT
             DISTINCT A, B, C
         FROM
@@ -314,7 +315,7 @@ def test_distinct_orderby(bodosql_numeric_types, spark_info, memory_leak_check):
     """
     Tests orderby and distinct work together as intended
     """
-    query = f"""
+    query = """
         SELECT
             distinct A, B
         FROM
@@ -332,7 +333,7 @@ def test_orderby_multiple_cols(col_a_identical_tables, memory_leak_check):
     """
     checks that orderby works correctly when sorting by multiple columns
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -373,7 +374,7 @@ def test_orderby_nulls_defaults(null_ordering_table, spark_info):
     """
     checks that order by null ordering is ASC by default with NULLS LAST
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -399,7 +400,7 @@ def test_orderby_nulls_defaults_asc(null_ordering_table, memory_leak_check):
     """
     checks that order by null ordering is NULLS LAST for ASC
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -425,7 +426,7 @@ def test_orderby_nulls_defaults_desc(null_ordering_table, memory_leak_check):
     """
     checks that order by null ordering is NULLS FIRST for DESC
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -458,7 +459,7 @@ def test_orderby_nulls_first(null_ordering_table, spark_info, memory_leak_check)
     """
     checks that order by null ordering matches with nulls first
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -481,7 +482,7 @@ def test_orderby_nulls_last(null_ordering_table, spark_info, memory_leak_check):
     """
     checks that order by null ordering matches with nulls last
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -503,7 +504,7 @@ def test_orderby_nulls_first_last(null_ordering_table, spark_info, memory_leak_c
     """
     checks that order by null ordering matches with nulls first and last
     """
-    query = f"""
+    query = """
         SELECT
             A, B
         FROM
@@ -559,7 +560,7 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
     large_timestamp = pd.Timestamp("2050-1-1", tz=representative_tz)
     small_timestamp = pd.Timestamp("1970-1-1", tz=representative_tz)
 
-    query1 = f"""
+    query1 = """
         Select *
         FROM table1
         ORDER BY
@@ -582,7 +583,7 @@ def test_orderby_tz_aware(representative_tz, memory_leak_check):
         session_tz=representative_tz,
     )
 
-    query2 = f"""
+    query2 = """
         Select *
         FROM table1
         ORDER BY

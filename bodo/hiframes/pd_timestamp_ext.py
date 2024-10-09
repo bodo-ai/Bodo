@@ -634,7 +634,19 @@ def overload_pd_timestamp(
     # for pd.Timestamp(), just return input
     if isinstance(ts_input, PandasTimestampType):
         return (
-            lambda ts_input=_no_input, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None: ts_input
+            lambda ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None: ts_input
         )  # pragma: no cover
 
     if ts_input == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
@@ -988,8 +1000,8 @@ def overload_pd_timestamp_day_name(ptt, locale=None):
     Support for Timestamp.day_name(). This returns the full name
     of the day of the week as a string.
     """
-    unsupported_args = dict(locale=locale)
-    arg_defaults = dict(locale=None)
+    unsupported_args = {"locale": locale}
+    arg_defaults = {"locale": None}
     check_unsupported_args(
         "Timestamp.day_name",
         unsupported_args,
@@ -1021,8 +1033,8 @@ def overload_pd_timestamp_month_name(ptt, locale=None):
     Support for Timestamp.month_name(). This returns the full name
     of the month as a string.
     """
-    unsupported_args = dict(locale=locale)
-    arg_defaults = dict(locale=None)
+    unsupported_args = {"locale": locale}
+    arg_defaults = {"locale": None}
     check_unsupported_args(
         "Timestamp.month_name",
         unsupported_args,
@@ -1071,8 +1083,8 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
         raise BodoError(
             "Cannot localize tz-aware Timestamp, use tz_convert for conversions"
         )
-    unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
-    defaults_args = dict(ambiguous="raise", nonexistent="raise")
+    unsupported_args = {"ambiguous": ambiguous, "nonexistent": nonexistent}
+    defaults_args = {"ambiguous": "raise", "nonexistent": "raise"}
     check_unsupported_args(
         "Timestamp.tz_localize",
         unsupported_args,
@@ -1137,14 +1149,14 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
         sign = "+"
 
     func_text = "def impl(ptt, tz, ambiguous='raise', nonexistent='raise'):\n"
-    func_text += f"    value =  ptt.value\n"
+    func_text += "    value =  ptt.value\n"
     func_text += f"    delta =  {delta_str}\n"
     func_text += f"    new_value = value {sign} delta\n"
     if check_transitions:
         func_text += "    end_delta = deltas[np.searchsorted(trans, new_value, side='right') - 1]\n"
         func_text += "    offset = delta - end_delta\n"
         func_text += "    new_value = new_value + offset\n"
-    func_text += f"    return convert_val_to_timestamp(new_value, tz=tz)\n"
+    func_text += "    return convert_val_to_timestamp(new_value, tz=tz)\n"
     loc_vars = {}
     exec(
         func_text,
@@ -1367,7 +1379,7 @@ def compute_val_for_timestamp(
 
     func_text = "def impl(year, month, day, hour, minute, second, microsecond, nanosecond, tz):\n"
     # Subtract the offset
-    func_text += f"  original_value = npy_datetimestruct_to_datetime(year, month, day, hour, minute, second, microsecond) + nanosecond\n"
+    func_text += "  original_value = npy_datetimestruct_to_datetime(year, month, day, hour, minute, second, microsecond) + nanosecond\n"
     # In this case the delta is a fixed offset in nanoseconds that is the amount to add from utc to the current
     # timezone. As a result we subtract this value.
     # Example:
@@ -1394,7 +1406,7 @@ def compute_val_for_timestamp(
     func_text += "    second=second,\n"
     func_text += "    microsecond=microsecond,\n"
     func_text += "    nanosecond=nanosecond,\n"
-    func_text += f"    value=value,\n"
+    func_text += "    value=value,\n"
     func_text += "    tz=tz,\n"
     func_text += "  )\n"
     loc_vars = {}
@@ -1912,8 +1924,17 @@ def overload_to_datetime(
 
     # return DatetimeIndex if input is array(dt64)
     if arg_a == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return lambda arg_a, errors="raise", dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, origin="unix", cache=True: bodo.hiframes.pd_index_ext.init_datetime_index(
-            arg_a, None
+        return (
+            lambda arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            origin="unix",
+            cache=True: bodo.hiframes.pd_index_ext.init_datetime_index(arg_a, None)
         )  # pragma: no cover
 
     # string_array_type as input
@@ -2431,8 +2452,8 @@ def toordinal(date):
 # https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timedeltas.pyx#L1219
 def overload_freq_methods(method):
     def freq_overload(td, freq, ambiguous="raise", nonexistent="raise"):
-        unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
-        floor_defaults = dict(ambiguous="raise", nonexistent="raise")
+        unsupported_args = {"ambiguous": ambiguous, "nonexistent": nonexistent}
+        floor_defaults = {"ambiguous": "raise", "nonexistent": "raise"}
         check_unsupported_args(
             f"Timestamp.{method}",
             unsupported_args,
@@ -2475,7 +2496,7 @@ def overload_freq_methods(method):
             )
         else:
             assert isinstance(td, PandasTimestampType), "Value must be a timestamp"
-            func_text += f"    value = td.value\n"
+            func_text += "    value = td.value\n"
             tz_literal = td.tz
             if tz_literal is not None:
                 # If we a timezone we need to remove the offset from UTC before computing
@@ -2511,7 +2532,7 @@ def overload_freq_methods(method):
                     # Integers are always the offset in nanoseconds
                     delta_str = str(tz_literal)
                 func_text += f"    delta = {delta_str}\n"
-                func_text += f"    value = value + delta\n"
+                func_text += "    value = value + delta\n"
 
             if method == "ceil":
                 func_text += "    value = value + np.remainder(-value, unit_value)\n"
@@ -2531,7 +2552,7 @@ def overload_freq_methods(method):
                 func_text += "        value = quotient * unit_value\n"
             if tz_literal is not None:
                 if has_transitions:
-                    func_text += f"    original_value = value\n"
+                    func_text += "    original_value = value\n"
                     func_text += "    start_trans = deltas[np.searchsorted(trans, original_value, side='right') - 1]\n"
                     # Restore the delta which may have changed
                     func_text += "    value = value - start_trans\n"
@@ -2559,7 +2580,7 @@ def overload_freq_methods(method):
                     func_text += "    value = value + offset\n"
                 else:
                     # Restore the delta which hasn't changed.
-                    func_text += f"    value = value - delta\n"
+                    func_text += "    value = value - delta\n"
             func_text += "    return pd.Timestamp(value, tz=tz_literal)\n"
         loc_vars = {}
         exec(

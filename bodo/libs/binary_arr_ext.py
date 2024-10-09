@@ -3,6 +3,7 @@
 It is equivalent to string array, except that it stores a 'bytes' object for each
 element instead of 'str'.
 """
+
 import operator
 
 import llvmlite.binding as ll

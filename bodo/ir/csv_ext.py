@@ -150,7 +150,7 @@ def check_node_typing(node, typemap):
         skiprows_typ = typemap[node.skiprows.name]
         if isinstance(skiprows_typ, types.Dispatcher):
             raise BodoError(
-                f"pd.read_csv(): 'skiprows' callable not supported yet.",
+                "pd.read_csv(): 'skiprows' callable not supported yet.",
                 node.file_name.loc,
             )
             # is_overload_constant_list
@@ -368,8 +368,8 @@ def csv_distributed_run(
         # Create a wrapper function that will be compiled. This will return
         # an iterator.
         func_text = "def csv_iterator_impl(fname, nrows, skiprows):\n"
-        func_text += f"    reader = _csv_reader_init(fname, nrows, skiprows)\n"
-        func_text += f"    iterator = init_csv_iterator(reader, csv_iterator_type)\n"
+        func_text += "    reader = _csv_reader_init(fname, nrows, skiprows)\n"
+        func_text += "    iterator = init_csv_iterator(reader, csv_iterator_type)\n"
         loc_vars = {}
         from bodo.io.csv_iterator_ext import init_csv_iterator
 
@@ -434,7 +434,7 @@ def csv_distributed_run(
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     # get column variables
     func_text = "def csv_impl(fname, nrows, skiprows):\n"
-    func_text += f"    (table_val, idx_col) = _csv_reader_py(fname, nrows, skiprows)\n"
+    func_text += "    (table_val, idx_col) = _csv_reader_py(fname, nrows, skiprows)\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -571,25 +571,25 @@ def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
     )
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    CsvReader
-] = bodo.ir.connector.connector_array_analysis
-distributed_analysis.distributed_analysis_extensions[
-    CsvReader
-] = bodo.ir.connector.connector_distributed_analysis
+numba.parfors.array_analysis.array_analysis_extensions[CsvReader] = (
+    bodo.ir.connector.connector_array_analysis
+)
+distributed_analysis.distributed_analysis_extensions[CsvReader] = (
+    bodo.ir.connector.connector_distributed_analysis
+)
 typeinfer.typeinfer_extensions[CsvReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[CsvReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[CsvReader] = remove_dead_csv
-numba.core.analysis.ir_extension_usedefs[
-    CsvReader
-] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[CsvReader] = (
+    bodo.ir.connector.connector_usedefs
+)
 ir_utils.copy_propagate_extensions[CsvReader] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[
-    CsvReader
-] = bodo.ir.connector.apply_copies_connector
-ir_utils.build_defs_extensions[
-    CsvReader
-] = bodo.ir.connector.build_connector_definitions
+ir_utils.apply_copy_propagate_extensions[CsvReader] = (
+    bodo.ir.connector.apply_copies_connector
+)
+ir_utils.build_defs_extensions[CsvReader] = (
+    bodo.ir.connector.build_connector_definitions
+)
 distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
 remove_dead_column_extensions[CsvReader] = csv_remove_dead_column
 ir_extension_table_column_use[CsvReader] = bodo.ir.connector.connector_table_column_use
@@ -949,7 +949,7 @@ def _gen_read_csv_objmode(
     else:
         func_text += f"  with bodo.no_warning_objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
     # create typemap for `df.astype` in runtime
-    func_text += f"    typemap = {{}}\n"
+    func_text += "    typemap = {}\n"
     for i, t_str in enumerate(typ_map.keys()):
         func_text += (
             f"    typemap.update({{i:{t_str} for i in t_arr_{i}_{call_id}_2}})\n"
@@ -998,11 +998,11 @@ def _gen_read_csv_objmode(
     # if usecols is empty, the table is dead, see remove_dead_csv.
     # In this case, we simply return None
     if len(usecols) == 0:
-        func_text += f"    T = None\n"
+        func_text += "    T = None\n"
     else:
-        func_text += f"    arrs = []\n"
-        func_text += f"    for i in range(df.shape[1]):\n"
-        func_text += f"      arrs.append(df.iloc[:, i].values)\n"
+        func_text += "    arrs = []\n"
+        func_text += "    for i in range(df.shape[1]):\n"
+        func_text += "      arrs.append(df.iloc[:, i].values)\n"
         # Bodo preserves all of the original types needed at typing in col_typs
         func_text += f"    T = Table(arrs, type_usecols_offsets_arr_{call_id}_2, {len(col_names)})\n"
     return func_text
@@ -1063,7 +1063,7 @@ def _gen_csv_reader_py(
     # 'pd': pd, 'np': np}
     # objmode type variable used in _gen_read_csv_objmode
     if idx_col_typ != types.none:
-        glbls[f"idx_array_typ"] = idx_col_typ
+        glbls["idx_array_typ"] = idx_col_typ
 
     # in the case that usecols is empty, the table is dead.
     # in this case, we simply return the

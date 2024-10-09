@@ -1,6 +1,7 @@
 """
 JIT support for Python's logging module
 """
+
 import logging
 
 import numba

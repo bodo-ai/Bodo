@@ -92,7 +92,7 @@ def strategic(df_pg, pg_type, strategy):
 @bodo.jit(distributed=False)
 def unit(df_pg):
     df_pg["Perc_Price"] = df_pg.VALID_PRICES.apply(perceived)
-    Perc_Ref_Price = df_pg.REF_PRICE.apply(perceived)
+    df_pg.REF_PRICE.apply(perceived)
 
     x = (df_pg.Perc_Price - df_pg.util) / df_pg.REF_PRICE
     x = np.exp(-df_pg.eps * x)

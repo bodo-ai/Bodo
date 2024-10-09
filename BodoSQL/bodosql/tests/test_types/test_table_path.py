@@ -3,6 +3,7 @@
 Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.
 """
+
 import io
 import json
 import os

@@ -71,11 +71,11 @@ def bodosql_listagg(
     ascending = get_overload_const_tuple(ascending)
     na_position = get_overload_const_tuple(na_position)
 
-    assert len(ascending) == len(
-        na_position
+    assert (
+        len(ascending) == len(na_position)
     ), "Internal error in bodosql_listagg_common: ascending and na_position must have same length"
-    assert len(ascending) == len(
-        order_cols
+    assert (
+        len(ascending) == len(order_cols)
     ), "Internal error in bodosql_listagg_common: ascending and order_cols must have same length"
 
     for order_col in order_cols:

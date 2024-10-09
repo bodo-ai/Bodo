@@ -2,6 +2,7 @@
 """
 Implementation of DataFrame attributes and methods using overload.
 """
+
 import operator
 import re
 import warnings
@@ -182,11 +183,11 @@ def overload_dataframe_values(df):
 
     n_cols = len(df.columns)
     # convert nullable data columns to float to match Pandas behavior
-    nullable_arr_cols = set(
+    nullable_arr_cols = {
         i
         for i in range(n_cols)
         if isinstance(df.data[i], (IntegerArrayType, FloatingArrayType))
-    )
+    }
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
             i, ".astype(float)" if i in nullable_arr_cols else ""
@@ -348,13 +349,13 @@ def _get_dtype_str(dtype):
     """
     # function cases like str
     if isinstance(dtype, types.Function):  # pragma: no cover
-        if dtype.key[0] == str:
+        if dtype.key[0] is str:
             return "'str'"
-        elif dtype.key[0] == float:
+        elif dtype.key[0] is float:
             return "float"
-        elif dtype.key[0] == int:
+        elif dtype.key[0] is int:
             return "int"
-        elif dtype.key[0] == bool:
+        elif dtype.key[0] is bool:
             return "bool"
         else:
             raise BodoError(f"invalid dtype: {dtype}")
@@ -648,11 +649,9 @@ def overload_dataframe_rename(
         "copy=True, inplace=False, level=None, errors='ignore', _bodo_transformed=False):\n"
     )
     extra_globals = None
-    out_df_type = None
 
     if df.is_table_format:
         header += "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
-        out_df_type = df.copy(columns=new_cols)
         output_arr_typ = types.none
         extra_globals = {"output_arr_typ": output_arr_typ}
         if is_overload_false(copy):
@@ -933,7 +932,6 @@ def overload_dataframe_notna(df):
     check_runtime_cols_unsupported(df, "DataFrame.notna()")
     header = "def impl(df):\n"
     extra_globals = None
-    out_df_type = None
     if df.is_table_format:
         # notna generates a boolean array for every column
         output_arr_typ = bodo.boolean_array_type
@@ -1285,8 +1283,8 @@ def dataframe_corr_lower(context, builder, sig, args):
 def overload_dataframe_cov(df, min_periods=None, ddof=1):
     check_runtime_cols_unsupported(df, "DataFrame.cov()")
 
-    unsupported_args = dict(ddof=ddof)
-    arg_defaults = dict(ddof=1)
+    unsupported_args = {"ddof": ddof}
+    arg_defaults = {"ddof": 1}
     check_unsupported_args(
         "DataFrame.cov",
         unsupported_args,
@@ -1341,8 +1339,8 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     check_runtime_cols_unsupported(df, "DataFrame.count()")
     # TODO: numeric_only flag
-    unsupported_args = dict(axis=axis, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(axis=0, level=None, numeric_only=False)
+    unsupported_args = {"axis": axis, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"axis": 0, "level": None, "numeric_only": False}
     check_unsupported_args(
         "DataFrame.count",
         unsupported_args,
@@ -1370,8 +1368,8 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 @overload_method(DataFrameType, "nunique", inline="always", no_unliteral=True)
 def overload_dataframe_nunique(df, axis=0, dropna=True):
     check_runtime_cols_unsupported(df, "DataFrame.unique()")
-    unsupported_args = dict(axis=axis)
-    arg_defaults = dict(axis=0)
+    unsupported_args = {"axis": axis}
+    arg_defaults = {"axis": 0}
     if not is_overload_bool(dropna):
         raise BodoError("DataFrame.nunique: dropna must be a boolean value")
     check_unsupported_args(
@@ -1403,10 +1401,13 @@ def overload_dataframe_prod(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
     check_runtime_cols_unsupported(df, "DataFrame.prod()")
-    unsupported_args = dict(
-        skipna=skipna, level=level, numeric_only=numeric_only, min_count=min_count
-    )
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None, min_count=0)
+    unsupported_args = {
+        "skipna": skipna,
+        "level": level,
+        "numeric_only": numeric_only,
+        "min_count": min_count,
+    }
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None, "min_count": 0}
     check_unsupported_args(
         "DataFrame.prod",
         unsupported_args,
@@ -1424,10 +1425,13 @@ def overload_dataframe_sum(
     df, axis=None, skipna=None, level=None, numeric_only=None, min_count=0
 ):
     check_runtime_cols_unsupported(df, "DataFrame.sum()")
-    unsupported_args = dict(
-        skipna=skipna, level=level, numeric_only=numeric_only, min_count=min_count
-    )
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None, min_count=0)
+    unsupported_args = {
+        "skipna": skipna,
+        "level": level,
+        "numeric_only": numeric_only,
+        "min_count": min_count,
+    }
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None, "min_count": 0}
     check_unsupported_args(
         "DataFrame.sum",
         unsupported_args,
@@ -1443,8 +1447,8 @@ def overload_dataframe_sum(
 @overload_method(DataFrameType, "max", inline="always", no_unliteral=True)
 def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=None):
     check_runtime_cols_unsupported(df, "DataFrame.max()")
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "DataFrame.max",
         unsupported_args,
@@ -1460,8 +1464,8 @@ def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=
 @overload_method(DataFrameType, "min", inline="always", no_unliteral=True)
 def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=None):
     check_runtime_cols_unsupported(df, "DataFrame.min()")
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "DataFrame.min",
         unsupported_args,
@@ -1476,8 +1480,8 @@ def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=
 @overload_method(DataFrameType, "mean", inline="always", no_unliteral=True)
 def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only=None):
     check_runtime_cols_unsupported(df, "DataFrame.mean()")
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "DataFrame.mean",
         unsupported_args,
@@ -1495,10 +1499,13 @@ def overload_dataframe_var(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
     check_runtime_cols_unsupported(df, "DataFrame.var()")
-    unsupported_args = dict(
-        skipna=skipna, level=level, ddof=ddof, numeric_only=numeric_only
-    )
-    arg_defaults = dict(skipna=None, level=None, ddof=1, numeric_only=None)
+    unsupported_args = {
+        "skipna": skipna,
+        "level": level,
+        "ddof": ddof,
+        "numeric_only": numeric_only,
+    }
+    arg_defaults = {"skipna": None, "level": None, "ddof": 1, "numeric_only": None}
     check_unsupported_args(
         "DataFrame.var",
         unsupported_args,
@@ -1516,10 +1523,13 @@ def overload_dataframe_std(
     df, axis=None, skipna=None, level=None, ddof=1, numeric_only=None
 ):
     check_runtime_cols_unsupported(df, "DataFrame.std()")
-    unsupported_args = dict(
-        skipna=skipna, level=level, ddof=ddof, numeric_only=numeric_only
-    )
-    arg_defaults = dict(skipna=None, level=None, ddof=1, numeric_only=None)
+    unsupported_args = {
+        "skipna": skipna,
+        "level": level,
+        "ddof": ddof,
+        "numeric_only": numeric_only,
+    }
+    arg_defaults = {"skipna": None, "level": None, "ddof": 1, "numeric_only": None}
     check_unsupported_args(
         "DataFrame.std",
         unsupported_args,
@@ -1537,8 +1547,8 @@ def overload_dataframe_median(
     df, axis=None, skipna=None, level=None, numeric_only=None
 ):
     check_runtime_cols_unsupported(df, "DataFrame.median()")
-    unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
-    arg_defaults = dict(skipna=None, level=None, numeric_only=None)
+    unsupported_args = {"skipna": skipna, "level": level, "numeric_only": numeric_only}
+    arg_defaults = {"skipna": None, "level": None, "numeric_only": None}
     check_unsupported_args(
         "DataFrame.median",
         unsupported_args,
@@ -1556,8 +1566,8 @@ def overload_dataframe_quantile(
     df, q=0.5, axis=0, numeric_only=True, interpolation="linear"
 ):
     check_runtime_cols_unsupported(df, "DataFrame.quantile()")
-    unsupported_args = dict(numeric_only=numeric_only, interpolation=interpolation)
-    arg_defaults = dict(numeric_only=True, interpolation="linear")
+    unsupported_args = {"numeric_only": numeric_only, "interpolation": interpolation}
+    arg_defaults = {"numeric_only": True, "interpolation": "linear"}
     check_unsupported_args(
         "DataFrame.quantile",
         unsupported_args,
@@ -1577,8 +1587,8 @@ def overload_dataframe_quantile(
 def overload_dataframe_idxmax(df, axis=0, skipna=True):
     check_runtime_cols_unsupported(df, "DataFrame.idxmax()")
     # TODO: [BE-281] Support idxmax with axis=1
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=0, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": 0, "skipna": True}
     check_unsupported_args(
         "DataFrame.idxmax",
         unsupported_args,
@@ -1622,8 +1632,8 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
 def overload_dataframe_idxmin(df, axis=0, skipna=True):
     check_runtime_cols_unsupported(df, "DataFrame.idxmin()")
     # TODO: [BE-281] Support idxmin with axis=1
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=0, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": 0, "skipna": True}
     check_unsupported_args(
         "DataFrame.idxmin",
         unsupported_args,
@@ -1880,8 +1890,8 @@ def overload_dataframe_pct_change(
     df, periods=1, fill_method="pad", limit=None, freq=None
 ):
     check_runtime_cols_unsupported(df, "DataFrame.pct_change()")
-    unsupported_args = dict(fill_method=fill_method, limit=limit, freq=freq)
-    arg_defaults = dict(fill_method="pad", limit=None, freq=None)
+    unsupported_args = {"fill_method": fill_method, "limit": limit, "freq": freq}
+    arg_defaults = {"fill_method": "pad", "limit": None, "freq": None}
     check_unsupported_args(
         "DataFrame.pct_change",
         unsupported_args,
@@ -1904,8 +1914,8 @@ def overload_dataframe_pct_change(
 @overload_method(DataFrameType, "cumprod", inline="always", no_unliteral=True)
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
     check_runtime_cols_unsupported(df, "DataFrame.cumprod()")
-    unsupported_args = dict(axis=axis, skipna=skipna)
-    arg_defaults = dict(axis=None, skipna=True)
+    unsupported_args = {"axis": axis, "skipna": skipna}
+    arg_defaults = {"axis": None, "skipna": True}
     check_unsupported_args(
         "DataFrame.cumprod",
         unsupported_args,
@@ -1926,8 +1936,8 @@ def overload_dataframe_cumprod(df, axis=None, skipna=True):
 @overload_method(DataFrameType, "cumsum", inline="always", no_unliteral=True)
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
     check_runtime_cols_unsupported(df, "DataFrame.cumsum()")
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = {"skipna": skipna}
+    arg_defaults = {"skipna": True}
     check_unsupported_args(
         "DataFrame.cumsum",
         unsupported_args,
@@ -1961,12 +1971,12 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
     Support df.describe with numeric and datetime column.
     """
     check_runtime_cols_unsupported(df, "DataFrame.describe()")
-    unsupported_args = dict(
-        percentiles=percentiles,
-        include=include,
-        exclude=exclude,
-    )
-    arg_defaults = dict(percentiles=None, include=None, exclude=None)
+    unsupported_args = {
+        "percentiles": percentiles,
+        "include": include,
+        "exclude": exclude,
+    }
+    arg_defaults = {"percentiles": None, "include": None, "exclude": None}
     check_unsupported_args(
         "DataFrame.describe",
         unsupported_args,
@@ -2025,8 +2035,8 @@ def overload_dataframe_describe(df, percentiles=None, include=None, exclude=None
 @overload_method(DataFrameType, "take", inline="always", no_unliteral=True)
 def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     check_runtime_cols_unsupported(df, "DataFrame.take()")
-    unsupported_args = dict(axis=axis, convert=convert, is_copy=is_copy)
-    arg_defaults = dict(axis=0, convert=None, is_copy=True)
+    unsupported_args = {"axis": axis, "convert": convert, "is_copy": is_copy}
+    arg_defaults = {"axis": 0, "convert": None, "is_copy": True}
     check_unsupported_args(
         "DataFrame.take",
         unsupported_args,
@@ -2050,14 +2060,14 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     check_runtime_cols_unsupported(df, "DataFrame.shift()")
     # TODO: handle freq, int NA
     # TODO: Support nullable float types
-    unsupported_args = dict(
-        freq=freq,
-        axis=axis,
-    )
-    arg_defaults = dict(
-        freq=None,
-        axis=0,
-    )
+    unsupported_args = {
+        "freq": freq,
+        "axis": axis,
+    }
+    arg_defaults = {
+        "freq": None,
+        "axis": 0,
+    }
     check_unsupported_args(
         "DataFrame.shift",
         unsupported_args,
@@ -2094,8 +2104,8 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     """DataFrame.diff() support which is the same as df - df.shift(periods)"""
     check_runtime_cols_unsupported(df, "DataFrame.diff()")
     # TODO: Support nullable integer/float types
-    unsupported_args = dict(axis=axis)
-    arg_defaults = dict(axis=0)
+    unsupported_args = {"axis": axis}
+    arg_defaults = {"axis": 0}
     check_unsupported_args(
         "DataFrame.diff",
         unsupported_args,
@@ -2164,9 +2174,7 @@ def overload_dataframe_explode(df, column, ignore_index=False):
             not isinstance(df.data[i], ArrayItemArrayType)
             and df.data[i].dtype != string_array_split_view_type
         ):
-            raise BodoError(
-                f"DataFrame.explode(): columns must have array-like entries"
-            )
+            raise BodoError("DataFrame.explode(): columns must have array-like entries")
     n = len(df.columns)
     header = "def impl(df, column, ignore_index=False):\n"
     header += "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
@@ -2393,7 +2401,7 @@ def overload_dataframe_drop_duplicates(
     if dict_cols:
         raise BodoError(
             f"DataFrame.drop_duplicates(): Columns {dict_cols} "
-            + f"have dictionary types which cannot be used to drop duplicates. "
+            + "have dictionary types which cannot be used to drop duplicates. "
             + "Please consider using the 'subset' argument to skip these columns."
         )
 
@@ -2560,10 +2568,18 @@ def _validate_arguments_mask_where(
     Helper function to perform the necessary error checking for
     Series.where() and Series.mask().
     """
-    unsupported_args = dict(
-        inplace=inplace, level=level, errors=errors, try_cast=try_cast
-    )
-    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
+    unsupported_args = {
+        "inplace": inplace,
+        "level": level,
+        "errors": errors,
+        "try_cast": try_cast,
+    }
+    arg_defaults = {
+        "inplace": False,
+        "level": None,
+        "errors": "raise",
+        "try_cast": False,
+    }
     check_unsupported_args(
         f"{func_name}",
         unsupported_args,
@@ -2711,7 +2727,7 @@ def create_binary_op_overload(op):
                     if l_ind != -1 and r_ind != -1
                     # Pandas always generates an array of NaNs if an intput is missing a
                     # column
-                    else f"bodo.libs.array_kernels.gen_na_array(len(lhs), float64_arr_type)"
+                    else "bodo.libs.array_kernels.gen_na_array(len(lhs), float64_arr_type)"
                     for l_ind, r_ind in zip(lcol_inds, rcol_inds)
                 )
                 header = "def impl(lhs, rhs):\n"
@@ -3240,7 +3256,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
         return expr_node
 
     null_set = set()
-    modified_expr_nodes = _insert_NA_cond_body(expr_node, null_set)
+    _insert_NA_cond_body(expr_node, null_set)
     return append_null_checks(expr_node, null_set)
 
 
@@ -3313,7 +3329,7 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     resolver = {"left": 0, "right": 0}
     # create fake environment for Expr to enable parsing
     env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
-    col_map = dict()
+    col_map = {}
     # When Pandas parses the query expression, all column names
     # that are not valid identifiers will be "cleaned" to become a
     # name that is a valid identifier
@@ -3382,8 +3398,8 @@ def overload_dataframe_merge(
     # several independent operations over the output before the next shuffle.
     check_runtime_cols_unsupported(left, "DataFrame.merge()")
     check_runtime_cols_unsupported(right, "DataFrame.merge()")
-    unsupported_args = dict(sort=sort, copy=copy, validate=validate)
-    arg_defaults = dict(sort=False, copy=True, validate=None)
+    unsupported_args = {"sort": sort, "copy": copy, "validate": validate}
+    arg_defaults = {"sort": False, "copy": True, "validate": None}
     check_unsupported_args(
         "DataFrame.merge",
         unsupported_args,
@@ -3589,7 +3605,8 @@ def common_validate_merge_merge_asof_spec(
 
         if len(comm_cols) == 0 and not is_gen_cond:
             raise_bodo_error(
-                name_func + "(): No common columns to perform merge on. "
+                name_func
+                + "(): No common columns to perform merge on. "
                 "Merge options: left_on={lon}, right_on={ron}, "
                 "left_index={lidx}, right_index={ridx}".format(
                     lon=is_overload_true(left_on),
@@ -3766,10 +3783,8 @@ def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_
         lk_type = lk_type.dtype
         rk_type = rk_type.dtype
         try:
-            ret_dtype = typing_context.resolve_function_type(
-                operator.eq, (lk_type, rk_type), {}
-            )
-        except:
+            typing_context.resolve_function_type(operator.eq, (lk_type, rk_type), {})
+        except Exception:
             raise_bodo_error(
                 "merge: You are trying to merge on {lk_dtype} and "
                 "{rk_dtype} columns. If you wish to proceed "
@@ -3802,10 +3817,10 @@ def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_
                 raise_bodo_error(msg)
 
             try:
-                ret_dtype = typing_context.resolve_function_type(
+                typing_context.resolve_function_type(
                     operator.eq, (lk_type, rk_type), {}
                 )
-            except:  # pragma: no cover
+            except Exception:  # pragma: no cover
                 # TODO: cover this case in unittests
                 raise_bodo_error(msg)
 
@@ -3833,8 +3848,8 @@ def overload_dataframe_join(
 ):
     check_runtime_cols_unsupported(left, "DataFrame.join()")
     check_runtime_cols_unsupported(other, "DataFrame.join()")
-    unsupported_args = dict(lsuffix=lsuffix, rsuffix=rsuffix)
-    arg_defaults = dict(lsuffix="", rsuffix="")
+    unsupported_args = {"lsuffix": lsuffix, "rsuffix": rsuffix}
+    arg_defaults = {"lsuffix": "", "rsuffix": ""}
     check_unsupported_args(
         "DataFrame.join",
         unsupported_args,
@@ -4181,13 +4196,18 @@ def validate_groupby_spec(
         )
 
     # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance
-    unsupported_args = dict(
-        sort=sort,
-        group_keys=group_keys,
-        squeeze=squeeze,
-        observed=observed,
-    )
-    args_defaults = dict(sort=False, group_keys=True, squeeze=False, observed=True)
+    unsupported_args = {
+        "sort": sort,
+        "group_keys": group_keys,
+        "squeeze": squeeze,
+        "observed": observed,
+    }
+    args_defaults = {
+        "sort": False,
+        "group_keys": True,
+        "squeeze": False,
+        "observed": True,
+    }
 
     check_unsupported_args(
         "Dataframe.groupby",
@@ -4214,7 +4234,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
             # Failing to provide the index requires just transposing the table into n columns,
             # where n is the length(values). As a result, at this time we don't support it.
             raise_bodo_error(
-                f"DataFrame.pivot_table(): 'index' argument is required and must be constant column labels"
+                "DataFrame.pivot_table(): 'index' argument is required and must be constant column labels"
             )
     else:
         # pivot supports index=None
@@ -4447,7 +4467,7 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
 
     if len(index_idx) == 0:
         # If we use the index just get the index data
-        func_text += f"        (bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)),),\n"
+        func_text += "        (bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)),),\n"
     else:
         func_text += "        (\n"
         for ind_idx in index_idx:
@@ -4501,22 +4521,22 @@ def overload_dataframe_pivot_table(
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
         data, "DataFrame.pivot_table()"
     )
-    unsupported_args = dict(
-        fill_value=fill_value,
-        margins=margins,
-        dropna=dropna,
-        margins_name=margins_name,
-        observed=observed,
-        sort=sort,
-    )
-    arg_defaults = dict(
-        fill_value=None,
-        margins=False,
-        dropna=True,
-        margins_name="All",
-        observed=False,
-        sort=True,
-    )
+    unsupported_args = {
+        "fill_value": fill_value,
+        "margins": margins,
+        "dropna": dropna,
+        "margins_name": margins_name,
+        "observed": observed,
+        "sort": sort,
+    }
+    arg_defaults = {
+        "fill_value": None,
+        "margins": False,
+        "dropna": True,
+        "margins_name": "All",
+        "observed": False,
+        "sort": True,
+    }
     check_unsupported_args(
         "DataFrame.pivot_table",
         unsupported_args,
@@ -4584,7 +4604,7 @@ def overload_dataframe_pivot_table(
         else:  # pragma: no cover
             # This should be unreachable
             raise BodoError(
-                f"pivot(): pivot values selcected via pivot JIT argument must all share a common int or string type."
+                "pivot(): pivot values selcected via pivot JIT argument must all share a common int or string type."
             )
     else:
         _pivot_values_arr = None
@@ -4658,14 +4678,14 @@ def overload_dataframe_melt(
     col_level=None,
     ignore_index=True,
 ):
-    unsupported_args = dict(
-        col_level=col_level,
-        ignore_index=ignore_index,
-    )
-    arg_defaults = dict(
-        col_level=None,
-        ignore_index=True,
-    )
+    unsupported_args = {
+        "col_level": col_level,
+        "ignore_index": ignore_index,
+    }
+    arg_defaults = {
+        "col_level": None,
+        "ignore_index": True,
+    }
     check_unsupported_args(
         "DataFrame.melt",
         unsupported_args,
@@ -4753,7 +4773,7 @@ def overload_dataframe_melt(
         or all(isinstance(c, str) for c in value_lit)
     ):
         raise BodoError(
-            f"DataFrame.melt(): column names selected for 'value_vars' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
+            "DataFrame.melt(): column names selected for 'value_vars' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
         )
     val_type = frame.data[value_idxs[0]]
     value_dtypes = [frame.data[i].dtype for i in value_idxs]
@@ -4837,28 +4857,28 @@ def crosstab_overload(
     _pivot_values=None,
 ):
     # TODO[BE-3188]: Disabling since needs to use new pivot infrastructure
-    raise BodoError(f"pandas.crosstab() not supported yet")
+    raise BodoError("pandas.crosstab() not supported yet")
 
-    unsupported_args = dict(
-        values=values,
-        rownames=rownames,
-        colnames=colnames,
-        aggfunc=aggfunc,
-        margins=margins,
-        margins_name=margins_name,
-        dropna=dropna,
-        normalize=normalize,
-    )
-    arg_defaults = dict(
-        values=None,
-        rownames=None,
-        colnames=None,
-        aggfunc=None,
-        margins=False,
-        margins_name="All",
-        dropna=True,
-        normalize=False,
-    )
+    unsupported_args = {
+        "values": values,
+        "rownames": rownames,
+        "colnames": colnames,
+        "aggfunc": aggfunc,
+        "margins": margins,
+        "margins_name": margins_name,
+        "dropna": dropna,
+        "normalize": normalize,
+    }
+    arg_defaults = {
+        "values": None,
+        "rownames": None,
+        "colnames": None,
+        "aggfunc": None,
+        "margins": False,
+        "margins_name": "All",
+        "dropna": True,
+        "normalize": False,
+    }
     check_unsupported_args(
         "pandas.crosstab",
         unsupported_args,
@@ -4917,8 +4937,8 @@ def overload_dataframe_sort_values(
     _bodo_transformed=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.sort_values()")
-    unsupported_args = dict(ignore_index=ignore_index, key=key)
-    arg_defaults = dict(ignore_index=False, key=None)
+    unsupported_args = {"ignore_index": ignore_index, "key": key}
+    arg_defaults = {"ignore_index": False, "key": None}
     check_unsupported_args(
         "DataFrame.sort_values",
         unsupported_args,
@@ -5002,7 +5022,7 @@ def validate_sort_values_spec(
     else:
         key_names = get_overload_const_list(by)
     # "A" is equivalent to ("A", "")
-    key_names = set((k, "") if (k, "") in valid_keys_set else k for k in key_names)
+    key_names = {(k, "") if (k, "") in valid_keys_set else k for k in key_names}
     if len(key_names.difference(valid_keys_set)) > 0:
         invalid_keys = list(set(get_overload_const_list(by)).difference(valid_keys_set))
         raise_bodo_error(f"sort_values(): invalid keys {invalid_keys} for by.")
@@ -5010,7 +5030,7 @@ def validate_sort_values_spec(
     # _bodo_interval_sort cannot be used without _bodo_chunk_bounds
     if is_overload_true(_bodo_interval_sort) and is_overload_none(_bodo_chunk_bounds):
         raise_bodo_error(
-            f"sort_values(): _bodo_chunk_bounds with at most 2 keys must be provided when _bodo_interval_sort=True."
+            "sort_values(): _bodo_chunk_bounds with at most 2 keys must be provided when _bodo_interval_sort=True."
         )
 
     if not is_overload_none(_bodo_chunk_bounds):
@@ -5018,12 +5038,12 @@ def validate_sort_values_spec(
             # If _bodo_interval_sort, at most 2 keys should be provided.
             if len(key_names) > 2:
                 raise_bodo_error(
-                    f"sort_values(): When using _bodo_interval_sort, you must specify at most 2 keys"
+                    "sort_values(): When using _bodo_interval_sort, you must specify at most 2 keys"
                 )
         elif len(key_names) != 1:
             # make sure there is only one key when bounds are passed and not _bodo_interval_sort (as currently supported)
             raise_bodo_error(
-                f"sort_values(): _bodo_chunk_bounds only supported when there is a single key."
+                "sort_values(): _bodo_chunk_bounds only supported when there is a single key."
             )
 
     # make sure axis has default value 0
@@ -5114,22 +5134,22 @@ def overload_dataframe_sort_index(
     _bodo_chunk_bounds=None,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.sort_index()")
-    unsupported_args = dict(
-        axis=axis,
-        level=level,
-        kind=kind,
-        sort_remaining=sort_remaining,
-        ignore_index=ignore_index,
-        key=key,
-    )
-    arg_defaults = dict(
-        axis=0,
-        level=None,
-        kind="quicksort",
-        sort_remaining=True,
-        ignore_index=False,
-        key=None,
-    )
+    unsupported_args = {
+        "axis": axis,
+        "level": level,
+        "kind": kind,
+        "sort_remaining": sort_remaining,
+        "ignore_index": ignore_index,
+        "key": key,
+    }
+    arg_defaults = {
+        "axis": 0,
+        "level": None,
+        "kind": "quicksort",
+        "sort_remaining": True,
+        "ignore_index": False,
+        "key": None,
+    }
     check_unsupported_args(
         "DataFrame.sort_index",
         unsupported_args,
@@ -5212,8 +5232,8 @@ def overload_dataframe_fillna(
     df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
     check_runtime_cols_unsupported(df, "DataFrame.fillna()")
-    unsupported_args = dict(limit=limit, downcast=downcast)
-    arg_defaults = dict(limit=None, downcast=None)
+    unsupported_args = {"limit": limit, "downcast": downcast}
+    arg_defaults = {"limit": None, "downcast": None}
     check_unsupported_args(
         "DataFrame.fillna",
         unsupported_args,
@@ -5272,8 +5292,8 @@ def overload_dataframe_reset_index(
     _bodo_transformed=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.reset_index()")
-    unsupported_args = dict(col_level=col_level, col_fill=col_fill)
-    arg_defaults = dict(col_level=0, col_fill="")
+    unsupported_args = {"col_level": col_level, "col_fill": col_fill}
+    arg_defaults = {"col_level": 0, "col_fill": ""}
     check_unsupported_args(
         "DataFrame.reset_index",
         unsupported_args,
@@ -5367,7 +5387,7 @@ def overload_dataframe_dropna(
 
     # check axis=0
     if not is_overload_zero(axis):
-        raise_bodo_error(f"df.dropna(): only axis=0 supported")
+        raise_bodo_error("df.dropna(): only axis=0 supported")
 
     ensure_constant_values("dropna", "how", how, ("any", "all"))
 
@@ -5419,8 +5439,8 @@ def overload_dataframe_drop(
     _bodo_transformed=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.drop()")
-    unsupported_args = dict(index=index, level=level, errors=errors)
-    arg_defaults = dict(index=None, level=None, errors="raise")
+    unsupported_args = {"index": index, "level": level, "errors": errors}
+    arg_defaults = {"index": None, "level": None, "errors": "raise"}
     check_unsupported_args(
         "DataFrame.drop",
         unsupported_args,
@@ -5519,8 +5539,8 @@ def overload_dataframe_sample(
     """
     check_runtime_cols_unsupported(df, "DataFrame.sample()")
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.sample()")
-    unsupported_args = dict(weights=weights, axis=axis, ignore_index=ignore_index)
-    sample_defaults = dict(weights=None, axis=None, ignore_index=False)
+    unsupported_args = {"weights": weights, "axis": axis, "ignore_index": ignore_index}
+    sample_defaults = {"weights": None, "axis": None, "ignore_index": False}
 
     if not is_overload_none(n) and not is_overload_none(frac):
         raise BodoError(
@@ -5676,7 +5696,7 @@ def overload_dataframe_info(
             "    col_dtype = bodo.libs.str_arr_ext.pre_alloc_string_array(ncols, -1)\n"
         )
         # Dictionary to store how many column types in the df
-        dtype_count = dict()
+        dtype_count = {}
         # Loop over each column and get its nbytes, name, how many non-null, and dtype
         for i in range(len(df.columns)):
             func_text += f"    non_null_count[{i}] = str(bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})))\n"
@@ -5766,7 +5786,7 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
         func_text += f"  bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, {start_offset})\n"
         if use_index:
             func_text += f"  nbytes_arr[0] = {index_nbytes}\n"
-        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(nbytes_arr, pd.Index(column_vals), None)\n"
+        func_text += "  return bodo.hiframes.pd_series_ext.init_series(nbytes_arr, pd.Index(column_vals), None)\n"
     else:
         data = ", ".join(
             f"bodo.libs.array_ops.array_op_nbytes(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
@@ -6145,11 +6165,11 @@ class BodoSQLReplaceColsInfer(AbstractTemplate):  # pragma: no cover
 
         col_names_to_replace = get_overload_const_tuple(args[1])
         replacement_columns = args[2]
-        assert len(col_names_to_replace) == len(
-            replacement_columns
+        assert (
+            len(col_names_to_replace) == len(replacement_columns)
         ), "Error while typechecking __bodosql_replace_columns_dummy: the tuple of column indicies to replace should be equal to the number of columns to replace them with"
-        assert len(col_names_to_replace) <= len(
-            input_df_typ.columns
+        assert (
+            len(col_names_to_replace) <= len(input_df_typ.columns)
         ), "Error while typechecking __bodosql_replace_columns_dummy: The number of indicies provided should be less than or equal to the number of columns in the input dataframe"
 
         for col_name in col_names_to_replace:
@@ -6321,17 +6341,18 @@ def _parse_query_expr(
                 "{0}({1})".format(self.op, ",".join(map(str, self.operands)))
             )
 
-        operands = map(
-            lambda a: "bodo.hiframes.pd_series_ext.get_series_data({})".format(str(a)),
-            self.operands,
-        )
         op = "np.{}".format(self.op)
         ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
             str(self.operands[0])
         )
         return pandas.io.formats.printing.pprint_thing(
             "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
-                op, ",".join(operands), ind
+                op,
+                ",".join(
+                    "bodo.hiframes.pd_series_ext.get_series_data({})".format(str(a))
+                    for a in self.operands
+                ),
+                ind,
             )
         )
 
@@ -6382,15 +6403,19 @@ def _parse_query_expr(
         )
         pandas.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
         # _maybe_downcast_constants accesses actual value which is not possible
-        pandas.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = lambda self, left, right: (  # type: ignore
-            left,
-            right,
+        pandas.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+            lambda self, left, right: (  # type: ignore
+                left,
+                right,
+            )
         )
         pandas.core.computation.ops.Term.__str__ = __str__
         pandas.core.computation.ops.MathCall.__str__ = math__str__
         pandas.core.computation.ops.Op.__str__ = op__str__
         # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None  # type: ignore
+        pandas.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+            lambda self: None
+        )  # type: ignore
         parsed_expr = pandas.core.computation.expr.Expr(expr, env=env)
         parsed_expr_str = str(parsed_expr)
     except pandas.errors.UndefinedVariableError as e:
@@ -6575,7 +6600,8 @@ def iternext_itertuples(context, builder, sig, args, result):
                 getitem_sig = signature(pd_timestamp_tz_naive_type, arr_typ, types.intp)
                 val = context.compile_internal(
                     builder,
-                    lambda a, i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                    lambda a,
+                    i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                         np.int64(a[i])
                     ),
                     getitem_sig,

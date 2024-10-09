@@ -1,5 +1,5 @@
-"""Remove docstrings from a python file and replace it
-"""
+"""Remove docstrings from a python file and replace it"""
+
 import ast
 from pathlib import Path
 

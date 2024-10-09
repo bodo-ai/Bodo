@@ -199,7 +199,7 @@ def test_median(data_col, partition_col, answer):
     """Tests median (needs to be handled seperately due to PySpark limitations
     on calculating medians)"""
     assert len(data_col) == len(partition_col)
-    query = f"SELECT C, MEDIAN(A) OVER (PARTITION BY B) FROM table1"
+    query = "SELECT C, MEDIAN(A) OVER (PARTITION BY B) FROM table1"
     ctx = {
         "TABLE1": pd.DataFrame(
             {"A": data_col, "B": partition_col, "C": list(range(len(data_col)))}
@@ -709,7 +709,7 @@ def test_bit_agg(data, dtype, memory_leak_check):
 )
 def test_object_agg(data, value_dtype, memory_leak_check):
     """Tests the OBJECT_AGG window function."""
-    query = f"SELECT P, O, OBJECT_AGG(K, V) OVER (PARTITION BY P) FROM table1"
+    query = "SELECT P, O, OBJECT_AGG(K, V) OVER (PARTITION BY P) FROM table1"
 
     df = pd.DataFrame(
         {

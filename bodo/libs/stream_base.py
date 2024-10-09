@@ -2,6 +2,7 @@
 """
 Base class implementations for supporting streaming operators.
 """
+
 import typing as pt
 
 import numba

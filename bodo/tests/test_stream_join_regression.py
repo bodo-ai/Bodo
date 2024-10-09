@@ -112,7 +112,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     and probe steps.
     """
     # Codegen change: Add print and overall timer
-    print(f"Started executing query...")
+    print("Started executing query...")
     t0 = time.time()
     __bodo_is_last_streaming_output_1 = False
     _iter_1 = 0

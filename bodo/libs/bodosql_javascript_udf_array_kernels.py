@@ -138,10 +138,7 @@ def overload_create_javascript_udf(body, argnames, return_type):  # pragma: no c
         )
 
     body_str = np.frombuffer(body_type.meta.encode("utf-8"), dtype=np.uint8)
-    body_str_len = len(body_str)
-    argnames_series = pd.array(
-        [arg for arg in argnames_type.meta], dtype=pd.StringDtype()
-    )
+    argnames_series = pd.array(list(argnames_type.meta), dtype=pd.StringDtype())
 
     return_arr_arr_type = numba_to_c_array_types([return_type_type])
     return_arr_c_type = numba_to_c_types([return_type_type])
@@ -315,7 +312,7 @@ def overload_execute_javascript_udf(js_func, args):  # pragma: no cover
         # add a statement to indicate what length to use
         if any(scalar_args):
             if all(scalar_args):
-                func_text += f"  length_arg = 1\n"
+                func_text += "  length_arg = 1\n"
             else:
                 func_text += f"  length_arg = len(args[{first_array_arg}])\n"
         func_text += f"  args_table = arrays_to_cpp_table(({','.join(args_text)},))\n"

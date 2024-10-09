@@ -35,6 +35,7 @@ need to use the "bodopartner.us-east-1" Snowflake account
 as mentioned above, and use the "SNOWFLAKE_SAMPLE_DATA"
 database and "TPCH_SF10" schema.
 """
+
 import time
 
 import pandas as pd
@@ -88,7 +89,7 @@ def impl(conn_str):  # Codegen change: add conn_str
     and concat steps.
     """
     # Codegen change: Add print and overall timer
-    print(f"Started executing query...")
+    print("Started executing query...")
     t0 = time.time()
     __bodo_is_last_streaming_output_1 = False
     _iter_1 = 0

@@ -2,6 +2,7 @@
 """
 Test SQL operations that should produce understandable errors on BodoSQL
 """
+
 import re
 
 import numpy as np

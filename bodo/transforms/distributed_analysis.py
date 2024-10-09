@@ -3,6 +3,7 @@
 analyzes the IR to decide parallelism of arrays and parfors
 for distributed transformation.
 """
+
 import copy
 import inspect
 import operator
@@ -693,8 +694,8 @@ class DistributedAnalysis:
         ):
             # attribute dist spec should be compatible with distribution of value
             attr_dist = rhs_typ.class_type.dist_spec[attr]
-            assert is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(
-                lhs_typ
+            assert (
+                is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
             ), "Variable {} is not distributable since it is of type {} (required for getting distributed class field)".format(
                 lhs, lhs_typ
             )
@@ -938,7 +939,7 @@ class DistributedAnalysis:
                 self._meet_array_dists(arg0, arg1, array_dists)
                 if array_dists[arg0] == Distribution.REP:
                     raise BodoError(
-                        f"Arguments of xgboost.fit are not distributed", rhs.loc
+                        "Arguments of xgboost.fit are not distributed", rhs.loc
                     )
             elif func_name == "predict":
                 # match input and output distributions
@@ -1192,7 +1193,7 @@ class DistributedAnalysis:
                     self._set_REP(
                         labels_arg_name,
                         array_dists,
-                        f"labels when provided are assumed to be REP",
+                        "labels when provided are assumed to be REP",
                         rhs.loc,
                     )
 
@@ -1216,7 +1217,7 @@ class DistributedAnalysis:
                     self._set_REP(
                         labels_arg_name,
                         array_dists,
-                        f"labels when provided are assumed to be REP",
+                        "labels when provided are assumed to be REP",
                         rhs.loc,
                     )
 
@@ -1292,7 +1293,7 @@ class DistributedAnalysis:
             if array_dists[rhs.args[0].name] == Distribution.REP:
                 # TODO: more informative error and suggestion
                 raise BodoError(
-                    f"Argument of bodo.dl.prepare_data is not distributed", rhs.loc
+                    "Argument of bodo.dl.prepare_data is not distributed", rhs.loc
                 )
             return
 
@@ -2085,7 +2086,7 @@ class DistributedAnalysis:
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
             assert (
                 elems is not None
-            ), f"Internal error, unable to find build tuple for arg0 of bodosql_case_kernel"
+            ), "Internal error, unable to find build tuple for arg0 of bodosql_case_kernel"
 
             arrays = [lhs] + [elem.name for elem in elems]
             if len(arrays) > 1:
@@ -3807,7 +3808,8 @@ class DistributedAnalysis:
             isinstance(v, str)
             # array analysis adds "#0" to array name to designate 1st dimension
             # See https://github.com/numba/numba/blob/d4460feb8c91213e7b89f97b632d19e34a776cd3/numba/parfors/array_analysis.py#L439
-            and "#0" in v and guard(_is_transposed_array, self.func_ir, v.split("#")[0])
+            and "#0" in v
+            and guard(_is_transposed_array, self.func_ir, v.split("#")[0])
             for v in var_set
         ):
             return
@@ -4183,9 +4185,12 @@ class DistributedAnalysis:
                 isinstance(nullable_tup_def, ir.Expr) and nullable_tup_def.op == "call"
             ), "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
             fdef = find_callname(self.func_ir, nullable_tup_def, self.typemap)
-            assert fdef == (
-                "build_nullable_tuple",
-                "bodo.libs.nullable_tuple_ext",
+            assert (
+                fdef
+                == (
+                    "build_nullable_tuple",
+                    "bodo.libs.nullable_tuple_ext",
+                )
             ), "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
             tup_val = nullable_tup_def.args[0]
         else:
@@ -4328,7 +4333,6 @@ class DistributedAnalysis:
     ):
         """analyze getitem nodes for arrays/tables
         having determined the the variable and index value."""
-        in_typ = self.typemap[in_var.name]
 
         if (in_var.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
@@ -4654,8 +4658,8 @@ class DistributedAnalysis:
         ):
             # attribute dist spec should be compatible with distribution of value
             attr_dist = target_type.class_type.dist_spec[attr]
-            assert is_distributable_typ(val_type) or is_distributable_tuple_typ(
-                val_type
+            assert (
+                is_distributable_typ(val_type) or is_distributable_tuple_typ(val_type)
             ), "Variable {} is not distributable since it is of type {} (required for setting class field)".format(
                 value.name, val_type
             )

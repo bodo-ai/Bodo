@@ -119,7 +119,7 @@ def test_glue_catalog_iceberg_write(glue_catalog, memory_leak_check):
                     schema,
                     table_name,
                 )
-            except:
+            except Exception:
                 pass
         else:
             run_rank0(bic.delete_table)(

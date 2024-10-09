@@ -4,6 +4,7 @@ Implementation of pd.read_sql in Bodo.
 We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
+
 import datetime
 import sys
 from typing import (
@@ -423,7 +424,11 @@ class SnowflakeFilterVisitor(bif.FilterVisitor[str]):
             case "case_insensitive_equality":
                 # Equality is just =, not a function
                 return f"(LOWER({self.visit(op.args[0])}) = LOWER({self.visit(op.args[1])}))"
-            case "case_insensitive_startswith" | "case_insensitive_endswith" | "case_insensitive_contains":
+            case (
+                "case_insensitive_startswith"
+                | "case_insensitive_endswith"
+                | "case_insensitive_contains"
+            ):
                 op_name = op.op[len("case_insensitive_") :]
                 return f"({op_name}(LOWER({self.visit(op.args[0])}), LOWER({self.visit(op.args[1])})))"
             case "like" | "ilike":
@@ -774,7 +779,7 @@ def rtjf_term_repr(rtjf_terms):
 
 
 def extract_rtjf_terms(
-    rtjf_terms: list[tuple[ir.Var, tuple[int], tuple[int, int, str]]]
+    rtjf_terms: list[tuple[ir.Var, tuple[int], tuple[int, int, str]]],
 ) -> tuple[list[tuple[int]], list[ir.Var], list[str], list[tuple[int, int, str]]]:
     """
     Extracts the runtime join filter terms into separate lists for the column indices,
@@ -908,7 +913,7 @@ def sql_distributed_run(
         if remaining_unsupported:
             unsupported_list = sorted(remaining_unsupported)
             msg_list = [
-                f"pandas.read_sql(): 1 or more columns found with Arrow types that are not supported in Bodo and could not be eliminated. "
+                "pandas.read_sql(): 1 or more columns found with Arrow types that are not supported in Bodo and could not be eliminated. "
                 + "Please manually remove these columns from your sql query by specifying the columns you need in your SELECT statement. If these "
                 + "columns are needed, you will need to modify your dataset to use a supported type.",
                 "Unsupported Columns:",
@@ -953,7 +958,7 @@ def sql_distributed_run(
             rtjf_state_names,
             rtjf_non_equality_info,
         ) = extract_rtjf_terms(sql_node.rtjf_terms)
-        rtjf_suffix += f'    runtime_join_filter_conds = ["TRUE"]\n'
+        rtjf_suffix += '    runtime_join_filter_conds = ["TRUE"]\n'
         for i in range(len(rtjf_state_names)):
             state_var = rtjf_state_names[i]
             col_indices = rtjf_state_cols[i]
@@ -1134,8 +1139,9 @@ def sql_distributed_run(
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert sql_node.has_side_effects or not (
-        sql_node.index_column_name is None and not sql_node.is_live_table
+    assert (
+        sql_node.has_side_effects
+        or not (sql_node.index_column_name is None and not sql_node.is_live_table)
     ), "At most one of table and index should be dead if the SQL IR node is live and has no side effects"
     if sql_node.index_column_name is None:
         # If the index_col is dead, remove the node.
@@ -1347,25 +1353,25 @@ def sql_remove_dead_column(sql_node: SqlReader, column_live_map, equiv_vars, typ
     )
 
 
-numba.parfors.array_analysis.array_analysis_extensions[
-    SqlReader
-] = bodo.ir.connector.connector_array_analysis
-distributed_analysis.distributed_analysis_extensions[
-    SqlReader
-] = bodo.ir.connector.connector_distributed_analysis
+numba.parfors.array_analysis.array_analysis_extensions[SqlReader] = (
+    bodo.ir.connector.connector_array_analysis
+)
+distributed_analysis.distributed_analysis_extensions[SqlReader] = (
+    bodo.ir.connector.connector_distributed_analysis
+)
 typeinfer.typeinfer_extensions[SqlReader] = bodo.ir.connector.connector_typeinfer
 ir_utils.visit_vars_extensions[SqlReader] = bodo.ir.connector.visit_vars_connector
 ir_utils.remove_dead_extensions[SqlReader] = remove_dead_sql
-numba.core.analysis.ir_extension_usedefs[
-    SqlReader
-] = bodo.ir.connector.connector_usedefs
+numba.core.analysis.ir_extension_usedefs[SqlReader] = (
+    bodo.ir.connector.connector_usedefs
+)
 ir_utils.copy_propagate_extensions[SqlReader] = bodo.ir.connector.get_copies_connector
-ir_utils.apply_copy_propagate_extensions[
-    SqlReader
-] = bodo.ir.connector.apply_copies_connector
-ir_utils.build_defs_extensions[
-    SqlReader
-] = bodo.ir.connector.build_connector_definitions
+ir_utils.apply_copy_propagate_extensions[SqlReader] = (
+    bodo.ir.connector.apply_copies_connector
+)
+ir_utils.build_defs_extensions[SqlReader] = (
+    bodo.ir.connector.build_connector_definitions
+)
 distributed_pass.distributed_run_extensions[SqlReader] = sql_distributed_run
 remove_dead_column_extensions[SqlReader] = sql_remove_dead_column
 ir_extension_table_column_use[SqlReader] = bodo.ir.connector.connector_table_column_use
@@ -1582,25 +1588,25 @@ def _gen_snowflake_reader_chunked_py(
 
     func_text += "\n".join(
         [
-            f"  total_rows_np = np.array([0], dtype=np.int64)",
-            f"  snowflake_reader = snowflake_reader_init_py_entry(",
-            f"    unicode_to_utf8(sql_request),",
-            f"    unicode_to_utf8(conn),",
+            "  total_rows_np = np.array([0], dtype=np.int64)",
+            "  snowflake_reader = snowflake_reader_init_py_entry(",
+            "    unicode_to_utf8(sql_request),",
+            "    unicode_to_utf8(conn),",
             f"    {parallel},",
             f"    {is_independent},",
             f"    pyarrow_schema_{call_id},",
             f"    {len(params.nullable_cols_array)},",
-            f"    nullable_cols_array.ctypes,",
+            "    nullable_cols_array.ctypes,",
             f"    {len(params.snowflake_dict_cols_array)},",
-            f"    snowflake_dict_cols_array.ctypes,",
-            f"    total_rows_np.ctypes,",
+            "    snowflake_dict_cols_array.ctypes,",
+            "    total_rows_np.ctypes,",
             f"    {is_select_query and len(used_col_names) == 0},",
             f"    {is_select_query},",
             f"    {downcast_decimal_to_double},",
             f"    {chunksize},",
             f"    {sql_op_id},",
-            f"    out_type,",
-            f"  )",
+            "    out_type,",
+            "  )",
             "",
         ]
     )
@@ -1715,13 +1721,7 @@ def _gen_sql_reader_py(
     py_table_type = types.none if is_dead_table else TableType(tuple(col_typs))
 
     # Handle filter information because we may need to update the function header
-    filter_args = ""
-    filter_map = {}
-    filter_vars = []
-
-    func_text = (
-        f"def sql_reader_py(sql_request, conn, database_schema, {filter_args}):\n"
-    )
+    func_text = "def sql_reader_py(sql_request, conn, database_schema):\n"
 
     if db_type == "snowflake":  # pragma: no cover
         assert (
@@ -1765,11 +1765,11 @@ def _gen_sql_reader_py(
             f"  )\n"
             f"  check_and_propagate_cpp_exception()\n"
         )
-        func_text += f"  total_rows = total_rows_np[0]\n"
+        func_text += "  total_rows = total_rows_np[0]\n"
         if parallel:
-            func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
+            func_text += "  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
         else:
-            func_text += f"  local_rows = total_rows\n"
+            func_text += "  local_rows = total_rows\n"
         if index_column_name:
             # The index is always placed in the last slot of the query if it exists.
             func_text += f"  index_var = array_from_cpp_table(out_table, {len(out_used_cols)}, index_col_typ)\n"
@@ -1790,11 +1790,11 @@ def _gen_sql_reader_py(
                 if index_column_name:
                     # Set the table length using the index var if we load that column.
                     func_text += (
-                        f"  table_var = set_table_len(table_var, len(index_var))\n"
+                        "  table_var = set_table_len(table_var, len(index_var))\n"
                     )
                 else:
                     # Set the table length using the total rows if don't load any columns
-                    func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
+                    func_text += "  table_var = set_table_len(table_var, local_rows)\n"
         func_text += "  delete_table(out_table)\n"
         func_text += "  ev.finalize()\n"
         func_text += "  return (total_rows, table_var, index_var)\n"
@@ -1832,9 +1832,9 @@ def _gen_sql_reader_py(
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
             if db_type == "oracle":
-                func_text += f"    sql_cons = 'select * from (' + sql_request + ') OFFSET ' + str(offset) + ' ROWS FETCH NEXT ' + str(limit) + ' ROWS ONLY'\n"
+                func_text += "    sql_cons = 'select * from (' + sql_request + ') OFFSET ' + str(offset) + ' ROWS FETCH NEXT ' + str(limit) + ' ROWS ONLY'\n"
             else:
-                func_text += f"    sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
+                func_text += "    sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
 
             func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
             func_text += (
@@ -1855,9 +1855,9 @@ def _gen_sql_reader_py(
             # Dead Index
             func_text += "    index_var = None\n"
         if not is_dead_table:
-            func_text += f"    arrs = []\n"
-            func_text += f"    for i in range(df_ret.shape[1]):\n"
-            func_text += f"      arrs.append(df_ret.iloc[:, i].values)\n"
+            func_text += "    arrs = []\n"
+            func_text += "    for i in range(df_ret.shape[1]):\n"
+            func_text += "      arrs.append(df_ret.iloc[:, i].values)\n"
             # Bodo preserves all of the original types needed at typing in col_typs
             func_text += f"    table_var = Table(arrs, type_usecols_offsets_arr_{call_id}_2, {len(col_names)})\n"
         else:
@@ -1961,8 +1961,9 @@ def snowflake_reader_init_py_entry(
     op_id_t,
     arrow_reader_t,
 ):  # pragma: no cover
-    assert isinstance(arrow_reader_t, types.TypeRef) and isinstance(
-        arrow_reader_t.instance_type, ArrowReaderType
+    assert (
+        isinstance(arrow_reader_t, types.TypeRef)
+        and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
     ), "snowflake_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
     assert (
         pyarrow_schema_t == pyarrow_schema_type

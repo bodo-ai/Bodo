@@ -1,7 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-    Test file for tests related to the "with" operator
+Test file for tests related to the "with" operator
 """
+
 import pandas as pd
 import pytest
 
@@ -23,26 +24,22 @@ def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
     Test that verifies that WITH works for multiple table names
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A", "D"]
     else:
@@ -63,26 +60,22 @@ def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
     Test that verifies that WITH aliasing works on created tables as well
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A", "Y", "Z"]
     else:
@@ -114,26 +107,22 @@ def test_nested_with(join_dataframes, spark_info, memory_leak_check):
     Test that verifies that WITH aliasing works in the nested case
     """
     if any(
-        [
-            isinstance(
-                x,
-                (
-                    pd.core.arrays.integer.IntegerDtype,
-                    pd.Float32Dtype,
-                    pd.Float64Dtype,
-                ),
-            )
-            for x in join_dataframes["TABLE1"].dtypes
-        ]
+        isinstance(
+            x,
+            (
+                pd.core.arrays.integer.IntegerDtype,
+                pd.Float32Dtype,
+                pd.Float64Dtype,
+            ),
+        )
+        for x in join_dataframes["TABLE1"].dtypes
     ):
         check_dtype = False
     else:
         check_dtype = True
     if any(
-        [
-            isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-            for colname in join_dataframes["TABLE1"].columns
-        ]
+        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
+        for colname in join_dataframes["TABLE1"].columns
     ):
         convert_columns_bytearray = ["A", "Y"]
     else:

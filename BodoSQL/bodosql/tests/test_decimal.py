@@ -31,7 +31,7 @@ def decimal_data():
     )
     group_ids_2 = [1, 2, 5, 6, 6, 5, 2, 2, 1, 1]
     amounts = [1, 2, 3, 4, 4, 3, 2, 2, 1, 1]
-    amounts = pa.array([x for x in amounts], type=pa.decimal128(28, 4))
+    amounts = pa.array(amounts, type=pa.decimal128(28, 4))
     cashflow_type_ids = [1, 2, 3, 4, 4, 3, 2, 2, 1, 1]
     df_2 = pd.DataFrame(
         {
@@ -94,7 +94,7 @@ def test_decimal_moment_functions_overflow(expr):
                 check_dtype=False,
             )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -333,7 +333,7 @@ def test_decimal_moment_functions_groupby(query, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -484,7 +484,7 @@ def test_decimal_two_arg_moment_functions_groupby(query, answer, memory_leak_che
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 def test_decimal_int_multiply_vector(decimal_data, memory_leak_check):
@@ -1153,7 +1153,7 @@ def test_decimal_addition(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -1370,7 +1370,7 @@ def test_decimal_subtraction(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -1727,7 +1727,7 @@ def test_decimal_rounding(df, expr, answer, spark_info, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -1870,7 +1870,7 @@ def test_decimal_ceil(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -2013,7 +2013,7 @@ def test_decimal_floor(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -2153,7 +2153,7 @@ def test_decimal_trunc(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -2946,7 +2946,7 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3093,6 +3093,7 @@ def test_decimal_to_string(df, expr, answer, memory_leak_check):
 def test_decimal_median(df, expected, spark_info, memory_leak_check):
     query = "SELECT A, median(B) FROM TABLE1 GROUP BY A"
 
+    old_use_decimal = bodo.bodo_use_decimal
     try:
         bodo.bodo_use_decimal = True
         check_query(
@@ -3104,7 +3105,7 @@ def test_decimal_median(df, expected, spark_info, memory_leak_check):
             expected_output=expected,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3306,6 +3307,7 @@ def test_decimal_percentile_cont(
 ):
     query = f"SELECT A, (PERCENTILE_CONT({percentile}) WITHIN GROUP (ORDER BY B))::VARCHAR AS C FROM TABLE1 GROUP BY A"
 
+    old_use_decimal = bodo.bodo_use_decimal
     try:
         bodo.bodo_use_decimal = True
         check_query(
@@ -3317,7 +3319,7 @@ def test_decimal_percentile_cont(
             expected_output=expected,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3459,6 +3461,7 @@ def test_decimal_percentile_disc(
 ):
     query = f"SELECT A, (PERCENTILE_DISC({percentile}) WITHIN GROUP (ORDER BY B))::VARCHAR AS C FROM TABLE1 GROUP BY A"
 
+    old_use_decimal = bodo.bodo_use_decimal
     try:
         bodo.bodo_use_decimal = True
         check_query(
@@ -3470,7 +3473,7 @@ def test_decimal_percentile_disc(
             expected_output=expected,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3541,6 +3544,7 @@ def test_decimal_percentile_disc(
 def test_decimal_median_error(arr, error_msg, spark_info):
     query = "SELECT A, median(B) FROM TABLE1 GROUP BY A"
 
+    old_use_decimal = bodo.bodo_use_decimal
     try:
         bodo.bodo_use_decimal = True
         with pytest.raises(Exception, match=error_msg):
@@ -3552,7 +3556,7 @@ def test_decimal_median_error(arr, error_msg, spark_info):
                 check_dtype=False,
             )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3700,7 +3704,7 @@ def test_decimal_abs(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(
@@ -3801,7 +3805,7 @@ def test_decimal_factorial(df, expr, answer, memory_leak_check):
             check_dtype=False,
         )
     finally:
-        bodo.bodo_use_decimal = False
+        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(

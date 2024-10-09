@@ -3,6 +3,7 @@
 Tests the correctness of the automatically generated library tests.
 These test cases will most likely be removed later
 """
+
 import operator
 
 import numpy as np
@@ -154,6 +155,6 @@ def test_faulty_impl():
         flag = False
         try:
             fn()
-        except:
+        except Exception:
             flag = True
         assert flag
