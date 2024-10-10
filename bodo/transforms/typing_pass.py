@@ -4345,6 +4345,10 @@ class TypingTransforms:
         data_arg_def = guard(get_definition, self.func_ir, data_arg)
 
         if isinstance(data_arg_def, ir.Expr) and data_arg_def.op == "build_map":
+            if data_arg.name in self._updated_containers:
+                # TODO[BSE-4021]: Move to _convert_const_key_dict
+                non_const_msg = "pd.Series(): When initializing series with a dictionary, it is required that the dict has constant keys"
+                raise_bodo_error(non_const_msg)
             if idx_arg != "":
                 # This is a defensive check, and isn't expected to be hit
                 # so we need the pragma to let coverage pass
@@ -4356,7 +4360,6 @@ class TypingTransforms:
                         "pd.Series(): Cannot specify index argument when initializing with a dictionary"
                     )
             msg = "When initializng a series with a dictionary, the keys should be constant strings or constant ints"
-
             (
                 tuples,
                 new_nodes,
@@ -6702,6 +6705,8 @@ class TypingTransforms:
             and var_def.op in ("build_list", "build_set", "build_map")
             and not var_def.items
         ):
+            # TODO[BSE-4021]: Do we need to check self._updated_containers?
+            # We need to be clear about the "constant" guarantee here.
             return True
         return is_literal_type(self.typemap.get(varname, None))
 

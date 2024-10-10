@@ -148,7 +148,7 @@ def peep_hole_fuse_dict_add_updates(func_ir):
     upgrade. If both are constant dictionaries
     defined in that block and neither is used between
     the update call, then we replace d1 with a new definition
-    that combines the two dicitonaries.
+    that combines the two dictionaries.
     Python 3.10 may also rewrite a dictionary as an empty
     build_map + many map_add, so we also need to replace those
     expressions with a constant build map.

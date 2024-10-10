@@ -2113,7 +2113,8 @@ def _convert_const_key_dict(
     """converts a constant key dictionary build_map into either a tuple with sentinel, or two tuples
     of keys/values as a workaround to extract key/values in overloads
     """
-
+    # TODO[BSE-4021]: Check if the build map is updated in the IR as this may change the constant
+    # value.
     keys = _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc)
 
     new_nodes = []
