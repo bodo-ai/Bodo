@@ -321,14 +321,6 @@ def create_overload_arith_op(op):
 
     def overload_arith_operator(lhs, rhs):
         """Overload some of the arithmetic operators like add, sub, truediv, floordiv, mul, pow, mod."""
-        if op not in [operator.add, operator.sub]:
-            # We support add and sub with tz-aware
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                lhs, f"{op} operator"
-            )
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                rhs, f"{op} operator"
-            )
 
         ## ---- start off with redirecting common overloads to some or common to all arith ops:
 
@@ -475,15 +467,6 @@ def create_overload_cmp_operator(op):
     def overload_cmp_operator(lhs, rhs):
         # Start of Dataframe Operations
         if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
-            # tz-aware comparison operators are supported for Series,
-            # but not DataFrame or arrays/scalars directly. As a result,
-            # we put this check on either side of the series section.
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                lhs, f"{op} operator"
-            )
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                rhs, f"{op} operator"
-            )
             return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
 
         # Start of Series Operations

@@ -298,28 +298,6 @@ def test_series_shift(memory_leak_check, sample_tz):
     check_func(impl2, (S, shift_amount, fill_value))
 
 
-def test_tz_series_unsupported(memory_leak_check):
-    """Test that an unsupported series operation gives a reasonable error
-    message.
-    """
-
-    def impl(s):
-        return s.apply(lambda x: x)
-
-    non_tz_s = pd.Series([pd.Timestamp(f"2020-01-0{i}") for i in range(1, 10)])
-    tz_s = pd.Series(
-        [pd.Timestamp(f"2020-01-0{i}", tz="US/Eastern") for i in range(1, 10)]
-    )
-
-    check_func(impl, (non_tz_s,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware series not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_s)
-
-
 @pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
 def test_series_dt_freq_methods(freq, representative_tz, memory_leak_check):
     """Tests the Series.dt freq methods with various frequencies"""

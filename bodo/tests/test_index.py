@@ -4,6 +4,7 @@ Tests for pd.Index functionality
 """
 
 import datetime
+import decimal
 import operator
 
 import numba
@@ -1243,20 +1244,133 @@ def test_index_argminmax(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([1, 5, 2, 1, 0]),
-        pd.Index([0.5, -13.0, -0.5, 2.75, 0.5, 64.1]),
-        pd.Index(pd.array([None, 1, None, 5, 2, 1, 3, None, None])),
-        pd.Index([True, True, True, False, True]),
-        pd.Index(pd.array([True, True, True, False, True])),
-        pd.RangeIndex(0, 10, 1),
-        pd.RangeIndex(-100, 100, 7),
-        pd.RangeIndex(100, -100, -9),
-        pd.RangeIndex(0, 10, -1),
-        pd.CategoricalIndex([1, 5, 1, 1, 2, 1, 5, 2, 1, 3], ordered=True),
-        pd.CategoricalIndex(list("ZEBRALIBRARY"), ordered=True),
+        pytest.param(
+            pd.Index([1, 5, 2, 1, 0, None], dtype=pd.Int32Dtype()), id="integer"
+        ),
+        pytest.param(pd.Index([0.5, -13.0, -0.5, 2.75, 0.5, 64.1]), id="float"),
+        pytest.param(
+            pd.Index(
+                [None, True, None, False, False, True, None, None],
+                dtype=pd.BooleanDtype(),
+            ),
+            id="boolean",
+        ),
+        pytest.param(pd.RangeIndex(0, 10, 1), id="range_simple"),
+        pytest.param(pd.RangeIndex(-100, 100, 7), id="range_skip"),
+        pytest.param(pd.RangeIndex(100, -100, -9), id="range_reverse_skip"),
+        pytest.param(pd.RangeIndex(0, 10, -1), id="range_reverse_simple"),
+        pytest.param(
+            pd.Index([hex(3**i) for i in range(10)]),
+            id="string",
+            marks=pytest.mark.skip(reason="min/max on string index unsupported"),
+        ),
+        pytest.param(
+            pd.Index([bytes(hex(5**i), encoding="utf-8") for i in range(10)]),
+            id="binary",
+            marks=pytest.mark.skip(reason="min/max on binary index unsupported"),
+        ),
+        pytest.param(
+            pd.Index(
+                [
+                    decimal.Decimal("2014.1"),
+                    None,
+                    decimal.Decimal("-3.1415"),
+                    decimal.Decimal("128"),
+                    decimal.Decimal("125.81103"),
+                ]
+            ),
+            id="decimal",
+        ),
+        pytest.param(
+            pd.Index([bodo.Time(nanosecond=10**i) for i in range(12)]), id="time"
+        ),
+        pytest.param(
+            pd.Index([datetime.date.fromordinal(738886 + i**2) for i in range(12)]),
+            id="date",
+        ),
+        pytest.param(
+            pd.Index([pd.Timedelta(hours=2**i) for i in range(12)]), id="timedelta"
+        ),
+        pytest.param(
+            pd.Index(
+                [
+                    pd.Timestamp("2020", tz="US/Pacific") + pd.Timedelta(hours=3**i)
+                    for i in range(12)
+                ]
+            ),
+            id="timestamp_naive",
+        ),
+        pytest.param(
+            pd.Index(
+                [pd.Timestamp("2020") + pd.Timedelta(hours=3**i) for i in range(12)]
+            ),
+            id="timestamp_timezone",
+        ),
+        pytest.param(
+            pd.CategoricalIndex([1, 5, 1, 1, 2, 1, 5, 2, 1, 3], ordered=True),
+            id="ord_cat_int",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(list("ZEBRALIBRARY"), ordered=True), id="ord_cat_str"
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [bytes(hex(5**i), encoding="utf-8") for i in range(10)], ordered=True
+            ),
+            id="ord_cat_binary",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [
+                    decimal.Decimal("2014.1"),
+                    None,
+                    decimal.Decimal("-3.1415"),
+                    decimal.Decimal("128"),
+                    decimal.Decimal("125.81103"),
+                ],
+                ordered=True,
+            ),
+            id="ord_cat_decimal",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [bodo.Time(nanosecond=10**i) for i in range(12)], ordered=True
+            ),
+            id="ord_cat_time",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [datetime.date.fromordinal(738886 + i**2) for i in range(12)],
+                ordered=True,
+            ),
+            id="ord_cat_date",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [pd.Timedelta(hours=2**i) for i in range(12)], ordered=True
+            ),
+            id="ord_cat_timedelta",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [
+                    pd.Timestamp("2020", tz="US/Pacific") + pd.Timedelta(hours=3**i)
+                    for i in range(12)
+                ],
+                ordered=True,
+            ),
+            id="ord_cat_timestamp_naive",
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [pd.Timestamp("2020") + pd.Timedelta(hours=3**i) for i in range(12)],
+                ordered=True,
+            ),
+            id="ord_cat_timestamp_timezone",
+        ),
     ],
 )
-def test_numeric_range_min_max(index):
+def test_index_min_max(index):
     def impl1(I):
         return I.min()
 

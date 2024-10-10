@@ -4647,6 +4647,8 @@ class DistributedPass:
         if reduce_op in (Reduce_Type.Concat, Reduce_Type.No_Op):
             return []
 
+        extra_globals = {}
+
         red_var_typ = self.typemap[reduce_var.name]
         el_typ = red_var_typ
         if is_np_array_typ(self.typemap[reduce_var.name]):
@@ -4668,6 +4670,17 @@ class DistributedPass:
                 init_val = "True"
                 if user_init_val == True:
                     return []
+            elif isinstance(el_typ, bodo.Decimal128Type):
+                extra_globals["_str_to_decimal_scalar"] = (
+                    bodo.libs.decimal_arr_ext._str_to_decimal_scalar
+                )
+                extra_globals["prec"] = el_typ.precision
+                extra_globals["scale"] = el_typ.scale
+                dec_str_setup = "'9' * (prec - scale) + '.' + '9' * scale"
+                pre_init_val = (
+                    f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
+                )
+                init_val = "val"
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
             elif isinstance(el_typ, TimeType):
@@ -4681,6 +4694,17 @@ class DistributedPass:
                 init_val = "False"
                 if user_init_val == False:
                     return []
+            elif isinstance(el_typ, bodo.Decimal128Type):
+                extra_globals["_str_to_decimal_scalar"] = (
+                    bodo.libs.decimal_arr_ext._str_to_decimal_scalar
+                )
+                extra_globals["prec"] = el_typ.precision
+                extra_globals["scale"] = el_typ.scale
+                dec_str_setup = "'-' + '9' * (prec - scale) + '.' + '9' * scale"
+                pre_init_val = (
+                    f"val, _ = _str_to_decimal_scalar({dec_str_setup}, prec, scale)"
+                )
+                init_val = "val"
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
             elif isinstance(el_typ, TimeType):
@@ -4702,7 +4726,9 @@ class DistributedPass:
 
         f_text = f"def f(s):\n  {pre_init_val}\n  return bodo.libs.distributed_api._root_rank_select(s, {init_val})"
         loc_vars = {}
-        exec(f_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
+        exec(
+            f_text, {"bodo": bodo, "numba": numba, "np": np, **extra_globals}, loc_vars
+        )
         f = loc_vars["f"]
 
         return compile_func_single_block(

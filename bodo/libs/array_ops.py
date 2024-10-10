@@ -612,6 +612,25 @@ def overload_array_op_quantile(arr, q):
 
             return _impl_list_dt
 
+        if isinstance(arr, bodo.DatetimeArrayType):
+            tz = arr.tz
+
+            def _impl_list_dt_tz(arr, q):  # pragma: no cover
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    len(q), tz
+                )
+                for i in range(len(q)):
+                    q_val = np.float64(q[i])
+                    out_arr[i] = pd.Timestamp(
+                        bodo.libs.array_kernels.quantile(
+                            arr._data.view(np.int64), q_val
+                        ),
+                        tz=tz,
+                    )
+                return out_arr
+
+            return _impl_list_dt_tz
+
         def impl_list(arr, q):  # pragma: no cover
             out_arr = np.empty(len(q), np.float64)
             for i in range(len(q)):
@@ -629,6 +648,19 @@ def overload_array_op_quantile(arr, q):
             )
 
         return _impl_dt
+
+    if isinstance(arr, bodo.DatetimeArrayType):
+        tz = arr.tz
+
+        def _impl_dt_tz(arr, q):  # pragma: no cover
+            return pd.Timestamp(
+                bodo.libs.array_kernels.quantile(
+                    arr._data.view(np.int64), np.float64(q)
+                ),
+                tz=tz,
+            )
+
+        return _impl_dt_tz
 
     def impl(arr, q):  # pragma: no cover
         return bodo.libs.array_kernels.quantile(arr, np.float64(q))

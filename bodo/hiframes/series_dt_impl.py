@@ -100,24 +100,6 @@ def create_date_field_overload(field):
             return
         has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
 
-        # Current list of tested pd.Series.dt fields
-        series_dt_fields = [
-            "year",
-            "quarter",
-            "month",
-            "week",
-            "day",
-            "hour",
-            "minute",
-            "second",
-            "microsecond",
-        ]
-
-        if field not in series_dt_fields:
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                S_dt, f"Series.dt.{field}"
-            )
-
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -191,7 +173,6 @@ def create_date_method_overload(method):
         func_text += "    )\n"
     else:
         func_text = "def overload_method(S_dt):\n"
-        func_text += f"    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S_dt, 'Series.dt.{method}()')\n"
     # .dt methods only work on datetime64s"""
     func_text += "    if not (S_dt.stype.dtype == bodo.datetime64ns or isinstance(S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)):\n"  # pragma: no cover
     func_text += "        return\n"
@@ -284,11 +265,6 @@ def create_series_dt_df_output_overload(attr):
             return
 
         has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
-        if attr != "isocalendar":
-            # We only support tz-aware data for isocalendar
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                S_dt, f"Series.dt.{attr}"
-            )
 
         if attr == "components":
             fields = [

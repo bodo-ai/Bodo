@@ -704,6 +704,26 @@ def overload_mod_operator_timedeltas(lhs, rhs):
         return impl
 
 
+@overload(min, no_unliteral=True)
+def timedelta_min(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True)
+def timedelta_max(lhs, rhs):
+    if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl
+
+
 def pd_create_cmp_op_overload(op):
     """create overload function for comparison operators with datetime_date_array"""
 

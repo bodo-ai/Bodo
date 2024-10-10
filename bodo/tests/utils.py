@@ -998,7 +998,7 @@ def _test_equal(
 
     # Bodo returns PyArrow decimal scalar
     if isinstance(py_out, Decimal):
-        py_out = pa.scalar(py_out, pa.decimal128(38, 18))
+        py_out = pa.scalar(py_out)
 
     if isinstance(py_out, pd.Series):
         if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(

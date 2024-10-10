@@ -293,6 +293,34 @@ def decimal128type_to_int128(typingctx, val):
     return int128_type(val), codegen
 
 
+@overload(min, no_unliteral=True)
+def decimal_min(lhs, rhs):
+    if isinstance(lhs, Decimal128Type) and isinstance(rhs, Decimal128Type):
+        if lhs.scale != rhs.scale:  # pragma: no cover
+            raise_bodo_error(
+                f"Cannot compare decimals with different scales: {lhs} and {rhs}"
+            )
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
+@overload(max, no_unliteral=True)
+def decimal_max(lhs, rhs):
+    if isinstance(lhs, Decimal128Type) and isinstance(rhs, Decimal128Type):
+        if lhs.scale != rhs.scale:  # pragma: no cover
+            raise_bodo_error(
+                f"Cannot compare decimals with different scales: {lhs} and {rhs}"
+            )
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl
+
+
 def decimal_to_str_codegen(context, builder, signature, args, scale):
     (val,) = args
     scale = context.get_constant(types.int32, scale)

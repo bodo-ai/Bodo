@@ -1036,10 +1036,6 @@ def overload_coerce_to_array(
     if isinstance(data, types.List) and isinstance(
         data.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
     ):
-        # Currently only support tz naive. Need an allocation function.
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            data, "coerce_to_array()"
-        )
 
         def impl_list_timestamp(
             data,
@@ -2178,10 +2174,7 @@ def overload_index_from_array(data, name=None):
             data, name
         )  # pragma: no cover
 
-    if (
-        data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
-        or data.dtype == types.NPDatetime("ns")
-    ):
+    if data.dtype == types.NPDatetime("ns"):
         return lambda data, name=None: pd.DatetimeIndex(
             data, name=name
         )  # pragma: no cover
@@ -2191,7 +2184,19 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if isinstance(data.dtype, (types.Integer, types.Float, types.Boolean)):
+    if (
+        isinstance(
+            data.dtype,
+            (
+                types.Integer,
+                types.Float,
+                types.Boolean,
+                bodo.TimeType,
+                bodo.Decimal128Type,
+            ),
+        )
+        or data.dtype == bodo.datetime_date_type
+    ):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
             data, name
         )  # pragma: no cover
