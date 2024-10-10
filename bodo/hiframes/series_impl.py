@@ -19,12 +19,16 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.datetime_date_ext import DatetimeDateArrayType
 from bodo.hiframes.datetime_datetime_ext import (
     datetime_datetime_type,
 )
 from bodo.hiframes.datetime_timedelta_ext import (
     PDTimeDeltaType,
     datetime_timedelta_type,
+)
+from bodo.hiframes.generic_pandas_coverage import (
+    generate_simple_series_impl,
 )
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -1541,6 +1545,156 @@ def overload_series_head(S, n=5):
         return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
 
     return impl
+
+
+@overload_method(SeriesType, "clip", inline="always", no_unliteral=True)
+def overload_series_clip(
+    S,
+    lower=None,
+    upper=None,
+    axis=None,
+    inplace=False,
+):
+    unsupported_args = {
+        "axis": axis,
+        "inplace": inplace,
+    }
+    arg_defaults = {
+        "axis": None,
+        "inplace": False,
+    }
+    check_unsupported_args(
+        "Series.clip",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    if not (
+        (
+            bodo.utils.utils.is_np_array_typ(S.data)
+            and (
+                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+                or isinstance(S.dtype, (types.Number, types.Boolean))
+            )
+        )
+        or S.data == bodo.dict_str_arr_type
+        or isinstance(
+            S.data,
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                DatetimeDateArrayType,
+                bodo.DatetimeArrayType,
+                BooleanArrayType,
+                StringArrayType,
+                BinaryArrayType,
+            ),
+        )
+    ):
+        raise BodoError(f"Series.clip() does not support series type: {S.data}.")
+
+    def coercible(l, r):
+        return l == r or (
+            isinstance(l, types.Integer)
+            and isinstance(r, (types.Float, Decimal128Type))
+        )
+
+    def element_type_check(S, bound):
+        series_type = element_type(S.data)
+        if bound != types.none:
+            return coercible(types.unliteral(element_type(bound)), series_type)
+        return True
+
+    def bound_type_check(bound):
+        return (
+            is_overload_constant_nan(bound)
+            or is_scalar_type(bound)
+            or isinstance(bound, SeriesType)
+            or isinstance(bound, types.Array)
+        )
+
+    if not (bound_type_check(lower) and element_type_check(S, lower)):
+        raise BodoError(
+            f"Series.clip() requires lower to be of the same type as its series of {element_type(S.data)}. Lower type: {lower.data if isinstance(lower, SeriesType) else lower} not supported."
+        )
+
+    if not (bound_type_check(upper) and element_type_check(S, upper)):
+        raise BodoError(
+            f"Series.clip() requires upper to be of the same type as its series of {element_type(S.data)}. Upper type: {upper.data if isinstance(upper, SeriesType) else upper} not supported."
+        )
+
+    if lower != types.none and upper != types.none:
+        scalar_text = "  if data[i] < lower:\n"
+        scalar_text += "    result[i] = lower\n"
+        scalar_text += "  elif data[i] > upper:\n"
+        scalar_text += "    result[i] = upper\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    result[i] = data[i]\n"
+    elif lower != types.none:
+        scalar_text = "  if data[i] < lower:\n"
+        scalar_text += "    result[i] = lower\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    result[i] = data[i]\n"
+    elif upper != types.none:
+        scalar_text = "  if data[i] > upper:\n"
+        scalar_text += "    result[i] = upper\n"
+        scalar_text += "  else:\n"
+        scalar_text += "    result[i] = data[i]\n"
+    else:
+        scalar_text = "  result[i] = data[i]\n"
+    na_check = "if bodo.libs.array_kernels.isna(data, i):\n"
+    na_check += "  bodo.libs.array_kernels.setna(result, i)\n"
+    na_check += "else:\n"
+    scalar_text = na_check + scalar_text
+
+    iterate_over_dict = True
+    # element-wise bound
+    preprocess_text = "def len_check(data, bound):\n"
+    preprocess_text += "  assert len(data) == len(bound), 'clip() requires bound to be of the same length as its series'\n"
+    if lower != types.none and isinstance(lower, SeriesType):
+        iterate_over_dict = False
+        preprocess_text += (
+            "lower_data = bodo.hiframes.pd_series_ext.get_series_data(lower)\n"
+        )
+        preprocess_text += "len_check(data, lower_data)\n"
+        scalar_text = scalar_text.replace(
+            "if data[i] < lower:",
+            "if not bodo.libs.array_kernels.isna(lower_data, i) and data[i] < lower_data[i]:",
+        )
+        scalar_text = scalar_text.replace(
+            "result[i] = lower", "result[i] = lower_data[i]"
+        )
+    if upper != types.none and isinstance(upper, SeriesType):
+        iterate_over_dict = False
+        preprocess_text += (
+            "upper_data = bodo.hiframes.pd_series_ext.get_series_data(upper)\n"
+        )
+        preprocess_text += "len_check(data, upper_data)\n"
+        scalar_text = scalar_text.replace(
+            "if data[i] > upper:",
+            "if not bodo.libs.array_kernels.isna(upper_data, i) and data[i] > upper_data[i]:",
+        )
+        scalar_text = scalar_text.replace(
+            "result[i] = upper", "result[i] = upper_data[i]"
+        )
+
+    return generate_simple_series_impl(
+        ("S", "lower", "upper", "axis", "inplace"),
+        (S, lower, upper, axis, inplace),
+        S,
+        scalar_text,
+        preprocess_text,
+        arg_defaults={
+            "lower": None,
+            "upper": None,
+            "axis": None,
+            "inplace": False,
+        },
+        iterate_over_dict=iterate_over_dict,
+    )
 
 
 # Include lowering for safety.

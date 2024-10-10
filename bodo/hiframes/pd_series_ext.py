@@ -1354,7 +1354,6 @@ series_unsupported_methods = (
     "ewm",
     "case_when",
     # Computations / descriptive stats
-    "clip",
     "factorize",
     "mode",
     # Reindexing / selection / label manipulation

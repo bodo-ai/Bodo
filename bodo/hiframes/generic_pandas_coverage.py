@@ -16,6 +16,7 @@ def generate_simple_series_impl(
     arg_types,
     out_type,
     scalar_text,
+    preprocess_text=None,
     arg_defaults=None,
     keep_name=True,
     keep_index=True,
@@ -37,6 +38,8 @@ def generate_simple_series_impl(
         that should be handled by a different code generation utility.
         out_type (type): the type that is to be returned by the function.
         scalar_text (string): the func_text for the computations at a row-by-row level.
+        preprocess_text (string): the func_text for additional logic before row-by-row computation.
+        arg_defaults (dict): a mapping of argument names to default values if applicable.
         keep_name (bool): if returning a Series, indicates that it should use the same name as the
         original input (if False, uses None).
         keep_index (bool): if returning a Series, indicates that it should use the same index as the
@@ -64,8 +67,8 @@ def generate_simple_series_impl(
         func_text = "def impl(" + ", ".join(arg_names) + "):\n"
     else:
         arg_def_strings = [
-            name if default is None else f"{name}={default}"
-            for name, default in zip(arg_names, arg_defaults)
+            name if name not in arg_defaults else f"{name}={arg_defaults.get(name)}"
+            for name in arg_names
         ]
         func_text = "def impl(" + ", ".join(arg_def_strings) + "):\n"
 
@@ -118,6 +121,11 @@ def generate_simple_series_impl(
         func_text += " has_global = data._has_global_dictionary\n"
         func_text += " indices = data._indices\n"
         func_text += " data = data._data\n"
+
+    # Embed preprocess_text
+    if preprocess_text is not None:
+        for line in preprocess_text.splitlines():
+            func_text += f" {line}\n"
 
     # Allocate the output array and set up a loop that will write to it
     func_text += " result = bodo.utils.utils.alloc_type(len(data), out_dtype, (-1,))\n"
