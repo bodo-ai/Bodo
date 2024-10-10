@@ -137,33 +137,49 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
     std::shared_ptr<table_info> in_table, mpi_comm_info const& comm_info);
 
 /**
- * @brief Broadcast an array. Child arrays will also be copied.
+ * @brief Broadcast an array (including child arrays).
  *
- * @param ref_arr : the reference array used for the datatype
- * @param in_arr : the broadcasted array
+ * @param ref_arr : the reference array used for the dictionaries if available
+ * (can be nullptr)
+ * @param in_arr : the array to broadcast
+ * @param comm_ranks : target ranks to send data to (can be nullptr if sending
+ * to all)
  * @param is_parallel : whether tracing should be parallel
  * @param mpi_root : root rank for broadcast (where data is broadcast from)
  * @param myrank : current rank
  * @return the array put in all the nodes
  */
-std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
-                                            std::shared_ptr<array_info> in_arr,
-                                            bool is_parallel, int mpi_root,
-                                            int myrank);
+std::shared_ptr<array_info> broadcast_array(
+    std::shared_ptr<array_info> ref_arr, std::shared_ptr<array_info> in_arr,
+    std::shared_ptr<array_info> comm_ranks, bool is_parallel, int mpi_root,
+    int myrank);
 
 /**
- * @brief Broadcast the first n_cols of in_table to the other nodes. The
- * ref_table contains only the type information. In order to eliminate it, we
- * would need to have a broadcast_datatype function.
+ * @brief Entry point for Python to call broadcast_array()
  *
- * For dict columns, we use the global dictionary from columns of ref_table
- * (since columns in in_table can be anything including nullptr on ranks !=
- * mpi_root) to ensure that ref_table and in_table share the same dictionary and
- * that it is global.
+ * @param in_arr input array to broadcast (non-root data is ignored)
+ * @param comm_ranks target ranks to send data to (all ranks if not specified)
+ * @param mpi_root broadcast root rank
+ * @return array_info* broadcast output array
+ */
+array_info* broadcast_array_py_entry(array_info* in_arr, array_info* comm_ranks,
+                                     int mpi_root);
+
+/**
+ * @brief Broadcast the first n_cols of in_table to the other ranks.
  *
- * @param ref_table : the reference table used for the datatype
+ * For dict columns, we use the global dictionary from columns of ref_table if
+ * available (since columns in in_table can be anything including nullptr on
+ * ranks != mpi_root) to ensure that ref_table and in_table share the same
+ * dictionary and that it is global. ref_table can be nullptr, in which case we
+ * broadcast the dictionary from root rank.
+ *
+ * @param ref_table : the reference table used for dictionary if available (can
+ * be nullptr)
  * @param in_table : the broadcasted table. It can be anything including nullptr
  * for the nodes of rank not equal to mpi_root.
+ * @param comm_ranks : target ranks to send data to (can be nullptr if sending
+ * to all)
  * @param n_cols : the number of columns in output
  * @param is_parallel : whether tracing should be parallel
  * @param mpi_root : root rank for broadcast (where data is broadcast from)
@@ -171,7 +187,19 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
  */
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
-    size_t n_cols, bool is_parallel, int mpi_root);
+    std::shared_ptr<array_info> comm_ranks, size_t n_cols, bool is_parallel,
+    int mpi_root);
+
+/**
+ * @brief Entry point for Python to call broadcast_table()
+ *
+ * @param in_arr input table to broadcast (non-root data is ignored)
+ * @param comm_ranks target ranks to send data to (all ranks if not specified)
+ * @param mpi_root broadcast root rank
+ * @return table_info* broadcast output table
+ */
+table_info* broadcast_table_py_entry(table_info* in_table,
+                                     array_info* comm_ranks, int mpi_root);
 
 /**
  * @brief Gather a table

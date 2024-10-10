@@ -1847,10 +1847,10 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_string_buffer(
     return buffer;
 }
 
-std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
-                                            std::shared_ptr<array_info> in_arr,
-                                            bool is_parallel, int mpi_root,
-                                            int myrank) {
+std::shared_ptr<array_info> broadcast_array(
+    std::shared_ptr<array_info> ref_arr, std::shared_ptr<array_info> in_arr,
+    std::shared_ptr<array_info> comm_ranks, bool is_parallel, int mpi_root,
+    int myrank) {
     int64_t arr_bcast[6];
     if (myrank == mpi_root) {
         arr_bcast[0] = in_arr->length;
@@ -1869,13 +1869,22 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
     int64_t num_categories = arr_bcast[4];
     int32_t precision = (int32_t)arr_bcast[5];
 
+    // Create new communicator if target ranks are specified by user
+    MPI_Comm comm = MPI_COMM_WORLD;
+    if (comm_ranks && comm_ranks->length > 0) {
+        c_comm_create((int*)comm_ranks->data1(), comm_ranks->length, &comm);
+        if (comm == MPI_COMM_NULL) {
+            return alloc_array_top_level(0, 0, 0, arr_type, dtype);
+        }
+    }
+
     std::shared_ptr<array_info> out_arr;
     if (arr_type == bodo_array_type::NUMPY ||
         arr_type == bodo_array_type::CATEGORICAL ||
         arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
         if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr);
+            out_arr = in_arr;
         } else {
             out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
@@ -1889,42 +1898,37 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         } else {
             bcast_size = n_rows;
         }
-        MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, mpi_root,
-                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, mpi_root, comm);
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
         if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr);
+            out_arr = in_arr;
         } else {
             out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
-        MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
-        MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root, MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, mpi_root, comm);
+        MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, mpi_root, comm);
     } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
         MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
         MPI_Datatype offset_mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
         if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr);
+            out_arr = in_arr;
         } else {
             out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
-        MPI_Bcast(out_arr->data1(), n_rows, utc_mpi_typ, mpi_root,
-                  MPI_COMM_WORLD);
-        MPI_Bcast(out_arr->data2(), n_rows, offset_mpi_typ, mpi_root,
-                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data1(), n_rows, utc_mpi_typ, mpi_root, comm);
+        MPI_Bcast(out_arr->data2(), n_rows, offset_mpi_typ, mpi_root, comm);
     } else if (arr_type == bodo_array_type::STRING) {
         MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
         MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
         if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr);
+            out_arr = in_arr;
         } else {
             out_arr = alloc_array_top_level(n_rows, n_sub_elems, -1, arr_type,
                                             dtype, -1, 0, num_categories);
         }
-        MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root,
-                  MPI_COMM_WORLD);
-        MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root,
-                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, mpi_root, comm);
+        MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, mpi_root, comm);
     } else if (arr_type == bodo_array_type::DICT) {
         if (myrank == mpi_root &&
             !in_arr->child_arrays[0]->is_globally_replicated) {
@@ -1933,46 +1937,60 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
                 "global dictionary.");
         }
         // Create a DICT out_arr
+        std::shared_ptr<array_info> out_dict =
+            ref_arr
+                ? ref_arr->child_arrays[0]
+                : broadcast_array(
+                      nullptr,
+                      myrank == mpi_root ? in_arr->child_arrays[0] : nullptr,
+                      comm_ranks, is_parallel, mpi_root, myrank);
         out_arr = create_dict_string_array(
-            ref_arr->child_arrays[0],
+            out_dict,
             broadcast_array(
-                ref_arr->child_arrays[1],
+                ref_arr ? ref_arr->child_arrays[1] : nullptr,
                 myrank == mpi_root ? in_arr->child_arrays[1] : nullptr,
-                is_parallel, mpi_root, myrank));
+                comm_ranks, is_parallel, mpi_root, myrank));
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
         if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr, /*shallow_copy_child_arrays*/ true);
+            out_arr = in_arr;
         } else {
             out_arr = alloc_array_item(n_rows, nullptr);
         }
-        out_arr->child_arrays.front() = broadcast_array(
-            ref_arr->child_arrays.front(), out_arr->child_arrays.front(),
-            is_parallel, mpi_root, myrank);
-        MPI_Bcast(out_arr->data1(), n_rows + 1, mpi_typ_offset, mpi_root,
-                  MPI_COMM_WORLD);
+        out_arr->child_arrays.front() =
+            broadcast_array(ref_arr ? ref_arr->child_arrays.front() : nullptr,
+                            out_arr->child_arrays.front(), comm_ranks,
+                            is_parallel, mpi_root, myrank);
+        MPI_Bcast(out_arr->data1(), n_rows + 1, mpi_typ_offset, mpi_root, comm);
     } else if (arr_type == bodo_array_type::STRUCT) {
-        if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr, /*shallow_copy_child_arrays*/ true);
+        int32_t n_child_arrs;
+        if (ref_arr) {
+            n_child_arrs = ref_arr->child_arrays.size();
         } else {
-            out_arr =
-                alloc_struct(n_rows, std::vector<std::shared_ptr<array_info>>(
-                                         ref_arr->child_arrays.size()));
+            MPI_Bcast(&n_child_arrs, 1, MPI_INT32_T, mpi_root, comm);
+        }
+        if (myrank == mpi_root) {
+            out_arr = in_arr;
+        } else {
+            out_arr = alloc_struct(
+                n_rows, std::vector<std::shared_ptr<array_info>>(n_child_arrs));
         }
         for (size_t i = 0; i < out_arr->child_arrays.size(); ++i) {
-            out_arr->child_arrays[i] = broadcast_array(
-                ref_arr->child_arrays[i], out_arr->child_arrays[i], is_parallel,
-                mpi_root, myrank);
+            out_arr->child_arrays[i] =
+                broadcast_array(ref_arr ? ref_arr->child_arrays[i] : nullptr,
+                                out_arr->child_arrays[i], comm_ranks,
+                                is_parallel, mpi_root, myrank);
         }
     } else if (arr_type == bodo_array_type::MAP) {
         if (myrank == mpi_root) {
-            out_arr = copy_array(in_arr, /*shallow_copy_child_arrays*/ true);
+            out_arr = in_arr;
         } else {
             out_arr = alloc_map(n_rows, alloc_array_item(n_rows, nullptr));
         }
         out_arr->child_arrays[0] =
-            broadcast_array(ref_arr->child_arrays[0], out_arr->child_arrays[0],
-                            is_parallel, mpi_root, myrank);
+            broadcast_array(ref_arr ? ref_arr->child_arrays[0] : nullptr,
+                            out_arr->child_arrays[0], comm_ranks, is_parallel,
+                            mpi_root, myrank);
     } else {
         throw std::runtime_error(
             "Unsupported array type for broadcast_array: " +
@@ -1986,16 +2004,38 @@ std::shared_ptr<array_info> broadcast_array(std::shared_ptr<array_info> ref_arr,
         // broadcasting the null bitmask
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         int n_bytes = (n_rows + 7) >> 3;
-        MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, mpi_root,
-                  MPI_COMM_WORLD);
+        MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, mpi_root, comm);
+    }
+
+    // Free communicator if created
+    if (comm_ranks && comm_ranks->length > 0) {
+        MPI_Comm_free(&comm);
     }
 
     return out_arr;
 }
 
+array_info* broadcast_array_py_entry(array_info* in_arr, array_info* comm_ranks,
+                                     int mpi_root) {
+    try {
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        std::shared_ptr<array_info> input_array(in_arr);
+        std::shared_ptr<array_info> comm_ranks_arr(comm_ranks);
+        std::shared_ptr<array_info> out_arr =
+            broadcast_array(nullptr, myrank == mpi_root ? input_array : nullptr,
+                            comm_ranks_arr, true, mpi_root, myrank);
+        return new array_info(*out_arr);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
+}
+
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
-    size_t n_cols, bool is_parallel, int mpi_root) {
+    std::shared_ptr<array_info> comm_ranks, size_t n_cols, bool is_parallel,
+    int mpi_root) {
     tracing::Event ev("broadcast_table", is_parallel);
     int myrank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -2005,12 +2045,27 @@ std::shared_ptr<table_info> broadcast_table(
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         // NOTE: in_table may not have columns in non-root ranks
         out_arrs.push_back(broadcast_array(
-            ref_table->columns[i_col],
-            myrank == mpi_root ? in_table->columns[i_col] : nullptr,
+            ref_table ? ref_table->columns[i_col] : nullptr,
+            myrank == mpi_root ? in_table->columns[i_col] : nullptr, comm_ranks,
             is_parallel, mpi_root, myrank));
     }
 
     return std::make_shared<table_info>(out_arrs);
+}
+
+table_info* broadcast_table_py_entry(table_info* in_table,
+                                     array_info* comm_ranks, int mpi_root) {
+    try {
+        std::shared_ptr<table_info> input_table(in_table);
+        std::shared_ptr<array_info> comm_ranks_arr(comm_ranks);
+        std::shared_ptr<table_info> out_table =
+            broadcast_table(nullptr, input_table, comm_ranks_arr,
+                            input_table->ncols(), true, mpi_root);
+        return new table_info(*out_table);
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
+    }
 }
 
 int MPI_Gengather(void* sendbuf, int sendcount, MPI_Datatype sendtype,

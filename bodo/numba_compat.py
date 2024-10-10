@@ -2912,7 +2912,7 @@ def _lower_call_ExternalFunction(self, fnty, expr, signature):
     from numba.core import funcdesc
 
     import bodo
-    from bodo.transforms.type_inference.typeinfer import ExternalFunctionErrorChecked
+    from bodo.utils.typing import ExternalFunctionErrorChecked
 
     # Handle a named external function
     self.debug_print("# external function")

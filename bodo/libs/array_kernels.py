@@ -1208,8 +1208,8 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):  # pragma: no cover
     else:
         res = np.empty(k, A.dtype)
         res_ind = np.empty(k, I.dtype)  # TODO: string array
-    bodo.libs.distributed_api.bcast(res)
-    bodo.libs.distributed_api.bcast(res_ind)
+    bodo.libs.distributed_api.bcast_preallocated(res)
+    bodo.libs.distributed_api.bcast_preallocated(res_ind)
     return res, res_ind
 
 

@@ -46,7 +46,7 @@ from bodo.libs.array import (
     delete_table,
     table_type,
 )
-from bodo.libs.distributed_api import bcast, bcast_scalar
+from bodo.libs.distributed_api import bcast_scalar
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
@@ -808,7 +808,6 @@ def iceberg_distributed_run(
         {
             "_iceberg_reader_py": sql_reader_py,
             "bcast_scalar": bcast_scalar,
-            "bcast": bcast,
         },
         typingctx=typingctx,
         targetctx=targetctx,

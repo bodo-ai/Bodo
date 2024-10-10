@@ -391,7 +391,7 @@ def get_filter_read_indices(bool_arr):  # pragma: no cover
         all_indices = inds
     else:
         all_indices = np.empty(n, indices.dtype)
-    bodo.libs.distributed_api.bcast(all_indices)
+    bodo.libs.distributed_api.bcast_preallocated(all_indices)
 
     start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
     end = bodo.libs.distributed_api.get_end(n, n_pes, rank)

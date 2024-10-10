@@ -6287,12 +6287,8 @@ def overload_rf_classifier_model_fit(
             y = bodo.gatherv(y)
             # Broadcast X, y to first rank in each node
             if nnodes > 1:
-                X = bodo.libs.distributed_api.bcast_comm(
-                    X, comm_ranks=first_rank_node, nranks=nnodes
-                )
-                y = bodo.libs.distributed_api.bcast_comm(
-                    y, comm_ranks=first_rank_node, nranks=nnodes
-                )
+                X = bodo.libs.distributed_api.bcast(X, comm_ranks=first_rank_node)
+                y = bodo.libs.distributed_api.bcast(y, comm_ranks=first_rank_node)
 
         with bodo.objmode:
             random_forest_model_fit(m, X, y)  # return value is m

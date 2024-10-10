@@ -102,7 +102,7 @@ table_info* nested_loop_join_table(
         non_equi_condition == non_equi_condition_exp) {                        \
         for (int p = 0; p < n_pes; p++) {                                      \
             std::shared_ptr<table_info> bcast_table_chunk =                    \
-                broadcast_table(bcast_table, bcast_table,                      \
+                broadcast_table(bcast_table, bcast_table, nullptr,             \
                                 bcast_table->ncols(), parallel_trace, p);      \
             bool is_bcast_outer = (is_left_outer && left_table_bcast) ||       \
                                   (is_right_outer && !left_table_bcast);       \

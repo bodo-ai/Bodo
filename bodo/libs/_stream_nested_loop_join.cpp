@@ -505,7 +505,7 @@ bool nested_loop_join_probe_consume_batch(
         for (int p = 0; p < n_pes; p++) {
             start_bcast = start_timer();
             std::shared_ptr<table_info> bcast_probe_chunk = broadcast_table(
-                in_table, in_table, in_table->ncols(), parallel, p);
+                in_table, in_table, nullptr, in_table->ncols(), parallel, p);
             join_state->metrics.probe_bcast_table_time +=
                 end_timer(start_bcast);
             join_state->ProcessProbeChunk(std::move(bcast_probe_chunk),
