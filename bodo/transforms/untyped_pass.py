@@ -590,6 +590,9 @@ class UntypedPass:
         else:
             func_name, func_mod = fdef
 
+        if fdef == ("dict", "builtins"):
+            return self._handle_dict(assign, lhs, rhs)
+
         # Erroring for SnowflakeCatalog.from_conn_str inside of JIT
         if fdef == ("from_conn_str", "bodosql.SnowflakeCatalog"):
             raise BodoError(
@@ -777,6 +780,52 @@ class UntypedPass:
             lhs,
         )
 
+    def _handle_dict(
+        self, assign: ir.Assign, lhs: ir.Var, rhs: ir.Expr
+    ) -> list[ir.Assign]:
+        """Optimization step to convert function calls for dict()
+        into Python dictionary literals whenever possible. Literal dictionaries
+        in Python use the BUILD_MAP instruction, which is more efficient and used
+        by Bodo/Numba for analysis of constant dictionaries. This cannot be done in
+        regular Python because any Python programmer can override the dict() function,
+        but this is not possible in Bodo/Numba, making this safe.
+        https://madebyme.today/blog/python-dict-vs-curly-brackets/
+
+        Right now we only support the case where the dict() function is called without
+        any arguments. This is a common pattern if people prefer the readability of dict()
+        over {}. We can easily support more cases in the future if needed. If the call to
+        dict() is not safe to convert to a dictionary literal, we will just return the
+        original assign node.
+
+        Note: The caller is expected to validate that the input is a call to dict().
+
+        Args:
+            assign (ir.Assign): The original assignment. We return this value if we cannot
+                convert the dict() call to a dictionary literal.
+            lhs (ir.Var): The target variable of the assignment. This will be our new target
+                variable if we can convert the dict() call to a dictionary literal.
+            rhs (ir.Expr): The right-hand side of the assignment. This is the dict() call
+                that we will analyze to see if we can convert it to a dictionary literal.
+
+        Returns:
+            list[ir.Assign]: An 1 element list containing either a new `build_map` call or the original
+                `dict()` call as an assignment.
+        """
+        has_args = (
+            len(rhs.args) > 0
+            or len(rhs.kws) > 0
+            or rhs.vararg is not None
+            or rhs.varkwarg is not None
+        )
+        # TODO: Support more complex cases like converting
+        # dict(x=1, y=2, z=3) to {"x": 1, "y": 2, "z": 3}
+        if has_args:
+            return [assign]
+        else:
+            # Create a new dictionary literal
+            new_dict = ir.Expr.build_map([], 0, {}, {}, rhs.loc)
+            return [ir.Assign(new_dict, lhs, lhs.loc)]
+
     def _handle_pd_DataFrame(self, assign, lhs, rhs, label):
         """
         Enable typing for dictionary data arg to pd.DataFrame({'A': A}) call.
@@ -791,6 +840,7 @@ class UntypedPass:
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             msg = "DataFrame column names should be constant strings or ints"
+            # TODO[BSE-4021]: Verify the build_map is not modified in the IR.
             (
                 tup_vars,
                 new_nodes,
@@ -857,6 +907,7 @@ class UntypedPass:
         if not is_expr(arg_def, "build_map"):
             raise BodoError(msg)
 
+        # TODO[BSE-4021]: Verify the build_map is not modified in the IR.
         (
             tup_vars,
             new_nodes,

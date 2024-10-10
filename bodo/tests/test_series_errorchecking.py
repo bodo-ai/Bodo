@@ -460,14 +460,35 @@ def test_np_select_series_cond(memory_leak_check):
 
 def test_series_init_dict_non_const_keys():
     """
-    Tests the error message when initializing series with non constant keyed dicts.
+    Tests the error message when initializing series with non constant keyed dicts
+    that cannot be unrolled.
     """
 
     @bodo.jit
     def test_impl():
-        # TODO: Bodo should not error here. It should optimize it to a constant,
-        # like done with:
-        # init_dict = {}; for i in range(10): init_dict[f"idx_{i}"] = 1
+        init_dict = dict()  # noqa: C408
+        n = 100 if np.random.rand() > 0.5 else 10
+        for i in range(n):
+            init_dict[f"idx_{i}"] = 1
+        return pd.Series(init_dict)
+
+    with pytest.raises(
+        BodoError,
+        match="pd.Series\\(\\): When initializing series with a dictionary, it is required that the dict has constant keys",
+    ):
+        test_impl()
+
+
+def test_series_init_dict_constant_unrolling():
+    """
+    Tests that we can build a DataFrame from a constant dictionary when the keys
+    can be constant by unrolling the loop. This requires further optimizations.
+    See BSE-4021.
+    """
+
+    @bodo.jit
+    def test_impl():
+        # TODO: Bodo should be able to unroll this loop.
         init_dict = dict()  # noqa: C408
         for i in range(10):
             init_dict[f"idx_{i}"] = 1
@@ -475,7 +496,29 @@ def test_series_init_dict_non_const_keys():
 
     with pytest.raises(
         BodoError,
-        match="pd.Series\\(\\): When intializing series with a dictionary, it is required that the dict has constant keys",
+        match="pd.Series\\(\\): When initializing series with a dictionary, it is required that the dict has constant keys",
+    ):
+        test_impl()
+
+
+def test_series_init_build_map_constant_unrolling():
+    """
+    Tests that we can build a DataFrame from a dictionary literal when the keys
+    can be constant by unrolling the loop. This requires further optimizations.
+    See BSE-4021.
+    """
+
+    @bodo.jit
+    def test_impl():
+        # TODO: Bodo should be able to unroll this loop.
+        init_dict = {}
+        for i in range(10):
+            init_dict[f"idx_{i}"] = 1
+        return pd.Series(init_dict)
+
+    with pytest.raises(
+        BodoError,
+        match="pd.Series\\(\\): When initializing series with a dictionary, it is required that the dict has constant keys",
     ):
         test_impl()
 

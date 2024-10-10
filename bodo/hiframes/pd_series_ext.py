@@ -987,7 +987,7 @@ def pd_series_overload(
     # to convert it to a tuple type, so we can access the keys as constants
     if isinstance(data, types.DictType):
         raise_bodo_error(
-            "pd.Series(): When intializing series with a dictionary, it is required that the dict has constant keys"
+            "pd.Series(): When initializing series with a dictionary, it is required that the dict has constant keys"
         )
 
     # heterogeneous tuple input case
