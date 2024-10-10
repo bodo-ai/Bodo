@@ -175,30 +175,6 @@ def test_pd_concat_dataframe_error(memory_leak_check):
         impl(df1, df3)
 
 
-def test_tz_dataframe_unsupported(memory_leak_check):
-    """Test that an unsupported DataFrame operation gives a reasonable error
-    message.
-    """
-
-    def impl(df):
-        return df.values
-
-    non_tz_df = pd.DataFrame(
-        {"a": [pd.Timestamp("2020-01-01")] * 10},
-    )
-    tz_df = pd.DataFrame(
-        {"a": [pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10},
-    )
-
-    check_func(impl, (non_tz_df,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware columns not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_df)
-
-
 def test_tz_aware_unsupported(memory_leak_check):
     """Test that a tz-naive values cannot be assigned to tz-aware series"""
 

@@ -108,10 +108,6 @@ def typeof_pd_index(val, c):
     if val.equals(pd.Index([])) and val.dtype == np.object_:
         return StringIndexType(get_val_type_maybe_str_literal(val.name))
 
-    # TODO: Replace with a specific type for DateIndex, so these can be boxed
-    if val.inferred_type == "date":
-        return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
-
     # Pandas uses object dtype for nullable int arrays
     if (
         val.inferred_type == "integer"
@@ -134,6 +130,14 @@ def typeof_pd_index(val, c):
                 # we don't have the dtype default to int64
                 dtype = types.int64
                 arr_type = IntegerArrayType(dtype)
+        return NumericIndexType(
+            dtype,
+            get_val_type_maybe_str_literal(val.name),
+            arr_type,
+        )
+    if val.inferred_type == "date" or pd._libs.lib.infer_dtype(val, True) == "date":
+        dtype = bodo.datetime_date_type
+        arr_type = bodo.datetime_date_array_type
         return NumericIndexType(
             dtype,
             get_val_type_maybe_str_literal(val.name),
@@ -174,6 +178,16 @@ def typeof_pd_index(val, c):
             types.bool_,
             get_val_type_maybe_str_literal(val.name),
             boolean_array_type,
+        )
+    # catch-all for all remaining Index types
+    arr_typ = bodo.hiframes.boxing._infer_series_arr_type(val)
+    if arr_typ == bodo.datetime_date_array_type or isinstance(
+        arr_typ, (bodo.DecimalArrayType, bodo.DatetimeArrayType, bodo.TimeArrayType)
+    ):
+        return NumericIndexType(
+            arr_typ.dtype,
+            get_val_type_maybe_str_literal(val.name),
+            arr_typ,
         )
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
@@ -816,7 +830,19 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         data, (SeriesType, types.List, types.UniTuple)
     ):
         # Numeric Indices:
-        if isinstance(elem_type, (types.Integer, types.Float, types.Boolean)):
+        if (
+            isinstance(
+                elem_type,
+                (
+                    types.Integer,
+                    types.Float,
+                    types.Boolean,
+                    bodo.TimeType,
+                    bodo.Decimal128Type,
+                ),
+            )
+            or elem_type == bodo.datetime_date_type
+        ):
             if dtype_provided:
 
                 def impl(
@@ -845,6 +871,29 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 return bodo.hiframes.pd_index_ext.init_binary_str_index(
                     bodo.utils.conversion.coerce_to_array(data), name
                 )
+
+        # Categorical index:
+        elif isinstance(elem_type, bodo.PDCategoricalDtype):
+            if dtype_provided:
+
+                def impl(
+                    data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+                ):  # pragma: no cover
+                    data_arr = bodo.utils.conversion.coerce_to_array(data)
+                    return bodo.hiframes.pd_index_ext.init_categorical_index(
+                        data_arr, name
+                    )
+
+            else:
+
+                def impl(
+                    data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+                ):  # pragma: no cover
+                    data_arr = bodo.utils.conversion.coerce_to_array(data)
+                    fixed_arr = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
+                    return bodo.hiframes.pd_index_ext.init_categorical_index(
+                        fixed_arr, name
+                    )
 
         else:
             raise BodoError("pd.Index(): provided array is of unsupported type.")
@@ -3127,7 +3176,15 @@ def array_type_to_index(arr_typ, name_typ=None):
 
     assert isinstance(
         arr_typ,
-        (types.Array, IntegerArrayType, FloatingArrayType, bodo.CategoricalArrayType),
+        (
+            types.Array,
+            IntegerArrayType,
+            FloatingArrayType,
+            bodo.CategoricalArrayType,
+            bodo.DecimalArrayType,
+            bodo.TimeArrayType,
+            bodo.DatetimeArrayType,
+        ),
     ) or arr_typ in (
         bodo.datetime_date_array_type,
         bodo.boolean_array_type,
@@ -3135,9 +3192,7 @@ def array_type_to_index(arr_typ, name_typ=None):
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
     # Fix this implementation to match.
-    if arr_typ == bodo.datetime_date_array_type or arr_typ.dtype == types.NPDatetime(
-        "ns"
-    ):
+    if arr_typ.dtype == types.NPDatetime("ns"):
         return DatetimeIndexType(name_typ)
 
     if isinstance(arr_typ, bodo.DatetimeArrayType):
@@ -3150,7 +3205,12 @@ def array_type_to_index(arr_typ, name_typ=None):
     if arr_typ.dtype == types.NPTimedelta("ns"):
         return TimedeltaIndexType(name_typ)
 
-    if isinstance(arr_typ.dtype, (types.Integer, types.Float, types.Boolean)):
+    if (
+        isinstance(
+            arr_typ.dtype, (types.Integer, types.Float, types.Boolean, bodo.TimeType)
+        )
+        or arr_typ == bodo.datetime_date_array_type
+    ):
         return NumericIndexType(arr_typ.dtype, name_typ, arr_typ)
 
     raise BodoError(f"invalid index type {arr_typ}")
@@ -5319,9 +5379,6 @@ def overload_index_argmin(I, axis=0, skipna=True):
         module_name="Index",
     )
 
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.argmin()")
-
     if isinstance(I, RangeIndexType):
 
         def impl(I, axis=0, skipna=True):  # pragma: no cover
@@ -5373,9 +5430,6 @@ def overload_index_argmax(I, axis=0, skipna=True):
         package_name="pandas",
         module_name="Index",
     )
-
-    # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.argmax()")
 
     if isinstance(I, RangeIndexType):
 
