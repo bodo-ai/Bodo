@@ -45,6 +45,7 @@ dependencies:
   - bodo.ai/linux-64::pyarrow=17.0.0  #[linux64]
   - pyarrow =17.0.0  #[osx64]
   - pyarrow =17.0.0  #[osx-arm64]
+  - bodo.ai/linux-64::libarrow=17.0.0  #[linux64]
   - fsspec >=2021.09
   # IO Optional
   - boto3
@@ -76,3 +77,6 @@ dependencies:
 
   # Neworking
   - requests
+
+  # Spawn mode serialization
+  - cloudpickle>=3.0.0
