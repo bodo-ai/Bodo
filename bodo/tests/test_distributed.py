@@ -2661,7 +2661,7 @@ def test_send_recv(val):
 
 
 @pytest.mark.slow
-def test_bcast(arr_tuple_val):
+def test_bcast_preallocated(arr_tuple_val):
     import datetime
 
     if not isinstance(arr_tuple_val[0], np.ndarray) or isinstance(
@@ -2675,7 +2675,7 @@ def test_bcast(arr_tuple_val):
             arr_val = A
         else:
             arr_val = np.empty(len(A), A.dtype)
-        bodo.libs.distributed_api.bcast(arr_val)
+        bodo.libs.distributed_api.bcast_preallocated(arr_val)
         return arr_val
 
     check_func(
@@ -2684,6 +2684,18 @@ def test_bcast(arr_tuple_val):
         py_output=arr_tuple_val[0],
         is_out_distributed=False,
     )
+
+
+@pytest.mark.slow
+def test_bcast_df_dict(memory_leak_check):
+    """Test bcast() with a dataframe that has a dict-encoded column"""
+    dict_arr = pa.array(
+        ["ab", "abc", "ab", "abc", "ab", "c"],
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+    df = pd.DataFrame({"A": np.arange(6), "B": dict_arr})
+    df2 = bodo.libs.distributed_api.bcast(df if bodo.get_rank() == 0 else None)
+    assert _test_equal_guard(df2, df)
 
 
 @pytest.mark.slow
@@ -2967,7 +2979,7 @@ def test_bcast(val1, val2, root):
             val = val1
         else:
             val = val2
-        bodo.libs.distributed_api.bcast(val, root)
+        bodo.libs.distributed_api.bcast_preallocated(val, root)
         return val
 
     check_func(impl, (), py_output=val1, is_out_distributed=False)

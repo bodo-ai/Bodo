@@ -6,6 +6,7 @@
 #include <ctime>
 #include <fstream>
 #include <vector>
+#include "_shuffle.h"
 #include "fmt/format.h"
 
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
@@ -790,6 +791,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, c_allgatherv);
     SetAttrStringFromVoidPtr(m, c_scatterv);
     SetAttrStringFromVoidPtr(m, c_bcast);
+    SetAttrStringFromVoidPtr(m, broadcast_array_py_entry);
+    SetAttrStringFromVoidPtr(m, broadcast_table_py_entry);
     SetAttrStringFromVoidPtr(m, c_alltoallv);
     SetAttrStringFromVoidPtr(m, c_alltoall);
     SetAttrStringFromVoidPtr(m, allgather);

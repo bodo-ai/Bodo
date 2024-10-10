@@ -53,7 +53,7 @@ from bodo.libs.array import (
     table_type,
 )
 from bodo.libs.dict_arr_ext import dict_str_arr_type
-from bodo.libs.distributed_api import bcast, bcast_scalar
+from bodo.libs.distributed_api import bcast_scalar
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
@@ -1066,7 +1066,6 @@ def sql_distributed_run(
         {
             "_sql_reader_py": sql_reader_py,
             "bcast_scalar": bcast_scalar,
-            "bcast": bcast,
             "get_sql_literal": _get_snowflake_sql_literal,
             "gen_runtime_join_filter_cond": gen_runtime_join_filter_cond,
             "gen_runtime_join_filter_interval_cond": gen_runtime_join_filter_interval_cond,

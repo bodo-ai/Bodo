@@ -3041,3 +3041,12 @@ def error_on_unsupported_streaming_arrays(table_type):
     for arr_type in table_type.arr_types:
         if isinstance(arr_type, bodo.IntervalArrayType):
             raise BodoError(f"Array type {arr_type} not supported in streaming yet")
+
+
+class ExternalFunctionErrorChecked(types.ExternalFunction):
+    """Same as Numba's ExternalFunction, but lowering checks for Python exceptions"""
+
+    pass
+
+
+register_model(ExternalFunctionErrorChecked)(models.OpaqueModel)

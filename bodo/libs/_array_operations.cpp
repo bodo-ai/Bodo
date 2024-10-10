@@ -470,8 +470,8 @@ std::shared_ptr<table_info> compute_bounds_from_samples(
     // The underlying dictionary is the same for local_sort and pre_bounds
     // for the dict columns, as needed for broadcast_table.
     std::shared_ptr<table_info> bounds =
-        broadcast_table(std::move(ref_table), std::move(pre_bounds), n_keys,
-                        parallel, mpi_root);
+        broadcast_table(std::move(ref_table), std::move(pre_bounds), nullptr,
+                        n_keys, parallel, mpi_root);
 
     return bounds;
 }
