@@ -1,4 +1,7 @@
+import inspect
+import warnings
 from abc import ABCMeta, abstractmethod
+from pathlib import Path
 
 from numba.core import types, utils
 from numba.core.cpu_options import InlineOptions
@@ -9,7 +12,7 @@ from numba.core.typing.templates import (
     infer_getattr,
 )
 
-from bodo.utils.typing import check_unsupported_args
+from bodo.utils.typing import BodoError, check_unsupported_args
 
 
 def get_feature_path(feature_name):
@@ -48,28 +51,45 @@ class DeclarativeTemplate(metaclass=ABCMeta):
 
 
 class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTemplate):
-    def document(self):
+    def document(self, write_out=True):
+        """
+        Generates a documentation string for the method, writes to corresponding file in
+        documentation if *write_out*
+        """
         title_str = f"# `{self.path_name}`"
         params_dict = utils.pysignature(self._overload_func).parameters
         params_list = list(params_dict.values())
         params_str = ", ".join(map(str, params_list[1:]))
 
+        # Signature taken from the overload defintion
         package_name, full_path = replace_package_name(self.path_name)
         pysig_str = f"`{full_path}({params_str})`"
 
-        unsupported_args_str = "### Supported Arguments:"
+        # Write bullet point for each argument and any restriction imposed by Bodo
+        argument_restrictions_str = "### Argument Restrictions:"
+        arg_restrictions = (
+            {}
+            if self.method_args_checker is None
+            else self.method_args_checker.explain_args()
+        )
         for param in params_list[1:]:
-            unsupported_args_str += f"\n * `{param.name}`"
+            argument_restrictions_str += f"\n * `{param.name}`: "
             if param.name in self.unsupported_args:
-                unsupported_args_str += (
-                    f": only supports default value `{param.default}`."
+                argument_restrictions_str += (
+                    f"only supports default value `{param.default}`."
                 )
+            elif param.name in arg_restrictions:
+                argument_restrictions_str += f"{arg_restrictions[param.name]}."
+            else:
+                argument_restrictions_str += "None."
 
+        # Defaults that have changed between Bodo and Package (optional)
         changed_defaults_str = ""
         for changed_arg in self.changed_defaults:
             default_value = params_dict[changed_arg].default
             changed_defaults_str += f"!!! note\n\tArgument `{changed_arg}` has default value `{default_value}` that's different than {package_name.capitalize()} default.\n\n"
 
+        # Additional notes (manually specified in overload)
         description = self.description
         hyperlink_str = (
             ""
@@ -77,26 +97,38 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             else f"[Link to {package_name.capitalize()} documentation]({self.hyperlink})\n\n"
         )
 
-        # extract example from existing doc for backcompatibility
+        # Extract example from existing doc for backcompatibility
         # TODO: link examples to our testing setup to verify they are still runnable
         path, name = get_feature_path(self.path_name)
         doc_path = f"{path}/{name}.md"
-        begin_example = "### Example Usage"
-        with open(doc_path, "r") as f:
-            doc = f.read()
-            example_str = (
-                "" if begin_example not in doc else doc[doc.index(begin_example) :]
+        example_str = ""
+        if Path(doc_path).is_file():
+            begin_example = "### Example Usage"
+            with open(doc_path, "r") as f:
+                doc = f.read()
+                if begin_example in doc:
+                    example_str = f"{doc[doc.index(begin_example) :].strip()}\n\n"
+        if example_str == "":
+            warnings.warn(
+                f"No example found for {self.path_name}: example must be manually embedded in {doc_path}."
             )
 
-        # overwrite document with generated information + extracted example
-        with open(doc_path, "w") as f:
-            f.write(f"{title_str}\n\n")
-            f.write(hyperlink_str)
-            f.write(f"{pysig_str}\n\n")
-            f.write(f"{unsupported_args_str}\n\n")
-            f.write(changed_defaults_str)
-            f.write(f"{description}\n\n")
-            f.write(example_str)
+        documentation = (
+            f"{title_str}\n\n"
+            f"{hyperlink_str}"
+            f"{pysig_str}\n\n"
+            f"{argument_restrictions_str}\n\n"
+            f"{changed_defaults_str}"
+            f"{description}\n\n"
+            f"{example_str}"
+        )
+
+        # Overwrite document with generated information + extracted example
+        if write_out:
+            with open(doc_path, "w") as f:
+                f.write(documentation)
+
+        return documentation
 
     def is_matching_template(self, attr):
         return self._attr == attr
@@ -139,6 +171,32 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             module_name=module_name,
         )
 
+    @classmethod
+    def _check_argument_types(cls, args, kws):
+        """
+        Check that args and kwargs are valid types
+        """
+        if cls.method_args_checker is None:
+            return
+
+        # match every arg and kwarg with it's argument name in the signature
+        overload_params = utils.pysignature(cls._overload_func).parameters
+        arg_types = []
+        for i, (name, param) in enumerate(overload_params.items()):
+            if i < len(args):  # positional only
+                arg_types.append((name, args[i]))
+            elif name in kws:
+                arg_types.append((name, kws[name]))
+            elif param.default != inspect._empty:
+                # no argument supplied, still check default for consistency
+                arg_types.append((name, param.default))
+            else:
+                raise BodoError(
+                    f"{cls.path_name}(): required argument {name} not supplied."
+                )
+
+        cls.method_args_checker.check_args(f"{cls.path_name}()", dict(arg_types))
+
     def _resolve(self, typ, attr):
         if not self.is_matching_template(attr):
             return None
@@ -162,6 +220,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             def generic(_, args, kws):
                 args = (typ,) + tuple(args)
                 self._check_unsupported_args(kws)
+                self._check_argument_types(args, kws)
                 fnty = self._get_function_type(self.context, typ)
                 sig = self._get_signature(self.context, fnty, args, kws)
 
@@ -180,6 +239,7 @@ def make_overload_declarative_template(
     overload_func,
     path_name,
     unsupported_args,
+    method_args_checker,
     description,
     changed_defaults=frozenset(),
     hyperlink=None,
@@ -208,6 +268,7 @@ def make_overload_declarative_template(
         "_no_unliteral": no_unliteral,
         "unsupported_args": unsupported_args,
         "changed_defaults": changed_defaults,
+        "method_args_checker": method_args_checker,
         "description": description,
         "hyperlink": hyperlink,
         "metadata": kwargs,
@@ -222,6 +283,7 @@ def overload_method_declarative(
     path_name,
     unsupported_args,
     description,
+    method_args_checker=None,
     changed_defaults=frozenset(),
     hyperlink=None,
     **kwargs,
@@ -238,6 +300,7 @@ def overload_method_declarative(
             overload_func,
             path_name,
             unsupported_args,
+            method_args_checker,
             description,
             changed_defaults=changed_defaults,
             hyperlink=hyperlink,
