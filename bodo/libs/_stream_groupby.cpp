@@ -20,6 +20,7 @@
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
+#include "_utils.h"
 #include "arrow/util/bit_util.h"
 
 #define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
@@ -2895,7 +2896,7 @@ GroupbyState::GroupbyState(
         // Enable sharing dictionary builders across group by used by multiple
         // grouping sets.
         key_dict_builders = key_dict_builders_.value();
-        assert(key_dict_builders.size() == this->n_keys);
+        ASSERT(key_dict_builders.size() == this->n_keys);
     } else {
         // Create dictionary builders for key columns (if not provided by
         // caller
@@ -3465,7 +3466,7 @@ void GroupbyState::AppendBuildBatch(
 
 void GroupbyState::InitOutputBufferMrnf(
     const std::shared_ptr<table_info>& dummy_build_table) {
-    assert(this->agg_type == AggregationType::MRNF);
+    ASSERT(this->agg_type == AggregationType::MRNF);
 
     // Skip if already initialized.
     if (this->output_state != nullptr) {
@@ -3500,8 +3501,8 @@ void GroupbyState::InitOutputBufferMrnf(
 
 void GroupbyState::InitOutputBufferWindow(
     const std::shared_ptr<table_info>& dummy_build_table) {
-    assert(this->agg_type == AggregationType::WINDOW);
-    assert(this->col_sets.size() == 1);
+    ASSERT(this->agg_type == AggregationType::WINDOW);
+    ASSERT(this->col_sets.size() == 1);
     const std::shared_ptr<BasicColSet>& col_set = this->col_sets[0];
     const std::vector<int64_t> window_funcs = col_set->getFtypes();
     // Skip if already initialized.
@@ -3555,7 +3556,7 @@ void GroupbyState::InitOutputBufferWindow(
 
 void GroupbyState::InitOutputBuffer(
     const std::shared_ptr<table_info>& dummy_table) {
-    assert(this->agg_type == AggregationType::AGGREGATE);
+    ASSERT(this->agg_type == AggregationType::AGGREGATE);
     auto schema = dummy_table->schema();
 
     std::vector<std::shared_ptr<DictionaryBuilder>> output_dict_builders(
@@ -4036,7 +4037,7 @@ void GroupbyState::FinalizeBuild() {
                     }
                     // We require num_histogram_bits to be max_partition_depth,
                     // so we have an exact mapping of buckets -> partition.
-                    assert(this->num_histogram_bits ==
+                    ASSERT(this->num_histogram_bits ==
                            this->max_partition_depth);
                     bucket_disabled_partitioning =
                         this->MaxPartitionExceedsThreshold(
@@ -5030,7 +5031,7 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                             auto it = std::find(kept_input_column_idxs.begin(),
                                                 kept_input_column_idxs.end(),
                                                 orig_idx);
-                            assert(it != kept_input_column_idxs.end());
+                            ASSERT(it != kept_input_column_idxs.end());
                             new_idx = std::distance(
                                 kept_input_column_idxs.begin(), it);
                         } else {
@@ -5043,13 +5044,13 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                         }
                     } else {
                         // Regular data column
-                        assert(orig_idx - num_skipped_keys >= 0);
+                        ASSERT(orig_idx - num_skipped_keys >= 0);
                         new_idx = (orig_idx - num_skipped_keys);
                     }
                     // Add to remapping cache
                     remapping_cache[orig_idx] = new_idx;
                 }
-                assert(new_idx != -1);
+                ASSERT(new_idx != -1);
                 remapped_f_in_cols.push_back(new_idx);
             }
 
