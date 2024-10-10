@@ -3106,16 +3106,15 @@ def test_series_getitem_str_and_series_init_dict_grpby_apply():
     )
 
 
-def test_series_init_empty_dict():
-    """tests intialzing series with an empty dict works"""
+def test_series_init_empty_dict(memory_leak_check):
+    """tests initializing series with an empty dict works"""
 
     def test_impl():
-        # this is needed so the dict has a type
-        d = {"a": 1}
-        d.pop("a")
-        pd.Series(d)
+        d = {}
+        return pd.Series(d)
 
     check_func(
         test_impl,
         (),
+        is_out_distributed=False,
     )
