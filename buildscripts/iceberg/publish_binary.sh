@@ -4,7 +4,7 @@ set -exo pipefail
 
 
 # Package Setup
-eval "$(./bin/micromamba shell hook -s posix)"
+eval "$(micromamba shell hook -s posix)"
 micromamba activate iceberg_build
 
 
