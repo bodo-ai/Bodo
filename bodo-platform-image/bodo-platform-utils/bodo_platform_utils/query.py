@@ -6,7 +6,7 @@ import typing as pt
 import fsspec
 import numba
 import pandas as pd
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 
 import bodo
 import bodo.utils.tracing as tracing
