@@ -532,7 +532,7 @@ std::unique_ptr<Schema> Schema::Project(
     std::vector<std::unique_ptr<DataType>> dtypes;
     dtypes.reserve(column_indices.size());
     for (int64_t col_idx : column_indices) {
-        assert(col_idx < this->column_types.size());
+        assert((size_t)col_idx < this->column_types.size());
         dtypes.push_back(this->column_types[col_idx]->copy());
     }
     return std::make_unique<Schema>(std::move(dtypes));

@@ -32,7 +32,6 @@ from bodo.hiframes.pd_categorical_ext import (
     get_categories_int_type,
 )
 from bodo.hiframes.time_ext import TimeArrayType, TimeType
-from bodo.hiframes.timestamptz_ext import timestamptz_array_type
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -441,13 +440,13 @@ def array_to_info_codegen(context, builder, sig, args):
             ],
         )
 
-    if arr_type == timestamptz_array_type:
+    if arr_type == bodo.hiframes.timestamptz_ext.timestamptz_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
-        data_ts_arr = context.make_array(timestamptz_array_type.ts_arr_type())(
-            context, builder, arr.data_ts
-        )
+        data_ts_arr = context.make_array(
+            bodo.hiframes.timestamptz_ext.timestamptz_array_type.ts_arr_type()
+        )(context, builder, arr.data_ts)
         data_offset_arr = context.make_array(
-            timestamptz_array_type.offset_array_type()
+            bodo.hiframes.timestamptz_ext.timestamptz_array_type.offset_array_type()
         )(context, builder, arr.data_offset)
         length = builder.extract_value(data_ts_arr.shape, 0)
         null_bitmap = context.make_helper(
@@ -1210,7 +1209,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
         return arr._getvalue()
 
     # Timestamp TZ array
-    if arr_type == timestamptz_array_type:
+    if arr_type == bodo.hiframes.timestamptz_ext.timestamptz_array_type:
         arr = cgutils.create_struct_proxy(arr_type)(context, builder)
         data_ts_arr_type = arr_type.ts_arr_type()
         data_ts_arr = context.make_array(data_ts_arr_type)(context, builder)

@@ -697,7 +697,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release")
     "bodo/transforms/table_column_del_pass.py"
     "bodo/transforms/typing_pass.py"
     "bodo/transforms/untyped_pass.py"
-    "bodo/transforms/typeinfer.py"
   )
 endif()
 
