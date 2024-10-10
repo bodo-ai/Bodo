@@ -4,7 +4,7 @@
 
 `pandas.Series.any(axis=0, bool_only=None, skipna=True)`
 
-### Supported Arguments:
+### Argument Restrictions:
  * `axis`: only supports default value `0`.
  * `bool_only`: only supports default value `None`.
  * `skipna`: only supports default value `True`.
