@@ -8,7 +8,7 @@ from typing import Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
-from mpi4py import MPI
+from bodo.mpi4py import MPI
 from pydantic import BaseModel
 
 import bodo

@@ -21,6 +21,8 @@ dependencies:
   - ipython==8.16.1                         #[linux64]
   - ipykernel==6.29.3                       #[linux64]
   - ipyparallel==8.6.1                      #[linux64]
+  # Needed by ipyparallel, but not a dependency
+  - mpi4py ~= 3.1                           #[linux64]
   - ipywidgets==8.1.1                       #[linux64]
   - nbconvert=6.5.0                         #[linux64]
   - _openmp_mutex *=*gnu*                   #[linux64]
