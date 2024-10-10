@@ -656,7 +656,7 @@ def dist_reduce_impl(value, reduce_op):
             supported_typs.append(bodo.datetime_date_type)
             supported_typs.append(bodo.TimeType)
         if target_typ not in supported_typs and not isinstance(
-            target_typ, bodo.Decimal128Type
+            target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
         ):  # pragma: no cover
             raise BodoError(
                 "argmin/argmax not supported for type {}".format(target_typ)
@@ -664,16 +664,34 @@ def dist_reduce_impl(value, reduce_op):
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
-    if isinstance(target_typ, bodo.Decimal128Type) and isinstance(
-        types.unliteral(value), IndexValueType
-    ):
-        # For index-value types, the data pointed too has different amounts of padding depending on machine type.
+    if isinstance(target_typ, bodo.Decimal128Type):
+        # For index-value types, the data pointed to has different amounts of padding depending on machine type.
         # as a workaround, we can pass the index separately.
-        def impl(value, reduce_op):  # pragma: no cover
-            in_ptr = value_to_ptr(value.value)
-            out_ptr = value_to_ptr(value)
-            _decimal_reduce(value.index, in_ptr, out_ptr, reduce_op, typ_enum)
-            return load_val_ptr(out_ptr, value)
+        if isinstance(types.unliteral(value), IndexValueType):
+
+            def impl(value, reduce_op):  # pragma: no cover
+                if reduce_op in {Reduce_Type.Argmin.value, Reduce_Type.Argmax.value}:
+                    in_ptr = value_to_ptr(value.value)
+                    out_ptr = value_to_ptr(value)
+                    _decimal_reduce(value.index, in_ptr, out_ptr, reduce_op, typ_enum)
+                    return load_val_ptr(out_ptr, value)
+                else:
+                    raise BodoError(
+                        "Only argmin/argmax/max/min scalar reduction is supported for Decimal"
+                    )
+
+        else:
+
+            def impl(value, reduce_op):  # pragma: no cover
+                if reduce_op in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
+                    in_ptr = value_to_ptr(value)
+                    out_ptr = value_to_ptr(value)
+                    _decimal_reduce(-1, in_ptr, out_ptr, reduce_op, typ_enum)
+                    return load_val_ptr(out_ptr, value)
+                else:
+                    raise BodoError(
+                        "Only argmin/argmax/max/min scalar reduction is supported for Decimal"
+                    )
 
         return impl
 
@@ -2156,7 +2174,6 @@ def scatterv_overload(data, send_counts=None, warn_if_dist=True):
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.scatterv()"
     )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.scatterv()")
     return lambda data, send_counts=None, warn_if_dist=True: scatterv_impl_jit(
         data, send_counts
     )  # pragma: no cover
@@ -2481,6 +2498,11 @@ def scatterv_impl_jit(data, send_counts=None, warn_if_dist=True):
                     d, b, precision, scale
                 )  # pragma: no cover
             )
+        if isinstance(data, DatetimeArrayType):
+            tz = data.tz
+            init_func = numba.njit(no_cpython_wrapper=True)(
+                lambda d, b: bodo.libs.pd_datetime_arr_ext.init_datetime_array(d, b, tz)
+            )  # pragma: no cover
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
 

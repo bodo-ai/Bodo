@@ -6916,73 +6916,96 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
     "df",
     [
         # int
-        pd.DataFrame(
-            {
-                "A": [np.nan, 1, 11, 1, 11, np.nan, np.nan],
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, 1, 11, 1, 11, np.nan, np.nan],
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+                }
+            ),
+            id="integer",
         ),
         # float
-        pd.DataFrame(
-            {
-                "A": [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan],
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan],
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+                }
+            ),
+            id="float",
         ),
         # nullable int
-        pd.DataFrame(
-            {
-                "A": pd.Series(
-                    [np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"
-                ),
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"
+                    ),
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+                }
+            ),
+            id="nullable_integer",
         ),
         # nullable float
-        pd.DataFrame(
-            {
-                "A": pd.Series(
-                    [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan, 3.3, 3.3],
-                    dtype="Float64",
-                ),
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan, 3.3, 3.3],
+                        dtype="Float64",
+                    ),
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+                }
+            ),
+            id="nullable_float",
         ),
         # timedelta
-        pd.DataFrame(
-            {
-                "A": [
-                    datetime.timedelta(3, 3, 3),
-                    datetime.timedelta(2, 2, 2),
-                    datetime.timedelta(1, 1, 1),
-                    np.nan,
-                    datetime.timedelta(5, 5, 5),
-                    np.nan,
-                    np.nan,
-                ],
-                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        datetime.timedelta(3, 3, 3),
+                        datetime.timedelta(2, 2, 2),
+                        datetime.timedelta(1, 1, 1),
+                        np.nan,
+                        datetime.timedelta(5, 5, 5),
+                        np.nan,
+                        np.nan,
+                    ],
+                    "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+                }
+            ),
+            id="timedelta",
         ),
         # datetime
-        pd.DataFrame(
-            {
-                "A": pd.concat(
-                    [
-                        pd.Series(
-                            pd.date_range(start="2/1/2015", end="2/24/2016", periods=6)
-                        ),
-                        pd.Series(data=[None]),
-                    ]
-                ),
-                "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
-            }
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.concat(
+                        [
+                            pd.Series(
+                                pd.date_range(
+                                    start="2/1/2015", end="2/24/2016", periods=6
+                                )
+                            ),
+                            pd.Series(data=[None]),
+                        ]
+                    ),
+                    "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
+                }
+            ),
+            id="timestamp",
         ),
         # String
-        pd.DataFrame(
-            {
-                "A": ["CC", "aa", "b", np.nan, "aa", np.nan, "aa", "CC"],
-                "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
-            },
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["CC", "aa", "b", np.nan, "aa", np.nan, "aa", "CC"],
+                    "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
+                },
+            ),
+            id="string",
         ),
         # Binary
         pytest.param(
@@ -6992,21 +7015,27 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
                     "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
                 },
             ),
-            id="binary_case",
+            id="binary",
         ),
         # Boolean
-        pd.DataFrame(
-            {
-                "A": [np.nan, False, True, True, True],
-                "B": [1.0, 2.0, 2, 1, 3],
-            },
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [np.nan, False, True, True, True],
+                    "B": [1.0, 2.0, 2, 1, 3],
+                },
+            ),
+            id="boolean",
         ),
         # String Repeat keys
-        pd.DataFrame(
-            {
-                "A": ["CC", "aa", "b", np.nan] * 20,
-                "B": [10.2, 11.1, 1.1, 2.2] * 20,
-            },
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["CC", "aa", "b", np.nan] * 20,
+                    "B": [10.2, 11.1, 1.1, 2.2] * 20,
+                },
+            ),
+            id="string_repeats",
         ),
     ],
 )

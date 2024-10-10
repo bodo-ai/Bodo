@@ -111,6 +111,21 @@ def _get_type_max_value_overload(dtype):
             numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
         )  # pragma: no cover
 
+    # tz-aware timestamp array
+    if isinstance(dtype, bodo.DatetimeArrayType):
+        tz = dtype.tz
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_max_value(
+                numba.core.types.int64
+            )
+            result = bodo.hiframes.pd_timestamp_ext.convert_val_to_timestamp(
+                int_value, tz
+            )
+            return result
+
+        return impl
+
     # timestamptz array
     if dtype == bodo.timestamptz_array_type:
         return lambda dtype: _get_timestamptz_max_value()
@@ -181,9 +196,17 @@ def _get_type_min_value_overload(dtype):
         dtype, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType
     ):  # pragma: no cover
         tz = dtype.tz
-        return lambda dtype: pd.Timestamp(
-            numba.cpython.builtins.get_type_min_value(numba.core.types.int64), tz
-        )  # pragma: no cover
+
+        def impl(dtype):  # pragma: no cover
+            int_value = numba.cpython.builtins.get_type_min_value(
+                numba.core.types.int64
+            )
+            result = bodo.hiframes.pd_timestamp_ext.convert_val_to_timestamp(
+                int_value, tz
+            )
+            return result
+
+        return impl
 
     # dt64
     if isinstance(dtype.dtype, types.NPDatetime):

@@ -1186,7 +1186,6 @@ def get_index_type_from_dtype(t):
     if t in [
         bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type,
         bodo.datetime64ns,
-        bodo.datetime_date_type,
     ]:
         return DatetimeIndexType(types.none)
 
@@ -1211,7 +1210,10 @@ def get_index_type_from_dtype(t):
     if t == bodo.bytes_type:
         return BinaryIndexType(types.none)
 
-    if isinstance(t, (types.Integer, types.Float, types.Boolean)):
+    if (
+        isinstance(t, (types.Integer, types.Float, types.Boolean))
+        or t == bodo.datetime_date_type
+    ):
         return NumericIndexType(t, types.none)
 
     if isinstance(t, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
@@ -1672,10 +1674,6 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
     # See test_map_array.py::test_map_apply_simple
     if isinstance(f_return_type, types.DictType):
         return_nullable = True
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        f_return_type, "Series.apply"
-    )
 
     # unbox Timestamp to dt64 in Series
     if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:

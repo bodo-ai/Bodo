@@ -619,9 +619,6 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         null_tup_type = types.Tuple([types.bool_] * len(data_type))
         nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            df.index, "DataFrame.apply()"
-        )
         if name_dtype == types.NPDatetime("ns"):
             name_dtype = bodo.pd_timestamp_tz_naive_type
         if name_dtype == types.NPTimedelta("ns"):

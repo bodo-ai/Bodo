@@ -55,6 +55,7 @@ from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, alloc_int_array
+from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
     pre_alloc_string_array,
@@ -192,6 +193,12 @@ def overload_isna(arr, i):
     if isinstance(arr, TupleArrayType):
         return lambda arr, i: bodo.libs.array_kernels.isna(
             arr._data, i
+        )  # pragma: no cover
+
+    # interval array
+    if isinstance(arr, IntervalArrayType):
+        return lambda arr, i: bodo.libs.array_kernels.isna(
+            arr._left, i
         )  # pragma: no cover
 
     # Categorical Array
@@ -405,6 +412,14 @@ def setna_overload(arr, ind, int_nan_const=0):
             arr[ind] = int_nan_const
 
         return setna_int
+
+    if isinstance(arr, IntervalArrayType):
+
+        def setna_interval(arr, ind, int_nan_const=0):  # pragma: no cover
+            setna(arr.left, ind, int_nan_const)
+            setna(arr.right, ind, int_nan_const)
+
+        return setna_interval
 
     # Add support for datetime.date array. This checks that the value in the
     # array won't cause a runtime error in getitem.
@@ -1485,7 +1500,6 @@ def overload_dropna(data, how, thresh, subset):
     """drop NA rows in tuple of arrays 'data'. 'subset' is the index numbers of arrays
     to consider for NA check. 'how' and 'thresh' are the same as df.dropna().
     """
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.dropna()")
 
     n_data_arrs = len(data.types)
     out_names = ["out" + str(i) for i in range(n_data_arrs)]
@@ -3078,9 +3092,6 @@ def ffill_bfill_overload(A, method, parallel=False):
     If method is 'ffill' or 'pad',  forward fills NA arguments, i.e. propagates last valid value.
     Otherwise, it backward fills NA arguments, i.e. uses the next valid observation to fill gap.
     """
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        A, "bodo.ffill_bfill_arr()"
-    )
 
     _dtype = element_type(A)
 
@@ -3097,6 +3108,8 @@ def ffill_bfill_overload(A, method, parallel=False):
         null_value = '""'
     elif _dtype == types.bool_:
         null_value = "False"
+    elif isinstance(_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        null_value = f"pd.Timestamp(0, tz='{_dtype.tz}')"
     elif _dtype == bodo.datetime64ns:
         null_value = (
             "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
@@ -3900,8 +3913,6 @@ def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
 
 @overload(operator.contains, no_unliteral=True)
 def arr_contains(A, val):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.contains()")
-
     # TODO: Add support for types with different width. i.e. int64 and int16
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.dtype == types.unliteral(val)
@@ -3922,8 +3933,6 @@ def arr_contains(A, val):
 
 @overload(np.any, inline="always", no_unliteral=True)
 def np_any(A, axis=None, out=None, keepdims=None):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.any()")
-
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
     ):  # pragma: no cover
@@ -3947,8 +3956,6 @@ def np_any(A, axis=None, out=None, keepdims=None):
 
 @overload(np.all, inline="always", no_unliteral=True)
 def np_all(A, axis=None, out=None, keepdims=None):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.all()")
-
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
     ):  # pragma: no cover

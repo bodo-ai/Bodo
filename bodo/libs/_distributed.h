@@ -419,6 +419,40 @@ static void argmin_argmax_decimal(void* in, void* out, int* len,
     }
 }
 
+/**
+ * @brief Custom reducer for min/max on decimal types. Note that for
+ * min/max we don't actually care abput the scale if everything is the same so
+ * just operates directly on the underlying int128's.
+ *
+ * @param in The ptr to the current element (For min/max this is a an array of 2
+ * uint64's to represent an int128/decimal value).
+ * @param out Currently reduced value, and the destination for the new reduced
+ * value.
+ * @param len number of elements.
+ * @param type the MPI datatype.
+ * @param is_max Whether we are doing an argmax or argmin.
+ */
+static void min_max_decimal(void* in, void* out, int* len, MPI_Datatype* type,
+                            bool is_max) {
+    uint64_t* in64 = (uint64_t*)in;
+    uint64_t* out64 = (uint64_t*)out;
+
+    uint64_t in_lo = in64[0];
+    uint64_t in_hi = in64[1];
+
+    uint64_t out_lo = out64[0];
+    uint64_t out_hi = out64[1];
+
+    __int128 in_val = static_cast<__int128>(in_hi) << 64 | in_lo;
+    __int128 out_val = static_cast<__int128>(out_hi) << 64 | out_lo;
+
+    bool in_is_greater = in_val > out_val;
+    if (in_is_greater == is_max) {
+        out64[0] = in_lo;
+        out64[1] = in_hi;
+    }
+}
+
 static void argmin_decimal(void* in, void* out, int* len, MPI_Datatype* type) {
     argmin_argmax_decimal(in, out, len, type, false);
 }
@@ -427,47 +461,98 @@ static void argmax_decimal(void* in, void* out, int* len, MPI_Datatype* type) {
     argmin_argmax_decimal(in, out, len, type, true);
 }
 
+static void min_decimal(void* in, void* out, int* len, MPI_Datatype* type) {
+    min_max_decimal(in, out, len, type, false);
+}
+
+static void max_decimal(void* in, void* out, int* len, MPI_Datatype* type) {
+    min_max_decimal(in, out, len, type, true);
+}
+
 static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
                            int op_enum, int type_enum) {
-    // only supports argmax/min for now
-    MPI_Op mpi_op = get_MPI_op(op_enum);
-    assert(mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC);
-    assert(type_enum == Bodo_CTypes::DECIMAL);
+    try {
+        // only supports argmin, argmax, min and min for now
+        MPI_Op mpi_op = get_MPI_op(op_enum);
+        assert(type_enum == Bodo_CTypes::DECIMAL);
+        assert(mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC ||
+               mpi_op == MPI_MIN || mpi_op == MPI_MAX);
 
-    // create MPI OP corresponding to argmax/argmin for decimals
-    MPI_Op argcmp_decimal;
-    MPI_Op_create(mpi_op == MPI_MAXLOC ? argmax_decimal : argmin_decimal, 1,
-                  &argcmp_decimal);
+        if (mpi_op == MPI_MIN || mpi_op == MPI_MAX) {
+            // create MPI OP corresponding to min/max for decimals
+            MPI_Op cmp_decimal;
+            MPI_Op_create(mpi_op == MPI_MAX ? max_decimal : min_decimal, 1,
+                          &cmp_decimal);
 
-    // type consisting of an int64 index and a decimal (represented as 2
-    // int64's)
-    MPI_Datatype index_decimal_type;
-    MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &index_decimal_type);
-    MPI_Type_commit(&index_decimal_type);
+            // type consisting of a decimal (represented as 2 int64's)
+            MPI_Datatype decimal_type;
+            MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_type);
+            MPI_Type_commit(&decimal_type);
 
-    constexpr int struct_size = 3 * sizeof(uint64_t);
-    int mpi_struct_size;
-    MPI_Type_size(index_decimal_type, &mpi_struct_size);
-    assert(mpi_struct_size == struct_size);
+            constexpr int struct_size = 2 * sizeof(uint64_t);
+            int mpi_struct_size;
+            MPI_Type_size(decimal_type, &mpi_struct_size);
+            assert(mpi_struct_size == struct_size);
 
-    char in_val[struct_size];
-    char out_val[struct_size];
+            char out_val[struct_size];
 
-    uint64_t lo = in_ptr[0];
-    uint64_t hi = in_ptr[1];
-    __int128 val = static_cast<__int128>(hi) << 64 | lo;
+            uint64_t lo = in_ptr[0];
+            uint64_t hi = in_ptr[1];
+            __int128 val = static_cast<__int128>(hi) << 64 | lo;
 
-    // remove padding by representing the index, decimal struct as 3 int64's
-    memcpy(in_val, &index, sizeof(uint64_t));
-    memcpy(in_val + sizeof(uint64_t), &val, sizeof(__int128));
-    MPI_Allreduce(in_val, out_val, 1, index_decimal_type, argcmp_decimal,
-                  MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(MPI_Allreduce(&val, out_val, 1, decimal_type,
+                                           cmp_decimal, MPI_COMM_WORLD),
+                             "_distributed.h::decimal_reduce");
 
-    MPI_Op_free(&argcmp_decimal);
-    MPI_Type_free(&index_decimal_type);
+            MPI_Op_free(&cmp_decimal);
+            MPI_Type_free(&decimal_type);
 
-    // copy over the index into the result
-    memcpy(out_ptr, out_val, sizeof(uint64_t));
+            // copy over the min/max decimal into the result
+            memcpy(out_ptr, out_val, sizeof(__int128_t));
+        } else {
+            // create MPI OP corresponding to argmax/argmin for decimals
+            MPI_Op argcmp_decimal;
+            MPI_Op_create(
+                mpi_op == MPI_MAXLOC ? argmax_decimal : argmin_decimal, 1,
+                &argcmp_decimal);
+
+            // type consisting of an int64 index and a decimal (represented as 2
+            // int64's)
+            MPI_Datatype index_decimal_type;
+            MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &index_decimal_type);
+            MPI_Type_commit(&index_decimal_type);
+
+            constexpr int struct_size = 3 * sizeof(uint64_t);
+            int mpi_struct_size;
+            MPI_Type_size(index_decimal_type, &mpi_struct_size);
+            assert(mpi_struct_size == struct_size);
+
+            char in_val[struct_size];
+            char out_val[struct_size];
+
+            uint64_t lo = in_ptr[0];
+            uint64_t hi = in_ptr[1];
+            __int128 val = static_cast<__int128>(hi) << 64 | lo;
+
+            // remove padding by representing the index, decimal struct as 3
+            // int64's
+            memcpy(in_val, &index, sizeof(uint64_t));
+            memcpy(in_val + sizeof(uint64_t), &val, sizeof(__int128));
+            HANDLE_MPI_ERROR(
+                MPI_Allreduce(&in_val, out_val, 1, index_decimal_type,
+                              argcmp_decimal, MPI_COMM_WORLD),
+                "_distributed.h::decimal_reduce");
+
+            MPI_Op_free(&argcmp_decimal);
+            MPI_Type_free(&index_decimal_type);
+
+            // copy over the index into the result
+            memcpy(out_ptr, out_val, sizeof(uint64_t));
+        }
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
@@ -567,8 +652,15 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
         return;
     }
 
-    MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD);
-    return;
+    try {
+        HANDLE_MPI_ERROR(
+            MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD),
+            "_distributed.h::dist_reduce:");
+        return;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return;
+    }
 }
 
 template <typename Alloc>

@@ -668,7 +668,6 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         dtype = ary.dtype
         # TODO(ehsan): use getitem resolve similar to df.apply?
         # getitem returns Timestamp for dt_index and series(dt64)
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.map()")
         if dtype == types.NPDatetime("ns"):
             dtype = pd_timestamp_tz_naive_type
         # getitem returns Timedelta for td_index and series(td64)
@@ -881,7 +880,6 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
 
     @bound_function("series.pipe", no_unliteral=True)
     def resolve_pipe(self, ary, args, kws):
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.pipe()")
         return bodo.hiframes.pd_groupby_ext.resolve_obj_pipe(
             self, ary, args, kws, "Series"
         )

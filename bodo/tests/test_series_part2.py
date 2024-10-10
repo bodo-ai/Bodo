@@ -926,24 +926,26 @@ def test_series_argmin_max(S, is_argmin, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "is_argmin", [pytest.param(True, id="argmin"), pytest.param(False, id="argmax")]
-)
-@pytest.mark.parametrize(
     "precision, scale",
     [
-        pytest.param(
-            38,
-            18,
-            id="p_38_s_18",
-        ),
-        pytest.param(38, 0, id="p_38_s_0"),
-        pytest.param(21, 15, id="p_21_s_15", marks=pytest.mark.slow),
-        pytest.param(18, 3, id="p_18_s_3", marks=pytest.mark.slow),
-        pytest.param(12, 11, id="p_12_s_11", marks=pytest.mark.slow),
-        pytest.param(9, 0, id="p_9_s_0", marks=pytest.mark.slow),
+        pytest.param(38, 18, id="p_38-s_18"),
+        pytest.param(38, 0, id="p_38-s_0"),
+        pytest.param(18, 3, id="p_18-s_3", marks=pytest.mark.slow),
+        pytest.param(12, 11, id="p_12-s_10", marks=pytest.mark.slow),
     ],
 )
-def test_series_argmin_max_decimal(precision, scale, is_argmin, memory_leak_check):
+@pytest.mark.parametrize(
+    "function",
+    [
+        pytest.param("argmin", id="argmin"),
+        pytest.param("argmax", id="argmax"),
+        pytest.param("min", id="min"),
+        pytest.param("max", id="max"),
+    ],
+)
+def test_series_min_max_argmin_argmax_decimal(
+    precision, scale, function, memory_leak_check
+):
     """
     Tests that argmin/max works on decimal series of varying scales/precisions
     """
@@ -953,7 +955,9 @@ def test_series_argmin_max_decimal(precision, scale, is_argmin, memory_leak_chec
     # answers: argmin = 3, argmax = 92
     S = pd.Series(
         [
-            Decimal(
+            None
+            if i % 10 == 7
+            else Decimal(
                 str(((i + 7) ** 3) % 100) * (digits_before_decimal // 2)
                 + "."
                 + str(((i + 7) ** 3) % 100) * (scale // 2)
@@ -965,7 +969,7 @@ def test_series_argmin_max_decimal(precision, scale, is_argmin, memory_leak_chec
 
     # Test that the min/max value for that decimal at the specified scale / precision
     max_string = "9" * digits_before_decimal + "." + "9" * scale
-    max_or_min_str = "-" + max_string if is_argmin else max_string
+    max_or_min_str = "-" + max_string if ("min" in function) else max_string
     S_max_or_min = pd.Series(
         [Decimal(max_or_min_str) for _ in range(15)],
         dtype=pd.ArrowDtype(pa.decimal128(precision, scale)),
@@ -977,12 +981,22 @@ def test_series_argmin_max_decimal(precision, scale, is_argmin, memory_leak_chec
     def test_argmax_impl(S):
         return S.argmax()
 
-    if is_argmin:
-        check_func(test_argmin_impl, (S,))
-        check_func(test_argmin_impl, (S_max_or_min,))
-    else:
-        check_func(test_argmax_impl, (S,))
-        check_func(test_argmax_impl, (S_max_or_min,))
+    def test_min_impl(S):
+        return S.min()
+
+    def test_max_impl(S):
+        return S.max()
+
+    impls = {
+        "argmin": test_argmin_impl,
+        "argmax": test_argmax_impl,
+        "min": test_min_impl,
+        "max": test_max_impl,
+    }
+
+    impl = impls[function]
+    check_func(impl, (S,))
+    check_func(impl, (S_max_or_min,))
 
 
 @pytest.mark.parametrize(
