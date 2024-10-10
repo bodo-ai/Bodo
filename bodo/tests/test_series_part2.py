@@ -3570,3 +3570,161 @@ def test_series_keys(S, memory_leak_check):
         return A.keys()
 
     check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "S, lower, upper",
+    [
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]),
+            2.0,
+            4.0,
+            id="float-scalar-float-bound",
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), 0, 7, id="float-scalar-int-bound"
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), 3.0, None, id="upper-None"
+        ),
+        pytest.param(pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), None, 2, id="lower-None"),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, np.nan, 5.0]), None, None, id="no-bound"
+        ),
+        pytest.param(
+            pd.Series([1.0, np.nan, 3.0, 4.0, 5.0]),
+            pd.Series([3.0, 3.0, np.nan, 2.0, 2.0]),
+            pd.Series([4.0, np.nan, 4.0, 3.0, 3.0]),
+            id="float-series-float-bound",
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, 4.0, 5.0]),
+            pd.Series([3, 3, 3, 2, 2], dtype=pd.Int32Dtype()),
+            pd.Series([4, 4, 4, 3, 3], dtype=pd.Int32Dtype()),
+            id="float-series-int-bound",
+        ),
+        pytest.param(
+            pd.Series([1.0, np.nan, 3.0, 4.0, 5.0]),
+            2,
+            pd.Series([4.0, np.nan, 4.0, 3.0, 3.0]),
+            id="scalar-series-mix-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [1.0, 2.0, 3.0, 4.0, 5.0], dtype=pd.ArrowDtype(pa.decimal128(10, 4))
+            ),
+            pd.Series(
+                [3.0, 3.0, 2.0, 2.0, 2.0], dtype=pd.ArrowDtype(pa.decimal128(10, 4))
+            ),
+            pd.Series(
+                [4.0, 4.0, 4.0, 3.0, 3.0], dtype=pd.ArrowDtype(pa.decimal128(10, 4))
+            ),
+            id="decimal128-series-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal("1.0"),
+                    Decimal("2.0"),
+                    Decimal("3.0"),
+                    Decimal("4.0"),
+                    Decimal("5.0"),
+                ]
+            ),
+            Decimal("2.0"),
+            Decimal("4.0"),
+            id="decimal-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    Decimal("1.0"),
+                    Decimal("2.0"),
+                    Decimal("3.0"),
+                    Decimal("4.0"),
+                    Decimal("5.0"),
+                ]
+            ),
+            pd.Series([2, 2, 3, 3, 3]),
+            4,
+            id="decimal-series-and-scalar-int-bound",
+        ),
+        pytest.param(
+            pd.Series([True, True, True, True, True]), None, False, id="boolean"
+        ),
+        pytest.param(
+            pd.Series([datetime.date(2020 + i, i, i) for i in range(1, 6)]),
+            datetime.date(2023, 1, 1),
+            datetime.date(2024, 1, 1),
+            id="date-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
+            np.timedelta64(2, "D").astype("timedelta64[ns]"),
+            np.timedelta64(4, "D").astype("timedelta64[ns]"),
+            id="timedelta-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series([datetime.timedelta(days=i) for i in range(1, 6)]),
+            pd.Series([datetime.timedelta(days=2) for i in range(1, 6)]),
+            pd.Series([datetime.timedelta(days=4) for i in range(1, 6)]),
+            id="timedelta-series-bound",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp(
+                        f"200{i % 10}-{i % 12 + 1}-{i % 28 + 1} {(i + 6) % 24}:{(i + 16) % 60}:{(i + 3) % 60}",
+                        tz="US/Pacific",
+                    )
+                    for i in range(10)
+                ]
+            ),
+            pd.Series(
+                [pd.Timestamp("2002-3-3 8:18:5", tz="US/Pacific") for i in range(10)]
+            ),
+            pd.Series(
+                [pd.Timestamp("2002-7-7 8:18:5", tz="US/Pacific") for i in range(10)]
+            ),
+            id="timestamp-tz-series-bound",
+        ),
+        pytest.param(
+            pd.Series([pd.Timestamp(f"2017-01-{i+1}") for i in range(10)]),
+            pd.Series([pd.Timestamp("2017-01-3") for i in range(10)]),
+            pd.Series([pd.Timestamp("2017-01-7") for i in range(10)]),
+            id="timestamp-series-bound",
+        ),
+        pytest.param(
+            pd.Series([bytes(i) for i in range(10)]),
+            pd.Series([bytes(3) for i in range(10)]),
+            pd.Series([bytes(7) for i in range(10)]),
+            id="binary-series-bound",
+        ),
+        pytest.param(
+            pd.Series([bytes(i) for i in range(10)]),
+            b"\x03",
+            b"\x07",
+            id="binary-scalar-bound",
+        ),
+        pytest.param(
+            pd.Series(["A", "A", "B", "D", "D"]),
+            pd.Series(["A", "B", "B", "B", "B"]),
+            pd.Series(["C", "C", "C", "C", "D"]),
+            id="string-series-bound",
+        ),
+        pytest.param(
+            pd.Series(["A", "A", "B", "D", "D"]), "B", "C", id="string-scalar-bound"
+        ),
+        pytest.param(
+            pd.Series(["A", np.nan, "D", "E", "Z"]),
+            "B",
+            "Q",
+            id="string-scalar-bound-2",
+        ),
+    ],
+)
+def test_series_clip(S, lower, upper):
+    def test_impl(S, lower, upper):
+        return S.clip(lower, upper)
+
+    check_func(test_impl, (S, lower, upper))
