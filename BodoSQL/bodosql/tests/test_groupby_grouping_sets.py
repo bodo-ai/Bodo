@@ -159,16 +159,16 @@ def test_grouping_sets_subset(grouping_sets_inputs, memory_leak_check):
         pytest.param(
             "SELECT A, SUM(B1) as SUM_B1, SUM(B2) as SUM_B2, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D, COUNT(DISTINCT(E)) as CD_E, COUNT(*) as COUNT_STAR FROM TABLE1 GROUP BY A",
             id="no-overlap",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             "SELECT A, SUM(B1) as SUM_B1, COUNT(DISTINCT(B1)) as CD_B1, SUM(B2) as SUM_B2, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D FROM TABLE1 GROUP BY A",
-            marks=pytest.mark.skip(reason="Bug in Grouping sets!"),
             id="overlap-sum-sum",
         ),
         pytest.param(
-            "SELECT A, SUM(B1) as SUM_B1, COUNT(DISTINCT(B1)) as CD_B1, COUNT(*) as COUNT_STAR, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D FROM TABLE1 GROUP BY A",
-            marks=pytest.mark.skip(reason="Bug in Grouping sets!"),
+            "SELECT A, SUM(B1) as SUM_B1, COUNT(DISTINCT(B1)) as CD_B1, COUNT(*) as COUNT_STAR, COUNT(C) as COUNT_C, COUNT(DISTINCT(C)) as CD_C, COUNT(DISTINCT(D)) as CD_D FROM TABLE1 GROUP BY A",
             id="overlap-sum-size",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -200,7 +200,7 @@ def test_implicit_grouping_sets(query, spark_info, memory_leak_check):
     )
 
     ctx = {"TABLE1": input_df}
-    check_query(query, ctx, spark_info, check_dtype=False, sort_output=True)
+    check_query(query, ctx, spark_info, check_dtype=False)
 
 
 def test_grouping_non_streaming(grouping_sets_inputs, memory_leak_check):

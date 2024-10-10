@@ -4986,16 +4986,7 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                  j < static_cast<uint64_t>(n_build_columns); j++) {
                 kept_columns[j] = true;
             }
-            // Remap each function to the correct columns to avoid extra keys.
-            int32_t num_grouping_keys =
-                grouping_sets_offsets[i + 1] - grouping_sets_offsets[i];
-            int32_t num_skipped_keys =
-                static_cast<int32_t>(n_keys) - num_grouping_keys;
-            std::vector<int32_t> remapped_f_in_cols;
-            for (size_t j = 0; j < f_in_cols_vector.size(); j++) {
-                remapped_f_in_cols.push_back(f_in_cols_vector[j] -
-                                             num_skipped_keys);
-            }
+
             // Remap the build information to skip any extra keys.
             std::vector<int64_t> kept_input_column_idxs;
             std::vector<std::unique_ptr<bodo::DataType>> kept_column_types;
@@ -5006,6 +4997,62 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                     kept_input_column_idxs.push_back(j);
                 }
             }
+
+            int32_t num_grouping_keys =
+                grouping_sets_offsets[i + 1] - grouping_sets_offsets[i];
+            int32_t num_skipped_keys =
+                static_cast<int32_t>(n_keys) - num_grouping_keys;
+
+            // Remap f_in_cols for this grouping set. We need some special
+            // handling for key columns (the key columns for this grouping set
+            // as well as any key columns in any of the grouping sets) that are
+            // also data column. Their mapping needs to be handled carefully to
+            // ensure there's no unnecessary duplication.
+            std::vector<int32_t> remapped_f_in_cols;
+            // This is used for caching the remapping computation. This also
+            // ensures that we insert additional values into 'kept_column_types'
+            // and 'kept_input_column_idxs' exactly once. Note that we do *not*
+            // update 'kept_columns' here. This is because we later use
+            // 'kept_columns' for checking if a key column is part of this
+            // grouping set's key columns.
+            std::unordered_map<int32_t, int32_t> remapping_cache;
+
+            for (const int32_t orig_idx : f_in_cols_vector) {
+                int32_t new_idx = -1;
+                if (remapping_cache.contains(orig_idx)) {
+                    new_idx = remapping_cache[orig_idx];
+                } else {
+                    if (static_cast<uint64_t>(orig_idx) < n_keys) {
+                        // This is a key column of *some* grouping set
+                        if (kept_columns[orig_idx]) {
+                            // Part of this grouping set's keys already, so we
+                            // just need to find its index
+                            auto it = std::find(kept_input_column_idxs.begin(),
+                                                kept_input_column_idxs.end(),
+                                                orig_idx);
+                            assert(it != kept_input_column_idxs.end());
+                            new_idx = std::distance(
+                                kept_input_column_idxs.begin(), it);
+                        } else {
+                            // This is a key column, but not for this grouping
+                            // set, so we need to add this as a data column.
+                            new_idx = kept_input_column_idxs.size();
+                            kept_input_column_idxs.push_back(orig_idx);
+                            kept_column_types.push_back(
+                                total_schema->column_types[orig_idx]->copy());
+                        }
+                    } else {
+                        // Regular data column
+                        assert(orig_idx - num_skipped_keys >= 0);
+                        new_idx = (orig_idx - num_skipped_keys);
+                    }
+                    // Add to remapping cache
+                    remapping_cache[orig_idx] = new_idx;
+                }
+                assert(new_idx != -1);
+                remapped_f_in_cols.push_back(new_idx);
+            }
+
             input_columns_remaps.push_back(kept_input_column_idxs);
             // Remap the output columns
             std::vector<int64_t> kept_output_column_idxs;
@@ -5016,6 +5063,14 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 local_key_dict_builders;
             for (size_t j = 0; j < n_keys; j++) {
                 if (kept_columns[j]) {
+                    // Note that some key column, that is not a key column for
+                    // this particular grouping set, may still be a data column
+                    // for this grouping set. However, 'kept_column' doesn't
+                    // know about that, which means that we're technically
+                    // losing some potential to reuse dictionary builders.
+                    // TODO This is something we could optimize. This would also
+                    // require allowing GroupbyState to optionally take in
+                    // DictionaryBuilders for its data columns.
                     kept_output_column_idxs.push_back(j);
                     local_key_dict_builders.push_back(key_dict_builders[j]);
                 } else {
@@ -5027,6 +5082,11 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                 if (ftypes[j] != Bodo_FTypes::grouping) {
                     kept_output_column_idxs.push_back(j + n_keys);
                 } else {
+                    // Note that some key column that is not a key column for
+                    // this particular grouping set, may still be a data column
+                    // for this grouping set. However, it shouldn't be part of
+                    // the group value. 'kept_columns' doesn't know about these,
+                    // so it produces the correct output.
                     grouping_values.push_back(get_grouping_value(
                         kept_columns, f_in_cols, f_in_offsets[j],
                         f_in_offsets[j + 1]));

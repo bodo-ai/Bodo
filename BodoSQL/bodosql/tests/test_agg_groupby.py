@@ -1993,3 +1993,23 @@ def test_mixed_nested_agg_keys(memory_leak_check):
         check_dtype=False,
         use_dict_encoded_strings=False,
     )
+
+
+@pytest.mark.slow
+def test_groupby_agg_on_key_col(spark_info, memory_leak_check):
+    """
+    Test Groupby cases where the key columns are also the data columns.
+    """
+
+    query = "SELECT A, B1, COUNT(A) as COUNT_A, SUM(B1) as SUM_B1 FROM TABLE1 GROUP BY A, B1"
+    input_df = pd.DataFrame(
+        {
+            "A": pd.array([1, 1, 2, 2, 4] * 10, dtype="Int64"),
+            "B1": pd.array(
+                [90, 283, 119, 34] * 11 + [39, 1124, 432, 534, 561, 523], dtype="Int64"
+            ),
+        }
+    )
+
+    ctx = {"TABLE1": input_df}
+    check_query(query, ctx, spark_info, check_dtype=False)
