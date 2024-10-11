@@ -40,7 +40,7 @@ requirements:
 
     # Build Dependencies
     - setuptools >=64
-    - cython <3.0
+    - cython ~=3.0
     - setuptools_scm >=8
     - scikit-build-core
     - cmake
