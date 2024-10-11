@@ -42,10 +42,10 @@ pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
 # Bodo-Iceberg Install
 cd iceberg
-python setup.py develop
+pip install --no-deps --no-build-isolation -ve .
 cd ..
 
 # BodoSQL Install
 cd BodoSQL
-python setup.py develop
+pip install --no-deps --no-build-isolation -ve .
 cd ..

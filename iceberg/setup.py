@@ -1,31 +1,12 @@
 import os
 import shutil
-import sys
 
-from setuptools import find_packages, setup
+from setuptools import setup
 from setuptools.command.build_py import build_py
-from setuptools.command.develop import develop
 from setuptools.errors import ExecError
 
-cwd = os.getcwd()
-setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
-# despite the name, this also works for directories
-if not os.path.samefile(cwd, setup_py_dir_path):
-    raise Exception(
-        "setup.py should only be invoked if the current working directory is in the same directory as setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules."
-    )
 
-# ----------------- Get Version in Build -----------------
-from setuptools_scm import get_version
-
-version = get_version(root="..", relative_to=__file__)
-# --------------------------------------------------------
-
-
-development_mode = "develop" in sys.argv
-
-
-def build_libs(obj, dev_mode=False):
+def build_libs(obj):
     """Build maven and then calls the original run command"""
     try:
         pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-java", "pom.xml")
@@ -64,14 +45,6 @@ def build_libs(obj, dev_mode=False):
         obj.error("Maven Build Failed with Error:", e)
 
 
-class CustomDevelopCommand(develop):
-    """Custom command to build the jars with python setup.py develop"""
-
-    def run(self):
-        build_libs(self, dev_mode=True)
-        super().run()
-
-
 class CustomBuildCommand(build_py):
     def run(self):
         """Creates the generated library/tests, builds maven, and then calls the original run command"""
@@ -80,36 +53,5 @@ class CustomBuildCommand(build_py):
 
 
 setup(
-    name="bodo-iceberg-connector",
-    version=version,
-    description="Bodo Connector for Iceberg",
-    long_description="Bodo Connector for Iceberg",
-    classifiers=[
-        "Development Status :: 5 - Production/Stable",
-        "Intended Audience :: Developers",
-        "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Topic :: Software Development :: Compilers",
-        "Topic :: System :: Distributed Computing",
-    ],
-    keywords="data analytics cluster",
-    url="https://bodo.ai",
-    author="Bodo.ai",
-    packages=find_packages(),
-    # This is needed so that the jars are included if/when the package is installed via pip.
-    package_data={
-        "bodo_iceberg_connector": [
-            "jars/bodo-iceberg-reader.jar",
-            "jars/libs/*.jar",
-        ]
-    },
-    # When doing `python setup.py develop`, setuptools will try to install whatever is
-    # in `install_requires` after building, so we set it to empty (we don't want to
-    # install bodo in development mode, and it will also break CI
-    install_requires=[] if development_mode else ["py4j==0.10.9.7"],
-    python_requires=">=3.10,<3.13",
-    cmdclass={"develop": CustomDevelopCommand, "build_py": CustomBuildCommand},
+    cmdclass={"build_py": CustomBuildCommand},
 )
