@@ -37,7 +37,7 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
 
 1. Checkout the branch (only required once): `psh git checkout working-branch`.
 1. Pull latest changes (do this after every push): `psh git pull`.
-1. Re-build: `BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python setup.py develop && cd ..`.
+1. Re-build: `BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 psh pip install --no-deps --no-build-isolation -ve . && cd BodoSQL && psh python -m pip install --no-deps --no-build-isolation -ve . && cd ..`.
 
 ## Using Bodo/BodoSQL
 

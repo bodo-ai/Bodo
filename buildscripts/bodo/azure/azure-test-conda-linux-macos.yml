@@ -99,7 +99,7 @@ jobs:
 
       wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
       cd azurefs-sas-token-provider
-      python setup.py develop
+      pip install --no-deps --no-build-isolation -ve .
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
     retryCountOnTaskFailure: 5
 
