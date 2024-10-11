@@ -4041,7 +4041,7 @@ def to_parquet_overload(
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path, parallel=_is_parallel)\n"
+    func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(path, parallel=_is_parallel)\n"
     col_names_no_parts_arr = None
     if partition_cols:
         col_names_no_parts_arr = pd.array(
@@ -4553,7 +4553,7 @@ def to_sql_overload(
         func_text += "        columns_index = get_dataframe_column_names(df)\n"
         func_text += "        names_arr = index_to_array(columns_index)\n"
 
-    func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(parquet_path, parallel=_is_parallel)\n"
+    func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(parquet_path, parallel=_is_parallel)\n"
 
     # On all ranks, write local dataframe chunk to S3/ADLS, or a local file
     # upon fallback to snowflake PUT. In the fallback case, we execute the
@@ -5059,7 +5059,7 @@ def to_json_overload(
             )
 
         # Assuming that path_or_buf is a string
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             path_or_buf, parallel=False
         )
 

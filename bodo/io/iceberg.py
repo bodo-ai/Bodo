@@ -3729,7 +3729,7 @@ def iceberg_write(
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
         alloc_false_bool_array(n_cols)
     )
-    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(table_loc, is_parallel)
+    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
         table_loc,
         bodo_table,
@@ -3930,7 +3930,7 @@ def iceberg_merge_cow(
     dummy_theta_sketch = bodo.io.stream_iceberg_write.init_theta_sketches_wrapper(
         alloc_false_bool_array(num_cols)
     )
-    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(table_loc, is_parallel)
+    bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(table_loc, is_parallel)
     iceberg_files_info = iceberg_pq_write(
         table_loc,
         bodo_table,

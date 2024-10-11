@@ -465,7 +465,7 @@ def gen_snowflake_writer_init_impl(
         if azure_stage_direct_upload:
             bodo.libs.distributed_api.disconnect_hdfs_njit()
         # Compute bucket region
-        writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_njit(
+        writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             stage_path, _is_parallel
         )
         # Set up internal stage directory for COPY INTO
