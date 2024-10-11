@@ -70,7 +70,7 @@ jobs:
       pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
       cd $(System.DefaultWorkingDirectory)/BodoSQL
-      python setup.py develop
+      pip install -v --no-deps --no-build-isolation .
       cd $(System.DefaultWorkingDirectory)/iceberg
       pip install -v .
     env:
@@ -98,7 +98,7 @@ jobs:
 
       wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
       cd azurefs-sas-token-provider
-      python setup.py develop
+      pip install --no-deps --no-build-isolation -ve .
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
     retryCountOnTaskFailure: 5
 

@@ -33,11 +33,11 @@ cd ~/Bodo
 psh env BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 pip install --no-deps --no-build-isolation -ve .
 
 cd BodoSQL
-psh python setup.py develop
+psh python -m pip install --no-deps --no-build-isolation -ve .
 cd ..
 
 cd iceberg
-psh python setup.py develop
+psh python -m pip install --no-deps --no-build-isolation -ve .
 cd ..
 
 cd bodo-platform-image/bodo-platform-utils/
