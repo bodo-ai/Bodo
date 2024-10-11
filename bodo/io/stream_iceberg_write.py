@@ -347,7 +347,7 @@ def overload_read_puffin_file_ndvs(puffin_file_loc, iceberg_schema):
     arr_type = bodo.FloatingArrayType(types.float64)
 
     def impl(puffin_file_loc, iceberg_schema):  # pragma: no cover
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             puffin_file_loc, parallel=True
         )
         res_info = _read_puffin_file_ndvs(
@@ -1024,7 +1024,7 @@ def gen_iceberg_writer_init_impl(
             table_builder_state_type,
             input_dicts_unified=input_dicts_unified,
         )
-        writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_njit(
+        writer["bucket_region"] = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             table_loc, _is_parallel
         )
 

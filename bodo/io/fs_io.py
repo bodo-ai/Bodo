@@ -9,7 +9,6 @@ import warnings
 from urllib.parse import urlparse
 
 import llvmlite.binding as ll
-import numba
 import numpy as np
 from fsspec.implementations.arrow import (
     ArrowFile,
@@ -204,7 +203,7 @@ def get_s3_fs_from_path(
     This function is usually called on just rank 0 during compilation,
     hence parallel=False by default.
     """
-    region = get_s3_bucket_region_njit(path, parallel=parallel)
+    region = get_s3_bucket_region_wrapper(path, parallel=parallel)
     if region == "":
         region = None
     return get_s3_fs(region, storage_options)
@@ -682,24 +681,32 @@ def get_s3_bucket_region(s3_filepath, parallel):
     return bucket_loc
 
 
-@numba.njit()
-def get_s3_bucket_region_njit(s3_filepath, parallel):  # pragma: no cover
+def get_s3_bucket_region_wrapper(s3_filepath, parallel):  # pragma: no cover
     """
-    njit wrapper around get_s3_bucket_region
+    Wrapper around get_s3_bucket_region that handles list input and non-S3 paths.
     parallel: True when called on all processes (usually runtime),
     False when called on just one process independent of the others
     (usually compile-time).
     """
-    with bodo.no_warning_objmode(bucket_loc="unicode_type"):
-        bucket_loc = ""
-        # The parquet read path might call this function with a list of files,
-        # in which case we retrieve the region of the first one. We assume
-        # every file is in the same region
-        if isinstance(s3_filepath, list):
-            s3_filepath = s3_filepath[0]
-        if s3_filepath.startswith("s3://"):
-            bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
+    bucket_loc = ""
+    # The parquet read path might call this function with a list of files,
+    # in which case we retrieve the region of the first one. We assume
+    # every file is in the same region
+    if isinstance(s3_filepath, list):
+        s3_filepath = s3_filepath[0]
+    if s3_filepath.startswith("s3://"):
+        bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
+
+
+@overload(get_s3_bucket_region_wrapper)
+def overload_get_s3_bucket_region_wrapper(s3_filepath, parallel):
+    def impl(s3_filepath, parallel):
+        with bodo.no_warning_objmode(bucket_loc="unicode_type"):
+            bucket_loc = get_s3_bucket_region_wrapper(s3_filepath, parallel)
+        return bucket_loc
+
+    return impl
 
 
 def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
@@ -711,7 +718,7 @@ def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no
 def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
     def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
-        bucket_region = get_s3_bucket_region_njit(path_or_buf, parallel=is_parallel)
+        bucket_region = get_s3_bucket_region_wrapper(path_or_buf, parallel=is_parallel)
         # TODO: support non-ASCII file names?
         utf8_str, utf8_len = unicode_to_utf8_and_len(D)
         offset = 0

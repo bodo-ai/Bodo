@@ -272,7 +272,7 @@ def gen_parquet_writer_init_impl(
     ):
         ev = tracing.Event("parquet_writer_init", is_parallel=_is_parallel)
 
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(
             path, parallel=_is_parallel
         )
         pq_write_create_dir(unicode_to_utf8(path))

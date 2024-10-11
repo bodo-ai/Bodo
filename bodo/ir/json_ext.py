@@ -321,7 +321,7 @@ def _gen_json_reader_py(
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
+    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_wrapper(fname, parallel={parallel})\n"
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
     if storage_options is None:
         storage_options = {}
