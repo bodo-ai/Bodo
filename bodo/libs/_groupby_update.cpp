@@ -540,8 +540,9 @@ void ngroup_computation(std::shared_ptr<array_info> arr,
     int64_t start_ngroup = 0;
     if (is_parallel) {
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT64);
-        MPI_Exscan(&num_group, &start_ngroup, 1, mpi_typ, MPI_SUM,
-                   MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(MPI_Exscan(&num_group, &start_ngroup, 1, mpi_typ,
+                                    MPI_SUM, MPI_COMM_WORLD),
+                         "ngroup_computation: MPI error on MPI_Exscan:");
     }
     for (size_t i = 0; i < arr->length; i++) {
         int64_t i_grp = grp_info.row_to_group[i];
