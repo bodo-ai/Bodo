@@ -119,6 +119,7 @@ ll.add_symbol("init_is_last_state", hdist.init_is_last_state)
 ll.add_symbol("delete_is_last_state", hdist.delete_is_last_state)
 ll.add_symbol("sync_is_last_non_blocking", hdist.sync_is_last_non_blocking)
 ll.add_symbol("decimal_reduce", hdist.decimal_reduce)
+ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
 
 
 # get size dynamically from C code (mpich 3.2 is 4 bytes but openmpi 1.6 is 8)
@@ -156,6 +157,7 @@ _dist_transpose_comm = types.ExternalFunction(
     "_dist_transpose_comm",
     types.void(types.voidptr, types.voidptr, types.int32, types.int64, types.int64),
 )
+_get_cpu_id = types.ExternalFunction("get_cpu_id", types.int32())
 
 
 @lower_builtin(
@@ -182,6 +184,18 @@ def get_size():  # pragma: no cover
 def barrier():  # pragma: no cover
     """wrapper for barrier (MPI barrier currently)"""
     _barrier()
+
+
+@numba.njit
+def get_cpu_id():  # pragma: no cover
+    """
+    Wrapper for get_cpu_id -- get id of the cpu that the process
+    is currently running on. This may change depending on if the
+    process is pinned or not, the OS, etc.)
+    This is not explicitly used anywhere, but is useful for
+    checking if the processes are pinned as expected.
+    """
+    return _get_cpu_id()
 
 
 _get_time = types.ExternalFunction("get_time", types.float64())
