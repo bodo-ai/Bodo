@@ -284,9 +284,11 @@ class GroupbyPipeline {
                              shuffle_before_update_local);
             // global count of ranks that decide to shuffle before update
             int shuffle_before_update_count;
-            MPI_Allreduce(&shuffle_before_update_local,
-                          &shuffle_before_update_count, 1, MPI_INT, MPI_SUM,
-                          MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(MPI_Allreduce(&shuffle_before_update_local,
+                                           &shuffle_before_update_count, 1,
+                                           MPI_INT, MPI_SUM, MPI_COMM_WORLD),
+                             "GroupbyPipeline::GroupbyPipeline: MPI error on "
+                             "MPI_Allreduce:");
             // TODO Need a better threshold or cost model to decide when
             // to shuffle: https://bodo.atlassian.net/browse/BE-1140
             int num_ranks;
@@ -483,8 +485,11 @@ class GroupbyPipeline {
         // Gather the number of rows on every rank
         int64_t num_rows = in_table->nrows();
         std::vector<int64_t> num_rows_ranks(num_ranks);
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "GroupbyPipeline::add_head_key_sort_column: MPI error on "
+            "MPI_Allgather:");
 
         // Determine the start/end row number of each rank
         int64_t rank_start_row, rank_end_row;
@@ -909,9 +914,11 @@ class GroupbyPipeline {
                 ev.add_attribute("nunique_" + std::to_string(i) +
                                      "_local_fraction_unique_hashes",
                                  local_fraction_unique_hashes);
-            MPI_Allreduce(&local_fraction_unique_hashes,
-                          &global_fraction_unique_hashes, 1, MPI_FLOAT, MPI_SUM,
-                          MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(MPI_Allreduce(&local_fraction_unique_hashes,
+                                           &global_fraction_unique_hashes, 1,
+                                           MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD),
+                             "GroupbyPipeline::gb_nunique_preprocess: MPI "
+                             "error on MPI_Allreduce:");
             global_fraction_unique_hashes /= static_cast<float>(num_ranks);
             ev.add_attribute("g_nunique_" + std::to_string(i) +
                                  "_global_fraction_unique_hashes",
