@@ -11,6 +11,9 @@ parameters:
 - name: CACHE_TEST
   type: boolean
   default: false
+- name: SPAWN_MODE_TEST
+  type: boolean
+  default: false
 - name: BODO_STREAMING_ENABLED
   type: number
   default: 0
@@ -133,6 +136,10 @@ jobs:
       export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
       if [[ "${{ parameters.CACHE_TEST }}" == "True" ]]; then
         python -u -m bodosql.runtests_caching "${{ parameters.name }}" "$(NP)" bodosql/tests/caching_tests/
+      elif [[ "${{ parameters.SPAWN_MODE_TEST }}" == "True" ]]; then
+        export BODO_TEST_SPAWN_MODE=1
+        export BODO_NUM_WORKERS="$NP"
+        pytest -s -v -p no:faulthandler -Wignore -m "$(PYTEST_MARKER)" bodosql/tests --junitxml=pytest-report-sql-spawn-mode.xml --test-run-title="${{ parameters.name }}"
       else
         python -u -m bodosql.runtests "${{ parameters.name }}" "$(NP)" -s -v -p no:faulthandler -m "$(PYTEST_MARKER)" bodosql/tests/
       fi

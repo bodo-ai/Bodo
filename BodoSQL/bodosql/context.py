@@ -710,6 +710,26 @@ class BodoSQLContext:
         if failed:
             raise BodoError(msg)
 
+    def __getstate__(self) -> object:
+        """
+        Returns a state object used during pickling.
+        """
+        # 'schema' is a Java Object which cannot be pickled, so we
+        # remove it from the state. We will re-initialize it during
+        # unpickling (see __setstate__).
+        dict_cp = self.__dict__.copy()
+        dict_cp.pop("schema")
+        return dict_cp
+
+    def __setstate__(self, state):
+        """
+        Inverse of __getstate__ where we modify this
+        object using the provided state.
+        """
+        # Set the state and initialize the Java objects from scratch.
+        self.__dict__ = state
+        self.schema = initialize_schema()
+
     def validate_query_compiles(self, sql, params_dict=None, dynamic_params_list=None):
         """
         Verifies BodoSQL can fully compile the query in Bodo.
