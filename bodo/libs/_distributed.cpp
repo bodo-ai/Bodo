@@ -612,6 +612,44 @@ int32_t sync_is_last_non_blocking(IsLastState *state, int32_t local_is_last) {
     }
 }
 
+// Only works on x86 Apple machines
+#if defined(__APPLE__) && defined(__x86_64__)
+#include <cpuid.h>
+
+#define CPUID(INFO, LEAF, SUBLEAF) \
+    __cpuid_count(LEAF, SUBLEAF, INFO[0], INFO[1], INFO[2], INFO[3])
+
+#define GETCPU(CPU)                                     \
+    {                                                   \
+        uint32_t CPUInfo[4];                            \
+        CPUID(CPUInfo, 1, 0);                           \
+        /* CPUInfo[1] is EBX, bits 24-31 are APIC ID */ \
+        if ((CPUInfo[3] & (1 << 9)) == 0) {             \
+            CPU = -1; /* no APIC on chip */             \
+        } else {                                        \
+            CPU = (unsigned)CPUInfo[1] >> 24;           \
+        }                                               \
+        if (CPU < 0)                                    \
+            CPU = 0;                                    \
+    }
+#endif
+
+/**
+ * @brief Get the ID of the CPU that this thread is running on. Returns -1 if we
+ * cannot get the ID, e.g. if on Windows.
+ *
+ * @return int
+ */
+[[maybe_unused]] static int get_cpu_id() {
+    int cpu_id = -1;
+#ifdef __linux__
+    cpu_id = sched_getcpu();
+#elif defined(__APPLE__) && defined(__x86_64__)
+    GETCPU(cpu_id);
+#endif
+    return cpu_id;
+}
+
 /**
  * @brief Wrapper around get_rank() to be called from Python (avoids Numba JIT
  overhead and makes compiler debugging easier by eliminating extra compilation)
@@ -641,8 +679,7 @@ static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef ext_methods[] = {
-#define declmethod(func) \
-    { #func, (PyCFunction)func, METH_VARARGS, NULL }
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(get_rank_py_wrapper),
     declmethod(finalize_py_wrapper),
     {NULL},
@@ -805,6 +842,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     SetAttrStringFromVoidPtr(m, init_is_last_state);
     SetAttrStringFromVoidPtr(m, delete_is_last_state);
     SetAttrStringFromVoidPtr(m, sync_is_last_non_blocking);
+    SetAttrStringFromVoidPtr(m, get_cpu_id);
 
     // add actual int value to module
     PyObject_SetAttrString(m, "mpi_req_num_bytes",

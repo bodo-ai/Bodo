@@ -2965,6 +2965,22 @@ pytest_mark_glue = compose_decos(glue_markers)
 pytest_glue = list(glue_markers)
 
 
+spawn_mode_markers = (
+    pytest.mark.spawn_mode,
+    pytest.mark.skipif(
+        os.environ.get("BODO_TEST_SPAWN_MODE", "0") == "0",
+        reason="requires spawn_mode testing enabled",
+    ),
+)
+
+# Decorate
+pytest_mark_spawn_mode = compose_decos(spawn_mode_markers)
+
+
+# This is for using a "mark" or marking a whole file.
+pytest_spawn_mode = list(spawn_mode_markers)
+
+
 # Flag to ignore the mass slowing of tests unless specific files are changed
 ignore_slow_unless_changed = os.environ.get("BODO_IGNORE_SLOW_UNLESS_CHANGED", False)
 

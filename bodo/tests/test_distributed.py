@@ -1,10 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import random
+import sys
 from decimal import Decimal
 
 import numpy as np
 import pandas as pd
+import psutil
 import pyarrow as pa
 import pytest
 from numba.core.ir_utils import find_callname, guard
@@ -3072,3 +3074,25 @@ def test_complex_arr_attr(memory_leak_check):
 
     A = np.arange(6).reshape((2, 3)) + 1j
     check_func(impl, (A,))
+
+
+@pytest.mark.skipif(
+    (not sys.platform.startswith("linux")) and (not sys.platform.startswith("darwin")),
+    reason="get_cpu_id only works on Mac/Linux",
+)
+def test_get_cpu_id(memory_leak_check):
+    """
+    Test that the get_cpu_id function returns a valid
+    CPU ID on Mac/Linux
+    """
+
+    def impl():
+        return bodo.libs.distributed_api.get_cpu_id()
+
+    n_logical_cpus = psutil.cpu_count(logical=True)
+
+    non_jit_out = impl()
+    assert 0 <= non_jit_out < n_logical_cpus
+
+    jit_out = bodo.jit(impl)()
+    assert 0 <= jit_out < n_logical_cpus

@@ -41,6 +41,7 @@ dependencies = [
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",
     "requests",
+    "cloudpickle>=3.0,<4.0"
 ]
 
 [project.optional-dependencies]

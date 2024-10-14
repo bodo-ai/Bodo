@@ -35,6 +35,16 @@ class DataPath(Protocol):
     def __call__(self, *args: str, check_exists: bool = True) -> str: ...
 
 
+def datapath_util(*args, base_path=None, check_exists=True) -> str:
+    if base_path is None:
+        base_path = os.path.join(os.path.dirname(__file__), "data")
+    path = os.path.join(base_path, *args)
+    if check_exists and not os.path.exists(path):
+        msg = "Could not find file {}."
+        raise ValueError(msg.format(path))
+    return path
+
+
 @pytest.fixture(scope="session")
 def datapath() -> DataPath:
     """Get the path to a test data file.
@@ -56,11 +66,7 @@ def datapath() -> DataPath:
     BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
 
     def deco(*args, check_exists=True):
-        path = os.path.join(BASE_PATH, *args)
-        if check_exists and not os.path.exists(path):
-            msg = "Could not find file {}."
-            raise ValueError(msg.format(path))
-        return path
+        return datapath_util(*args, base_path=BASE_PATH, check_exists=check_exists)
 
     return deco
 

@@ -81,9 +81,30 @@ def construct_batch_field(env_vars, image_path: str):
             }
         )
 
-    # IF NP=1 is in the env vars add SonarQube as a last step
+    # IF NP=1 is in the env vars add Spawn mode tests and SonarQube
     if "NP" in env_vars and 1 in env_vars["NP"]:
+        buildspec = get_buildspec_file(None, None)
+        env_dict = {}
+        env_dict["compute-type"] = get_compute_type({"NP": 1}, None, None)
+        env_dict["image"] = image_path
+        env_dict["variables"] = {
+            "NP": 1,
+            "BODO_TEST_SPAWN_MODE": 1,
+            "BODO_NUM_WORKERS": 2,
+            "NUMBER_GROUPS_SPLIT": 1,
+            "PYTEST_MARKER": "spawn_mode",
+        }
+        build_graph.append(
+            {
+                "identifier": "linux_NP_1_spawn_mode",
+                "env": {**env_dict},
+                "buildspec": buildspec,
+                "depend-on": ["linux_PRECACHE"],
+            }
+        )
+
         add_sonar(build_graph)
+
     return {"build-graph": build_graph}
 
 
@@ -141,7 +162,7 @@ def get_compute_type(env_var_dict, image_path, buildspec):
 
 # Function to generate the batch portion for the CI build
 def generate_CI_buildspec(num_groups):
-    image_path = "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:7.9"
+    image_path = "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:7.10"
     pytest_starting_marker = "not slow and not weekly"
     pytest_options = [
         pytest_starting_marker + " and " + str(i) for i in range(num_groups)
