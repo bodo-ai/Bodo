@@ -108,6 +108,9 @@ def worker_loop(
         elif command == CommandType.EXIT.value:
             logger.debug("Exiting...")
             return
+        elif command == CommandType.BROADCAST.value:
+            bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
+            logger.debug("Broadcast done")
         else:
             raise ValueError(f"Unsupported command '{command}!")
 

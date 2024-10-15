@@ -129,8 +129,8 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
-static void c_bcast(void* send_data, int sendcount, int typ_enum,
-                    int root) __UNUSED__;
+static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
+                    int64_t comm_ptr) __UNUSED__;
 
 static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                         int* recv_counts, int* send_disp, int* recv_disp,
@@ -991,10 +991,18 @@ static void c_comm_create(const int* comm_ranks, int n, MPI_Comm* comm) {
  * @param sendcount number of elements in the data buffer
  * @param typ_enum datatype of buffer
  * @param root rank to broadcast.
+ * @param comm_ptr pointer to intercomm if available (0 means not over
+ * intercomm)
  */
-static void c_bcast(void* send_data, int sendcount, int typ_enum, int root) {
+static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
+                    int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Bcast(send_data, sendcount, mpi_typ, root, MPI_COMM_WORLD);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    // Use provided comm pointer if available (0 means not provided)
+    if (comm_ptr != 0) {
+        comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
+    }
+    MPI_Bcast(send_data, sendcount, mpi_typ, root, comm);
 }
 
 static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
