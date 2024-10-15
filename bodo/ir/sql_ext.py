@@ -99,7 +99,7 @@ ll.add_symbol(
     stream_join_cpp.get_runtime_join_filter_unique_values_py_entrypt,
 )
 
-MPI_ROOT = 0
+DEFAULT_ROOT = 0
 
 
 class SnowflakeReadParams(NamedTuple):
@@ -1820,7 +1820,7 @@ def _gen_sql_reader_py(
                 func_text += f"  nb_row = {limit}\n"
             else:
                 func_text += '  with bodo.no_warning_objmode(nb_row="int64"):\n'
-                func_text += f"     if rank == {MPI_ROOT}:\n"
+                func_text += f"     if rank == {DEFAULT_ROOT}:\n"
                 func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
                 func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
                 func_text += "         nb_row = frame.iat[0,0]\n"

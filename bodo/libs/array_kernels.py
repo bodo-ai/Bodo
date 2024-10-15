@@ -97,7 +97,7 @@ from bodo.utils.utils import (
 ll.add_symbol("quantile_sequential", quantile_alg.quantile_sequential)
 ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 
-MPI_ROOT = 0
+DEFAULT_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
 max_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Max.value)
 min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
@@ -1203,7 +1203,7 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):  # pragma: no cover
     all_largest_ind = bodo.libs.distributed_api.gatherv(local_res_ind)
 
     # TODO: handle len(res) < k case
-    if my_rank == MPI_ROOT:
+    if my_rank == DEFAULT_ROOT:
         res, res_ind = nlargest(all_largest, all_largest_ind, k, is_largest, cmp_f)
     else:
         res = np.empty(k, A.dtype)

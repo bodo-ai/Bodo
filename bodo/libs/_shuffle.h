@@ -145,61 +145,70 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
  * @param comm_ranks : target ranks to send data to (can be nullptr if sending
  * to all)
  * @param is_parallel : whether tracing should be parallel
- * @param mpi_root : root rank for broadcast (where data is broadcast from)
+ * @param root : root rank for broadcast (where data is broadcast from)
  * @param myrank : current rank
+ * @param comm_ptr pointer to intercomm if available (0 means not over
+ * intercomm)
  * @return the array put in all the nodes
  */
 std::shared_ptr<array_info> broadcast_array(
     std::shared_ptr<array_info> ref_arr, std::shared_ptr<array_info> in_arr,
-    std::shared_ptr<array_info> comm_ranks, bool is_parallel, int mpi_root,
-    int myrank);
+    std::shared_ptr<std::vector<int>> comm_ranks, bool is_parallel, int root,
+    int myrank, int64_t comm_ptr = 0);
 
 /**
  * @brief Entry point for Python to call broadcast_array()
  *
  * @param in_arr input array to broadcast (non-root data is ignored)
  * @param comm_ranks target ranks to send data to (all ranks if not specified)
- * @param mpi_root broadcast root rank
+ * @param root broadcast root rank
+ * @param comm_ptr pointer to intercomm if available (0 means not over
+ * intercomm)
  * @return array_info* broadcast output array
  */
 array_info* broadcast_array_py_entry(array_info* in_arr, array_info* comm_ranks,
-                                     int mpi_root);
+                                     int root, int64_t comm_ptr = 0);
 
 /**
  * @brief Broadcast the first n_cols of in_table to the other ranks.
  *
  * For dict columns, we use the global dictionary from columns of ref_table if
  * available (since columns in in_table can be anything including nullptr on
- * ranks != mpi_root) to ensure that ref_table and in_table share the same
+ * ranks != root) to ensure that ref_table and in_table share the same
  * dictionary and that it is global. ref_table can be nullptr, in which case we
  * broadcast the dictionary from root rank.
  *
  * @param ref_table : the reference table used for dictionary if available (can
  * be nullptr)
  * @param in_table : the broadcasted table. It can be anything including nullptr
- * for the nodes of rank not equal to mpi_root.
+ * for the nodes of rank not equal to root.
  * @param comm_ranks : target ranks to send data to (can be nullptr if sending
  * to all)
  * @param n_cols : the number of columns in output
  * @param is_parallel : whether tracing should be parallel
- * @param mpi_root : root rank for broadcast (where data is broadcast from)
+ * @param root : root rank for broadcast (where data is broadcast from)
+ * @param comm_ptr pointer to intercomm if available (0 means not over
+ * intercomm)
  * @return the table put in all the nodes
  */
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
-    std::shared_ptr<array_info> comm_ranks, size_t n_cols, bool is_parallel,
-    int mpi_root);
+    std::shared_ptr<std::vector<int>> comm_ranks, size_t n_cols,
+    bool is_parallel, int root, int64_t comm_ptr = 0);
 
 /**
  * @brief Entry point for Python to call broadcast_table()
  *
  * @param in_arr input table to broadcast (non-root data is ignored)
  * @param comm_ranks target ranks to send data to (all ranks if not specified)
- * @param mpi_root broadcast root rank
+ * @param root broadcast root rank
+ * @param comm_ptr pointer to intercomm if available (0 means not over
+ * intercomm)
  * @return table_info* broadcast output table
  */
 table_info* broadcast_table_py_entry(table_info* in_table,
-                                     array_info* comm_ranks, int mpi_root);
+                                     array_info* comm_ranks, int root,
+                                     int64_t comm_ptr = 0);
 
 /**
  * @brief Gather a table
