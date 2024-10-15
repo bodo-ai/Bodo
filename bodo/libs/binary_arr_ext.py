@@ -537,7 +537,8 @@ def create_binary_cmp_op_overload(op):
             null_checks.append("bodo.libs.array_kernels.isna(lhs, i)")
         if is_array_rhs:
             null_checks.append("bodo.libs.array_kernels.isna(rhs, i)")
-        func_text += f"    if {' or '.join(null_checks)}:\n"
+        all_null_checks = " or ".join(null_checks)
+        func_text += f"    if {all_null_checks}:\n"
         func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "      continue\n"
         left_arg = "lhs[i]" if is_array_lhs else "lhs"
