@@ -20,7 +20,7 @@ dependencies:
   - pandas >=2.2,<2.3
 
   # HDFS
-  - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_*
+  - hdf5 >=1.14.3,<1.14.4.0a0=mpi_mpich_*
   - h5py
 
   # MPI
@@ -34,7 +34,7 @@ dependencies:
   - py4j ==0.10.9.7
 
   # FFT
-  - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
+  - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
 
   # Data Science
   - scipy
