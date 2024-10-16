@@ -62,14 +62,14 @@ requirements:
     - pyarrow =17.0.0
     - boost-cpp =1.85
     - libcurl ~= 8.0
-    - hdf5 >=1.14.3,<1.14.4.0a0=*mpi_mpich_* # [not win]
+    - hdf5 >=1.14.3,<1.14.4.0a0=mpi_mpich_* # [not win]
     - h5py
     - mpich 4.1.2=h* # [not win]
     - msmpi # [win]
     - vc # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
-    - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
+    - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
     - requests
     - aws-sdk-cpp
     - zstd<=1.5.6
@@ -86,7 +86,7 @@ requirements:
     - msmpi # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
-    - fftw >=3.3.10,<3.4.0a0=*mpi_mpich_*
+    - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
     - requests
     - aws-sdk-cpp
     - zstd<=1.5.6
@@ -103,7 +103,7 @@ requirements:
     - s3fs >=2022.1.0
     - adlfs >=2022.1.0
     - gcsfs >=2022.1.0
-  
+
 test:
   imports:
     - bodo
