@@ -33,7 +33,9 @@ import org.apache.iceberg.exceptions.ValidationException
 import org.apache.iceberg.types.Type
 import org.apache.iceberg.types.Types
 
-class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor where T : Catalog, T : SupportsNamespaces {
+class IcebergDDLExecutor<T>(
+    private val icebergConnection: T,
+) : DDLExecutor where T : Catalog, T : SupportsNamespaces {
     override fun createSchema(schemaPath: ImmutableList<String>) {
         val ns = schemaPathToNamespace(schemaPath)
         try {
@@ -49,8 +51,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param ns Namespace path of schema to drop
      * @return True if the namespace existed, false otherwise
      */
-    private fun dropSchema(ns: Namespace): Boolean {
-        return try {
+    private fun dropSchema(ns: Namespace): Boolean =
+        try {
             icebergConnection.dropNamespace(ns)
         } catch (e: NamespaceNotEmptyException) {
             for (nsInner in icebergConnection.listNamespaces(ns)) {
@@ -64,7 +66,6 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             // Should return true in this path, since the schema has contents
             icebergConnection.dropNamespace(ns)
         }
-    }
 
     override fun dropSchema(
         defaultSchemaPath: ImmutableList<String>,
@@ -83,12 +84,14 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * by other connectors.
      * @param purge If purge is true, it will actually delete the data/metadata files which prevents time travel.
      * If purge is false, even though the table is dropped the underlying data/metadata may still exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     override fun dropTable(
         tablePath: ImmutableList<String>,
         cascade: Boolean,
         purge: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
@@ -96,12 +99,13 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         if (!result) {
             throw RuntimeException("Unable to drop table $tableName. Please check that you have sufficient permissions.")
         }
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("$tableName successfully dropped.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("$tableName successfully dropped.")), returnTypes)
     }
 
     override fun describeTable(
         tablePath: ImmutableList<String>,
         typeFactory: RelDataTypeFactory,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val names =
             listOf(
@@ -138,7 +142,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             // Five new columns from Snowflake that is set to null in Iceberg
             for (idx in 7..11) columnValues[idx].add(null)
         }
-        return DDLExecutionResult(names, columnValues)
+        return DDLExecutionResult(names, columnValues, returnTypes)
     }
 
     /**
@@ -148,9 +152,13 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      *
      * @param schemaPath The schema path to describe.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, KIND
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @throws NoSuchNamespaceException if namespace cannot be found
      */
-    override fun describeSchema(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun describeSchema(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND")
         val columnValues = List(4) { ArrayList<String?>() }
@@ -173,20 +181,24 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 columnValues[2].add("VIEW")
             }
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW TERSE OBJECTS for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
      * The method uses the .listTables(namespace) and .listViews(namespace) method of the respective catalog
      * to emulate SHOW TERSE OBJECTS.
      */
-    override fun showTerseObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseObjects(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
@@ -209,20 +221,24 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 columnValues[3].add(namespace.levels().joinToString("."))
             }
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW OBJECTS for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
      * The method uses the .listTables(namespace) and .listViews(namespace) method of the respective catalog
      * to emulate the table part of SHOW TERSE OBJECTS.
      */
-    override fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showObjects(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         // Short helper to update the last element of a list.
         fun <T> MutableList<T>.setLast(value: T) {
             if (this.isNotEmpty()) {
@@ -279,20 +295,24 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 columnValues[fieldNames.indexOf("COMMENT")].setLast(table.properties()["comment"])
             }
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW TERSE SCHEMAS for a specified namespace in Iceberg.
      *
      * @param dbPath The db path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
      * The method uses the .listNamespaces(namespace) method of the respective catalog
      * to emulate SHOW TERSE SCHEMAS.
      */
-    override fun showTerseSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseSchemas(
+        dbPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
@@ -307,20 +327,24 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[3].add(it.toString())
         }
 
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW SCHEMAS for a specified namespace in Iceberg.
      *
      * @param dbPath The db path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
      * The method uses the .listNamespaces(namespace) method of the respective catalog
      * to emulate SHOW SCHEMAS.
      */
-    override fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showSchemas(
+        dbPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         // Short helper to update the last element of a list.
         fun <T> MutableList<T>.setLast(value: T) {
             if (this.isNotEmpty()) {
@@ -352,20 +376,24 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[fieldNames.indexOf("NAME")].setLast(it.level(it.levels().size - 1))
             columnValues[fieldNames.indexOf("DATABASE_NAME")].setLast(namespace.levels().joinToString("."))
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW TERSE TABLES for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
      * The method uses the .listTables(namespace) method of the respective catalog
      * to emulate SHOW TERSE TABLES.
      */
-    override fun showTerseTables(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseTables(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND", "SCHEMA_NAME")
         val columnValues = List(4) { ArrayList<String?>() }
@@ -377,20 +405,24 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[2].add("TABLE")
             columnValues[3].add(namespace.levels().joinToString("."))
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW TABLES for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws NoSuchNamespaceException if namespace cannot be found
      *
      * The method uses the .listTables(namespace) method of the respective catalog
      * to emulate SHOW TABLES.
      */
-    override fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTables(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         // Short helper to update the last element of a list.
         fun <T> MutableList<T>.setLast(value: T) {
             if (this.isNotEmpty()) {
@@ -436,13 +468,14 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[fieldNames.indexOf("COMMENT")].setLast(table.properties()["comment"])
             columnValues[fieldNames.indexOf("IS_ICEBERG")].setLast("Y")
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW TERSE VIEWS for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws NoSuchNamespaceException if namespace cannot be found
      * @throws RuntimeException if catalog does not support view operations
@@ -450,7 +483,10 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * The method uses the .listViews(namespace) method of the respective catalog
      * to emulate SHOW TERSE VIEWS, if the catalog supports the method.
      */
-    override fun showTerseViews(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showTerseViews(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         if (icebergConnection !is ViewCatalog) {
             throw RuntimeException("SHOW VIEWS is unimplemented for the current catalog")
         }
@@ -464,13 +500,14 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[2].add("VIEW")
             columnValues[3].add(namespace.levels().joinToString("."))
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
      * Emulates SHOW VIEWS for a specified namespace in Iceberg.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws NoSuchNamespaceException if namespace cannot be found
      * @throws RuntimeException if catalog does not support view operations
@@ -478,7 +515,10 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * The method uses the .listViews(namespace) method of the respective catalog
      * to emulate SHOW VIEWS, if the catalog supports the method.
      */
-    override fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult {
+    override fun showViews(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult {
         // Short helper to update the last element of a list.
         fun <T> MutableList<T>.setLast(value: T) {
             if (this.isNotEmpty()) {
@@ -517,7 +557,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             columnValues[fieldNames.indexOf("SCHEMA_NAME")].setLast(namespace.levels().joinToString("."))
             columnValues[fieldNames.indexOf("COMMENT")].setLast(view.properties()["comment"])
         }
-        return DDLExecutionResult(fieldNames, columnValues)
+        return DDLExecutionResult(fieldNames, columnValues, returnTypes)
     }
 
     /**
@@ -525,6 +565,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      *
      * @param tablePath The table path.
      * @param property The specific table property to display. If not specified, will be null.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws Exception if a property is specified but cannot be found
      *
@@ -534,6 +575,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
     override fun showTableProperties(
         tablePath: ImmutableList<String>,
         property: SqlLiteral?,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableIdentifier = tablePathToTableIdentifier(tablePath.subList(0, tablePath.size - 1), Util.last(tablePath))
         val table = icebergConnection.loadTable(tableIdentifier)
@@ -566,7 +608,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 columnValues[1].add(it.value)
             }
         }
-        return DDLExecutionResult(names, columnValues)
+        return DDLExecutionResult(names, columnValues, returnTypes)
     }
 
     /**
@@ -575,8 +617,8 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param dataType The RelDataType.
      * @return The appropriate Iceberg type corresponding to the dataType.
      */
-    fun relDataTypeToIcebergType(dataType: RelDataType): Type {
-        return when {
+    fun relDataTypeToIcebergType(dataType: RelDataType): Type =
+        when {
             SqlTypeFamily.STRING.contains(dataType) -> Types.StringType.get()
             SqlTypeFamily.BINARY.contains(dataType) -> Types.BinaryType.get()
             SqlTypeFamily.TIMESTAMP.contains(dataType) -> {
@@ -609,7 +651,6 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 )
             else -> throw Exception("Unsupported data type $dataType in Iceberg view")
         }
-    }
 
     override fun createOrReplaceView(
         viewPath: ImmutableList<String>,
@@ -644,6 +685,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
     override fun describeView(
         viewPath: ImmutableList<String>,
         typeFactory: RelDataTypeFactory,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         if (icebergConnection is ViewCatalog) {
             val names =
@@ -680,7 +722,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
                 // Five new columns from Snowflake that is set to null in Iceberg
                 for (idx in 7..11) columnValues[idx].add(null)
             }
-            return DDLExecutionResult(names, columnValues)
+            return DDLExecutionResult(names, columnValues, returnTypes)
         }
         throw RuntimeException("DESCRIBE VIEW is unimplemented for the current catalog")
     }
@@ -692,6 +734,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param tablePath The path of the table to rename.
      * @param renamePath The new path of the table.
      * @param ifExists Whether to use the IF EXISTS clause.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      * @throws NoSuchTableException If the table does not exist and IF EXISTS clause not present.
      * @throws AlreadyExistsException If the renamed table already exists.
@@ -701,6 +744,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         tablePath: ImmutableList<String>,
         renamePath: ImmutableList<String>,
         ifExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
@@ -716,14 +760,14 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         val renameIdentifier = tablePathToTableIdentifier(renameSchema, renameName)
         return try {
             icebergConnection.renameTable(tableIdentifier, renameIdentifier)
-            DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+            DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
         } catch (e: NoSuchTableException) {
             // To match snowflake's behavior, we see if it is a view and try renaming the view too.
             if (icebergConnection is ViewCatalog) {
-                renameView(tablePath, renamePath, ifExists)
+                renameView(tablePath, renamePath, ifExists, returnTypes)
             } else if (ifExists) {
                 // Need to return gracefully with an IF EXISTS clause.
-                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
             } else {
                 throw e
             }
@@ -742,6 +786,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param viewPath The path of the view to rename.
      * @param renamePath The new path of the view.
      * @param ifExists Whether to use the IF EXISTS clause.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      * @throws NoSuchViewException If the view does not exist and IF EXISTS clause not present.
      * @throws AlreadyExistsException If the renamed view already exists.
@@ -752,6 +797,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         viewPath: ImmutableList<String>,
         renamePath: ImmutableList<String>,
         ifExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         if (icebergConnection is ViewCatalog) {
             val viewName = viewPath[viewPath.size - 1]
@@ -768,11 +814,11 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             val renameIdentifier = tablePathToTableIdentifier(renameSchema, renameName)
             return try {
                 icebergConnection.renameView(viewIdentifier, renameIdentifier)
-                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
             } catch (e: NoSuchViewException) {
                 if (ifExists) {
                     // Need to return gracefully with an IF EXISTS clause.
-                    DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+                    DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
                 } else {
                     throw e
                 }
@@ -814,6 +860,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param valueList The list of values to set. Must be a SqlNodeList of SqlLiteral.
      * @param ifExists Flag indicating whether to set the properties only if the table exists.
      *                 If true, will not error even if the table does not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the DDL execution.
      */
 
@@ -822,6 +869,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         propertyList: SqlNodeList,
         valueList: SqlNodeList,
         ifExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
@@ -840,7 +888,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         }
         updater.commit()
 
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 
     /**
@@ -853,6 +901,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param ifPropertyExists Flag indicating whether to unset the properties only if the property exists
      *                         on the table. If this flag is not set to True, and a non-existent property is
      *                         attempted to be unset, a RuntimeException will be thrown.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the DDL execution.
      */
 
@@ -861,6 +910,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         propertyList: SqlNodeList,
         ifExists: Boolean,
         ifPropertyExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
@@ -880,7 +930,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         }
         updater.commit()
 
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 
     /**
@@ -894,6 +944,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param ifNotExists Do nothing if true and the column to add already exists.
      * @param addCol SqlNode representing column details to be added (name, type, etc)
      * @param validator Validator needed to derive type information from addCol SqlNode.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
     override fun addColumn(
@@ -902,6 +953,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         ifNotExists: Boolean,
         addCol: SqlNode,
         validator: SqlValidator,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         // Table info
         val tableName = tablePath[tablePath.size - 1]
@@ -922,13 +974,13 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             val cName = c.name()
             if (columnName == cName && ifNotExists) {
                 // Return early
-                return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+                return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
             }
             // Otherwise, let the query throw its exception
         }
         // Execute query
         table.updateSchema().addColumn(columnName, columnType).commit()
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 
     /**
@@ -940,6 +992,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      *                 has no effect here, but is included to match signature.)
      * @param dropCols SqlNodeList representing column names to be dropped.
      * @param ifColumnExists Do nothing if true and the columns do not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
     override fun dropColumn(
@@ -947,6 +1000,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         ifExists: Boolean,
         dropCols: SqlNodeList,
         ifColumnExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         // Table info
         val tableName = tablePath[tablePath.size - 1]
@@ -975,7 +1029,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             }
         }
         updater.commit()
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 
     /**
@@ -987,6 +1041,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      *                 has no effect here, but is included to match signature.)
      * @param renameColOld SqlIdentifier signifying the column to rename.
      * @param renameColNew SqlIdentifier signifying what to rename renameColOld to.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
     override fun renameColumn(
@@ -994,6 +1049,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         ifExists: Boolean,
         renameColOld: SqlIdentifier,
         renameColNew: SqlIdentifier,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
@@ -1016,7 +1072,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
             throw Exception("Column $renameColName already exists; cannot rename")
         }
 
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 
     /**
@@ -1028,6 +1084,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      *                 has no effect here, but is included to match signature.)
      * @param column SqlIdentifier signifying the column to set the comment on.
      * @param comment SqlLiteral containing the string of the comment to set.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
     override fun alterColumnComment(
@@ -1035,6 +1092,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         ifExists: Boolean,
         column: SqlIdentifier,
         comment: SqlLiteral,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
@@ -1051,7 +1109,7 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         } catch (e: IllegalArgumentException) {
             throw Exception("Invalid column name or column does not exist: $colName")
         }
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 
     /**
@@ -1062,12 +1120,14 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
      * @param ifExists Do nothing if true and the table does not exist. (This is already dealt with in DDLResolverImpl so
      *                 has no effect here, but is included to match signature.)
      * @param column SqlIdentifier signifying the column to change to nullable.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
     override fun alterColumnDropNotNull(
         tablePath: ImmutableList<String>,
         ifExists: Boolean,
         column: SqlIdentifier,
+        returnTypes: List<String>,
     ): DDLExecutionResult {
         val tableName = tablePath[tablePath.size - 1]
         val tableSchema = tablePath.subList(0, tablePath.size - 1)
@@ -1084,6 +1144,6 @@ class IcebergDDLExecutor<T>(private val icebergConnection: T) : DDLExecutor wher
         } catch (e: IllegalArgumentException) {
             throw Exception("Invalid column name or column does not exist: $colName")
         }
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
     }
 }

@@ -14,7 +14,9 @@ import org.apache.calcite.sql.type.SqlTypeName
 /**
  * Generate the "schema" for DDL operations.
  */
-class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
+class GenerateDDLTypes(
+    private val typeFactory: RelDataTypeFactory,
+) {
     fun generateType(ddlNode: SqlNode): RelDataType {
         // All DDL types likely use a string type.
         val stringType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true)
@@ -37,8 +39,18 @@ class GenerateDDLTypes(private val typeFactory: RelDataTypeFactory) {
                     // We only return the first 7 arguments from Snowflake right now as other expressions may not generalize.
                     val fieldNames =
                         listOf(
-                            "NAME", "TYPE", "KIND", "NULL?", "DEFAULT", "PRIMARY_KEY", "UNIQUE_KEY", "CHECK",
-                            "EXPRESSION", "COMMENT", "POLICY NAME", "PRIVACY DOMAIN",
+                            "NAME",
+                            "TYPE",
+                            "KIND",
+                            "NULL?",
+                            "DEFAULT",
+                            "PRIMARY_KEY",
+                            "UNIQUE_KEY",
+                            "CHECK",
+                            "EXPRESSION",
+                            "COMMENT",
+                            "POLICY NAME",
+                            "PRIVACY DOMAIN",
                         )
                     val types = List(12) { _ -> stringType }
                     Pair(fieldNames, types)
