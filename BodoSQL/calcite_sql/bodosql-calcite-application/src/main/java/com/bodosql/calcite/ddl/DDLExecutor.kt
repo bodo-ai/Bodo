@@ -17,7 +17,9 @@ class NamespaceNotFoundException : Exception()
 
 class ViewAlreadyExistsException : Exception()
 
-class MissingObjectException(message: String) : Exception(message)
+class MissingObjectException(
+    message: String,
+) : Exception(message)
 
 /**
  * General interface for executing DDL operations. Each distinct catalog table type
@@ -49,12 +51,14 @@ interface DDLExecutor {
      * @param tablePath The path to the table to drop.
      * @param cascade Specifies whether the table can be dropped if foreign keys exist that reference the table.
      * @param purge Indicate whether (meta)data files are marked for permanent deletion.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun dropTable(
         tablePath: ImmutableList<String>,
         cascade: Boolean,
         purge: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -67,11 +71,13 @@ interface DDLExecutor {
      * @param tablePath The path to the table to rename.
      * @param renamePath The new name of the table.
      * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      */
     fun renameTable(
         tablePath: ImmutableList<String>,
         renamePath: ImmutableList<String>,
         ifExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -84,11 +90,13 @@ interface DDLExecutor {
      * @param viewPath The path to the view to rename.
      * @param renamePath The new name of the view.
      * @param ifExists If true, the operation will not fail if the view does not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      */
     fun renameView(
         viewPath: ImmutableList<String>,
         renamePath: ImmutableList<String>,
         ifExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -99,6 +107,7 @@ interface DDLExecutor {
      * @param propertyList The list of properties to set. Must be a SqlNodeList of SqlLiteral.
      * @param valueList The list of values to set. Must be a SqlNodeList of SqlLiteral.
      * @param ifExists If true, the operation will not fail if the table does not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      *
      * @return The result of the operation.
      */
@@ -107,6 +116,7 @@ interface DDLExecutor {
         propertyList: SqlNodeList,
         valueList: SqlNodeList,
         ifExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -116,6 +126,7 @@ interface DDLExecutor {
      * @param propertyList The list of properties to unset. Must be a SqlNodeList of SqlLiteral.
      * @param ifExists If true, the operation will not fail if the table does not exist.
      * @param ifPropertyExists If true, the operation will not fail if the property does not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      *
      * @return The result of the operation.
      */
@@ -124,6 +135,7 @@ interface DDLExecutor {
         propertyList: SqlNodeList,
         ifExists: Boolean,
         ifPropertyExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -134,6 +146,7 @@ interface DDLExecutor {
      * @param ifNotExists If true, the operation will not fail if the property does not exist.
      * @param addCol SqlNode representing column details to be added (name, type, etc)
      * @param validator Validator needed to derive type information from addCol SqlNode.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun addColumn(
@@ -142,6 +155,7 @@ interface DDLExecutor {
         ifNotExists: Boolean,
         addCol: SqlNode,
         validator: SqlValidator,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -152,6 +166,7 @@ interface DDLExecutor {
      * @param dropCols SqlNodeList representing columns to be dropped. (name, type, etc)
      *                 Should be list of CompoundIdentifiers.
      * @param ifColumnExists If true, the operation will not fail if the columns do not exist.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun dropColumn(
@@ -159,6 +174,7 @@ interface DDLExecutor {
         ifExists: Boolean,
         dropCols: SqlNodeList,
         ifColumnExists: Boolean,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -168,6 +184,7 @@ interface DDLExecutor {
      * @param ifExists If true, the operation will not fail if the table does not exist.
      * @param renameColOld SqlIdentifier signifying the column to rename.
      * @param renameColNew SqlIdentifier signifying what to rename renameColOld to.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun renameColumn(
@@ -175,6 +192,7 @@ interface DDLExecutor {
         ifExists: Boolean,
         renameColOld: SqlIdentifier,
         renameColNew: SqlIdentifier,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -184,6 +202,7 @@ interface DDLExecutor {
      * @param ifExists If true, the operation will not fail if the table does not exist.
      * @param column SqlIdentifier signifying the column to set the comment on.
      * @param comment SqlLiteral containing the string of the comment to set.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun alterColumnComment(
@@ -191,6 +210,7 @@ interface DDLExecutor {
         ifExists: Boolean,
         column: SqlIdentifier,
         comment: SqlLiteral,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -199,11 +219,13 @@ interface DDLExecutor {
      * @param tablePath The path to the table to add the column to.
      * @param ifExists If true, the operation will not fail if the table does not exist.
      * @param column SqlIdentifier signifying the column to change to nullable.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      */
     fun alterColumnDropNotNull(
         tablePath: ImmutableList<String>,
         ifExists: Boolean,
         column: SqlIdentifier,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
@@ -211,85 +233,125 @@ interface DDLExecutor {
      * type consistently across all catalogs.
      * @param tablePath The path to the table to describe.
      * @param typeFactory The type factory to use for creating the Bodo Type.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun describeTable(
         tablePath: ImmutableList<String>,
         typeFactory: RelDataTypeFactory,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /**
      * Describes a schema in the catalog.
      * @param schemaPath The path to the schema to describe.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
-    fun describeSchema(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun describeSchema(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show objects in the database in a terse format.
      * @param schemaPath The path to the schema to show objects from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      */
-    fun showTerseObjects(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun showTerseObjects(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show objects in the database.
      * @param schemaPath The path to the schema to show objects from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
-    fun showObjects(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun showObjects(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show schemas in the database in a terse format.
      * @param dbPath The path to schema to show all sub-schemas from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      */
-    fun showTerseSchemas(dbPath: ImmutableList<String>): DDLExecutionResult
+    fun showTerseSchemas(
+        dbPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show schemas in the database.
      * @param dbPath The path to schema to show all sub-schemas from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
-    fun showSchemas(dbPath: ImmutableList<String>): DDLExecutionResult
+    fun showSchemas(
+        dbPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show tables in the database in a terse format.
      * @param schemaPath The path to the schema to show tables from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      */
-    fun showTerseTables(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun showTerseTables(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show tables in the database.
      * @param schemaPath The path to the schema to show tables from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
-    fun showTables(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun showTables(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show views in the database in a terse format.
      * @param schemaPath The path to the schema to show views from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      */
-    fun showTerseViews(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun showTerseViews(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show views in the database.
      * @param schemaPath The path to the schema to show views from.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      */
-    fun showViews(schemaPath: ImmutableList<String>): DDLExecutionResult
+    fun showViews(
+        schemaPath: ImmutableList<String>,
+        returnTypes: List<String>,
+    ): DDLExecutionResult
 
     /**
      * Show properties of a table.
      * @param tablePath: The identifier of the table to show properties of.
      * @param property The property to show. If null, show all properties.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns (KEY, VALUE) or just (VALUE) if property is null
      */
     fun showTableProperties(
         tablePath: ImmutableList<String>,
         property: SqlLiteral?,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     @Throws(ViewAlreadyExistsException::class)
@@ -305,11 +367,13 @@ interface DDLExecutor {
      * type consistently across all catalogs.
      * @param viewPath The path to the table to describe.
      * @param typeFactory The type factory to use for creating the Bodo Type.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      */
     fun describeView(
         viewPath: ImmutableList<String>,
         typeFactory: RelDataTypeFactory,
+        returnTypes: List<String>,
     ): DDLExecutionResult
 
     /*

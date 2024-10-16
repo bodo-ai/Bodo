@@ -2,6 +2,7 @@ package org.apache.calcite.sql.validate
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator
 import com.bodosql.calcite.ddl.DDLExecutionResult
+import com.bodosql.calcite.ddl.GenerateDDLTypes
 import com.bodosql.calcite.ddl.MissingObjectException
 import com.bodosql.calcite.ddl.NamespaceAlreadyExistsException
 import com.bodosql.calcite.ddl.NamespaceNotFoundException
@@ -45,6 +46,7 @@ import org.apache.calcite.sql.ddl.SqlDropView
 import org.apache.calcite.sql.ddl.SqlDdlNodes
 import org.apache.calcite.util.Util
 import java.util.function.Function
+import org.apache.calcite.rel.type.RelDataType
 
 /**
  * Implementation class for the DDLResolver interface.
@@ -56,6 +58,7 @@ import java.util.function.Function
 open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, private val getValidator: Function<List<String>, BodoSqlValidator>) :
     DDLResolver {
     private val scope: SqlValidatorScope = CatalogScope(EmptyScope(getValidator.apply(listOf())), ImmutableList.of("CATALOG"))
+    private val typeGenerator: GenerateDDLTypes = GenerateDDLTypes(catalogReader.typeFactory)
 
     private fun validateTable(table: BodoSqlTable, kind: SqlKind, tableName: String): CatalogTable {
         if (table !is CatalogTable) {
@@ -77,52 +80,55 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      */
     override fun executeDDL(node: SqlNode): DDLExecutionResult {
         assert (!RelationalAlgebraGenerator.isComputeKind(node.kind)) { "Node is not a DDL operation: $node" }
+        val ddlType: RelDataType = typeGenerator.generateType(node)
+        val returnTypes = DDLExecutionResult.toPandasDataTypeList(ddlType)
+
         return when (node.kind) {
             // No-ops, only return expected value
             SqlKind.BEGIN, SqlKind.COMMIT, SqlKind.ROLLBACK -> {
-                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")))
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes)
             }
 
             // Create Queries
-            SqlKind.CREATE_SCHEMA -> executeCreateSchema(node as SqlCreateSchema)
+            SqlKind.CREATE_SCHEMA -> executeCreateSchema(node as SqlCreateSchema, returnTypes)
             // Drop Queries
-            SqlKind.DROP_SCHEMA -> executeDropSchema(node as SqlDropSchema)
-            SqlKind.DROP_TABLE -> executeDropTable(node as SqlDropTable)
+            SqlKind.DROP_SCHEMA -> executeDropSchema(node as SqlDropSchema, returnTypes)
+            SqlKind.DROP_TABLE -> executeDropTable(node as SqlDropTable, returnTypes)
 
             // Alter Queries
-            SqlKind.ALTER_TABLE -> executeAlterTable(node as SqlAlterTable)
-            SqlKind.ALTER_VIEW -> executeAlterView(node as SqlAlterView)
+            SqlKind.ALTER_TABLE -> executeAlterTable(node as SqlAlterTable, returnTypes)
+            SqlKind.ALTER_VIEW -> executeAlterView(node as SqlAlterView, returnTypes)
             
             SqlKind.DESCRIBE_TABLE -> {
-                executeDescribeTable(node as SqlDescribeTable)
+                executeDescribeTable(node as SqlDescribeTable, returnTypes)
             }
             SqlKind.DESCRIBE_SCHEMA -> {
-                executeDescribeSchema(node as SqlDescribeSchema)
+                executeDescribeSchema(node as SqlDescribeSchema, returnTypes)
             }
             SqlKind.SHOW_OBJECTS-> {
-                executeShowObjects(node as SqlSnowflakeShowObjects)
+                executeShowObjects(node as SqlSnowflakeShowObjects, returnTypes)
             }
             SqlKind.SHOW_SCHEMAS-> {
-                executeShowSchemas(node as SqlSnowflakeShowSchemas)
+                executeShowSchemas(node as SqlSnowflakeShowSchemas, returnTypes)
             }
             SqlKind.SHOW_TABLES-> {
-                executeShowTables(node as SqlShowTables)
+                executeShowTables(node as SqlShowTables, returnTypes)
             }
             SqlKind.SHOW_VIEWS-> {
-                executeShowViews(node as SqlShowViews)
+                executeShowViews(node as SqlShowViews, returnTypes)
             }
             SqlKind.SHOW_TBLPROPERTIES-> {
-                executeShowTblproperties(node as SqlShowTblproperties)
+                executeShowTblproperties(node as SqlShowTblproperties, returnTypes)
             }
             SqlKind.CREATE_VIEW -> {
-                executeCreateView(node as SqlCreateView)
+                executeCreateView(node as SqlCreateView, returnTypes)
             }
             SqlKind.DESCRIBE_VIEW -> {
-                executeDescribeView(node as SqlDescribeView)
+                executeDescribeView(node as SqlDescribeView, returnTypes)
             }
 
             SqlKind.DROP_VIEW -> {
-                executeDropView(node as SqlDropView)
+                executeDropView(node as SqlDropView, returnTypes)
             }
             else -> {
                 throw RuntimeException("Unsupported DDL operation: ${node.kind}")
@@ -142,7 +148,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @param node The ALTER TABLE node to execute.
      * @return The result of the operation.
      */
-    private fun executeAlterTable(node: SqlAlterTable): DDLExecutionResult{
+    private fun executeAlterTable(node: SqlAlterTable, returnTypes: List<String>): DDLExecutionResult{
         // Type check up front
         // When adding support for additional ALTER operations, expand this check.
         // NOTE: This check will not actually catch cases like ALTER TABLE CLUSTER BY, since
@@ -180,7 +186,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                 try {
                     val schema = deriveSchema(schemaPath)
                     validateSchema(schema, node.kind, schemaName)
-                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")));
+                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes);
                 } catch (e: MissingObjectException){
                     throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
                 }
@@ -193,28 +199,28 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         val validator = getValidator.apply(listOf())
         return when (node) {
             is SqlAlterTableRenameTable -> {
-                catalogTable.getDDLExecutor().renameTable(catalogTable.fullPath, node.renameName.names, node.ifExists)
+                catalogTable.getDDLExecutor().renameTable(catalogTable.fullPath, node.renameName.names, node.ifExists, returnTypes)
             }
             is SqlAlterTableSetProperty -> {
-                catalogTable.getDDLExecutor().setProperty(catalogTable.fullPath, node.propertyList, node.valueList, node.ifExists)
+                catalogTable.getDDLExecutor().setProperty(catalogTable.fullPath, node.propertyList, node.valueList, node.ifExists, returnTypes)
             }
             is SqlAlterTableUnsetProperty -> {
-                catalogTable.getDDLExecutor().unsetProperty(catalogTable.fullPath, node.propertyList, node.ifExists, node.ifPropertyExists)
+                catalogTable.getDDLExecutor().unsetProperty(catalogTable.fullPath, node.propertyList, node.ifExists, node.ifPropertyExists, returnTypes)
             }
             is SqlAlterTableAddCol -> {
-                catalogTable.getDDLExecutor().addColumn(catalogTable.fullPath,node.ifExists, node.ifNotExists, node.addCol, validator)
+                catalogTable.getDDLExecutor().addColumn(catalogTable.fullPath,node.ifExists, node.ifNotExists, node.addCol, validator, returnTypes)
             }
             is SqlAlterTableDropCol -> {
-                catalogTable.getDDLExecutor().dropColumn(catalogTable.fullPath,node.ifExists, node.dropCols, node.ifColumnExists)
+                catalogTable.getDDLExecutor().dropColumn(catalogTable.fullPath,node.ifExists, node.dropCols, node.ifColumnExists, returnTypes)
             }
             is SqlAlterTableRenameCol -> {
-                catalogTable.getDDLExecutor().renameColumn(catalogTable.fullPath,node.ifExists, node.renameColOld, node.renameColNew)
+                catalogTable.getDDLExecutor().renameColumn(catalogTable.fullPath,node.ifExists, node.renameColOld, node.renameColNew, returnTypes)
             }
             is SqlAlterTableAlterColumnComment -> {
-                catalogTable.getDDLExecutor().alterColumnComment(catalogTable.fullPath,node.ifExists, node.column, node.comment as SqlLiteral)
+                catalogTable.getDDLExecutor().alterColumnComment(catalogTable.fullPath,node.ifExists, node.column, node.comment as SqlLiteral, returnTypes)
             }
             is SqlAlterTableAlterColumnDropNotNull -> {
-                catalogTable.getDDLExecutor().alterColumnDropNotNull(catalogTable.fullPath,node.ifExists, node.column)
+                catalogTable.getDDLExecutor().alterColumnDropNotNull(catalogTable.fullPath,node.ifExists, node.column, returnTypes)
             }
             else -> throw RuntimeException("This DDL operation is currently unsupported.") // Should not be here anyway, since type check is up front.
         }
@@ -234,7 +240,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @param node The ALTER VIEW node to execute.
      * @return The result of the operation.
      */
-    private fun executeAlterView(node: SqlAlterView): DDLExecutionResult{
+    private fun executeAlterView(node: SqlAlterView, returnTypes: List<String>): DDLExecutionResult{
         // Type check up front
         // When adding support for additional ALTER operations, expand this check.
         if (node !is SqlAlterViewRenameView) {
@@ -258,7 +264,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                 try {
                     val schema = deriveSchema(schemaPath)
                     validateSchema(schema, node.kind, schemaName)
-                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")));
+                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Statement executed successfully.")), returnTypes);
                 } catch (e: MissingObjectException){
                     throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
                 }
@@ -269,13 +275,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         // After validation, we can then case on the type of ALTER.
         return when (node) {
             is SqlAlterViewRenameView -> {
-                catalogView.getDDLExecutor().renameView(catalogView.fullPath, node.renameName.names, node.ifExists)
+                catalogView.getDDLExecutor().renameView(catalogView.fullPath, node.renameName.names, node.ifExists, returnTypes)
             }
             else -> throw RuntimeException("This DDL operation is currently unsupported.")
         }
     }
 
-    private fun executeCreateSchema(node: SqlCreateSchema): DDLExecutionResult {
+    private fun executeCreateSchema(node: SqlCreateSchema, returnTypes: List<String>): DDLExecutionResult {
         val schemaPath = node.name.names
         val schemaPathStr = schemaPath.joinToString(separator = ".")
         val schemaName = schemaPath.last()
@@ -284,18 +290,18 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val schema = deriveSchema(parentSchemaPath)
             val catalogSchema = validateSchema(schema, node.kind, schemaName)
             // Perform the actual create schema implementation
-            catalogSchema.getDDLExecutor().createSchema(schemaPath)
+            catalogSchema.ddlExecutor.createSchema(schemaPath)
         } catch (e: NamespaceAlreadyExistsException) {
             return if (node.ifNotExists) {
-                DDLExecutionResult(listOf("STATUS"), listOf(listOf("'$schemaName' already exists, statement succeeded.")))
+                DDLExecutionResult(listOf("STATUS"), listOf(listOf("'$schemaName' already exists, statement succeeded.")), returnTypes)
             } else {
                 throw RuntimeException("Schema '$schemaPathStr' already exists.")
             }
         }
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' successfully created.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' successfully created.")), returnTypes)
     }
 
-    private fun executeDropSchema(node: SqlDropSchema): DDLExecutionResult {
+    private fun executeDropSchema(node: SqlDropSchema, returnTypes: List<String>): DDLExecutionResult {
         val schemaPath = node.name.names
         val schemaName = schemaPath.last()
 
@@ -314,23 +320,23 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             catalogSchema.ddlExecutor.dropSchema(catalogSchema.fullPath, schemaName)
         } catch (e: NamespaceNotFoundException) {
             if (node.ifExists) {
-                return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' already dropped, statement succeeded.")))
+                return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' already dropped, statement succeeded.")), returnTypes)
             } else {
                 // Already verified that the parent exists
                 throw RuntimeException("Schema '$schemaName' does not exist or drop cannot be performed.")
             }
         }
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' successfully dropped.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Schema '$schemaName' successfully dropped.")), returnTypes)
     }
 
-    private fun executeDropTable(node: SqlDropTable): DDLExecutionResult {
+    private fun executeDropTable(node: SqlDropTable, returnTypes: List<String>): DDLExecutionResult {
         val tablePath = node.name.names
         val tableName = tablePath.joinToString(separator = ".")
         try {
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual drop table operation
-            return catalogTable.getDDLExecutor().dropTable(catalogTable.fullPath, node.cascade, node.purge)
+            return catalogTable.getDDLExecutor().dropTable(catalogTable.fullPath, node.cascade, node.purge, returnTypes)
         } catch (e: MissingObjectException) {
             if (node.ifExists) {
                 // If drop table doesn't care if the table exists, we still need to validate the
@@ -340,7 +346,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                 try {
                     val schema = deriveSchema(Util.skipLast(tablePath))
                     validateSchema(schema, node.kind, schemaName)
-                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Drop statement executed successfully ($tableName already dropped).")))
+                    return DDLExecutionResult(listOf("STATUS"), listOf(listOf("Drop statement executed successfully ($tableName already dropped).")), returnTypes)
                 } catch (e: MissingObjectException) {
                     throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
                 }
@@ -350,14 +356,14 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         }
     }
 
-    private fun executeDescribeTable(node: SqlDescribeTable): DDLExecutionResult {
+    private fun executeDescribeTable(node: SqlDescribeTable, returnTypes: List<String>): DDLExecutionResult {
         val tablePath = node.table.names
         val tableName = tablePath.joinToString(separator = ".")
         try {
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual describe table operation
-            return catalogTable.getDDLExecutor().describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
+            return catalogTable.getDDLExecutor().describeTable(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory, returnTypes)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Table $tableName does not exist or not authorized to describe.")
         }
@@ -370,13 +376,13 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @return DDLExecutionResult containing the details of the schema.
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
-    private fun executeDescribeSchema(node: SqlDescribeSchema): DDLExecutionResult {
+    private fun executeDescribeSchema(node: SqlDescribeSchema, returnTypes: List<String>): DDLExecutionResult {
         val schemaPath = node.schema.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            return schemaCat.ddlExecutor.describeSchema(schemaPath)
+            return schemaCat.ddlExecutor.describeSchema(schemaPath, returnTypes)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
         }
@@ -390,16 +396,16 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @return DDLExecutionResult containing the details of the objects in the specified schema.
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
-    private fun executeShowObjects(node: SqlSnowflakeShowObjects): DDLExecutionResult {
+    private fun executeShowObjects(node: SqlSnowflakeShowObjects, returnTypes: List<String>): DDLExecutionResult {
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            if (node.isTerse){
-                return schemaCat.ddlExecutor.showTerseObjects(schemaPath)
+            return if (node.isTerse){
+                schemaCat.ddlExecutor.showTerseObjects(schemaPath, returnTypes)
             } else {
-                return schemaCat.ddlExecutor.showObjects(schemaPath)
+                schemaCat.ddlExecutor.showObjects(schemaPath, returnTypes)
             }
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
@@ -413,16 +419,16 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @return DDLExecutionResult containing the details of the schemas in the specified DB.
      * @throws RuntimeException if the DB does not exist or the user is not authorized to access it.
      */
-    private fun executeShowSchemas(node: SqlSnowflakeShowSchemas): DDLExecutionResult {
+    private fun executeShowSchemas(node: SqlSnowflakeShowSchemas, returnTypes: List<String>): DDLExecutionResult {
         val dbPath = node.dbName.names
         val dbName = dbPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(dbPath)
             val schemaCat = validateSchema(schema, node.kind, dbName)
-            if (node.isTerse){
-                return schemaCat.ddlExecutor.showTerseSchemas(dbPath)
+            return if (node.isTerse){
+                schemaCat.ddlExecutor.showTerseSchemas(dbPath, returnTypes)
             } else {
-                return schemaCat.ddlExecutor.showSchemas(dbPath)
+                schemaCat.ddlExecutor.showSchemas(dbPath, returnTypes)
             }
 
         } catch (e: MissingObjectException) {
@@ -437,18 +443,17 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @return DDLExecutionResult containing the details of the tables in the specified schema.
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
-    private fun executeShowTables(node: SqlShowTables): DDLExecutionResult {
+    private fun executeShowTables(node: SqlShowTables, returnTypes: List<String>): DDLExecutionResult {
 
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            if (node.isTerse){
-                return schemaCat.ddlExecutor.showTerseTables(schemaPath)
-            }
-            else {
-                return schemaCat.ddlExecutor.showTables(schemaPath)
+            return if (node.isTerse){
+                schemaCat.ddlExecutor.showTerseTables(schemaPath, returnTypes)
+            } else {
+                schemaCat.ddlExecutor.showTables(schemaPath, returnTypes)
             }
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
@@ -462,16 +467,16 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @return DDLExecutionResult containing the details of the tables in the specified schema.
      * @throws RuntimeException if the schema does not exist or the user is not authorized to access it.
      */
-    private fun executeShowViews(node: SqlShowViews): DDLExecutionResult {
+    private fun executeShowViews(node: SqlShowViews, returnTypes: List<String>): DDLExecutionResult {
         val schemaPath = node.schemaName.names
         val schemaName = schemaPath.joinToString(separator = ".")
         try {
             val schema = deriveSchema(schemaPath)
             val schemaCat = validateSchema(schema, node.kind, schemaName)
-            if (node.isTerse){
-                return schemaCat.ddlExecutor.showTerseViews(schemaPath)
+            return if (node.isTerse){
+                schemaCat.ddlExecutor.showTerseViews(schemaPath, returnTypes)
             } else {
-                return schemaCat.ddlExecutor.showViews(schemaPath)
+                schemaCat.ddlExecutor.showViews(schemaPath, returnTypes)
             }
         } catch (e: MissingObjectException) {
             throw RuntimeException("Schema $schemaName does not exist or not authorized.")
@@ -485,20 +490,20 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
      * @return DDLExecutionResult containing the properties of the table.
      * @throws RuntimeException if the table does not exist or the user is not authorized to access it.
      */
-    private fun executeShowTblproperties(node: SqlShowTblproperties): DDLExecutionResult {
+    private fun executeShowTblproperties(node: SqlShowTblproperties, returnTypes: List<String>): DDLExecutionResult {
         val tablePath = node.table.names
         val tableName = tablePath.joinToString(separator = ".")
         try {
             val table = deriveTable(tablePath)
             val catalogTable = validateTable(table, node.kind, tableName)
             // Perform the actual describe table operation
-            return catalogTable.getDDLExecutor().showTableProperties(catalogTable.fullPath, node.property)
+            return catalogTable.getDDLExecutor().showTableProperties(catalogTable.fullPath, node.property, returnTypes)
         } catch (e: MissingObjectException) {
             throw RuntimeException("Table $tableName does not exist or not authorized to show properties.")
         }
     }
 
-    private fun executeCreateView(node: SqlCreateView): DDLExecutionResult {
+    private fun executeCreateView(node: SqlCreateView, returnTypes: List<String>): DDLExecutionResult {
         val schemaPath = node.name.names
         val schemaName = schemaPath.last()
         val parentSchemaPath = Util.skipLast(schemaPath)
@@ -517,25 +522,25 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
         val validatedCreate = SqlDdlNodes.createView(node.parserPosition, node.replace, node.name, node.columnList, validatedQuery)
         catalogSchema.ddlExecutor.createOrReplaceView(schemaPath, validatedCreate, catalogSchema, rowDataType)
 
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$schemaName' successfully created.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$schemaName' successfully created.")), returnTypes)
     }
 
-    private fun executeDescribeView(node: SqlDescribeView): DDLExecutionResult {
+    private fun executeDescribeView(node: SqlDescribeView, returnTypes: List<String>): DDLExecutionResult {
         val viewPath = node.view.names
         val viewName = viewPath.joinToString(separator = ".")
         try {
             val view = deriveTable(viewPath)
             val catalogTable = validateTable(view, node.kind, viewName)
-            return catalogTable.getDDLExecutor().describeView(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory)
+            return catalogTable.getDDLExecutor().describeView(catalogTable.fullPath, getValidator.apply(listOf()).typeFactory, returnTypes)
         } catch (e: MissingObjectException) {
             throw RuntimeException("View '$viewName' does not exist or not authorized to describe.")
         }
     }
     
-    private fun executeDropView(node: SqlDropView): DDLExecutionResult {
+    private fun executeDropView(node: SqlDropView, returnTypes: List<String>): DDLExecutionResult {
         val viewPath = node.name.names
         val viewName = viewPath.joinToString(separator = ".")
-        val ifexists: () -> DDLExecutionResult = {
+        val ifExists: () -> DDLExecutionResult = {
             if (node.ifExists) {
                 // If drop table doesn't care if the table exists, we still need to validate the
                 // schema exists.
@@ -544,7 +549,7 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
                 try {
                     val schema = deriveSchema(Util.skipLast(viewPath))
                     validateSchema(schema, node.kind, schemaName)
-                    DDLExecutionResult(listOf("STATUS"), listOf(listOf("Drop statement executed successfully ($viewName already dropped).")))
+                    DDLExecutionResult(listOf("STATUS"), listOf(listOf("Drop statement executed successfully ($viewName already dropped).")), returnTypes)
                 } catch (e: MissingObjectException) {
                     throw RuntimeException("Schema '$schemaName' does not exist or not authorized.")
                 }
@@ -557,11 +562,11 @@ open class DDLResolverImpl(private val catalogReader: CalciteCatalogReader, priv
             val catalogView = validateTable(view, node.kind, viewName)
             catalogView.getDDLExecutor().dropView(catalogView.fullPath)
         } catch (e: MissingObjectException) {
-            return ifexists()
+            return ifExists()
         } catch (e: NamespaceNotFoundException) {
-            return ifexists()
+            return ifExists()
         }
-        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$viewName' successfully dropped.")))
+        return DDLExecutionResult(listOf("STATUS"), listOf(listOf("View '$viewName' successfully dropped.")), returnTypes)
     }
 
     /**
