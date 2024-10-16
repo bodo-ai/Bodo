@@ -14,11 +14,11 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
+#include "_distributed.h"
 #include "_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
-#include "_shuffle.h"
 
 #pragma pack(1)
 struct decimal_value {

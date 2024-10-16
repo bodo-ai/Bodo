@@ -1,7 +1,7 @@
 #include "_theta_sketches.h"
 #include <arrow/python/api.h>
 #include <mpi.h>
-#include "_shuffle.h"
+#include "_distributed.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it

@@ -210,40 +210,6 @@ table_info* broadcast_table_py_entry(table_info* in_table,
                                      array_info* comm_ranks, int root,
                                      int64_t comm_ptr = 0);
 
-/**
- * @brief Gather a table
- *
- * @param in_table : the input table. Passing a nullptr will cause a segfault.
- * error.
- * @param n_cols : the number of columns of the keys. If -1 then all columns are
- * used. Otherwise, the first n_cols columns are gather.
- * @param all_gather : whether to do all_gather
- * @param is_parallel : whether tracing should be parallel
- * @param mpi_root : root rank for gathering (where data is gathered to)
- * @return the table obtained by concatenating the tables on the node mpi_root
- * If all_gather is false on all ranks != mpi_root will return an empty
- * table_info with uninitialized array_info
- */
-std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
-                                         int64_t n_cols, bool all_gather,
-                                         bool is_parallel, int mpi_root = 0);
-
-/**
- * @brief Gather an array_info
- *
- * @param in_arr : the input table. Passing a nullptr will cause a segfault.
- * error.
- * @param all_gather : whether to do all_gather
- * @param is_parallel : whether tracing should be parallel
- * @param mpi_root : root rank for gathering (where data is gathered to)
- * @param int n_pes: the number of ranks
- * @param int myrank: the current rank
- * @return the table obtained by concatenating the tables on the node mpi_root
- */
-std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
-                                         bool all_gather, bool is_parallel,
-                                         int mpi_root, int n_pes, int myrank);
-
 /** Compute whether we need to do a reshuffling or not for performance reasons.
     The dilemma is following:
     ---If the workload is not well partitioned then the code becomes serialized
@@ -339,32 +305,6 @@ inline void fill_recv_data_inner(T* recv_buff, T* data,
         int64_t ind = tmp_offset[node];
         data[i] = recv_buff[ind];
         tmp_offset[node]++;
-    }
-}
-
-template <class T>
-void copy_gathered_null_bytes(uint8_t* null_bitmask,
-                              const std::span<const uint8_t> tmp_null_bytes,
-                              std::vector<T> const& recv_count_null,
-                              std::vector<T> const& recv_count) {
-    size_t curr_tmp_byte = 0;  // current location in buffer with all data
-    size_t curr_str = 0;       // current string in output bitmap
-    // for each chunk
-    for (size_t i = 0; i < recv_count.size(); i++) {
-        size_t n_strs = recv_count[i];
-        size_t n_bytes = recv_count_null[i];
-        if (n_strs == 0) {
-            // Prevents bugs caused when tmp_null_bytes happens
-            // to point to nullptr due to an empty vector.
-            continue;
-        }
-        const uint8_t* chunk_bytes = &tmp_null_bytes[curr_tmp_byte];
-        // for each string in chunk
-        for (size_t j = 0; j < n_strs; j++) {
-            SetBitTo(null_bitmask, curr_str, GetBit(chunk_bytes, j));
-            curr_str += 1;
-        }
-        curr_tmp_byte += n_bytes;
     }
 }
 
