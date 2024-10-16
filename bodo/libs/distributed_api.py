@@ -40,6 +40,7 @@ from bodo.libs.array import (
     delete_info,
     delete_table,
     info_to_array,
+    py_data_to_cpp_table,
     py_table_to_cpp_table,
     table_type,
 )
@@ -54,7 +55,6 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.interval_arr_ext import IntervalArrayType
-from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
     convert_len_arr_to_offset,
@@ -67,14 +67,13 @@ from bodo.libs.str_arr_ext import (
     set_bit_to,
     string_array_type,
 )
-from bodo.libs.struct_arr_ext import StructArrayType
-from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.mpi4py import MPI
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     ColNamesMetaType,
     ExternalFunctionErrorChecked,
+    MetaType,
     decode_if_dict_array,
     is_overload_false,
     is_overload_none,
@@ -119,6 +118,8 @@ ll.add_symbol("init_is_last_state", hdist.init_is_last_state)
 ll.add_symbol("delete_is_last_state", hdist.delete_is_last_state)
 ll.add_symbol("sync_is_last_non_blocking", hdist.sync_is_last_non_blocking)
 ll.add_symbol("decimal_reduce", hdist.decimal_reduce)
+ll.add_symbol("gather_table_py_entry", hdist.gather_table_py_entry)
+ll.add_symbol("gather_array_py_entry", hdist.gather_array_py_entry)
 ll.add_symbol("get_cpu_id", hdist.get_cpu_id)
 
 
@@ -816,6 +817,56 @@ def copy_gathered_null_bytes(
         curr_tmp_byte += n_bytes
 
 
+@intrinsic
+def _gather_table_py_entry(typingctx, in_table, allgather, warn_if_rep, root):
+    def codegen(context, builder, sig, args):
+        in_table, allgather, warn_if_rep, root = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="gather_table_py_entry"
+        )
+        table_ret = builder.call(fn_tp, (in_table, allgather, warn_if_rep, root))
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return table_ret
+
+    ret_type = in_table
+    sig = ret_type(in_table, allgather, warn_if_rep, root)
+    return sig, codegen
+
+
+@intrinsic
+def _gather_array_py_entry(typingctx, in_array, allgather, warn_if_rep, root):
+    def codegen(context, builder, sig, args):
+        in_array, allgather, warn_if_rep, root = args
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="gather_array_py_entry"
+        )
+        array_ret = builder.call(fn_tp, (in_array, allgather, warn_if_rep, root))
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return array_ret
+
+    ret_type = in_array
+    sig = ret_type(in_array, allgather, warn_if_rep, root)
+    return sig, codegen
+
+
 @numba.njit
 def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
     return gatherv_impl_jit(data, allgather, warn_if_rep, root)
@@ -832,396 +883,6 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.gatherv()"
     )
-
-    if isinstance(data, CategoricalArrayType):
-
-        def impl_cat(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            codes = bodo.gatherv(data.codes, allgather, root=root)
-            return bodo.hiframes.pd_categorical_ext.init_categorical_array(
-                codes, data.dtype
-            )
-
-        return impl_cat
-
-    if data == bodo.null_array_type:
-
-        def impl_null_array(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            # Gather the lengths of the null array
-            lengths = gather_scalar(len(data), allgather, root=root)
-            # Sum the results to get the total length
-            total_length = lengths.sum()
-            return bodo.libs.null_arr_ext.init_null_array(total_length)
-
-        return impl_null_array
-
-    if isinstance(data, types.Array):
-        typ_val = numba_to_c_type(data.dtype)
-
-        def gatherv_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            data = np.ascontiguousarray(data)
-            rank = bodo.libs.distributed_api.get_rank()
-            # size to handle multi-dim arrays
-            n_loc = data.size
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            displs = np.empty(1, np.int32)
-            if rank == root or allgather:
-                displs = bodo.ir.join.calc_disp(recv_counts)
-            # print(rank, n_loc, n_total, recv_counts, displs)
-            c_gatherv(
-                data.ctypes,
-                np.int32(n_loc),
-                all_data.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                np.int32(typ_val),
-                allgather,
-                np.int32(root),
-            )
-            # handle multi-dim case
-            return all_data.reshape((-1,) + data.shape[1:])
-
-        return gatherv_impl
-
-    if data == bodo.string_array_type:
-
-        def gatherv_str_arr_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            # call gatherv() on underlying array(item) array
-            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
-            return bodo.libs.str_arr_ext.init_str_arr(all_data)
-
-        return gatherv_str_arr_impl
-
-    if data == bodo.dict_str_arr_type:
-
-        def gatherv_dict_arr_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            # gather data as string for simplicity (but return dict to have proper type)
-            # TODO[BSE-1567]: use the C++ implementation which keeps data as dict
-            str_data = decode_if_dict_array(data)
-            all_data = bodo.gatherv(str_data, allgather, warn_if_rep, root)
-            return bodo.libs.str_arr_ext.str_arr_to_dict_str_arr(all_data)
-
-        return gatherv_dict_arr_impl
-
-    if data == binary_array_type:
-
-        def gatherv_binary_arr_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            # call gatherv() on underlying array(item) array
-            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
-            return bodo.libs.binary_arr_ext.init_binary_arr(all_data)
-
-        return gatherv_binary_arr_impl
-
-    # Handle datetime error as special because no _data field
-    if data == datetime_timedelta_array_type:
-        typ_val = numba_to_c_type(types.int64)
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def gatherv_impl_int_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            displs = np.empty(1, np.int32)
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if rank == root or allgather:
-                displs = bodo.ir.join.calc_disp(recv_counts)
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-            c_gatherv(
-                data._days_data.ctypes,
-                np.int32(n_loc),
-                all_data._days_data.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                np.int32(typ_val),
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data._seconds_data.ctypes,
-                np.int32(n_loc),
-                all_data._seconds_data.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                np.int32(typ_val),
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data._microseconds_data.ctypes,
-                np.int32(n_loc),
-                all_data._microseconds_data.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                np.int32(typ_val),
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data._null_bitmap.ctypes,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            copy_gathered_null_bytes(
-                all_data._null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return all_data
-
-        return gatherv_impl_int_arr
-
-    if data == boolean_array_type:
-        # Nullable booleans need their own implementation because the
-        # data array stores 1 bit per boolean. As a result, the data array
-        # requires separate handling.
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def gatherv_impl_bool_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            recv_counts_bytes = np.empty(1, np.int32)
-            displs_bytes = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if rank == root or allgather:
-                recv_counts_bytes = np.empty(len(recv_counts), np.int32)
-                for i in range(len(recv_counts)):
-                    recv_counts_bytes[i] = (recv_counts[i] + 7) >> 3
-                displs_bytes = bodo.ir.join.calc_disp(recv_counts_bytes)
-                tmp_data_bytes = np.empty(recv_counts_bytes.sum(), np.uint8)
-                tmp_null_bytes = np.empty(recv_counts_bytes.sum(), np.uint8)
-
-            c_gatherv(
-                data._data.ctypes,
-                np.int32(n_bytes),
-                tmp_data_bytes.ctypes,
-                recv_counts_bytes.ctypes,
-                displs_bytes.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data._null_bitmap.ctypes,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_bytes.ctypes,
-                displs_bytes.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            copy_gathered_null_bytes(
-                all_data._data.ctypes,
-                tmp_data_bytes,
-                recv_counts_bytes,
-                recv_counts,
-            )
-            copy_gathered_null_bytes(
-                all_data._null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_bytes,
-                recv_counts,
-            )
-            return all_data
-
-        return gatherv_impl_bool_arr
-
-    if (
-        isinstance(
-            data,
-            (
-                IntegerArrayType,
-                FloatingArrayType,
-                DecimalArrayType,
-                bodo.TimeArrayType,
-                DatetimeArrayType,
-            ),
-        )
-        or data == datetime_date_array_type
-    ):
-        typ_val = numba_to_c_type(data.dtype)
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def gatherv_impl_int_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            displs = np.empty(1, np.int32)
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if rank == root or allgather:
-                displs = bodo.ir.join.calc_disp(recv_counts)
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-            c_gatherv(
-                data._data.ctypes,
-                np.int32(n_loc),
-                all_data._data.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                np.int32(typ_val),
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data._null_bitmap.ctypes,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            copy_gathered_null_bytes(
-                all_data._null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return all_data
-
-        return gatherv_impl_int_arr
-
-    # primitive array
-    if isinstance(data, bodo.libs.primitive_arr_ext.PrimitiveArrayType):
-
-        def gatherv_prim_arr_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            np_arr = bodo.libs.primitive_arr_ext.primitive_to_np(data)
-            all_data = bodo.gatherv(np_arr, allgather, warn_if_rep, root)
-            return bodo.libs.primitive_arr_ext.np_to_primitive(all_data)
-
-        return gatherv_prim_arr_impl
-
-    # interval array
-    if isinstance(data, IntervalArrayType):
-        # gather the left/right arrays
-        def impl_interval_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            all_left = bodo.gatherv(data._left, allgather, warn_if_rep, root)
-            all_right = bodo.gatherv(data._right, allgather, warn_if_rep, root)
-            return bodo.libs.interval_arr_ext.init_interval_array(all_left, all_right)
-
-        return impl_interval_arr
-
-    # TimestampTZ Array
-    if data == bodo.timestamptz_array_type:
-        ts_typ_enum = np.int32(numba_to_c_type(data.ts_dtype()))
-        offset_typ_enum = np.int32(numba_to_c_type(data.offset_dtype()))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def gatherv_impl_timestamp_tz_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-            all_data = empty_like_type(n_total, data)
-            # displacements
-            displs = np.empty(1, np.int32)
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if rank == root or allgather:
-                displs = bodo.ir.join.calc_disp(recv_counts)
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-            c_gatherv(
-                data.data_ts.ctypes,
-                np.int32(n_loc),
-                all_data.data_ts.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                ts_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data.data_offset.ctypes,
-                np.int32(n_loc),
-                all_data.data_offset.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                offset_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            c_gatherv(
-                data._null_bitmap.ctypes,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            copy_gathered_null_bytes(
-                all_data._null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return all_data
-
-        return gatherv_impl_timestamp_tz_arr
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
@@ -1332,43 +993,21 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         return impl_multi_index
 
     if isinstance(data, bodo.hiframes.table.TableType):
-        glbls = {
-            "bodo": bodo,
-            "get_table_block": bodo.hiframes.table.get_table_block,
-            "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
-            "set_table_block": bodo.hiframes.table.set_table_block,
-            "set_table_len": bodo.hiframes.table.set_table_len,
-            "alloc_list_like": bodo.hiframes.table.alloc_list_like,
-            "init_table": bodo.hiframes.table.init_table,
-        }
-        func_text = f"def impl_table(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}):\n"
-        func_text += "  T = data\n"
-        func_text += "  T2 = init_table(T, False)\n"
+        table_type = data
+        n_table_cols = len(table_type.arr_types)
+        in_col_inds = MetaType(tuple(range(n_table_cols)))
+        out_cols_arr = np.array(range(n_table_cols), dtype=np.int64)
 
-        for typ, input_blk in data.type_to_blk.items():
-            output_blk = data.type_to_blk[typ]
-            glbls[f"arr_inds_{input_blk}"] = np.array(
-                data.block_to_arr_ind[input_blk], dtype=np.int64
+        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
+            cpp_table = py_data_to_cpp_table(data, (), in_col_inds, n_table_cols)
+            out_cpp_table = _gather_table_py_entry(
+                cpp_table, allgather, warn_if_rep, root
             )
-            func_text += (
-                f"  arr_list_{input_blk} = get_table_block(T, {input_blk})\n"
-                f"  out_arr_list_{input_blk} = alloc_list_like(arr_list_{input_blk}, len(arr_list_{input_blk}), False)\n"
-                f"  for i in range(len(arr_list_{input_blk})):\n"
-                f"    arr_ind_{input_blk} = arr_inds_{input_blk}[i]\n"
-                f"    ensure_column_unboxed(T, arr_list_{input_blk}, i, arr_ind_{input_blk})\n"
-                f"    out_arr_{input_blk} = bodo.gatherv(arr_list_{input_blk}[i], allgather, warn_if_rep, root)\n"
-                f"    out_arr_list_{input_blk}[i] = out_arr_{input_blk}\n"
-                f"  T2 = set_table_block(T2, out_arr_list_{input_blk}, {output_blk})\n"
-            )
-        func_text += (
-            "  length = T._len if bodo.get_rank() == root or allgather else 0\n"
-            "  T2 = set_table_len(T2, length)\n"
-            "  return T2\n"
-        )
-        loc_vars = {}
-        exec(func_text, glbls, loc_vars)
-        impl_table = loc_vars["impl_table"]
-        return impl_table
+            ret = cpp_table_to_py_table(out_cpp_table, out_cols_arr, table_type, 0)
+            delete_table(out_cpp_table)
+            return ret
+
+        return impl
 
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
@@ -1422,173 +1061,6 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         exec(func_text, glbls, loc_vars)
         impl_df = loc_vars["impl_df"]
         return impl_df
-
-    # array(item) array
-    if isinstance(data, ArrayItemArrayType):
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def gatherv_array_item_arr_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
-            data_arr = bodo.libs.array_item_arr_ext.get_data(data)
-            # remove excess data due to possible over-allocation
-            data_arr = data_arr[: offsets_arr[-1]]
-            null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
-            n_loc = len(data)
-
-            # allocate buffer for sending lengths of lists
-            send_list_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
-            n_bytes = (n_loc + 7) >> 3
-
-            for i in range(n_loc):
-                send_list_lens[i] = offsets_arr[i + 1] - offsets_arr[i]
-
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-
-            # displacements
-            displs = np.empty(1, np.int32)
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-
-            if rank == root or allgather:
-                displs = bodo.ir.join.calc_disp(recv_counts)
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for k in range(len(recv_counts)):
-                    recv_counts_nulls[k] = (recv_counts[k] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            out_lens_arr = np.empty(n_total + 1, np.uint32)
-            out_data_arr = bodo.gatherv(data_arr, allgather, warn_if_rep, root)
-            out_null_bitmap_arr = np.empty((n_total + 7) >> 3, np.uint8)
-
-            # index offset
-            c_gatherv(
-                send_list_lens.ctypes,
-                np.int32(n_loc),
-                out_lens_arr.ctypes,
-                recv_counts.ctypes,
-                displs.ctypes,
-                int32_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            # nulls
-            c_gatherv(
-                null_bitmap_arr.ctypes,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            dummy_use(data)  # needed?
-
-            # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
-            # use the same buffer
-            out_offsets_arr = np.empty(n_total + 1, np.uint64)
-            convert_len_arr_to_offset(
-                out_lens_arr.ctypes, out_offsets_arr.ctypes, n_total
-            )
-            copy_gathered_null_bytes(
-                out_null_bitmap_arr.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            out_arr = bodo.libs.array_item_arr_ext.init_array_item_array(
-                n_total, out_data_arr, out_offsets_arr, out_null_bitmap_arr
-            )
-            return out_arr
-
-        return gatherv_array_item_arr_impl
-
-    if isinstance(data, StructArrayType):
-        names = data.names
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-
-        def impl_struct_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            data_arrs = bodo.libs.struct_arr_ext.get_data(data)
-            null_bitmap = bodo.libs.struct_arr_ext.get_null_bitmap(data)
-            out_data_arrs = bodo.gatherv(data_arrs, allgather=allgather, root=root)
-            # gather the null bits similar to other arrays
-            rank = bodo.libs.distributed_api.get_rank()
-            n_loc = len(data)
-            n_bytes = (n_loc + 7) >> 3
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
-            n_total = recv_counts.sum()
-            out_null_bitmap = np.empty((n_total + 7) >> 3, np.uint8)
-            # displacements
-            recv_counts_nulls = np.empty(1, np.int32)
-            displs_nulls = np.empty(1, np.int32)
-            tmp_null_bytes = np.empty(1, np.uint8)
-            if rank == root or allgather:
-                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
-                for i in range(len(recv_counts)):
-                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
-                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
-                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-
-            c_gatherv(
-                null_bitmap.ctypes,
-                np.int32(n_bytes),
-                tmp_null_bytes.ctypes,
-                recv_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                char_typ_enum,
-                allgather,
-                np.int32(root),
-            )
-            copy_gathered_null_bytes(
-                out_null_bitmap.ctypes,
-                tmp_null_bytes,
-                recv_counts_nulls,
-                recv_counts,
-            )
-            return bodo.libs.struct_arr_ext.init_struct_arr(
-                n_total, out_data_arrs, out_null_bitmap, names
-            )
-
-        return impl_struct_arr
-
-    if data == binary_array_type:
-        # gather the data array
-        def impl_bin_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
-            return bodo.libs.binary_arr_ext.init_binary_arr(all_data)
-
-        return impl_bin_arr
-
-    if isinstance(data, TupleArrayType):
-        # gather the data array
-        def impl_tuple_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
-            return bodo.libs.tuple_arr_ext.init_tuple_arr(all_data)
-
-        return impl_tuple_arr
-
-    if isinstance(data, MapArrayType):
-        # gather the data array
-        def impl_map_arr(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
-        ):  # pragma: no cover
-            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
-            return bodo.libs.map_arr_ext.init_map_arr(all_data)
-
-        return impl_map_arr
 
     # CSR Matrix
     if isinstance(data, CSRMatrixType):
@@ -1650,6 +1122,63 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         return (
             lambda data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT: None
         )  # pragma: no cover
+
+    if isinstance(data, types.Array):
+        typ_val = numba_to_c_type(data.dtype)
+
+        def gatherv_impl(
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+        ):  # pragma: no cover
+            data = np.ascontiguousarray(data)
+            rank = bodo.libs.distributed_api.get_rank()
+            # size to handle multi-dim arrays
+            n_loc = data.size
+            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
+            n_total = recv_counts.sum()
+            all_data = empty_like_type(n_total, data)
+            # displacements
+            displs = np.empty(1, np.int32)
+            if rank == root or allgather:
+                displs = bodo.ir.join.calc_disp(recv_counts)
+            # print(rank, n_loc, n_total, recv_counts, displs)
+            c_gatherv(
+                data.ctypes,
+                np.int32(n_loc),
+                all_data.ctypes,
+                recv_counts.ctypes,
+                displs.ctypes,
+                np.int32(typ_val),
+                allgather,
+                np.int32(root),
+            )
+            # handle multi-dim case
+            return all_data.reshape((-1,) + data.shape[1:])
+
+        return gatherv_impl
+
+    if isinstance(data, CategoricalArrayType):
+
+        def impl_cat(
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+        ):  # pragma: no cover
+            codes = bodo.gatherv(data.codes, allgather, root=root)
+            return bodo.hiframes.pd_categorical_ext.init_categorical_array(
+                codes, data.dtype
+            )
+
+        return impl_cat
+
+    if is_array_typ(data):
+        dtype = data
+
+        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
+            input_info = array_to_info(data)
+            out_info = _gather_array_py_entry(input_info, allgather, warn_if_rep, root)
+            ret = info_to_array(out_info, dtype)
+            delete_info(out_info)
+            return ret
+
+        return impl
 
     try:
         import bodosql
