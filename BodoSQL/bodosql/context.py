@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import ir, types
 
 import bodo
@@ -1398,12 +1399,18 @@ class BodoSQLContext:
                 ddl_result = generator.executeDDL(sql)
                 # Convert the output to a DataFrame.
                 column_names = list(ddl_result.getColumnNames())
+                column_types = [
+                    _generate_ddl_column_type(t) for t in ddl_result.getColumnTypes()
+                ]
                 data = [
-                    pd.array(column, dtype=object)
-                    for column in ddl_result.getColumnValues()
+                    # Use astype to avoid issues with Java conversion.
+                    pd.array(column, dtype=object).astype(column_types[i])
+                    for i, column in enumerate(ddl_result.getColumnValues())
                 ]
                 df_dict = {column_names[i]: data[i] for i in range(len(column_names))}
-                result = pd.DataFrame(df_dict)
+                result = pd.DataFrame(
+                    df_dict,
+                )
             except Exception as e:
                 error = error_to_string(e)
         result = comm.bcast(result)
@@ -1412,6 +1419,23 @@ class BodoSQLContext:
         if error is not None:
             raise BodoError(error)
         return result
+
+
+def _generate_ddl_column_type(type_string: str) -> Any:
+    """Convert a string representation of a Pandas column type
+    passed from Java to a Python type.
+
+    Args:
+        type_string (str): A string for the expression you would
+            execution in Python to get the type.
+
+    Returns:
+        Any: The actual type object.
+    """
+    glbls = {"pd": pd, "pa": pa}
+    locs = {}
+    exec(f"ddl_type = {type_string}", glbls, locs)
+    return locs["ddl_type"]
 
 
 def initialize_schema():

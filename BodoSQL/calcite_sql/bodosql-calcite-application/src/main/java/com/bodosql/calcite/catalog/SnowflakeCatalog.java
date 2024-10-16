@@ -2101,7 +2101,10 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     @NotNull
     @Override
     public DDLExecutionResult dropTable(
-        @NotNull ImmutableList<String> tablePath, boolean cascade, boolean purge) {
+        @NotNull ImmutableList<String> tablePath,
+        boolean cascade,
+        boolean purge,
+        @NotNull List<String> returnTypes) {
       if (purge) {
         VERBOSE_LEVEL_ONE_LOGGER.warning(
             "PURGE is not supported in Snowflake and will be ignored.");
@@ -2117,7 +2120,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         while (output.next()) {
           columnValues.get(0).add(output.getString(1));
         }
-        return new DDLExecutionResult(List.of("STATUS"), columnValues);
+        return new DDLExecutionResult(List.of("STATUS"), columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2135,6 +2138,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * @param tablePath The path of the table to rename.
      * @param renamePath The new path of the table.
      * @param ifExists Whether to use the IF EXISTS clause.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      * @throws RuntimeException If the operation fails.
      */
@@ -2143,7 +2147,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     public DDLExecutionResult renameTable(
         @NotNull ImmutableList<String> tablePath,
         @NotNull ImmutableList<String> renamePath,
-        boolean ifExists) {
+        boolean ifExists,
+        @NotNull List<String> returnTypes) {
       // Convert paths into Snowflake object strings
       String tableName = generateSnowflakeObjectString(tablePath);
       String renameName = generateSnowflakeObjectString(renamePath);
@@ -2164,7 +2169,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         while (output.next()) {
           columnValues.get(0).add(output.getString(1));
         }
-        return new DDLExecutionResult(List.of("STATUS"), columnValues);
+        return new DDLExecutionResult(List.of("STATUS"), columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2182,6 +2187,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * @param viewPath The path of the view to rename.
      * @param renamePath The new path of the view.
      * @param ifExists Whether to use the IF EXISTS clause.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return The result of the operation.
      * @throws RuntimeException If the operation fails.
      */
@@ -2190,7 +2196,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     public DDLExecutionResult renameView(
         @NotNull ImmutableList<String> viewPath,
         @NotNull ImmutableList<String> renamePath,
-        boolean ifExists) {
+        boolean ifExists,
+        @NotNull List<String> returnTypes) {
       // Convert paths into Snowflake object strings
       String viewName = generateSnowflakeObjectString(viewPath);
       String renameName = generateSnowflakeObjectString(renamePath);
@@ -2211,7 +2218,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         while (output.next()) {
           columnValues.get(0).add(output.getString(1));
         }
-        return new DDLExecutionResult(List.of("STATUS"), columnValues);
+        return new DDLExecutionResult(List.of("STATUS"), columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2225,7 +2232,9 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
     @NotNull
     @Override
     public DDLExecutionResult describeTable(
-        @NotNull ImmutableList<String> tablePath, @NotNull RelDataTypeFactory typeFactory) {
+        @NotNull ImmutableList<String> tablePath,
+        @NotNull RelDataTypeFactory typeFactory,
+        @NotNull List<String> returnTypes) {
       String tableName = generateSnowflakeObjectString(tablePath);
       String query = String.format(Locale.ROOT, "DESCRIBE TABLE %s", tableName);
       List<List<String>> columnValues = new ArrayList<>();
@@ -2263,7 +2272,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             columnValues.get(i).add(output.getString(i + 1));
           }
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2278,6 +2287,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates DESCRIBE SCHEMA for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, KIND
      * @throws RuntimeException on error
      *     <p>The method executes a Snowflake query DESCRIBE SCHEMAS to show tables within a
@@ -2285,7 +2295,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult describeSchema(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult describeSchema(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "DESCRIBE SCHEMA %s", schemaName);
       List<List<String>> columnValues = new ArrayList<>();
@@ -2300,7 +2311,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnValues.get(1).add(output.getString("name"));
           columnValues.get(2).add(output.getString("kind"));
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2315,6 +2326,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW TERSE OBJECTS for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws RuntimeException on error The method executes a Snowflake query SHOW OBJECTS to show
      *     objects within a specified schema, and processes the result set. It builds up and returns
@@ -2324,7 +2336,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showTerseObjects(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTerseObjects(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
 
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW OBJECTS IN %s", schemaName);
@@ -2343,7 +2356,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnValues.get(2).add(db_schema);
           columnValues.get(3).add(output.getString("kind"));
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2358,6 +2371,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW OBJECTS for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws RuntimeException on error The method executes a Snowflake query SHOW OBJECTS to show
      *     objects within a specified schema, and processes the result set. It builds up and returns
@@ -2367,7 +2381,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showObjects(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showObjects(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW OBJECTS IN %s", schemaName);
       List<List<Object>> columnValues = new ArrayList();
@@ -2404,7 +2419,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
           }
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2419,6 +2434,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW TERSE TABLES for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws RuntimeException on error The method executes a Snowflake query SHOW TABLES to show
      *     tables within a specified schema, and processes the result set. It builds up and returns
@@ -2428,7 +2444,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showTerseTables(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTerseTables(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW TABLES IN %s", schemaName);
       List<List<String>> columnValues = new ArrayList();
@@ -2446,7 +2463,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnValues.get(2).add(db_schema);
           columnValues.get(3).add(output.getString("kind"));
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2458,6 +2475,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW TABLES for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws RuntimeException on error The method executes a Snowflake query SHOW TABLES to show
      *     tables within a specified schema, and processes the result set. It builds up and returns
@@ -2465,7 +2483,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showTables(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTables(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW TABLES IN %s", schemaName);
       List<List<Object>> columnValues = new ArrayList();
@@ -2510,7 +2529,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
           }
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2522,6 +2541,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW TERSE SCHEMAS for a specified db in Snowflake.
      *
      * @param dbPath The db path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws RuntimeException on error The method executes a Snowflake query SHOW SCHEMAS to show
      *     schemas within a specified schema, and processes the result set. It builds up and returns
@@ -2531,8 +2551,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showTerseSchemas(@NotNull ImmutableList<String> dbPath) {
-
+    public DDLExecutionResult showTerseSchemas(
+        @NotNull ImmutableList<String> dbPath, @NotNull List<String> returnTypes) {
       String dbName = generateSnowflakeObjectString(dbPath);
       String query = String.format(Locale.ROOT, "SHOW SCHEMAS IN %s", dbName);
       List<List<String>> columnValues = new ArrayList();
@@ -2552,7 +2572,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           // but with `show terse schemas` it appears and its value is null
           columnValues.get(3).add(null);
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2570,12 +2590,14 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * which uses namespaces instead of DB/schemas.
      *
      * @param dbPath The db path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws RuntimeException on error
      */
     @NotNull
     @Override
-    public DDLExecutionResult showSchemas(@NotNull ImmutableList<String> dbPath) {
+    public DDLExecutionResult showSchemas(
+        @NotNull ImmutableList<String> dbPath, @NotNull List<String> returnTypes) {
       String dbName = generateSnowflakeObjectString(dbPath);
       String query = String.format(Locale.ROOT, "SHOW SCHEMAS IN %s", dbName);
       List<List<String>> columnValues = new ArrayList();
@@ -2601,7 +2623,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
           }
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2613,6 +2635,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW TERSE VIEWS for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult containing columns CREATED_ON, NAME, SCHEMA_NAME, KIND
      * @throws RuntimeException on error
      *     <p>The method executes a Snowflake query SHOW TABLES to show tables within a specified
@@ -2623,7 +2646,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showTerseViews(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showTerseViews(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
 
       String schemaName = generateSnowflakeObjectString(schemaPath);
       // NOTE: Normal SHOW VIEWS does not provide a "kind" column.
@@ -2643,7 +2667,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
           columnValues.get(2).add(db_schema);
           columnValues.get(3).add(output.getString("kind"));
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2655,6 +2679,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      * Emulates SHOW VIEWS for a specified schema in Snowflake.
      *
      * @param schemaPath The schema path.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
      * @return DDLExecutionResult
      * @throws RuntimeException on error
      *     <p>The method executes a Snowflake query SHOW TABLES to show tables within a specified
@@ -2665,7 +2690,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      */
     @NotNull
     @Override
-    public DDLExecutionResult showViews(@NotNull ImmutableList<String> schemaPath) {
+    public DDLExecutionResult showViews(
+        @NotNull ImmutableList<String> schemaPath, @NotNull List<String> returnTypes) {
       String schemaName = generateSnowflakeObjectString(schemaPath);
       String query = String.format(Locale.ROOT, "SHOW VIEWS IN %s", schemaName);
       List<List<Object>> columnValues = new ArrayList();
@@ -2700,7 +2726,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             columnValues.get(i).add(output.getString(columnNames.get(i).toLowerCase()));
           }
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2738,11 +2764,15 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
      *
      * @param viewPath The path to the view to describe.
      * @param typeFactory The type factory to use for creating the Bodo Type.
+     * @param returnTypes The return types for the operation when generating the DDLExecutionResult.
+     * @return DDLExecutionResult reformated from Snowflake.
      */
     @NotNull
     @Override
     public DDLExecutionResult describeView(
-        @NotNull ImmutableList<String> viewPath, @NotNull RelDataTypeFactory typeFactory) {
+        @NotNull ImmutableList<String> viewPath,
+        @NotNull RelDataTypeFactory typeFactory,
+        @NotNull List<String> returnTypes) {
       String viewName = generateSnowflakeObjectString(viewPath);
       String query = String.format(Locale.ROOT, "DESCRIBE VIEW %s", viewName);
       List<List<String>> columnValues = new ArrayList<>();
@@ -2780,7 +2810,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
             columnValues.get(i).add(output.getString(i + 1));
           }
         }
-        return new DDLExecutionResult(columnNames, columnValues);
+        return new DDLExecutionResult(columnNames, columnValues, returnTypes);
       } catch (SQLException e) {
         throw new RuntimeException(
             String.format(
@@ -2791,7 +2821,7 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
       }
     }
 
-    /*
+    /**
      * Drop a view with call to Snowflake API. Signals error whenever Snowflake signals an error.
      * The "if_exists" flag is handled in DDLExecutor.
      *
@@ -2824,7 +2854,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         @NotNull ImmutableList<String> tablePath,
         @NotNull SqlNodeList propertyList,
         @NotNull SqlNodeList valueList,
-        boolean ifExists) {
+        boolean ifExists,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("SET PROPERTY/TAG is not supported for Snowflake.");
     }
 
@@ -2834,7 +2865,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         @NotNull ImmutableList<String> tablePath,
         @NotNull SqlNodeList propertyList,
         boolean ifExists,
-        boolean ifPropertyExists) {
+        boolean ifPropertyExists,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("UNSET PROPERTY/TAG is not supported for Snowflake.");
     }
 
@@ -2845,7 +2877,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         boolean ifExists,
         boolean ifNotExists,
         @NotNull SqlNode addCol,
-        @NotNull SqlValidator validator) {
+        @NotNull SqlValidator validator,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("ADD COLUMN is not yet supported for Snowflake.");
     }
 
@@ -2855,14 +2888,17 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         @NotNull ImmutableList<String> tablePath,
         boolean ifExists,
         @NotNull SqlNodeList dropCols,
-        boolean ifColumnExists) {
+        boolean ifColumnExists,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("DROP COLUMN is not yet supported for Snowflake.");
     }
 
     @Override
     @NotNull
     public DDLExecutionResult showTableProperties(
-        @NotNull ImmutableList<String> tablePath, SqlLiteral property) {
+        @NotNull ImmutableList<String> tablePath,
+        SqlLiteral property,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("SHOW TBLPROPERTIES is not supported for Snowflake.");
     }
 
@@ -2872,7 +2908,8 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         @NotNull ImmutableList<String> tablePath,
         boolean ifExists,
         @NotNull SqlIdentifier renameColOld,
-        @NotNull SqlIdentifier renameColNew) {
+        @NotNull SqlIdentifier renameColNew,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("RENAME COLUMN is not yet supported for Snowflake.");
     }
 
@@ -2882,14 +2919,18 @@ public class SnowflakeCatalog implements BodoSQLCatalog {
         @NotNull ImmutableList<String> tablePath,
         boolean ifExists,
         @NotNull SqlIdentifier column,
-        @NotNull SqlLiteral comment) {
+        @NotNull SqlLiteral comment,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("ALTER COLUMN COMMENT is not yet supported for Snowflake.");
     }
 
     @Override
     @NotNull
     public DDLExecutionResult alterColumnDropNotNull(
-        @NotNull ImmutableList<String> tablePath, boolean ifExists, @NotNull SqlIdentifier column) {
+        @NotNull ImmutableList<String> tablePath,
+        boolean ifExists,
+        @NotNull SqlIdentifier column,
+        @NotNull List<String> returnTypes) {
       throw new RuntimeException("ALTER COLUMN DROP NOT NULL is not yet supported for Snowflake.");
     }
   }

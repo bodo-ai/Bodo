@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -96,14 +97,19 @@ def test_drop_schema(if_exists, iceberg_filesystem_catalog, memory_leak_check):
     if_exists_str = "IF EXISTS" if if_exists else ""
     query = f"DROP SCHEMA {if_exists_str} {schema_name}"
     py_output = pd.DataFrame(
-        {"STATUS": [f"Schema '{schema_name}' successfully dropped."]}
+        {
+            "STATUS": pd.array(
+                [f"Schema '{schema_name}' successfully dropped."],
+                dtype=pd.ArrowDtype(pa.string()),
+            )
+        }
     )
     bc = bodosql.BodoSQLContext(catalog=iceberg_filesystem_catalog)
 
     # execute_ddl Version
     with ddl_schema(schema_path):
         bodo_output = bc.execute_ddl(query)
-        assert_equal_par(bodo_output, py_output)
+        assert_equal_par(bodo_output, py_output, check_dtype=True)
         assert not schema_path.exists()
 
     # Python Version
@@ -119,6 +125,7 @@ def test_drop_schema(if_exists, iceberg_filesystem_catalog, memory_leak_check):
             lambda bc, query: bc.sql(query),
             (bc, query),
             py_output=py_output,
+            check_dtype=False,
             test_str_literal=True,
         )
         assert not schema_path.exists()
