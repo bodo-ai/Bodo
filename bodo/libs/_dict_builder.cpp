@@ -7,8 +7,8 @@
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_bodo_common.h"
+#include "_distributed.h"
 #include "_query_profile_collector.h"
-#include "_shuffle.h"
 #include "_table_builder.h"
 
 /* -------------------------- DictBuilderMetrics -------------------------- */
