@@ -35,7 +35,9 @@ endif()
 
 # ----------------------------- Declare Dependencies -------------------------
 # We need to do this before setting CMake Options so they aren't propagated
-if (DEFINED ENV{BUILD_WITH_V8})
+set(BUILD_WITH_V8 "$ENV{BUILD_WITH_V8}")
+cmake_print_variables(BUILD_WITH_V8)
+if (BUILD_WITH_V8)
     # Needed for Prix64 to be defined in g++/Centos
     add_compile_definitions("__STDC_FORMAT_MACROS")
     include(FetchContent)
@@ -484,7 +486,7 @@ set(sources_list
   "bodo/io/arrow_compat.cpp"
 )
 
-if (DEFINED ENV{BUILD_WITH_V8})
+if (BUILD_WITH_V8)
   set(sources_list "${sources_list}"
     "bodo/libs/_javascript_udf.cpp"
       )
@@ -539,7 +541,7 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
     "bodo/tests/test_thread_pool.cpp"
     "bodo/tests/test_datatypes.cpp"
   )
-  if (DEFINED ENV{BUILD_WITH_V8})
+  if (BUILD_WITH_V8)
       set(test_list "${test_list}"
       "bodo/tests/test_javascript.cpp"
       )
@@ -661,7 +663,9 @@ if (IS_PLATFORM OR DEFINED ENV{USE_BODO_ARROW_FORK})
   target_compile_definitions(ext PRIVATE "USE_BODO_ARROW_FORK=1")
 endif()
 
-if (DEFINED ENV{BUILD_WITH_V8})
+
+if (BUILD_WITH_V8)
+  message(STATUS "Building with V8")
   target_link_libraries(ext PRIVATE
     v8_libbase
     v8_libplatform
