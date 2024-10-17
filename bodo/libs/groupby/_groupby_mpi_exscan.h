@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
 
-#include "_bodo_common.h"
+#include "../_bodo_common.h"
 /**
  * This file declares the functions that are used to determine and utilize
  * the MPI_Exscan strategy for groupby. This strategy is used when we have

@@ -11,10 +11,10 @@
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
 
-#include "_groupby.h"
-#include "_groupby_col_set.h"
-#include "_groupby_ftypes.h"
-#include "_groupby_groups.h"
+#include "groupby/_groupby.h"
+#include "groupby/_groupby_col_set.h"
+#include "groupby/_groupby_ftypes.h"
+#include "groupby/_groupby_groups.h"
 
 // Default threshold for Groupby operator's OperatorBufferPool
 #define GROUPBY_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD 0.5

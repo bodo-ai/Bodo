@@ -1,8 +1,8 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_groups.h"
-#include "_bodo_common.h"
-#include "_dict_builder.h"
+#include "../_bodo_common.h"
+#include "../_dict_builder.h"
 #include "_groupby_hashing.h"
 
 /**

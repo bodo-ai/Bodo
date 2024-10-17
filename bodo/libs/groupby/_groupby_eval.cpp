@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
-#include "_array_utils.h"
-#include "_dict_builder.h"
+#include "../_array_utils.h"
+#include "../_dict_builder.h"
 #include "_groupby.h"
 
 /**

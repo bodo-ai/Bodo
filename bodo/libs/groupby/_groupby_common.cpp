@@ -1,14 +1,14 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_common.h"
 #include <numeric>
-#include "_array_operations.h"
-#include "_array_utils.h"
-#include "_bodo_common.h"
+#include "../_array_operations.h"
+#include "../_array_utils.h"
+#include "../_bodo_common.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_update.h"
 
 /**
- * This function contains helper functions that are shared by multiple possible
+ * This file contains helper functions that are shared by multiple possible
  * groupby paths.
  */
 

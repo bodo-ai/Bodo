@@ -12,9 +12,6 @@
 #include "_chunked_table_builder.h"
 #include "_dict_builder.h"
 #include "_distributed.h"
-#include "_groupby_col_set.h"
-#include "_groupby_common.h"
-#include "_groupby_ftypes.h"
 #include "_memory_budget.h"
 #include "_query_profile_collector.h"
 #include "_shuffle.h"
@@ -22,6 +19,9 @@
 #include "_table_builder.h"
 #include "_utils.h"
 #include "arrow/util/bit_util.h"
+#include "groupby/_groupby_col_set.h"
+#include "groupby/_groupby_common.h"
+#include "groupby/_groupby_ftypes.h"
 
 #define MAX_SHUFFLE_TABLE_SIZE 50 * 1024 * 1024
 #define MAX_SHUFFLE_HASHTABLE_SIZE 50 * 1024 * 1024

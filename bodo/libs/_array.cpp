@@ -21,9 +21,9 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_dict_builder.h"
-#include "_groupby.h"
 #include "_join.h"
 #include "_shuffle.h"
+#include "groupby/_groupby.h"
 
 array_info* struct_array_to_info(int64_t n_fields, int64_t n_items,
                                  array_info** inner_arrays, char** field_names,

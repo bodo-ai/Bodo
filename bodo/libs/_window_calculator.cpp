@@ -2,14 +2,14 @@
 #include "_window_calculator.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_groupby_common.h"
-#include "_groupby_do_apply_to_column.h"
-#include "_groupby_ftypes.h"
-#include "_groupby_update.h"
 #include "_memory.h"
 #include "_shuffle.h"
 #include "_stream_join.h"
 #include "_table_builder_utils.h"
+#include "groupby/_groupby_common.h"
+#include "groupby/_groupby_do_apply_to_column.h"
+#include "groupby/_groupby_ftypes.h"
+#include "groupby/_groupby_update.h"
 
 // See the following link for an explanation of the classes in this file:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/1832189971/Streaming+Window+Sort+Implementation+Design+Overhaul

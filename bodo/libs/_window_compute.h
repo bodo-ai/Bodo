@@ -5,9 +5,9 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_dict_builder.h"
-#include "_groupby_common.h"
-#include "_groupby_do_apply_to_column.h"
-#include "_groupby_ftypes.h"
+#include "groupby/_groupby_common.h"
+#include "groupby/_groupby_do_apply_to_column.h"
+#include "groupby/_groupby_ftypes.h"
 
 /**
  * @brief Helper function to determine the correct ftype and array-type for

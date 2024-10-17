@@ -4,9 +4,9 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
-#include "_groupby_ftypes.h"
 #include "_window_calculator.h"
 #include "_window_compute.h"
+#include "groupby/_groupby_ftypes.h"
 
 WindowStateSorter::WindowStateSorter(
     std::shared_ptr<bodo::Schema>& build_table_schema, size_t n_window_keys,

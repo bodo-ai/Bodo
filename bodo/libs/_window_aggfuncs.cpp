@@ -4,8 +4,8 @@
 #include "_window_aggfuncs.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_groupby_common.h"
-#include "_groupby_ftypes.h"
+#include "groupby/_groupby_common.h"
+#include "groupby/_groupby_ftypes.h"
 
 // Class to store any accumulator information for a window frame computation.
 // Each new ftype that is supported using this infrastructure will have its
