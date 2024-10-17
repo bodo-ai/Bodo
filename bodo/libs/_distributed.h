@@ -14,8 +14,6 @@
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 
-#define ROOT_PE 0
-
 // Helper macro to make an MPI call that returns an error code. In case of an
 // error, this raises a runtime_error (with MPI error details).
 #define HANDLE_MPI_ERROR(CALL, USER_ERR_MSG_PREFIX)                           \
@@ -77,6 +75,7 @@ struct BODO_ReduceOps {
 
 static int dist_get_rank() __UNUSED__;
 static int dist_get_size() __UNUSED__;
+static int dist_get_remote_size(int64_t comm_ptr) __UNUSED__;
 static int dist_get_node_count() __UNUSED__;
 static int64_t dist_get_start(int64_t total, int num_pes,
                               int node_id) __UNUSED__;
@@ -123,8 +122,8 @@ static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
                       bool allgather, int root) __UNUSED__;
 static void c_scatterv(void* send_data, int* sendcounts, int* displs,
-                       void* recv_data, int recv_count,
-                       int typ_enum) __UNUSED__;
+                       void* recv_data, int recv_count, int typ_enum, int root,
+                       int64_t comm_ptr) __UNUSED__;
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
@@ -241,8 +240,13 @@ static int dist_get_rank() {
 static int dist_get_size() {
     int size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    // printf("r size:%d\n", sizeof(MPI_Request));
-    // printf("mpi_size:%d\n", size);
+    return size;
+}
+
+static int dist_get_remote_size(int64_t comm_ptr) {
+    int size;
+    MPI_Comm comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
+    MPI_Comm_remote_size(comm, &size);
     return size;
 }
 
@@ -951,10 +955,16 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
 }
 
 static void c_scatterv(void* send_data, int* sendcounts, int* displs,
-                       void* recv_data, int recv_count, int typ_enum) {
+                       void* recv_data, int recv_count, int typ_enum, int root,
+                       int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    // Use provided comm pointer if available (0 means not provided)
+    if (comm_ptr != 0) {
+        comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
+    }
     MPI_Scatterv(send_data, sendcounts, displs, mpi_typ, recv_data, recv_count,
-                 mpi_typ, ROOT_PE, MPI_COMM_WORLD);
+                 mpi_typ, root, comm);
 }
 
 /**

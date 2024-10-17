@@ -12,6 +12,9 @@ import pytest
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+import bodo.submit.spawner
+from bodo.mpi4py import MPI
+from bodo.submit.spawner import CommandType
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.test_numpy_array import arr_tuple_val  # noqa
 from bodo.tests.utils import (
@@ -28,6 +31,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     gen_random_string_binary_array,
     get_start_end,
+    pytest_mark_spawn_mode,
     reduce_sum,
 )
 from bodo.transforms.distributed_analysis import Distribution, is_REP
@@ -2226,7 +2230,7 @@ def _check_scatterv_gatherv_allgatherv(orig_data, n):
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
-    # check data with gatherv
+    # check data with allgatherv
     allgathered_data = bodo.allgatherv(recv_data)
     passed = _test_equal_guard(allgathered_data, orig_data)
     n_passed = reduce_sum(passed)
@@ -2264,9 +2268,8 @@ def get_random_int64index(n):
     return pd.Index(np.random.randint(0, 10, n), dtype="Int64")
 
 
-@pytest.mark.parametrize(
-    "data",
-    [
+@pytest.fixture(
+    params=[
         np.arange(n, dtype=np.float32),  # 1D np array
         pytest.param(
             np.arange(n * n_col).reshape(n, n_col), marks=pytest.mark.slow
@@ -2408,13 +2411,17 @@ def get_random_int64index(n):
         ),
     ],
 )
-def test_scatterv_gatherv_allgatherv_python(data, memory_leak_check):
-    """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
-    n = len(data)
+def scatter_gather_data(request):
+    return request.param
 
-    _check_scatterv_gatherv_allgatherv(data, n)
-    # check it works in a tuple aswell
-    _check_scatterv_gatherv_allgatherv((data,), n)
+
+def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_check):
+    """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
+    n = len(scatter_gather_data)
+
+    _check_scatterv_gatherv_allgatherv(scatter_gather_data, n)
+    # check it works in a tuple as well
+    _check_scatterv_gatherv_allgatherv((scatter_gather_data,), n)
 
 
 def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
@@ -2422,7 +2429,7 @@ def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
     n = len(df_value)
 
     _check_scatterv_gatherv_allgatherv(df_value, n)
-    # check it works in a tuple aswell
+    # check it works in a tuple as well
     _check_scatterv_gatherv_allgatherv((df_value,), n)
 
 
@@ -3096,3 +3103,33 @@ def test_get_cpu_id(memory_leak_check):
 
     jit_out = bodo.jit(impl)()
     assert 0 <= jit_out < n_logical_cpus
+
+
+def bcast_intercomm(data):
+    """broadcast data using spawner's intercomm"""
+    spawner = bodo.submit.spawner.get_spawner()
+    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+    spawner.worker_intercomm.bcast(CommandType.BROADCAST.value, bcast_root)
+    bodo.libs.distributed_api.bcast(
+        data, root=bcast_root, comm=spawner.worker_intercomm
+    )
+
+
+@pytest_mark_spawn_mode
+def test_bcast_intercomm():
+    """Make sure intercomm support of bcast() works"""
+    # TODO(ehsan): check received output on workers (when infrastructure is available)
+    bcast_intercomm(np.arange(6, dtype=np.int64).reshape(2, 3))
+    bcast_intercomm(pd.DataFrame({"A": np.arange(4), "B": ["a1", "a23", "a34", "a66"]}))
+
+
+@pytest_mark_spawn_mode
+def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
+    """Test scatterv's intercomm support in spawn mode"""
+
+    spawner = bodo.submit.spawner.get_spawner()
+    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+    spawner.worker_intercomm.bcast(CommandType.SCATTER.value, bcast_root)
+    bodo.libs.distributed_api.scatterv(
+        scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
+    )

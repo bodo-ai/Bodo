@@ -1,13 +1,11 @@
 import os
 
 import cloudpickle
-import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.mpi4py import MPI
-from bodo.submit.spawner import CommandType, submit_jit
+from bodo.submit.spawner import submit_jit
 from bodo.tests.conftest import datapath_util
 from bodo.tests.utils import pytest_spawn_mode
 
@@ -139,20 +137,3 @@ def simple_test():
 def test_simple():
     """Simple test that reads data and computes in spawn mode"""
     simple_test()
-
-
-def bcast_intercomm(data):
-    """broadcast data using spawner's intercomm"""
-    spawner = bodo.submit.spawner.get_spawner()
-    bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-    spawner.worker_intercomm.bcast(CommandType.BROADCAST.value, bcast_root)
-    bodo.libs.distributed_api.bcast(
-        data, root=bcast_root, comm=spawner.worker_intercomm
-    )
-
-
-def test_bcast_intercomm():
-    """Make sure intercomm support of bcast() works"""
-    # TODO(ehsan): check received output on workers (when infrastructure is available)
-    bcast_intercomm(np.arange(6, dtype=np.int64).reshape(2, 3))
-    bcast_intercomm(pd.DataFrame({"A": np.arange(4), "B": ["a1", "a23", "a34", "a66"]}))
