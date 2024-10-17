@@ -539,8 +539,9 @@ std::shared_ptr<table_info> sort_values_table(
     int64_t n_local = in_table->nrows();
     int64_t n_total = n_local;
     if (parallel) {
-        MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT,
+                                       MPI_SUM, MPI_COMM_WORLD),
+                         "sort_values_table: MPI error on MPI_Allreduce:");
     }
 
     // Want to keep dead keys only when we will perform a shuffle operation
@@ -1216,12 +1217,18 @@ sort_both_tables_for_interval_join(std::shared_ptr<table_info> table_1,
     std::vector<uint64_t> n_local_vec{table_1->nrows(), table_2->nrows()};
     std::vector<uint64_t> n_total_vec{n_local_vec[0], n_local_vec[1]};
     if (table_1_parallel) {
-        MPI_Allreduce(n_local_vec.data(), n_total_vec.data(), 1,
-                      MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allreduce(n_local_vec.data(), n_total_vec.data(), 1,
+                          MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+            "sort_both_tables_for_interval_join: MPI error on "
+            "MPI_Allreduce[table_1_parallel]:");
     }
     if (table_2_parallel) {
-        MPI_Allreduce(n_local_vec.data() + 1, n_total_vec.data() + 1, 1,
-                      MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allreduce(n_local_vec.data() + 1, n_total_vec.data() + 1, 1,
+                          MPI_UNSIGNED_LONG_LONG, MPI_SUM, MPI_COMM_WORLD),
+            "sort_both_tables_for_interval_join: MPI error on "
+            "MPI_Allreduce[table_2_parallel]:");
     }
 
     //
@@ -1960,8 +1967,10 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
 
     // Gather how many rows are on each rank
     std::vector<int64_t> ListSizes(n_pes);
-    MPI_Allgather(&n_local, 1, MPI_LONG, ListSizes.data(), 1, MPI_LONG,
-                  MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Allgather(&n_local, 1, MPI_LONG, ListSizes.data(), 1, MPI_LONG,
+                      MPI_COMM_WORLD),
+        "sample_table_inner_parallel: MPI error on MPI_Allgather:");
 
     // Total number of rows across all ranks
     int64_t n_total = std::accumulate(ListSizes.begin(), ListSizes.end(), 0);
@@ -2091,13 +2100,17 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
 
         // Scatter sampled indices to each node
         int n_samp_out;
-        MPI_Scatter(ListCounts.data(), 1, MPI_INT, &n_samp_out, 1, MPI_INT, 0,
-                    MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Scatter(ListCounts.data(), 1, MPI_INT, &n_samp_out, 1, MPI_INT,
+                        0, MPI_COMM_WORLD),
+            "sample_table_inner_parallel: MPI error on MPI_Scatter:");
 
         ListIdxChosen.resize(n_samp_out);
-        MPI_Scatterv(ListIdxSampledExport.data(), ListCounts.data(),
-                     ListDisps.data(), MPI_LONG, ListIdxChosen.data(),
-                     n_samp_out, MPI_LONG, 0, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Scatterv(ListIdxSampledExport.data(), ListCounts.data(),
+                         ListDisps.data(), MPI_LONG, ListIdxChosen.data(),
+                         n_samp_out, MPI_LONG, 0, MPI_COMM_WORLD),
+            "sample_table_inner_parallel: MPI error on MPI_Scatterv:");
 
         ListIdxSampledExport.clear();
         ListCounts.clear();

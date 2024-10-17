@@ -1363,8 +1363,9 @@ int64_t table_local_dictionary_memory_size(
 int64_t table_global_memory_size(const std::shared_ptr<table_info>& table) {
     int64_t local_size = table_local_memory_size(table, false);
     int64_t global_size;
-    MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                  MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Allreduce(&local_size, &global_size, 1,
+                                   MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD),
+                     "table_global_memory_size: MPI error on MPI_Allreduce:");
     return global_size;
 }
 
