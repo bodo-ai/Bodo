@@ -3,8 +3,8 @@
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_groupby_common.h"
-#include "_groupby_ftypes.h"
+#include "groupby/_groupby_common.h"
+#include "groupby/_groupby_ftypes.h"
 
 template <int ftype>
 concept size = ftype == Bodo_FTypes::size;

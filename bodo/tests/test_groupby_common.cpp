@@ -4,7 +4,7 @@
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "../libs/_groupby_common.h"
+#include "../libs/groupby/_groupby_common.h"
 #include "./table_generator.hpp"
 #include "./test.hpp"
 

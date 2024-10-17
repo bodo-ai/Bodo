@@ -10,14 +10,14 @@
 #include "_decimal_ext.h"
 #include "_dict_builder.h"
 #include "_gandiva_decimal_copy.h"
-#include "_groupby_common.h"
-#include "_groupby_do_apply_to_column.h"
-#include "_groupby_ftypes.h"
 #include "_shuffle.h"
 #include "_stream_shuffle.h"
 #include "_table_builder.h"
 #include "_table_builder_utils.h"
 #include "_window_aggfuncs.h"
+#include "groupby/_groupby_common.h"
+#include "groupby/_groupby_do_apply_to_column.h"
+#include "groupby/_groupby_ftypes.h"
 #include "mpi.h"
 
 std::tuple<int64_t, bodo_array_type::arr_type_enum>

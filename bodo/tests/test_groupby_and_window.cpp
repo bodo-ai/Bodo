@@ -2,8 +2,8 @@
 #include <sstream>
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
-#include "../libs/_groupby_col_set.h"
 #include "../libs/_window_compute.h"
+#include "../libs/groupby/_groupby_col_set.h"
 #include "./test.hpp"
 #include "table_generator.hpp"
 

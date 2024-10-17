@@ -1,16 +1,16 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_mpi_exscan.h"
-#include "_array_hash.h"
-#include "_array_operations.h"
-#include "_array_utils.h"
-#include "_bodo_common.h"
-#include "_dict_builder.h"
-#include "_distributed.h"
+#include "../_array_hash.h"
+#include "../_array_operations.h"
+#include "../_array_utils.h"
+#include "../_bodo_common.h"
+#include "../_dict_builder.h"
+#include "../_distributed.h"
+#include "../_shuffle.h"
 #include "_groupby_common.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_hashing.h"
-#include "_shuffle.h"
 
 // Strategy for determining exscan
 

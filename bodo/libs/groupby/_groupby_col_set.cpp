@@ -4,16 +4,16 @@
 #include <iostream>
 #include <numeric>
 
-#include "_array_operations.h"
-#include "_array_utils.h"
-#include "_bodo_common.h"
-#include "_dict_builder.h"
+#include "../_array_operations.h"
+#include "../_array_utils.h"
+#include "../_bodo_common.h"
+#include "../_dict_builder.h"
+#include "../_window_compute.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_mode.h"
 #include "_groupby_update.h"
-#include "_window_compute.h"
 #include "fmt/format.h"
 
 /**
@@ -102,7 +102,7 @@ const std::vector<std::shared_ptr<array_info>> BasicColSet::getOutputColumns() {
 
 SizeColSet::SizeColSet(bool combine_step, bool use_sql_rules)
     : BasicColSet(nullptr, Bodo_FTypes::size, combine_step, use_sql_rules) {}
-SizeColSet::~SizeColSet(){};
+SizeColSet::~SizeColSet() {};
 
 void SizeColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -113,8 +113,7 @@ void SizeColSet::alloc_running_value_columns(
 }
 
 void SizeColSet::setInCol(
-    std::vector<std::shared_ptr<array_info>> new_in_cols) { /*NOP*/
-}
+    std::vector<std::shared_ptr<array_info>> new_in_cols) { /*NOP*/ }
 
 void SizeColSet::update(const std::vector<grouping_info>& grp_infos,
                         bodo::IBufferPool* const pool,
