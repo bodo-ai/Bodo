@@ -1,10 +1,10 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_mode.h"
 
-#include "_array_hash.h"
-#include "_array_utils.h"
-#include "_bodo_common.h"
-#include "_dict_builder.h"
+#include "../_array_hash.h"
+#include "../_array_utils.h"
+#include "../_bodo_common.h"
+#include "../_dict_builder.h"
 #include "_groupby_common.h"
 #include "_groupby_hashing.h"
 

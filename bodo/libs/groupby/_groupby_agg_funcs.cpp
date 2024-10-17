@@ -1,6 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-#include "_array_utils.h"
-#include "_bodo_common.h"
+#include "../_array_utils.h"
+#include "../_bodo_common.h"
 
 /**
  * This file contains groupby update functions that still correspond to the

@@ -1,6 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #pragma once
-#include "_bodo_common.h"
+#include "../_bodo_common.h"
 
 /** Data structure used for the computation of groups.
 

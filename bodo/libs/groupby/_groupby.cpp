@@ -1,18 +1,18 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_groupby.h"
 #include <map>
-#include "_array_hash.h"
-#include "_array_operations.h"
-#include "_array_utils.h"
-#include "_dict_builder.h"
-#include "_distributed.h"
+#include "../_array_hash.h"
+#include "../_array_operations.h"
+#include "../_array_utils.h"
+#include "../_dict_builder.h"
+#include "../_distributed.h"
+#include "../_shuffle.h"
 #include "_groupby_col_set.h"
 #include "_groupby_common.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_groups.h"
 #include "_groupby_mpi_exscan.h"
 #include "_groupby_udf.h"
-#include "_shuffle.h"
 
 /*
  An instance of GroupbyPipeline class manages a groupby operation. In a

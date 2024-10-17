@@ -2,7 +2,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_dict_builder.h"
-#include "_groupby_ftypes.h"
+#include "groupby/_groupby_ftypes.h"
 
 /**
  * @breif Computes the outputs of a collection of window functions

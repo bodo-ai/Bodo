@@ -5,11 +5,11 @@
 #include <numeric>
 #include <stdexcept>
 
-#include "_bodo_common.h"
+#include "../_bodo_common.h"
+#include "../_stl.h"
 #include "_groupby_agg_funcs.h"
 #include "_groupby_eval.h"
 #include "_groupby_ftypes.h"
-#include "_stl.h"
 #include "arrow/vendored/portable-snippets/safe-math.h"
 
 // Equivalent to arrow::Decimal128::FitsInPrecision(DECIMAL128_MAX_PRECISION).

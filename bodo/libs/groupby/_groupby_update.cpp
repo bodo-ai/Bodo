@@ -1,16 +1,16 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_update.h"
 #include <arrow/util/decimal.h>
-#include "_array_operations.h"
-#include "_array_utils.h"
-#include "_bodo_common.h"
-#include "_decimal_ext.h"
-#include "_distributed.h"
-#include "_gandiva_decimal_copy.h"
+#include "../_array_operations.h"
+#include "../_array_utils.h"
+#include "../_bodo_common.h"
+#include "../_decimal_ext.h"
+#include "../_distributed.h"
+#include "../_gandiva_decimal_copy.h"
+#include "../_shuffle.h"
 #include "_groupby_common.h"
 #include "_groupby_do_apply_to_column.h"
 #include "_groupby_hashing.h"
-#include "_shuffle.h"
 
 // Really should be defined in something like _decimal_ext.h,
 // but there seem to be many other files that redefine CHECK_ARROW.
