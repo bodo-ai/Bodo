@@ -1,7 +1,6 @@
 #include "typeinfer.h"
 
 #include <object.h>
-#include <pytypedefs.h>
 #include <cassert>
 #include <cstdio>
 #include <stdexcept>
