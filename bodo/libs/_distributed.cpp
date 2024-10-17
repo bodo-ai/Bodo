@@ -1150,6 +1150,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
 
     SetAttrStringFromVoidPtr(m, dist_get_rank);
     SetAttrStringFromVoidPtr(m, dist_get_size);
+    SetAttrStringFromVoidPtr(m, dist_get_remote_size);
     SetAttrStringFromVoidPtr(m, dist_get_start);
     SetAttrStringFromVoidPtr(m, dist_get_end);
     SetAttrStringFromVoidPtr(m, dist_get_node_portion);

@@ -1729,12 +1729,12 @@ std::shared_ptr<table_info> coherent_shuffle_table(
 std::shared_ptr<array_info> broadcast_array(
     std::shared_ptr<array_info> ref_arr, std::shared_ptr<array_info> in_arr,
     std::shared_ptr<std::vector<int>> comm_ranks, bool is_parallel, int root,
-    int myrank, int64_t comm_ptr) {
+    int myrank, MPI_Comm* comm_ptr) {
     MPI_Comm comm = MPI_COMM_WORLD;
     bool is_sender = (myrank == root);
-    // Use provided comm pointer if available (0 means not provided)
-    if (comm_ptr != 0) {
-        comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
+    // Use provided comm pointer if available (nullptr means not provided)
+    if (comm_ptr) {
+        comm = *comm_ptr;
         is_sender = (root == MPI_ROOT);
     }
     int64_t arr_bcast[6];
@@ -1916,9 +1916,9 @@ array_info* broadcast_array_py_entry(array_info* in_arr,
             comm_ranks->insert(comm_ranks->end(), data_ptr,
                                data_ptr + comm_ranks_arr->length);
         }
-        std::shared_ptr<array_info> out_arr =
-            broadcast_array(nullptr, is_sender ? input_array : nullptr,
-                            comm_ranks, true, root, myrank, comm_ptr);
+        std::shared_ptr<array_info> out_arr = broadcast_array(
+            nullptr, is_sender ? input_array : nullptr, comm_ranks, true, root,
+            myrank, reinterpret_cast<MPI_Comm*>(comm_ptr));
         return new array_info(*out_arr);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -1929,13 +1929,13 @@ array_info* broadcast_array_py_entry(array_info* in_arr,
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
     std::shared_ptr<std::vector<int>> comm_ranks, size_t n_cols,
-    bool is_parallel, int root, int64_t comm_ptr) {
+    bool is_parallel, int root, MPI_Comm* comm_ptr) {
     tracing::Event ev("broadcast_table", is_parallel);
     int myrank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
     bool is_sender = (myrank == root);
-    if (comm_ptr != 0) {
+    if (comm_ptr) {
         is_sender = (root == MPI_ROOT);
     }
 
@@ -1966,9 +1966,9 @@ table_info* broadcast_table_py_entry(table_info* in_table,
             comm_ranks->insert(comm_ranks->end(), data_ptr,
                                data_ptr + comm_ranks_arr->length);
         }
-        std::shared_ptr<table_info> out_table =
-            broadcast_table(nullptr, input_table, comm_ranks,
-                            input_table->ncols(), true, root, comm_ptr);
+        std::shared_ptr<table_info> out_table = broadcast_table(
+            nullptr, input_table, comm_ranks, input_table->ncols(), true, root,
+            reinterpret_cast<MPI_Comm*>(comm_ptr));
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
