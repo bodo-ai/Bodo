@@ -471,7 +471,7 @@ def overload_series_prod(
 @overload_method_declarative(
     SeriesType,
     "any",
-    path_name="pd.Series.any",
+    path="pd.Series.any",
     unsupported_args={"axis", "bool_only", "skipna"},
     description="""!!! note
     Bodo does not accept any additional arguments for Numpy
@@ -4552,7 +4552,7 @@ def create_explicit_binary_reverse_op_overload(op):
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             # other could be tuple, list, array, Index, or Series
-            other_arr = bodo.hiframes.pd_series_ext.get_series_data(other)
+            other_arr = bodo.utils.conversion.coerce_to_array(other)
             numba.parfors.parfor.init_prange()
             n = len(arr)
             out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)

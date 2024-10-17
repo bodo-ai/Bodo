@@ -56,13 +56,13 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         Generates a documentation string for the method, writes to corresponding file in
         documentation if *write_out*
         """
-        title_str = f"# `{self.path_name}`"
+        title_str = f"# `{self.path}`"
         params_dict = utils.pysignature(self._overload_func).parameters
         params_list = list(params_dict.values())
         params_str = ", ".join(map(str, params_list[1:]))
 
         # Signature taken from the overload defintion
-        package_name, full_path = replace_package_name(self.path_name)
+        package_name, full_path = replace_package_name(self.path)
         pysig_str = f"`{full_path}({params_str})`"
 
         # Write bullet point for each argument and any restriction imposed by Bodo
@@ -90,7 +90,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             changed_defaults_str += f"!!! note\n\tArgument `{changed_arg}` has default value `{default_value}` that's different than {package_name.capitalize()} default.\n\n"
 
         # Additional notes (manually specified in overload)
-        description = self.description
+        description = "" if self.description is None else f"{self.description}\n\n"
         hyperlink_str = (
             ""
             if self.hyperlink is None
@@ -99,7 +99,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
 
         # Extract example from existing doc for backcompatibility
         # TODO: link examples to our testing setup to verify they are still runnable
-        path, name = get_feature_path(self.path_name)
+        path, name = get_feature_path(self.path)
         doc_path = f"{path}/{name}.md"
         example_str = ""
         if Path(doc_path).is_file():
@@ -110,7 +110,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
                     example_str = f"{doc[doc.index(begin_example) :].strip()}\n\n"
         if example_str == "":
             warnings.warn(
-                f"No example found for {self.path_name}: example must be manually embedded in {doc_path}."
+                f"No example found for {self.path}: example must be manually embedded in {doc_path}."
             )
 
         documentation = (
@@ -119,7 +119,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             f"{pysig_str}\n\n"
             f"{argument_restrictions_str}\n\n"
             f"{changed_defaults_str}"
-            f"{description}\n\n"
+            f"{description}"
             f"{example_str}"
         )
 
@@ -138,7 +138,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
 
     @classmethod
     def _check_unsupported_args(cls, kws):
-        path = cls.path_name.split(".")
+        path = cls.path.split(".")
         assert (
             len(path) > 2
         ), "Path expected to begin with '<package_name>.<module_name>.'"
@@ -164,7 +164,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
 
         # check unsupported defaults
         check_unsupported_args(
-            cls.path_name,
+            cls.path,
             args_dict,
             args_default_dict,
             package_name="pandas",
@@ -191,11 +191,9 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
                 # no argument supplied, still check default for consistency
                 arg_types.append((name, param.default))
             else:
-                raise BodoError(
-                    f"{cls.path_name}(): required argument {name} not supplied."
-                )
+                raise BodoError(f"{cls.path}(): required argument {name} not supplied.")
 
-        cls.method_args_checker.check_args(f"{cls.path_name}()", dict(arg_types))
+        cls.method_args_checker.check_args(f"{cls.path}()", dict(arg_types))
 
     def _resolve(self, typ, attr):
         if not self.is_matching_template(attr):
@@ -211,10 +209,11 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         class DeclarativeMethodTemplate(AbstractTemplate):
             key = (self.key, attr)
             _inline = self._inline
+            _no_unliteral = self._no_unliteral
             _overload_func = staticmethod(self._overload_func)
             _inline_overloads = self._inline_overloads
             prefer_literal = self.prefer_literal
-            path_name = self.path_name
+            path = self.path
             unsupported_args = self.unsupported_args
 
             def generic(_, args, kws):
@@ -237,7 +236,7 @@ def make_overload_declarative_template(
     typ,
     attr,
     overload_func,
-    path_name,
+    path,
     unsupported_args,
     method_args_checker,
     description,
@@ -259,7 +258,7 @@ def make_overload_declarative_template(
     dct = {
         "key": typ,
         "_attr": attr,
-        "path_name": path_name,
+        "path": path,
         "_impl_cache": {},
         "_inline": staticmethod(InlineOptions(inline)),
         "_inline_overloads": {},
@@ -280,7 +279,7 @@ def make_overload_declarative_template(
 def overload_method_declarative(
     typ,
     attr,
-    path_name,
+    path,
     unsupported_args,
     description,
     method_args_checker=None,
@@ -298,7 +297,7 @@ def overload_method_declarative(
             typ,
             attr,
             overload_func,
-            path_name,
+            path,
             unsupported_args,
             method_args_checker,
             description,

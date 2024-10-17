@@ -556,6 +556,10 @@ def is_overload_float(val):
     return is_overload_constant_float(val) or isinstance(val, types.Float)
 
 
+def is_overload_numeric_scalar(val):
+    return is_overload_bool(val) or is_overload_float(val) or is_overload_int(val)
+
+
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)
@@ -755,7 +759,9 @@ def check_unsupported_args(
             v1 is NOT_CONSTANT
             or (v1 is not None and v2 is None)
             or (v1 is None and v2 is not None)
-            or v1 != v2
+            or (v1 is not np.nan and v1 != v2)
+            or (v1 is np.nan and v2 is not np.nan)
+            or (v1 is not np.nan and v2 is np.nan)
             or (v1 is not _no_input and v2 is _no_input)
             or (v1 is _no_input and v2 is not _no_input)
         ):
