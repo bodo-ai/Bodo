@@ -147,14 +147,14 @@ std::shared_ptr<table_info> reverse_shuffle_table_kernel(
  * @param is_parallel : whether tracing should be parallel
  * @param root : root rank for broadcast (where data is broadcast from)
  * @param myrank : current rank
- * @param comm_ptr pointer to intercomm if available (0 means not over
+ * @param comm_ptr pointer to intercomm if available (nullptr means not over
  * intercomm)
  * @return the array put in all the nodes
  */
 std::shared_ptr<array_info> broadcast_array(
     std::shared_ptr<array_info> ref_arr, std::shared_ptr<array_info> in_arr,
     std::shared_ptr<std::vector<int>> comm_ranks, bool is_parallel, int root,
-    int myrank, int64_t comm_ptr = 0);
+    int myrank, MPI_Comm* comm_ptr = nullptr);
 
 /**
  * @brief Entry point for Python to call broadcast_array()
@@ -187,14 +187,14 @@ array_info* broadcast_array_py_entry(array_info* in_arr, array_info* comm_ranks,
  * @param n_cols : the number of columns in output
  * @param is_parallel : whether tracing should be parallel
  * @param root : root rank for broadcast (where data is broadcast from)
- * @param comm_ptr pointer to intercomm if available (0 means not over
+ * @param comm_ptr pointer to intercomm if available (nullptr means not over
  * intercomm)
  * @return the table put in all the nodes
  */
 std::shared_ptr<table_info> broadcast_table(
     std::shared_ptr<table_info> ref_table, std::shared_ptr<table_info> in_table,
     std::shared_ptr<std::vector<int>> comm_ranks, size_t n_cols,
-    bool is_parallel, int root, int64_t comm_ptr = 0);
+    bool is_parallel, int root, MPI_Comm* comm_ptr = nullptr);
 
 /**
  * @brief Entry point for Python to call broadcast_table()
