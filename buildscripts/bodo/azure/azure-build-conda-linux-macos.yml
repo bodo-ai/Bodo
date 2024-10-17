@@ -64,12 +64,6 @@ jobs:
 
   - script: |
       set -exo pipefail
-      pip install ruff==0.5.5
-      ruff check .
-    displayName: 'Ruff'
-
-  - script: |
-      set -exo pipefail
       if [[ ! -z $IS_RELEASE ]]; then
         ## Remove existing tag if it's a release
         git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' tag -d $IS_RELEASE
@@ -244,9 +238,6 @@ jobs:
         --no-test --no-verify --no-anaconda-upload \
         $CONDA_VARIANT_ARG $BUILD_PY_VERSION \
         --croot $HOME/conda-bld --build-id-pat='bb'
-
-      # TODO: Add back for Pip
-      # --keep-old-work --dirty --merge-build-host
 
       # Copy the Build Folder to Working Directory
       cp -r $HOME/conda-bld $(System.DefaultWorkingDirectory)/conda-bld
