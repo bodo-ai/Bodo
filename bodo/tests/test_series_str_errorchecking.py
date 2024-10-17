@@ -445,9 +445,11 @@ def test_contains_args(test_sr, memory_leak_check):
     """
 
     def impl(test_sr):
-        return test_sr.str.contains("New", na=np.nan)
+        return test_sr.str.contains("New", na=-1)
 
-    with pytest.raises(BodoError, match="is not supported"):
+    with pytest.raises(
+        BodoError, match="na parameter only supports default value None"
+    ):
         bodo.jit(impl)(test_sr)
 
 
@@ -459,7 +461,7 @@ def test_contains_flags(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", flags="x")
 
-    with pytest.raises(BodoError, match="expected an int object"):
+    with pytest.raises(BodoError, match="Expected 'flags' to be type Integer"):
         bodo.jit(impl)(test_sr)
 
 
@@ -471,9 +473,7 @@ def test_contains_regex(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", regex="x")
 
-    with pytest.raises(
-        BodoError, match="'regex' argument should be a constant boolean"
-    ):
+    with pytest.raises(BodoError, match="Expected 'regex' to be a constant Boolean"):
         bodo.jit(impl)(test_sr)
 
 
@@ -485,7 +485,7 @@ def test_contains_case(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", case="x")
 
-    with pytest.raises(BodoError, match="'case' argument should be a constant boolean"):
+    with pytest.raises(BodoError, match="Expected 'case' to be a constant Boolean"):
         bodo.jit(impl)(test_sr)
 
 

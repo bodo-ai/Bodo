@@ -33,6 +33,13 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     string_array_split_view_type,
 )
+from bodo.ir.argument_checkers import (
+    ConstantArgumentChecker,
+    IntegerScalarArgumentChecker,
+    OverloadArgumentsChecker,
+    StringScalarArgumentChecker,
+)
+from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.array import get_search_regex
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.str_arr_ext import (
@@ -592,32 +599,32 @@ def is_regex_unsupported(pat):
         return True
 
 
-@overload_method(SeriesStrMethodType, "contains", no_unliteral=True)
-def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
-    not_supported_arg_check("contains", "na", na, np.nan)
-    str_arg_check("contains", "pat", pat)
-    int_arg_check("contains", "flags", flags)
+@overload_method_declarative(
+    SeriesStrMethodType,
+    "contains",
+    path="pd.Series.str.contains",
+    unsupported_args={"na"},
+    method_args_checker=OverloadArgumentsChecker(
+        [
+            StringScalarArgumentChecker("pat"),
+            ConstantArgumentChecker("case", (bool,)),
+            IntegerScalarArgumentChecker("flags"),
+            ConstantArgumentChecker("regex", (bool,)),
+        ]
+    ),
+    description=None,
+    no_unliteral=True,
+)
+def overload_str_method_contains(S_str, pat, case=True, flags=0, na=None, regex=True):
     # TODO: support other arguments
     # TODO: support dynamic values for regex
-
-    # Error checking for regex argument
-    if not is_overload_constant_bool(regex):
-        raise BodoError(
-            "Series.str.contains(): 'regex' argument should be a constant boolean"
-        )
-    # Error checking for case argument
-    if not is_overload_constant_bool(case):
-        raise BodoError(
-            "Series.str.contains(): 'case' argument should be a constant boolean"
-        )
-
     # Get value of re.IGNORECASE. It cannot be computed inside the impl
     # since this is a custom enum class (not regular Enum) and numba doesn't
     # support it. https://numba.readthedocs.io/en/stable/reference/pysupported.html#enum
     re_ignorecase_value = re.IGNORECASE.value
 
     func_text = "def impl(\n"
-    func_text += "    S_str, pat, case=True, flags=0, na=np.nan, regex=True\n"
+    func_text += "    S_str, pat, case=True, flags=0, na=None, regex=True\n"
     func_text += "):\n"
     func_text += "  S = S_str._obj\n"
     func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
