@@ -2,15 +2,14 @@
 
 `pandas.Series.str.contains(pat, case=True, flags=0, na=None, regex=True)`
 
-### Supported Arguments
+### Argument Restrictions:
+ * `pat`: must be type `String`.
+ * `case`: must be a compile time constant and must be type `Boolean`.
+ * `flags`: must be type `Integer`.
+ * `na`: only supports default value `None`.
+ * `regex`: must be a compile time constant and must be type `Boolean`.
 
-| argument | datatypes | other requirements                   |
-|----------|-----------|--------------------------------------|
-| `pat`    | String    |                                      |
-| `case`   | Boolean   | **Must be constant at Compile Time** |
-| `flags`  | Integer   |                                      |
-| `regex`  | Boolean   | **Must be constant at Compile Time** |
-
+### Example Usage:
 ``` py
 >>> @bodo.jit
 ... def f(S):

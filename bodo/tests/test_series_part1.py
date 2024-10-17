@@ -2335,6 +2335,30 @@ def test_series_unary_op(op, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.parametrize(
+    "other",
+    [
+        pytest.param(pd.array([1, 2, 3, 4, 5]), id="array"),
+        pytest.param(5.1, id="scalar"),
+    ],
+)
+def test_series_explicit_binop_nonseries_other(other, memory_leak_check):
+    """
+    Check that explicit binary op correctly handles other argument that is not a Series
+    """
+
+    S = pd.Series([5, 4, 3, 2, 1])
+
+    def test_impl(S, other):
+        S.sub(other)
+
+    def test_reversed_impl(S, other):
+        S.rsub(other)
+
+    check_func(test_impl, (S, other), check_dtype=False)
+    check_func(test_reversed_impl, (S, other), check_dtype=False)
+
+
 def test_series_ufunc(memory_leak_check):
     ufunc = np.negative
 
