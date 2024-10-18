@@ -24,9 +24,9 @@ data class DDLExecutionResult(
             rowType.fieldList.forEach {
                 val typeString =
                     if (SqlTypeName.CHAR_TYPES.contains(it.type.sqlTypeName)) {
-                        "pd.ArrowDtype(pa.string())"
-                    } else if (it.type.sqlTypeName == SqlTypeName.DECIMAL) {
-                        "pd.ArrowDtype(pa.decimal128(${it.type.precision}, ${it.type.scale}))"
+                        "pd.StringDtype()"
+                    } else if (it.type.sqlTypeName == SqlTypeName.BIGINT) {
+                        "pd.Int64Dtype()"
                     } else {
                         throw RuntimeException("Unsupported DDL return type: ${it.type.sqlTypeName}")
                     }
