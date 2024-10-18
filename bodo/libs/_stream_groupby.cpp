@@ -2009,8 +2009,10 @@ void GroupbyOutputState::StealWorkIfNeeded() {
     // Start work stealing "command" bcast on non-zero ranks in the first
     // iteration
     if (this->myrank != 0 && !this->steal_work_bcast_started) {
-        MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0, this->mpi_comm,
-                   &this->steal_work_bcast_request);
+        HANDLE_MPI_ERROR(
+            MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0,
+                       this->mpi_comm, &this->steal_work_bcast_request),
+            "GroupbyOutputState::StealWorkIfNeeded: MPI error on MPI_Ibcast:");
         this->steal_work_bcast_started = true;
     }
 
@@ -2018,8 +2020,10 @@ void GroupbyOutputState::StealWorkIfNeeded() {
     // stealing status to simplify the code)
     if (this->buffer.total_remaining == 0 && !this->done_sent) {
         this->done_sent = true;
-        MPI_Isend(&this->done_sent, 1, MPI_C_BOOL, 0, 0, this->mpi_comm,
-                  &this->done_request);
+        HANDLE_MPI_ERROR(
+            MPI_Isend(&this->done_sent, 1, MPI_C_BOOL, 0, 0, this->mpi_comm,
+                      &this->done_request),
+            "GroupbyOutputState::StealWorkIfNeeded: MPI error on MPI_Isend:");
     }
 
     // Return if work stealing command bcast already received from rank 0
@@ -2033,7 +2037,9 @@ void GroupbyOutputState::StealWorkIfNeeded() {
     // Test every 10 iterations to reduce MPI call overheads
     else if ((this->iter + 1) % 10 == 0) {
         int flag = 0;
-        MPI_Test(&this->steal_work_bcast_request, &flag, MPI_STATUS_IGNORE);
+        HANDLE_MPI_ERROR(
+            MPI_Test(&this->steal_work_bcast_request, &flag, MPI_STATUS_IGNORE),
+            "GroupbyOutputState::StealWorkIfNeeded: MPI error on MPI_Test:");
         if (flag) {
             this->steal_work_bcast_done = true;
         }
@@ -2068,8 +2074,10 @@ void GroupbyOutputState::manage_work_stealing_rank_0() {
         this->done_recv_buff = std::make_unique<bool[]>(this->n_pes);
         for (int i = 0; i < this->n_pes; i++) {
             MPI_Request recv_req;
-            MPI_Irecv(&this->done_recv_buff[i], 1, MPI_C_BOOL, i, 0,
-                      this->mpi_comm, &recv_req);
+            HANDLE_MPI_ERROR(MPI_Irecv(&this->done_recv_buff[i], 1, MPI_C_BOOL,
+                                       i, 0, this->mpi_comm, &recv_req),
+                             "GroupbyOutputState::manage_work_stealing_rank_0: "
+                             "MPI error on MPI_Irecv:");
             this->done_recv_requests.push_back(recv_req);
         }
         done_received.resize(n_pes, false);
@@ -2089,7 +2097,10 @@ void GroupbyOutputState::manage_work_stealing_rank_0() {
     for (int i = 0; i < this->n_pes; i++) {
         if (!this->done_received[i]) {
             int flag = 0;
-            MPI_Test(&this->done_recv_requests[i], &flag, MPI_STATUS_IGNORE);
+            HANDLE_MPI_ERROR(MPI_Test(&this->done_recv_requests[i], &flag,
+                                      MPI_STATUS_IGNORE),
+                             "GroupbyOutputState::manage_work_stealing_rank_0: "
+                             "MPI error on MPI_Test:");
             if (flag) {
                 this->done_received[i] = true;
                 this->num_ranks_done++;
@@ -2100,8 +2111,11 @@ void GroupbyOutputState::manage_work_stealing_rank_0() {
     // All ranks done, broadcast "no work redistribution command"
     if (this->num_ranks_done == this->n_pes) {
         assert(this->should_steal_work == false);
-        MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0, this->mpi_comm,
-                   &this->steal_work_bcast_request);
+        HANDLE_MPI_ERROR(
+            MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0,
+                       this->mpi_comm, &this->steal_work_bcast_request),
+            "GroupbyOutputState::manage_work_stealing_rank_0: MPI error on "
+            "MPI_Ibcast:");
         this->steal_work_bcast_done = true;
         this->command_sent = true;
         return;
@@ -2131,8 +2145,11 @@ void GroupbyOutputState::manage_work_stealing_rank_0() {
         this->should_steal_work = true;
         this->metrics.n_ranks_done_before_work_redistribution =
             this->num_ranks_done;
-        MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0, this->mpi_comm,
-                   &this->steal_work_bcast_request);
+        HANDLE_MPI_ERROR(
+            MPI_Ibcast(&this->should_steal_work, 1, MPI_C_BOOL, 0,
+                       this->mpi_comm, &this->steal_work_bcast_request),
+            "GroupbyOutputState::manage_work_stealing_rank_0: MPI error on "
+            "MPI_Ibcast:");
         this->steal_work_bcast_done = true;
         this->command_sent = true;
     }
@@ -2378,8 +2395,10 @@ void GroupbyOutputState::RedistributeWork() {
     // 1. Gather data about remaining number of batches on every rank.
     uint64_t num_batches = this->buffer.chunks.size();
     std::vector<uint64_t> num_batches_ranks(this->n_pes);
-    MPI_Allgather(&num_batches, 1, MPI_UINT64_T, num_batches_ranks.data(), 1,
-                  MPI_UINT64_T, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Allgather(&num_batches, 1, MPI_UINT64_T, num_batches_ranks.data(),
+                      1, MPI_UINT64_T, MPI_COMM_WORLD),
+        "GroupbyOutputState::RedistributeWork: MPI error on MPI_Allgather:");
 
     // 2. Use a deterministic algorithm to assign the number of
     // batches/rows that each rank needs to send to every other rank.
@@ -3662,12 +3681,16 @@ bool GroupbyState::GetGlobalIsLast(bool local_is_last) {
 
     if (this->parallel && local_is_last) {
         if (!this->is_last_barrier_started) {
-            MPI_Ibarrier(this->shuffle_comm, &this->is_last_request);
+            HANDLE_MPI_ERROR(
+                MPI_Ibarrier(this->shuffle_comm, &this->is_last_request),
+                "GroupbyState::GetGlobalIsLast: MPI error on MPI_Ibarrier:");
             this->is_last_barrier_started = true;
             return false;
         } else {
             int flag = 0;
-            MPI_Test(&this->is_last_request, &flag, MPI_STATUS_IGNORE);
+            HANDLE_MPI_ERROR(
+                MPI_Test(&this->is_last_request, &flag, MPI_STATUS_IGNORE),
+                "GroupbyState::GetGlobalIsLast: MPI error on MPI_Test:");
             if (flag) {
                 this->global_is_last = true;
             }
