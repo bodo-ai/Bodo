@@ -13,7 +13,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 import bodo
@@ -100,7 +99,7 @@ def test_drop_schema(if_exists, iceberg_filesystem_catalog, memory_leak_check):
         {
             "STATUS": pd.array(
                 [f"Schema '{schema_name}' successfully dropped."],
-                dtype=pd.ArrowDtype(pa.string()),
+                dtype=pd.StringDtype(),
             )
         }
     )

@@ -20,7 +20,7 @@ class GenerateDDLTypes(
     fun generateType(ddlNode: SqlNode): RelDataType {
         // All DDL types likely use a string type.
         val stringType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.VARCHAR), true)
-        val decimalType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.DECIMAL), true)
+        val bigIntType = typeFactory.createTypeWithNullability(typeFactory.createSqlType(SqlTypeName.BIGINT), true)
         val (fieldsNames, columnTypes) =
             when (ddlNode.kind) {
                 // DDL queries that only return a status message
@@ -111,8 +111,9 @@ class GenerateDDLTypes(
                                 stringType,
                                 stringType,
                                 // ROWS and BYTES are of type decimal(38, 0)
-                                decimalType,
-                                decimalType,
+                                // However we use BigInt due to Bodo inconsistencies
+                                bigIntType,
+                                bigIntType,
                                 stringType,
                                 stringType,
                                 stringType,
@@ -224,8 +225,9 @@ class GenerateDDLTypes(
                                 stringType,
                                 stringType,
                                 // ROWS and BYTES are of type decimal(38, 0)
-                                decimalType,
-                                decimalType,
+                                // However we use BigInt due to Bodo inconsistencies
+                                bigIntType,
+                                bigIntType,
                                 stringType,
                                 stringType,
                                 stringType,
