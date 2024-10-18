@@ -2134,6 +2134,9 @@ def test_series_operations(memory_leak_check, is_slow_run):
     def f_rpow(S1, S2):
         return S1.rpow(S2)
 
+    def f_pow(S1, S2):
+        return S1.pow(S2)
+
     def f_rsub(S1, S2):
         return S1.rsub(S2)
 
@@ -2169,6 +2172,7 @@ def test_series_operations(memory_leak_check, is_slow_run):
     check_func(f_rpow, (S1, S2))
     if not is_slow_run:
         return
+    check_func(f_pow, (S1, S2))
     check_func(f_rsub, (S1, S2))
     check_func(f_rmul, (S1, S2))
     check_func(f_radd, (S1, S2))
