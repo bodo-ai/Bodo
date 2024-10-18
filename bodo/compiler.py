@@ -53,6 +53,7 @@ import bodo.libs.re_ext  # noqa # side effect: initialize Numba extensions
 import bodo.libs.spark_extra
 import bodo.transforms
 import bodo.transforms.series_pass
+import bodo.transforms.type_inference
 import bodo.transforms.type_inference.typeinfer  # noqa # side effect: initialize Numba extensions
 import bodo.transforms.untyped_pass
 import bodo.utils
