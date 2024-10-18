@@ -381,7 +381,8 @@ def is_primary():
 
 
 def main():
-    if is_primary() and rank in bodo.get_nodes_first_ranks():
+    is_first_rank = rank in bodo.get_nodes_first_ranks()
+    if is_first_rank and is_primary():
         logger.info(f"rank {rank} waiting for query from endpoint ...")
         comm.allreduce(rank, op=MPI.SUM)
         uvicorn.run(app, port=5000, timeout_keep_alive=SQL_QUERY_TIMEOUT_SECONDS)
