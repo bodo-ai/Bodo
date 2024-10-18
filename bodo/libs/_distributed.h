@@ -95,8 +95,8 @@ static int get_elem_size(int type_enum) __UNUSED__;
 static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
                                int64_t* out_timestamp, int64_t* out_offset,
                                bool is_max) __UNUSED__;
-static void dist_reduce(char* in_ptr, char* out_ptr, int op,
-                        int type_enum) __UNUSED__;
+static void dist_reduce(char* in_ptr, char* out_ptr, int op, int type_enum,
+                        int64_t comm_ptr) __UNUSED__;
 static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
                            int op, int type_enum) __UNUSED__;
 template <typename Alloc>
@@ -117,10 +117,12 @@ static void dist_send(void* out, int size, int type_enum, int pe,
 static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
-                            bool allgather, int root) __UNUSED__;
+                            bool allgather, int root,
+                            int64_t comm_ptr = 0) __UNUSED__;
 static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
-                      bool allgather, int root) __UNUSED__;
+                      bool allgather, int root,
+                      int64_t comm_ptr = 0) __UNUSED__;
 static void c_scatterv(void* send_data, int* sendcounts, int* displs,
                        void* recv_data, int recv_count, int typ_enum, int root,
                        int64_t comm_ptr) __UNUSED__;
@@ -558,17 +560,19 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
     }
 }
 
-static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
-                        int type_enum) {
-    // printf("reduce value: %d\n", value);
+static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum,
+                        int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
-
-    // This is a hack because TimestampTZ's scalar representation isn't the same
-    // as it's array representation.
+    MPI_Comm comm = MPI_COMM_WORLD;
+    if (comm_ptr != 0) {
+        comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
+    }
 
     // argmax and argmin need special handling
     if (mpi_op == MPI_MAXLOC || mpi_op == MPI_MINLOC) {
+        // TODO: support intercomm in minloc/maxloc
+        assert(comm_ptr == 0);
         // since MPI's indexed types use 32 bit integers, we workaround by
         // using rank as index, then broadcasting the actual values from the
         // target rank.
@@ -583,9 +587,6 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
         MPI_Datatype val_rank_mpi_typ = get_val_rank_MPI_typ(type_enum);
         // copy input index_value to output
         memcpy(out_ptr, in_ptr, value_size + sizeof(int64_t));
-        // printf("rank:%d index:%lld value:%lf value_size:%d\n", rank,
-        //     *(int64_t*)in_ptr, *(double*)(in_ptr+sizeof(int64_t)),
-        //     value_size);
 
         // Determine the size of the pointer to allocate.
         // argmin/argmax in MPI communicates a struct of 2 values:
@@ -646,8 +647,7 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
                       MPI_COMM_WORLD);
 
         int target_rank = *((int*)(out_val_rank + struct_val_size));
-        // printf("rank:%d allreduce rank:%d val:%lf\n", rank, target_rank,
-        // *(double*)out_val_rank);
+
         MPI_Bcast(out_ptr, value_size + sizeof(int64_t), MPI_BYTE, target_rank,
                   MPI_COMM_WORLD);
         free(in_val_rank);
@@ -657,7 +657,7 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
 
     try {
         HANDLE_MPI_ERROR(
-            MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD),
+            MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
             "_distributed.h::dist_reduce:");
         return;
     } catch (const std::exception& e) {
@@ -922,27 +922,33 @@ static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
 }
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
-                            bool allgather, int root) {
+                            bool allgather, int root, int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    if (comm_ptr != 0) {
+        comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
+    }
     if (allgather)
-        MPI_Allgather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ,
-                      MPI_COMM_WORLD);
+        MPI_Allgather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, comm);
     else
-        MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, root,
-                   MPI_COMM_WORLD);
+        MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, root, comm);
     return;
 }
 
 static void c_gatherv(void* send_data, int sendcount, void* recv_data,
                       int* recv_counts, int* displs, int typ_enum,
-                      bool allgather, int root) {
+                      bool allgather, int root, int64_t comm_ptr) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    if (comm_ptr != 0) {
+        comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
+    }
     if (allgather)
         MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
-                       displs, mpi_typ, MPI_COMM_WORLD);
+                       displs, mpi_typ, comm);
     else
         MPI_Gatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
-                    displs, mpi_typ, root, MPI_COMM_WORLD);
+                    displs, mpi_typ, root, comm);
     return;
 }
 
@@ -1523,7 +1529,8 @@ void copy_gathered_null_bytes(uint8_t* null_bitmask,
  */
 std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                          int64_t n_cols, bool all_gather,
-                                         bool is_parallel, int mpi_root = 0);
+                                         bool is_parallel, int mpi_root = 0,
+                                         MPI_Comm* comm_ptr = nullptr);
 
 /**
  * @brief Gather an array_info
@@ -1539,4 +1546,5 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
  */
 std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                          bool all_gather, bool is_parallel,
-                                         int mpi_root, int n_pes, int myrank);
+                                         int mpi_root, int n_pes, int myrank,
+                                         MPI_Comm* comm_ptr = nullptr);

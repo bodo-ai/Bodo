@@ -96,6 +96,9 @@ def worker_loop(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
     """Main loop for the worker to listen and receive commands from driver_intercomm"""
+    # Stored last data value received from scatterv/bcast for testing gatherv purposes
+    last_received_data = None
+
     while True:
         logger.debug("Waiting for command")
         # TODO Change this to a wait that doesn't spin cycles
@@ -109,11 +112,20 @@ def worker_loop(
             logger.debug("Exiting...")
             return
         elif command == CommandType.BROADCAST.value:
-            bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
+            last_received_data = bodo.libs.distributed_api.bcast(
+                None, root=0, comm=spawner_intercomm
+            )
             logger.debug("Broadcast done")
         elif command == CommandType.SCATTER.value:
-            bodo.libs.distributed_api.scatterv(None, root=0, comm=spawner_intercomm)
+            last_received_data = bodo.libs.distributed_api.scatterv(
+                None, root=0, comm=spawner_intercomm
+            )
             logger.debug("Scatter done")
+        elif command == CommandType.GATHER.value:
+            bodo.libs.distributed_api.gatherv(
+                last_received_data, root=0, comm=spawner_intercomm
+            )
+            logger.debug("Gather done")
         else:
             raise ValueError(f"Unsupported command '{command}!")
 
