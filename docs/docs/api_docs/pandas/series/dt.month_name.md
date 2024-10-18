@@ -2,7 +2,11 @@
 
 `pandas.Series.dt.month_name(locale=None)`
 
-### Supported Arguments None
+### Argument Restrictions:
+ * `locale`: only supports default value `None`.
+
+!!! note
+	`pd.Series.dt.month_name` only supported on Series of `datetime64` data.
 
 ### Example Usage
 

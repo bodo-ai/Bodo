@@ -597,12 +597,16 @@ def is_overload_zero(val):
     return val == 0 or val == types.IntegerLiteral(0) or getattr(val, "value", -1) == 0
 
 
-def is_overload_str(val, const):
+def is_overload_const_str_equal(val, const):
     return (
         val == const
         or val == types.StringLiteral(const)
         or getattr(val, "value", -1) == const
     )
+
+
+def is_overload_str(val):
+    return isinstance(val, types.UnicodeType) or is_overload_constant_str(val)
 
 
 # TODO: refactor with get_literal_value()

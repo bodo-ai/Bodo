@@ -3,9 +3,15 @@ from types import NoneType
 
 from numba.core import types
 
+from bodo.hiframes.pd_series_ext import (
+    SeriesType,
+    is_dt64_series_typ,
+    is_timedelta64_series_typ,
+)
 from bodo.utils.typing import (
     BodoError,
     get_literal_value,
+    get_overload_const_str_len,
     is_iterable_type,
     is_literal_type,
     is_overload_bool,
@@ -14,6 +20,8 @@ from bodo.utils.typing import (
     is_overload_int,
     is_overload_none,
     is_overload_numeric_scalar,
+    is_overload_str,
+    is_str_arr_type,
 )
 
 _types_to_str = {
@@ -129,7 +137,7 @@ class PrimitiveTypeArgumentChecker(AbstractArgumentTypeChecker):
     def check_arg(self, context, path, arg_type):
         if not self.is_overload_typ(arg_type):
             raise BodoError(
-                f"{path}: Expected '{self.arg_name}' to be type {self.type_name}. Got: {arg_type}."
+                f"{path}: Expected '{self.arg_name}' to be a {self.type_name}. Got: {arg_type}."
             )
         return arg_type
 
@@ -160,11 +168,20 @@ class FloatScalarArgumentChecker(PrimitiveTypeArgumentChecker):
 
 class StringScalarArgumentChecker(PrimitiveTypeArgumentChecker):
     def __init__(self, arg_name):
-        is_overload_str = lambda t: isinstance(
-            t, types.UnicodeType
-        ) or is_overload_constant_str(t)
         super(StringScalarArgumentChecker, self).__init__(
             arg_name, "String", is_overload_str
+        )
+
+
+class CharScalarArgumentChecker(PrimitiveTypeArgumentChecker):
+    """Checks that a value is a String and checks length is 1 if it can be determined at compile time"""
+
+    def __init__(self, arg_name):
+        is_overload_const_char_or_str = lambda t: (
+            isinstance(t, types.UnicodeType)
+        ) or (is_overload_constant_str(t) and get_overload_const_str_len(t) == 1)
+        super(CharScalarArgumentChecker, self).__init__(
+            arg_name, "Character", is_overload_const_char_or_str
         )
 
 
@@ -188,7 +205,7 @@ class NumericScalarArgumentChecker(AbstractArgumentTypeChecker):
                 else "Integer, Float or Boolean"
             )
             raise BodoError(
-                f"{path}: Expected '{self.arg_name}' to be type {types_str}. Got: {arg_type}."
+                f"{path}: Expected '{self.arg_name}' to be a {types_str}. Got: {arg_type}."
             )
         return arg_type
 
@@ -225,6 +242,144 @@ class NumericSeriesBinOpChecker(AbstractArgumentTypeChecker):
         return "must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data"
 
 
+class AnySeriesArgumentChecker(AbstractArgumentTypeChecker):
+    """
+    Argument checker for explicitly stating/documenting Series with any data are supported
+    """
+
+    def __init__(self, arg_name, is_self=False):
+        self.arg_name = arg_name
+        self.display_arg_name = "self" if is_self else self.arg_name
+        self.is_self = is_self
+
+    def check_arg(self, context, path, arg_type):
+        if not isinstance(arg_type, SeriesType):
+            raise BodoError(f"{path}: Expected {self.arg_name} to be a Series. Got:.")
+        return arg_type
+
+    def explain_arg(self, context):
+        return "all Series types supported"
+
+
+class DatetimeLikeSeriesArgumentChecker(AnySeriesArgumentChecker):
+    """
+    Checker for documenting methods/attributes found in Series.dt
+    """
+
+    def __init__(self, arg_name, is_self=False, type="any"):
+        super(DatetimeLikeSeriesArgumentChecker, self).__init__(arg_name, is_self)
+        self.type = type
+
+        # any: datetime or timedelta types accepted
+        assert self.type in ["any", "datetime", "timedelta"]
+
+    def check_arg(self, context, path, arg_type):
+        """Check that arg_type is a Series of valid datetimelike data"""
+        # Access underlying Series type for XMethodType (using getattr to avoid the circular import)
+        series_type = getattr(arg_type, "stype", arg_type)
+
+        if (
+            self.type in ["any", "timedelta"] and is_timedelta64_series_typ(series_type)
+        ) or (self.type in ["any", "datetime"] and is_dt64_series_typ(series_type)):
+            return series_type
+
+        if self.type == "any":
+            supported_types = "datetime64 or timedelta64"
+        else:
+            supported_types = f"{self.type}64"
+
+        raise BodoError(
+            f"{path}: Expected '{self.display_arg_name}' to be a Series of {supported_types} data. Got: {series_type}"
+        )
+
+    def explain_arg(self, context):
+        supported_types = (
+            "`datetime64` or `timedelta64`"
+            if self.type == "any"
+            else f"`{self.type}64`"
+        )
+        prefix = "must be " if not self.is_self else "only supported on "
+        return f"{prefix}Series of {supported_types} data"
+
+
+class NumericSeriesArgumentChecker(AnySeriesArgumentChecker):
+    """For Series Arguments that require numeric data (Float or Integer)"""
+
+    def check_arg(self, context, path, arg_type):
+        if not isinstance(arg_type, SeriesType) or not isinstance(
+            arg_type.dtype, types.Number
+        ):
+            raise BodoError(
+                f"{path}: Expected '{self.display_arg_name}' to be a Series of Float or Integer data. Got: {arg_type}"
+            )
+        return arg_type
+
+    def explain_arg(self, context):
+        prefix = "must be " if not self.is_self else "only supported on "
+        return f"{prefix}Series of `Integer` or `Float` data"
+
+
+class StringSeriesArgumentChecker(AnySeriesArgumentChecker):
+    """For Series arguments that require String data"""
+
+    def check_arg(self, context, path, arg_type):
+        """Check that the underlying data of Seires is a valid string type"""
+        # Access underlying Series type for XMethodType (using getattr to avoid the circular import)
+        series_type = getattr(arg_type, "stype", arg_type)
+        if not (
+            isinstance(series_type, SeriesType) and is_str_arr_type(series_type.data)
+        ):
+            raise BodoError(
+                f"{path}: Expected '{self.display_arg_name}' to be a Series of String data. Got: {series_type}."
+            )
+        return series_type
+
+    def explain_arg(self, context):
+        prefix = "must be " if not self.is_self else "only supported on "
+        return f"{prefix}Series of `String` data"
+
+
+class GenericArgumentChecker(AbstractArgumentTypeChecker):
+    """
+    Generic Argument type checker that accepts custom logic for check and explain.
+    """
+
+    def __init__(self, arg_name, check_fn, explain_fn, is_self=False):
+        """
+        Intialize an instance of GenericArgumentChecker with custom check and explain
+        logic.
+
+        Args:
+            arg_name (str): The name of the argument.
+            check_fn (Callable) a lambda which accepts a context containing all
+                previously processed arguments and a type and returns a tuple where the
+                first value indicates whether the argument is the correct type, if True
+                then the second value contains the new argument type. If False, the
+                second value is a string for error reporting.
+            explain_str (Callable): a lambda that accepts a context containing all
+                previously processed arguments and returns a string description of
+                the typing rules for the argument.
+            is_self (bool, optional): If true, display the argument name as "self" in
+                error messages. Defaults to False.
+        """
+        self.arg_name = arg_name
+        self.display_arg_name = "self" if is_self else self.arg_name
+        self.check_fn = check_fn
+        self.explain_fn = explain_fn
+
+    def check_arg(self, context, path, arg_type):
+        success, err_or_typ = self.check_fn(context, arg_type)
+        if not success:
+            raise BodoError(
+                f"{path}: '{self.display_arg_name}' {err_or_typ}. Got: {arg_type}"
+            )
+
+        return err_or_typ
+
+    def explain_arg(self, context):
+        return self.explain_fn(context)
+
+
 class OverloadArgumentsChecker:
     def __init__(self, argument_checkers):
         self.argument_checkers = {
@@ -246,7 +401,7 @@ class OverloadArgumentsChecker:
                 self.set_context(arg_name, new_arg)
 
     def explain_args(self):
-        """Creates a dictioanry mapping argument names to their description"""
+        """Creates a dictionary mapping argument names to their description"""
         return {
             arg_name: arg_checker.explain_arg(self.context)
             for arg_name, arg_checker in self.argument_checkers.items()

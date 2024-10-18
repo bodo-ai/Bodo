@@ -104,6 +104,7 @@ from bodo.utils.typing import (
     is_literal_type,
     is_nullable,
     is_overload_bool,
+    is_overload_const_str_equal,
     is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_list,
@@ -2638,9 +2639,6 @@ def join_dummy(
 @infer_global(join_dummy)
 class JoinTyper(AbstractTemplate):
     def generic(self, args, kws):
-        from bodo.hiframes.pd_dataframe_ext import DataFrameType
-        from bodo.utils.typing import is_overload_str
-
         assert not kws
         (
             left_df,
@@ -2810,7 +2808,7 @@ class JoinTyper(AbstractTemplate):
         # Convert range index to numeric index
         convert_range = False
         index_to_nullable = False
-        if left_index and right_index and not is_overload_str(how, "asof"):
+        if left_index and right_index and not is_overload_const_str_equal(how, "asof"):
             index_typ = left_df.index
             convert_range = True
         elif left_index and not right_index:

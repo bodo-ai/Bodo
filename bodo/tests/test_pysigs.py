@@ -102,6 +102,18 @@ def signatures_equal(pysig, overload_sig, changed_defaults):
     return True
 
 
+def _skip_pysig_check(path):
+    """
+    Returns whether to skip the check that pysig for **path** is consistent with
+    external api documentation.
+    """
+    # TODO (fix in pandas): Series.dt.xxx methods have generic signatures that look
+    # like (self, *arg, **kwargs)
+    if path[:2] == ["Series", "dt"]:
+        return True
+    return False
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "get_apis, keys", [pytest.param(_get_series_apis, ["Series"], id="series")]
@@ -136,7 +148,9 @@ def test_pandas_pysigs(get_apis, keys):
                 invalid_ser_attrs.add(api)
 
             # check that the pysig matches with pandas API docs
-            elif isinstance(template, _OverloadDeclarativeMethodTemplate):
+            elif isinstance(
+                template, _OverloadDeclarativeMethodTemplate
+            ) and not _skip_pysig_check(path):
                 pysig = _get_pysig_from_path(path)
                 overload_sig = template.get_signature()
                 changed_defaults = getattr(template, "changed_defaults", frozenset())

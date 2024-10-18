@@ -47,6 +47,12 @@ from bodo.hiframes.pd_timestamp_ext import (
     pd_timestamp_tz_naive_type,
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
+from bodo.ir.argument_checkers import (
+    NumericScalarArgumentChecker,
+    NumericSeriesArgumentChecker,
+    NumericSeriesBinOpChecker,
+    OverloadArgumentsChecker,
+)
 from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import (
@@ -4607,6 +4613,28 @@ split_logical_binops_funcs = [
     operator.and_,
 ]
 
+# These explicit binops use overload_method_declarative to generate documentation
+# as well as perform check that the arguments are valid at compile time
+binop_overload_declarative_prototypes = ["pow"]
+
+
+def overload_binop_declarative(name, overload_impl):
+    """Create overload declarative method template prototype for binop **name**"""
+    overload_method_declarative(
+        SeriesType,
+        name,
+        f"pd.Series.{name}",
+        unsupported_args={"level", "axis"},
+        method_args_checker=OverloadArgumentsChecker(
+            [
+                NumericSeriesArgumentChecker("S", is_self=True),
+                NumericSeriesBinOpChecker("other"),
+                NumericScalarArgumentChecker("fill_value", is_optional=True),
+            ]
+        ),
+        description=None,
+    )(overload_impl)
+
 
 def _install_explicit_binary_ops():
     for op, list_name in explicit_binop_funcs_two_ways.items():
@@ -4614,10 +4642,14 @@ def _install_explicit_binary_ops():
             overload_impl = create_explicit_binary_op_overload(op)
             overload_reverse_impl = create_explicit_binary_reverse_op_overload(op)
             r_name = "r" + name
-            overload_method(SeriesType, name, no_unliteral=True)(overload_impl)
-            overload_method(SeriesType, r_name, no_unliteral=True)(
-                overload_reverse_impl
-            )
+            if name in binop_overload_declarative_prototypes:
+                overload_binop_declarative(name, overload_impl)
+                overload_binop_declarative(r_name, overload_reverse_impl)
+            else:
+                overload_method(SeriesType, name, no_unliteral=True)(overload_impl)
+                overload_method(SeriesType, r_name, no_unliteral=True)(
+                    overload_reverse_impl
+                )
             explicit_binop_funcs.add(name)
     for op, name in explicit_binop_funcs_single.items():
         overload_impl = create_explicit_binary_op_overload(op)

@@ -134,9 +134,11 @@ def test_pad_fillchar_nonchar(test_sr, memory_leak_check):
     def impl2(test_sr):
         return test_sr.str.pad(width=13, fillchar="**")
 
-    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+    expected_err_msg = "Expected 'fillchar' to be a Character. Got"
+
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl)(test_sr)
-    with pytest.raises(BodoError, match="fillchar must be a character, not"):
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl2)(test_sr)
 
 
@@ -148,7 +150,7 @@ def test_pad_width_noint(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.pad(width="1", fillchar="*")
 
-    with pytest.raises(BodoError, match="expected an int object"):
+    with pytest.raises(BodoError, match="Expected 'width' to be a Integer. Got:"):
         bodo.jit(impl)(test_sr)
 
 
@@ -163,9 +165,11 @@ def test_pad_side_invalid(test_sr, memory_leak_check):
     def impl2(test_sr):
         return test_sr.str.pad(width=13, side=123, fillchar="*")
 
-    with pytest.raises(BodoError, match="Invalid Side"):
+    expected_err_msg = 'Expected \'side\' to be a compile time constant and must be "left", "right" or "both". Got:'
+
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl)(test_sr)
-    with pytest.raises(BodoError, match="Invalid Side"):
+    with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl2)(test_sr)
 
 
@@ -461,7 +465,7 @@ def test_contains_flags(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", flags="x")
 
-    with pytest.raises(BodoError, match="Expected 'flags' to be type Integer"):
+    with pytest.raises(BodoError, match="Expected 'flags' to be a Integer"):
         bodo.jit(impl)(test_sr)
 
 

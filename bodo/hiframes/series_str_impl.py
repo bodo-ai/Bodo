@@ -34,10 +34,13 @@ from bodo.hiframes.split_impl import (
     string_array_split_view_type,
 )
 from bodo.ir.argument_checkers import (
+    CharScalarArgumentChecker,
     ConstantArgumentChecker,
     IntegerScalarArgumentChecker,
+    NDistinctValueArgumentChecker,
     OverloadArgumentsChecker,
     StringScalarArgumentChecker,
+    StringSeriesArgumentChecker,
 )
 from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.array import get_search_regex
@@ -606,6 +609,7 @@ def is_regex_unsupported(pat):
     unsupported_args={"na"},
     method_args_checker=OverloadArgumentsChecker(
         [
+            StringSeriesArgumentChecker("S_str", is_self=True),
             StringScalarArgumentChecker("pat"),
             ConstantArgumentChecker("case", (bool,)),
             IntegerScalarArgumentChecker("flags"),
@@ -1212,19 +1216,23 @@ def _install_ljust_rjust_center():
 _install_ljust_rjust_center()
 
 
-@overload_method(SeriesStrMethodType, "pad", no_unliteral=True)
+@overload_method_declarative(
+    SeriesStrMethodType,
+    "pad",
+    path="pd.Series.str.pad",
+    unsupported_args={},
+    method_args_checker=OverloadArgumentsChecker(
+        [
+            StringSeriesArgumentChecker("S_str", is_self=True),
+            IntegerScalarArgumentChecker("width"),
+            NDistinctValueArgumentChecker("side", ["left", "right", "both"]),
+            CharScalarArgumentChecker("fillchar"),
+        ]
+    ),
+    description=None,
+    no_unliteral=True,
+)
 def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
-    common_validate_padding("pad", width, fillchar)
-    if is_overload_constant_str(side):
-        if get_overload_const_str(side) not in [
-            "left",
-            "right",
-            "both",
-        ]:  # numba does not catch this case. Causes SegFault
-            raise BodoError("Series.str.pad(): Invalid Side")
-    else:
-        raise BodoError("Series.str.pad(): Invalid Side")
-
     # optimized version for dictionary encoded arrays
     if S_str.stype.data == bodo.dict_str_arr_type:
 
