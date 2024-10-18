@@ -3,6 +3,7 @@ from types import NoneType
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core import types
 
 import bodo
 import bodo.hiframes
@@ -10,17 +11,21 @@ import bodo.hiframes.series_impl
 from bodo.ir.argument_checkers import (
     BooleanScalarArgumentChecker,
     ConstantArgumentChecker,
+    DatetimeLikeSeriesArgumentChecker,
     FloatScalarArgumentChecker,
+    GenericArgumentChecker,
     IntegerScalarArgumentChecker,
     NDistinctValueArgumentChecker,
     NumericScalarArgumentChecker,
+    NumericSeriesArgumentChecker,
     NumericSeriesBinOpChecker,
     OverloadArgumentsChecker,
     StringScalarArgumentChecker,
+    StringSeriesArgumentChecker,
 )
 from bodo.ir.declarative_templates import overload_method_declarative
-from bodo.tests.utils import run_rank0
-from bodo.utils.typing import BodoError
+from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError, is_overload_const_str_equal
 
 
 def _val_to_string(val):
@@ -49,7 +54,32 @@ def _val_to_string(val):
     return str(val)
 
 
-@run_rank0
+def _val_to_string(val):
+    """
+    Embed *val* as it's constructor in a string.
+    *val* can be a Series, Index, RangeIndex, numpy array,
+    DataFrame, str, int, float or bool
+    """
+    if isinstance(val, pd.Series):
+        elems_str = ",".join(map(_val_to_string, val.array))
+        return f"pd.Series([{elems_str}])"
+    if isinstance(val, pd.RangeIndex):
+        return f"pd.RangeIndex(start={val.start}, stop={val.stop}, step={val.step})"
+    if isinstance(val, pd.Index):
+        elems_str = ",".join(map(str, val.array))
+        return f"pd.Index([{elems_str}])"
+    if isinstance(val, np.ndarray):
+        return f"np.array({list(val)})"
+    if isinstance(val, pd.DataFrame):
+        df_dict = dict(val)
+        for key, val in df_dict.items():
+            df_dict[key] = list(val)
+        return f"pd.DataFrame({df_dict})"
+    if isinstance(val, str):
+        return f'"{val}"'
+    return str(val)
+
+
 @pytest.mark.parametrize(
     "args, kwargs, expected_err_msg",
     [
@@ -130,7 +160,6 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
         delattr(bodo.hiframes.series_impl, "overload_series_do_something")
 
 
-@run_rank0
 @pytest.mark.parametrize(
     "use_constant",
     [
@@ -147,25 +176,25 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
         pytest.param(
             (1, 0.0),
             {"arg3": True, "arg4": 2},
-            r"pd.Series.do_something2\(\): Expected 'arg1' to be type String. Got:",
+            r"pd.Series.do_something2\(\): Expected 'arg1' to be a String. Got:",
             id="str_error_message",
         ),
         pytest.param(
             ("hello", 0),
             {"arg3": True, "arg4": 2},
-            r"pd.Series.do_something2\(\): Expected 'arg2' to be type Float. Got:",
+            r"pd.Series.do_something2\(\): Expected 'arg2' to be a Float. Got:",
             id="float_error_message",
         ),
         pytest.param(
             ("hello", 0.0),
             {"arg3": 23, "arg4": 2},
-            r"pd.Series.do_something2\(\): Expected 'arg3' to be type Boolean. Got:",
+            r"pd.Series.do_something2\(\): Expected 'arg3' to be a Boolean. Got:",
             id="bool_error_message",
         ),
         pytest.param(
             ("hello", 0.0),
             {"arg3": True, "arg4": 2.71},
-            r"pd.Series.do_something2\(\): Expected 'arg4' to be type Integer. Got:",
+            r"pd.Series.do_something2\(\): Expected 'arg4' to be a Integer. Got:",
             id="int_error_message",
         ),
     ],
@@ -229,7 +258,6 @@ def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_co
         delattr(bodo.hiframes.series_impl, "overload_series_do_something2")
 
 
-@run_rank0
 @pytest.mark.parametrize(
     "use_constant",
     [
@@ -298,7 +326,7 @@ def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_co
         pytest.param(
             pd.Index([1, 2, 3, 4, 5]),
             "hello",
-            r"pd.Series.sub2\(\): Expected 'fill_value' to be type Integer, Float, Boolean or None. Got:",
+            r"pd.Series.sub2\(\): Expected 'fill_value' to be a Integer, Float, Boolean or None. Got:",
             id="scalar_dtype_err",
         ),
     ],
@@ -362,3 +390,175 @@ def test_numeric_series_argument_checkers(
 
     finally:
         delattr(bodo.hiframes.series_impl, "overload_series_sub2")
+
+
+@pytest.mark.parametrize(
+    "S, arg1, arg2, expected_err_msg",
+    [
+        pytest.param(
+            pd.Series([1, 2, 3, 4]),
+            pd.Series(["1", "2", "3", "4"]),
+            pd.Series([np.datetime64("2007-01-01T03:30")], dtype="datetime64[ns]"),
+            None,
+            id="no_errors",
+        ),
+        pytest.param(
+            pd.Series(["this", "is", "a", "string"]),
+            pd.Series(["1", "2", "3", "4"]),
+            pd.Series([np.datetime64("2007-01-01T03:30")], dtype="datetime64[ns]"),
+            "Expected 'self' to be a Series of Float or Integer data. Got:",
+            id="self_error",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4]),
+            pd.Series(["1", "2", "3", "4"]),
+            pd.Series([np.timedelta64(i) for i in range(5)], dtype="timedelta64[ns]"),
+            "Expected 'arg2' to be a Series of datetime64 data. Got:",
+            id="datetimelike_series_error",
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, 4]),
+            pd.Series([[1, 2, 3], [2, 3, 4]]),
+            pd.Series([np.datetime64("2007-01-01T03:30")], dtype="datetime64[ns]"),
+            "Expected 'arg1' to be a Series of String data. Got:",
+            id="string_series_error",
+        ),
+    ],
+)
+def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
+    """Verify that the numeric argument checkers for Series methods work as expected using Series.sub"""
+
+    @overload_method_declarative(
+        bodo.SeriesType,
+        "do_something3",
+        path="pd.Series.do_something3",
+        unsupported_args=[],
+        description="This method adds",
+        method_args_checker=OverloadArgumentsChecker(
+            [
+                NumericSeriesArgumentChecker("S", is_self=True),
+                StringSeriesArgumentChecker("arg1"),
+                DatetimeLikeSeriesArgumentChecker("arg2", type="datetime"),
+            ]
+        ),
+    )
+    def overload_series_do_something3(S, arg1, arg2):
+        def impl(S, arg1, arg2):
+            return 1
+
+        return impl
+
+    setattr(
+        bodo.hiframes.series_impl,
+        "overload_series_do_something3",
+        overload_series_do_something3,
+    )
+
+    try:
+
+        def test_impl(S, arg1, arg2):
+            return S.do_something3(arg1, arg2)
+
+        def test_impl2(S, arg1, arg2):
+            return S.do_something3(arg1.str, arg2.dt)
+
+        if expected_err_msg is None:
+            # expect to compile successfully
+            check_func(test_impl, (S, arg1, arg2), py_output=1)
+            check_func(test_impl2, (S, arg1, arg2), py_output=1)
+        else:
+            with pytest.raises(BodoError, match=expected_err_msg):
+                bodo.jit(test_impl)(S, arg1, arg2)
+            with pytest.raises(BodoError, match=expected_err_msg):
+                bodo.jit(test_impl2)(S, arg1, arg2)
+
+    finally:
+        delattr(bodo.hiframes.series_impl, "overload_series_do_something3")
+
+
+@pytest.mark.parametrize(
+    "S, arg1, expected_err_msg",
+    [
+        pytest.param(pd.Series([5, 4, 3, 2, 1]), "int", None, id="no_error"),
+        pytest.param(
+            pd.Series([5, 4, 3, 2, 1]),
+            "float",
+            "only accepts the constant value 'int' for Series of integer data",
+            id="float_error",
+        ),
+        pytest.param(
+            pd.Series([5.0, 4.0, 3.0, 2.0, 1.0]),
+            "int",
+            "only accepts the constant value 'float' for Series of float data",
+            id="int_error",
+        ),
+    ],
+)
+def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
+    """
+    Test that generic argument checker works. In this example, argument arg1 must be
+    of of ('int', 'float'), S can be either a Series of integers or a Series of floats,
+    and if S is a Series of ints then arg1 must be 'int' and if it is a Series of floats
+    then arg1 must be 'float'
+    """
+
+    def check_fn(context, arg_typ):
+        series_type = context["S"]
+        if isinstance(
+            series_type.dtype, types.Integer
+        ) and not is_overload_const_str_equal(arg_typ, "int"):
+            return (
+                False,
+                "only accepts the constant value 'int' for Series of integer data",
+            )
+        elif isinstance(
+            series_type.dtype, types.Float
+        ) and not is_overload_const_str_equal(arg_typ, "float"):
+            return (
+                False,
+                "only accepts the constant value 'float' for Series of float data",
+            )
+        return True, arg_typ
+
+    def explain_fn(context):
+        return 'only supports constant value "int" for Series of integer data and "float" for Series of float data.'
+
+    @overload_method_declarative(
+        bodo.SeriesType,
+        "do_something4",
+        path="pd.Series.do_something4",
+        unsupported_args=[],
+        description="This method adds",
+        method_args_checker=OverloadArgumentsChecker(
+            [
+                NumericSeriesArgumentChecker("S", is_self=True),
+                GenericArgumentChecker("arg1", check_fn, explain_fn),
+            ]
+        ),
+    )
+    def overload_series_do_something4(S, arg1):
+        def impl(S, arg1):
+            return 1
+
+        return impl
+
+    setattr(
+        bodo.hiframes.series_impl,
+        "overload_series_do_something4",
+        overload_series_do_something4,
+    )
+
+    try:
+
+        def test_impl(S):
+            return S.do_something4(arg1)
+
+        if expected_err_msg is None:
+            # expect to compile successfully
+            check_func(test_impl, (S,), py_output=1)
+        else:
+            with pytest.raises(BodoError, match=expected_err_msg):
+                bodo.jit(test_impl)(S)
+
+    finally:
+        delattr(bodo.hiframes.series_impl, "overload_series_do_something4")

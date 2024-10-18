@@ -26,6 +26,11 @@ from bodo.hiframes.pd_series_ext import (
     get_series_name,
     init_series,
 )
+from bodo.ir.argument_checkers import (
+    DatetimeLikeSeriesArgumentChecker,
+    OverloadArgumentsChecker,
+)
+from bodo.ir.declarative_templates import overload_method_declarative
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.utils.typing import (
     BodoError,
@@ -210,12 +215,34 @@ def create_date_method_overload(method):
     return overload_method
 
 
+# These methods use overload_method_declarative to generate documentation
+# as well as perform check that the Series data is datetime at compile time
+datetime_overload_declarative_prototypes = ["month_name"]
+
+
 def _install_date_methods():
     for method in bodo.hiframes.pd_timestamp_ext.date_methods:
         overload_impl = create_date_method_overload(method)
-        overload_method(SeriesDatetimePropertiesType, method, inline="always")(
-            overload_impl
-        )
+        if method in datetime_overload_declarative_prototypes:
+            overload_method_declarative(
+                SeriesDatetimePropertiesType,
+                method,
+                path=f"pd.Series.dt.{method}",
+                unsupported_args={"locale"},
+                method_args_checker=OverloadArgumentsChecker(
+                    [
+                        DatetimeLikeSeriesArgumentChecker(
+                            "S_dt", type="datetime", is_self=True
+                        ),
+                    ]
+                ),
+                description=None,
+                inline="always",
+            )(overload_impl)
+        else:
+            overload_method(SeriesDatetimePropertiesType, method, inline="always")(
+                overload_impl
+            )
 
 
 _install_date_methods()

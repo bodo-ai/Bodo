@@ -2,16 +2,14 @@
 
 `pandas.Series.rpow(other, level=None, fill_value=None, axis=0)`
 
-### Supported Arguments
-
-| argument                      | datatypes                                                                                                  |
-|-------------------------------|------------------------------------------------------------------------------------------------------------|
-| `other`                       | <ul><li>   numeric scalar </li><li> array with numeric data </li><li>  Series with numeric data </li></ul> |
-| `fill_value`                  | numeric scalar                                                                                             |
+### Argument Restrictions:
+ * `other`: must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data.
+ * `level`: only supports default value `None`.
+ * `fill_value`: must be `Integer`, `Float`, `Boolean`, or `None`.
+ * `axis`: only supports default value `0`.
 
 !!! note
-    `Series.rpow` is only supported on Series of numeric data.
-
+	`pd.Series.rpow` only supported on Series of `Integer` or `Float` data.
 
 ### Example Usage
 

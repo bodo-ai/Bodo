@@ -83,6 +83,15 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             else:
                 argument_restrictions_str += "None."
 
+        # Separate restriction on "self" argument from other arguments for clarity
+        supported_types_str = ""
+        if params_list[0].name in arg_restrictions:
+            supported_types_str += (
+                "\n\n!!! note\n\t"
+                f"`{self.path}` {arg_restrictions[params_list[0].name]}."
+            )
+        argument_restrictions_str += supported_types_str
+
         # Defaults that have changed between Bodo and Package (optional)
         changed_defaults_str = ""
         for changed_arg in self.changed_defaults:
