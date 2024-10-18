@@ -17,6 +17,7 @@ class CommandType(str, Enum):
     EXIT = "exit"
     BROADCAST = "broadcast"
     SCATTER = "scatter"
+    GATHER = "gather"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):

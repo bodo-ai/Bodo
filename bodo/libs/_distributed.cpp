@@ -1,5 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_distributed.h"
+#include <mpi.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -642,13 +643,29 @@ int MPI_Gengatherv(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
 
 std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                          bool all_gather, bool is_parallel,
-                                         int mpi_root, int n_pes, int myrank) {
+                                         int mpi_root, int n_pes, int myrank,
+                                         MPI_Comm *comm_ptr) {
     int64_t n_rows = in_arr->length;
     int64_t n_sub_elems = in_arr->n_sub_elems();
+
+    MPI_Comm comm = MPI_COMM_WORLD;
+    bool is_receiver = (myrank == mpi_root);
+    bool is_intercomm = false;
+    if (comm_ptr != nullptr) {
+        comm = *comm_ptr;
+        is_intercomm = true;
+        is_receiver = (mpi_root == MPI_ROOT);
+        if (is_receiver) {
+            MPI_Comm_remote_size(*comm_ptr, &n_pes);
+            n_rows = 0;
+            n_sub_elems = 0;
+        }
+    }
+
     int64_t arr_gath_s[2] = {n_rows, n_sub_elems};
     bodo::vector<int64_t> arr_gath_r(2 * n_pes);
     MPI_Gengather(arr_gath_s, 2, MPI_LONG_LONG_INT, arr_gath_r.data(), 2,
-                  MPI_LONG_LONG_INT, mpi_root, MPI_COMM_WORLD, all_gather);
+                  MPI_LONG_LONG_INT, mpi_root, comm, all_gather);
 
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
@@ -692,8 +709,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             int n_bytes = (n_rows + 7) >> 3;
             MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ, tmp_data_bytes.data(),
                            recv_count_bytes.data(), recv_disp_bytes.data(),
-                           mpi_typ, mpi_root, MPI_COMM_WORLD, all_gather);
-            if (myrank == mpi_root || all_gather) {
+                           mpi_typ, mpi_root, comm, all_gather);
+            if (is_receiver || all_gather) {
                 out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
                                                 dtype, -1, 0, num_categories);
                 uint8_t *data_arr_o = (uint8_t *)out_arr->data1();
@@ -703,14 +720,14 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         } else {
             MPI_Datatype mpi_typ = get_MPI_typ(dtype);
             char *data1_ptr = nullptr;
-            if (myrank == mpi_root || all_gather) {
+            if (is_receiver || all_gather) {
                 out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
                                                 dtype, -1, 0, num_categories);
                 data1_ptr = out_arr->data1();
             }
             MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
-                           mpi_root, MPI_COMM_WORLD, all_gather);
+                           mpi_root, comm, all_gather);
         }
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
@@ -721,7 +738,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             n_rows_tot += arr_gath_r[2 * i_p];
         char *data1_ptr = nullptr;
         char *data2_ptr = nullptr;
-        if (myrank == mpi_root || all_gather) {
+        if (is_receiver || all_gather) {
             out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type, dtype,
                                             -1, 0, num_categories);
             data1_ptr = out_arr->data1();
@@ -729,10 +746,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         }
         MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
                        rows_counts.data(), rows_disps.data(), mpi_typ, mpi_root,
-                       MPI_COMM_WORLD, all_gather);
+                       comm, all_gather);
         MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
                        rows_counts.data(), rows_disps.data(), mpi_typ, mpi_root,
-                       MPI_COMM_WORLD, all_gather);
+                       comm, all_gather);
     } else if (arr_type == bodo_array_type::STRING) {
         MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
         MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
@@ -745,7 +762,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         }
         // Doing the characters
         char *data1_ptr = nullptr;
-        if (myrank == mpi_root || all_gather) {
+        if (is_receiver || all_gather) {
             out_arr =
                 alloc_array_top_level(n_rows_tot, n_chars_tot, -1, arr_type,
                                       dtype, -1, 0, num_categories);
@@ -761,7 +778,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         }
         MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
                        char_counts.data(), char_disps.data(), mpi_typ8,
-                       mpi_root, MPI_COMM_WORLD, all_gather);
+                       mpi_root, comm, all_gather);
         // Collecting the offsets data
         bodo::vector<uint32_t> list_count_loc(n_rows);
         offset_t *offsets_i = (offset_t *)in_arr->data2();
@@ -774,9 +791,9 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         bodo::vector<uint32_t> list_count_tot(n_rows_tot);
         MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
                        list_count_tot.data(), rows_counts.data(),
-                       rows_disps.data(), mpi_typ32, mpi_root, MPI_COMM_WORLD,
+                       rows_disps.data(), mpi_typ32, mpi_root, comm,
                        all_gather);
-        if (myrank == mpi_root || all_gather) {
+        if (is_receiver || all_gather) {
             offset_t *offsets_o = (offset_t *)out_arr->data2();
             offsets_o[0] = 0;
             for (int64_t pos = 0; pos < n_rows_tot; pos++) {
@@ -786,12 +803,34 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
     } else if (arr_type == bodo_array_type::DICT) {
         // Note: We need to revisit if gather_table should be a no-op if
         // is_parallel=False
-        make_dictionary_global_and_unique(in_arr, true);
+        if (!(is_receiver && is_intercomm)) {
+            make_dictionary_global_and_unique(in_arr, true);
+        }
+        std::shared_ptr<array_info> dict_arr = in_arr->child_arrays[0];
+
+        // Workers need to send dictionary to receiver in the intercomm case
+        if (is_intercomm) {
+            std::shared_ptr<array_info> dict_to_send = dict_arr;
+
+            // Use gather to send dictionary slices to receiver
+            // TODO(ehsan): use point-to-point array communication when
+            // available
+            if (!is_receiver) {
+                int64_t start = dist_get_start(dict_arr->length, n_pes, myrank);
+                int64_t end = dist_get_end(dict_arr->length, n_pes, myrank);
+                int64_t size = end - start;
+                std::vector<int64_t> slice_inds(size);
+                std::iota(slice_inds.begin(), slice_inds.end(), start);
+                dict_to_send =
+                    RetrieveArray_SingleColumn(dict_arr, slice_inds, false);
+            }
+            dict_arr = gather_array(dict_to_send, false, is_parallel, mpi_root,
+                                    n_pes, myrank, comm_ptr);
+        }
         out_arr = gather_array(in_arr->child_arrays[1], all_gather, is_parallel,
-                               mpi_root, n_pes, myrank);
-        if (all_gather || myrank == mpi_root) {
-            out_arr =
-                create_dict_string_array(in_arr->child_arrays[0], out_arr);
+                               mpi_root, n_pes, myrank, comm_ptr);
+        if (all_gather || is_receiver) {
+            out_arr = create_dict_string_array(dict_arr, out_arr);
         }
     } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
         // Computing the total number of rows.
@@ -806,7 +845,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         // Copy the UTC timestamp and offset minutes buffers
         char *data1_ptr = nullptr;
         char *data2_ptr = nullptr;
-        if (myrank == mpi_root || all_gather) {
+        if (is_receiver || all_gather) {
             out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type, dtype,
                                             -1, 0, num_categories);
             data1_ptr = out_arr->data1();
@@ -814,10 +853,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         }
         MPI_Gengatherv(in_arr->data1(), n_rows, utc_mpi_typ, data1_ptr,
                        rows_counts.data(), rows_disps.data(), utc_mpi_typ,
-                       mpi_root, MPI_COMM_WORLD, all_gather);
+                       mpi_root, comm, all_gather);
         MPI_Gengatherv(in_arr->data2(), n_rows, offset_mpi_typ, data2_ptr,
                        rows_counts.data(), rows_disps.data(), offset_mpi_typ,
-                       mpi_root, MPI_COMM_WORLD, all_gather);
+                       mpi_root, comm, all_gather);
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_rows_tot = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
@@ -834,12 +873,12 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         MPI_Datatype mpi_typ64 = get_MPI_typ(Bodo_CTypes::UINT64);
         MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ64,
                        list_count_tot.data(), rows_counts.data(),
-                       rows_disps.data(), mpi_typ64, mpi_root, MPI_COMM_WORLD,
+                       rows_disps.data(), mpi_typ64, mpi_root, comm,
                        all_gather);
         // Gathering inner array
         out_arr = gather_array(in_arr->child_arrays.front(), all_gather,
-                               is_parallel, mpi_root, n_pes, myrank);
-        if (myrank == mpi_root || all_gather) {
+                               is_parallel, mpi_root, n_pes, myrank, comm_ptr);
+        if (is_receiver || all_gather) {
             out_arr = alloc_array_item(n_rows_tot, out_arr);
             offset_t *offsets_o = (offset_t *)out_arr->data1();
             offsets_o[0] = 0;
@@ -848,7 +887,7 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             }
         }
     } else if (arr_type == bodo_array_type::STRUCT) {
-        if (myrank == mpi_root || all_gather) {
+        if (is_receiver || all_gather) {
             int64_t n_rows_tot = 0;
             for (int i_p = 0; i_p < n_pes; i_p++) {
                 n_rows_tot += arr_gath_r[2 * i_p];
@@ -856,22 +895,22 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             std::vector<std::shared_ptr<array_info>> child_arrays;
             child_arrays.reserve(in_arr->child_arrays.size());
             for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
-                child_arrays.push_back(gather_array(in_arr->child_arrays[i],
-                                                    all_gather, is_parallel,
-                                                    mpi_root, n_pes, myrank));
+                child_arrays.push_back(gather_array(
+                    in_arr->child_arrays[i], all_gather, is_parallel, mpi_root,
+                    n_pes, myrank, comm_ptr));
             }
             out_arr = alloc_struct(n_rows_tot, std::move(child_arrays));
         } else {
             for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
                 gather_array(in_arr->child_arrays[i], all_gather, is_parallel,
-                             mpi_root, n_pes, myrank);
+                             mpi_root, n_pes, myrank, comm_ptr);
             }
         }
     } else if (arr_type == bodo_array_type::MAP) {
         std::shared_ptr<array_info> out_arr_item =
             gather_array(in_arr->child_arrays[0], all_gather, is_parallel,
-                         mpi_root, n_pes, myrank);
-        if (all_gather || myrank == mpi_root) {
+                         mpi_root, n_pes, myrank, comm_ptr);
+        if (is_receiver || all_gather) {
             out_arr = alloc_map(out_arr_item->length, out_arr_item);
         }
     } else {
@@ -896,8 +935,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         int n_bytes = (n_rows + 7) >> 3;
         MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ, tmp_null_bytes.data(),
                        recv_count_null.data(), recv_disp_null.data(), mpi_typ,
-                       mpi_root, MPI_COMM_WORLD, all_gather);
-        if (myrank == mpi_root || all_gather) {
+                       mpi_root, comm, all_gather);
+        if (is_receiver || all_gather) {
             char *null_bitmask_o = out_arr->null_bitmask();
             copy_gathered_null_bytes((uint8_t *)null_bitmask_o, tmp_null_bytes,
                                      recv_count_null, rows_counts);
@@ -909,7 +948,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
 
 std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
                                          int64_t n_cols, bool all_gather,
-                                         bool is_parallel, int mpi_root) {
+                                         bool is_parallel, int mpi_root,
+                                         MPI_Comm *comm_ptr) {
     tracing::Event ev("gather_table", is_parallel);
     int n_pes, myrank;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -921,39 +961,63 @@ std::shared_ptr<table_info> gather_table(std::shared_ptr<table_info> in_table,
     out_arrs.reserve(n_cols);
     for (int64_t i_col = 0; i_col < n_cols; i_col++) {
         out_arrs.push_back(gather_array(in_table->columns[i_col], all_gather,
-                                        is_parallel, mpi_root, n_pes, myrank));
+                                        is_parallel, mpi_root, n_pes, myrank,
+                                        comm_ptr));
     }
     return std::make_shared<table_info>(out_arrs);
 }
 
 table_info *gather_table_py_entry(table_info *in_table, bool all_gather,
-                                  bool warn_if_rep, int64_t mpi_root) {
-    int myrank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+                                  int mpi_root, int64_t comm_ptr) {
+    try {
+        int myrank;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        bool is_receiver =
+            comm_ptr != 0 ? (mpi_root == MPI_ROOT) : (myrank == mpi_root);
 
-    std::shared_ptr<table_info> table(in_table);
-    auto output =
-        gather_table(table, in_table->ncols(), all_gather, true, mpi_root);
-    if (myrank != mpi_root && !all_gather) {
-        output = alloc_table_like(table);
+        std::shared_ptr<table_info> table(in_table);
+        std::shared_ptr<table_info> output =
+            gather_table(table, in_table->ncols(), all_gather, true, mpi_root,
+                         reinterpret_cast<MPI_Comm *>(comm_ptr));
+        if (!is_receiver && !all_gather) {
+            output = alloc_table_like(table);
+        }
+
+        return new table_info(*output);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-
-    return new table_info(*output);
 }
 
 array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
-                                  bool warn_if_rep, int64_t mpi_root) {
-    int myrank, n_pes;
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+                                  int mpi_root, int64_t comm_ptr) {
+    try {
+        int myrank, n_pes;
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
 
-    std::shared_ptr<array_info> array(in_array);
-    auto output =
-        gather_array(array, all_gather, true, mpi_root, n_pes, myrank);
-    if (myrank != mpi_root && !all_gather) {
-        output = alloc_array_like(array);
+        MPI_Comm *mpi_comm_ptr = reinterpret_cast<MPI_Comm *>(comm_ptr);
+        bool is_receiver = (myrank == mpi_root);
+        if (mpi_comm_ptr != nullptr) {
+            is_receiver = (mpi_root == MPI_ROOT);
+            if (is_receiver) {
+                MPI_Comm_remote_size(*mpi_comm_ptr, &n_pes);
+            }
+        }
+
+        std::shared_ptr<array_info> array(in_array);
+        std::shared_ptr<array_info> output = gather_array(
+            array, all_gather, true, mpi_root, n_pes, myrank, mpi_comm_ptr);
+
+        if (!is_receiver && !all_gather) {
+            output = alloc_array_like(array);
+        }
+        return new array_info(*output);
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-    return new array_info(*output);
 }
 
 // Only works on x86 Apple machines

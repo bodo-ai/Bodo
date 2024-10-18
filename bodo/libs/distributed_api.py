@@ -529,26 +529,34 @@ def alltoall(send_arr, recv_arr, count):  # pragma: no cover
 
 
 @numba.njit
-def gather_scalar(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
-    return gather_scalar_impl_jit(data, allgather, warn_if_rep, root)
+def gather_scalar(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0):
+    return gather_scalar_impl_jit(data, allgather, warn_if_rep, root, comm)
 
 
 @numba.generated_jit(nopython=True)
-def gather_scalar_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
+def gather_scalar_impl_jit(
+    data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+):
     data = types.unliteral(data)
     typ_val = numba_to_c_type(data)
     dtype = data
 
     def gather_scalar_impl(
-        data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+        data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
     ):  # pragma: no cover
         n_pes = bodo.libs.distributed_api.get_size()
         rank = bodo.libs.distributed_api.get_rank()
+        is_receiver = rank == root
+        if comm != 0:
+            is_receiver = root == MPI.ROOT
+            if is_receiver:
+                n_pes = bodo.libs.distributed_api.get_remote_size(comm)
+
         send = np.full(1, data, dtype)
-        res_size = n_pes if (rank == root or allgather) else 0
+        res_size = n_pes if (is_receiver or allgather) else 0
         res = np.empty(res_size, dtype)
         c_gather_scalar(
-            send.ctypes, res.ctypes, np.int32(typ_val), allgather, np.int32(root)
+            send.ctypes, res.ctypes, np.int32(typ_val), allgather, np.int32(root), comm
         )
         return res
 
@@ -557,7 +565,9 @@ def gather_scalar_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT
 
 c_gather_scalar = types.ExternalFunction(
     "c_gather_scalar",
-    types.void(types.voidptr, types.voidptr, types.int32, types.bool_, types.int32),
+    types.void(
+        types.voidptr, types.voidptr, types.int32, types.bool_, types.int32, types.int64
+    ),
 )
 
 
@@ -573,6 +583,7 @@ c_gatherv = types.ExternalFunction(
         types.int32,
         types.bool_,
         types.int32,
+        types.int64,
     ),
 )
 
@@ -628,7 +639,8 @@ def load_val_ptr(typingctx, ptr_tp, val_tp=None):
 
 
 _dist_reduce = types.ExternalFunction(
-    "dist_reduce", types.void(types.voidptr, types.voidptr, types.int32, types.int32)
+    "dist_reduce",
+    types.void(types.voidptr, types.voidptr, types.int32, types.int32, types.int64),
 )
 
 _dist_arr_reduce = types.ExternalFunction(
@@ -647,16 +659,17 @@ _decimal_reduce = types.ExternalFunction(
 
 
 @numba.njit
-def dist_reduce(value, reduce_op):
-    return dist_reduce_impl(value, reduce_op)
+def dist_reduce(value, reduce_op, comm=0):
+    return dist_reduce_impl(value, reduce_op, comm)
 
 
 @numba.generated_jit(nopython=True)
-def dist_reduce_impl(value, reduce_op):
+def dist_reduce_impl(value, reduce_op, comm):
     if isinstance(value, types.Array):
         typ_enum = np.int32(numba_to_c_type(value.dtype))
 
-        def impl_arr(value, reduce_op):  # pragma: no cover
+        def impl_arr(value, reduce_op, comm):  # pragma: no cover
+            assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
             A = np.ascontiguousarray(value)
             _dist_arr_reduce(A.ctypes, A.size, reduce_op, typ_enum)
             return A
@@ -699,7 +712,10 @@ def dist_reduce_impl(value, reduce_op):
         # as a workaround, we can pass the index separately.
         if isinstance(types.unliteral(value), IndexValueType):
 
-            def impl(value, reduce_op):  # pragma: no cover
+            def impl(value, reduce_op, comm):  # pragma: no cover
+                assert (
+                    comm == 0
+                ), "dist_reduce_impl: intercomm not supported for decimal"
                 if reduce_op in {Reduce_Type.Argmin.value, Reduce_Type.Argmax.value}:
                     in_ptr = value_to_ptr(value.value)
                     out_ptr = value_to_ptr(value)
@@ -712,7 +728,8 @@ def dist_reduce_impl(value, reduce_op):
 
         else:
 
-            def impl(value, reduce_op):  # pragma: no cover
+            def impl(value, reduce_op, comm):  # pragma: no cover
+                assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
                 if reduce_op in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
                     in_ptr = value_to_ptr(value)
                     out_ptr = value_to_ptr(value)
@@ -739,7 +756,8 @@ def dist_reduce_impl(value, reduce_op):
         # portable).
         # TODO(aneesh): unify array and scalar representations of TimestampTZ to
         # avoid this.
-        def impl(value, reduce_op):  # pragma: no cover
+        def impl(value, reduce_op, comm):  # pragma: no cover
+            assert comm == 0, "dist_reduce_impl: intercomm not supported for arrays"
             if reduce_op not in {Reduce_Type.Min.value, Reduce_Type.Max.value}:
                 raise BodoError(
                     "Only max/min scalar reduction is supported for TimestampTZ"
@@ -762,10 +780,10 @@ def dist_reduce_impl(value, reduce_op):
 
         return impl
 
-    def impl(value, reduce_op):  # pragma: no cover
+    def impl(value, reduce_op, comm):  # pragma: no cover
         in_ptr = value_to_ptr(value)
         out_ptr = value_to_ptr(value)
-        _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum)
+        _dist_reduce(in_ptr, out_ptr, reduce_op, typ_enum, comm)
         return load_val_ptr(out_ptr, value)
 
     return impl
@@ -821,63 +839,73 @@ def copy_gathered_null_bytes(
         curr_tmp_byte += n_bytes
 
 
-@intrinsic
-def _gather_table_py_entry(typingctx, in_table, allgather, warn_if_rep, root):
-    def codegen(context, builder, sig, args):
-        in_table, allgather, warn_if_rep, root = args
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(64),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="gather_table_py_entry"
-        )
-        table_ret = builder.call(fn_tp, (in_table, allgather, warn_if_rep, root))
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return table_ret
-
-    ret_type = in_table
-    sig = ret_type(in_table, allgather, warn_if_rep, root)
-    return sig, codegen
+_gather_table_py_entry = ExternalFunctionErrorChecked(
+    "gather_table_py_entry",
+    table_type(table_type, types.bool_, types.int32, types.int64),
+)
 
 
-@intrinsic
-def _gather_array_py_entry(typingctx, in_array, allgather, warn_if_rep, root):
-    def codegen(context, builder, sig, args):
-        in_array, allgather, warn_if_rep, root = args
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(64),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="gather_array_py_entry"
-        )
-        array_ret = builder.call(fn_tp, (in_array, allgather, warn_if_rep, root))
-        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
-        return array_ret
+_gather_array_py_entry = ExternalFunctionErrorChecked(
+    "gather_array_py_entry",
+    array_info_type(array_info_type, types.bool_, types.int32, types.int64),
+)
 
-    ret_type = in_array
-    sig = ret_type(in_array, allgather, warn_if_rep, root)
-    return sig, codegen
+
+def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=None):
+    """Gathers data from all ranks to root."""
+    from bodo.mpi4py import MPI
+
+    if allgather and comm is not None:
+        raise BodoError("gatherv(): allgather flag not supported in intercomm case")
+
+    # Get data type on receiver in case of intercomm (since doesn't have any local data)
+    rank = bodo.libs.distributed_api.get_rank()
+    if comm is not None:
+        # Receiver has to set root to MPI.ROOT in case of intercomm
+        is_receiver = root == MPI.ROOT
+        # Get data type in receiver
+        if is_receiver:
+            dtype = comm.recv(source=0, tag=11)
+            data = get_value_for_type(dtype)
+        elif rank == 0:
+            dtype = bodo.typeof(data)
+            comm.send(dtype, dest=0, tag=11)
+
+    # Pass Comm pointer to native code (0 means not provided).
+    if comm is None:
+        comm_ptr = 0
+    else:
+        comm_ptr = MPI._addressof(comm)
+
+    return gatherv_impl_wrapper(data, allgather, warn_if_rep, root, comm_ptr)
+
+
+@overload(gatherv)
+def gatherv_overload(
+    data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+):
+    """support gatherv inside jit functions"""
+
+    return (
+        lambda data,
+        allgather=False,
+        warn_if_rep=True,
+        root=DEFAULT_ROOT,
+        comm=0: gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
+    )  # pragma: no cover
 
 
 @numba.njit
-def gatherv(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
-    return gatherv_impl_jit(data, allgather, warn_if_rep, root)
+def gatherv_impl_wrapper(
+    data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+):
+    return gatherv_impl_jit(data, allgather, warn_if_rep, root, comm)
 
 
 @numba.generated_jit(nopython=True)
-def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
+def gatherv_impl_jit(
+    data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+):
     """gathers distributed data into rank 0 or all ranks if 'allgather' is set.
     'warn_if_rep' flag controls if a warning is raised if the input is replicated and
     gatherv has no effect (applicable only inside jit functions).
@@ -891,17 +919,27 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
         def impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
             # get data and index arrays
             arr = bodo.hiframes.pd_series_ext.get_series_data(data)
             index = bodo.hiframes.pd_series_ext.get_series_index(data)
             name = bodo.hiframes.pd_series_ext.get_series_name(data)
+            # Send name from workers to receiver in case of intercomm since not
+            # available on receiver
+            if comm != 0:
+                bcast_root = MPI.PROC_NULL
+                is_receiver = root == MPI.ROOT
+                if is_receiver:
+                    bcast_root = 0
+                elif bodo.get_rank() == 0:
+                    bcast_root = MPI.ROOT
+                name = bcast_scalar(name, bcast_root, comm)
             # gather data
             out_arr = bodo.libs.distributed_api.gatherv(
-                arr, allgather, warn_if_rep, root
+                arr, allgather, warn_if_rep, root, comm
             )
-            out_index = bodo.gatherv(index, allgather, warn_if_rep, root)
+            out_index = bodo.gatherv(index, allgather, warn_if_rep, root, comm)
             # create output Series
             return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
 
@@ -912,8 +950,11 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         INT64_MIN = np.iinfo(np.int64).min
 
         def impl_range_index(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
+            is_receiver = bodo.get_rank() == root
+            if comm != 0:
+                is_receiver = root == MPI.ROOT
             # NOTE: assuming processes have chunks of a global RangeIndex with equal
             # steps. using min/max reductions to get start/stop of global range
             start = data._start
@@ -923,13 +964,13 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
                 start = INT64_MAX
                 stop = INT64_MIN
             start = bodo.libs.distributed_api.dist_reduce(
-                start, np.int32(Reduce_Type.Min.value)
+                start, np.int32(Reduce_Type.Min.value), comm
             )
             stop = bodo.libs.distributed_api.dist_reduce(
-                stop, np.int32(Reduce_Type.Max.value)
+                stop, np.int32(Reduce_Type.Max.value), comm
             )
             total_len = bodo.libs.distributed_api.dist_reduce(
-                len(data), np.int32(Reduce_Type.Sum.value)
+                len(data), np.int32(Reduce_Type.Sum.value), comm
             )
             # output is empty if all range chunks are empty
             if start == INT64_MAX and stop == INT64_MIN:
@@ -944,12 +985,25 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
 
             # gatherv() of dataframe returns 0-length arrays so index should
             # be 0-length to match
-            if bodo.get_rank() != root and not allgather:
+            if not is_receiver and not allgather:
                 start = 0
                 stop = 0
-            return bodo.hiframes.pd_index_ext.init_range_index(
-                start, stop, data._step, data._name
-            )
+
+            name = data._name
+            step = data._step
+
+            # Send name and step from workers to receiver in case of intercomm since not
+            # available on receiver
+            if comm != 0:
+                bcast_root = MPI.PROC_NULL
+                if is_receiver:
+                    bcast_root = 0
+                elif bodo.get_rank() == 0:
+                    bcast_root = MPI.ROOT
+                name = bcast_scalar(name, bcast_root, comm)
+                step = bcast_scalar(step, bcast_root, comm)
+
+            return bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
 
         return impl_range_index
 
@@ -961,24 +1015,44 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
             freq = data.freq
 
             def impl_pd_index(
-                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
             ):  # pragma: no cover
                 arr = bodo.libs.distributed_api.gatherv(
-                    data._data, allgather, root=root
+                    data._data, allgather, warn_if_rep, root, comm
                 )
-                return bodo.hiframes.pd_index_ext.init_period_index(
-                    arr, data._name, freq
-                )
+                # Send name from workers to receiver in case of intercomm since not
+                # available on receiver
+                name = data._name
+                if comm != 0:
+                    bcast_root = MPI.PROC_NULL
+                    is_receiver = root == MPI.ROOT
+                    if is_receiver:
+                        bcast_root = 0
+                    elif bodo.get_rank() == 0:
+                        bcast_root = MPI.ROOT
+                    name = bcast_scalar(name, bcast_root, comm)
+                return bodo.hiframes.pd_index_ext.init_period_index(arr, name, freq)
 
         else:
 
             def impl_pd_index(
-                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
             ):  # pragma: no cover
                 arr = bodo.libs.distributed_api.gatherv(
-                    data._data, allgather, root=root
+                    data._data, allgather, warn_if_rep, root, comm
                 )
-                return bodo.utils.conversion.index_from_array(arr, data._name)
+                # Send name from workers to receiver in case of intercomm since not
+                # available on receiver
+                name = data._name
+                if comm != 0:
+                    bcast_root = MPI.PROC_NULL
+                    is_receiver = root == MPI.ROOT
+                    if is_receiver:
+                        bcast_root = 0
+                    elif bodo.get_rank() == 0:
+                        bcast_root = MPI.ROOT
+                    name = bcast_scalar(name, bcast_root, comm)
+                return bodo.utils.conversion.index_from_array(arr, name)
 
         return impl_pd_index
 
@@ -987,11 +1061,24 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         # just gather the data arrays
         # TODO: handle `levels` and `codes` when available
         def impl_multi_index(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
-            all_data = bodo.gatherv(data._data, allgather, root=root)
+            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root, comm)
+            # Send name from workers to receiver in case of intercomm since not
+            # available on receiver
+            name = data._name
+            names = data._names
+            if comm != 0:
+                bcast_root = MPI.PROC_NULL
+                is_receiver = root == MPI.ROOT
+                if is_receiver:
+                    bcast_root = 0
+                elif bodo.get_rank() == 0:
+                    bcast_root = MPI.ROOT
+                name = bcast_scalar(name, bcast_root, comm)
+                names = bcast_tuple(names, bcast_root, comm)
             return bodo.hiframes.pd_multi_index_ext.init_multi_index(
-                all_data, data._names, data._name
+                all_data, names, name
             )
 
         return impl_multi_index
@@ -1002,11 +1089,9 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         in_col_inds = MetaType(tuple(range(n_table_cols)))
         out_cols_arr = np.array(range(n_table_cols), dtype=np.int64)
 
-        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
+        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0):
             cpp_table = py_data_to_cpp_table(data, (), in_col_inds, n_table_cols)
-            out_cpp_table = _gather_table_py_entry(
-                cpp_table, allgather, warn_if_rep, root
-            )
+            out_cpp_table = _gather_table_py_entry(cpp_table, allgather, root, comm)
             ret = cpp_table_to_py_table(out_cpp_table, out_cols_arr, table_type, 0)
             delete_table(out_cpp_table)
             return ret
@@ -1020,10 +1105,10 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
             __col_name_meta_value_gatherv_no_cols = ColNamesMetaType(())
 
             def impl(
-                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+                data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
             ):  # pragma: no cover
                 index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)
-                g_index = bodo.gatherv(index, allgather, warn_if_rep, root)
+                g_index = bodo.gatherv(index, allgather, warn_if_rep, root, comm)
                 return bodo.hiframes.pd_dataframe_ext.init_dataframe(
                     (), g_index, __col_name_meta_value_gatherv_no_cols
                 )
@@ -1032,28 +1117,20 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
 
         data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
 
-        func_text = (
-            "def impl_df(data, allgather=False, warn_if_rep=True, root={}):\n".format(
-                DEFAULT_ROOT
-            )
-        )
+        func_text = f"def impl_df(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         if data.is_table_format:
             data_args = "T2"
             func_text += (
                 "  T = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(data)\n"
-                "  T2 = bodo.gatherv(T, allgather, warn_if_rep, root)\n"
+                "  T2 = bodo.gatherv(T, allgather, warn_if_rep, root, comm)\n"
             )
         else:
             for i in range(n_cols):
-                func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
-                    i, i
-                )
-                func_text += "  g_data_{} = bodo.gatherv(data_{}, allgather, warn_if_rep, root)\n".format(
-                    i, i
-                )
+                func_text += f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i})\n"
+                func_text += f"  g_data_{i} = bodo.gatherv(data_{i}, allgather, warn_if_rep, root, comm)\n"
         func_text += (
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
-            "  g_index = bodo.gatherv(index, allgather, warn_if_rep, root)\n"
+            "  g_index = bodo.gatherv(index, allgather, warn_if_rep, root, comm)\n"
             f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), g_index, __col_name_meta_value_gatherv_with_cols)\n"
         )
 
@@ -1070,16 +1147,20 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
     if isinstance(data, CSRMatrixType):
 
         def impl_csr_matrix(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
             # gather local data
-            all_data = bodo.gatherv(data.data, allgather, warn_if_rep, root)
-            all_col_inds = bodo.gatherv(data.indices, allgather, warn_if_rep, root)
-            all_indptr = bodo.gatherv(data.indptr, allgather, warn_if_rep, root)
-            all_local_rows = gather_scalar(data.shape[0], allgather, root=root)
+            all_data = bodo.gatherv(data.data, allgather, warn_if_rep, root, comm)
+            all_col_inds = bodo.gatherv(
+                data.indices, allgather, warn_if_rep, root, comm
+            )
+            all_indptr = bodo.gatherv(data.indptr, allgather, warn_if_rep, root, comm)
+            all_local_rows = gather_scalar(
+                data.shape[0], allgather, root=root, comm=comm
+            )
             n_rows = all_local_rows.sum()
             n_cols = bodo.libs.distributed_api.dist_reduce(
-                data.shape[1], np.int32(Reduce_Type.Max.value)
+                data.shape[1], np.int32(Reduce_Type.Max.value), comm
             )
 
             # using np.int64 in output since maximum index value is not known at
@@ -1107,12 +1188,10 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
-        func_text = "def impl_tuple(data, allgather=False, warn_if_rep=True, root={}):\n".format(
-            DEFAULT_ROOT
-        )
+        func_text = f"def impl_tuple(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(
-                "bodo.gatherv(data[{}], allgather, warn_if_rep, root)".format(i)
+                f"bodo.gatherv(data[{i}], allgather, warn_if_rep, root, comm)"
                 for i in range(len(data))
             ),
             "," if len(data) > 0 else "",
@@ -1124,27 +1203,36 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
 
     if data is types.none:
         return (
-            lambda data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT: None
+            lambda data,
+            allgather=False,
+            warn_if_rep=True,
+            root=DEFAULT_ROOT,
+            comm=0: None
         )  # pragma: no cover
 
-    if isinstance(data, types.Array):
+    if isinstance(data, types.Array) and data.ndim != 1:
         typ_val = numba_to_c_type(data.dtype)
 
         def gatherv_impl(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
             data = np.ascontiguousarray(data)
-            rank = bodo.libs.distributed_api.get_rank()
+            rank = bodo.get_rank()
+            is_receiver = rank == root
+            is_intercomm = comm != 0
+            if is_intercomm:
+                is_receiver = root == MPI.ROOT
             # size to handle multi-dim arrays
             n_loc = data.size
-            recv_counts = gather_scalar(np.int32(n_loc), allgather, root=root)
+            recv_counts = gather_scalar(
+                np.int32(n_loc), allgather, root=root, comm=comm
+            )
             n_total = recv_counts.sum()
             all_data = empty_like_type(n_total, data)
             # displacements
             displs = np.empty(1, np.int32)
-            if rank == root or allgather:
+            if is_receiver or allgather:
                 displs = bodo.ir.join.calc_disp(recv_counts)
-            # print(rank, n_loc, n_total, recv_counts, displs)
             c_gatherv(
                 data.ctypes,
                 np.int32(n_loc),
@@ -1154,30 +1242,43 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
                 np.int32(typ_val),
                 allgather,
                 np.int32(root),
+                comm,
             )
+
+            shape = data.shape
+            # Send shape from workers to receiver in case of intercomm since not
+            # available on receiver
+            if is_intercomm:
+                bcast_root = MPI.PROC_NULL
+                if is_receiver:
+                    bcast_root = 0
+                elif rank == 0:
+                    bcast_root = MPI.ROOT
+                shape = bcast_tuple(shape, bcast_root, comm)
+
             # handle multi-dim case
-            return all_data.reshape((-1,) + data.shape[1:])
+            return all_data.reshape((-1,) + shape[1:])
 
         return gatherv_impl
 
     if isinstance(data, CategoricalArrayType):
 
         def impl_cat(
-            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
-            codes = bodo.gatherv(data.codes, allgather, root=root)
+            codes = bodo.gatherv(data.codes, allgather, warn_if_rep, root, comm)
             return bodo.hiframes.pd_categorical_ext.init_categorical_array(
                 codes, data.dtype
             )
 
         return impl_cat
 
-    if is_array_typ(data):
+    if is_array_typ(data, False):
         dtype = data
 
-        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT):
+        def impl(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0):
             input_info = array_to_info(data)
-            out_info = _gather_array_py_entry(input_info, allgather, warn_if_rep, root)
+            out_info = _gather_array_py_entry(input_info, allgather, root, comm)
             ret = info_to_array(out_info, dtype)
             delete_info(out_info)
             return ret
@@ -1190,11 +1291,11 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
     except ImportError:  # pragma: no cover
         BodoSQLContextType = None
     if BodoSQLContextType is not None and isinstance(data, BodoSQLContextType):
-        func_text = f"def impl_bodosql_context(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}):\n"
+        func_text = f"def impl_bodosql_context(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         comma_sep_names = ", ".join([f"'{name}'" for name in data.names])
         comma_sep_dfs = ", ".join(
             [
-                f"bodo.gatherv(data.dataframes[{i}], allgather, warn_if_rep, root)"
+                f"bodo.gatherv(data.dataframes[{i}], allgather, warn_if_rep, root, comm)"
                 for i in range(len(data.dataframes))
             ]
         )
@@ -1210,14 +1311,14 @@ def gatherv_impl_jit(data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT)
         TablePathType = None
     if TablePathType is not None and isinstance(data, TablePathType):
         # Table Path info is all compile time so we return the same data.
-        func_text = f"def impl_table_path(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}):\n"
+        func_text = f"def impl_table_path(data, allgather=False, warn_if_rep=True, root={DEFAULT_ROOT}, comm=0):\n"
         func_text += "  return data\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         impl_table_path = loc_vars["impl_table_path"]
         return impl_table_path
 
-    raise BodoError("gatherv() not available for {}".format(data))  # pragma: no cover
+    raise BodoError(f"gatherv() not available for {data}")  # pragma: no cover
 
 
 def distributed_transpose(arr):  # pragma: no cover
