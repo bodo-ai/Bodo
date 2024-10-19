@@ -18,7 +18,7 @@ from bodo_iceberg_connector.py4j_support import (
     convert_list_to_java,
     get_bodo_arrow_schema_utils_class,
     get_bodo_iceberg_handler_class,
-    get_java_table_handler,
+    get_catalog,
 )
 from bodo_iceberg_connector.schema_helper import (
     arrow_schema_j2py,
@@ -142,7 +142,7 @@ def start_write(
     table_loc: Updated warehouse location of data/ path (and files)
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
 
     table_comment = None
     column_comments = None
@@ -166,6 +166,8 @@ def start_write(
         ), "bodo_iceberg_connector Internal Error: Should never create existing table"
         try:
             txn_id = handler.startCreateOrReplaceTable(
+                db_name,
+                table_name,
                 arrow_to_iceberg_schema(pa_schema, column_comments),
                 False,
                 convert_dict_to_java(additional_properties),
@@ -177,6 +179,8 @@ def start_write(
     elif mode == "replace":
         try:
             txn_id = handler.startCreateOrReplaceTable(
+                db_name,
+                table_name,
                 arrow_to_iceberg_schema(pa_schema, column_comments),
                 True,
                 convert_dict_to_java(additional_properties),
@@ -192,7 +196,7 @@ def start_write(
 
         try:
             txn_id = handler.startAppendTable(
-                convert_dict_to_java(additional_properties)
+                db_name, table_name, convert_dict_to_java(additional_properties)
             )
         except Py4JError as e:
             print("Error during Iceberg table append: ", e)
@@ -238,17 +242,14 @@ def commit_write(
         bool: Whether the action was successfully committed or not
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
     file_info_str = process_file_infos(
         fnames, file_size_bytes, metrics, table_loc, db_name, table_name
     )
 
     if mode in ("create", "replace"):
         try:
-            handler.commitCreateOrReplaceTable(
-                txn_id,
-                file_info_str,
-            )
+            handler.commitCreateOrReplaceTable(txn_id, file_info_str)
         except Py4JError as e:
             print("Error during Iceberg table create/replace commit: ", e)
             return False
@@ -284,7 +285,7 @@ def remove_transaction(
         table_name (str): Name of the table for indexing into our object list.
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
     handler.removeTransaction(transaction_id)
 
 
@@ -311,7 +312,7 @@ def fetch_puffin_metadata(
         location at which to write the puffin file.
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
     snapshot_id = handler.getTransactionSnapshotID(transaction_id)
     sequence_number = handler.getTransactionSequenceNumber(transaction_id)
     location = normalize_loc(
@@ -328,10 +329,12 @@ def commit_statistics_file(
     statistic_file_info: StatisticsFile,
 ):
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
     # Json encode the statistics file info
     statistic_file_info_str = json.dumps(asdict(statistic_file_info))
-    handler.commitStatisticsFile(snapshot_id, statistic_file_info_str)
+    handler.commitStatisticsFile(
+        db_name, table_name, snapshot_id, statistic_file_info_str
+    )
 
 
 def commit_merge_cow(
@@ -375,8 +378,10 @@ def commit_merge_cow(
     )
 
     try:
-        handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-        handler.mergeCOWTable(old_fnames_java, new_file_info_str, snapshot_id)
+        handler = get_catalog(conn_str, catalog_type)
+        handler.mergeCOWTable(
+            db_name, table_name, old_fnames_java, new_file_info_str, snapshot_id
+        )
     except Py4JError as e:
         # Note: Py4JError is the base class for all types of Py4j Exceptions.
         print("Error during Iceberg MERGE INTO COW:", e)
@@ -396,9 +401,9 @@ def delete_table(conn_str: str, db_name: str, table_name: str, purge: bool = Tru
     return: True if successful, False otherwise
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
     try:
-        return handler.deleteTable(purge)
+        return handler.deleteTable(db_name, table_name, purge)
     except Py4JError as e:
         print("Error during Iceberg table delete: ", e)
         return False
@@ -409,5 +414,5 @@ def get_table_metadata_path(conn_str: str, db_name: str, table_name: str):
     Get the path to the current metadata file.
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-    return normalize_loc(handler.getTableMetadataPath())
+    handler = get_catalog(conn_str, catalog_type)
+    return normalize_loc(handler.getTableMetadataPath(db_name, table_name))

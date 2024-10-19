@@ -7,7 +7,7 @@ from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
-from bodo_iceberg_connector.py4j_support import get_java_table_handler
+from bodo_iceberg_connector.py4j_support import get_catalog
 
 
 def bodo_connector_get_current_snapshot_id(
@@ -16,13 +16,8 @@ def bodo_connector_get_current_snapshot_id(
     catalog_type, _ = parse_conn_str(conn_str)
 
     try:
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn_str,
-            catalog_type,
-            db_name,
-            table,
-        )
-        snapshot_id = bodo_iceberg_table_reader.getSnapshotId()
+        bodo_iceberg_table_reader = get_catalog(conn_str, catalog_type)
+        snapshot_id = bodo_iceberg_table_reader.getSnapshotId(db_name, table)
     except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 
@@ -49,14 +44,8 @@ def bodo_connector_get_table_property(
     catalog_type, _ = parse_conn_str(conn_str)
 
     try:
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn_str,
-            catalog_type,
-            db_name,
-            table,
-        )
-
-        value = bodo_iceberg_table_reader.getTableProperty(property)
+        bodo_iceberg_table_reader = get_catalog(conn_str, catalog_type)
+        value = bodo_iceberg_table_reader.getTableProperty(db_name, table, property)
     except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 

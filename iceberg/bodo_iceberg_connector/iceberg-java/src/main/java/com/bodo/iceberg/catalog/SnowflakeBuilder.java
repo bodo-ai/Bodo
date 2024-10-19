@@ -5,11 +5,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.jdbc.JdbcCatalog;
-import org.apache.iceberg.snowflake.SnowflakeCatalog;
 
-class SnowflakeBuilder {
-  public static Catalog create(Configuration conf, Map<String, String> properties) {
-    SnowflakeCatalog catalog = new SnowflakeCatalog();
+public class SnowflakeBuilder {
+  public static void initialize(
+      PrefetchSnowflakeCatalog catalog, Configuration conf, Map<String, String> properties) {
     catalog.setConf(conf);
     // Snowflake uses a JDBC connection, so we need to convert the URI to a JDBC URI
     properties.put(
@@ -25,6 +24,12 @@ class SnowflakeBuilder {
     String fileIOImpl = "org.apache.iceberg.io.BodoResolvingFileIO";
     properties.put(CatalogProperties.FILE_IO_IMPL, fileIOImpl);
     catalog.initialize("snowflake_catalog", properties);
+  }
+
+  public static Catalog create(Configuration conf, Map<String, String> properties) {
+    PrefetchSnowflakeCatalog catalog =
+        new PrefetchSnowflakeCatalog(properties.get(CatalogProperties.URI));
+    SnowflakeBuilder.initialize(catalog, conf, properties);
     return catalog;
   }
 }

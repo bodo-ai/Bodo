@@ -16,7 +16,7 @@ from bodo_iceberg_connector.catalog_conn import (
 )
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
 from bodo_iceberg_connector.py4j_support import (
-    get_java_table_handler,
+    get_catalog,
     launch_jvm,
 )
 from bodo_iceberg_connector.schema_helper import (
@@ -96,15 +96,10 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
 
     try:
         # Construct Table Reader
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn_str,
-            catalog_type,
-            schema,
-            table,
-        )
+        bodo_iceberg_table_reader = get_catalog(conn_str, catalog_type)
 
         # Get Iceberg Schema Info
-        java_table_info = bodo_iceberg_table_reader.getTableInfo(error)
+        java_table_info = bodo_iceberg_table_reader.getTableInfo(schema, table, error)
         if java_table_info is None:
             schema_id = None
             iceberg_schema_str = ""
