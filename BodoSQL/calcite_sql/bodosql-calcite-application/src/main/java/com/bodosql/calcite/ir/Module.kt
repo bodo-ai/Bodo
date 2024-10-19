@@ -11,7 +11,9 @@ import java.util.Stack
  * Module is the top level compilation unit for code generation.
  * @param frame The main function frame for this module.
  */
-class Module(private val frame: Frame) {
+class Module(
+    private val frame: Frame,
+) {
     /**
      * Emits the code for the module.
      * @return Emitted code for the full module.
@@ -124,9 +126,7 @@ class Module(private val frame: Frame) {
         /**
          * getter for the JoinStateCache
          */
-        fun getJoinStateCache(): JoinStateCache {
-            return joinStateCache
-        }
+        fun getJoinStateCache(): JoinStateCache = joinStateCache
 
         /**
          * Adds the operation to the end of the active Frame.
@@ -182,9 +182,7 @@ class Module(private val frame: Frame) {
             return this
         }
 
-        fun append(code: StringBuilder): Builder {
-            return append(code.toString())
-        }
+        fun append(code: StringBuilder): Builder = append(code.toString())
 
         /**
          * Generate the Snowflake-managed Iceberg prefetch call
@@ -211,9 +209,8 @@ class Module(private val frame: Frame) {
                     Expr.Call(
                         "bodo.io.iceberg.prefetch_sf_tables_njit",
                         Expr.StringLiteral(sfConnStr!!),
-                        Expr.List(
-                            sfIcebergTablePaths.map { Expr.StringLiteral(it) },
-                        ),
+                        Expr.List(sfIcebergTablePaths.map { Expr.StringLiteral(it) }),
+                        Expr.IntegerLiteral(this.verboseLevel),
                     ),
                 ),
             )
@@ -241,9 +238,7 @@ class Module(private val frame: Frame) {
         fun buildFunction(
             name: String,
             args: List<Variable>,
-        ): Op.Function {
-            return Op.Function(name, args, functionFrame)
-        }
+        ): Op.Function = Op.Function(name, args, functionFrame)
 
         /**
          * Updates a builder to create a new activeFrame
@@ -318,8 +313,6 @@ class Module(private val frame: Frame) {
         /**
          * Returns if we are in a streaming frame.
          */
-        fun isStreamingFrame(): Boolean {
-            return activeFrame is StreamingPipelineFrame
-        }
+        fun isStreamingFrame(): Boolean = activeFrame is StreamingPipelineFrame
     }
 }

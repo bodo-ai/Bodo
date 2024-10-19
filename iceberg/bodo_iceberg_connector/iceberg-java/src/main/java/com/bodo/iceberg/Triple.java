@@ -1,6 +1,6 @@
 package com.bodo.iceberg;
 
-/** Template class for storing a pair of objects. */
+/** Template class for storing a triple of objects. */
 public class Triple<X, Y, Z> {
   private final X first;
   private final Y second;

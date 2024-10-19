@@ -666,8 +666,6 @@ def test_azure_basic_write(memory_leak_check):
 def test_prefetch_flag(memory_leak_check):
     """
     Test that if the prefetch flag is set, a prefetch occurs
-    TODO: [BSE-3977] There is a bug that causes the prefetch
-    to not be used when the query is compiled in the same process
     """
 
     old_prefetch_flag = bodo.prefetch_sf_iceberg
@@ -713,6 +711,8 @@ def test_prefetch_flag(memory_leak_check):
                 stream,
                 'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
             )
+            # TODO: How can we check that the table was loaded from the CachingCatalog
+            # It doesn't have logging support
 
     finally:
         bodo.prefetch_sf_iceberg = old_prefetch_flag

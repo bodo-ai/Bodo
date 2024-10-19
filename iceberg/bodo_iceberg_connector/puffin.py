@@ -12,9 +12,7 @@ from bodo_iceberg_connector.catalog_conn import (
     normalize_loc,
     parse_conn_str,
 )
-from bodo_iceberg_connector.py4j_support import (
-    get_java_table_handler,
-)
+from bodo_iceberg_connector.py4j_support import get_catalog
 
 
 @dataclass
@@ -49,9 +47,7 @@ class StatisticsFile:
         return StatisticsFile(-1, "", -1, -1, [])
 
 
-def table_columns_have_theta_sketches(
-    conn_str: str, db_name: str, table_name: str
-) -> pd.array:
+def table_columns_have_theta_sketches(conn_str: str, db_name: str, table_name: str):
     """
     Determine which columns in a given table have theta sketches. The returned
     result is a boolean array where the ith element is True if the ith column
@@ -68,14 +64,12 @@ def table_columns_have_theta_sketches(
         column has a theta sketch, and False otherwise.
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-    hasSketches = handler.tableColumnsHaveThetaSketches()
+    handler = get_catalog(conn_str, catalog_type)
+    hasSketches = handler.tableColumnsHaveThetaSketches(db_name, table_name)
     return pd.array(hasSketches, dtype="boolean")
 
 
-def table_columns_enabled_theta_sketches(
-    conn_str: str, db_name: str, table_name: str
-) -> pd.array:
+def table_columns_enabled_theta_sketches(conn_str: str, db_name: str, table_name: str):
     """
     Determine which columns in a given table have theta sketches ENABLED. The returned
     result is a boolean array where the ith element is True if the ith column
@@ -93,8 +87,8 @@ def table_columns_enabled_theta_sketches(
         column has a theta sketch enabled, and False otherwise.
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-    enabledSketches = handler.tableColumnsEnabledThetaSketches()
+    handler = get_catalog(conn_str, catalog_type)
+    enabledSketches = handler.tableColumnsEnabledThetaSketches(db_name, table_name)
     return pd.array(enabledSketches, dtype="boolean")
 
 
@@ -106,5 +100,5 @@ def get_old_statistics_file_path(
     must exist because of previous checks.
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+    handler = get_catalog(conn_str, catalog_type)
     return normalize_loc(handler.getStatisticsFilePath(txn_id))

@@ -442,20 +442,15 @@ def fetch_snapshot_id(rank, conn, db_schema, table_name):
     Fetches the snapshot_id from the current Iceberg transaction.
     """
     from bodo_iceberg_connector.catalog_conn import parse_conn_str
-    from bodo_iceberg_connector.py4j_support import get_java_table_handler
+    from bodo_iceberg_connector.py4j_support import get_catalog
 
     snapshot_id = -1
     if rank == 0:
         catalog_type, _ = parse_conn_str(conn)
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn,
-            catalog_type,
-            db_schema,
-            table_name,
-        )
+        catalog = get_catalog(conn, catalog_type)
         # TODO: get this from the write commit function instead so we can
         # avoid getting the wrong snapshotID
-        snapshot_id = bodo_iceberg_table_reader.getSnapshotId()
+        snapshot_id = catalog.getSnapshotId(db_schema, table_name)
     snapshot_id = MPI.COMM_WORLD.bcast(snapshot_id)
     return snapshot_id
 

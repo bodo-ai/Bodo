@@ -1,44 +1,24 @@
 package com.bodo.iceberg;
 
 import com.bodo.iceberg.catalog.CatalogCreator;
+import com.bodo.iceberg.catalog.PrefetchSnowflakeCatalog;
+import com.bodo.iceberg.catalog.SnowflakeBuilder;
 import com.bodo.iceberg.filters.FilterExpr;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.apache.iceberg.AppendFiles;
-import org.apache.iceberg.BlobMetadata;
-import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DeleteFiles;
-import org.apache.iceberg.HasTableOperations;
-import org.apache.iceberg.ManifestFile;
-import org.apache.iceberg.ManifestFiles;
-import org.apache.iceberg.ManifestReader;
-import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.SnapshotUpdate;
-import org.apache.iceberg.SortOrder;
-import org.apache.iceberg.StatisticsFile;
-import org.apache.iceberg.Table;
-import org.apache.iceberg.TableProperties;
-import org.apache.iceberg.Transaction;
-import org.apache.iceberg.UpdateProperties;
+import org.apache.iceberg.*;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
+import org.json.JSONArray;
 
 public class BodoIcebergHandler {
   /**
@@ -47,44 +27,72 @@ public class BodoIcebergHandler {
    */
   private final Catalog catalog;
 
-  private final TableIdentifier id;
-
   // Map of transaction hashcode to transaction instance
   private final HashMap<Integer, Transaction> transactions;
 
-  @Nullable private final SnowflakePrefetch prefetcher;
+  private BodoIcebergHandler(Catalog catalog) {
+    this.catalog = catalog;
+    this.transactions = new HashMap<>();
+  }
 
   // Note: This API is exposed to Python.
-  public BodoIcebergHandler(
-      String connStr,
-      String catalogType,
-      String dbName,
-      String tableName,
-      String coreSitePath,
-      @Nullable SnowflakePrefetch prefetcher)
+  public BodoIcebergHandler(String connStr, String catalogType, String coreSitePath)
       throws URISyntaxException {
-    this.catalog = CatalogCreator.create(connStr, catalogType, coreSitePath);
-
-    // Snowflake uses dot separated strings for DB and schema names
-    // Iceberg uses Namespaces with multiple levels to represent this
-    Namespace dbNamespace = Namespace.of(dbName.split("\\."));
-    id = TableIdentifier.of(dbNamespace, tableName);
-
-    this.transactions = new HashMap<>();
-    this.prefetcher = prefetcher;
+    this(CatalogCreator.create(connStr, catalogType, coreSitePath));
   }
 
   /**
-   * Inner function to help load tables, either from the catalog or the SnowflakePrefetcher if
-   * defined
+   * Start the Snowflake query to get the metadata paths for a list of Snowflake-managed Iceberg
+   * tables. NOTE: This API is exposed to Python.
+   *
+   * <p>The query is not expected to finish until the table is needed for initialization / read.
+   *
+   * @param tablePathsStr A JSON string of a list of tablePaths Py4J can't pass the direct list of
+   *     strings in
+   */
+  public static BodoIcebergHandler buildPrefetcher(
+      String connStr,
+      String catalogType,
+      String coreSitePath,
+      String tablePathsStr,
+      int verboseLevel)
+      throws SQLException, URISyntaxException {
+
+    if (!Objects.equals(catalogType, "snowflake")) {
+      throw new RuntimeException(
+          "BodoIcebergHandler::buildPrefetcher: Cannot prefetch SF metadata paths for a"
+              + " catalog of type "
+              + catalogType);
+    }
+
+    // Convert table paths to list of strings
+    var tablePathsJSON = new JSONArray(tablePathsStr);
+    var tablePaths = new ArrayList<String>();
+    for (int i = 0; i < tablePathsJSON.length(); i++) {
+      tablePaths.add(tablePathsJSON.getString(i));
+    }
+
+    // Construct Catalog
+    var out = CatalogCreator.prepareInput(connStr, catalogType, coreSitePath);
+    var catalog = new PrefetchSnowflakeCatalog(connStr, tablePaths, verboseLevel);
+    SnowflakeBuilder.initialize(catalog, out.getFirst(), out.getSecond());
+    return new BodoIcebergHandler(CachingCatalog.wrap(catalog));
+  }
+
+  private static TableIdentifier genTableID(String dbName, String tableName) {
+    // Snowflake uses dot separated strings for DB and schema names
+    // Iceberg uses Namespaces with multiple levels to represent this
+    Namespace dbNamespace = Namespace.of(dbName.split("\\."));
+    return TableIdentifier.of(dbNamespace, tableName);
+  }
+
+  /**
+   * Inner function to help load tables
    *
    * @return Iceberg table associated with ID
    */
-  private Table loadTable() throws SQLException, URISyntaxException, InterruptedException {
-    if (this.prefetcher != null && this.prefetcher.tableExists(id)) {
-      return prefetcher.loadTable(id);
-    }
-    return catalog.loadTable(id);
+  private Table loadTable(String dbName, String tableName) {
+    return catalog.loadTable(genTableID(dbName, tableName));
   }
 
   /**
@@ -95,9 +103,8 @@ public class BodoIcebergHandler {
    * @param property The name of the property to get.
    * @return the corresponding property value or null if key does not exist
    */
-  public String getTableProperty(String property)
-      throws SQLException, URISyntaxException, InterruptedException {
-    Table table = loadTable();
+  public String getTableProperty(String dbName, String tableName, String property) {
+    Table table = loadTable(dbName, tableName);
     return table.properties().get(property);
   }
 
@@ -112,9 +119,7 @@ public class BodoIcebergHandler {
    * @param txnID The id of the transaction to remove. If this id is not found this is a NO-OP.
    */
   public void removeTransaction(int txnID) {
-    if (this.transactions.containsKey(txnID)) {
-      this.transactions.remove(txnID);
-    }
+    this.transactions.remove(txnID);
   }
 
   /**
@@ -154,14 +159,14 @@ public class BodoIcebergHandler {
    *
    * @return Information about Table needed by Bodo
    */
-  public TableInfo getTableInfo(boolean error)
+  public TableInfo getTableInfo(String dbName, String tableName, boolean error)
       throws SQLException, URISyntaxException, InterruptedException {
-    if (!catalog.tableExists(id) && !error) {
+    if (!catalog.tableExists(genTableID(dbName, tableName)) && !error) {
       return null;
     }
 
     // Note that repeated calls to loadTable are cheap due to CachingCatalog
-    return new TableInfo(loadTable());
+    return new TableInfo(loadTable(dbName, tableName));
   }
 
   /**
@@ -171,9 +176,8 @@ public class BodoIcebergHandler {
    */
   public Triple<
           List<BodoParquetInfo>, Map<Integer, org.apache.arrow.vector.types.pojo.Schema>, Long>
-      getParquetInfo(FilterExpr filters)
-          throws IOException, SQLException, URISyntaxException, InterruptedException {
-    return FileHandler.getParquetInfo(loadTable(), filters);
+      getParquetInfo(String dbName, String tableName, FilterExpr filters) throws IOException {
+    return FileHandler.getParquetInfo(loadTable(dbName, tableName), filters);
   }
 
   /**
@@ -184,9 +188,8 @@ public class BodoIcebergHandler {
    * @return List of booleans indicating which columns have theta sketches. The booleans correspond
    *     to the columns in the schema, not the field IDs.
    */
-  public List<Boolean> tableColumnsHaveThetaSketches()
-      throws SQLException, URISyntaxException, InterruptedException {
-    Table table = loadTable();
+  public List<Boolean> tableColumnsHaveThetaSketches(String dbName, String tableName) {
+    Table table = loadTable(dbName, tableName);
     Schema schema = table.schema();
     List<Types.NestedField> columns = schema.columns();
     List<Boolean> hasThetaSketches = new ArrayList<>(Collections.nCopies(columns.size(), false));
@@ -234,9 +237,8 @@ public class BodoIcebergHandler {
    * @return List of booleans indicating which columns have theta sketches enabled. The booleans
    *     correspond to the columns in the schema, not the field IDs.
    */
-  public List<Boolean> tableColumnsEnabledThetaSketches()
-      throws SQLException, URISyntaxException, InterruptedException {
-    Table table = loadTable();
+  public List<Boolean> tableColumnsEnabledThetaSketches(String dbName, String tableName) {
+    Table table = loadTable(dbName, tableName);
     Schema schema = table.schema();
     List<Types.NestedField> columns = schema.columns();
     List<Boolean> enabledThetaSketches =
@@ -257,10 +259,10 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public int getNumParquetFiles() throws SQLException, URISyntaxException, InterruptedException {
+  public int getNumParquetFiles(String dbName, String tableName) {
 
     // First, check if we can get the information from the summary
-    Table table = loadTable();
+    Table table = loadTable(dbName, tableName);
     Snapshot currentSnapshot = table.currentSnapshot();
 
     if (currentSnapshot.summary().containsKey("total-data-files")) {
@@ -421,9 +423,8 @@ public class BodoIcebergHandler {
    *
    * @return Location of the table metadata file.
    */
-  public @Nonnull String getTableMetadataPath()
-      throws SQLException, URISyntaxException, InterruptedException {
-    Table table = loadTable();
+  public @Nonnull String getTableMetadataPath(String dbName, String tableName) {
+    Table table = loadTable(dbName, tableName);
     if (table instanceof HasTableOperations) {
       HasTableOperations opsTable = (HasTableOperations) table;
       return opsTable.operations().current().metadataFileLocation();
@@ -458,14 +459,17 @@ public class BodoIcebergHandler {
    * @param replace Whether to replace the table if it already exists
    * @return Transaction ID
    */
-  public Integer startCreateOrReplaceTable(Schema schema, boolean replace, Map<String, String> prop)
+  public Integer startCreateOrReplaceTable(
+      String dbName, String tableName, Schema schema, boolean replace, Map<String, String> prop)
       throws SQLException, URISyntaxException, InterruptedException {
     Map<String, String> properties = new HashMap<>();
     properties.put(TableProperties.FORMAT_VERSION, "2");
     // TODO: Support passing in new partition spec and sort order as well
     final Transaction txn;
+    TableIdentifier id = genTableID(dbName, tableName);
+
     if (replace) {
-      if (getTableInfo(false) == null) {
+      if (getTableInfo(dbName, tableName, false) == null) {
         // Temporarily create the table to avoid breaking the rest catalog.
         // TODO: REMOVE. The REST catalog runtime should use the information
         // from the active transaction.
@@ -496,7 +500,6 @@ public class BodoIcebergHandler {
    * <p>Note: This API is exposed to Python.
    */
   public void commitCreateOrReplaceTable(int txnID, String fileInfoJson) {
-
     Transaction txn = this.transactions.get(txnID);
     List<DataFileInfo> fileInfos = DataFileInfo.fromJson(fileInfoJson);
     this.addData(txn.newAppend(), PartitionSpec.unpartitioned(), SortOrder.unsorted(), fileInfos);
@@ -508,8 +511,8 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public Integer startAppendTable(Map<String, String> prop) {
-    Transaction txn = catalog.loadTable(id).newTransaction();
+  public Integer startAppendTable(String dbName, String tableName, Map<String, String> prop) {
+    Transaction txn = loadTable(dbName, tableName).newTransaction();
     UpdateTxnProperties(txn, prop);
     this.transactions.put(txn.hashCode(), txn);
     return txn.hashCode();
@@ -534,9 +537,10 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public void commitStatisticsFile(long snapshotID, String statisticsFileJson) {
+  public void commitStatisticsFile(
+      String dbName, String tableName, long snapshotID, String statisticsFileJson) {
     StatisticsFile statisticsFile = BodoStatisticFile.fromJson(statisticsFileJson);
-    Table table = catalog.loadTable(id);
+    Table table = loadTable(dbName, tableName);
     Transaction txn = table.newTransaction();
     txn.updateStatistics().setStatistics(snapshotID, statisticsFile).commit();
     txn.commitTransaction();
@@ -547,10 +551,16 @@ public class BodoIcebergHandler {
    *
    * <p>Note: This API is exposed to Python.
    */
-  public void mergeCOWTable(List<String> oldFileNames, String newFileInfoJson, long snapshotID) {
+  public void mergeCOWTable(
+      String dbName,
+      String tableName,
+      List<String> oldFileNames,
+      String newFileInfoJson,
+      long snapshotID) {
 
     // Remove the Table instance associated with `id` from the cache
     // So that the next load gets the current instance from the underlying catalog
+    TableIdentifier id = genTableID(dbName, tableName);
     catalog.invalidateTable(id);
     Table table = catalog.loadTable(id);
     if (table.currentSnapshot().snapshotId() != snapshotID)
@@ -611,8 +621,8 @@ public class BodoIcebergHandler {
   /**
    * Fetch the snapshot id for a table. Returns -1 for a newly created table without any snapshots
    */
-  public long getSnapshotId() throws SQLException, URISyntaxException, InterruptedException {
-    Snapshot snapshot = loadTable().currentSnapshot();
+  public long getSnapshotId(String dbName, String tableName) {
+    Snapshot snapshot = loadTable(dbName, tableName).currentSnapshot();
     // When the table has just been created
     if (snapshot == null) {
       return -1;
@@ -626,7 +636,7 @@ public class BodoIcebergHandler {
    * @param purge Whether to purge the table from the underlying storage
    * @return Whether the table was successfully deleted
    */
-  public boolean deleteTable(boolean purge) {
-    return catalog.dropTable(id, purge);
+  public boolean deleteTable(String dbName, String tableName, boolean purge) {
+    return catalog.dropTable(genTableID(dbName, tableName), purge);
   }
 }

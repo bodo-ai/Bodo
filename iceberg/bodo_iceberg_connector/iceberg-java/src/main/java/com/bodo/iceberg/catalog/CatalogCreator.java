@@ -1,7 +1,9 @@
 package com.bodo.iceberg.catalog;
 
+import com.bodo.iceberg.Triple;
 import java.net.URISyntaxException;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -13,8 +15,8 @@ import org.apache.iceberg.catalog.Catalog;
 
 /** Iceberg Catalog Connector and Communicator */
 public class CatalogCreator {
-  public static Catalog create(String connStr, String catalogType, String coreSitePath)
-      throws URISyntaxException {
+  public static Triple<Configuration, Map<String, String>, URIBuilder> prepareInput(
+      String connStr, String catalogType, String coreSitePath) throws URISyntaxException {
     // Extract Parameters from URI
     // TODO: Just get from Python
     URIBuilder uriBuilder = new URIBuilder(connStr);
@@ -27,7 +29,7 @@ public class CatalogCreator {
     // Additional parameters like Iceberg-specific ones should be ignored
     // Since the conf is reused by multiple objects, like Hive and Hadoop ones
     // TODO: Spark does something similar, but I believe they do some filtering. What is it?
-    boolean loadDefaults = coreSitePath == "";
+    boolean loadDefaults = Objects.equals(coreSitePath, "");
     Configuration conf = new Configuration(loadDefaults);
     // Core site path is specified
     if (!loadDefaults) {
@@ -43,7 +45,16 @@ public class CatalogCreator {
     String uriStr = uriBuilder.removeQuery().build().toString();
     params.put(CatalogProperties.URI, uriStr);
 
+    return new Triple<>(conf, params, uriBuilder);
+  }
+
+  public static Catalog create(String connStr, String catalogType, String coreSitePath)
+      throws URISyntaxException {
     // Create Catalog
+    var out = prepareInput(connStr, catalogType, coreSitePath);
+    Configuration conf = out.getFirst();
+    Map<String, String> params = out.getSecond();
+    URIBuilder uriBuilder = out.getThird();
     final Catalog catalog;
 
     switch (catalogType.toLowerCase()) {
