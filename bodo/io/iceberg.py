@@ -31,6 +31,7 @@ from numba.core import types
 from numba.extending import box, intrinsic, models, overload, register_model, unbox
 
 import bodo
+import bodo.user_logging
 import bodo.utils.tracing as tracing
 from bodo.ext import s3_reader
 from bodo.io.fs_io import (
@@ -2659,7 +2660,9 @@ def determine_str_as_dict_columns(
     return str_as_dict
 
 
-def prefetch_sf_tables(conn_str: str, table_paths: list[str]) -> None:
+def prefetch_sf_tables(
+    conn_str: str, table_paths: list[str], verbose_level: int
+) -> None:
     "Helper function for the Python contents of prefetch_sf_tables_njit."
 
     import bodo_iceberg_connector as bic
@@ -2670,7 +2673,7 @@ def prefetch_sf_tables(conn_str: str, table_paths: list[str]) -> None:
     conn_str = format_iceberg_conn(conn_str)
     if bodo.get_rank() == 0:
         try:
-            bic.prefetch_sf_tables(conn_str, table_paths)
+            bic.prefetch_sf_tables(conn_str, table_paths, verbose_level)
         except bic.IcebergError as e:
             exc = BodoError(
                 f"Failed to prefetch Snowflake-managed Iceberg table paths: {e.message}"
@@ -2681,7 +2684,9 @@ def prefetch_sf_tables(conn_str: str, table_paths: list[str]) -> None:
         raise exc
 
 
-def prefetch_sf_tables_njit(conn_str: str, table_paths: list[str]) -> None:
+def prefetch_sf_tables_njit(
+    conn_str: str, table_paths: list[str], verbose_level: int
+) -> None:
     """
     Prefetch the metadata path for a list of Snowflake-managed Iceberg tables.
     This function is called in parallel across all ranks. It is mainly used
@@ -2695,10 +2700,10 @@ def prefetch_sf_tables_njit(conn_str: str, table_paths: list[str]) -> None:
 
 
 @overload(prefetch_sf_tables_njit)
-def overload_prefetch_sf_tables_njit(conn_str, table_paths):
-    def impl(conn_str, table_paths):
+def overload_prefetch_sf_tables_njit(conn_str, table_paths, verbose_level):
+    def impl(conn_str, table_paths, verbose_level):
         with bodo.no_warning_objmode():
-            prefetch_sf_tables(conn_str, table_paths)
+            prefetch_sf_tables(conn_str, table_paths, verbose_level)
 
     return impl
 

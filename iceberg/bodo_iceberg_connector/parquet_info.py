@@ -13,7 +13,7 @@ from py4j.protocol import Py4JError
 from bodo_iceberg_connector.catalog_conn import parse_conn_str
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import FilterExpr
-from bodo_iceberg_connector.py4j_support import get_java_table_handler
+from bodo_iceberg_connector.py4j_support import get_catalog
 from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
 
 
@@ -42,16 +42,11 @@ def get_bodo_parquet_info(
     try:
         catalog_type, warehouse_loc = parse_conn_str(conn_str)
 
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn_str,
-            catalog_type,
-            db_name,
-            table,
-        )
+        handler = get_catalog(conn_str, catalog_type)
 
         filters = FilterExpr.default() if filters is None else filters
         filter_expr = filters.to_java()
-        java_out = bodo_iceberg_table_reader.getParquetInfo(filter_expr)
+        java_out = handler.getParquetInfo(db_name, table, filter_expr)
         java_parquet_infos = java_out.getFirst()
         java_all_schemas = java_out.getSecond()
         get_file_to_schema_us = java_out.getThird() // 1000
@@ -130,14 +125,9 @@ def bodo_connector_get_total_num_pq_files_in_table(
     try:
         catalog_type, _ = parse_conn_str(conn_str)
 
-        bodo_iceberg_table_reader = get_java_table_handler(
-            conn_str,
-            catalog_type,
-            db_name,
-            table,
-        )
+        bodo_iceberg_table_reader = get_catalog(conn_str, catalog_type)
 
-        return bodo_iceberg_table_reader.getNumParquetFiles()
+        return bodo_iceberg_table_reader.getNumParquetFiles(db_name, table)
 
     except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)

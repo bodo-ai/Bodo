@@ -18,14 +18,14 @@ if pt.TYPE_CHECKING:
 
 # The gateway object used to communicate with the JVM.
 gateway: pt.Optional[JavaGateway] = None
+# Output path for redirecting Java output
+global_redirect_path: str | None = None
 
 # Java Classes used by the Python Portion
 CLASSES: pt.Dict[str, "JavaClass"] = {}
 
 # Dictionary mapping table info -> Reader obj
-table_dict = {}
-# Tuple of connection string and instance of SnowflakePrefetch associated
-prefetch_inst: tuple[str | None, pt.Any | None] = (None, None)
+catalog_dict = {}
 
 
 # Core site location.
@@ -91,14 +91,23 @@ def launch_jvm() -> JavaGateway:
     Returns:
         The active Py4J java gateway instance
     """
-    global CLASSES, gateway
+    global CLASSES, gateway, global_redirect_path
 
     rank = MPI.COMM_WORLD.Get_rank()
     assert (
         rank == 0
     ), f"Rank {rank} is trying to launch the JVM. Only rank 0 should launch it."
 
-    if gateway is None:
+    # If provided, redirect stdout and stderr to the specified file.
+    # Useful for testing because capsys will error when capturing Java output
+    # If the environment variable changes, we will relaunch the JVM
+    # TODO: Shared logging between Python and Java
+    redirect_path = os.environ.get("BODO_ICEBERG_OUTPUT_PATH", None)
+
+    if gateway is None or global_redirect_path != redirect_path:
+        # Set redirect_path value to current
+        global_redirect_path = redirect_path
+
         cur_file_path = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(cur_file_path, "jars", "bodo-iceberg-reader.jar")
 
@@ -106,13 +115,16 @@ def launch_jvm() -> JavaGateway:
         # We don't need to specify a classpath here, as the executable JAR has a baked in default
         # classpath, which will point to the folder that contains all the needed dependencies.
         java_path = get_java_path()
+
+        redirectf = None if redirect_path is None else open(redirect_path, "w")
+
         gateway_port = pt.cast(
             int,
             launch_gateway(
                 jarpath=full_path,
                 java_path=java_path,
-                redirect_stderr=sys.stderr,
-                redirect_stdout=sys.stdout,
+                redirect_stderr=sys.stderr if redirectf is None else redirectf,
+                redirect_stdout=sys.stdout if redirectf is None else redirectf,
                 die_on_exit=True,
             ),
         )
@@ -231,41 +243,14 @@ get_filter_expr_class = get_class_wrapper(
 )
 
 
-def get_java_table_handler(conn_str: str, catalog_type: str, db_name: str, table: str):
+def get_catalog(conn_str: str, catalog_type: str):
+    """
+    Get the catalog object from the global cache
+    """
     reader_class = get_bodo_iceberg_handler_class()
-    key = (conn_str, db_name, table)
-    if key not in table_dict:
+    if conn_str not in catalog_dict:
         created_core_site = get_core_site_path()
         # Use the defaults if the user didn't override the core site.
         core_site = created_core_site if os.path.exists(created_core_site) else ""
-        inst = (
-            prefetch_inst[1]
-            if prefetch_inst[0] is not None and conn_str.startswith(prefetch_inst[0])
-            else None
-        )
-        table_dict[key] = reader_class(
-            conn_str, catalog_type, db_name, table, core_site, inst
-        )
-    return table_dict[key]
-
-
-def get_snowflake_prefetch(conn_str: str, reset: bool = False) -> pt.Any:
-    """
-    Get the static / global SnowflakePrefetch instance associated with
-    the given connection string.
-
-    - If the connection string is different, raise an error.
-    - If the instance is not initialized or reset is True, initialize a new instance.
-      Reset is applied for test runs when multiple queries are executed sequentially.
-    """
-
-    global prefetch_inst
-
-    if prefetch_inst[0] is None or reset:
-        prefetch_class = get_snowflake_prefetch_class()
-        inst = prefetch_class(conn_str)
-        prefetch_inst = (conn_str, inst)
-    elif prefetch_inst[0] != conn_str:
-        raise ValueError("Cannot prefetch object with a different connection string")
-
-    return prefetch_inst[1]
+        catalog_dict[conn_str] = reader_class(conn_str, catalog_type, core_site)
+    return catalog_dict[conn_str]

@@ -103,7 +103,7 @@ public class PandasGenTest {
             false, // Disable Streaming Sort Limit Offset for Testing
             "SNOWFLAKE", // Maintain case sensitivity in the Snowflake style by default
             false, // Only cache identical nodes
-            false // Generate a prefetch call at the beginning of SQL queries
+            true // Generate a prefetch call at the beginning of SQL queries
             );
     List<ColumnDataTypeInfo> paramTypes =
         List.of(new ColumnDataTypeInfo(BodoSQLColumnDataType.INT64, false));

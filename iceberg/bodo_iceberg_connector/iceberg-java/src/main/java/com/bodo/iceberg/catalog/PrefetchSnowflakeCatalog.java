@@ -1,10 +1,12 @@
-package com.bodo.iceberg;
+package com.bodo.iceberg.catalog;
 
 import static java.lang.Math.min;
 
 import java.net.URISyntaxException;
 import java.sql.*;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import net.snowflake.client.core.QueryStatus;
 import net.snowflake.client.jdbc.SnowflakeConnection;
@@ -13,32 +15,41 @@ import net.snowflake.client.jdbc.SnowflakeResultSet;
 import org.apache.hc.core5.http.NameValuePair;
 import org.apache.hc.core5.net.URIBuilder;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.StaticTableOperations;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.io.ResolvingFileIO;
-import org.json.JSONArray;
+import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.snowflake.SnowflakeCatalog;
 import org.json.JSONObject;
 
-/**
- * Helper class to perform prefetch operations for getting Snowflake-managed Iceberg table metadata.
- * TODO: It would make more sense for this to become a catalog with additional features pending a
- * refactor for BodoIcebergHandler to only store catalogs
- */
-public class SnowflakePrefetch {
+public class PrefetchSnowflakeCatalog extends SnowflakeCatalog {
   private static final int MAX_RETRIES = 5;
   private static final int BACKOFF_MS = 100;
   private static final int MAX_BACKOFF_MS = 2000;
 
   private final String connStr;
   private Connection conn;
+  private final Map<String, String> tablePathToQueryID;
+  private boolean loadTableVerbose = false;
 
-  private Map<String, String> tablePathToQueryID;
+  // Copies from SnowflakeCatalog
+  private Object conf;
+  private Map<String, String> catalogProperties;
 
-  public SnowflakePrefetch(String connStr) {
+  public PrefetchSnowflakeCatalog(String connStr) {
     this.connStr = connStr;
     this.conn = null;
     this.tablePathToQueryID = new HashMap<>();
+  }
+
+  public PrefetchSnowflakeCatalog(String connStr, List<String> tablePaths, int verboseLevel)
+      throws SQLException, URISyntaxException {
+    this(connStr);
+    // Should print verbose info during loadTable
+    this.loadTableVerbose = (verboseLevel > 0);
+    this.prefetchMetadataPaths(tablePaths);
   }
 
   private Connection getConnection() throws SQLException, URISyntaxException {
@@ -55,6 +66,9 @@ public class SnowflakePrefetch {
     // https://stackoverflow.com/questions/6110975/connection-retry-using-jdbc
     int numRetries = 0;
     do {
+      Logger logger = Logger.getLogger("net.snowflake.client.jdbc");
+      logger.setLevel(Level.OFF);
+      DriverManager.setLogWriter(null);
       this.conn = DriverManager.getConnection(uriBuilder.build().toString(), props);
       if (this.conn == null) {
         int sleepMultiplier = 2 << numRetries;
@@ -78,17 +92,10 @@ public class SnowflakePrefetch {
    *
    * <p>The query is not expected to finish until the table is needed for initialization / read.
    *
-   * @param tablePathsStr A JSON string of a list of tablePaths Py4J can't pass the direct list of
-   *     strings in
+   * @param tablePaths A list of tablePaths to prefetch
    */
-  public void prefetchMetadataPaths(String tablePathsStr) throws SQLException, URISyntaxException {
-    // Convert table paths to list of strings
-    var tablePathsJSON = new JSONArray(tablePathsStr);
-    var tablePaths = new ArrayList<String>();
-    for (int i = 0; i < tablePathsJSON.length(); i++) {
-      tablePaths.add(tablePathsJSON.getString(i));
-    }
-
+  public void prefetchMetadataPaths(List<String> tablePaths)
+      throws SQLException, URISyntaxException {
     // Start prefetch
     var conn = this.getConnection();
 
@@ -159,12 +166,6 @@ public class SnowflakePrefetch {
         .collect(Collectors.joining("."));
   }
 
-  /** Check if the prefetcher submitted a query for a table */
-  public boolean tableExists(TableIdentifier id) {
-    String tablePath = idToQualifiedName(id);
-    return this.tablePathToQueryID.containsKey(tablePath);
-  }
-
   /**
    * Load and construct the Snowflake-managed Iceberg table using the prefetched data.
    *
@@ -174,15 +175,56 @@ public class SnowflakePrefetch {
    * @param id The identifier of the table to load
    * @return A read-only Iceberg table object representing loaded table
    */
-  public Table loadTable(TableIdentifier id)
-      throws SQLException, URISyntaxException, InterruptedException {
+  public Table loadTable(TableIdentifier id) {
     String tablePath = idToQualifiedName(id);
 
+    // Redirect if not prefetched
+    if (!this.tablePathToQueryID.containsKey(tablePath)) {
+      if (this.loadTableVerbose) {
+        System.err.println(
+            "BODO VERBOSE: PrefetchSnowflakeCatalog::loadTable: Loading `"
+                + tablePath
+                + "` regularly");
+      }
+      return super.loadTable(id);
+    }
+
+    if (this.loadTableVerbose) {
+      System.err.println(
+          "BODO VERBOSE: PrefetchSnowflakeCatalog::loadTable: Loading `"
+              + tablePath
+              + "` from prefetch");
+    }
+
     // Get and wait for the query ID to get metadata location
-    String metadataLoc = waitPrefetch(this.tablePathToQueryID.get(tablePath));
+    String metadataLoc;
+    try {
+      metadataLoc = waitPrefetch(this.tablePathToQueryID.get(tablePath));
+    } catch (InterruptedException | SQLException | URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
 
     // Construct table from just location
-    var op = new StaticTableOperations(metadataLoc, new ResolvingFileIO());
-    return new BaseTable(op, id.name());
+    String fileIOImpl = "org.apache.iceberg.io.ResolvingFileIO";
+    if (this.catalogProperties.containsKey(CatalogProperties.FILE_IO_IMPL)) {
+      fileIOImpl = this.catalogProperties.get(CatalogProperties.FILE_IO_IMPL);
+    }
+
+    FileIO fileIO = CatalogUtil.loadFileIO(fileIOImpl, this.properties(), this.conf);
+    var op = new StaticTableOperations(metadataLoc, fileIO);
+    var table = new BaseTable(op, id.name());
+    table.refresh();
+    return table;
+  }
+
+  // Overrides to have access to configuration properties
+  public void setConf(Object conf) {
+    super.setConf(conf);
+    this.conf = conf;
+  }
+
+  public void initialize(String name, Map<String, String> properties) {
+    super.initialize(name, properties);
+    this.catalogProperties = properties;
   }
 }
