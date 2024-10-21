@@ -1435,8 +1435,10 @@ void single_global_window_computation(
         total_rows += it->nrows();
     }
     if (is_parallel) {
-        MPI_Allreduce(MPI_IN_PLACE, &total_rows, 1, MPI_UINT64_T, MPI_SUM,
-                      MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allreduce(MPI_IN_PLACE, &total_rows, 1, MPI_UINT64_T, MPI_SUM,
+                          MPI_COMM_WORLD),
+            "single_global_window_computation: MPI error on MPI_Allreduce:");
     }
     getv<uint64_t>(out_arr, 0) = total_rows;
 }
