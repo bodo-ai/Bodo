@@ -598,10 +598,16 @@ equi_join_shuffle(std::shared_ptr<table_info> left_table,
                 int64_t left_table_global_nrows;
                 int64_t right_table_global_nrows;
                 // TODO do this in a single reduction?
-                MPI_Allreduce(&left_table_nrows, &left_table_global_nrows, 1,
-                              MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
-                MPI_Allreduce(&right_table_nrows, &right_table_global_nrows, 1,
-                              MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+                HANDLE_MPI_ERROR(
+                    MPI_Allreduce(&left_table_nrows, &left_table_global_nrows,
+                                  1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD),
+                    "equi_join_shuffle: MPI error on MPI_Allreduce [left "
+                    "table]:");
+                HANDLE_MPI_ERROR(
+                    MPI_Allreduce(&right_table_nrows, &right_table_global_nrows,
+                                  1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD),
+                    "equi_join_shuffle: MPI error on MPI_Allreduce [right "
+                    "table]:");
                 static constexpr size_t MAX_BLOOM_SIZE = 100 * 1024 * 1024;
                 size_t left_cardinality = 0;
                 size_t right_cardinality = 0;
