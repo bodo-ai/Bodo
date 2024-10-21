@@ -2,7 +2,6 @@ package org.apache.calcite.sql.type;
 
 
 
-import com.amazonaws.services.dynamodbv2.xspec.L;
 import com.bodosql.calcite.application.operatorTables.DatetimeFnUtils;
 import com.bodosql.calcite.application.operatorTables.VariantOperandChecker;
 
