@@ -1849,8 +1849,11 @@ class WindowCollectionComputer {
             // corresponding to the current rank.
             int64_t send_rows = static_cast<int64_t>(!is_empty);
             int64_t _rank_idx = 0;
-            MPI_Exscan(&send_rows, &_rank_idx, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                       MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(
+                MPI_Exscan(&send_rows, &_rank_idx, 1, MPI_LONG_LONG_INT,
+                           MPI_SUM, MPI_COMM_WORLD),
+                "WindowCollectionComputer::CommunicateBoundary: MPI error on "
+                "MPI_Exscan:");
             auto rank_idx = static_cast<size_t>(_rank_idx);
 
             // Communicate the first/last row info across all ranks.

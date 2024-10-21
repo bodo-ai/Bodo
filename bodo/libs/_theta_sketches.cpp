@@ -167,7 +167,10 @@ std::unique_ptr<array_info> CompactSketchCollection::compute_ndv() {
         }
     }
     // Broadcast the vector onto all ranks);
-    MPI_Bcast(local_estimates.data(), n_fields, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Bcast(local_estimates.data(), n_fields, MPI_DOUBLE, 0,
+                  MPI_COMM_WORLD),
+        "CompactSketchCollection::compute_ndv: MPI error on MPI_Bcast:");
 
     // Convert to an array where -1 is a sentinel for null
     std::unique_ptr<array_info> arr =
