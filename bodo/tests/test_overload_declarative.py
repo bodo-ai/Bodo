@@ -20,38 +20,16 @@ from bodo.ir.argument_checkers import (
     NumericSeriesArgumentChecker,
     NumericSeriesBinOpChecker,
     OverloadArgumentsChecker,
+    OverloadAttributeChecker,
     StringScalarArgumentChecker,
     StringSeriesArgumentChecker,
 )
-from bodo.ir.declarative_templates import overload_method_declarative
+from bodo.ir.declarative_templates import (
+    overload_attribute_declarative,
+    overload_method_declarative,
+)
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError, is_overload_const_str_equal
-
-
-def _val_to_string(val):
-    """
-    Embed *val* as it's constructor in a string.
-    *val* can be a Series, Index, RangeIndex, numpy array,
-    DataFrame, str, int, float or bool
-    """
-    if isinstance(val, pd.Series):
-        elems_str = ",".join(map(_val_to_string, val.array))
-        return f"pd.Series([{elems_str}])"
-    if isinstance(val, pd.RangeIndex):
-        return f"pd.RangeIndex(start={val.start}, stop={val.stop}, step={val.step})"
-    if isinstance(val, pd.Index):
-        elems_str = ",".join(map(str, val.array))
-        return f"pd.Index([{elems_str}])"
-    if isinstance(val, np.ndarray):
-        return f"np.array({list(val)})"
-    if isinstance(val, pd.DataFrame):
-        df_dict = dict(val)
-        for key, val in df_dict.items():
-            df_dict[key] = list(val)
-        return f"pd.DataFrame({df_dict})"
-    if isinstance(val, str):
-        return f'"{val}"'
-    return str(val)
 
 
 def _val_to_string(val):
@@ -479,7 +457,7 @@ def test_series_self_argument_checkers(S, arg1, arg2, expected_err_msg):
 @pytest.mark.parametrize(
     "S, arg1, expected_err_msg",
     [
-        pytest.param(pd.Series([5, 4, 3, 2, 1]), "int", None, id="no_error"),
+        pytest.param(pd.Series([5, 4, 3, 2, 1]), "int", None, id="no_errors"),
         pytest.param(
             pd.Series([5, 4, 3, 2, 1]),
             "float",
@@ -562,3 +540,53 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
 
     finally:
         delattr(bodo.hiframes.series_impl, "overload_series_do_something4")
+
+
+@pytest.mark.parametrize(
+    "S, expected_err_msg",
+    [
+        pytest.param(pd.Series(["1", "2", "3", "4", "5"]), None, id="no_errors"),
+        pytest.param(
+            pd.Series([1, 2, 3, 4]),
+            "Expected 'self' to be a Series of String data.",
+            id="error",
+        ),
+    ],
+)
+def test_overload_attr(S, expected_err_msg):
+    @overload_attribute_declarative(
+        bodo.SeriesType,
+        "some_attr",
+        "pd.Series.some_attr",
+        description="this is an attribute",
+        arg_checker=OverloadAttributeChecker(
+            StringSeriesArgumentChecker("S", is_self=True)
+        ),
+        inline="always",
+    )
+    def overload_series_attr(S):
+        def impl(S):
+            return S.str.casefold()
+
+        return impl
+
+    setattr(
+        bodo.hiframes.series_impl,
+        "overload_series_attr",
+        overload_series_attr,
+    )
+
+    try:
+
+        def test_impl(S):
+            return S.some_attr
+
+        if expected_err_msg is None:
+            # expect to compile successfully
+            bodo.jit(test_impl)(S)
+        else:
+            with pytest.raises(BodoError, match=expected_err_msg):
+                bodo.jit(test_impl)(S)
+
+    finally:
+        delattr(bodo.hiframes.series_impl, "overload_series_attr")

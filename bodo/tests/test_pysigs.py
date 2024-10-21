@@ -29,13 +29,27 @@ def _get_series_apis():
 
 def _get_method_template(typing_ctx, types, attrs):
     """
-    Try to get a template of attrs from typ. If template is missing or if an supported
-    and unsupported overload template are found, returns an instance of
-    _OverloadMissingOrIncorrect
+    Get a template of *attrs* from *types*. If template is missing or if both a
+    supported and unsupported overload template are found, returns an instance of
+    _OverloadMissingOrIncorrect. If the attribute exists as an UnsupportedTemplate,
+    returns None.
+
+    Args:
+        typing_ctx (BaseContext): The registry containing all method/attribute
+            templates
+        types (List[type]): A list of possible types to use as starting points to
+            look up *attrs* in the typing context. These should all be instances of
+            the same type, for example for SeriesType, *types* might consist of a string
+            series, an int series, etc..
+        attrs (List[str]): A path specifying an attribute starting from the types in
+            *types*.
+
+    Returns:
+        AttributeTemplate | None | _OverloadMissingOrIncorrect: An overload template if
+            one exists.
     """
     typ = None
     template = None
-
     for base_type in types:
         typ = base_type
         try:
@@ -50,14 +64,18 @@ def _get_method_template(typing_ctx, types, attrs):
                     # No template or inconsistent templates
                     return _OverloadMissingOrIncorrect()
                 else:
-                    # UnsupportedTemplate case return None
+                    # UnsupportedTemplate case, return None
                     return None
+            # return the first template found
+            return template
         except Exception as e:
             # catch bodo/numba errors for invalid input type and raise everything else
             if not isinstance(e, errors.TypingError) and not isinstance(e, BodoError):
                 raise e
 
-    return template
+    # catch all, if typing errors are raised for all types then maybe this attr should
+    # have an unsupported template
+    return _OverloadMissingOrIncorrect()
 
 
 def _get_pysig_from_path(path, package_name="pd"):
@@ -73,8 +91,8 @@ def _get_pysig_from_path(path, package_name="pd"):
 
 def signatures_equal(pysig, overload_sig, changed_defaults):
     """
-    Compare **pysig** to **overload_sig** on all parameters not listed in
-    **changed_defaults** or *args/**kwargs
+    Compare *pysig* to **overload_sig** on all parameters not listed in
+    *changed_defaults* or *args/**kwargs
     """
 
     overload_params = list(overload_sig.parameters.values())

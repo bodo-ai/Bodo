@@ -2,6 +2,9 @@
 
 `pandas.Series.dt.is_month_start`
 
+!!! note
+	Input must be a Series of `datetime64` data.
+
 ### Example Usage
 
 ``` py
