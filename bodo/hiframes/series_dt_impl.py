@@ -29,8 +29,12 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.ir.argument_checkers import (
     DatetimeLikeSeriesArgumentChecker,
     OverloadArgumentsChecker,
+    OverloadAttributeChecker,
 )
-from bodo.ir.declarative_templates import overload_method_declarative
+from bodo.ir.declarative_templates import (
+    overload_attribute_declarative,
+    overload_method_declarative,
+)
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.utils.typing import (
     BodoError,
@@ -99,10 +103,6 @@ def overload_series_dt(s):
 
 def create_date_field_overload(field):
     def overload_field(S_dt):
-        if S_dt.stype.dtype != types.NPDatetime("ns") and not isinstance(
-            S_dt.stype.dtype, PandasDatetimeTZDtype
-        ):  # pragma: no cover
-            return
         has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
 
         func_text = "def impl(S_dt):\n"
@@ -152,35 +152,41 @@ def create_date_field_overload(field):
     return overload_field
 
 
+def overload_datetime_field_declarative(field, overload_impl):
+    """
+    Use declarative overload template to create an overload of dt fields that are only
+    implemented for datetimes. This check is performed at compile time and is
+    documenteded using overload_attribute_declarative.
+    """
+    overload_attribute_declarative(
+        SeriesDatetimePropertiesType,
+        field,
+        path=f"pd.Series.dt.{field}",
+        arg_checker=OverloadAttributeChecker(
+            DatetimeLikeSeriesArgumentChecker("S_dt", type="datetime", is_self=True),
+        ),
+        description=None,
+        inline="always",
+    )(overload_impl)
+
+
 def _install_date_fields():
     for field in bodo.hiframes.pd_timestamp_ext.date_fields:
         overload_impl = create_date_field_overload(field)
-        overload_attribute(SeriesDatetimePropertiesType, field)(overload_impl)
+        # Using overload_attribute_declarative performs check that the Series data is
+        # datetime at compile time and can be used to generate documentation.
+        overload_datetime_field_declarative(field, overload_impl)
 
 
 _install_date_fields()
 
 
-def create_date_method_overload(method):
-    is_str_method = method in ["day_name", "month_name"]
-
+def create_date_method_overload(method, is_str_method):
     if is_str_method:
-        func_text = "def overload_method(S_dt, locale=None):\n"
         # Only string methods both have locale as an argument.
-        func_text += "    unsupported_args = dict(locale=locale)\n"
-        func_text += "    arg_defaults = dict(locale=None)\n"
-        func_text += "    bodo.utils.typing.check_unsupported_args(\n"
-        func_text += f"        'Series.dt.{method}',\n"
-        func_text += "        unsupported_args,\n"
-        func_text += "        arg_defaults,\n"
-        func_text += "        package_name='pandas',\n"
-        func_text += "        module_name='Series',\n"
-        func_text += "    )\n"
+        func_text = "def overload_method(S_dt, locale=None):\n"
     else:
         func_text = "def overload_method(S_dt):\n"
-    # .dt methods only work on datetime64s"""
-    func_text += "    if not (S_dt.stype.dtype == bodo.datetime64ns or isinstance(S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)):\n"  # pragma: no cover
-    func_text += "        return\n"
     if is_str_method:
         func_text += "    def impl(S_dt, locale=None):\n"
     else:
@@ -215,34 +221,38 @@ def create_date_method_overload(method):
     return overload_method
 
 
-# These methods use overload_method_declarative to generate documentation
-# as well as perform check that the Series data is datetime at compile time
-datetime_overload_declarative_prototypes = ["month_name"]
+def overload_datetime_method_declarative(method, overload_impl, unsupported_args):
+    """
+    Use declarative overload template to create an overload of dt method that are only
+    implemented for datetimes. This check is performed at compile time and is
+    documenteded using overload_method_declarative.
+    """
+    overload_method_declarative(
+        SeriesDatetimePropertiesType,
+        method,
+        path=f"pd.Series.dt.{method}",
+        unsupported_args=unsupported_args,
+        method_args_checker=OverloadArgumentsChecker(
+            [
+                DatetimeLikeSeriesArgumentChecker(
+                    "S_dt", type="datetime", is_self=True
+                ),
+            ]
+        ),
+        description=None,
+        inline="always",
+    )(overload_impl)
 
 
 def _install_date_methods():
     for method in bodo.hiframes.pd_timestamp_ext.date_methods:
-        overload_impl = create_date_method_overload(method)
-        if method in datetime_overload_declarative_prototypes:
-            overload_method_declarative(
-                SeriesDatetimePropertiesType,
-                method,
-                path=f"pd.Series.dt.{method}",
-                unsupported_args={"locale"},
-                method_args_checker=OverloadArgumentsChecker(
-                    [
-                        DatetimeLikeSeriesArgumentChecker(
-                            "S_dt", type="datetime", is_self=True
-                        ),
-                    ]
-                ),
-                description=None,
-                inline="always",
-            )(overload_impl)
-        else:
-            overload_method(SeriesDatetimePropertiesType, method, inline="always")(
-                overload_impl
-            )
+        is_str_method = method in ["day_name", "month_name"]
+        overload_impl = create_date_method_overload(method, is_str_method)
+        # Only string methods have locale as an argument.
+        unsupported_args = {"locale"} if is_str_method else set()
+        # Using overload_method_declarative performs check that the Series data is
+        # datetime at compile time and can be used to generate documentation.
+        overload_datetime_method_declarative(method, overload_impl, unsupported_args)
 
 
 _install_date_methods()

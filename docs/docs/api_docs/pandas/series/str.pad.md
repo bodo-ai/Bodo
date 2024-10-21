@@ -4,11 +4,11 @@
 
 ### Argument Restrictions:
  * `width`: must be type `Integer`.
- * `side`: must be a compile time constant and must be `"left"`, `"right"` or `"both"`.
+ * `side`: must be a compile time constant and must be `"right"`, `"both"` or `"left"`.
  * `fillchar`: must be type `Character`.
 
 !!! note
-	`pd.Series.str.pad` only supported on Series of `String` data.
+	Input must be a Series of `String` data.
 
 ### Example Usage
 ``` py

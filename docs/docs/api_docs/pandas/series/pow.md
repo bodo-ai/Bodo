@@ -9,7 +9,7 @@
  * `axis`: only supports default value `0`.
 
 !!! note
-	`pd.Series.pow` only supported on Series of `Integer` or `Float` data.
+	Input must be a Series of `Integer` or `Float` data.
 
 ### Example Usage
 
