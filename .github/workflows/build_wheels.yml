@@ -13,7 +13,7 @@ defaults:
     shell: bash -leo pipefail {0}
 
 jobs:
-  build_wheels:
+  build_bodo_wheels:
     permissions:
       id-token: write
       contents: read
@@ -101,7 +101,7 @@ jobs:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
-  test-linux:
+  test-bodo-linux:
     # The manylinux image we use to build the wheels can't install the wheels since it's too old. 
     # For this reason we test them separately
     runs-on: ubuntu-latest
@@ -110,7 +110,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10", "3.11", "3.12"]
-    needs: build_wheels
+    needs: build_bodo_wheels
     steps:
       - uses: actions/download-artifact@v4
         id: download-artifact
@@ -147,8 +147,9 @@ jobs:
               fi
           done
 
+
   upload_all:
-    needs: [build_wheels, test-linux]
+    needs: [build_bodo_wheels, test-bodo-linux]
     permissions:
       id-token: write
     runs-on: ubuntu-latest
