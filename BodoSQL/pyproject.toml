@@ -35,5 +35,8 @@ packages = ["bodosql"]
 [tool.setuptools.package-data]
 bodosql = ["jars/*.jar", "opensource/*.NOTICE"]
 
+[tool.setuptools.exclude-package-data]
+bodosql =["tests*"]
+
 [tool.setuptools_scm]
 root = ".."
