@@ -1,10 +1,11 @@
 #!/bin/bash
 
-dnf update -y
 # Install kernel headers for efa, requires restart
 dnf install -y kernel-devel-matched
 # Bug in rocky 9.4, updating kernel doesn't trigger rebuilding grub
 grub2-mkconfig -o /boot/grub2/grub.cfg
+
+dnf upgrade --refresh -y
 
 dnf install -y python3-pip
 dnf config-manager --set-enabled crb
