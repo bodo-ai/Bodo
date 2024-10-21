@@ -92,7 +92,7 @@ class NDistinctValueArgumentChecker(AbstractArgumentTypeChecker):
             f"{path}: Expected '{self.arg_name}' to be a compile time constant and must be {values_str}. Got: {arg_type}."
         )
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         values_str = format_requirements_list(self._get_values_str, self.values, True)
         return f"must be a compile time constant and must be {values_str}"
 
@@ -121,7 +121,7 @@ class ConstantArgumentChecker(AbstractArgumentTypeChecker):
             f"{path}: Expected '{self.arg_name}' to be a constant {types_str}. Got: {arg_type}."
         )
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         types_str = format_requirements_list(
             self._get_types_str, self.types, usetick=True
         )
@@ -141,7 +141,7 @@ class PrimitiveTypeArgumentChecker(AbstractArgumentTypeChecker):
             )
         return arg_type
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         return f"must be type `{self.type_name}`"
 
 
@@ -209,7 +209,7 @@ class NumericScalarArgumentChecker(AbstractArgumentTypeChecker):
             )
         return arg_type
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         return (
             "must be `Integer`, `Float`, `Boolean`, or `None`"
             if self.is_optional
@@ -238,7 +238,7 @@ class NumericSeriesBinOpChecker(AbstractArgumentTypeChecker):
             )
         return arg_typ
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         return "must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data"
 
 
@@ -257,7 +257,7 @@ class AnySeriesArgumentChecker(AbstractArgumentTypeChecker):
             raise BodoError(f"{path}: Expected {self.arg_name} to be a Series. Got:.")
         return arg_type
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         return "all Series types supported"
 
 
@@ -292,14 +292,13 @@ class DatetimeLikeSeriesArgumentChecker(AnySeriesArgumentChecker):
             f"{path}: Expected '{self.display_arg_name}' to be a Series of {supported_types} data. Got: {series_type}"
         )
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         supported_types = (
             "`datetime64` or `timedelta64`"
             if self.type == "any"
             else f"`{self.type}64`"
         )
-        prefix = "must be " if not self.is_self else "only supported on "
-        return f"{prefix}Series of {supported_types} data"
+        return f"must be a Series of {supported_types} data"
 
 
 class NumericSeriesArgumentChecker(AnySeriesArgumentChecker):
@@ -314,9 +313,8 @@ class NumericSeriesArgumentChecker(AnySeriesArgumentChecker):
             )
         return arg_type
 
-    def explain_arg(self, context):
-        prefix = "must be " if not self.is_self else "only supported on "
-        return f"{prefix}Series of `Integer` or `Float` data"
+    def explain_arg(self, context):  # pragma: no cover
+        return "must be a Series of `Integer` or `Float` data"
 
 
 class StringSeriesArgumentChecker(AnySeriesArgumentChecker):
@@ -334,9 +332,21 @@ class StringSeriesArgumentChecker(AnySeriesArgumentChecker):
             )
         return series_type
 
-    def explain_arg(self, context):
-        prefix = "must be " if not self.is_self else "only supported on "
-        return f"{prefix}Series of `String` data"
+    def explain_arg(self, context):  # pragma: no cover
+        return "must be a Series of `String` data"
+
+
+class AnyArgumentChecker(AbstractArgumentTypeChecker):
+    """Dummy class for overload attribute that allows all types"""
+
+    def __init__(self, arg_name):
+        self.arg_name = arg_name
+
+    def check_arg(self, context, path, arg_type):
+        return arg_type
+
+    def explain_arg(self, context):  # pragma: no cover
+        return "supported on all datatypes"
 
 
 class GenericArgumentChecker(AbstractArgumentTypeChecker):
@@ -376,7 +386,7 @@ class GenericArgumentChecker(AbstractArgumentTypeChecker):
 
         return err_or_typ
 
-    def explain_arg(self, context):
+    def explain_arg(self, context):  # pragma: no cover
         return self.explain_fn(context)
 
 
@@ -406,3 +416,18 @@ class OverloadArgumentsChecker:
             arg_name: arg_checker.explain_arg(self.context)
             for arg_name, arg_checker in self.argument_checkers.items()
         }
+
+
+class OverloadAttributeChecker(OverloadArgumentsChecker):
+    """Checker for attributes that accepts a single ArgumentChecker"""
+
+    def __init__(self, argument_checker):
+        self.argument_checker = argument_checker
+        self.context = {}
+
+    def check_args(self, path, arg_type):
+        new_arg_type = self.argument_checker.check_arg(self.context, path, arg_type)
+        self.set_context(self.argument_checker.arg_name, new_arg_type)
+
+    def explain_args(self):
+        return self.argument_checker.explain_arg(self.context)

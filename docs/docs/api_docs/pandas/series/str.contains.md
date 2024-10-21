@@ -10,7 +10,7 @@
  * `regex`: must be a compile time constant and must be type `Boolean`.
 
 !!! note
-	`pd.Series.str.contains` only supported on Series of `String` data.
+	Input must be a Series of `String` data.
 
 ### Example Usage:
 ``` py

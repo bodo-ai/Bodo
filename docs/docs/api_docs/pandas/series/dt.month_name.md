@@ -6,7 +6,7 @@
  * `locale`: only supports default value `None`.
 
 !!! note
-	`pd.Series.dt.month_name` only supported on Series of `datetime64` data.
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

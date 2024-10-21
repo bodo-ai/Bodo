@@ -2,6 +2,9 @@
 
 `pandas.Series.dt.day_of_week`
 
+!!! note
+	Input must be a Series of `datetime64` data.
+
 ### Example Usage
 
 ``` py
