@@ -544,8 +544,10 @@ void _dist_transpose_comm(char *output, char *input, int typ_enum,
     }
 
     std::vector<int64_t> recv_counts(n_pes);
-    MPI_Alltoall(send_counts.data(), 1, MPI_INT64_T, recv_counts.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT64_T, recv_counts.data(), 1,
+                     MPI_INT64_T, MPI_COMM_WORLD),
+        "_dist_transpose_comm: MPI error on MPI_Alltoall:");
 
     std::vector<int64_t> send_disp(n_pes);
     std::vector<int64_t> recv_disp(n_pes);
@@ -600,12 +602,16 @@ int32_t sync_is_last_non_blocking(IsLastState *state, int32_t local_is_last) {
 
     if (local_is_last) {
         if (!state->is_last_barrier_started) {
-            MPI_Ibarrier(state->is_last_comm, &state->is_last_request);
+            HANDLE_MPI_ERROR(
+                MPI_Ibarrier(state->is_last_comm, &state->is_last_request),
+                "sync_is_last_non_blocking: MPI error on MPI_Ibarrier:");
             state->is_last_barrier_started = true;
             return 0;
         } else {
             int flag = 0;
-            MPI_Test(&state->is_last_request, &flag, MPI_STATUS_IGNORE);
+            HANDLE_MPI_ERROR(
+                MPI_Test(&state->is_last_request, &flag, MPI_STATUS_IGNORE),
+                "sync_is_last_non_blocking: MPI error on MPI_Test:");
             if (flag) {
                 state->global_is_last = true;
             }
@@ -664,8 +670,10 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
 
     int64_t arr_gath_s[2] = {n_rows, n_sub_elems};
     bodo::vector<int64_t> arr_gath_r(2 * n_pes);
-    MPI_Gengather(arr_gath_s, 2, MPI_LONG_LONG_INT, arr_gath_r.data(), 2,
-                  MPI_LONG_LONG_INT, mpi_root, comm, all_gather);
+    HANDLE_MPI_ERROR(
+        MPI_Gengather(arr_gath_s, 2, MPI_LONG_LONG_INT, arr_gath_r.data(), 2,
+                      MPI_LONG_LONG_INT, mpi_root, comm, all_gather),
+        "_distributed.cpp::gather_array: MPI error on MPI_Gengather:");
 
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
@@ -707,9 +715,12 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             // Boolean arrays always store data as UINT8
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
             int n_bytes = (n_rows + 7) >> 3;
-            MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ, tmp_data_bytes.data(),
-                           recv_count_bytes.data(), recv_disp_bytes.data(),
-                           mpi_typ, mpi_root, comm, all_gather);
+            HANDLE_MPI_ERROR(
+                MPI_Gengatherv(data_arr_i, n_bytes, mpi_typ,
+                               tmp_data_bytes.data(), recv_count_bytes.data(),
+                               recv_disp_bytes.data(), mpi_typ, mpi_root, comm,
+                               all_gather),
+                "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
             if (is_receiver || all_gather) {
                 out_arr = alloc_array_top_level(n_rows_tot, -1, -1, arr_type,
                                                 dtype, -1, 0, num_categories);
@@ -725,9 +736,11 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
                                                 dtype, -1, 0, num_categories);
                 data1_ptr = out_arr->data1();
             }
-            MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
-                           rows_counts.data(), rows_disps.data(), mpi_typ,
-                           mpi_root, comm, all_gather);
+            HANDLE_MPI_ERROR(
+                MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
+                               rows_counts.data(), rows_disps.data(), mpi_typ,
+                               mpi_root, comm, all_gather),
+                "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
         }
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
@@ -744,12 +757,16 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             data1_ptr = out_arr->data1();
             data2_ptr = out_arr->data2();
         }
-        MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
-                       rows_counts.data(), rows_disps.data(), mpi_typ, mpi_root,
-                       comm, all_gather);
-        MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
-                       rows_counts.data(), rows_disps.data(), mpi_typ, mpi_root,
-                       comm, all_gather);
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(in_arr->data1(), n_rows, mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(in_arr->data2(), n_rows, mpi_typ, data2_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
     } else if (arr_type == bodo_array_type::STRING) {
         MPI_Datatype mpi_typ32 = get_MPI_typ(Bodo_CTypes::UINT32);
         MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
@@ -776,9 +793,11 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             char_counts[i_p] = siz;
             pos += siz;
         }
-        MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
-                       char_counts.data(), char_disps.data(), mpi_typ8,
-                       mpi_root, comm, all_gather);
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(in_arr->data1(), n_sub_elems, mpi_typ8, data1_ptr,
+                           char_counts.data(), char_disps.data(), mpi_typ8,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
         // Collecting the offsets data
         bodo::vector<uint32_t> list_count_loc(n_rows);
         offset_t *offsets_i = (offset_t *)in_arr->data2();
@@ -789,10 +808,12 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             curr_offset = new_offset;
         }
         bodo::vector<uint32_t> list_count_tot(n_rows_tot);
-        MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
-                       list_count_tot.data(), rows_counts.data(),
-                       rows_disps.data(), mpi_typ32, mpi_root, comm,
-                       all_gather);
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ32,
+                           list_count_tot.data(), rows_counts.data(),
+                           rows_disps.data(), mpi_typ32, mpi_root, comm,
+                           all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
         if (is_receiver || all_gather) {
             offset_t *offsets_o = (offset_t *)out_arr->data2();
             offsets_o[0] = 0;
@@ -851,12 +872,16 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             data1_ptr = out_arr->data1();
             data2_ptr = out_arr->data2();
         }
-        MPI_Gengatherv(in_arr->data1(), n_rows, utc_mpi_typ, data1_ptr,
-                       rows_counts.data(), rows_disps.data(), utc_mpi_typ,
-                       mpi_root, comm, all_gather);
-        MPI_Gengatherv(in_arr->data2(), n_rows, offset_mpi_typ, data2_ptr,
-                       rows_counts.data(), rows_disps.data(), offset_mpi_typ,
-                       mpi_root, comm, all_gather);
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(in_arr->data1(), n_rows, utc_mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), utc_mpi_typ,
+                           mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(in_arr->data2(), n_rows, offset_mpi_typ, data2_ptr,
+                           rows_counts.data(), rows_disps.data(),
+                           offset_mpi_typ, mpi_root, comm, all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
     } else if (arr_type == bodo_array_type::ARRAY_ITEM) {
         int64_t n_rows_tot = 0;
         for (int i_p = 0; i_p < n_pes; i_p++) {
@@ -871,10 +896,12 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         }
         std::vector<offset_t> list_count_tot(n_rows_tot);
         MPI_Datatype mpi_typ64 = get_MPI_typ(Bodo_CTypes::UINT64);
-        MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ64,
-                       list_count_tot.data(), rows_counts.data(),
-                       rows_disps.data(), mpi_typ64, mpi_root, comm,
-                       all_gather);
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(list_count_loc.data(), n_rows, mpi_typ64,
+                           list_count_tot.data(), rows_counts.data(),
+                           rows_disps.data(), mpi_typ64, mpi_root, comm,
+                           all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
         // Gathering inner array
         out_arr = gather_array(in_arr->child_arrays.front(), all_gather,
                                is_parallel, mpi_root, n_pes, myrank, comm_ptr);
@@ -933,9 +960,12 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         bodo::vector<uint8_t> tmp_null_bytes(n_null_bytes, 0);
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         int n_bytes = (n_rows + 7) >> 3;
-        MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ, tmp_null_bytes.data(),
-                       recv_count_null.data(), recv_disp_null.data(), mpi_typ,
-                       mpi_root, comm, all_gather);
+        HANDLE_MPI_ERROR(
+            MPI_Gengatherv(null_bitmask_i, n_bytes, mpi_typ,
+                           tmp_null_bytes.data(), recv_count_null.data(),
+                           recv_disp_null.data(), mpi_typ, mpi_root, comm,
+                           all_gather),
+            "_distributed.cpp::gather_array: MPI error on MPI_Gengatherv:");
         if (is_receiver || all_gather) {
             char *null_bitmask_o = out_arr->null_bitmask();
             copy_gathered_null_bytes((uint8_t *)null_bitmask_o, tmp_null_bytes,
