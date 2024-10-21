@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include "../io/_io.h"
 #include "_bodo_common.h"
+#include "_distributed.h"
 #include "_memory.h"
 #include "_memory_budget.h"
 
@@ -84,7 +85,8 @@ void QueryProfileCollector::Init() {
     }
     // Broadcast the output_dir length to all ranks
     int output_dir_len = output_dir.size();
-    MPI_Bcast(&output_dir_len, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Bcast(&output_dir_len, 1, MPI_INT, 0, MPI_COMM_WORLD),
+                     "QueryProfileCollector::Init: MPI error on MPI_Bcast:");
 
     // Reserve space for the output directory
     if (rank != 0) {
@@ -92,8 +94,9 @@ void QueryProfileCollector::Init() {
     }
 
     // Broadcast the output directory to all ranks
-    MPI_Bcast((void*)output_dir.c_str(), output_dir.size(), MPI_CHAR, 0,
-              MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Bcast((void*)output_dir.c_str(), output_dir.size(),
+                               MPI_CHAR, 0, MPI_COMM_WORLD),
+                     "QueryProfileCollector::Init: MPI error on MPI_Bcast:");
 }
 
 static uint64_t us_since_epoch() {
