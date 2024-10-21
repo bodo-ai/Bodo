@@ -101,10 +101,13 @@ void redistribute_for_fftw(std::shared_ptr<array_info>& arr,
     std::vector<int> arr_lens = std::vector<int>(npes, 0);
     std::vector<int> local_arr_starts = std::vector<int>(npes + 1, 0);
     local_arr_starts[npes] = shape[0] * shape[1];
-    MPI_Allgather(&arr_len, 1, MPI_INT, arr_lens.data(), 1, MPI_INT,
-                  MPI_COMM_WORLD);
-    MPI_Allgather(&local_arr_start, 1, MPI_INT, local_arr_starts.data(), 1,
-                  MPI_INT, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Allgather(&arr_len, 1, MPI_INT, arr_lens.data(), 1,
+                                   MPI_INT, MPI_COMM_WORLD),
+                     "redistribute_for_fftw: MPI error on MPI_Allgather:");
+    HANDLE_MPI_ERROR(
+        MPI_Allgather(&local_arr_start, 1, MPI_INT, local_arr_starts.data(), 1,
+                      MPI_INT, MPI_COMM_WORLD),
+        "redistribute_for_fftw: MPI error on MPI_Allgather:");
     size_t global_idx_offset = 0;
     for (int i = 0; i < rank; ++i) {
         global_idx_offset += arr_lens[i];
@@ -129,16 +132,20 @@ void redistribute_for_fftw(std::shared_ptr<array_info>& arr,
 
     std::vector<int> recvoffsets = std::vector<int>(npes, 0);
     std::vector<int> recvcounts = std::vector<int>(npes, 0);
-    MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT,
-                 MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1,
+                     MPI_INT, MPI_COMM_WORLD),
+        "redistribute_for_fftw: MPI error on MPI_Alltoall:");
     for (int i = 1; i < npes; ++i) {
         recvoffsets[i] = recvoffsets[i - 1] + recvcounts[i - 1];
     }
 
-    MPI_Alltoallv(arr->buffers[0]->mutable_data(), sendcounts.data(),
-                  sendoffsets.data(), fftw_mpi_type<dtype>,
-                  out_arr->buffers[0]->mutable_data(), recvcounts.data(),
-                  recvoffsets.data(), fftw_mpi_type<dtype>, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoallv(arr->buffers[0]->mutable_data(), sendcounts.data(),
+                      sendoffsets.data(), fftw_mpi_type<dtype>,
+                      out_arr->buffers[0]->mutable_data(), recvcounts.data(),
+                      recvoffsets.data(), fftw_mpi_type<dtype>, MPI_COMM_WORLD),
+        "redistribute_for_fftw: MPI error on MPI_Alltoallv:");
     out_arr->length = local_arr_len;
 }
 /**
@@ -164,8 +171,9 @@ std::shared_ptr<array_info> fft2(std::shared_ptr<array_info> arr,
 
     if (parallel) {
         // Get the global shape
-        MPI_Allreduce(MPI_IN_PLACE, &shape[0], 1, MPI_UINT64_T, MPI_SUM,
-                      MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(MPI_Allreduce(MPI_IN_PLACE, &shape[0], 1, MPI_UINT64_T,
+                                       MPI_SUM, MPI_COMM_WORLD),
+                         "fft2: MPI error on MPI_Allreduce:");
     }
     // When processing an array of shape (n, 1) or (1, n) fftw doesn't support
     // the (n, 1) case so we need to swap the shape and then
@@ -335,8 +343,10 @@ fftshift_redistribute_across_ranks(std::shared_ptr<array_info> arr,
     std::replace(send_offsets.begin(), send_offsets.end(), -1, 0);
     recv_offsets[npes] = global_arr_len;
     // Distribute send_counts so we can calculate recv_counts/offsets
-    MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT,
-                 MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1,
+                     MPI_INT, MPI_COMM_WORLD),
+        "fftshift_redistribute_across_ranks: MPI error on MPI_Alltoall:");
     for (int i = 1; i < npes; ++i) {
         recv_offsets[i] = recv_offsets[i - 1] + recv_counts[i - 1];
     }
@@ -353,19 +363,24 @@ fftshift_redistribute_across_ranks(std::shared_ptr<array_info> arr,
     // calculate each received element's starting global_idx
     std::vector<int> other_ranks_send_offset_for_this_rank =
         std::vector<int>(npes);
-    MPI_Alltoall(send_offsets.data(), 1, MPI_INT,
-                 other_ranks_send_offset_for_this_rank.data(), 1, MPI_INT,
-                 MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoall(send_offsets.data(), 1, MPI_INT,
+                     other_ranks_send_offset_for_this_rank.data(), 1, MPI_INT,
+                     MPI_COMM_WORLD),
+        "fftshift_redistribute_across_ranks: MPI error on MPI_Alltoall:");
     for (size_t i = 0; i < global_idx_offset_per_rank.size(); ++i) {
         global_idx_offset_per_rank[i] +=
             other_ranks_send_offset_for_this_rank[i];
     }
     // Since send_counts/offsets are different from recv_counts/offsets
     // this can't be done in place
-    MPI_Alltoallv(arr->buffers[0]->mutable_data(), send_counts.data(),
-                  send_offsets.data(), fftw_mpi_type<dtype>,
-                  temp_arr->buffers[0]->mutable_data(), recv_counts.data(),
-                  recv_offsets.data(), fftw_mpi_type<dtype>, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoallv(arr->buffers[0]->mutable_data(), send_counts.data(),
+                      send_offsets.data(), fftw_mpi_type<dtype>,
+                      temp_arr->buffers[0]->mutable_data(), recv_counts.data(),
+                      recv_offsets.data(), fftw_mpi_type<dtype>,
+                      MPI_COMM_WORLD),
+        "fftshift_redistribute_across_ranks: MPI error on MPI_Alltoallv:");
     return {temp_arr, recv_offsets, elements_distributed};
 }
 
@@ -388,8 +403,10 @@ void fftshift(std::shared_ptr<array_info> arr, uint64_t shape[2],
     if (parallel) {
         // Distribute each ranks length to every other rank
         arr_lens = std::vector<uint64_t>(npes, 0);
-        MPI_Allgather(&arr->length, 1, MPI_UINT64_T, arr_lens.data(), 1,
-                      MPI_UINT64_T, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allgather(&arr->length, 1, MPI_UINT64_T, arr_lens.data(), 1,
+                          MPI_UINT64_T, MPI_COMM_WORLD),
+            "fftshift: MPI error on MPI_Allgather:");
         // Calculate the size of arr across all ranks
         global_arr_len =
             std::accumulate<std::vector<uint64_t>::iterator, size_t>(
@@ -424,8 +441,10 @@ void fftshift(std::shared_ptr<array_info> arr, uint64_t shape[2],
         // Global idx offset needs to be updated based on the updated data
         // distribution
         auto recv_arr_lens = std::vector<uint64_t>(npes);
-        MPI_Allgather(&recv_arr->length, 1, MPI_UINT64_T, recv_arr_lens.data(),
-                      1, MPI_UINT64_T, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(MPI_Allgather(&recv_arr->length, 1, MPI_UINT64_T,
+                                       recv_arr_lens.data(), 1, MPI_UINT64_T,
+                                       MPI_COMM_WORLD),
+                         "fftshift: MPI error on MPI_Allgather:");
         global_idx_offset = std::accumulate(recv_arr_lens.begin(),
                                             recv_arr_lens.begin() + rank, 0);
         // Capture all the related data from this exchange
@@ -450,9 +469,11 @@ void fftshift(std::shared_ptr<array_info> arr, uint64_t shape[2],
             // distribution
             std::vector<uint64_t> recv_arr_lens_secondary =
                 std::vector<uint64_t>(npes);
-            MPI_Allgather(&recv_arr_secondary->length, 1, MPI_UINT64_T,
-                          recv_arr_lens_secondary.data(), 1, MPI_UINT64_T,
-                          MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(
+                MPI_Allgather(&recv_arr_secondary->length, 1, MPI_UINT64_T,
+                              recv_arr_lens_secondary.data(), 1, MPI_UINT64_T,
+                              MPI_COMM_WORLD),
+                "fftshift: MPI error on MPI_Allgather:");
             for (size_t i = 0; i < recv_arr_lens_secondary.size(); ++i) {
                 recv_arr_lens_secondary[i] += recv_arr_lens[i];
             }
