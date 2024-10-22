@@ -2049,7 +2049,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                _meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         if (
@@ -2066,7 +2066,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                _meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         if fdef == ("bodosql_case_kernel", ""):
@@ -2083,7 +2083,7 @@ class DistributedAnalysis:
 
             arrays = [lhs] + [elem.name for elem in elems]
             if len(arrays) > 1:
-                _meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         if fdef == ("concat_ws", "bodosql.kernels"):
@@ -2104,7 +2104,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[sep_name]):
                     arrays.append(sep_name)
                 if len(arrays) > 1:
-                    _meet_several_array_dists(arrays, array_dists)
+                    _meet_several_array_dists(self.typemap, arrays, array_dists)
                 return
 
         if fdef == ("is_in", "bodosql.kernels"):
@@ -3308,7 +3308,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                _meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(self.typemap, arrays, array_dists)
             return
 
         # handle calling other Bodo functions that have distributed flags
@@ -3740,7 +3740,7 @@ class DistributedAnalysis:
             if is_distributable_typ(self.typemap[args[1].name]):
                 arys_to_meet += [args[1].name]
             if len(arys_to_meet) > 1:
-                _meet_several_array_dists(arys_to_meet, array_dists)
+                _meet_several_array_dists(self.typemap, arys_to_meet, array_dists)
             return
 
         # set REP if not found
