@@ -46,6 +46,10 @@ from bodo.libs.bodosql_kernels.bodosql_array_kernels import (
 )
 from bodo.libs.bool_arr_ext import boolean_array_type
 from bodo.libs.distributed_api import Reduce_Type
+from bodo.transforms.distributed_analysis_call_registry import (
+    DistributedAnalysisContext,
+    call_registry,
+)
 from bodo.utils.transform import (
     get_call_expr_arg,
     get_const_value,
@@ -919,6 +923,10 @@ class DistributedAnalysis:
         if isinstance(self.typemap[rhs.func.name], WrapPythonDispatcherType):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+        # Check distributed analysis call registry for handler first
+        ctx = DistributedAnalysisContext(self.typemap, array_dists, equiv_set)
+        if call_registry.analyze_call(ctx, inst, fdef):
             return
 
         if (
@@ -989,21 +997,6 @@ class DistributedAnalysis:
             array_dists[lhs] = out_dist
             if out_dist != Distribution.OneD_Var:
                 array_dists[table] = out_dist
-            return
-
-        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
-            # scalar_optional_getitem isused by BodoSQL to load scalars.
-            # This doesn't impact the distribution of any array.
-            return
-
-        if fdef == ("add_nested_counts", "bodo.utils.indexing"):
-            # add_nested_counts is used by ArrayItemArray to add nested counts.
-            # This doesn't impact the distribution of any array.
-            return
-
-        if fdef == ("scalar_to_array_item_array", "bodo.libs.array_item_arr_ext"):
-            # scalar_to_array_item_array is used to convert a scalar to ArrayItemArray.
-            # This doesn't impact the distribution of any array.
             return
 
         if fdef == (
