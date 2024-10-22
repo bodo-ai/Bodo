@@ -33,7 +33,7 @@ class DistributedAnalysisCallRegistry:
         }
 
     def analyze_call(self, ctx, inst, fdef):
-        """Perform distributed analys for input call if it's in the registry.
+        """Perform distributed analysis for input call if it's in the registry.
         Return True if handled.
 
         Args:
