@@ -56,25 +56,20 @@ class BodoPhysicalAggregate(
         groupSet: ImmutableBitSet,
         groupSets: List<ImmutableBitSet>?,
         aggCalls: List<AggregateCall>,
-    ): BodoPhysicalAggregate {
-        return BodoPhysicalAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
-    }
+    ): BodoPhysicalAggregate = BodoPhysicalAggregate(cluster, traitSet, input, groupSet, groupSets, aggCalls)
 
     /**
      * Determine if this aggregate should use the
      * grouping sets code paths.
      */
-    private fun usesGroupingSets(): Boolean {
-        return groupSets.size > 1 || (groupSets[0] != groupSet)
-    }
+    private fun usesGroupingSets(): Boolean = groupSets.size > 1 || (groupSets[0] != groupSet)
 
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             emitStreaming(implementor)
         } else {
             emitSingleBatch(implementor)
         }
-    }
 
     private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         val stage =
@@ -86,8 +81,7 @@ class BodoPhysicalAggregate(
         // The final pipeline generates the output from the state.
         val outputStage =
             OutputtingStageEmission(
-                {
-                        ctx, stateVar, _ ->
+                { ctx, stateVar, _ ->
                     emitStreamingProduceOutput(ctx, stateVar)
                 },
                 // Out table sizes are handled directly in C++.
@@ -119,7 +113,7 @@ class BodoPhysicalAggregate(
         val batchCall =
             if (usesGroupingSets()) {
                 Expr.Call(
-                    "bodo.libs.stream_groupby.groupby_grouping_sets_build_consume_batch",
+                    "bodo.libs.streaming.groupby.groupby_grouping_sets_build_consume_batch",
                     listOf(
                         stateVar,
                         input,
@@ -128,7 +122,7 @@ class BodoPhysicalAggregate(
                 )
             } else {
                 Expr.Call(
-                    "bodo.libs.stream_groupby.groupby_build_consume_batch",
+                    "bodo.libs.streaming.groupby.groupby_build_consume_batch",
                     listOf(
                         stateVar,
                         input,
@@ -152,9 +146,10 @@ class BodoPhysicalAggregate(
         }
     }
 
-    private fun generateSubOperatorIDs(operatorID: OperatorID): List<OperatorID> {
-        return (1..groupSets.size).map { OperatorID(operatorID.id + it, operatorID.hide) }
-    }
+    private fun generateSubOperatorIDs(operatorID: OperatorID): List<OperatorID> =
+        (1..groupSets.size).map {
+            OperatorID(operatorID.id + it, operatorID.hide)
+        }
 
     private fun emitStreamingProduceOutput(
         ctx: BodoPhysicalRel.BuildContext,
@@ -168,9 +163,9 @@ class BodoPhysicalAggregate(
         pipeline.addOutputControl(outputControl)
         val functionName =
             if (usesGroupingSets()) {
-                "bodo.libs.stream_groupby.groupby_grouping_sets_produce_output_batch"
+                "bodo.libs.streaming.groupby.groupby_grouping_sets_produce_output_batch"
             } else {
-                "bodo.libs.stream_groupby.groupby_produce_output_batch"
+                "bodo.libs.streaming.groupby.groupby_produce_output_batch"
             }
         val outputCall = Expr.Call(functionName, listOf(stateVar, outputControl))
         builder.add(TupleAssign(listOf(outTable, pipeline.getExitCond()), outputCall))
@@ -184,9 +179,8 @@ class BodoPhysicalAggregate(
         }
     }
 
-    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return (implementor::build)(inputs) {
-                ctx, inputs ->
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        (implementor::build)(inputs) { ctx, inputs ->
             val groupingVariables = groupSet.asList()
             val groups = groupSets
             val expectedOutputCols: List<String> = this.getRowType().fieldNames
@@ -271,19 +265,29 @@ class BodoPhysicalAggregate(
                         )
                     val groupSetList = groupSet.toList()
                     val keptFields =
-                        this.getRowType().fieldList.withIndex().filter {
-                            (it.index < groupSetList.size && curGroup.contains(groupSetList[it.index])) || (
-                                it.index >= groupingVariables.size &&
-                                    aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
-                            )
-                        }.map { it.value.type }
+                        this
+                            .getRowType()
+                            .fieldList
+                            .withIndex()
+                            .filter {
+                                (it.index < groupSetList.size && curGroup.contains(groupSetList[it.index])) ||
+                                    (
+                                        it.index >= groupingVariables.size &&
+                                            aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
+                                    )
+                            }.map { it.value.type }
                     val keptNames =
-                        this.getRowType().fieldNames.withIndex().filter {
-                            (it.index < groupSetList.size && curGroup.contains(groupSetList[it.index])) || (
-                                it.index >= groupingVariables.size &&
-                                    aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
-                            )
-                        }.map { it.value }
+                        this
+                            .getRowType()
+                            .fieldNames
+                            .withIndex()
+                            .filter {
+                                (it.index < groupSetList.size && curGroup.contains(groupSetList[it.index])) ||
+                                    (
+                                        it.index >= groupingVariables.size &&
+                                            aggCallList[it.index - groupingVariables.size].aggregation.kind != SqlKind.LITERAL_AGG
+                                    )
+                            }.map { it.value }
                     val outputRowType = cluster.typeFactory.createStructType(keptFields, keptNames)
                     val engineTable = BodoEngineTable(tableVar.emit(), outputRowType)
                     val finalDf = ctx.convertTableToDf(engineTable)
@@ -355,7 +359,6 @@ class BodoPhysicalAggregate(
                 intermediateTable
             }
         }
-    }
 
     /**
      * Generates an expression for a Logical Aggregation with grouped variables. May return code to be
@@ -377,8 +380,8 @@ class BodoPhysicalAggregate(
         aggCallNames: List<String>,
         group: List<Int>,
         ctx: BodoPhysicalRel.BuildContext,
-    ): Pair<Expr, Op?> {
-        return if (AggHelpers.aggContainsFilter(aggCallList)) {
+    ): Pair<Expr, Op?> =
+        if (AggHelpers.aggContainsFilter(aggCallList)) {
             // If we have a Filter we need to generate a groupby apply
             AggCodeGen.generateApplyCodeWithGroupBy(
                 inVar,
@@ -395,7 +398,6 @@ class BodoPhysicalAggregate(
                 AggCodeGen.generateAggCodeWithGroupBy(inVar, inputColumnNames, group, aggCallList, aggCallNames)
             Pair(output, null)
         }
-    }
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         val builder = ctx.builder()
@@ -420,7 +422,7 @@ class BodoPhysicalAggregate(
             // TODO: Add handling for if we are using GROUPING.
             val stateCall =
                 Expr.Call(
-                    "bodo.libs.stream_groupby.init_grouping_sets_state",
+                    "bodo.libs.streaming.groupby.init_grouping_sets_state",
                     operatorId.toExpr(),
                     subOperatorIDCodegen,
                     keyIndices,
@@ -445,7 +447,7 @@ class BodoPhysicalAggregate(
         } else {
             val stateCall =
                 Expr.Call(
-                    "bodo.libs.stream_groupby.init_groupby_state",
+                    "bodo.libs.streaming.groupby.init_groupby_state",
                     ctx.operatorID().toExpr(),
                     keyIndices,
                     funcNames,
@@ -473,17 +475,16 @@ class BodoPhysicalAggregate(
         val finalizePipeline = ctx.builder().getCurrentStreamingPipeline()
         val functionName =
             if (usesGroupingSets()) {
-                "bodo.libs.stream_groupby.delete_grouping_sets_state"
+                "bodo.libs.streaming.groupby.delete_grouping_sets_state"
             } else {
-                "bodo.libs.stream_groupby.delete_groupby_state"
+                "bodo.libs.streaming.groupby.delete_groupby_state"
             }
         val deleteState = Stmt(Expr.Call(functionName, listOf(stateVar)))
         finalizePipeline.addTermination(deleteState)
     }
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.aggregateProperty(groupSet, groupSets, aggCalls, getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.aggregateProperty(groupSet, groupSets, aggCalls, getRowType())
 
     /**
      * Estimate the memory needed for each grouping set. If a key cannot be found then we select an equal fraction
@@ -541,8 +542,6 @@ class BodoPhysicalAggregate(
             groupSet: ImmutableBitSet,
             groupSets: List<ImmutableBitSet>,
             aggCalls: List<AggregateCall>,
-        ): BodoPhysicalAggregate {
-            return BodoPhysicalAggregate(cluster, cluster.traitSet(), input, groupSet, groupSets, aggCalls)
-        }
+        ): BodoPhysicalAggregate = BodoPhysicalAggregate(cluster, cluster.traitSet(), input, groupSet, groupSets, aggCalls)
     }
 }

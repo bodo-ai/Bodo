@@ -49,28 +49,24 @@ class BodoPhysicalWindow(
     rowType: RelDataType,
     groups: List<Group>,
     inputsToKeep: ImmutableBitSet,
-) :
-    WindowBase(
-            cluster,
-            traitSet.replace(BodoPhysicalRel.CONVENTION),
-            hints,
-            input,
-            constants,
-            rowType,
-            groups,
-            inputsToKeep,
-        ),
-        BodoPhysicalRel {
+) : WindowBase(
+        cluster,
+        traitSet.replace(BodoPhysicalRel.CONVENTION),
+        hints,
+        input,
+        constants,
+        rowType,
+        groups,
+        inputsToKeep,
+    ),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoPhysicalWindow {
-        return BodoPhysicalWindow(cluster, traitSet, hints, inputs[0], constants, rowType, groups, inputsToKeep)
-    }
+    ): BodoPhysicalWindow = BodoPhysicalWindow(cluster, traitSet, hints, inputs[0], constants, rowType, groups, inputsToKeep)
 
-    override fun copy(constants: MutableList<RexLiteral>): BodoPhysicalWindow {
-        return BodoPhysicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
-    }
+    override fun copy(constants: MutableList<RexLiteral>): BodoPhysicalWindow =
+        BodoPhysicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
 
     /**
      * Mapping of sql window operators to bodo window func names
@@ -121,13 +117,12 @@ class BodoPhysicalWindow(
      *      <li>There is a single group with a single aggfunc</li>
      *  </ul>
      */
-    fun supportsStreamingWindow(): Boolean {
-        return traitSet.isEnabled(BatchingPropertyTraitDef.INSTANCE) && groups.size == 1 &&
-            groups.all {
-                    group ->
+    fun supportsStreamingWindow(): Boolean =
+        traitSet.isEnabled(BatchingPropertyTraitDef.INSTANCE) &&
+            groups.size == 1 &&
+            groups.all { group ->
                 isSupportedHashGroup(group) || isSupportedSortGroup(group) || isSupportedBlankWindowGroup(group)
             }
-    }
 
     /**
      * Returns whether a window cohort is supported for the
@@ -135,10 +130,9 @@ class BodoPhysicalWindow(
      * Requires all aggfuncs in the group to be supported in the hash codepath,
      * and for there to be at least one partition column.
      */
-    fun isSupportedHashGroup(group: Window.Group): Boolean {
-        return group.keys.cardinality() >= 1 &&
-            group.aggCalls.all {
-                    aggCall ->
+    fun isSupportedHashGroup(group: Window.Group): Boolean =
+        group.keys.cardinality() >= 1 &&
+            group.aggCalls.all { aggCall ->
                 !aggCall.distinct && !aggCall.ignoreNulls
                 when (aggCall.operator.kind) {
                     SqlKind.ROW_NUMBER,
@@ -152,7 +146,6 @@ class BodoPhysicalWindow(
                     else -> false
                 }
             }
-    }
 
     // The list of types that are allowed in the streaming sort-based implementation of
     // selection functions (min, max, etc.)
@@ -179,11 +172,11 @@ class BodoPhysicalWindow(
      * Requires all aggfuncs in the group to be supported in the sort codepath,
      * and for there to be at least one partition or orderby column.
      */
-    fun isSupportedSortGroup(group: Window.Group): Boolean {
-        return (group.keys.cardinality() >= 1 || group.orderKeys.keys.isNotEmpty()) &&
-            group.aggCalls.all {
-                    aggCall ->
-                !aggCall.distinct && !aggCall.ignoreNulls &&
+    fun isSupportedSortGroup(group: Window.Group): Boolean =
+        (group.keys.cardinality() >= 1 || group.orderKeys.keys.isNotEmpty()) &&
+            group.aggCalls.all { aggCall ->
+                !aggCall.distinct &&
+                    !aggCall.ignoreNulls &&
                     when (aggCall.operator.kind) {
                         SqlKind.ROW_NUMBER,
                         SqlKind.RANK,
@@ -221,18 +214,16 @@ class BodoPhysicalWindow(
                         else -> false
                     }
             }
-    }
 
     /**
      * Returns whether a window cohort is supported for the
      * Bodo execution codepath without partition or order
      * columns.
      */
-    fun isSupportedBlankWindowGroup(group: Group): Boolean {
-        return group.keys.cardinality() == 0 &&
+    fun isSupportedBlankWindowGroup(group: Group): Boolean =
+        group.keys.cardinality() == 0 &&
             group.orderKeys.keys.size == 0 &&
-            group.aggCalls.all {
-                    aggCall ->
+            group.aggCalls.all { aggCall ->
                 !aggCall.distinct && !aggCall.ignoreNulls
                 when (aggCall.operator.kind) {
                     SqlKind.MIN,
@@ -244,7 +235,6 @@ class BodoPhysicalWindow(
                     else -> false
                 }
             }
-    }
 
     /**
      * Emits the code necessary for implementing this relational operator.
@@ -262,7 +252,7 @@ class BodoPhysicalWindow(
                 val batchExitCond = pipeline.getExitCond()
                 val consumeCall =
                     Expr.Call(
-                        "bodo.libs.stream_window.window_build_consume_batch",
+                        "bodo.libs.streaming.window.window_build_consume_batch",
                         listOf(
                             stateVar,
                             inputVar,
@@ -282,15 +272,14 @@ class BodoPhysicalWindow(
         // The final pipeline generates the output from the state.
         val outputStage =
             OutputtingStageEmission(
-                {
-                        ctx, stateVar, _ ->
+                { ctx, stateVar, _ ->
                     val builder = ctx.builder()
                     val pipeline = builder.getCurrentStreamingPipeline()
                     val outputControl: Variable = builder.symbolTable.genOutputControlVar()
                     pipeline.addOutputControl(outputControl)
                     val outputCall =
                         Expr.Call(
-                            "bodo.libs.stream_window.window_produce_output_batch",
+                            "bodo.libs.streaming.window.window_produce_output_batch",
                             listOf(stateVar, outputControl),
                         )
                     val outTable: Variable = builder.symbolTable.genTableVar()
@@ -316,9 +305,7 @@ class BodoPhysicalWindow(
     /**
      * If non-streaming, use the regular path from projection-style window functions.
      */
-    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return convertToProject().emit(implementor)
-    }
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable = convertToProject().emit(implementor)
 
     /**
      * Iteratively traverses upward through the subtree starting at
@@ -365,8 +352,8 @@ class BodoPhysicalWindow(
      * the current RelNode to detect whether there is a nested loop
      * join in the same pipeline as the window node.
      */
-    private fun pipelineDescendantNestedJoin(): Boolean {
-        return try {
+    private fun pipelineDescendantNestedJoin(): Boolean =
+        try {
             object : RelVisitor() {
                 override fun visit(
                     node: RelNode,
@@ -400,7 +387,6 @@ class BodoPhysicalWindow(
         } catch (e: Util.FoundOne) {
             true
         }
-    }
 
     /**
      * Helper for getting the bodo name from an AggCall.
@@ -440,8 +426,7 @@ class BodoPhysicalWindow(
             orderAsc.add(Expr.BooleanLiteral(!it.direction.isDescending))
             orderNullPos.add(Expr.BooleanLiteral(it.nullDirection == RelFieldCollation.NullDirection.LAST))
         }
-        group.aggCalls.forEach {
-                aggCall ->
+        group.aggCalls.forEach { aggCall ->
             val operatorName = getOperatorName(aggCall)
             funcNames.add(Expr.StringLiteral(operatorName))
             val funcColumnArgs: MutableList<Expr> = mutableListOf()
@@ -459,8 +444,7 @@ class BodoPhysicalWindow(
             ) {
                 throw BodoSQLCodegenException("Too few arguments for window function: $aggCall (expected {${argsList.size}})")
             }
-            aggCall.operands.forEachIndexed {
-                    it, op ->
+            aggCall.operands.forEachIndexed { it, op ->
                 // Defensive check since op should always be a RexInputRef by the
                 // design of the Window node.
                 if (op !is RexInputRef) {
@@ -510,7 +494,7 @@ class BodoPhysicalWindow(
             )
         val stateCall =
             Expr.Call(
-                "bodo.libs.stream_window.init_window_state",
+                "bodo.libs.streaming.window.init_window_state",
                 listOf(
                     ctx.operatorID().toExpr(),
                     partitionGlobal,
@@ -559,13 +543,12 @@ class BodoPhysicalWindow(
         val builder = ctx.builder()
         val finalPipeline = builder.getCurrentStreamingPipeline()
         val deleteState =
-            Op.Stmt(Expr.Call("bodo.libs.stream_window.delete_window_state", listOf(stateVar)))
+            Op.Stmt(Expr.Call("bodo.libs.streaming.window.delete_window_state", listOf(stateVar)))
         finalPipeline.addTermination(deleteState)
     }
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(rowType)
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(rowType)
 
     /**
      * Converts a BodoPhysicalWindow back to a BodoPhysicalProject for codegen purposes.
@@ -585,9 +568,7 @@ class BodoPhysicalWindow(
             rowType: RelDataType,
             groups: List<Group>,
             inputsToKeep: ImmutableBitSet,
-        ): BodoPhysicalWindow {
-            return BodoPhysicalWindow(cluster, input.traitSet, hints, input, constants, rowType, groups, inputsToKeep)
-        }
+        ): BodoPhysicalWindow = BodoPhysicalWindow(cluster, input.traitSet, hints, input, constants, rowType, groups, inputsToKeep)
 
         @JvmStatic
         fun create(
@@ -597,8 +578,6 @@ class BodoPhysicalWindow(
             constants: List<RexLiteral>,
             rowType: RelDataType,
             groups: List<Group>,
-        ): BodoPhysicalWindow {
-            return create(cluster, hints, input, constants, rowType, groups, ImmutableBitSet.range(input.rowType.fieldCount))
-        }
+        ): BodoPhysicalWindow = create(cluster, hints, input, constants, rowType, groups, ImmutableBitSet.range(input.rowType.fieldCount))
     }
 }

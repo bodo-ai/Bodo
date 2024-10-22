@@ -6,7 +6,7 @@ from numba.core import types
 
 import bodo
 from bodo.hiframes.table import TableType
-from bodo.libs.stream_union import UnionStateType
+from bodo.libs.streaming.union import UnionStateType
 from bodo.tests.utils import (
     check_func,
     pytest_mark_one_rank,
@@ -367,11 +367,11 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         is_last1 = False
         _iter_1 = 0
         state_1 = pd.read_parquet(customer_path, _bodo_chunksize=4000)
-        state_2 = bodo.libs.stream_union.init_union_state(-1, all=all)
+        state_2 = bodo.libs.streaming.union.init_union_state(-1, all=all)
         while not is_last1:
             T1, is_last1 = bodo.io.arrow_reader.read_arrow_next(state_1, True)
             T3 = bodo.hiframes.table.table_subset(T1, global_2, False)
-            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.streaming.union.union_consume_batch(
                 state_2, T3, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -384,7 +384,7 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         while not _temp1:
             T2, is_last2 = bodo.io.arrow_reader.read_arrow_next(state_3, True)
             T4 = bodo.hiframes.table.table_subset(T2, global_3, False)
-            _temp1, _ = bodo.libs.stream_union.union_consume_batch(
+            _temp1, _ = bodo.libs.streaming.union.union_consume_batch(
                 state_2, T4, is_last2, True
             )
             _iter_2 = _iter_2 + 1
@@ -394,11 +394,11 @@ def test_stream_union_distinct_basic(all, datapath, memory_leak_check):
         _iter_3 = 0
         table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
         while not is_last3:
-            T5, is_last3 = bodo.libs.stream_union.union_produce_batch(state_2, True)
+            T5, is_last3 = bodo.libs.streaming.union.union_produce_batch(state_2, True)
             bodo.libs.table_builder.table_builder_append(table_builder, T5)
             _iter_3 = _iter_3 + 1
 
-        bodo.libs.stream_union.delete_union_state(state_2)
+        bodo.libs.streaming.union.delete_union_state(state_2)
         T6 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
@@ -448,14 +448,14 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
             1,
         )
         T1_len = bodo.hiframes.table.local_len(T1)
-        union_state = bodo.libs.stream_union.init_union_state(-1, all=False)
+        union_state = bodo.libs.streaming.union.init_union_state(-1, all=False)
         while not is_last1:
             # We use a small batch size to force different number of iterations.
             T2 = bodo.hiframes.table.table_local_filter(
                 T1, slice((_iter_1 * 200), ((_iter_1 + 1) * 200))
             )
             is_last1 = ((_iter_1 + 1) * 200) >= T1_len
-            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.streaming.union.union_consume_batch(
                 union_state, T2, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -474,7 +474,7 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
                 T3, slice((_iter_2 * 200), ((_iter_2 + 1) * 200))
             )
             is_last2 = ((_iter_2 + 1) * 200) >= T3_len
-            is_last2, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last2, _ = bodo.libs.streaming.union.union_consume_batch(
                 union_state, T4, is_last2, True
             )
             _iter_2 = _iter_2 + 1
@@ -483,11 +483,13 @@ def test_stream_union_distinct_sync(datapath, memory_leak_check):
         _iter_3 = 0
         table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
         while not is_last3:
-            T5, is_last3 = bodo.libs.stream_union.union_produce_batch(union_state, True)
+            T5, is_last3 = bodo.libs.streaming.union.union_produce_batch(
+                union_state, True
+            )
             bodo.libs.table_builder.table_builder_append(table_builder, T5)
             _iter_3 = _iter_3 + 1
 
-        bodo.libs.stream_union.delete_union_state(union_state)
+        bodo.libs.streaming.union.delete_union_state(union_state)
         T6 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T6,), index_1, global_1)
@@ -700,7 +702,7 @@ def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
     def impl(df):
         is_last1 = False
         _iter_1 = 0
-        state_2 = bodo.libs.stream_union.init_union_state(-1, all=all)
+        state_2 = bodo.libs.streaming.union.init_union_state(-1, all=all)
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df), (), global_2, 1
         )
@@ -709,7 +711,7 @@ def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
                 T1, slice((_iter_1 * 3), ((_iter_1 + 1) * 3))
             )
             is_last1 = (_iter_1 * 3) >= len(T1)
-            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.streaming.union.union_consume_batch(
                 state_2, T3, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -723,7 +725,7 @@ def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
             )
             _iter_2 = _iter_2 + 1
             is_last2 = (_iter_2 * 3) >= len(T1)
-            _temp1, _ = bodo.libs.stream_union.union_consume_batch(
+            _temp1, _ = bodo.libs.streaming.union.union_consume_batch(
                 state_2, T5, is_last2, True
             )
 
@@ -731,11 +733,11 @@ def test_nested_array_stream_union(all, df, use_map_arrays, memory_leak_check):
         _iter_3 = 0
         table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
         while not is_last3:
-            T6, is_last3 = bodo.libs.stream_union.union_produce_batch(state_2, True)
+            T6, is_last3 = bodo.libs.streaming.union.union_produce_batch(state_2, True)
             bodo.libs.table_builder.table_builder_append(table_builder, T6)
             _iter_3 = _iter_3 + 1
 
-        bodo.libs.stream_union.delete_union_state(state_2)
+        bodo.libs.streaming.union.delete_union_state(state_2)
         T7 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T7), 1, None)
         df1 = bodo.hiframes.pd_dataframe_ext.init_dataframe((T7,), index_1, global_1)

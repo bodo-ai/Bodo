@@ -483,7 +483,7 @@ def get_runtime_join_filter_min_max(
     either the string representation of the value, or None if it cannot be found.
     Whether the min or max is returned depends on the is_min argument.
     """
-    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+    assert isinstance(state_var_t, bodo.libs.streaming.join.JoinStateType)
 
     def codegen(context, builder, signature, args):
         fnty = lir.FunctionType(
@@ -521,7 +521,7 @@ def is_empty_build_table(typingctx, state_var_t):
     Returns if a join state has a completely empty build table, which can
     be used to prune the entire probe table.
     """
-    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+    assert isinstance(state_var_t, bodo.libs.streaming.join.JoinStateType)
 
     def codegen(context, builder, signature, args):
         fnty = lir.FunctionType(
@@ -549,7 +549,7 @@ def has_runtime_join_filter_unique_values(typingctx, state_var_t, key_index_t):
     Returns whether a join state has a list of unique values for a specific
     join key column.
     """
-    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+    assert isinstance(state_var_t, bodo.libs.streaming.join.JoinStateType)
 
     def codegen(context, builder, signature, args):
         fnty = lir.FunctionType(
@@ -578,7 +578,7 @@ def get_runtime_join_filter_unique_values(typingctx, state_var_t, key_index_t):
     Returns whether the list of unique values from the join state corresponding
     to a certain key column.
     """
-    assert isinstance(state_var_t, bodo.libs.stream_join.JoinStateType)
+    assert isinstance(state_var_t, bodo.libs.streaming.join.JoinStateType)
 
     def codegen(context, builder, signature, args):
         fnty = lir.FunctionType(

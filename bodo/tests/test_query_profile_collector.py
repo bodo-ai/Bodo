@@ -8,13 +8,13 @@ import pytest
 
 import bodo
 from bodo.io.arrow_reader import arrow_reader_del, read_arrow_next
-from bodo.libs.stream_groupby import (
+from bodo.libs.streaming.groupby import (
     delete_groupby_state,
     groupby_build_consume_batch,
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.libs.stream_join import (
+from bodo.libs.streaming.join import (
     delete_join_state,
     init_join_state,
     join_build_consume_batch,
@@ -1203,7 +1203,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
     @bodo.jit(distributed=["df1", "df2", "df3"])
     def impl(df1, df2, df3):
         bodo.libs.query_profile_collector.init()
-        union_state = bodo.libs.stream_union.init_union_state(0, all=False)
+        union_state = bodo.libs.streaming.union.init_union_state(0, all=False)
 
         T1 = bodo.hiframes.table.logical_table_to_table(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_all_data(df1),
@@ -1221,7 +1221,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.streaming.union.union_consume_batch(
                 union_state, T3, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -1243,7 +1243,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.streaming.union.union_consume_batch(
                 union_state, T3, is_last1, False
             )
             _iter_1 = _iter_1 + 1
@@ -1265,7 +1265,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
             )
             is_last1 = (_iter_1 * batch_size) >= _temp1
             T3 = bodo.hiframes.table.table_subset(T2, in_kept_cols, False)
-            is_last1, _ = bodo.libs.stream_union.union_consume_batch(
+            is_last1, _ = bodo.libs.streaming.union.union_consume_batch(
                 union_state, T3, is_last1, True
             )
             _iter_1 = _iter_1 + 1
@@ -1276,12 +1276,14 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
         table_builder = bodo.libs.table_builder.init_table_builder_state(-1)
         bodo.libs.query_profile_collector.start_pipeline(3)
         while not is_last3:
-            T5, is_last3 = bodo.libs.stream_union.union_produce_batch(union_state, True)
+            T5, is_last3 = bodo.libs.streaming.union.union_produce_batch(
+                union_state, True
+            )
             bodo.libs.table_builder.table_builder_append(table_builder, T5)
             _iter_3 = _iter_3 + 1
         bodo.libs.query_profile_collector.end_pipeline(3, _iter_3)
 
-        bodo.libs.stream_union.delete_union_state(union_state)
+        bodo.libs.streaming.union.delete_union_state(union_state)
         T6 = bodo.libs.table_builder.table_builder_finalize(table_builder)
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)
         out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
@@ -1669,7 +1671,7 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         is_last = False
         _iter = 0
         df_len = bodo.hiframes.table.local_len(T1)
-        sort_state = bodo.libs.stream_sort.init_stream_sort_state(
+        sort_state = bodo.libs.streaming.sort.init_stream_sort_state(
             0,  # Op ID
             limit,
             offset,
@@ -1684,7 +1686,7 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
                 T1, slice((_iter * 4096), ((_iter + 1) * 4096))
             )
             is_last = (_iter * 4096) >= df_len
-            is_last = bodo.libs.stream_sort.sort_build_consume_batch(
+            is_last = bodo.libs.streaming.sort.sort_build_consume_batch(
                 sort_state, T3, is_last
             )
             _iter = _iter + 1
@@ -1695,10 +1697,12 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         out_tb = bodo.libs.table_builder.init_table_builder_state(1)
         bodo.libs.query_profile_collector.start_pipeline(1)
         while not (is_last):
-            (T4, is_last) = bodo.libs.stream_sort.produce_output_batch(sort_state, True)
+            (T4, is_last) = bodo.libs.streaming.sort.produce_output_batch(
+                sort_state, True
+            )
             bodo.libs.table_builder.table_builder_append(out_tb, T4)
             _iter = _iter + 1
-        bodo.libs.stream_sort.delete_stream_sort_state(sort_state)
+        bodo.libs.streaming.sort.delete_stream_sort_state(sort_state)
         T6 = bodo.libs.table_builder.table_builder_finalize(out_tb)
         bodo.libs.query_profile_collector.end_pipeline(1, _iter)
         index_1 = bodo.hiframes.pd_index_ext.init_range_index(0, len(T6), 1, None)

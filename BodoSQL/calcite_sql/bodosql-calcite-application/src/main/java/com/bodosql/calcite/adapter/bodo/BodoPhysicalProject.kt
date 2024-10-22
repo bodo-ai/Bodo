@@ -29,23 +29,21 @@ class BodoPhysicalProject(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType,
-) : ProjectBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), ImmutableList.of(), input, projects, rowType), BodoPhysicalRel {
+) : ProjectBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), ImmutableList.of(), input, projects, rowType),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): BodoPhysicalProject {
-        return BodoPhysicalProject(cluster, traitSet, input, projects, rowType)
-    }
+    ): BodoPhysicalProject = BodoPhysicalProject(cluster, traitSet, input, projects, rowType)
 
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             emitStreaming(implementor)
         } else {
             emitSingleBatch(implementor)
         }
-    }
 
     private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         val stage =
@@ -76,16 +74,14 @@ class BodoPhysicalProject(
         return implementor.buildStreaming(operatorEmission)!!
     }
 
-    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return (implementor::build)(listOf(this.input)) {
-                ctx, inputs ->
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        (implementor::build)(listOf(this.input)) { ctx, inputs ->
             val inputVar = inputs[0]
             // Extract window aggregates and update the nodes.
             val (projectExprs, localRefs) = genDataFrameWindowInputs(ctx, inputVar)
             val translator = ctx.rexTranslator(inputVar, localRefs)
             generateDataFrame(ctx, inputVar, translator, projectExprs, localRefs, projects, input)
         }
-    }
 
     /**
      * Generate the additional inputs to generateDataFrame after handling the Window
@@ -108,7 +104,9 @@ class BodoPhysicalProject(
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.addInitialization(Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
+        currentPipeline.addInitialization(
+            Op.Assign(readerVar, Expr.Call("bodo.libs.streaming.dict_encoding.init_dict_encoding_state")),
+        )
         return readerVar
     }
 
@@ -117,13 +115,12 @@ class BodoPhysicalProject(
         stateVar: StateVariable,
     ) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
-        val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
+        val deleteState = Op.Stmt(Expr.Call("bodo.libs.streaming.dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
         currentPipeline.addTermination(deleteState)
     }
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return projectProperty(projects, inputBatchingProperty)
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        projectProperty(projects, inputBatchingProperty)
 
     companion object {
         fun create(
@@ -150,7 +147,8 @@ class BodoPhysicalProject(
             val cluster = input.cluster
             val mq = cluster.metadataQuery
             val traitSet =
-                cluster.traitSet()
+                cluster
+                    .traitSet()
                     .replaceIfs(RelCollationTraitDef.INSTANCE) {
                         RelMdCollation.project(mq, input, projects)
                     }
@@ -180,8 +178,6 @@ class BodoPhysicalProject(
             input: RelNode,
             projects: List<RexNode>,
             rowType: RelDataType,
-        ): BodoPhysicalProject {
-            return BodoPhysicalProject(cluster, traitSet, input, projects, rowType)
-        }
+        ): BodoPhysicalProject = BodoPhysicalProject(cluster, traitSet, input, projects, rowType)
     }
 }

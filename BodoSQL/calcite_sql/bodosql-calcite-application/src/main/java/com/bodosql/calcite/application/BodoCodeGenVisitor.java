@@ -1321,7 +1321,8 @@ public class BodoCodeGenVisitor extends RelVisitor {
     keywordArgs.add(new kotlin.Pair("mrnf_sort_col_na", nullPosGlobal));
     keywordArgs.add(new kotlin.Pair("mrnf_col_inds_keep", keepGlobal));
     Expr.Call stateCall =
-        new Expr.Call("bodo.libs.stream_groupby.init_groupby_state", positionalArgs, keywordArgs);
+        new Expr.Call(
+            "bodo.libs.streaming.groupby.init_groupby_state", positionalArgs, keywordArgs);
     Op.Assign mrnfInit = new Op.Assign(groupbyStateVar, stateCall);
     inputPipeline.initializeStreamingState(
         operatorID, mrnfInit, OperatorType.GROUPBY, node.estimateBuildMemory(mq));
@@ -1336,7 +1337,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // is_final_pipeline is always True in the regular MinRowNumberFilter case.
     Expr.Call batchCall =
         new Expr.Call(
-            "bodo.libs.stream_groupby.groupby_build_consume_batch",
+            "bodo.libs.streaming.groupby.groupby_build_consume_batch",
             List.of(
                 groupbyStateVar,
                 buildTable,
@@ -1367,7 +1368,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     outputPipeline.addOutputControl(outputControl);
     Expr.Call outputCall =
         new Expr.Call(
-            "bodo.libs.stream_groupby.groupby_produce_output_batch",
+            "bodo.libs.streaming.groupby.groupby_produce_output_batch",
             List.of(groupbyStateVar, outputControl));
     timerInfo.insertLoopOperationStartTimer(2);
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag), outputCall));
@@ -1378,7 +1379,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Op.Stmt deleteState =
         new Op.Stmt(
             new Expr.Call(
-                "bodo.libs.stream_groupby.delete_groupby_state", List.of(groupbyStateVar)));
+                "bodo.libs.streaming.groupby.delete_groupby_state", List.of(groupbyStateVar)));
     outputPipeline.addTermination(deleteState);
     // Add the table to the stack
     tableGenStack.push(table);
@@ -1629,7 +1630,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Expr.BooleanLiteral forceBroadcast = new Expr.BooleanLiteral(node.getBroadcastBuildSide());
     Expr.Call stateCall =
         new Expr.Call(
-            "bodo.libs.stream_join.init_join_state",
+            "bodo.libs.streaming.join.init_join_state",
             List.of(
                 operatorID.toExpr(),
                 keyIndices.right,
@@ -1675,7 +1676,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     batchPipeline.endSection(newExitCond);
     Expr.Call batchCall =
         new Expr.Call(
-            "bodo.libs.stream_join.join_build_consume_batch",
+            "bodo.libs.streaming.join.join_build_consume_batch",
             List.of(joinStateVar, buildTable, batchExitCond));
     generatedCode.add(new Op.TupleAssign(List.of(newExitCond, inputRequest), batchCall));
     batchPipeline.addInputRequest(inputRequest);
@@ -1706,7 +1707,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     Variable inputRequest = genInputRequestVar();
     Expr.Call probeCall =
         new Expr.Call(
-            "bodo.libs.stream_join.join_probe_consume_batch",
+            "bodo.libs.streaming.join.join_probe_consume_batch",
             List.of(joinStateVar, probeTable, oldFlag, outputControl));
     generatedCode.add(new Op.TupleAssign(List.of(outTable, newFlag, inputRequest), probeCall));
     probePipeline.addInputRequest(inputRequest);
@@ -1716,7 +1717,7 @@ public class BodoCodeGenVisitor extends RelVisitor {
     // Append the code to delete the state
     Op.Stmt deleteState =
         new Op.Stmt(
-            new Expr.Call("bodo.libs.stream_join.delete_join_state", List.of(joinStateVar)));
+            new Expr.Call("bodo.libs.streaming.join.delete_join_state", List.of(joinStateVar)));
     probePipeline.deleteStreamingState(operatorID, deleteState);
     // Add the table to the stack
     BodoEngineTable outEngineTable = new BodoEngineTable(outTable.emit(), node);

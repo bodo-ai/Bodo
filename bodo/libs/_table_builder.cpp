@@ -2,8 +2,8 @@
 #include <memory>
 
 #include "_array_hash.h"
-#include "_stream_join.h"
 #include "_table_builder_utils.h"
+#include "streaming/_join.h"
 
 /* -------------------------- TableBuildBuffer ---------------------------- */
 

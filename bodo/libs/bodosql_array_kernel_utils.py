@@ -447,9 +447,9 @@ def gen_vectorized(
                 # see if we can skip the computation. Otherwise we generate the result as normal
                 # and update the dictionary encoding state.
                 func_text += "   use_cached_value = False\n"
-                func_text += f"   cached_dict_length = bodo.libs.stream_dict_encoding.state_contains_dict_array({dict_encoding_state_name}, {func_id_name}, cache_dict_id)\n"
+                func_text += f"   cached_dict_length = bodo.libs.streaming.dict_encoding.state_contains_dict_array({dict_encoding_state_name}, {func_id_name}, cache_dict_id)\n"
                 func_text += "   if cached_dict_length == n:\n"
-                func_text += "      res, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(\n"
+                func_text += "      res, new_dict_id, _ = bodo.libs.streaming.dict_encoding.get_array(\n"
                 func_text += f"         {dict_encoding_state_name},\n"
                 func_text += f"         {func_id_name},\n"
                 func_text += "         cache_dict_id,\n"
@@ -535,7 +535,7 @@ def gen_vectorized(
         if cache_dict_arrays:
             # Add suffix to precomputed prefix (if the prefix exists)
             non_cached_text += "   if cached_dict_length > 0:\n"
-            non_cached_text += "      old_res, new_dict_id, _ = bodo.libs.stream_dict_encoding.get_array(\n"
+            non_cached_text += "      old_res, new_dict_id, _ = bodo.libs.streaming.dict_encoding.get_array(\n"
             non_cached_text += f"         {dict_encoding_state_name},\n"
             non_cached_text += f"         {func_id_name},\n"
             non_cached_text += "         cache_dict_id,\n"
@@ -556,7 +556,7 @@ def gen_vectorized(
             else:
                 non_cached_text += "      new_dict_id = -1\n"
             # Cache the newly computed results
-            non_cached_text += "   bodo.libs.stream_dict_encoding.set_array(\n"
+            non_cached_text += "   bodo.libs.streaming.dict_encoding.set_array(\n"
             non_cached_text += f"      {dict_encoding_state_name},\n"
             non_cached_text += f"      {func_id_name},\n"
             non_cached_text += "      cache_dict_id,\n"

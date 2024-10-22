@@ -3034,19 +3034,19 @@ class TypingTransforms:
                 rhs.loc,
             )
 
-        if func_mod == "bodo.libs.stream_join":
+        if func_mod == "bodo.libs.streaming.join":
             return self._run_call_stream_join(assign, rhs, func_name, label)
 
-        if func_mod == "bodo.libs.stream_groupby":
+        if func_mod == "bodo.libs.streaming.groupby":
             return self._run_call_stream_groupby(assign, rhs, func_name)
 
-        if func_mod == "bodo.libs.stream_window":
+        if func_mod == "bodo.libs.streaming.window":
             return self._run_call_stream_window(assign, rhs, func_name)
 
-        if func_mod == "bodo.libs.stream_union":
+        if func_mod == "bodo.libs.streaming.union":
             return self._run_call_stream_union(assign, rhs, func_name, label)
 
-        if func_mod == "bodo.libs.stream_sort":
+        if func_mod == "bodo.libs.streaming.sort":
             return self._run_call_stream_sort(assign, rhs, func_name, label)
 
         if func_mod == "bodo.libs.table_builder":
@@ -5127,7 +5127,9 @@ class TypingTransforms:
 
             # Fetch the join information from the definition
             join_def = _get_state_defining_call(
-                self.func_ir, join_state, ("init_join_state", "bodo.libs.stream_join")
+                self.func_ir,
+                join_state,
+                ("init_join_state", "bodo.libs.streaming.join"),
             )
             if join_def is None:
                 self.needs_transform = True
@@ -5158,7 +5160,7 @@ class TypingTransforms:
             if input_table_type != table_type:
                 # We need to update the expected type
                 if is_build:
-                    new_type = bodo.libs.stream_join.JoinStateType(
+                    new_type = bodo.libs.streaming.join.JoinStateType(
                         output_type.build_key_inds,
                         output_type.probe_key_inds,
                         output_type.build_outer,
@@ -5167,7 +5169,7 @@ class TypingTransforms:
                         output_type.probe_table_type,
                     )
                 else:
-                    new_type = bodo.libs.stream_join.JoinStateType(
+                    new_type = bodo.libs.streaming.join.JoinStateType(
                         output_type.build_key_inds,
                         output_type.probe_key_inds,
                         output_type.build_outer,
@@ -5228,7 +5230,7 @@ class TypingTransforms:
 
                 # Compile a new function.
                 func_text = f"""def impl({", ".join(params)}):
-                    return bodo.libs.stream_join.init_join_state(
+                    return bodo.libs.streaming.join.init_join_state(
                         operator_id,
                         build_key_inds,
                         probe_key_inds,
@@ -5300,7 +5302,10 @@ class TypingTransforms:
                 return [assign]
             state_init = guard(find_callname, self.func_ir, groupby_def)
             # Verify we are at init_groupby_state and we can fetch the call name.
-            if state_init != ("init_groupby_state", "bodo.libs.stream_groupby"):
+            if state_init != (
+                "init_groupby_state",
+                "bodo.libs.streaming.groupby",
+            ):
                 self.needs_transform = True
                 return [assign]
                 # Fetch the expected type.
@@ -5324,7 +5329,7 @@ class TypingTransforms:
                 return [assign]
             if input_table_type != output_type.build_table_type:
                 # We need to update the expected type
-                new_type = bodo.libs.stream_groupby.GroupbyStateType(
+                new_type = bodo.libs.streaming.groupby.GroupbyStateType(
                     output_type.key_inds,
                     output_type.grouping_sets,
                     output_type.fnames,
@@ -5392,7 +5397,7 @@ class TypingTransforms:
 
                 # Compile a new function.
                 func_text = f"""def impl({", ".join(params)}):
-                    return bodo.libs.stream_groupby.init_groupby_state(
+                    return bodo.libs.streaming.groupby.init_groupby_state(
                         operator_id,
                         key_inds,
                         fnames,
@@ -5471,7 +5476,10 @@ class TypingTransforms:
                 return [assign]
             state_init = guard(find_callname, self.func_ir, grouping_sets_def)
             # Verify we are at init_grouping_sets_state and we can fetch the call name.
-            if state_init != ("init_grouping_sets_state", "bodo.libs.stream_groupby"):
+            if state_init != (
+                "init_grouping_sets_state",
+                "bodo.libs.streaming.groupby",
+            ):
                 self.needs_transform = True
                 return [assign]
                 # Fetch the expected type.
@@ -5495,7 +5503,7 @@ class TypingTransforms:
                 return [assign]
             if input_table_type != output_type.build_table_type:
                 # We need to update the expected type
-                new_type = bodo.libs.stream_groupby.GroupbyStateType(
+                new_type = bodo.libs.streaming.groupby.GroupbyStateType(
                     output_type.key_inds,
                     output_type.grouping_sets,
                     output_type.fnames,
@@ -5522,7 +5530,7 @@ class TypingTransforms:
 
                 # Compile a new function.
                 func_text = f"""def impl({", ".join(params)}):
-                    return bodo.libs.stream_groupby.init_grouping_sets_state(
+                    return bodo.libs.streaming.groupby.init_grouping_sets_state(
                         operator_id,
                         sub_operator_ids,
                         key_inds,
@@ -5627,7 +5635,7 @@ class TypingTransforms:
                 return [assign]
             state_init = guard(find_callname, self.func_ir, window_def)
             # Verify we are at init_window_state and we can fetch the call name.
-            if state_init != ("init_window_state", "bodo.libs.stream_window"):
+            if state_init != ("init_window_state", "bodo.libs.streaming.window"):
                 self.needs_transform = True
                 return [assign]
                 # Fetch the expected type.
@@ -5651,7 +5659,7 @@ class TypingTransforms:
                 return [assign]
             if input_table_type != output_type.build_table_type:
                 # We need to update the expected type
-                new_type = bodo.libs.stream_window.WindowStateType(
+                new_type = bodo.libs.streaming.window.WindowStateType(
                     output_type.partition_indices,
                     output_type.order_by_indices,
                     output_type.is_ascending,
@@ -5699,7 +5707,7 @@ class TypingTransforms:
 
                 # Compile a new function.
                 func_text = f"""def impl({", ".join(params)}):
-                    return bodo.libs.stream_window.init_window_state(
+                    return bodo.libs.streaming.window.init_window_state(
                         operator_id,
                         partition_indices,
                         order_by_indices,
@@ -5801,7 +5809,7 @@ class TypingTransforms:
             union_def = _get_state_defining_call(
                 self.func_ir,
                 union_state,
-                ("init_union_state", "bodo.libs.stream_union"),
+                ("init_union_state", "bodo.libs.streaming.union"),
             )
             if union_def is None:
                 self.needs_transform = True
@@ -5829,14 +5837,14 @@ class TypingTransforms:
             # Check if input table type is in state type
             # and add if not
             if input_table_type not in output_state_type.in_table_types:
-                new_state_type = bodo.libs.stream_union.UnionStateType(
+                new_state_type = bodo.libs.streaming.union.UnionStateType(
                     output_state_type.all,
                     (*output_state_type.in_table_types, input_table_type),
                 )
 
                 # Compile a new function with new state
                 func_text = """def impl(operator_id):
-                    return bodo.libs.stream_union.init_union_state(
+                    return bodo.libs.streaming.union.init_union_state(
                         operator_id,
                         all=_all,
                         expected_state_typeref=_expected_state_typeref,
@@ -5904,7 +5912,7 @@ class TypingTransforms:
                 _get_state_defining_call,
                 self.func_ir,
                 builder_state,
-                ("init_stream_sort_state", "bodo.libs.stream_sort"),
+                ("init_stream_sort_state", "bodo.libs.streaming.sort"),
             )
             if builder_def is None:
                 self.needs_transform = True
@@ -5944,7 +5952,7 @@ class TypingTransforms:
                 _get_state_defining_call,
                 self.func_ir,
                 builder_state,
-                ("init_stream_sort_state", "bodo.libs.stream_sort"),
+                ("init_stream_sort_state", "bodo.libs.streaming.sort"),
             )
             if builder_def is None:
                 self.needs_transform = True
@@ -6003,13 +6011,13 @@ class TypingTransforms:
                 by = arg_values[3]
                 col_names = arg_values[6]
                 key_inds = tuple(col_names.index(col) for col in by)
-                new_type = bodo.libs.stream_sort.SortStateType(
+                new_type = bodo.libs.streaming.sort.SortStateType(
                     input_table_type, key_inds
                 )
 
                 func_text = (
                     "def impl():\n"
-                    "  return bodo.libs.stream_sort.init_stream_sort_state(\n"
+                    "  return bodo.libs.streaming.sort.init_stream_sort_state(\n"
                     f"    {const_args},\n"
                     "    expected_state_type=_expected_state_type\n"
                     "  )\n"
