@@ -456,10 +456,8 @@ class DistributedAnalysis:
                 if d is None:
                     new_dist.append(None)
                     continue
-                new_d = self._min_dist(
-                    d, _get_var_dist(v.name, array_dists, self.typemap)
-                )
-                self._set_var_dist(v.name, array_dists, new_d)
+                new_d = _min_dist(d, _get_var_dist(v.name, array_dists, self.typemap))
+                _set_var_dist(v.name, array_dists, new_d)
                 new_dist.append(new_d)
 
             array_dists[lhs] = new_dist
@@ -677,11 +675,11 @@ class DistributedAnalysis:
             # find min of all array distributions
             l_dist = _get_var_dist(lhs, array_dists, self.typemap)
             m_dist = _get_var_dist(rhs.value.name, array_dists, self.typemap)
-            new_dist = self._min_dist(l_dist[0], m_dist)
+            new_dist = _min_dist(l_dist[0], m_dist)
             for d in l_dist:
-                new_dist = self._min_dist(new_dist, d)
-            self._set_var_dist(lhs, array_dists, new_dist)
-            self._set_var_dist(rhs.value.name, array_dists, new_dist)
+                new_dist = _min_dist(new_dist, d)
+            _set_var_dist(lhs, array_dists, new_dist)
+            _set_var_dist(rhs.value.name, array_dists, new_dist)
             return
         elif isinstance(rhs_typ, CategoricalArrayType) and attr == "codes":
             # categorical array and its underlying codes array have same distributions
@@ -898,7 +896,7 @@ class DistributedAnalysis:
                 func_def.value, numba.core.dispatcher.ObjModeLiftedWith
             ):
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
                 return
             # some functions like overload_bool_arr_op_nin_1 may generate const ufuncs
             if isinstance(func_def, ir.Const) and isinstance(func_def.value, np.ufunc):
@@ -925,7 +923,7 @@ class DistributedAnalysis:
         # Similar to ObjModeLiftedWith, we assume out data is distributed (1D_Var)
         if isinstance(self.typemap[rhs.func.name], WrapPythonDispatcherType):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
         # Check distributed analysis call registry for handler first
         ctx = DistributedAnalysisContext(self.typemap, array_dists, equiv_set)
@@ -981,7 +979,7 @@ class DistributedAnalysis:
 
         if fdef == ("create_empty_table", "bodo.hiframes.table"):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
+                _set_var_dist(lhs, array_dists, Distribution.OneD, True)
             return
 
         if fdef == ("table_concat", "bodo.utils.table_utils"):
@@ -1260,18 +1258,18 @@ class DistributedAnalysis:
             if func_name == "train_test_split":
                 arg0 = rhs.args[0].name
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD, True)
+                    _set_var_dist(lhs, array_dists, Distribution.OneD, True)
 
-                min_dist = self._min_dist(array_dists[lhs][0], array_dists[lhs][1])
-                min_dist = self._min_dist(min_dist, array_dists[arg0])
+                min_dist = _min_dist(array_dists[lhs][0], array_dists[lhs][1])
+                min_dist = _min_dist(min_dist, array_dists[arg0])
                 if self.typemap[rhs.args[1].name] != types.none:
                     arg1 = rhs.args[1].name
-                    min_dist = self._min_dist(min_dist, array_dists[arg1])
-                    min_dist = self._min_dist(min_dist, array_dists[lhs][2])
-                    min_dist = self._min_dist(min_dist, array_dists[lhs][3])
+                    min_dist = _min_dist(min_dist, array_dists[arg1])
+                    min_dist = _min_dist(min_dist, array_dists[lhs][2])
+                    min_dist = _min_dist(min_dist, array_dists[lhs][3])
                     array_dists[arg1] = min_dist
 
-                self._set_var_dist(lhs, array_dists, min_dist)
+                _set_var_dist(lhs, array_dists, min_dist)
                 array_dists[arg0] = min_dist
             return
 
@@ -1351,9 +1349,9 @@ class DistributedAnalysis:
             # The BodoSQLContext behaves like a tuple. We need to verify that
             # each entry matches.
             if func_mod.name not in array_dists:
-                self._set_var_dist(func_mod.name, array_dists, Distribution.OneD)
+                _set_var_dist(func_mod.name, array_dists, Distribution.OneD)
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
             old_lhs_dists = array_dists[lhs]
             old_rhs_var_dists = array_dists.get(func_mod.name, ())
             lhs_dists = []
@@ -1441,7 +1439,7 @@ class DistributedAnalysis:
         if fdef == ("scatterv", "bodo"):
             # output of scatterv is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
             elif is_REP(array_dists[lhs]):
                 raise BodoError(
                     "Output of scatterv should be a distributed array", rhs.loc
@@ -1515,7 +1513,7 @@ class DistributedAnalysis:
             # default is set to 1D_var because there could be no matches
             # for some strings
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = Distribution(
                 min(
@@ -1535,19 +1533,19 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[3].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[3].name, array_dists, in_dist)
             return
 
         # dict-arr concat
         if fdef == ("cat_dict_str", "bodo.libs.dict_arr_ext"):
             # all input arrays and output array have the same distribution
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
 
             out_dist = Distribution(
                 min(
@@ -1555,8 +1553,8 @@ class DistributedAnalysis:
                     array_dists[lhs].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
-            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, out_dist)
             return
 
         if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
@@ -1576,7 +1574,7 @@ class DistributedAnalysis:
 
         if fdef == ("read_arrow_next", "bodo.io.arrow_reader"):  # pragma: no cover
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = array_dists[rhs.args[0].name]
 
@@ -1587,11 +1585,11 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             if out_dist == Distribution.REP:
                 in_dist = out_dist
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
             return
 
         if fdef == (
@@ -1601,7 +1599,7 @@ class DistributedAnalysis:
             # Initialize join state to 1D
             if lhs not in array_dists:
                 default_dist = (Distribution.OneD, Distribution.OneD)
-                self._set_var_dist(lhs, array_dists, default_dist, False)
+                _set_var_dist(lhs, array_dists, default_dist, False)
             return
 
         if fdef == (
@@ -1618,10 +1616,10 @@ class DistributedAnalysis:
                 )
             )
             # Update the build table
-            self._set_var_dist(rhs.args[1].name, array_dists, build_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, build_dist)
             # Update the state
             new_state_dist = (build_dist, state_dist[1])
-            self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
+            _set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
         if fdef == ("runtime_join_filter", "bodo.libs.streaming.join"):
@@ -1634,7 +1632,7 @@ class DistributedAnalysis:
             "bodo.libs.streaming.join",
         ):  # pragma: no cover
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             state_dist = array_dists[rhs.args[0].name]
             # Get the build dist
             build_dist = state_dist[0]
@@ -1662,17 +1660,17 @@ class DistributedAnalysis:
                 )
             )
             # Update the output
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             if out_dist == Distribution.REP:
                 # Output can convert inputs to REP.
                 build_dist = Distribution.REP
                 probe_dist = Distribution.REP
 
             # Update the probe table
-            self._set_var_dist(rhs.args[1].name, array_dists, probe_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, probe_dist)
             # Update the state
             new_state_dist = (build_dist, probe_dist)
-            self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
+            _set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
         if fdef == ("iceberg_writer_fetch_theta", "bodo.io.stream_iceberg_write"):
@@ -1715,7 +1713,7 @@ class DistributedAnalysis:
         ):  # pragma: no cover
             # Initialize groupby state to 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+                _set_var_dist(lhs, array_dists, Distribution.OneD, False)
             return
 
         if fdef in (
@@ -1740,7 +1738,7 @@ class DistributedAnalysis:
             ("produce_output_batch", "bodo.libs.streaming.sort"),
         ):  # pragma: no cover
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             state_dist = array_dists[rhs.args[0].name]
 
@@ -1751,14 +1749,14 @@ class DistributedAnalysis:
                 )
             )
             # Update the output
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             if out_dist == Distribution.REP:
                 # Output can convert inputs to REP.
                 state_dist = Distribution.REP
 
             # Update the state
-            self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
+            _set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
             return
 
         if fdef == (
@@ -1775,7 +1773,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 # We can pop unequal chunks on each rank. As a result we must
                 # initialize everything to 1DVar.
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             lhs_dist = array_dists[lhs][0]
             out_dist = Distribution(
                 min(
@@ -1783,7 +1781,7 @@ class DistributedAnalysis:
                     array_dists[rhs.args[0].name].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             array_dists[rhs.args[0].name] = out_dist
             return
 
@@ -1798,9 +1796,7 @@ class DistributedAnalysis:
             # If the input is OneD, it the output should be OneD_Var since
             # appending multiple OneD tables together may break the invariant
             # that we have only at most 1 extra row on a given rank.
-            out_dist = self._min_dist(
-                Distribution.OneD_Var, array_dists[rhs.args[1].name]
-            )
+            out_dist = _min_dist(Distribution.OneD_Var, array_dists[rhs.args[1].name])
             array_dists[rhs.args[0].name] = out_dist
             return
 
@@ -1814,7 +1810,7 @@ class DistributedAnalysis:
                 # If the input is OneD, it the output should be OneD_Var since
                 # appending multiple OneD tables together may break the invariant
                 # that we have only at most 1 extra row on a given rank.
-                out_dist = self._min_dist(
+                out_dist = _min_dist(
                     Distribution.OneD_Var, array_dists[rhs.args[1].name]
                 )
                 array_dists[rhs.args[0].name] = out_dist
@@ -1828,7 +1824,7 @@ class DistributedAnalysis:
                 if lhs not in array_dists:
                     # We can pop unequal chunks on each rank. As a result we must
                     # initialize everything to 1DVar.
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
                 lhs_dist = array_dists[lhs][0]
                 out_dist = Distribution(
                     min(
@@ -1836,12 +1832,12 @@ class DistributedAnalysis:
                         array_dists[rhs.args[0].name].value,
                     )
                 )
-                self._set_var_dist(lhs, array_dists, out_dist)
+                _set_var_dist(lhs, array_dists, out_dist)
                 array_dists[rhs.args[0].name] = out_dist
 
             else:
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
                 state_dist = array_dists[rhs.args[0].name]
 
@@ -1852,14 +1848,14 @@ class DistributedAnalysis:
                     )
                 )
                 # Update the output
-                self._set_var_dist(lhs, array_dists, out_dist)
+                _set_var_dist(lhs, array_dists, out_dist)
 
                 if out_dist == Distribution.REP:
                     # Output can convert inputs to REP.
                     state_dist = Distribution.REP
 
                 # Update the state
-                self._set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
+                _set_var_dist(rhs.args[0].name, array_dists, state_dist, False)
             return
 
         if (
@@ -1974,9 +1970,9 @@ class DistributedAnalysis:
                     rhs.args[0].name in array_dists
                     and array_dists[rhs.args[0].name] == Distribution.REP
                 ):
-                    self._set_var_dist(lhs, array_dists, Distribution.REP)
+                    _set_var_dist(lhs, array_dists, Distribution.REP)
                 else:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                    _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             return
 
         if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
@@ -2041,7 +2037,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(arrays, array_dists)
             return
 
         if (
@@ -2058,7 +2054,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(arrays, array_dists)
             return
 
         if fdef == ("bodosql_case_kernel", ""):
@@ -2075,7 +2071,7 @@ class DistributedAnalysis:
 
             arrays = [lhs] + [elem.name for elem in elems]
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(arrays, array_dists)
             return
 
         if fdef == ("concat_ws", "bodosql.kernels"):
@@ -2096,7 +2092,7 @@ class DistributedAnalysis:
                 if is_array_typ(self.typemap[sep_name]):
                     arrays.append(sep_name)
                 if len(arrays) > 1:
-                    self._meet_several_array_dists(arrays, array_dists)
+                    _meet_several_array_dists(arrays, array_dists)
                 return
 
         if fdef == ("is_in", "bodosql.kernels"):
@@ -2139,7 +2135,7 @@ class DistributedAnalysis:
             # due to the possibility of deleting
             # varying numbers of rows on each rank at runtime
 
-            self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             return
 
         if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
@@ -2236,9 +2232,9 @@ class DistributedAnalysis:
                     array_dists[rhs.args[1].name].value,
                 )
             )
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
-            self._set_var_dist(lhs, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(lhs, array_dists, in_dist)
             return
 
         if fdef == (
@@ -2285,7 +2281,7 @@ class DistributedAnalysis:
         if fdef == ("nonzero", "bodo.libs.array_kernels"):
             # output of nonzero is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
@@ -2296,13 +2292,13 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("repeat_kernel", "bodo.libs.array_kernels"):
@@ -2310,7 +2306,7 @@ class DistributedAnalysis:
             # because of the boundary case
             # ex repeat(A, 2) where len(A) = 9 -> (10, 8)
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
@@ -2326,15 +2322,15 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
             if is_array_typ(self.typemap[rhs.args[1].name]):
-                self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+                _set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("repeat_like", "bodo.libs.array_kernels"):
@@ -2350,7 +2346,7 @@ class DistributedAnalysis:
             # output of repeat_like should have distribution matching dist_like_arr
             # arr should also be distributed
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # return is an array
             out_dist = Distribution(
@@ -2359,22 +2355,22 @@ class DistributedAnalysis:
                     like_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[1].name, array_dists, out_dist)
+                _set_var_dist(rhs.args[1].name, array_dists, out_dist)
             return
 
         if fdef == ("make_replicated_array", "bodo.utils.conversion"):
             # output must be replicated
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            _set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
         if fdef == ("list_to_array", "bodo.utils.conversion"):
             # Initialize output to distirbuted.
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
             if array_dists[lhs] == Distribution.OneD_Var:
                 raise BodoError(
                     "Output of list_to_array must have a OneD distribution", rhs.loc
@@ -2384,7 +2380,7 @@ class DistributedAnalysis:
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # df.drop_duplicates(ignore_index=True) passes None as Index to
             # drop_duplicates kernel, which causes it to return None as output Index.
@@ -2413,20 +2409,20 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("drop_duplicates_table", "bodo.utils.table_utils"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # df.drop_duplicates(ignore_index=True) passes None as Index to
             # drop_duplicates_table kernel, which causes it to return None as output
@@ -2456,20 +2452,20 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("drop_duplicates_table", "bodo.utils.table_utils"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a table, arg1 is an array
             in_dist = Distribution(
@@ -2486,20 +2482,20 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("union_tables", "bodo.libs.array"):
             # output of union_tables is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a tuple of "tables". Here each table is either a
             # tuple of arrays or the actual table type. We currently require
@@ -2517,35 +2513,35 @@ class DistributedAnalysis:
                 table_dists.append(table_dist)
             rhs_total_dist = Distribution(min(a.value for a in table_dists))
             out_dist = Distribution(min(rhs_total_dist.value, array_dists[lhs].value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+                _set_var_dist(rhs.args[0].name, array_dists, out_dist)
             return
 
         if fdef == ("drop_duplicates_array", "bodo.libs.array_kernels"):
             # output of drop_duplicates_array is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
 
             # return is an array
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("duplicated", "bodo.libs.array_kernels"):
             # output of duplicated is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
 
             # input tuple may be empty, see test_df_duplicated
             if len(self.typemap[rhs.args[0].name]) == 0:
@@ -2554,30 +2550,30 @@ class DistributedAnalysis:
             # arg0 is a tuple of arrays, arg1 is an array
             in_dist = Distribution(min(a.value for a in array_dists[rhs.args[0].name]))
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
-            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, out_dist)
             return
 
         if fdef == ("dropna", "bodo.libs.array_kernels"):
             # output of dropna is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = Distribution(min(a.value for a in array_dists[rhs.args[0].name]))
             out_dist = Distribution(min(a.value for a in array_dists[lhs]))
             out_dist = Distribution(min(out_dist.value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
         if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext"):
             # output of pivot_impl is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a tuple of arrays that must share a distribution.
             index_dist = array_dists[rhs.args[0].name]
@@ -2595,17 +2591,17 @@ class DistributedAnalysis:
             )
             out_dist = array_dists[lhs]
             final_dist = Distribution(min(in_dist.value, out_dist.value))
-            self._set_var_dist(lhs, array_dists, final_dist)
+            _set_var_dist(lhs, array_dists, final_dist)
             # output can cause input REP
             if final_dist != Distribution.OneD_Var:
                 in_dist = final_dist
             # Update args 0, 1, 2 so all arrays have the same dist
             index_dist = len(index_dist) * [in_dist]
-            self._set_var_dist(rhs.args[0].name, array_dists, index_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, index_dist)
             columns_dist = len(columns_dist) * [in_dist]
-            self._set_var_dist(rhs.args[1].name, array_dists, columns_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, columns_dist)
             values_dist = len(values_dist) * [in_dist]
-            self._set_var_dist(rhs.args[2].name, array_dists, values_dist)
+            _set_var_dist(rhs.args[2].name, array_dists, values_dist)
             # arg 3 must be replicated
             self._set_REP(
                 rhs.args[3].name,
@@ -2667,7 +2663,7 @@ class DistributedAnalysis:
                 # For enumerate the iterator should be the same dist as the value
                 # portion of the enumerate tuple.
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                    _set_var_dist(lhs, array_dists, Distribution.OneD)
                 if rhs.args[0].name not in array_dists:
                     array_dists[rhs.args[0].name] = Distribution.OneD
                 rhs_dist = array_dists[rhs.args[0].name]
@@ -2678,7 +2674,7 @@ class DistributedAnalysis:
                 if rhs_dist != out_dist:
                     array_dists[rhs.args[0].name] = out_dist
                 if lhs_dist != out_dist:
-                    self._set_var_dist(lhs, array_dists, out_dist)
+                    _set_var_dist(lhs, array_dists, out_dist)
             return
 
         if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
@@ -2780,13 +2776,13 @@ class DistributedAnalysis:
         if fdef == ("explode", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = _meet_array_dists(rhs.args[1].name, rhs.args[0].name, array_dists)
             out_dist = Distribution(
                 min(array_dists[lhs][0].value, array_dists[lhs][1].value, in_dist.value)
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
@@ -2799,11 +2795,11 @@ class DistributedAnalysis:
         if fdef == ("explode_no_index", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             in_dist = _meet_array_dists(rhs.args[1].name, rhs.args[0].name, array_dists)
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
@@ -2826,7 +2822,7 @@ class DistributedAnalysis:
         if fdef == ("explode_str_split", "bodo.libs.array_kernels"):
             # output of explode is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # Input array and index array (args 0 and 3) need to be checked
             in_dist = _meet_array_dists(rhs.args[3].name, rhs.args[0].name, array_dists)
@@ -2834,7 +2830,7 @@ class DistributedAnalysis:
             out_dist = Distribution(
                 min(array_dists[lhs][0].value, array_dists[lhs][1].value, in_dist.value)
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
@@ -2869,7 +2865,7 @@ class DistributedAnalysis:
                     min(out_dist.value, array_dists[rhs.args[0].name].value)
                 )
                 array_dists[lhs] = [out_dist] * len(tuple_typ)
-                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+                _set_var_dist(rhs.args[0].name, array_dists, out_dist)
             else:
                 _meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -2965,9 +2961,9 @@ class DistributedAnalysis:
             # handle index
             new_dist_val = min(new_dist_val, array_dists[ind_varname].value)
             new_dist = Distribution(new_dist_val)
-            self._set_var_dist(data_varname, array_dists, new_dist)
-            self._set_var_dist(ind_varname, array_dists, new_dist)
-            self._set_var_dist(lhs, array_dists, new_dist)
+            _set_var_dist(data_varname, array_dists, new_dist)
+            _set_var_dist(ind_varname, array_dists, new_dist)
+            _set_var_dist(lhs, array_dists, new_dist)
             return
 
         if fdef == ("pushdown_safe_init_df", "bodo.hiframes.pd_dataframe_ext"):
@@ -3032,7 +3028,7 @@ class DistributedAnalysis:
         if fdef == ("get_dataframe_all_data", "bodo.hiframes.pd_dataframe_ext"):
             in_df = rhs.args[0].name
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+                _set_var_dist(lhs, array_dists, Distribution.OneD, False)
 
             min_dist = Distribution(
                 min(
@@ -3044,8 +3040,8 @@ class DistributedAnalysis:
                     array_dists[in_df].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, min_dist)
-            self._set_var_dist(in_df, array_dists, min_dist)
+            _set_var_dist(lhs, array_dists, min_dist)
+            _set_var_dist(in_df, array_dists, min_dist)
             return
 
         if fdef == ("get_table_data", "bodo.hiframes.table"):
@@ -3054,7 +3050,7 @@ class DistributedAnalysis:
 
         if fdef == ("logical_table_to_table", "bodo.hiframes.table"):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+                _set_var_dist(lhs, array_dists, Distribution.OneD, False)
 
             # NOTE: replacing dead input arguments with None is done in table column
             # del pass so there is no None input here
@@ -3083,9 +3079,9 @@ class DistributedAnalysis:
                     array_dists[lhs].value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, min_dist)
-            self._set_var_dist(in_table, array_dists, min_dist)
-            self._set_var_dist(in_extra_arrs, array_dists, min_dist)
+            _set_var_dist(lhs, array_dists, min_dist)
+            _set_var_dist(in_table, array_dists, min_dist)
+            _set_var_dist(in_extra_arrs, array_dists, min_dist)
             return
 
         if fdef == ("get_dataframe_column_names", "bodo.hiframes.table"):
@@ -3213,7 +3209,7 @@ class DistributedAnalysis:
         if fdef == ("_bodo_groupby_apply_impl", ""):
             # output is variable-length even if input is 1D
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
             # arg0 is a tuple of arrays, arg1 is a dataframe
             in_dist = Distribution(
@@ -3228,14 +3224,14 @@ class DistributedAnalysis:
                     in_dist.value,
                 )
             )
-            self._set_var_dist(lhs, array_dists, out_dist)
+            _set_var_dist(lhs, array_dists, out_dist)
 
             # output can cause input REP
             if out_dist != Distribution.OneD_Var:
                 in_dist = out_dist
 
-            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-            self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            _set_var_dist(rhs.args[1].name, array_dists, in_dist)
             self._set_REP(
                 args[2:], array_dists, "extra argument in groupby.apply()", rhs.loc
             )
@@ -3250,7 +3246,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 # Default to 1D_Var, fftw's distribution does not match our 1D distribution
                 # so 1D always becomes 1D_Var
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             new_dist = Distribution(
                 min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
             )
@@ -3271,7 +3267,7 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 # Default to 1D, this always does an alltoallv
                 # so 1D_Var always becomes 1D
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
             new_dist = Distribution(
                 min(array_dists[lhs].value, array_dists[rhs.args[0].name].value)
             )
@@ -3294,13 +3290,13 @@ class DistributedAnalysis:
         ):  # pragma: no cover
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another
-            self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            _set_var_dist(lhs, array_dists, Distribution.OneD)
             arrays = [lhs]
             for arg in rhs.args:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
             if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
+                _meet_several_array_dists(arrays, array_dists)
             return
 
         # handle calling other Bodo functions that have distributed flags
@@ -3547,7 +3543,7 @@ class DistributedAnalysis:
             min_dist = lhs_dist
 
             for dist_val in cond_list_dist + choice_list_dist:
-                min_dist = self._min_dist(min_dist, dist_val)
+                min_dist = _min_dist(min_dist, dist_val)
 
             array_dists[lhs] = min_dist
             if cond_list_basetuple:
@@ -3732,7 +3728,7 @@ class DistributedAnalysis:
             if is_distributable_typ(self.typemap[args[1].name]):
                 arys_to_meet += [args[1].name]
             if len(arys_to_meet) > 1:
-                self._meet_several_array_dists(arys_to_meet, array_dists)
+                _meet_several_array_dists(arys_to_meet, array_dists)
             return
 
         # set REP if not found
@@ -3865,10 +3861,10 @@ class DistributedAnalysis:
         # special case: output is 1D_Var since we just reshape locally without data
         # exchange
         if len(shape_vars) == 1:
-            self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
         # all other cases will have data exchange resulting in 1D distribution
         else:
-            self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            _set_var_dist(lhs, array_dists, Distribution.OneD)
 
     def _analyze_call_df(self, lhs, arr, func_name, args, array_dists, loc):
         # to_csv() and to_parquet() can be parallelized
@@ -3899,8 +3895,8 @@ class DistributedAnalysis:
             return
 
         if func_name == "rep_return":
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
-            self._set_var_dist(args[0].name, array_dists, Distribution.REP)
+            _set_var_dist(lhs, array_dists, Distribution.REP)
+            _set_var_dist(args[0].name, array_dists, Distribution.REP)
             return
 
         if func_name == "dist_return":
@@ -3940,7 +3936,7 @@ class DistributedAnalysis:
 
         # output is replicated but input can stay distributed
         if func_name == "get_chunk_bounds":
-            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            _set_var_dist(lhs, array_dists, Distribution.REP)
             return
 
         # set REP if not found
@@ -3980,7 +3976,7 @@ class DistributedAnalysis:
                         ),
                         rhs.loc,
                     )
-            self._set_var_dist(
+            _set_var_dist(
                 lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
             )
         else:
@@ -3998,7 +3994,7 @@ class DistributedAnalysis:
                     ),
                     rhs.loc,
                 )
-            self._set_var_dist(
+            _set_var_dist(
                 lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
             )
 
@@ -4360,8 +4356,8 @@ class DistributedAnalysis:
             # output array is 1D_Var if input array is distributed
             out_dist = Distribution.OneD_Var
             if lhs in array_dists:
-                out_dist = self._min_dist(out_dist, array_dists[lhs])
-            out_dist = self._min_dist(out_dist, array_dists[in_var.name])
+                out_dist = _min_dist(out_dist, array_dists[lhs])
+            out_dist = _min_dist(out_dist, array_dists[in_var.name])
             array_dists[lhs] = out_dist
             # input can become REP
             if out_dist != Distribution.OneD_Var:
@@ -4416,10 +4412,10 @@ class DistributedAnalysis:
                 ind_val = index_typ.literal_value
                 tup = rhs.value.name
                 if tup not in array_dists:
-                    self._set_var_dist(tup, array_dists, Distribution.OneD)
+                    _set_var_dist(tup, array_dists, Distribution.OneD)
                 if lhs not in array_dists:
-                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
-                new_dist = self._min_dist(array_dists[tup][ind_val], array_dists[lhs])
+                    _set_var_dist(lhs, array_dists, Distribution.OneD)
+                new_dist = _min_dist(array_dists[tup][ind_val], array_dists[lhs])
                 array_dists[tup][ind_val] = new_dist
                 array_dists[lhs] = new_dist
             return
@@ -4567,12 +4563,12 @@ class DistributedAnalysis:
         # take precedence)
         if rhs.name in self.metadata["replicated"]:
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
+                _set_var_dist(lhs, array_dists, Distribution.REP)
         elif rhs.name in self.metadata["distributed_block"] or (
             is_arg and self.flags.all_args_distributed_block
         ):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                _set_var_dist(lhs, array_dists, Distribution.OneD)
             # Check if a user specified argument is indicated distributed
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
@@ -4581,7 +4577,7 @@ class DistributedAnalysis:
             is_arg and self.flags.all_args_distributed_varlength
         ):
             if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+                _set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             # Check if a user specified argument is indicated distributed
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
@@ -4723,7 +4719,7 @@ class DistributedAnalysis:
                         + info
                     )
                     self._add_diag_info(info, loc)
-                self._set_var_dist(varname, array_dists, Distribution.REP)
+                _set_var_dist(varname, array_dists, Distribution.REP)
 
     def _get_calc_n_items_range_index(self, size_def):
         """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r"""
