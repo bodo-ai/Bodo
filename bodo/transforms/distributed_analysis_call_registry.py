@@ -65,7 +65,9 @@ def no_op_analysis(ctx, inst):
 
 def meet_out_first_arg_analysis(ctx, inst):
     """Handler that meets distributions of first call argument and output variables"""
-    _meet_array_dists(inst.target.name, inst.value.args[0].name, ctx.array_dists)
+    _meet_array_dists(
+        ctx.typemap, inst.target.name, inst.value.args[0].name, ctx.array_dists
+    )
 
 
 call_registry = DistributedAnalysisCallRegistry()
