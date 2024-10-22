@@ -1616,7 +1616,10 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist, False)
             return
 
-        if fdef == ("init_join_state", "bodo.libs.stream_join"):  # pragma: no cover
+        if fdef == (
+            "init_join_state",
+            "bodo.libs.streaming.join",
+        ):  # pragma: no cover
             # Initialize join state to 1D
             if lhs not in array_dists:
                 default_dist = (Distribution.OneD, Distribution.OneD)
@@ -1625,7 +1628,7 @@ class DistributedAnalysis:
 
         if fdef == (
             "join_build_consume_batch",
-            "bodo.libs.stream_join",
+            "bodo.libs.streaming.join",
         ):  # pragma: no cover
             state_dist = array_dists[rhs.args[0].name]
             build_state_dist = state_dist[0]
@@ -1643,14 +1646,14 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, new_state_dist, False)
             return
 
-        if fdef == ("runtime_join_filter", "bodo.libs.stream_join"):
+        if fdef == ("runtime_join_filter", "bodo.libs.streaming.join"):
             # Simply match input and output array distributions.
             self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
             return
 
         if fdef == (
             "join_probe_consume_batch",
-            "bodo.libs.stream_join",
+            "bodo.libs.streaming.join",
         ):  # pragma: no cover
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
@@ -1725,12 +1728,12 @@ class DistributedAnalysis:
             return
 
         if fdef in (
-            ("init_groupby_state", "bodo.libs.stream_groupby"),
-            ("init_grouping_sets_state", "bodo.libs.stream_groupby"),
+            ("init_groupby_state", "bodo.libs.streaming.groupby"),
+            ("init_grouping_sets_state", "bodo.libs.streaming.groupby"),
             ("init_table_builder_state", "bodo.libs.table_builder"),
-            ("init_union_state", "bodo.libs.stream_union"),
-            ("init_window_state", "bodo.libs.stream_window"),
-            ("init_stream_sort_state", "bodo.libs.stream_sort"),
+            ("init_union_state", "bodo.libs.streaming.union"),
+            ("init_window_state", "bodo.libs.streaming.window"),
+            ("init_stream_sort_state", "bodo.libs.streaming.sort"),
         ):  # pragma: no cover
             # Initialize groupby state to 1D
             if lhs not in array_dists:
@@ -1738,19 +1741,25 @@ class DistributedAnalysis:
             return
 
         if fdef in (
-            ("groupby_build_consume_batch", "bodo.libs.stream_groupby"),
-            ("groupby_grouping_sets_build_consume_batch", "bodo.libs.stream_groupby"),
-            ("window_build_consume_batch", "bodo.libs.stream_window"),
-            ("sort_build_consume_batch", "bodo.libs.stream_sort"),
+            ("groupby_build_consume_batch", "bodo.libs.streaming.groupby"),
+            (
+                "groupby_grouping_sets_build_consume_batch",
+                "bodo.libs.streaming.groupby",
+            ),
+            ("window_build_consume_batch", "bodo.libs.streaming.window"),
+            ("sort_build_consume_batch", "bodo.libs.streaming.sort"),
         ):  # pragma: no cover
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
         if fdef in (
-            ("groupby_produce_output_batch", "bodo.libs.stream_groupby"),
-            ("groupby_grouping_sets_produce_output_batch", "bodo.libs.stream_groupby"),
-            ("window_produce_output_batch", "bodo.libs.stream_window"),
-            ("produce_output_batch", "bodo.libs.stream_sort"),
+            ("groupby_produce_output_batch", "bodo.libs.streaming.groupby"),
+            (
+                "groupby_grouping_sets_produce_output_batch",
+                "bodo.libs.streaming.groupby",
+            ),
+            ("window_produce_output_batch", "bodo.libs.streaming.window"),
+            ("produce_output_batch", "bodo.libs.streaming.sort"),
         ):  # pragma: no cover
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
@@ -1817,7 +1826,7 @@ class DistributedAnalysis:
             array_dists[rhs.args[0].name] = out_dist
             return
 
-        if fdef == ("union_consume_batch", "bodo.libs.stream_union"):
+        if fdef == ("union_consume_batch", "bodo.libs.streaming.union"):
             state = self.typemap[rhs.args[0].name]
             if state.all:
                 if array_dists[rhs.args[0].name] == Distribution.REP:
@@ -1835,7 +1844,7 @@ class DistributedAnalysis:
                 self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
-        if fdef == ("union_produce_batch", "bodo.libs.stream_union"):
+        if fdef == ("union_produce_batch", "bodo.libs.streaming.union"):
             state = self.typemap[rhs.args[0].name]
             if state.all:
                 if lhs not in array_dists:

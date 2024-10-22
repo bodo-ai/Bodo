@@ -4042,7 +4042,10 @@ class SeriesPass:
 
         require(is_call(table_def))
         source_fname = find_callname(self.func_ir, table_def, self.typemap)
-        return source_fname == ("join_probe_consume_batch", "bodo.libs.stream_join")
+        return source_fname == (
+            "join_probe_consume_batch",
+            "bodo.libs.streaming.join",
+        )
 
     def _simplify_IR(self):
         """Simplify IR after Series pass transforms."""

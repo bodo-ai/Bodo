@@ -561,8 +561,8 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
             suffix_code += f"dict_ids = [{arr_ids}]\n"
             arr_lens = ", ".join([f"len(A{i}._data)" for i in range(len(A))])
             suffix_code += f"dict_lens = [{arr_lens}]\n"
-            suffix_code += "if bodo.libs.stream_dict_encoding.state_contains_multi_input_dict_array(dict_encoding_state, func_id, dict_ids, dict_lens):\n"
-            suffix_code += "  dict_data, new_dict_id = bodo.libs.stream_dict_encoding.get_array_multi_input(\n"
+            suffix_code += "if bodo.libs.streaming.dict_encoding.state_contains_multi_input_dict_array(dict_encoding_state, func_id, dict_ids, dict_lens):\n"
+            suffix_code += "  dict_data, new_dict_id = bodo.libs.streaming.dict_encoding.get_array_multi_input(\n"
             suffix_code += "    dict_encoding_state, func_id, dict_ids, dict_lens, bodo.string_array_type\n"
             suffix_code += "  )\n"
             suffix_code += "else:\n"
@@ -593,7 +593,9 @@ def overload_coalesce_util(A, dict_encoding_state=None, func_id=-1):
         suffix_code += f"{indent}new_dict_id = bodo.libs.dict_arr_ext.generate_dict_id(num_strings)\n"
         # Update the cache.
         if not (is_overload_none(dict_encoding_state)):
-            suffix_code += "  bodo.libs.stream_dict_encoding.set_array_multi_input(\n"
+            suffix_code += (
+                "  bodo.libs.streaming.dict_encoding.set_array_multi_input(\n"
+            )
             suffix_code += "    dict_encoding_state, func_id, dict_ids, dict_lens, dict_data, new_dict_id\n"
             suffix_code += "  )\n"
 

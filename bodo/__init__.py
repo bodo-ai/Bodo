@@ -288,12 +288,12 @@ import bodo.libs.distributed_api
 import bodo.libs.memory_budget
 import bodo.libs.timsort
 import bodo.libs.query_profile_collector
-import bodo.libs.stream_join
-import bodo.libs.stream_groupby
-import bodo.libs.stream_dict_encoding
-import bodo.libs.stream_sort
-import bodo.libs.stream_union
-import bodo.libs.stream_window
+import bodo.libs.streaming.join
+import bodo.libs.streaming.groupby
+import bodo.libs.streaming.dict_encoding
+import bodo.libs.streaming.sort
+import bodo.libs.streaming.union
+import bodo.libs.streaming.window
 import bodo.libs.table_builder
 
 import bodo.io

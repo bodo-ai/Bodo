@@ -29,32 +29,28 @@ class BodoPhysicalUnion(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : UnionBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), inputs, all), BodoPhysicalRel {
+) : UnionBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), inputs, all),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
         all: Boolean,
-    ): BodoPhysicalUnion {
-        return BodoPhysicalUnion(cluster, traitSet, inputs, all)
-    }
+    ): BodoPhysicalUnion = BodoPhysicalUnion(cluster, traitSet, inputs, all)
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
 
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             emitStreaming(implementor)
         } else {
             emitSingleBatch(implementor)
         }
-    }
 
     private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         // Generate a pipeline for each input and pushing its result into the union state
         val terminatingPipelines =
-            inputs.withIndex().map {
-                    (idx, input) ->
+            inputs.withIndex().map { (idx, input) ->
                 val isLast = idx == inputs.size - 1
                 val forceEndOperator = isLast && !all
                 // Terminating pipelines must end with a terminating state. Because we just
@@ -68,7 +64,7 @@ class BodoPhysicalUnion(
                         val batchExitCond = pipeline.getExitCond()
                         val consumeCall =
                             Expr.Call(
-                                "bodo.libs.stream_union.union_consume_batch",
+                                "bodo.libs.streaming.union.union_consume_batch",
                                 listOf(
                                     stateVar,
                                     inputVar,
@@ -85,7 +81,7 @@ class BodoPhysicalUnion(
                         // We need to reset non-blocking is_last sync state after each pipeline when using groupby
                         if (!all) {
                             val endBuild =
-                                Op.Stmt(Expr.Call("bodo.libs.stream_union.end_union_consume_pipeline", listOf(stateVar)))
+                                Op.Stmt(Expr.Call("bodo.libs.streaming.union.end_union_consume_pipeline", listOf(stateVar)))
                             pipeline.addTermination(endBuild)
                         }
                         // For budget purposes we mark the end of the operator after the last stage.
@@ -100,15 +96,14 @@ class BodoPhysicalUnion(
         // The final pipeline generates the output from the state.
         val outputStage =
             OutputtingStageEmission(
-                {
-                        ctx, stateVar, _ ->
+                { ctx, stateVar, _ ->
                     val builder = ctx.builder()
                     val pipeline = builder.getCurrentStreamingPipeline()
                     val outputControl: Variable = builder.symbolTable.genOutputControlVar()
                     pipeline.addOutputControl(outputControl)
                     val outputCall =
                         Expr.Call(
-                            "bodo.libs.stream_union.union_produce_batch",
+                            "bodo.libs.streaming.union.union_produce_batch",
                             listOf(stateVar, outputControl),
                         )
                     val outTable: Variable = builder.symbolTable.genTableVar()
@@ -133,8 +128,7 @@ class BodoPhysicalUnion(
 
     private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         val columnNames = getRowType().fieldNames
-        return (implementor::build)(inputs) {
-                ctx, inputs ->
+        return (implementor::build)(inputs) { ctx, inputs ->
             val builder = ctx.builder()
             val dfs = inputs.map { input -> ctx.convertTableToDf(input) }
             val outVar = builder.symbolTable.genDfVar()
@@ -150,7 +144,7 @@ class BodoPhysicalUnion(
         val isAll = Pair<String, Expr>("all", Expr.BooleanLiteral(this.all))
         val stateCall =
             Expr.Call(
-                "bodo.libs.stream_union.init_union_state",
+                "bodo.libs.streaming.union.init_union_state",
                 listOf(ctx.operatorID().toExpr()),
                 listOf(isAll),
             )
@@ -179,7 +173,7 @@ class BodoPhysicalUnion(
         val builder = ctx.builder()
         val finalPipeline = builder.getCurrentStreamingPipeline()
         val deleteState =
-            Stmt(Expr.Call("bodo.libs.stream_union.delete_union_state", listOf(stateVar)))
+            Stmt(Expr.Call("bodo.libs.streaming.union.delete_union_state", listOf(stateVar)))
         finalPipeline.addTermination(deleteState)
     }
 
@@ -202,8 +196,6 @@ class BodoPhysicalUnion(
             cluster: RelOptCluster,
             inputs: List<RelNode>,
             all: Boolean,
-        ): BodoPhysicalUnion {
-            return BodoPhysicalUnion(cluster, cluster.traitSet(), inputs, all)
-        }
+        ): BodoPhysicalUnion = BodoPhysicalUnion(cluster, cluster.traitSet(), inputs, all)
     }
 }
