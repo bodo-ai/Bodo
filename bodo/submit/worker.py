@@ -12,8 +12,38 @@ import cloudpickle
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.submit.spawner import SubmitDispatcher
+from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata, SubmitDispatcher
 from bodo.submit.utils import CommandType, poll_for_barrier
+
+
+def _recv_arg(arg, spawner_intercomm):
+    """Receive argument if it is a DataFrame/Series/Index/array value.
+
+    Args:
+        arg (Any or ArgMetadata): argument value or metadata
+        spawner_intercomm (MPI.Intercomm): spawner intercomm handle
+
+    Returns:
+        Any: received function argument
+    """
+    if isinstance(arg, ArgMetadata):
+        if arg.is_broadcast:
+            return bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
+        else:
+            return bodo.libs.distributed_api.scatterv(
+                None, root=0, comm=spawner_intercomm
+            )
+
+    if isinstance(arg, BodoSQLContextMetadata):
+        from bodosql import BodoSQLContext
+
+        tables = {
+            tname: _recv_arg(tmeta, spawner_intercomm)
+            for tname, tmeta in arg.tables.items()
+        }
+        return BodoSQLContext(tables, arg.catalog, arg.default_tz)
+
+    return arg
 
 
 def exec_func_handler(
@@ -27,11 +57,10 @@ def exec_func_handler(
     pickled_func = spawner_intercomm.bcast(None, 0)
     logger.debug("Received pickled pyfunc from spawner.")
 
-    # For testing SQL
-    recv_bsql_context = spawner_intercomm.bcast(None, 0)
-    if recv_bsql_context:
-        arg0_bc = spawner_intercomm.bcast(None, 0)
-        logger.debug("Received pickled BodoSQLContext from spawner.")
+    # Receive function arguments
+    (args, kwargs) = spawner_intercomm.bcast(None, 0)
+    args = tuple(_recv_arg(arg, spawner_intercomm) for arg in args)
+    kwargs = {name: _recv_arg(arg, spawner_intercomm) for name, arg in kwargs.items()}
 
     pyfunc = None
     decorator = None
@@ -79,10 +108,7 @@ def exec_func_handler(
 
         # Try to compile and execute it. Catch and share any errors with the spawner.
         logger.debug("Compiling and executing func")
-        if recv_bsql_context:
-            func(arg0_bc)
-        else:
-            func()
+        func(*args, **kwargs)
     except Exception as e:
         logger.error(f"Exception while trying to execute code: {e}")
         caught_exception = e

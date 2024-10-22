@@ -4609,7 +4609,13 @@ class DistributedAnalysis:
         Checks for user flags; sets to REP if no user flag found
         """
         is_arg = isinstance(rhs, ir.Arg)
-        if rhs.name in self.metadata["distributed_block"] or (
+        # Check replicated flag first since it takes precedence over others (spawner
+        # sets all_args_distributed_block=True but user specified replicated should
+        # take precedence)
+        if rhs.name in self.metadata["replicated"]:
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
+        elif rhs.name in self.metadata["distributed_block"] or (
             is_arg and self.flags.all_args_distributed_block
         ):
             if lhs not in array_dists:
@@ -4627,9 +4633,6 @@ class DistributedAnalysis:
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
             self._check_user_distributed_args(array_dists, lhs, rhs.loc)
-        elif rhs.name in self.metadata["replicated"]:
-            if lhs not in array_dists:
-                self._set_var_dist(lhs, array_dists, Distribution.REP)
         elif rhs.name in self.metadata["threaded"]:
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.Thread
