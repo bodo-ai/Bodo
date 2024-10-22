@@ -13,7 +13,6 @@ from numba.core.options import _mapping
 from numba.core.targetconfig import Option, TargetConfig
 
 import bodo
-from bodo import master_mode
 
 # Add Bodo's options to Numba's allowed options/flags
 numba.core.cpu.CPUTargetOptions.all_args_distributed_block = _mapping(
@@ -279,14 +278,6 @@ def distributed_diagnostics(self, signature=None, level=1):
 numba.core.dispatcher.Dispatcher.distributed_diagnostics = distributed_diagnostics
 
 
-def master_mode_wrapper(numba_jit_wrapper):  # pragma: no cover
-    def _wrapper(pyfunc):
-        dispatcher = numba_jit_wrapper(pyfunc)
-        return master_mode.MasterModeDispatcher(dispatcher)
-
-    return _wrapper
-
-
 # shows whether jit compilation is on inside a function or not. The overloaded version
 # returns True while regular interpreted version returns False.
 # example:
@@ -339,20 +330,7 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     numba_jit = numba.jit(
         signature_or_function, pipeline_class=pipeline_class, **options
     )
-    if (
-        master_mode.master_mode_on and bodo.get_rank() == master_mode.MASTER_RANK
-    ):  # pragma: no cover
-        # when options are passed, this function is called with
-        # signature_or_function==None, so numba.jit doesn't return a Dispatcher
-        # object. it returns a decorator ("_jit.<locals>.wrapper") to apply
-        # to the Python function, and we need to wrap that around our own
-        # decorator
-        if isinstance(numba_jit, numba.dispatcher._DispatcherBase):
-            return master_mode.MasterModeDispatcher(numba_jit)
-        else:
-            return master_mode_wrapper(numba_jit)
-    else:
-        return numba_jit
+    return numba_jit
 
 
 def _init_extensions():
