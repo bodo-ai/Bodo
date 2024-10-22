@@ -3,6 +3,8 @@
 Provides a registry of function call handlers for distributed analysis.
 """
 
+from bodo.transforms.distributed_analysis import _meet_array_dists
+
 
 class DistributedAnalysisContext:
     """Distributed analysis context data needed for handling calls"""
@@ -30,6 +32,10 @@ class DistributedAnalysisCallRegistry:
                 "scalar_to_array_item_array",
                 "bodo.libs.array_item_arr_ext",
             ): no_op_analysis,
+            (
+                "table_astype",
+                "bodo.utils.table_utils",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -55,6 +61,11 @@ class DistributedAnalysisCallRegistry:
 def no_op_analysis(ctx, inst):
     """Handler that doesn't change any distributions"""
     pass
+
+
+def meet_out_first_arg_analysis(ctx, inst):
+    """Handler that meets distributions of first call argument and output variables"""
+    _meet_array_dists(inst.target.name, inst.value.args[0].name, ctx.array_dists)
 
 
 call_registry = DistributedAnalysisCallRegistry()
