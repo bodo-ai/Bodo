@@ -927,7 +927,13 @@ class DistributedAnalysis:
 
         # Check distributed analysis call registry for handler first
         ctx = DistributedAnalysisContext(self.typemap, array_dists, equiv_set)
-        if call_registry.analyze_call(ctx, inst, fdef):
+        # Replace ir.Var with string representation of type for easy matching
+        fedf_str_var = fdef[:-1] + (
+            str(self.typemap[fdef[-1].name])
+            if isinstance(fdef[-1], ir.Var)
+            else fdef[-1],
+        )
+        if call_registry.analyze_call(ctx, inst, fedf_str_var):
             return
 
         if (
@@ -1031,56 +1037,6 @@ class DistributedAnalysis:
                 (bodo.ml_support.xgb_ext.BodoXGBClassifierType,),
             )
         ):  # pragma: no cover
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if (
-            func_name in {"fit", "predict", "score"}
-            and is_ml_support_loaded()
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
-                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
-                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
-                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
-                ),
-            )
-        ):
-            if func_name == "fit":
-                _meet_array_dists(
-                    self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
-                )
-            elif func_name == "predict":
-                # match input and output distributions
-                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            elif func_name == "score":
-                _meet_array_dists(
-                    self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
-                )
-            return
-
-        if (
-            func_name in {"predict_proba", "predict_log_proba"}
-            and is_ml_support_loaded()
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
-                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
-                ),
-            )
-        ):
-            # match input and output distributions
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
             return
 

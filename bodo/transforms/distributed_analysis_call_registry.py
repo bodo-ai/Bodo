@@ -36,6 +36,54 @@ class DistributedAnalysisCallRegistry:
                 "table_astype",
                 "bodo.utils.table_utils",
             ): meet_out_first_arg_analysis,
+            ("fit", "BodoRandomForestClassifierType"): meet_first_2_args_analysis,
+            ("predict", "BodoRandomForestClassifierType"): meet_out_first_arg_analysis,
+            ("score", "BodoRandomForestClassifierType"): meet_first_2_args_analysis,
+            (
+                "predict_proba",
+                "BodoRandomForestClassifierType",
+            ): meet_out_first_arg_analysis,
+            (
+                "predict_log_proba",
+                "BodoRandomForestClassifierType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoRandomForestRegressorType"): meet_first_2_args_analysis,
+            ("predict", "BodoRandomForestRegressorType"): meet_out_first_arg_analysis,
+            ("score", "BodoRandomForestRegressorType"): meet_first_2_args_analysis,
+            ("fit", "BodoSGDClassifierType"): meet_first_2_args_analysis,
+            ("predict", "BodoSGDClassifierType"): meet_out_first_arg_analysis,
+            ("score", "BodoSGDClassifierType"): meet_first_2_args_analysis,
+            ("predict_proba", "BodoSGDClassifierType"): meet_out_first_arg_analysis,
+            ("predict_log_proba", "BodoSGDClassifierType"): meet_out_first_arg_analysis,
+            ("fit", "BodoSGDRegressorType"): meet_first_2_args_analysis,
+            ("predict", "BodoSGDRegressorType"): meet_out_first_arg_analysis,
+            ("score", "BodoSGDRegressorType"): meet_first_2_args_analysis,
+            ("fit", "BodoLogisticRegressionType"): meet_first_2_args_analysis,
+            ("predict", "BodoLogisticRegressionType"): meet_out_first_arg_analysis,
+            ("score", "BodoLogisticRegressionType"): meet_first_2_args_analysis,
+            (
+                "predict_proba",
+                "BodoLogisticRegressionType",
+            ): meet_out_first_arg_analysis,
+            (
+                "predict_log_proba",
+                "BodoLogisticRegressionType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoMultinomialNBType"): meet_first_2_args_analysis,
+            ("predict", "BodoMultinomialNBType"): meet_out_first_arg_analysis,
+            ("score", "BodoMultinomialNBType"): meet_first_2_args_analysis,
+            ("fit", "BodoLassoType"): meet_first_2_args_analysis,
+            ("predict", "BodoLassoType"): meet_out_first_arg_analysis,
+            ("score", "BodoLassoType"): meet_first_2_args_analysis,
+            ("fit", "BodoLinearRegressionType"): meet_first_2_args_analysis,
+            ("predict", "BodoLinearRegressionType"): meet_out_first_arg_analysis,
+            ("score", "BodoLinearRegressionType"): meet_first_2_args_analysis,
+            ("fit", "BodoRidgeType"): meet_first_2_args_analysis,
+            ("predict", "BodoRidgeType"): meet_out_first_arg_analysis,
+            ("score", "BodoRidgeType"): meet_first_2_args_analysis,
+            ("fit", "BodoLinearSVCType"): meet_first_2_args_analysis,
+            ("predict", "BodoLinearSVCType"): meet_out_first_arg_analysis,
+            ("score", "BodoLinearSVCType"): meet_first_2_args_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -67,6 +115,13 @@ def meet_out_first_arg_analysis(ctx, inst):
     """Handler that meets distributions of first call argument and output variables"""
     _meet_array_dists(
         ctx.typemap, inst.target.name, inst.value.args[0].name, ctx.array_dists
+    )
+
+
+def meet_first_2_args_analysis(ctx, inst):
+    """Handler that meets distributions of the first two call arguments"""
+    _meet_array_dists(
+        ctx.typemap, inst.value.args[0].name, inst.value.args[1].name, ctx.array_dists
     )
 
 
