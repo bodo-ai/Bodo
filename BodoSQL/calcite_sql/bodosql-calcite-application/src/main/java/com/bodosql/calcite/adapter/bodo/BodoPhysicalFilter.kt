@@ -25,22 +25,20 @@ class BodoPhysicalFilter(
     traitSet: RelTraitSet,
     child: RelNode,
     condition: RexNode,
-) : FilterBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), child, condition), BodoPhysicalRel {
+) : FilterBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), child, condition),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): BodoPhysicalFilter {
-        return BodoPhysicalFilter(cluster, traitSet, input, condition)
-    }
+    ): BodoPhysicalFilter = BodoPhysicalFilter(cluster, traitSet, input, condition)
 
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             emitStreaming(implementor)
         } else {
             emitSingleBatch(implementor)
         }
-    }
 
     private fun emitStreaming(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         val stage =
@@ -71,16 +69,14 @@ class BodoPhysicalFilter(
         return implementor.buildStreaming(operatorEmission)!!
     }
 
-    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return (implementor::build)(this.inputs) {
-                ctx, inputs ->
+    private fun emitSingleBatch(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        (implementor::build)(this.inputs) { ctx, inputs ->
             val inputVar = inputs[0]
             // Extract window aggregates and update the nodes.
             val (condition, inputRefs) = genDataFrameWindowInputs(ctx, inputVar)
             val translator = ctx.rexTranslator(inputVar, inputRefs)
             emit(ctx, translator, inputVar, condition)
         }
-    }
 
     /**
      * Generate the additional inputs to generateDataFrame after handling the Window
@@ -103,7 +99,9 @@ class BodoPhysicalFilter(
         val builder = ctx.builder()
         val currentPipeline = builder.getCurrentStreamingPipeline()
         val readerVar = builder.symbolTable.genStateVar()
-        currentPipeline.addInitialization(Op.Assign(readerVar, Expr.Call("bodo.libs.stream_dict_encoding.init_dict_encoding_state")))
+        currentPipeline.addInitialization(
+            Op.Assign(readerVar, Expr.Call("bodo.libs.streaming.dict_encoding.init_dict_encoding_state")),
+        )
         return readerVar
     }
 
@@ -116,7 +114,7 @@ class BodoPhysicalFilter(
         stateVar: StateVariable,
     ) {
         val currentPipeline = ctx.builder().getCurrentStreamingPipeline()
-        val deleteState = Op.Stmt(Expr.Call("bodo.libs.stream_dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
+        val deleteState = Op.Stmt(Expr.Call("bodo.libs.streaming.dict_encoding.delete_dict_encoding_state", listOf(stateVar)))
         currentPipeline.addTermination(deleteState)
     }
 
@@ -162,9 +160,8 @@ class BodoPhysicalFilter(
             ),
         )
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.filterProperty(condition)
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.filterProperty(condition)
 
     companion object {
         fun create(

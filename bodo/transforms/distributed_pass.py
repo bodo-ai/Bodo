@@ -548,7 +548,7 @@ class DistributedPass:
             return [assign]
 
         if (
-            fdef == ("init_join_state", "bodo.libs.stream_join")
+            fdef == ("init_join_state", "bodo.libs.streaming.join")
             and lhs in self._dist_analysis.array_dists
         ):
             build_dist, probe_dist = self._dist_analysis.array_dists[lhs]
@@ -585,23 +585,23 @@ class DistributedPass:
             ),
             (
                 "init_groupby_state",
-                "bodo.libs.stream_groupby",
+                "bodo.libs.streaming.groupby",
             ),
             (
                 "init_grouping_sets_state",
-                "bodo.libs.stream_groupby",
+                "bodo.libs.streaming.groupby",
             ),
             (
                 "init_stream_sort_state",
-                "bodo.libs.stream_sort",
+                "bodo.libs.streaming.sort",
             ),
             (
                 "init_union_state",
-                "bodo.libs.stream_union",
+                "bodo.libs.streaming.union",
             ),
             (
                 "init_window_state",
-                "bodo.libs.stream_window",
+                "bodo.libs.streaming.window",
             ),
         ) and self._is_1D_or_1D_Var_arr(lhs):
             set_last_arg_to_true(self, assign.value)

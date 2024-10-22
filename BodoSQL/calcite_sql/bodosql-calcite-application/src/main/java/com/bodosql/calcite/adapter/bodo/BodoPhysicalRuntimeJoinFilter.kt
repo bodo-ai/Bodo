@@ -41,9 +41,7 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoPhysicalRuntimeJoinFilter {
-        return copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
-    }
+    ): BodoPhysicalRuntimeJoinFilter = copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
 
     /**
      * Return a new RuntimeJoinFilterBase with only a different set of columns.
@@ -53,8 +51,8 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
         input: RelNode,
         newEqualityColumns: List<List<Int>>,
         newNonEqualityColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
-    ): BodoPhysicalRuntimeJoinFilter {
-        return BodoPhysicalRuntimeJoinFilter(
+    ): BodoPhysicalRuntimeJoinFilter =
+        BodoPhysicalRuntimeJoinFilter(
             cluster,
             traitSet,
             input,
@@ -63,7 +61,6 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
             equalityIsFirstLocations,
             newNonEqualityColumns,
         )
-    }
 
     /**
      * Match the input's batching property. This node can be used in streaming
@@ -71,9 +68,8 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
      * @param inputBatchingProperty the input's batching property
      * @return the expected batching property of this node.
      */
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
 
     /**
      * Emits the code necessary for implementing this relational operator.
@@ -131,9 +127,7 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
      * Function to create the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
-        return UnusedStateVariable
-    }
+    override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable = UnusedStateVariable
 
     /**
      * Function to delete the initial state for a streaming pipeline.
@@ -217,7 +211,7 @@ class BodoPhysicalRuntimeJoinFilter private constructor(
             val columnVarsTuple = Expr.Tuple(columnVars)
             val isFirstLocationVarsTuple = Expr.Tuple(isFirstLocationVars)
             return Expr.Call(
-                "bodo.libs.stream_join.runtime_join_filter",
+                "bodo.libs.streaming.join.runtime_join_filter",
                 listOf(stateVarsTuple, input, columnVarsTuple, isFirstLocationVarsTuple),
             )
         }

@@ -979,7 +979,7 @@ def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
 
 @numba.njit
 def get_rtjf_col_min_max_unique_map(
-    rtjf_state: bodo.libs.stream_join.JoinStateType,
+    rtjf_state: bodo.libs.streaming.join.JoinStateType,
     rtjf_build_cols: npt.NDArray,
     rtjf_probe_cols: npt.NDArray,
     col_names: list[str],

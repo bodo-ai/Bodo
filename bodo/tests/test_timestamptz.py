@@ -358,7 +358,7 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
         )
 
         # Initialize the join state
-        join_state = bodo.libs.stream_join.init_join_state(
+        join_state = bodo.libs.streaming.join.init_join_state(
             0,
             global_2,
             global_3,
@@ -380,7 +380,7 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
                 T1, slice((iter_build * 3), ((iter_build + 1) * 3))
             )
             is_last_build = (iter_build * 3) >= length_build
-            done_build, _ = bodo.libs.stream_join.join_build_consume_batch(
+            done_build, _ = bodo.libs.streaming.join.join_build_consume_batch(
                 join_state, T3, is_last_build
             )
             iter_build = iter_build + 1
@@ -397,12 +397,12 @@ def test_streaming_join_timestamptz_data(timestamptz_join_data, memory_leak_chec
                 T2, slice((iter_probe * 3), ((iter_probe + 1) * 3))
             )
             is_last_probe = (iter_probe * 3) >= length_probe
-            (T5, done_probe, _) = bodo.libs.stream_join.join_probe_consume_batch(
+            (T5, done_probe, _) = bodo.libs.streaming.join.join_probe_consume_batch(
                 join_state, T4, is_last_probe, produce_probe
             )
             bodo.libs.table_builder.table_builder_append(builder_state, T5)
             iter_probe = iter_probe + 1
-        bodo.libs.stream_join.delete_join_state(join_state)
+        bodo.libs.streaming.join.delete_join_state(join_state)
 
         # Extract the final table from the table builder and convert back to a DataFrame
         T6 = bodo.libs.table_builder.table_builder_finalize(builder_state)
@@ -561,7 +561,7 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
         )
 
         # Initialize the join state
-        join_state = bodo.libs.stream_join.init_join_state(
+        join_state = bodo.libs.streaming.join.init_join_state(
             0,
             global_2,
             global_3,
@@ -583,7 +583,7 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
                 T1, slice((iter_build * 3), ((iter_build + 1) * 3))
             )
             is_last_build = (iter_build * 3) >= length_build
-            done_build, _ = bodo.libs.stream_join.join_build_consume_batch(
+            done_build, _ = bodo.libs.streaming.join.join_build_consume_batch(
                 join_state, T3, is_last_build
             )
             iter_build = iter_build + 1
@@ -600,12 +600,12 @@ def test_streaming_join_timestamptz_keys(timestamptz_join_keys, memory_leak_chec
                 T2, slice((iter_probe * 3), ((iter_probe + 1) * 3))
             )
             is_last_probe = (iter_probe * 3) >= length_probe
-            (T5, done_probe, _) = bodo.libs.stream_join.join_probe_consume_batch(
+            (T5, done_probe, _) = bodo.libs.streaming.join.join_probe_consume_batch(
                 join_state, T4, is_last_probe, produce_probe
             )
             bodo.libs.table_builder.table_builder_append(builder_state, T5)
             iter_probe = iter_probe + 1
-        bodo.libs.stream_join.delete_join_state(join_state)
+        bodo.libs.streaming.join.delete_join_state(join_state)
 
         # Extract the final table from the table builder and convert back to a DataFrame
         T6 = bodo.libs.table_builder.table_builder_finalize(builder_state)

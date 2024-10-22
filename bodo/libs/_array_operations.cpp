@@ -9,9 +9,9 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_shuffle.h"
-#include "_stream_dict_encoding.h"
 #include "_table_builder.h"
 #include "gfx/timsort.hpp"
+#include "streaming/_dict_encoding.h"
 
 //
 //   ARRAY ISIN

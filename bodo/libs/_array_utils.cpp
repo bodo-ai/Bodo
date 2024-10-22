@@ -4,7 +4,7 @@
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
-#include "_stream_join.h"
+#include "streaming/_join.h"
 
 #include <arrow/array/array_nested.h>
 #include <arrow/compute/cast.h>

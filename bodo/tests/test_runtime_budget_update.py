@@ -7,19 +7,19 @@ import bodo.tests.utils
 from bodo.libs.memory_budget import (
     OperatorType,
 )
-from bodo.libs.stream_groupby import (
+from bodo.libs.streaming.groupby import (
     delete_groupby_state,
     groupby_build_consume_batch,
     groupby_produce_output_batch,
     init_groupby_state,
 )
-from bodo.libs.stream_join import (
+from bodo.libs.streaming.join import (
     delete_join_state,
     init_join_state,
     join_build_consume_batch,
     join_probe_consume_batch,
 )
-from bodo.libs.stream_join import (
+from bodo.libs.streaming.join import (
     get_op_pool_budget_bytes as join_get_op_pool_budget_bytes,
 )
 from bodo.tests.utils import pytest_mark_one_rank, temp_env_override

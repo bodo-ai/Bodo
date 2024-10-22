@@ -1,7 +1,7 @@
 #include <random>
 #include "../libs/_distributed.h"
 #include "../libs/_shuffle.h"
-#include "../libs/_stream_sort.h"
+#include "../libs/streaming/_sort.h"
 #include "./test.hpp"
 #include "fmt/format.h"
 #include "table_generator.hpp"

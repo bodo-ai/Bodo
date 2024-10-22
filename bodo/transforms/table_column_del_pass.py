@@ -1522,7 +1522,10 @@ def remove_dead_columns(
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
                     continue
-                elif fdef == ("join_probe_consume_batch", "bodo.libs.stream_join"):
+                elif fdef == (
+                    "join_probe_consume_batch",
+                    "bodo.libs.streaming.join",
+                ):
                     # Prune any unused columns from the output of join_probe_consume_batch.
                     # This avoids outputting unnecessary keys.
 
@@ -1541,7 +1544,7 @@ def remove_dead_columns(
 
                     nodes = compile_func_single_block(
                         eval(
-                            "lambda join_state, table, is_last, produce_output: bodo.libs.stream_join.join_probe_consume_batch(join_state, table, is_last, produce_output, used_cols=used_columns)"
+                            "lambda join_state, table, is_last, produce_output: bodo.libs.streaming.join.join_probe_consume_batch(join_state, table, is_last, produce_output, used_cols=used_columns)"
                         ),
                         rhs.args,
                         stmt.target,

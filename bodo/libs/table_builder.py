@@ -30,7 +30,7 @@ from bodo.libs.array import (
     py_data_to_cpp_table,
 )
 from bodo.libs.array import table_type as cpp_table_type
-from bodo.libs.stream_base import StreamingStateType
+from bodo.libs.streaming.base import StreamingStateType
 from bodo.utils.typing import (
     MetaType,
     error_on_unsupported_streaming_arrays,

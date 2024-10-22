@@ -37,16 +37,15 @@ class BodoPhysicalSort(
     collation: RelCollation,
     offset: RexNode?,
     fetch: RexNode?,
-) : SortBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), input, collation, offset, fetch), BodoPhysicalRel {
+) : SortBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), input, collation, offset, fetch),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         collation: RelCollation,
         offset: RexNode?,
         fetch: RexNode?,
-    ): BodoPhysicalSort {
-        return BodoPhysicalSort(cluster, traitSet, input, collation, offset, fetch)
-    }
+    ): BodoPhysicalSort = BodoPhysicalSort(cluster, traitSet, input, collation, offset, fetch)
 
     private fun getLimitAndOffsetStrs(
         ctx: BodoPhysicalRel.BuildContext,
@@ -63,8 +62,10 @@ class BodoPhysicalSort(
             // This is handled by the parser for all situations except namedParams
             // TODO: Determine how to move this into Calcite
             val typeName = fetchNode.type.sqlTypeName
-            if (typeName != SqlTypeName.TINYINT && typeName != SqlTypeName.SMALLINT &&
-                typeName != SqlTypeName.INTEGER && typeName != SqlTypeName.BIGINT
+            if (typeName != SqlTypeName.TINYINT &&
+                typeName != SqlTypeName.SMALLINT &&
+                typeName != SqlTypeName.INTEGER &&
+                typeName != SqlTypeName.BIGINT
             ) {
                 throw BodoSQLCodegenException(
                     String.format(Locale.ROOT, "Limit value must be an integer, value is of type: %s", fetchNode.type.toString()),
@@ -82,8 +83,10 @@ class BodoPhysicalSort(
             // This is handled by the parser for all situations except namedParams
             // TODO: Determine how to move this into Calcite
             val typeName = offsetNode.type.sqlTypeName
-            if (typeName != SqlTypeName.TINYINT && typeName != SqlTypeName.SMALLINT &&
-                typeName != SqlTypeName.INTEGER && typeName != SqlTypeName.BIGINT
+            if (typeName != SqlTypeName.TINYINT &&
+                typeName != SqlTypeName.SMALLINT &&
+                typeName != SqlTypeName.INTEGER &&
+                typeName != SqlTypeName.BIGINT
             ) {
                 throw BodoSQLCodegenException(
                     String.format(Locale.ROOT, "Offset value must be an integer, value is of type: %s", offsetNode.type.toString()),
@@ -98,8 +101,8 @@ class BodoPhysicalSort(
         return Pair(limitStr, offsetStr)
     }
 
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             // The first pipeline accumulates all the rows
             val stage =
                 TerminatingStageEmission { ctx, stateVar, table ->
@@ -109,7 +112,7 @@ class BodoPhysicalSort(
                     val batchExitCond = pipeline.getExitCond()
                     val consumeCall =
                         Expr.Call(
-                            "bodo.libs.stream_sort.sort_build_consume_batch",
+                            "bodo.libs.streaming.sort.sort_build_consume_batch",
                             listOf(
                                 stateVar,
                                 inputVar,
@@ -127,8 +130,7 @@ class BodoPhysicalSort(
             // The final pipeline generates the output from the state.
             val outputStage =
                 OutputtingStageEmission(
-                    {
-                            ctx, stateVar, _ ->
+                    { ctx, stateVar, _ ->
                         val builder = ctx.builder()
                         val pipeline = builder.getCurrentStreamingPipeline()
                         val outputControl: Variable = builder.symbolTable.genOutputControlVar()
@@ -136,7 +138,7 @@ class BodoPhysicalSort(
                         // TODO supply limit/offset to produce_output_batch and handle LIMIT in streaming
                         val outputCall =
                             Expr.Call(
-                                "bodo.libs.stream_sort.produce_output_batch",
+                                "bodo.libs.streaming.sort.produce_output_batch",
                                 listOf(stateVar, outputControl),
                             )
                         val outTable: Variable = builder.symbolTable.genTableVar()
@@ -179,7 +181,6 @@ class BodoPhysicalSort(
                 ctx.convertDfToTable(sortVar, this)
             }
         }
-    }
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         val colNames = input.rowType.fieldNames
@@ -222,7 +223,7 @@ class BodoPhysicalSort(
         val sortStateVar: StateVariable = ctx.builder().symbolTable.genStateVar()
         val stateCall =
             Expr.Call(
-                "bodo.libs.stream_sort.init_stream_sort_state",
+                "bodo.libs.streaming.sort.init_stream_sort_state",
                 listOf(
                     ctx.operatorID().toExpr(),
                     limit,
@@ -231,8 +232,7 @@ class BodoPhysicalSort(
                     ascendingList,
                     naPositionList,
                     Expr.Tuple(
-                        colNames.map {
-                                it ->
+                        colNames.map { it ->
                             Expr.StringLiteral(it)
                         },
                     ),
@@ -251,7 +251,7 @@ class BodoPhysicalSort(
     ) {
         val finalizePipeline = ctx.builder().getCurrentStreamingPipeline()
         // Append the code to delete the state
-        val deleteState = Stmt(Expr.Call("bodo.libs.stream_sort.delete_stream_sort_state", listOf(stateVar)))
+        val deleteState = Stmt(Expr.Call("bodo.libs.streaming.sort.delete_stream_sort_state", listOf(stateVar)))
         finalizePipeline.addTermination(deleteState)
     }
 
