@@ -1,6 +1,7 @@
 import os
 
 import cloudpickle
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -137,3 +138,40 @@ def simple_test():
 def test_simple():
     """Simple test that reads data and computes in spawn mode"""
     simple_test()
+
+
+def test_args():
+    """Make sure arguments work for submit_jit functions properly"""
+
+    @submit_jit
+    def impl1(a, arr, c=1):
+        print(a + c, arr.sum())
+
+    A = np.arange(6)
+    impl1(1, A, 3)
+    impl1(1, arr=A, c=3)
+
+    # Test replicated flag
+    @submit_jit(replicated=["arr"])
+    def impl2(a, arr, c=1):
+        print(a + c, arr.sum())
+
+    A = np.arange(6)
+    impl2(1, A, 3)
+    impl2(1, arr=A, c=3)
+
+    # Test BodoSQLContext if bodosql installed in test environment
+    try:
+        import bodosql
+    except ImportError:
+        return
+
+    @submit_jit
+    def impl3(a, bc, b):
+        df = bc.sql('select * from "source"')
+        print(df, a + b)
+
+    df1 = pd.DataFrame({"id": [1, 1], "dep": ["software", "hr"]})
+    df2 = pd.DataFrame({"id": [1, 2], "dep": ["finance", "hardware"]})
+    bc = bodosql.context.BodoSQLContext({"target": df1, "source": df2})
+    impl3(1, bc, 4)

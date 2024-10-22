@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from bodo.submit.spawner import submit_jit
 from bodo.tests.utils import pytest_spawn_mode
@@ -11,6 +12,9 @@ def setitem_jit(A):
     A[0] = 1
 
 
+@pytest.mark.skip(
+    reason="[BSE-4054] needs update after recursive compilation PR is merged"
+)
 def test_setitem(memory_leak_check):
     @submit_jit
     def do_test():

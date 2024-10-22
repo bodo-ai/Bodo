@@ -4,6 +4,7 @@
 import atexit
 import contextlib
 import dis
+import itertools
 import logging
 import os
 import sys
@@ -17,6 +18,7 @@ import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
 from bodo.submit.utils import CommandType, poll_for_barrier
+from bodo.utils.utils import is_array_typ
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
 # is detected
@@ -38,6 +40,27 @@ def no_stdin():
     finally:
         # Restore the saved fd
         os.dup2(stdin_dup, 0)
+
+
+class ArgMetadata:
+    """Argument metadata to inform workers about other arguments to receive separately.
+    E.g. broadcast or scatter a dataframe from spawner to workers.
+    Used for DataFrame/Series/Index/array arguments.
+    """
+
+    def __init__(self, is_broadcast):
+        self.is_broadcast = is_broadcast
+
+
+class BodoSQLContextMetadata:
+    """Argument metadata for BodoSQLContext values which allows reconstructing
+    BodoSQLContext on workers properly by receiving table DataFrames separately.
+    """
+
+    def __init__(self, tables, catalog, default_tz):
+        self.tables = tables
+        self.catalog = catalog
+        self.default_tz = default_tz
 
 
 class Spawner:
@@ -118,42 +141,6 @@ class Spawner:
 
     def submit_func_to_workers(self, func, *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
-        global BodoSQLContextCls
-
-        bcast_bsql_context = False
-        bsql_ctx = None
-        if len(args) > 0:
-            if len(args) == 1:
-                if (
-                    type(args[0]).__name__ == "BodoSQLContext"
-                    and BodoSQLContextCls is None
-                ):
-                    try:
-                        from bodosql import BodoSQLContext
-
-                        BodoSQLContextCls = BodoSQLContext
-                    except ImportError:
-                        pass
-
-            if (
-                len(args) == 1
-                and BodoSQLContextCls is not None
-                and isinstance(args[0], BodoSQLContextCls)
-            ):
-                bsql_ctx = args[0]
-                if len(bsql_ctx.tables.keys()) > 0:
-                    raise NotImplementedError(
-                        "BodoSQLContext with tables are not yet supported. Only catalogs are supported."
-                    )
-                bcast_bsql_context = True
-            else:
-                raise NotImplementedError(
-                    "Functions with arguments are not yet supported!"
-                )
-        if len(kwargs.keys()) > 0:
-            raise NotImplementedError(
-                "Functions with keyword arguments are not yet supported!"
-            )
 
         # Check that the only return is a "return None"
         pyfunc_bytecode = dis.Bytecode(func.py_func)
@@ -171,10 +158,8 @@ class Spawner:
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, bcast_root)
         self.worker_intercomm.bcast(pickled_func, root=bcast_root)
 
-        # Send bsql_context if it exists
-        self.worker_intercomm.bcast(bcast_bsql_context, root=bcast_root)
-        if bcast_bsql_context:
-            self.worker_intercomm.bcast(bsql_ctx, root=bcast_root)
+        # Send arguments
+        self._send_func_args(func, args, kwargs, bcast_root)
 
         # Wait for execution to finish
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
@@ -210,6 +195,92 @@ class Spawner:
                 raise Exception("Some ranks failed") from accumulated_exception
 
         return self.collect_results()
+
+    def _get_arg_metadata(self, arg_name, arg, replicated):
+        """Replace argument with metadata for later bcast/scatter if it is a DataFrame,
+        Series, Index or array type.
+
+        Args:
+            arg_name (str): argument name
+            arg (Any): argument value
+            replicated (set[str]): set of replicated arguments (based on flags)
+
+        Returns:
+            ArgMetadata or Any: argument potentially replaced with ArgMetadata
+        """
+        data_type = bodo.typeof(arg)
+
+        if is_array_typ(data_type, True) or isinstance(
+            data_type, (bodo.DataFrameType, bodo.TableType)
+        ):
+            return ArgMetadata(arg_name in replicated)
+
+        # Send metadata to receive tables and reconstruct BodoSQLContext on workers
+        # properly.
+        if type(arg).__name__ == "BodoSQLContext":
+            # Import bodosql lazily to avoid import overhead when not necessary
+            from bodosql import BodoSQLContext
+
+            assert isinstance(arg, BodoSQLContext), "invalid BodoSQLContext"
+            table_metas = {
+                tname: ArgMetadata(arg_name in replicated)
+                for tname in arg.tables.keys()
+            }
+            return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
+
+        return arg
+
+    def _send_func_args(self, func, args, kwargs, bcast_root):
+        """Send function arguments from spawner to workers. DataFrame/Series/Index/array
+        arguments are sent separately using broadcast or scatter (depending on flags).
+
+        Args:
+            func (CPUDispatcher): dispatcher to run on workers
+            args (tuple[Any]): positional arguments
+            kwargs (dict[str, Any]): keyword arguments
+            bcast_root (int): root value for broadcast (MPI.ROOT on spawner)
+        """
+        param_names = list(numba.core.utils.pysignature(func.py_func).parameters)
+        replicated = set(func.submit_jit_args.get("replicated", ()))
+        out_args = tuple(
+            self._get_arg_metadata(param_names[i], arg, replicated)
+            for i, arg in enumerate(args)
+        )
+        out_kwargs = {
+            name: self._get_arg_metadata(name, arg, replicated)
+            for name, arg in kwargs.items()
+        }
+        self.worker_intercomm.bcast((out_args, out_kwargs), root=bcast_root)
+
+        # Send DataFrame/Series/Index/array arguments
+        for arg, out_arg in itertools.chain(
+            zip(args, out_args), zip(kwargs.values(), out_kwargs.values())
+        ):
+            if isinstance(out_arg, ArgMetadata):
+                if out_arg.is_broadcast:
+                    bodo.libs.distributed_api.bcast(
+                        arg, root=bcast_root, comm=spawner.worker_intercomm
+                    )
+                else:
+                    bodo.libs.distributed_api.scatterv(
+                        arg, root=bcast_root, comm=spawner.worker_intercomm
+                    )
+
+            # Send table DataFrames for BodoSQLContext
+            if isinstance(out_arg, BodoSQLContextMetadata):
+                for tname, tmeta in out_arg.tables.items():
+                    if tmeta.is_broadcast:
+                        bodo.libs.distributed_api.bcast(
+                            arg.tables[tname],
+                            root=bcast_root,
+                            comm=spawner.worker_intercomm,
+                        )
+                    else:
+                        bodo.libs.distributed_api.scatterv(
+                            arg.tables[tname],
+                            root=bcast_root,
+                            comm=spawner.worker_intercomm,
+                        )
 
     def reset(self):
         """Destroy spawned processes"""
@@ -298,6 +369,10 @@ def submit_dispatcher_wrapper(numba_jit_wrapper, **kwargs):  # pragma: no cover
 def submit_jit(signature_or_function=None, pipeline_class=None, **options):
     """Spawn mode execution entry point decorator. Functions decorated with submit_jit
     will be compiled and executed on a spawned group."""
+
+    # Spawner distributes arguments by default (with scatterv)
+    options["all_args_distributed_block"] = True
+
     if signature_or_function:
         # Add JIT args onto the function so that the worker can construct the
         # appropriate dispatcher using these args
