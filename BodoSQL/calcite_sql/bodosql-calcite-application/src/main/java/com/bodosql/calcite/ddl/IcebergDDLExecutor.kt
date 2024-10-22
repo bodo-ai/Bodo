@@ -161,7 +161,7 @@ class IcebergDDLExecutor<T>(
     ): DDLExecutionResult {
         val fieldNames =
             listOf("CREATED_ON", "NAME", "KIND")
-        val columnValues = List(4) { ArrayList<String?>() }
+        val columnValues = List(fieldNames.size) { ArrayList<String?>() }
         val namespace = Namespace.of(*schemaPath.toTypedArray())
         // Loop over all objects in the schema,
         // and add their details to the result.
