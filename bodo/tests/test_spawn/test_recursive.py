@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from bodo.submit.spawner import submit_jit
 from bodo.tests.conftest import datapath_util
@@ -40,3 +41,21 @@ def test_recursive():
     """Test that a JIT function that calls another JIT function in spawn mode is
     supported"""
     jit_fn_that_calls_other_jit_fns()
+
+
+@pytest.mark.skip(reason="This test is flaky, revisit when output is supported")
+def test_recursive_across_module(capfd):
+    import bodo.tests.test_spawn.mymodule as mymod
+
+    @submit_jit
+    def f():
+        mymod.jit_fn()
+
+    f()
+
+    with capfd.disabled():
+        out, _ = capfd.readouterr()
+        n_calls = sum("called mymodule.jit_fn" in l for l in out.split("\n"))
+        # Regardless of the number of workers, if the function was called in the
+        # compiled mode, the print should only happen once
+        assert n_calls == 1

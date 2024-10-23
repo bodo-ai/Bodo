@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import time
+import types
 
 import cloudpickle
 import numba
@@ -18,6 +19,7 @@ import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
 from bodo.submit.utils import CommandType, poll_for_barrier
+from bodo.submit.worker_state import is_worker
 from bodo.utils.utils import is_array_typ
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
@@ -40,6 +42,18 @@ def no_stdin():
     finally:
         # Restore the saved fd
         os.dup2(stdin_dup, 0)
+
+
+def get_num_workers():
+    """Returns the number of workers to spawn.
+    If BODO_NUM_WORKERS is set, spawn that many workers. Else, we will spawn as
+    many workers as there are physical cores on this machine."""
+    n_pes = 2
+    if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
+        n_pes = int(n_pes_env)
+    elif cpu_count := psutil.cpu_count(logical=False):
+        n_pes = cpu_count
+    return n_pes
 
 
 class ArgMetadata:
@@ -80,14 +94,7 @@ class Spawner:
 
         self.comm_world = MPI.COMM_WORLD
 
-        # If BODO_NUM_WORKERS is set, spawn that many workers. Else,
-        # we will spawn as many workers as there are physical cores
-        # on this machine.
-        n_pes = 2
-        if n_pes_env := os.environ.get("BODO_NUM_WORKERS"):
-            n_pes = int(n_pes_env)
-        elif cpu_count := psutil.cpu_count(logical=False):
-            n_pes = cpu_count
+        n_pes = get_num_workers()
         self.logger.debug(f"Trying to spawn {n_pes} workers...")
         errcodes = [0] * n_pes
         t0 = time.monotonic()
@@ -139,12 +146,12 @@ class Spawner:
         # call bodo.gatherv on the intercomm
         return None
 
-    def submit_func_to_workers(self, func, *args, **kwargs):
+    def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
 
         # Check that the only return is a "return None"
-        pyfunc_bytecode = dis.Bytecode(func.py_func)
-        for inst in pyfunc_bytecode:
+        func_bytecode = dis.Bytecode(dispatcher.py_func)
+        for inst in func_bytecode:
             if inst.opname == "RETURN_VALUE" or (
                 inst.opname == "RETURN_CONST" and inst.argrepr != "None"
             ):
@@ -152,14 +159,14 @@ class Spawner:
                     "Functions that return values are not supported by submit_jit yet"
                 )
 
-        # Send pyfunc:
-        pickled_func = cloudpickle.dumps(func.py_func)
+        # Send func:
+        pickled_func = cloudpickle.dumps(dispatcher)
         bcast_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, bcast_root)
         self.worker_intercomm.bcast(pickled_func, root=bcast_root)
 
         # Send arguments
-        self._send_func_args(func, args, kwargs, bcast_root)
+        self._send_func_args(dispatcher, args, kwargs, bcast_root)
 
         # Wait for execution to finish
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
@@ -230,18 +237,18 @@ class Spawner:
 
         return arg
 
-    def _send_func_args(self, func, args, kwargs, bcast_root):
+    def _send_func_args(self, dispatcher: "SubmitDispatcher", args, kwargs, bcast_root):
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
 
         Args:
-            func (CPUDispatcher): dispatcher to run on workers
+            dispathcer (SubmitDispatcher): dispatcher to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
             bcast_root (int): root value for broadcast (MPI.ROOT on spawner)
         """
-        param_names = list(numba.core.utils.pysignature(func.py_func).parameters)
-        replicated = set(func.submit_jit_args.get("replicated", ()))
+        param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
+        replicated = set(dispatcher.decorator_args.get("replicated", ()))
         out_args = tuple(
             self._get_arg_metadata(param_names[i], arg, replicated)
             for i, arg in enumerate(args)
@@ -317,58 +324,48 @@ def destroy_spawner():
 atexit.register(destroy_spawner)
 
 
-def submit_func_to_workers(func, *args, **kwargs):
+def submit_func_to_workers(dispatcher: "SubmitDispatcher", *args, **kwargs):
     """Get the global spawner and submit `func` for execution"""
     spawner = get_spawner()
-    spawner.submit_func_to_workers(func, *args, **kwargs)
+    spawner.submit_func_to_workers(dispatcher, *args, **kwargs)
 
 
-class SubmitDispatcher(object):
-    def __init__(self, dispatcher):
-        self.dispatcher = dispatcher
+class SubmitDispatcher:
+    """Pickleable wrapper that lazily sends a function and the arguments needed
+    to compile to the workers"""
+
+    def __init__(self, py_func, decorator_args):
+        self.py_func = py_func
+        self.decorator_args = decorator_args
 
     def __call__(self, *args, **kwargs):
-        func = self.dispatcher
-        submit_func_to_workers(func, *args, **kwargs)
+        submit_func_to_workers(self, *args, **kwargs)
 
-    def __getstate__(self):
-        return self.dispatcher.py_func
+    @classmethod
+    def get_dispatcher(cls, py_func, decorator_args):
+        # Instead of unpickling into a new SubmitDispatcher, we call bodo.jit to
+        # return the real dispatcher
+        decorator = bodo.jit(**decorator_args)
+        return decorator(py_func)
 
-    def __setstate__(self, state):
-        pyfunc = state
-        # Extract JIT args from the function object to reconstruct the correct
-        # dispatcher
-        assert pyfunc.__dict__.get("is_submit_jit")
-        decorator_args = pyfunc.__dict__.get("submit_jit_args")
-        decorator = submit_jit(**decorator_args)
-        rebuild_submit_dispatcher = decorator(pyfunc)
-        self.dispatcher = rebuild_submit_dispatcher.dispatcher
-
-
-def submit_dispatcher_wrapper(numba_jit_wrapper, **kwargs):  # pragma: no cover
-    """Wrapper that stores the JIT wrapper to be passed a real function later.
-    This is the case when we run code that invokes `submit_jit` without a
-    function argument (usually because additional arguments were suppplied),
-    e.g.:
-      @submit_jit(cache=True)
-      def fn():
-        ...
-    """
-
-    def _wrapper(pyfunc):
-        # Add JIT args onto the function so that the worker can construct the
-        # appropriate dispatcher using these args
-        pyfunc.is_submit_jit = True
-        pyfunc.submit_jit_args = kwargs
-        dispatcher = numba_jit_wrapper(pyfunc)
-        return SubmitDispatcher(dispatcher)
-
-    return _wrapper
+    def __reduce__(self):
+        # Pickle this object by pickling the underlying function (which is
+        # guaranteed to have the extra properties necessary to build the actual
+        # dispatcher via bodo.jit on the worker side)
+        return SubmitDispatcher.get_dispatcher, (self.py_func, self.decorator_args)
 
 
 def submit_jit(signature_or_function=None, pipeline_class=None, **options):
     """Spawn mode execution entry point decorator. Functions decorated with submit_jit
     will be compiled and executed on a spawned group."""
+    if is_worker():
+        # If we are already in the worker, just use `bodo.jit` to
+        # compile/execute directly
+        return bodo.jit(
+            signature_or_function=signature_or_function,
+            pipeline_class=pipeline_class,
+            **options,
+        )
 
     # Spawner distributes arguments by default (with scatterv)
     options["all_args_distributed_block"] = True
@@ -380,19 +377,12 @@ def submit_jit(signature_or_function=None, pipeline_class=None, **options):
         signature_or_function.submit_jit_args = {**options}
         signature_or_function.submit_jit_args["pipeline_class"] = pipeline_class
 
-    numba_jit = bodo.jit(
-        signature_or_function, pipeline_class=pipeline_class, **options
-    )
-    # When options are passed, this function is called with
-    # signature_or_function==None, so numba.jit doesn't return a Dispatcher
-    # object. it returns a decorator ("_jit.<locals>.wrapper") to apply
-    # to the Python function, and we need to wrap that around our own
-    # decorator
-    if isinstance(numba_jit, numba.core.dispatcher._DispatcherBase):
-        f = SubmitDispatcher(numba_jit)
-    else:
-        kwargs = options
-        if pipeline_class is not None:
-            kwargs["pipeline_class"] = pipeline_class
-        f = submit_dispatcher_wrapper(numba_jit, **kwargs)
-    return f
+    def return_wrapped_fn(py_func):
+        submit_jit_args = {**options}
+        submit_jit_args["pipeline_class"] = pipeline_class
+        return SubmitDispatcher(py_func, submit_jit_args)
+
+    if isinstance(signature_or_function, types.FunctionType):
+        py_func = signature_or_function
+        return return_wrapped_fn(py_func)
+    return return_wrapped_fn

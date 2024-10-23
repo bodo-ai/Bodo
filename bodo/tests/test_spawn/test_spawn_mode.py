@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.submit.spawner import submit_jit
+from bodo.submit.spawner import get_num_workers, submit_jit
 from bodo.tests.conftest import datapath_util
 from bodo.tests.utils import pytest_spawn_mode
 
@@ -68,26 +68,32 @@ def test_modify_global():
         fn()
 
 
-import bodo.tests.test_spawn.mymodule as mymod
-
-
 @pytest.mark.skip(
-    reason="TODO: pytest prevents module resolution from working correctly"
+    "capfd tests are unreliable with MPI see mymodule.py for details on unblocking this test"
 )
-def test_import_module():
-    """Check that modules referenced by submitted fns will be imported on the
-    spawned process"""
+def test_import_module(capfd):
+    import bodo.tests.test_spawn.mymodule as mymod
 
     def print_np():
         with bodo.no_warning_objmode:
             mymod.f()
 
-    print(print_np)
     fn = submit_jit(cache=True)(print_np)
     fn()
 
     fn2 = submit_jit(cache=True)(print_np)
     fn2()
+
+    with capfd.disabled():
+        out, _ = capfd.readouterr()
+        lines = out.split("\n")
+
+        n_pes = get_num_workers()
+        # Check that mymodule is only imported once per worker and once from the
+        # spawning process
+        assert sum("imported mymodule" in l for l in lines) == (n_pes + 1)
+        # ensure that the function in mymodule was ran twice on every rank
+        assert sum("called mymodule.f" in l for l in lines) == 2 * n_pes
 
 
 def f0():
