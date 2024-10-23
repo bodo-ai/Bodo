@@ -94,6 +94,7 @@ class DistributedAnalysisCallRegistry:
             ("score", "BodoLinearSVCType"): meet_first_2_args_analysis,
             ("fit", "BodoXGBClassifierType"): meet_first_2_args_analysis_xgb_fit,
             ("predict", "BodoXGBClassifierType"): meet_out_first_arg_analysis,
+            ("predict_proba", "BodoXGBClassifierType"): meet_out_first_arg_analysis,
             ("fit", "BodoXGBRegressorType"): meet_first_2_args_analysis_xgb_fit,
             ("predict", "BodoXGBRegressorType"): meet_out_first_arg_analysis,
             (

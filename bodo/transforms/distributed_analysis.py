@@ -982,18 +982,6 @@ class DistributedAnalysis:
             return
 
         if (
-            func_name == "predict_proba"
-            and "bodo.ml_support.xgb_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (bodo.ml_support.xgb_ext.BodoXGBClassifierType,),
-            )
-        ):  # pragma: no cover
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
-        if (
             func_name in {"fit", "predict", "score", "transform"}
             and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
