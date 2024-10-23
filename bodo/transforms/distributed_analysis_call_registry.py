@@ -3,6 +3,7 @@
 Provides a registry of function call handlers for distributed analysis.
 """
 
+from numba.core import types
 from numba.core.ir_utils import guard
 
 from bodo.transforms.distributed_analysis import (
@@ -12,6 +13,7 @@ from bodo.transforms.distributed_analysis import (
     _set_var_dist,
 )
 from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_none
+from bodo.utils.utils import is_distributable_typ
 
 
 class DistributedAnalysisContext:
@@ -228,6 +230,54 @@ class DistributedAnalysisCallRegistry:
                 "shuffle",
                 "sklearn.utils",
             ): meet_out_first_arg_analysis,
+            (
+                "precision_score",
+                "sklearn.metrics._classification",
+            ): analyze_call_sklearn_metrics,
+            (
+                "precision_score",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "recall_score",
+                "sklearn.metrics._classification",
+            ): analyze_call_sklearn_metrics,
+            (
+                "recall_score",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "f1_score",
+                "sklearn.metrics._classification",
+            ): analyze_call_sklearn_metrics,
+            (
+                "f1_score",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "log_loss",
+                "sklearn.metrics._classification",
+            ): analyze_call_sklearn_metrics,
+            (
+                "log_loss",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "accuracy_score",
+                "sklearn.metrics._classification",
+            ): analyze_call_sklearn_metrics,
+            (
+                "accuracy_score",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
+            (
+                "confusion_matrix",
+                "sklearn.metrics._classification",
+            ): analyze_call_sklearn_metrics,
+            (
+                "confusion_matrix",
+                "sklearn.metrics",
+            ): analyze_call_sklearn_metrics,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -418,6 +468,168 @@ def analyze_call_sklearn_cluster_kmeans(ctx, inst):
     elif func_name == "transform":
         # match input (X) and output (X_new) distributions
         _meet_array_dists(typemap, lhs, rhs.args[0].name, array_dists)
+
+
+def analyze_call_sklearn_metrics(ctx, inst):
+    """
+    Analyze distribution of sklearn metrics functions
+    """
+    lhs = inst.target.name
+    rhs = inst.value
+    kws = dict(rhs.kws)
+    array_dists = ctx.array_dists
+    func_name = ctx.func_name
+    typemap = ctx.typemap
+    metadata = ctx.metadata
+    diag_info = ctx.diag_info
+    if func_name in {"precision_score", "recall_score", "f1_score"}:
+        # output is always replicated, and the output can be an array
+        # if average=None so we have to set it
+        # TODO this shouldn't be done if output is float?
+        _set_REP(
+            typemap,
+            metadata,
+            diag_info,
+            lhs,
+            array_dists,
+            f"output of {func_name} is REP",
+            rhs.loc,
+        )
+        dist_arg0 = is_distributable_typ(typemap[rhs.args[0].name])
+        dist_arg1 = is_distributable_typ(typemap[rhs.args[1].name])
+        if dist_arg0 and dist_arg1:
+            _meet_array_dists(typemap, rhs.args[0].name, rhs.args[1].name, array_dists)
+        elif not dist_arg0 and dist_arg1:
+            _set_REP(
+                typemap,
+                metadata,
+                diag_info,
+                rhs.args[1].name,
+                array_dists,
+                f"first input of {func_name} is non-distributable",
+                rhs.loc,
+            )
+        elif not dist_arg1 and dist_arg0:
+            _set_REP(
+                typemap,
+                metadata,
+                diag_info,
+                rhs.args[0].name,
+                array_dists,
+                f"second input of {func_name} is non-distributable",
+                rhs.loc,
+            )
+
+    if func_name == "log_loss":
+        _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+            typemap, lhs, func_name, rhs, kws, array_dists
+        )
+        # labels is an optional kw arg, so check if it is provided.
+        # if it is provided, then set it to REP
+        if "labels" in kws:
+            labels_arg_name = kws["labels"].name
+            _set_REP(
+                typemap,
+                metadata,
+                diag_info,
+                labels_arg_name,
+                array_dists,
+                "labels when provided are assumed to be REP",
+                rhs.loc,
+            )
+
+    if func_name == "accuracy_score":
+        _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+            typemap, lhs, func_name, rhs, kws, array_dists
+        )
+
+    if func_name == "confusion_matrix":
+        # output is always replicated, and the output is an array
+        _set_REP(
+            typemap,
+            metadata,
+            diag_info,
+            lhs,
+            array_dists,
+            f"output of {func_name} is REP",
+            rhs.loc,
+        )
+        _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+            typemap, lhs, func_name, rhs, kws, array_dists
+        )
+        # labels is an optional kw arg, so check if it is provided.
+        # if it is provided, then set it to REP
+        if "labels" in kws:
+            labels_arg_name = kws["labels"].name
+            _set_REP(
+                typemap,
+                metadata,
+                diag_info,
+                labels_arg_name,
+                array_dists,
+                "labels when provided are assumed to be REP",
+                rhs.loc,
+            )
+
+
+def _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+    typemap, lhs, func_name, rhs, kws, array_dists
+):
+    """
+    Analyze for sklearn functions like accuracy_score and mean_squared_error.
+    In these we have a y_true, y_pred and optionally a sample_weight.
+    Distribution of all 3 should match.
+    """
+
+    # sample_weight is an optional kw arg, so check if it is provided.
+    # if it is provided and it is not none (because if it is none it's
+    # as good as not being provided), then get the "name"
+    sample_weight_arg_name = None
+    if "sample_weight" in kws and (typemap[kws["sample_weight"].name] != types.none):
+        sample_weight_arg_name = kws["sample_weight"].name
+
+    # check if all 3 (y_true, y_pred, sample_weight) are distributable types
+    dist_y_true = is_distributable_typ(typemap[rhs.args[0].name])
+    dist_y_pred = is_distributable_typ(typemap[rhs.args[1].name])
+    # if sample_weight is not provided, we can act as if it is distributable
+    dist_sample_weight = (
+        is_distributable_typ(typemap[sample_weight_arg_name])
+        if sample_weight_arg_name
+        else True
+    )
+
+    # if any of the 3 are not distributable, set top_dist to REP
+    top_dist = Distribution.OneD
+    if not (dist_y_true and dist_y_pred and dist_sample_weight):
+        top_dist = Distribution.REP
+
+    # Match distribution of y_true and y_pred, with top dist as
+    # computed above, i.e. set to REP if any of the types
+    # are not distributable
+    _meet_array_dists(
+        typemap,
+        rhs.args[0].name,
+        rhs.args[1].name,
+        array_dists,
+        top_dist=top_dist,
+    )
+    if sample_weight_arg_name:
+        # Match distribution of y_true and sample_weight
+        _meet_array_dists(
+            typemap,
+            rhs.args[0].name,
+            sample_weight_arg_name,
+            array_dists,
+            top_dist=top_dist,
+        )
+        # Match distribution of y_pred and sample_weight
+        _meet_array_dists(
+            typemap,
+            rhs.args[1].name,
+            sample_weight_arg_name,
+            array_dists,
+            top_dist=top_dist,
+        )
 
 
 call_registry = DistributedAnalysisCallRegistry()
