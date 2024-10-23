@@ -169,6 +169,23 @@ def test_compute_return_scalar(datapath):
     _test_equal(bodo_submit_out, py_out)
 
 
+@pytest.mark.skip("submit_jit does not support output")
+def test_environment():
+    os.environ["BODO_TESTS_VARIABLE"] = "42"
+    try:
+
+        @submit_jit
+        def get_from_env():
+            with bodo.no_warning_objmode(ret_val="int64"):
+                ret_val = int(os.environ["BODO_TESTS_VARIABLE"])
+            return ret_val
+
+        assert get_from_env() == 42
+    finally:
+        # Remove environment variable
+        del os.environ["BODO_TESTS_VARIABLE"]
+
+
 def test_args():
     """Make sure arguments work for submit_jit functions properly"""
 
