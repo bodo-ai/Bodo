@@ -17,10 +17,11 @@ from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_non
 class DistributedAnalysisContext:
     """Distributed analysis context data needed for handling calls"""
 
-    def __init__(self, typemap, array_dists, equiv_set):
+    def __init__(self, typemap, array_dists, equiv_set, func_name):
         self.typemap = typemap
         self.array_dists = array_dists
         self.equiv_set = equiv_set
+        self.func_name = func_name
 
 
 class DistributedAnalysisCallRegistry:
@@ -115,6 +116,16 @@ class DistributedAnalysisCallRegistry:
                 "bodo.libs.struct_arr_ext",
             ): init_out_1D,
             ("scalar_to_map_array", "bodo.libs.map_arr_ext"): init_out_1D,
+            (
+                "transform",
+                "BodoKMeansClusteringType",
+            ): analyze_call_sklearn_cluster_kmeans,
+            ("score", "BodoKMeansClusteringType"): analyze_call_sklearn_cluster_kmeans,
+            (
+                "predict",
+                "BodoKMeansClusteringType",
+            ): analyze_call_sklearn_cluster_kmeans,
+            ("fit", "BodoKMeansClusteringType"): analyze_call_sklearn_cluster_kmeans,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -246,6 +257,62 @@ def init_out_1D(ctx, inst):
     lhs = inst.target.name
     if lhs not in ctx.array_dists:
         ctx.array_dists[lhs] = Distribution.OneD
+
+
+def analyze_call_sklearn_cluster_kmeans(ctx, inst):
+    """
+    Analyze distribution of sklearn cluster kmeans
+    functions (sklearn.cluster.kmeans.func_name)
+    """
+    lhs = inst.target.name
+    rhs = inst.value
+    kws = dict(rhs.kws)
+    array_dists = ctx.array_dists
+    func_name = ctx.func_name
+    typemap = ctx.typemap
+    if func_name == "fit":
+        # match dist of X and sample_weight (if provided)
+        X_arg_name = rhs.args[0].name
+        if len(rhs.args) >= 3:
+            sample_weight_arg_name = rhs.args[2].name
+        elif "sample_weight" in kws:
+            sample_weight_arg_name = kws["sample_weight"].name
+        else:
+            sample_weight_arg_name = None
+
+        if sample_weight_arg_name:
+            _meet_array_dists(typemap, X_arg_name, sample_weight_arg_name, array_dists)
+
+    elif func_name == "predict":
+        # match dist of X and sample_weight (if provided)
+        X_arg_name = rhs.args[0].name
+        if len(rhs.args) >= 2:
+            sample_weight_arg_name = rhs.args[1].name
+        elif "sample_weight" in kws:
+            sample_weight_arg_name = kws["sample_weight"].name
+        else:
+            sample_weight_arg_name = None
+        if sample_weight_arg_name:
+            _meet_array_dists(typemap, X_arg_name, sample_weight_arg_name, array_dists)
+
+        # match input and output distributions
+        _meet_array_dists(typemap, lhs, rhs.args[0].name, array_dists)
+
+    elif func_name == "score":
+        # match dist of X and sample_weight (if provided)
+        X_arg_name = rhs.args[0].name
+        if len(rhs.args) >= 3:
+            sample_weight_arg_name = rhs.args[2].name
+        elif "sample_weight" in kws:
+            sample_weight_arg_name = kws["sample_weight"].name
+        else:
+            sample_weight_arg_name = None
+        if sample_weight_arg_name:
+            _meet_array_dists(typemap, X_arg_name, sample_weight_arg_name, array_dists)
+
+    elif func_name == "transform":
+        # match input (X) and output (X_new) distributions
+        _meet_array_dists(typemap, lhs, rhs.args[0].name, array_dists)
 
 
 call_registry = DistributedAnalysisCallRegistry()

@@ -75,7 +75,6 @@ from bodo.utils.utils import (
     is_distributable_tuple_typ,
     is_distributable_typ,
     is_expr,
-    is_ml_support_loaded,
     is_np_array_typ,
     is_slice_equiv_arr,
     is_whole_slice,
@@ -959,7 +958,9 @@ class DistributedAnalysis:
                 _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD_Var)
 
         # Check distributed analysis call registry for handler first
-        ctx = DistributedAnalysisContext(self.typemap, array_dists, equiv_set)
+        ctx = DistributedAnalysisContext(
+            self.typemap, array_dists, equiv_set, func_name
+        )
         # Replace ir.Var with type's class name for easy matching
         fdef_str_var = fdef[:-1] + (
             type(self.typemap[fdef[-1].name]).__name__
@@ -978,20 +979,6 @@ class DistributedAnalysis:
             # Filter code matches getitem code.
             self._analyze_getitem_array_table_inputs(
                 inst, lhs, in_var, index_var, rhs.loc, equiv_set, array_dists
-            )
-            return
-
-        if (
-            func_name in {"fit", "predict", "score", "transform"}
-            and is_ml_support_loaded()
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
-            )
-        ):
-            self._analyze_call_sklearn_cluster_kmeans(
-                lhs, func_name, rhs, kws, array_dists
             )
             return
 
@@ -3423,65 +3410,6 @@ class DistributedAnalysis:
                 _meet_array_dists(
                     self.typemap, X_arg_name, groups_arg_name, array_dists
                 )
-
-    def _analyze_call_sklearn_cluster_kmeans(
-        self, lhs, func_name, rhs, kws, array_dists
-    ):
-        """
-        Analyze distribution of sklearn cluster kmeans
-        functions (sklearn.cluster.kmeans.func_name)
-        """
-        if func_name == "fit":
-            # match dist of X and sample_weight (if provided)
-            X_arg_name = rhs.args[0].name
-            if len(rhs.args) >= 3:
-                sample_weight_arg_name = rhs.args[2].name
-            elif "sample_weight" in kws:
-                sample_weight_arg_name = kws["sample_weight"].name
-            else:
-                sample_weight_arg_name = None
-
-            if sample_weight_arg_name:
-                _meet_array_dists(
-                    self.typemap, X_arg_name, sample_weight_arg_name, array_dists
-                )
-
-        elif func_name == "predict":
-            # match dist of X and sample_weight (if provided)
-            X_arg_name = rhs.args[0].name
-            if len(rhs.args) >= 2:
-                sample_weight_arg_name = rhs.args[1].name
-            elif "sample_weight" in kws:
-                sample_weight_arg_name = kws["sample_weight"].name
-            else:
-                sample_weight_arg_name = None
-            if sample_weight_arg_name:
-                _meet_array_dists(
-                    self.typemap, X_arg_name, sample_weight_arg_name, array_dists
-                )
-
-            # match input and output distributions
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-
-        elif func_name == "score":
-            # match dist of X and sample_weight (if provided)
-            X_arg_name = rhs.args[0].name
-            if len(rhs.args) >= 3:
-                sample_weight_arg_name = rhs.args[2].name
-            elif "sample_weight" in kws:
-                sample_weight_arg_name = kws["sample_weight"].name
-            else:
-                sample_weight_arg_name = None
-            if sample_weight_arg_name:
-                _meet_array_dists(
-                    self.typemap, X_arg_name, sample_weight_arg_name, array_dists
-                )
-
-        elif func_name == "transform":
-            # match input (X) and output (X_new) distributions
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-
-        return
 
     def _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
         self, lhs, func_name, rhs, kws, array_dists
