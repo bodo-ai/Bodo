@@ -3,7 +3,8 @@
 Provides a registry of function call handlers for distributed analysis.
 """
 
-from bodo.transforms.distributed_analysis import _meet_array_dists
+from bodo.transforms.distributed_analysis import Distribution, _meet_array_dists
+from bodo.utils.typing import BodoError
 
 
 class DistributedAnalysisContext:
@@ -84,6 +85,10 @@ class DistributedAnalysisCallRegistry:
             ("fit", "BodoLinearSVCType"): meet_first_2_args_analysis,
             ("predict", "BodoLinearSVCType"): meet_out_first_arg_analysis,
             ("score", "BodoLinearSVCType"): meet_first_2_args_analysis,
+            ("fit", "BodoXGBClassifierType"): meet_first_2_args_analysis_xgb_fit,
+            ("predict", "BodoXGBClassifierType"): meet_out_first_arg_analysis,
+            ("fit", "BodoXGBRegressorType"): meet_first_2_args_analysis_xgb_fit,
+            ("predict", "BodoXGBRegressorType"): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -123,6 +128,15 @@ def meet_first_2_args_analysis(ctx, inst):
     _meet_array_dists(
         ctx.typemap, inst.value.args[0].name, inst.value.args[1].name, ctx.array_dists
     )
+
+
+def meet_first_2_args_analysis_xgb_fit(ctx, inst):  # pragma: no cover
+    """Handler that meets distributions of the first two call arguments for xgb fit"""
+    _meet_array_dists(
+        ctx.typemap, inst.value.args[0].name, inst.value.args[1].name, ctx.array_dists
+    )
+    if ctx.array_dists[inst.value.args[0].name] == Distribution.REP:
+        raise BodoError("Arguments of xgboost.fit are not distributed", inst.loc)
 
 
 call_registry = DistributedAnalysisCallRegistry()

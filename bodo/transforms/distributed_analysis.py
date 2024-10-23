@@ -936,31 +936,6 @@ class DistributedAnalysis:
         if call_registry.analyze_call(ctx, inst, fdef_str_var):
             return
 
-        if (
-            func_name in {"fit", "predict"}
-            and "bodo.ml_support.xgb_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.xgb_ext.BodoXGBClassifierType,
-                    bodo.ml_support.xgb_ext.BodoXGBRegressorType,
-                ),
-            )
-        ):  # pragma: no cover
-            if func_name == "fit":
-                arg0 = rhs.args[0].name
-                arg1 = rhs.args[1].name
-                _meet_array_dists(self.typemap, arg0, arg1, array_dists)
-                if array_dists[arg0] == Distribution.REP:
-                    raise BodoError(
-                        "Arguments of xgboost.fit are not distributed", rhs.loc
-                    )
-            elif func_name == "predict":
-                # match input and output distributions
-                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return
-
         if fdef == (
             "generate_mappable_table_func",
             "bodo.utils.table_utils",
