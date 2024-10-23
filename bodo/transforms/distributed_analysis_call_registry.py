@@ -101,6 +101,7 @@ class DistributedAnalysisCallRegistry:
             ): analyze_mappable_table_funcs,
             ("table_subset", "bodo.hiframes.table"): meet_out_first_arg_analysis,
             ("create_empty_table", "bodo.hiframes.table"): analyze_create_table_empty,
+            ("table_concat", "bodo.utils.table_utils"): analyze_table_concat,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -196,6 +197,19 @@ def analyze_create_table_empty(ctx, inst):
     lhs = inst.target.name
     if lhs not in ctx.array_dists:
         _set_var_dist(ctx.typemap, lhs, ctx.array_dists, Distribution.OneD, True)
+
+
+def analyze_table_concat(ctx, inst):
+    """distributed analysis for table_concat"""
+    lhs = inst.target.name
+    table = inst.value.args[0].name
+    out_dist = Distribution.OneD_Var
+    if lhs in ctx.array_dists:
+        out_dist = Distribution(min(out_dist.value, ctx.array_dists[lhs].value))
+    out_dist = Distribution(min(out_dist.value, ctx.array_dists[table].value))
+    ctx.array_dists[lhs] = out_dist
+    if out_dist != Distribution.OneD_Var:
+        ctx.array_dists[table] = out_dist
 
 
 call_registry = DistributedAnalysisCallRegistry()

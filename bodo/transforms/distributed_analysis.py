@@ -948,17 +948,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("table_concat", "bodo.utils.table_utils"):
-            table = args[0].name
-            out_dist = Distribution.OneD_Var
-            if lhs in array_dists:
-                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
-            out_dist = Distribution(min(out_dist.value, array_dists[table].value))
-            array_dists[lhs] = out_dist
-            if out_dist != Distribution.OneD_Var:
-                array_dists[table] = out_dist
-            return
-
         if fdef == (
             "array_to_repeated_array_item_array",
             "bodo.libs.array_item_arr_ext",
