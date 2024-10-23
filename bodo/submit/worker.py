@@ -6,14 +6,15 @@ directly"""
 import logging
 import os
 import sys
-import types as pytypes
 
 import cloudpickle
+import numba
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata, SubmitDispatcher
+from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata
 from bodo.submit.utils import CommandType, poll_for_barrier
+from bodo.submit.worker_state import set_is_worker
 
 
 def _recv_arg(arg, spawner_intercomm):
@@ -63,55 +64,29 @@ def exec_func_handler(
     kwargs = {name: _recv_arg(arg, spawner_intercomm) for name, arg in kwargs.items()}
 
     pyfunc = None
-    decorator = None
-
-    try:
-        pyfunc = cloudpickle.loads(pickled_func)
-    except Exception as e:
-        logger.error(f"Exception while trying to unpickle code: {e}")
-        # TODO: check that all ranks raise an exception
-        # forward_exception(e, comm_world, spawner_intercomm)
-        pyfunc = None
 
     caught_exception = None
     try:
-        # Convert all recursively used SubmitDispatchers to regular Numba Dispatchers.
-        for objname, obj in list(pyfunc.__globals__.items()):
-            if isinstance(obj, SubmitDispatcher):
-                pyfunc.__globals__[objname] = obj.dispatcher
-        # fix references to the module that the submitted func originates from
-        # TODO(aneesh) can this be done via import/importlib instead?
-        if pyfunc.__module__ not in sys.modules:
-            sys.modules[pyfunc.__module__] = pytypes.ModuleType(pyfunc.__module__)
+        pyfunc = cloudpickle.loads(pickled_func)
+        # ensure that we have a CPUDispatcher to compile and execute code
+        assert isinstance(pyfunc, numba.core.registry.CPUDispatcher)
 
-        # Assert that this function is from @submit_jit and retrieve any
-        # additional arguments to be sent to bodo.jit.
-        assert pyfunc.__dict__.get("is_submit_jit")
-        decorator_args = pyfunc.__dict__.get("submit_jit_args")
-
-        # Create an alias for all new imports - this is to workaround the
-        # compile not being able to pick up the module aliases even though
-        # they are present in pyfunc.__globals__.
-        # TODO Find a more robust solution.
-        for k, v in pyfunc.__globals__.items():
-            if isinstance(v, pytypes.ModuleType):
-                assert v in sys.modules.values()
-                if k not in globals():
-                    globals()[k] = v
-
-        decorator = bodo.jit
-        if len(decorator_args):
-            decorator = bodo.jit(**decorator_args)
-
-        # Apply decorator to get the dispatcher
-        func = decorator(pyfunc)
-
-        # Try to compile and execute it. Catch and share any errors with the spawner.
-        logger.debug("Compiling and executing func")
-        func(*args, **kwargs)
     except Exception as e:
-        logger.error(f"Exception while trying to execute code: {e}")
+        logger.error(f"Exception while trying to receive code: {e}")
+        # TODO: check that all ranks raise an exception
+        # forward_exception(e, comm_world, spawner_intercomm)
+        pyfunc = None
         caught_exception = e
+
+    if caught_exception is None:
+        try:
+            func = pyfunc
+            # Try to compile and execute it. Catch and share any errors with the spawner.
+            logger.debug("Compiling and executing func")
+            func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Exception while trying to execute code: {e}")
+            caught_exception = e
 
     poll_for_barrier(spawner_intercomm)
     # Propagate any exceptions
@@ -157,6 +132,7 @@ def worker_loop(
 
 
 if __name__ == "__main__":
+    set_is_worker()
     # See comment in spawner about STDIN and MPI_Spawn
     sys.stdin.close()
 
@@ -178,5 +154,4 @@ if __name__ == "__main__":
     comm_world: MPI.Intracomm = MPI.COMM_WORLD
     spawner_intercomm: MPI.Intercomm | None = comm_world.Get_parent()
 
-    comm_world.barrier()
     worker_loop(comm_world, spawner_intercomm, logger)
