@@ -176,6 +176,7 @@ def check_func(
     use_dict_encoded_strings=None,
     use_map_arrays: bool = False,
     convert_to_nullable_float=True,
+    use_spawn_mode: bool = False,
 ) -> dict[str, Callable]:
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -222,7 +223,12 @@ def check_func(
     Runs bodo typing on arguments and converts warnings to errors.
     - convert_to_nullable_float: convert float inputs to nullable float if the global
     nullable float flag is on.
+    - use spawn mode test using Spawn mode instead of SPMD mode (i.e. use
+      submit_jit instead of bodo.jit)
     """
+
+    if use_spawn_mode:
+        raise NotImplementedError("Spawn mode not supported by check_func yet")
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
