@@ -17,11 +17,13 @@ from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_non
 class DistributedAnalysisContext:
     """Distributed analysis context data needed for handling calls"""
 
-    def __init__(self, typemap, array_dists, equiv_set, func_name):
+    def __init__(self, typemap, array_dists, equiv_set, func_name, metadata, diag_info):
         self.typemap = typemap
         self.array_dists = array_dists
         self.equiv_set = equiv_set
         self.func_name = func_name
+        self.metadata = metadata
+        self.diag_info = diag_info
 
 
 class DistributedAnalysisCallRegistry:
@@ -245,6 +247,9 @@ def analyze_array_to_repeated_array_item_array(ctx, inst):
     # array_to_repeated_array_item_array is used to create an ArrayItemArray with an array.
     # This requires the input array to be replicated.
     _set_REP(
+        ctx.typemap,
+        ctx.metadata,
+        ctx.diag_info,
         rhs.args[0],
         ctx.array_dists,
         "The scalar array must be duplicated for array_to_repeated_array_item_array.",

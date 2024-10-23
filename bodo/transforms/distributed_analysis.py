@@ -959,7 +959,12 @@ class DistributedAnalysis:
 
         # Check distributed analysis call registry for handler first
         ctx = DistributedAnalysisContext(
-            self.typemap, array_dists, equiv_set, func_name
+            self.typemap,
+            array_dists,
+            equiv_set,
+            func_name,
+            self.metadata,
+            self.diag_info,
         )
         # Replace ir.Var with type's class name for easy matching
         fdef_str_var = fdef[:-1] + (
