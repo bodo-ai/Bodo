@@ -395,7 +395,10 @@ class DistributedAnalysis:
                     inst.target, inst.attr, inst.value, array_dists, inst.loc
                 )
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     inst.list_vars(),
                     array_dists,
                     "unsupported statement in distribution analysis",
@@ -521,8 +524,14 @@ class DistributedAnalysis:
             # this path is not possible since pair_first is only used in the pattern
             # above, unless if variable definitions have some issue
             else:  # pragma: no cover
-                self._set_REP(
-                    inst.list_vars(), array_dists, "invalid pair_first", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    inst.list_vars(),
+                    array_dists,
+                    "invalid pair_first",
+                    rhs.loc,
                 )
         elif isinstance(rhs, ir.Expr) and rhs.op in ("getiter", "iternext"):
             # analyze array container access in pair_first
@@ -592,7 +601,10 @@ class DistributedAnalysis:
                     # C = A * B
                     # B is replicated since accessed across rows but A and C can be
                     # distributed
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         rhs.rhs.name,
                         array_dists,
                         "matrix multiply right hand side input",
@@ -640,7 +652,15 @@ class DistributedAnalysis:
                 return
 
             msg = "unsupported expression in distributed analysis"
-            self._set_REP(inst.list_vars(), array_dists, msg, rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                inst.list_vars(),
+                array_dists,
+                msg,
+                rhs.loc,
+            )
 
     def _analyze_getattr(self, lhs, rhs, array_dists):
         """analyze getattr nodes (ir.Expr.getattr)"""
@@ -719,8 +739,14 @@ class DistributedAnalysis:
         elif is_bodosql_context_type(rhs_typ) and attr == "dataframes":
             _meet_array_dists(self.typemap, lhs, rhs.value.name, array_dists)
         elif isinstance(rhs_typ, DataFrameType) and attr == "dtypes":
-            self._set_REP(
-                lhs, array_dists, "Output of DataFrame.dtypes is replicated", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "Output of DataFrame.dtypes is replicated",
+                rhs.loc,
             )
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
@@ -817,7 +843,10 @@ class DistributedAnalysis:
             # reduction arrays of distributed parfors are replicated
             # see test_basic.py::test_array_reduce
             # concat reduce variables should stay distributed
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 non_concat_redvars,
                 array_dists,
                 "reduction arrays of distributed parfor",
@@ -1042,8 +1071,14 @@ class DistributedAnalysis:
                 # output is always replicated, and the output can be an array
                 # if average=None so we have to set it
                 # TODO this shouldn't be done if output is float?
-                self._set_REP(
-                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    f"output of {func_name} is REP",
+                    rhs.loc,
                 )
                 dist_arg0 = is_distributable_typ(self.typemap[rhs.args[0].name])
                 dist_arg1 = is_distributable_typ(self.typemap[rhs.args[1].name])
@@ -1052,14 +1087,20 @@ class DistributedAnalysis:
                         self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
                     )
                 elif not dist_arg0 and dist_arg1:
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         rhs.args[1].name,
                         array_dists,
                         f"first input of {func_name} is non-distributable",
                         rhs.loc,
                     )
                 elif not dist_arg1 and dist_arg0:
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         rhs.args[0].name,
                         array_dists,
                         f"second input of {func_name} is non-distributable",
@@ -1074,7 +1115,10 @@ class DistributedAnalysis:
                 # if it is provided, then set it to REP
                 if "labels" in kws:
                     labels_arg_name = kws["labels"].name
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         labels_arg_name,
                         array_dists,
                         "labels when provided are assumed to be REP",
@@ -1088,8 +1132,14 @@ class DistributedAnalysis:
 
             if func_name == "confusion_matrix":
                 # output is always replicated, and the output is an array
-                self._set_REP(
-                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    f"output of {func_name} is REP",
+                    rhs.loc,
                 )
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
                     lhs, func_name, rhs, kws, array_dists
@@ -1098,7 +1148,10 @@ class DistributedAnalysis:
                 # if it is provided, then set it to REP
                 if "labels" in kws:
                     labels_arg_name = kws["labels"].name
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         labels_arg_name,
                         array_dists,
                         "labels when provided are assumed to be REP",
@@ -1109,8 +1162,14 @@ class DistributedAnalysis:
 
         if func_mod in ("sklearn.metrics._regression", "sklearn.metrics"):
             if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
-                self._set_REP(
-                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    f"output of {func_name} is REP",
+                    rhs.loc,
                 )
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
                     lhs, func_name, rhs, kws, array_dists
@@ -1333,8 +1392,14 @@ class DistributedAnalysis:
             if warn_flag and is_REP(array_dists[rhs.args[0].name]):
                 # TODO: test
                 warnings.warn(BodoWarning("Input to gatherv is not distributed array"))
-            self._set_REP(
-                lhs, array_dists, "output of gatherv() is replicated", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of gatherv() is replicated",
+                rhs.loc,
             )
             return
 
@@ -1585,12 +1650,12 @@ class DistributedAnalysis:
             # an Iceberg writer as an array, where each row is the current estimate
             # for that column of the table. Answer is replicated since there is
             # only 1 correct answer globally.
-            self._set_REP(lhs, array_dists)
+            _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
 
         if fdef == ("read_puffin_file_ndvs", "bodo.io.stream_iceberg_write"):
             # Used to the ndvs from a puffin file for testing.
-            self._set_REP(lhs, array_dists)
+            _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             return
 
         if fdef in (
@@ -2035,7 +2100,13 @@ class DistributedAnalysis:
 
             # if arg0 is replicated, then we must force arg1 to be replicated as well
             if is_REP(array_dists.get(rhs.args[0].name, None)):
-                self._set_REP(rhs.args[1].name, array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    rhs.args[1].name,
+                    array_dists,
+                )
 
             return
 
@@ -2051,7 +2122,13 @@ class DistributedAnalysis:
             if is_REP(array_dists.get(rhs.args[0].name, None)) or is_REP(
                 array_dists.get(rhs.args[1].name, None)
             ):
-                self._set_REP([lhs, rhs.args[0].name, rhs.args[1].name], array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    [lhs, rhs.args[0].name, rhs.args[1].name],
+                    array_dists,
+                )
                 return
             # If rhs.args[1].name and rhs.args[0].name are both distributed,
             # they do not affect the others distribution
@@ -2084,7 +2161,13 @@ class DistributedAnalysis:
 
             # if the input is replicated, then we must force the values  to be replicated as well
             if is_REP(new_dist) and _is_1D_or_1D_Var_arr(rhs.args[2].name, array_dists):
-                self._set_REP(rhs.args[2].name, array_dists)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    rhs.args[2].name,
+                    array_dists,
+                )
 
             return
         if fdef == ("get_search_regex", "bodo.libs.array"):
@@ -2139,7 +2222,15 @@ class DistributedAnalysis:
                 self.typemap, rhs.args[0].name, rhs.args[1].name, array_dists
             )
             # output of nlargest is REP
-            self._set_REP(lhs, array_dists, "output of nlargest is REP", rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of nlargest is REP",
+                rhs.loc,
+            )
             return
 
         if fdef in (
@@ -2266,7 +2357,10 @@ class DistributedAnalysis:
 
         if fdef == ("repeat_like", "bodo.libs.array_kernels"):
             # arr has to be replicated for this function
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[0],
                 array_dists,
                 "repeat_like argument 0 must be replicated",
@@ -2534,7 +2628,10 @@ class DistributedAnalysis:
             values_dist = len(values_dist) * [in_dist]
             _set_var_dist(self.typemap, rhs.args[2].name, array_dists, values_dist)
             # arg 3 must be replicated
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[3].name,
                 array_dists,
                 "list of unique values for pivot is replicated",
@@ -2542,7 +2639,10 @@ class DistributedAnalysis:
             )
             # arg 6 must be replicated if it is an array
             if self.typemap[rhs.args[6].name] != types.none:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     rhs.args[6].name,
                     array_dists,
                     "column names for pivot is replicated",
@@ -2555,7 +2655,15 @@ class DistributedAnalysis:
             return
 
         if fdef == ("nancorr", "bodo.libs.array_kernels"):
-            self._set_REP(lhs, array_dists, "output of nancorr is REP", rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of nancorr is REP",
+                rhs.loc,
+            )
             return
 
         if fdef == ("series_monotonicity", "bodo.libs.array_kernels"):
@@ -2675,7 +2783,10 @@ class DistributedAnalysis:
         # add proper diagnostic info for tuple/list to array since usually happens
         # when the code creates Series/Dataframe from list, e.g. pd.Series([1, 2, 3])
         if fdef == ("tuple_list_to_array", "bodo.utils.utils"):
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[0],
                 array_dists,
                 "Tuples and lists are not distributed by default. Convert to array/Series/DataFrame and use bodo.scatterv() to distribute if necessary.",
@@ -2923,7 +3034,10 @@ class DistributedAnalysis:
             # having incorrect indices. The indices should match
             # the distribution of the output.
             _meet_array_dists(self.typemap, lhs, rhs.args[1].name, array_dists)
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[0].name,
                 array_dists,
                 "init_dict_arr dictionary array is REP",
@@ -3036,7 +3150,15 @@ class DistributedAnalysis:
             return
 
         if fdef == ("get_dataframe_column_names", "bodo.hiframes.table"):
-            self._set_REP(lhs, array_dists, "DataFrame column names is REP", rhs.loc)
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "DataFrame column names is REP",
+                rhs.loc,
+            )
             return
 
         if fdef == ("compute_split_view", "bodo.hiframes.split_impl"):
@@ -3092,7 +3214,10 @@ class DistributedAnalysis:
 
         if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
             # Arg1 is the output array and is always replicated.
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 rhs.args[1],
                 array_dists,
                 "nbytes array in generate_table_nbytes is REP",
@@ -3147,8 +3272,14 @@ class DistributedAnalysis:
         # str_arr_from_sequence() applies to lists/tuples so output is REP
         # e.g. column names in df.mean()
         if fdef == ("str_arr_from_sequence", "bodo.libs.str_arr_ext"):
-            self._set_REP(
-                lhs, array_dists, "output of str_arr_from_sequence is REP", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of str_arr_from_sequence is REP",
+                rhs.loc,
             )
             return
 
@@ -3183,8 +3314,14 @@ class DistributedAnalysis:
 
             _set_var_dist(self.typemap, rhs.args[0].name, array_dists, in_dist)
             _set_var_dist(self.typemap, rhs.args[1].name, array_dists, in_dist)
-            self._set_REP(
-                args[2:], array_dists, "extra argument in groupby.apply()", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                args[2:],
+                array_dists,
+                "extra argument in groupby.apply()",
+                rhs.loc,
             )
             return
         if fdef == ("fft2", "scipy.fftpack._basic") or fdef == (
@@ -3204,8 +3341,14 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             # If output is REP set input to REP
             if new_dist == Distribution.REP:
-                self._set_REP(
-                    rhs.args[0], array_dists, "Output of FFT is replicated.", rhs.loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    rhs.args[0],
+                    array_dists,
+                    "Output of FFT is replicated.",
+                    rhs.loc,
                 )
             return
         if fdef == ("fftshift", "numpy.fft") or fdef == (
@@ -3226,7 +3369,10 @@ class DistributedAnalysis:
                 new_dist = Distribution.OneD
             # If output is REP set input to REP
             if new_dist == Distribution.REP:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     rhs.args[0],
                     array_dists,
                     "Output of fftshift is replicated.",
@@ -3509,8 +3655,14 @@ class DistributedAnalysis:
             in_arr = get_call_expr_arg("digitize", args, kws, 0, "x")
             bins = get_call_expr_arg("digitize", args, kws, 1, "bins")
             _meet_array_dists(self.typemap, lhs, in_arr.name, array_dists)
-            self._set_REP(
-                bins.name, array_dists, "'bins' argument of 'digitize' is REP", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                bins.name,
+                array_dists,
+                "'bins' argument of 'digitize' is REP",
+                loc,
             )
             return
 
@@ -3531,7 +3683,10 @@ class DistributedAnalysis:
             if is_array_typ(self.typemap[arg.name]):  # pragma: no cover
                 _meet_array_dists(self.typemap, lhs, arg.name, array_dists)
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of np.array() call on non-array is REP",
@@ -3545,7 +3700,10 @@ class DistributedAnalysis:
             if is_array_typ(self.typemap[args[0].name]):
                 _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of np.asarray() call on non-array is REP",
@@ -3564,7 +3722,10 @@ class DistributedAnalysis:
                 _meet_array_dists(self.typemap, lhs, args[0].name, array_dists)
                 return
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of np.asmatrix() call is REP if input is not 2D array or matrix",
@@ -3583,8 +3744,14 @@ class DistributedAnalysis:
             axis = guard(find_const, self.func_ir, axis_var)
             # sum over the first axis produces REP output
             if axis == 0:
-                self._set_REP(
-                    lhs, array_dists, "sum over the first axis produces REP output", loc
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    "sum over the first axis produces REP output",
+                    loc,
                 )
                 return
             # sum over other axis doesn't change distribution
@@ -3761,8 +3928,14 @@ class DistributedAnalysis:
         if is_REP(array_dists[arr.name]) or (
             lhs in array_dists and is_REP(array_dists[lhs])
         ):
-            self._set_REP(
-                [lhs, arr.name], array_dists, "np.reshape() input/output are REP", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                [lhs, arr.name],
+                array_dists,
+                "np.reshape() input/output are REP",
+                loc,
             )
             return
 
@@ -4015,7 +4188,10 @@ class DistributedAnalysis:
                     continue
                 typ = arg_types[ind]
                 if vname in rep_vars:
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         vname,
                         array_dists,
                         f"replicated flag set for {vname}",
@@ -4023,7 +4199,10 @@ class DistributedAnalysis:
                     )
                     continue
                 if not hasattr(typ, "dist"):
-                    self._set_REP(
+                    _set_REP(
+                        self.typemap,
+                        self.metadata,
+                        self.diag_info,
                         vname,
                         array_dists,
                         f"input of another Bodo call without distributed flag (automatic distribution detection not supported for data type {typ})",
@@ -4039,7 +4218,10 @@ class DistributedAnalysis:
                     self.typemap[vname] = new_typ
                     recompile = True
             else:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     vname,
                     array_dists,
                     "input of another Bodo call without distributed flag",
@@ -4148,8 +4330,14 @@ class DistributedAnalysis:
             # special case were arg1 vector is treated as column vector
             # samples dot weights: np.dot(X,w)
             # w is always REP
-            self._set_REP(
-                arg1, array_dists, "vector multiplied by matrix rows in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                arg1,
+                array_dists,
+                "vector multiplied by matrix rows in np.dot()",
+                loc,
             )
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
@@ -4160,8 +4348,14 @@ class DistributedAnalysis:
         if ndim0 == 1 and ndim1 == 2 and not t1:
             # reduction across samples np.dot(Y,X)
             # lhs is always REP
-            self._set_REP(
-                lhs, array_dists, "output of vector-matrix multiply in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of vector-matrix multiply in np.dot()",
+                loc,
             )
             # Y and X have same distribution
             _meet_array_dists(self.typemap, arg0, arg1, array_dists)
@@ -4170,8 +4364,14 @@ class DistributedAnalysis:
         if ndim0 == 2 and ndim1 == 2 and t0 and not t1:
             # reduction across samples np.dot(X.T,Y)
             # lhs is always REP
-            self._set_REP(
-                lhs, array_dists, "output of matrix-matrix multiply in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                lhs,
+                array_dists,
+                "output of matrix-matrix multiply in np.dot()",
+                loc,
             )
             # Y and X have same distribution
             _meet_array_dists(self.typemap, arg0, arg1, array_dists)
@@ -4180,8 +4380,14 @@ class DistributedAnalysis:
         if ndim0 == 2 and ndim1 == 2 and not t0 and not t1:
             # samples dot weights: np.dot(X,w)
             # w is always REP
-            self._set_REP(
-                arg1, array_dists, "matrix multiplied by rows in np.dot()", loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                arg1,
+                array_dists,
+                "matrix multiplied by rows in np.dot()",
+                loc,
             )
             _meet_array_dists(self.typemap, lhs, arg0, array_dists)
             dprint("dot case 4 Xw:", arg0, arg1)
@@ -4196,12 +4402,14 @@ class DistributedAnalysis:
             typ = self.typemap[v.name]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint(f"dist setting call arg REP {v.name} in {fdef}")
-                self._set_REP(v.name, array_dists)
+                _set_REP(
+                    self.typemap, self.metadata, self.diag_info, v.name, array_dists
+                )
                 arrs.append(v.name)
         typ = self.typemap[lhs]
         if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
             dprint(f"dist setting call out REP {lhs} in {fdef}")
-            self._set_REP(lhs, array_dists)
+            _set_REP(self.typemap, self.metadata, self.diag_info, lhs, array_dists)
             arrs.append(lhs)
         # save diagnostic info for faild analysis
         fname = fdef
@@ -4235,7 +4443,10 @@ class DistributedAnalysis:
 
         if (in_var.name, index_var.name) in self._parallel_accesses:
             # XXX: is this always valid? should be done second pass?
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 [inst.target],
                 array_dists,
                 "output of distributed getitem is REP",
@@ -4250,8 +4461,14 @@ class DistributedAnalysis:
             index_var = tup_list[0]
             # rest of indices should be replicated if array
             other_ind_vars = tup_list[1:]
-            self._set_REP(
-                other_ind_vars, array_dists, "getitem index variables are REP", rhs_loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                other_ind_vars,
+                array_dists,
+                "getitem index variables are REP",
+                rhs_loc,
             )
 
         assert isinstance(index_var, ir.Var)
@@ -4310,7 +4527,10 @@ class DistributedAnalysis:
         # avoid parallel scalar getitem when inside a parfor
         # examples: test_np_dot, logistic_regression_rand
         if self.in_parallel_parfor != -1:
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 inst.list_vars(),
                 array_dists,
                 "getitem inside parallel loop is REP",
@@ -4321,7 +4541,10 @@ class DistributedAnalysis:
         # int index of dist array
         if isinstance(index_typ, types.Integer):
             if is_distributable_typ(self.typemap[lhs]):
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     lhs,
                     array_dists,
                     "output of distributed getitem with int index is REP",
@@ -4329,8 +4552,14 @@ class DistributedAnalysis:
                 )
             return
 
-        self._set_REP(
-            inst.list_vars(), array_dists, "unsupported getitem distribution", rhs_loc
+        _set_REP(
+            self.typemap,
+            self.metadata,
+            self.diag_info,
+            inst.list_vars(),
+            array_dists,
+            "unsupported getitem distribution",
+            rhs_loc,
         )
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
@@ -4373,8 +4602,14 @@ class DistributedAnalysis:
 
         # indexing into arrays from this point only, check for array type
         if not (is_array_typ(in_typ) or isinstance(in_typ, TableType)):
-            self._set_REP(
-                inst.list_vars(), array_dists, "getitem input not array", rhs.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                inst.list_vars(),
+                array_dists,
+                "getitem input not array",
+                rhs.loc,
             )
             return
 
@@ -4401,7 +4636,10 @@ class DistributedAnalysis:
 
         if (arr.name, index_var.name) in self._parallel_accesses:
             # no parallel to parallel array set (TODO)
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 [inst.value],
                 array_dists,
                 "value set in distributed setitem is REP",
@@ -4413,8 +4651,14 @@ class DistributedAnalysis:
         if tup_list is not None:
             index_var = tup_list[0]
             # rest of indices should be replicated if array
-            self._set_REP(
-                tup_list[1:], array_dists, "index variables are REP", inst.loc
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
+                tup_list[1:],
+                array_dists,
+                "index variables are REP",
+                inst.loc,
             )
 
         # array selection with boolean index
@@ -4427,7 +4671,10 @@ class DistributedAnalysis:
             if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
                 # input array and bool index have the same distribution
                 _meet_array_dists(self.typemap, arr.name, index_var.name, array_dists)
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     [inst.value],
                     array_dists,
                     "scalar/lower-dimension value set in distributed setitem with bool array index is REP",
@@ -4449,7 +4696,10 @@ class DistributedAnalysis:
         elif isinstance(index_typ, types.SliceType):
             # if the value is scalar/lower dimension
             if not is_array_typ(value_typ) or value_typ.ndim < target_typ.ndim:
-                self._set_REP(
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
                     [inst.value],
                     array_dists,
                     "scalar/lower-dimension value set in distributed setitem with slice index is REP",
@@ -4461,7 +4711,10 @@ class DistributedAnalysis:
 
         # avoid parallel scalar setitem when inside a parfor
         if self.in_parallel_parfor != -1:
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 inst.list_vars(),
                 array_dists,
                 "setitem inside parallel loop is REP",
@@ -4471,7 +4724,10 @@ class DistributedAnalysis:
 
         # int index setitem of dist array
         if isinstance(index_typ, types.Integer):
-            self._set_REP(
+            _set_REP(
+                self.typemap,
+                self.metadata,
+                self.diag_info,
                 [inst.value],
                 array_dists,
                 "value set in distributed array setitem is REP",
@@ -4489,7 +4745,10 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, arr.name, index_var.name, array_dists)
             return
 
-        self._set_REP(
+        _set_REP(
+            self.typemap,
+            self.metadata,
+            self.diag_info,
             [inst.value, arr, index_var],
             array_dists,
             "unsupported setitem distribution",
@@ -4548,7 +4807,15 @@ class DistributedAnalysis:
                     "'{1}'). Set distributed flag for '{0}' if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs, "argument" if is_arg else "global value")
-                self._set_REP(lhs, array_dists, info, rhs.loc)
+                _set_REP(
+                    self.typemap,
+                    self.metadata,
+                    self.diag_info,
+                    lhs,
+                    array_dists,
+                    info,
+                    rhs.loc,
+                )
 
     def _analyze_setattr(self, target, attr, value, array_dists, loc):
         """Analyze ir.SetAttr nodes for distribution (e.g. A.b = B)"""
@@ -4578,7 +4845,15 @@ class DistributedAnalysis:
                 )
             return
 
-        self._set_REP([target, value], array_dists, "unsupported SetAttr", loc)
+        _set_REP(
+            self.typemap,
+            self.metadata,
+            self.diag_info,
+            [target, value],
+            array_dists,
+            "unsupported SetAttr",
+            loc,
+        )
 
     def _analyze_return(self, var, array_dists, loc):
         """analyze ir.Return nodes for distribution. Checks for user flags; sets to REP
@@ -4622,7 +4897,9 @@ class DistributedAnalysis:
             f"'{var.name}'. Set distributed flag for the original variable if distributed "
             "partitions should be returned."
         )
-        self._set_REP([var], array_dists, info, loc)
+        _set_REP(
+            self.typemap, self.metadata, self.diag_info, [var], array_dists, info, loc
+        )
 
     def _is_dist_return_var(self, var):
         try:
@@ -4640,29 +4917,6 @@ class DistributedAnalysis:
             return True
         except GuardException:
             return False
-
-    def _set_REP(self, var_list, array_dists, info=None, loc=None):
-        """set distribution of all variables in 'var_list' to REP if distributable."""
-        if isinstance(var_list, (str, ir.Var)):
-            var_list = [var_list]
-        for var in var_list:
-            varname = var.name if isinstance(var, ir.Var) else var
-            # Handle SeriesType since it comes from Arg node and it could
-            # have user-defined distribution
-            typ = self.typemap[varname]
-            if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
-                dprint(f"dist setting REP {varname}")
-                # keep diagnostics info if the distribution is changing to REP and extra
-                # info is available
-                if (
-                    varname not in array_dists or not is_REP(array_dists[varname])
-                ) and info is not None:
-                    info = (
-                        f"Setting distribution of variable '{_get_user_varname(self.metadata, varname)}' to REP: "
-                        + info
-                    )
-                    _add_diag_info(self.diag_info, info, loc)
-                _set_var_dist(self.typemap, varname, array_dists, Distribution.REP)
 
     def _get_calc_n_items_range_index(self, size_def):
         """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r"""
@@ -4745,6 +4999,30 @@ class DistributedAnalysis:
     def _get_diag_info_str(self):
         """returns all diagnostics info and their locations as a string"""
         return "\n".join(f"{info}\n{loc.strformat()}" for (info, loc) in self.diag_info)
+
+
+def _set_REP(typemap, metadata, diag_info, var_list, array_dists, info=None, loc=None):
+    """set distribution of all variables in 'var_list' to REP if distributable."""
+    if isinstance(var_list, (str, ir.Var)):
+        var_list = [var_list]
+    for var in var_list:
+        varname = var.name if isinstance(var, ir.Var) else var
+        # Handle SeriesType since it comes from Arg node and it could
+        # have user-defined distribution
+        typ = typemap[varname]
+        if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
+            dprint(f"dist setting REP {varname}")
+            # keep diagnostics info if the distribution is changing to REP and extra
+            # info is available
+            if (
+                varname not in array_dists or not is_REP(array_dists[varname])
+            ) and info is not None:
+                info = (
+                    f"Setting distribution of variable '{_get_user_varname(metadata, varname)}' to REP: "
+                    + info
+                )
+                _add_diag_info(diag_info, info, loc)
+            _set_var_dist(typemap, varname, array_dists, Distribution.REP)
 
 
 def _add_diag_info(diag_info, info, loc):
