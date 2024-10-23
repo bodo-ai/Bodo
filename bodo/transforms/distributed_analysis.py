@@ -981,19 +981,6 @@ class DistributedAnalysis:
             )
             return
 
-        # Scalar to array functions are similar to allocations and can return
-        # distributed data
-        if fdef in (
-            (
-                "scalar_to_struct_array",
-                "bodo.libs.struct_arr_ext",
-            ),
-            ("scalar_to_map_array", "bodo.libs.map_arr_ext"),
-        ):
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            return
-
         if (
             func_name == "predict_proba"
             and "bodo.ml_support.xgb_ext" in sys.modules

@@ -107,6 +107,13 @@ class DistributedAnalysisCallRegistry:
                 "array_to_repeated_array_item_array",
                 "bodo.libs.array_item_arr_ext",
             ): analyze_array_to_repeated_array_item_array,
+            # Scalar to array functions are similar to allocations and can return
+            # distributed data
+            (
+                "scalar_to_struct_array",
+                "bodo.libs.struct_arr_ext",
+            ): init_out_1D,
+            ("scalar_to_map_array", "bodo.libs.map_arr_ext"): init_out_1D,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -231,6 +238,13 @@ def analyze_array_to_repeated_array_item_array(ctx, inst):
         "The scalar array must be duplicated for array_to_repeated_array_item_array.",
         rhs.loc,
     )
+
+
+def init_out_1D(ctx, inst):
+    """initialize output distribution to 1D"""
+    lhs = inst.target.name
+    if lhs not in ctx.array_dists:
+        ctx.array_dists[lhs] = Distribution.OneD
 
 
 call_registry = DistributedAnalysisCallRegistry()
