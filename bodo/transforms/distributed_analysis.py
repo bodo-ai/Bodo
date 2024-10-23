@@ -988,28 +988,6 @@ class DistributedAnalysis:
             return
 
         if (
-            func_name
-            in {"fit", "partial_fit", "transform", "inverse_transform", "fit_transform"}
-            and "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType,
-                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
-                ),
-            )
-        ):
-            self._analyze_call_sklearn_preprocessing_scalers(
-                lhs, func_name, rhs, kws, array_dists
-            )
-            return
-
-        if (
             func_name in {"fit_transform"}
             and "bodo.ml_support.sklearn_feature_extraction_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
@@ -3373,26 +3351,6 @@ class DistributedAnalysis:
 
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, fdef, rhs.loc)
-
-    def _analyze_call_sklearn_preprocessing_scalers(
-        self,
-        lhs,
-        func_name,
-        rhs,
-        kws,
-        array_dists,
-    ):
-        """
-        Analyze distribution of sklearn.preprocessing.OneHotEncoder, StandardScaler,
-        MaxAbsScaler, MinMaxScaler, RobustScaler, and LabelEncoder functions.
-        Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
-        """
-
-        if func_name in {"transform", "inverse_transform", "fit_transform"}:
-            # match input (X) and output (X_new) distributions
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-
-        return
 
     def _analyze_call_sklearn_cross_validators(
         self, lhs, func_name, rhs, kws, array_dists

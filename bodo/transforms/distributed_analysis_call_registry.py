@@ -128,6 +128,93 @@ class DistributedAnalysisCallRegistry:
                 "BodoKMeansClusteringType",
             ): analyze_call_sklearn_cluster_kmeans,
             ("fit", "BodoKMeansClusteringType"): analyze_call_sklearn_cluster_kmeans,
+            # Analyze distribution of sklearn.preprocessing.OneHotEncoder, StandardScaler,
+            # MaxAbsScaler, MinMaxScaler, RobustScaler, and LabelEncoder functions.
+            # Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
+            ("fit", "BodoPreprocessingOneHotEncoderType"): no_op_analysis,
+            ("partial_fit", "BodoPreprocessingOneHotEncoderType"): no_op_analysis,
+            (
+                "transform",
+                "BodoPreprocessingOneHotEncoderType",
+            ): meet_out_first_arg_analysis,
+            (
+                "inverse_transform",
+                "BodoPreprocessingOneHotEncoderType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoPreprocessingOneHotEncoderType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoPreprocessingStandardScalerType"): no_op_analysis,
+            ("partial_fit", "BodoPreprocessingStandardScalerType"): no_op_analysis,
+            (
+                "transform",
+                "BodoPreprocessingStandardScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "inverse_transform",
+                "BodoPreprocessingStandardScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoPreprocessingStandardScalerType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoPreprocessingMaxAbsScalerType"): no_op_analysis,
+            ("partial_fit", "BodoPreprocessingMaxAbsScalerType"): no_op_analysis,
+            (
+                "transform",
+                "BodoPreprocessingMaxAbsScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "inverse_transform",
+                "BodoPreprocessingMaxAbsScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoPreprocessingMaxAbsScalerType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoPreprocessingMinMaxScalerType"): no_op_analysis,
+            ("partial_fit", "BodoPreprocessingMinMaxScalerType"): no_op_analysis,
+            (
+                "transform",
+                "BodoPreprocessingMinMaxScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "inverse_transform",
+                "BodoPreprocessingMinMaxScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoPreprocessingMinMaxScalerType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoPreprocessingRobustScalerType"): no_op_analysis,
+            ("partial_fit", "BodoPreprocessingRobustScalerType"): no_op_analysis,
+            (
+                "transform",
+                "BodoPreprocessingRobustScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "inverse_transform",
+                "BodoPreprocessingRobustScalerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoPreprocessingRobustScalerType",
+            ): meet_out_first_arg_analysis,
+            ("fit", "BodoPreprocessingLabelEncoderType"): no_op_analysis,
+            ("partial_fit", "BodoPreprocessingLabelEncoderType"): no_op_analysis,
+            (
+                "transform",
+                "BodoPreprocessingLabelEncoderType",
+            ): meet_out_first_arg_analysis,
+            (
+                "inverse_transform",
+                "BodoPreprocessingLabelEncoderType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoPreprocessingLabelEncoderType",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
