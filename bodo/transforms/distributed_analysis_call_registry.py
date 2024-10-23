@@ -5,7 +5,11 @@ Provides a registry of function call handlers for distributed analysis.
 
 from numba.core.ir_utils import guard
 
-from bodo.transforms.distributed_analysis import Distribution, _meet_array_dists
+from bodo.transforms.distributed_analysis import (
+    Distribution,
+    _meet_array_dists,
+    _set_var_dist,
+)
 from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_none
 
 
@@ -96,6 +100,7 @@ class DistributedAnalysisCallRegistry:
                 "bodo.utils.table_utils",
             ): analyze_mappable_table_funcs,
             ("table_subset", "bodo.hiframes.table"): meet_out_first_arg_analysis,
+            ("create_empty_table", "bodo.hiframes.table"): analyze_create_table_empty,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -182,6 +187,15 @@ def analyze_mappable_table_funcs(ctx, inst):
         return True
 
     return False
+
+
+def analyze_create_table_empty(ctx, inst):
+    """distributed analysis for create_empty_table (just initializes the output to
+    Distribution.OneD)
+    """
+    lhs = inst.target.name
+    if lhs not in ctx.array_dists:
+        _set_var_dist(ctx.typemap, lhs, ctx.array_dists, Distribution.OneD, True)
 
 
 call_registry = DistributedAnalysisCallRegistry()

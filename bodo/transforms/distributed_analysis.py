@@ -948,11 +948,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == ("create_empty_table", "bodo.hiframes.table"):
-            if lhs not in array_dists:
-                _set_var_dist(self.typemap, lhs, array_dists, Distribution.OneD, True)
-            return
-
         if fdef == ("table_concat", "bodo.utils.table_utils"):
             table = args[0].name
             out_dist = Distribution.OneD_Var
