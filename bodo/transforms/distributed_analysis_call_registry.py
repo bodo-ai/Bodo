@@ -215,6 +215,15 @@ class DistributedAnalysisCallRegistry:
                 "fit_transform",
                 "BodoPreprocessingLabelEncoderType",
             ): meet_out_first_arg_analysis,
+            # match input and output distributions (y is ignored)
+            (
+                "fit_transform",
+                "BodoFExtractHashingVectorizerType",
+            ): meet_out_first_arg_analysis,
+            (
+                "fit_transform",
+                "BodoFExtractCountVectorizerType",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):

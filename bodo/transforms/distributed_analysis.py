@@ -987,24 +987,6 @@ class DistributedAnalysis:
             )
             return
 
-        if (
-            func_name in {"fit_transform"}
-            and "bodo.ml_support.sklearn_feature_extraction_ext" in sys.modules
-            and isinstance(func_mod, numba.core.ir.Var)
-            and isinstance(
-                self.typemap[func_mod.name],
-                (
-                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType,
-                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
-                ),
-            )
-        ):
-            if func_name == "fit_transform":
-                # match input and output distributions (y is ignored)
-                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-
-            return
-
         if func_mod == "sklearn.utils" and func_name == "shuffle":
             # match input and output distributions
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
