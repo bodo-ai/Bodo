@@ -236,7 +236,7 @@ class Spawner:
         arguments are sent separately using broadcast or scatter (depending on flags).
 
         Args:
-            dispathcer (SubmitDispatcher): dispatcher to run on workers
+            dispatcher (SubmitDispatcher): dispatcher to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
             bcast_root (int): root value for broadcast (MPI.ROOT on spawner)
@@ -363,13 +363,6 @@ def submit_jit(signature_or_function=None, pipeline_class=None, **options):
 
     # Spawner distributes arguments by default (with scatterv)
     options["all_args_distributed_block"] = True
-
-    if signature_or_function:
-        # Add JIT args onto the function so that the worker can construct the
-        # appropriate dispatcher using these args
-        signature_or_function.is_submit_jit = True
-        signature_or_function.submit_jit_args = {**options}
-        signature_or_function.submit_jit_args["pipeline_class"] = pipeline_class
 
     def return_wrapped_fn(py_func):
         submit_jit_args = {**options}
