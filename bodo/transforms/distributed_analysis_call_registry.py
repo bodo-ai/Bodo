@@ -224,6 +224,10 @@ class DistributedAnalysisCallRegistry:
                 "fit_transform",
                 "BodoFExtractCountVectorizerType",
             ): meet_out_first_arg_analysis,
+            (
+                "shuffle",
+                "sklearn.utils",
+            ): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
