@@ -857,7 +857,7 @@ class DistributedAnalysis:
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
                     self._add_diag_info(
-                        f"Variable '{self._get_user_varname(reduce_varname)}' set to REP since it is a concat reduction variable for Parfor {parfor.id} which is REP",
+                        f"Variable '{_get_user_varname(self.metadata, reduce_varname)}' set to REP since it is a concat reduction variable for Parfor {parfor.id} which is REP",
                         self.parfor_locs[parfor.id],
                     )
                     array_dists[reduce_varname] = Distribution.REP
@@ -4210,7 +4210,10 @@ class DistributedAnalysis:
             info = (
                 "Distributed analysis set '{}' as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
-            ).format(", ".join(f"'{self._get_user_varname(a)}'" for a in arrs), fname)
+            ).format(
+                ", ".join(f"'{_get_user_varname(self.metadata, a)}'" for a in arrs),
+                fname,
+            )
             self._add_diag_info(info, loc)
 
     def _analyze_getitem_array_table_inputs(
@@ -4651,7 +4654,7 @@ class DistributedAnalysis:
                     varname not in array_dists or not is_REP(array_dists[varname])
                 ) and info is not None:
                     info = (
-                        f"Setting distribution of variable '{self._get_user_varname(varname)}' to REP: "
+                        f"Setting distribution of variable '{_get_user_varname(self.metadata, varname)}' to REP: "
                         + info
                     )
                     self._add_diag_info(info, loc)
@@ -4743,11 +4746,12 @@ class DistributedAnalysis:
         """returns all diagnostics info and their locations as a string"""
         return "\n".join(f"{info}\n{loc.strformat()}" for (info, loc) in self.diag_info)
 
-    def _get_user_varname(self, v):
-        """get original variable name by user for diagnostics info if possible"""
-        if v in self.metadata["parfors"]["var_rename_map"]:
-            return self.metadata["parfors"]["var_rename_map"][v]
-        return v
+
+def _get_user_varname(metadata, v):
+    """get original variable name by user for diagnostics info if possible"""
+    if v in metadata["parfors"]["var_rename_map"]:
+        return metadata["parfors"]["var_rename_map"][v]
+    return v
 
 
 def _meet_array_dists(typemap, arr1, arr2, array_dists, top_dist=None):
