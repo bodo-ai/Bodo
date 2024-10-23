@@ -3,7 +3,6 @@
 
 import atexit
 import contextlib
-import dis
 import itertools
 import logging
 import os
@@ -141,25 +140,10 @@ class Spawner:
         self.logger.debug(f"Spawned {n_pes} workers in {(time.monotonic()-t0):0.4f}s")
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
-    def collect_results(self):
-        # TODO: result collection needs modification to gatherv API, then we can
-        # call bodo.gatherv on the intercomm
-        return None
-
     def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
 
-        # Check that the only return is a "return None"
-        func_bytecode = dis.Bytecode(dispatcher.py_func)
-        for inst in func_bytecode:
-            if inst.opname == "RETURN_VALUE" or (
-                inst.opname == "RETURN_CONST" and inst.argrepr != "None"
-            ):
-                raise NotImplementedError(
-                    "Functions that return values are not supported by submit_jit yet"
-                )
-
-        # Send func:
+        # Send pyfunc:
         pickled_func = cloudpickle.dumps(dispatcher)
         bcast_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, bcast_root)
@@ -172,6 +156,16 @@ class Spawner:
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         poll_for_barrier(self.worker_intercomm)
         caught_exceptions = self.worker_intercomm.gather(None, root=gather_root)
+        output_is_distributed = self.worker_intercomm.gather(None, root=gather_root)[0]
+        # TODO(aneesh) handle returned tuples/nested distributed data
+        if output_is_distributed:
+            res = bodo.gatherv(
+                None,
+                root=MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL,
+                comm=self.worker_intercomm,
+            )
+        else:
+            res = self.worker_intercomm.recv(source=0)
         assert caught_exceptions is not None
         if any(caught_exceptions):
             types = {type(excep) for excep in caught_exceptions}
@@ -201,7 +195,7 @@ class Spawner:
                 # Raise the combined exception
                 raise Exception("Some ranks failed") from accumulated_exception
 
-        return self.collect_results()
+        return res
 
     def _get_arg_metadata(self, arg_name, arg, replicated):
         """Replace argument with metadata for later bcast/scatter if it is a DataFrame,
@@ -327,7 +321,7 @@ atexit.register(destroy_spawner)
 def submit_func_to_workers(dispatcher: "SubmitDispatcher", *args, **kwargs):
     """Get the global spawner and submit `func` for execution"""
     spawner = get_spawner()
-    spawner.submit_func_to_workers(dispatcher, *args, **kwargs)
+    return spawner.submit_func_to_workers(dispatcher, *args, **kwargs)
 
 
 class SubmitDispatcher:
@@ -339,7 +333,7 @@ class SubmitDispatcher:
         self.decorator_args = decorator_args
 
     def __call__(self, *args, **kwargs):
-        submit_func_to_workers(self, *args, **kwargs)
+        return submit_func_to_workers(self, *args, **kwargs)
 
     @classmethod
     def get_dispatcher(cls, py_func, decorator_args):
