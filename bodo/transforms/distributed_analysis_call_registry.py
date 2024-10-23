@@ -3,8 +3,10 @@
 Provides a registry of function call handlers for distributed analysis.
 """
 
+from numba.core.ir_utils import guard
+
 from bodo.transforms.distributed_analysis import Distribution, _meet_array_dists
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_none
 
 
 class DistributedAnalysisContext:
@@ -89,6 +91,10 @@ class DistributedAnalysisCallRegistry:
             ("predict", "BodoXGBClassifierType"): meet_out_first_arg_analysis,
             ("fit", "BodoXGBRegressorType"): meet_first_2_args_analysis_xgb_fit,
             ("predict", "BodoXGBRegressorType"): meet_out_first_arg_analysis,
+            (
+                "generate_mappable_table_func",
+                "bodo.utils.table_utils",
+            ): analyze_mappable_table_funcs,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -137,6 +143,44 @@ def meet_first_2_args_analysis_xgb_fit(ctx, inst):  # pragma: no cover
     )
     if ctx.array_dists[inst.value.args[0].name] == Distribution.REP:
         raise BodoError("Arguments of xgboost.fit are not distributed", inst.loc)
+
+
+def analyze_mappable_table_funcs(ctx, inst):
+    """
+    Analyze for functions using generate_mappable_table_func.
+    Arg0 is a table used for distribution and arg1 is the function
+    name. Distributions differ based on arg1.
+
+    Returns True if there was a known implementation.
+    """
+    lhs = inst.target.name
+    rhs = inst.value
+    func_name_typ = ctx.typemap[rhs.args[1].name]
+    has_func = not is_overload_none(func_name_typ)
+    if has_func:
+        # XXX: Make this more scalable by recalling the distributed
+        # analysis already in this pass for each of the provided
+        # func names.
+        func_name = guard(get_overload_const_str, func_name_typ)
+        # We support mappable prefixes that don't need to be separate functions.
+        if func_name[0] == "~":
+            func_name = func_name[1:]
+        # Note: This isn't an elif because the ~ may modify the name
+        if func_name in (
+            "bodo.libs.array_ops.array_op_isna",
+            "copy",
+            "bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict",
+        ):
+            # Not currently in the code because it is otherwise inlined.
+            # This should be included somewhere.
+            _meet_array_dists(ctx.typemap, lhs, rhs.args[0].name, ctx.array_dists)
+            return True
+    else:
+        # If we don't have a func, this is a shallow copy.
+        _meet_array_dists(ctx.typemap, lhs, rhs.args[0].name, ctx.array_dists)
+        return True
+
+    return False
 
 
 call_registry = DistributedAnalysisCallRegistry()

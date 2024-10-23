@@ -936,12 +936,6 @@ class DistributedAnalysis:
         if call_registry.analyze_call(ctx, inst, fdef_str_var):
             return
 
-        if fdef == (
-            "generate_mappable_table_func",
-            "bodo.utils.table_utils",
-        ) and self._analyze_mappable_table_funcs(lhs, rhs, kws, array_dists):
-            return
-
         if func_mod == "bodo.hiframes.table" and func_name in (
             "table_filter",
             "table_local_filter",
@@ -3399,41 +3393,6 @@ class DistributedAnalysis:
             _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
 
         return
-
-    def _analyze_mappable_table_funcs(self, lhs, rhs, kws, array_dists):
-        """
-        Analyze for functions using generate_mappable_table_func.
-        Arg0 is a table used for distribution and arg1 is the function
-        name. Distributions differ based on arg1.
-
-        Returns True if there was a known implementation.
-        """
-        func_name_typ = self.typemap[rhs.args[1].name]
-        has_func = not is_overload_none(func_name_typ)
-        if has_func:
-            # XXX: Make this more scalable by recalling the distributed
-            # analysis already in this pass for each of the provided
-            # func names.
-            func_name = guard(get_overload_const_str, func_name_typ)
-            # We support mappable prefixes that don't need to be separate functions.
-            if func_name[0] == "~":
-                func_name = func_name[1:]
-            # Note: This isn't an elif because the ~ may modify the name
-            if func_name in (
-                "bodo.libs.array_ops.array_op_isna",
-                "copy",
-                "bodo.libs.array_ops.drop_duplicates_local_dictionary_if_dict",
-            ):
-                # Not currently in the code because it is otherwise inlined.
-                # This should be included somewhere.
-                _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-                return True
-        else:
-            # If we don't have a func, this is a shallow copy.
-            _meet_array_dists(self.typemap, lhs, rhs.args[0].name, array_dists)
-            return True
-
-        return False
 
     def _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
         self, lhs, func_name, rhs, kws, array_dists
