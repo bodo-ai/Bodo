@@ -927,13 +927,13 @@ class DistributedAnalysis:
 
         # Check distributed analysis call registry for handler first
         ctx = DistributedAnalysisContext(self.typemap, array_dists, equiv_set)
-        # Replace ir.Var with string representation of type for easy matching
-        fedf_str_var = fdef[:-1] + (
-            str(self.typemap[fdef[-1].name])
+        # Replace ir.Var with type's class name for easy matching
+        fdef_str_var = fdef[:-1] + (
+            type(self.typemap[fdef[-1].name]).__name__
             if isinstance(fdef[-1], ir.Var)
             else fdef[-1],
         )
-        if call_registry.analyze_call(ctx, inst, fedf_str_var):
+        if call_registry.analyze_call(ctx, inst, fdef_str_var):
             return
 
         if (
