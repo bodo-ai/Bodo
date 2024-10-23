@@ -95,6 +95,7 @@ class DistributedAnalysisCallRegistry:
                 "generate_mappable_table_func",
                 "bodo.utils.table_utils",
             ): analyze_mappable_table_funcs,
+            ("table_subset", "bodo.hiframes.table"): meet_out_first_arg_analysis,
         }
 
     def analyze_call(self, ctx, inst, fdef):
