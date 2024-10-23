@@ -1,25 +1,14 @@
 import os
 
-import cloudpickle
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.submit.spawner import get_num_workers, submit_jit
-from bodo.tests.conftest import datapath_util
-from bodo.tests.utils import pytest_spawn_mode
+from bodo.tests.utils import _test_equal, pytest_spawn_mode
 
 pytestmark = pytest_spawn_mode
-
-
-def test_return_not_supported():
-    @submit_jit
-    def fn():
-        return 0
-
-    with pytest.raises(NotImplementedError, match="not supported by submit_jit"):
-        fn()
 
 
 def test_propogate_same_exception_all_ranks():
@@ -74,14 +63,14 @@ def test_modify_global():
 def test_import_module(capfd):
     import bodo.tests.test_spawn.mymodule as mymod
 
-    def print_np():
+    def impl():
         with bodo.no_warning_objmode:
             mymod.f()
 
-    fn = submit_jit(cache=True)(print_np)
+    fn = submit_jit(cache=True)(impl)
     fn()
 
-    fn2 = submit_jit(cache=True)(print_np)
+    fn2 = submit_jit(cache=True)(impl)
     fn2()
 
     with capfd.disabled():
@@ -100,16 +89,6 @@ def f0():
     return 0
 
 
-def test_cloudpickle():
-    """Test that cloudpickle preserves arbitrary properties attached to
-    serialized functions"""
-    f0.my_prop = "hello world"
-    f0_pickle = cloudpickle.dumps(f0)
-    f1 = cloudpickle.loads(f0_pickle)
-    assert f1.my_prop == "hello world"
-    assert f1() == 0
-
-
 def test_closure():
     """Check that cloudpickle correctly handles variables captured by a
     closure"""
@@ -118,32 +97,76 @@ def test_closure():
         f = 10
 
         def closure():
-            print("in closure:", f)
+            return "in closure: " + str(f)
 
         return closure
 
     fn = submit_jit(cache=True)(create_closure())
-    fn()
+    assert fn() == "in closure: 10"
 
 
-CUSTOMER_TABLE_PATH = datapath_util("tpch-test_data/parquet/customer.parquet")
+def test_return_scalar():
+    """Test that scalars can be returned"""
+
+    @submit_jit
+    def fn():
+        return 42
+
+    assert fn() == 42
 
 
-@submit_jit(cache=True)
-def simple_test():
-    df = pd.read_parquet(CUSTOMER_TABLE_PATH)
-    max_acctbal = (
-        df[df["C_ACCTBAL"] > 1000.0]
-        .groupby(["C_MKTSEGMENT", "C_NATIONKEY"])
-        .agg({"C_ACCTBAL": "max"})
+def test_return_array():
+    """Test that arrays can be returned"""
+
+    @submit_jit
+    def fn():
+        A = np.zeros(100, dtype=np.int64)
+        return A
+
+    _test_equal(fn(), np.zeros(100, dtype=np.int64))
+
+
+def test_compute_return_df(datapath):
+    """Simple test that reads data and computes in spawn mode, returning a
+    dataframe"""
+
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+
+    def impl():
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        max_acctbal = (
+            df[df["C_ACCTBAL"] > 1000.0]
+            .groupby(["C_MKTSEGMENT", "C_NATIONKEY"])
+            .agg({"C_ACCTBAL": "max"})
+        )
+        return max_acctbal
+
+    submit_fn = submit_jit(cache=True)(impl)
+    py_out = impl()
+    bodo_submit_out = submit_fn()
+    _test_equal(
+        bodo_submit_out, py_out, sort_output=True, reset_index=True, check_dtype=False
     )
-    print("Max acctbal:")
-    print(max_acctbal)
 
 
-def test_simple():
-    """Simple test that reads data and computes in spawn mode"""
-    simple_test()
+def test_compute_return_scalar(datapath):
+    """Simple test that reads data and computes in spawn mode, returning a
+    scalar"""
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+
+    def impl():
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        max_acctbal = (
+            df[df["C_ACCTBAL"] > 1000.0]
+            .groupby(["C_MKTSEGMENT", "C_NATIONKEY"])
+            .agg({"C_ACCTBAL": "max"})
+        )
+        return max_acctbal.sum()
+
+    submit_fn = submit_jit(cache=True)(impl)
+    py_out = impl()
+    bodo_submit_out = submit_fn()
+    _test_equal(bodo_submit_out, py_out)
 
 
 def test_args():

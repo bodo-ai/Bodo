@@ -63,34 +63,54 @@ def exec_func_handler(
     args = tuple(_recv_arg(arg, spawner_intercomm) for arg in args)
     kwargs = {name: _recv_arg(arg, spawner_intercomm) for name, arg in kwargs.items()}
 
-    pyfunc = None
-
     caught_exception = None
+    res = None
+    func = None
     try:
-        pyfunc = cloudpickle.loads(pickled_func)
+        func = cloudpickle.loads(pickled_func)
         # ensure that we have a CPUDispatcher to compile and execute code
-        assert isinstance(pyfunc, numba.core.registry.CPUDispatcher)
-
+        assert isinstance(
+            func, numba.core.registry.CPUDispatcher
+        ), "Unexpected function type"
     except Exception as e:
         logger.error(f"Exception while trying to receive code: {e}")
         # TODO: check that all ranks raise an exception
         # forward_exception(e, comm_world, spawner_intercomm)
-        pyfunc = None
+        func = None
         caught_exception = e
 
     if caught_exception is None:
         try:
-            func = pyfunc
             # Try to compile and execute it. Catch and share any errors with the spawner.
             logger.debug("Compiling and executing func")
-            func(*args, **kwargs)
+            res = func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Exception while trying to execute code: {e}")
             caught_exception = e
 
     poll_for_barrier(spawner_intercomm)
+    has_exception = caught_exception is not None
+    logger.debug(f"Propagating exception {has_exception=}")
     # Propagate any exceptions
     spawner_intercomm.gather(caught_exception, root=0)
+
+    is_distributed = False
+    if func is not None and len(func.signatures) > 0:
+        # There should only be one signature compiled for the input function
+        sig = func.signatures[0]
+        assert sig in func.overloads
+        # Extract return value distribution from metadata
+        is_distributed = func.overloads[sig].metadata["is_return_distributed"]
+    logger.debug(f"Gathering result {is_distributed=}")
+
+    spawner_intercomm.gather(is_distributed, root=0)
+    if is_distributed:
+        # Combine distributed results with gatherv
+        bodo.gatherv(res, root=0, comm=spawner_intercomm)
+    else:
+        if bodo.get_rank() == 0:
+            # broadcast non-distributed results
+            spawner_intercomm.send(res, dest=0)
 
 
 def worker_loop(
