@@ -752,7 +752,8 @@ class DistributedAnalysis:
         out_dist = Distribution.OneD
         # nested parfors are replicated
         if self.in_parallel_parfor != -1:
-            self._add_diag_info(
+            _add_diag_info(
+                self.diag_info,
                 f"Parfor {parfor.id} set to REP since it is inside another distributed Parfor",
                 self.parfor_locs[parfor.id],
             )
@@ -784,7 +785,8 @@ class DistributedAnalysis:
                     parfor_arrs.add(arr)
                     self._parallel_accesses.add((arr, index))
                 if par_index_var in index_tuple[1:]:
-                    self._add_diag_info(
+                    _add_diag_info(
+                        self.diag_info,
                         f"Parfor {parfor.id} set to REP since index is used in lower dimensions of array access",
                         self.parfor_locs[parfor.id],
                     )
@@ -845,7 +847,8 @@ class DistributedAnalysis:
             if reduce_op == Reduce_Type.Concat:
                 # if output array is replicated, parfor should be replicated too
                 if is_REP(array_dists[reduce_varname]):
-                    self._add_diag_info(
+                    _add_diag_info(
+                        self.diag_info,
                         f"Parfor {parfor.id} set to REP since its concat reduction variable is REP",
                         self.parfor_locs[parfor.id],
                     )
@@ -856,7 +859,8 @@ class DistributedAnalysis:
                     array_dists[reduce_varname] = Distribution.OneD_Var
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
-                    self._add_diag_info(
+                    _add_diag_info(
+                        self.diag_info,
                         f"Variable '{_get_user_varname(self.metadata, reduce_varname)}' set to REP since it is a concat reduction variable for Parfor {parfor.id} which is REP",
                         self.parfor_locs[parfor.id],
                     )
@@ -4214,7 +4218,7 @@ class DistributedAnalysis:
                 ", ".join(f"'{_get_user_varname(self.metadata, a)}'" for a in arrs),
                 fname,
             )
-            self._add_diag_info(info, loc)
+            _add_diag_info(self.diag_info, info, loc)
 
     def _analyze_getitem_array_table_inputs(
         self,
@@ -4657,7 +4661,7 @@ class DistributedAnalysis:
                         f"Setting distribution of variable '{_get_user_varname(self.metadata, varname)}' to REP: "
                         + info
                     )
-                    self._add_diag_info(info, loc)
+                    _add_diag_info(self.diag_info, info, loc)
                 _set_var_dist(self.typemap, varname, array_dists, Distribution.REP)
 
     def _get_calc_n_items_range_index(self, size_def):
@@ -4721,7 +4725,8 @@ class DistributedAnalysis:
 
     def _recompile_func(self, lhs, rhs, fname):
         """Recompile function call due to distribution change in input data types"""
-        self._add_diag_info(
+        _add_diag_info(
+            self.diag_info,
             f"Recompiling {fname} since argument data distribution changed after analysis",
             rhs.loc,
         )
@@ -4737,14 +4742,15 @@ class DistributedAnalysis:
         self.typemap.pop(lhs)
         self.typemap[lhs] = self.calltypes[rhs].return_type
 
-    def _add_diag_info(self, info, loc):
-        """append diagnostics info to be displayed in distributed diagnostics output"""
-        if (info, loc) not in self.diag_info:
-            self.diag_info.append((info, loc))
-
     def _get_diag_info_str(self):
         """returns all diagnostics info and their locations as a string"""
         return "\n".join(f"{info}\n{loc.strformat()}" for (info, loc) in self.diag_info)
+
+
+def _add_diag_info(diag_info, info, loc):
+    """append diagnostics info to be displayed in distributed diagnostics output"""
+    if (info, loc) not in diag_info:
+        diag_info.append((info, loc))
 
 
 def _get_user_varname(metadata, v):
