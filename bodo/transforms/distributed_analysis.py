@@ -948,22 +948,6 @@ class DistributedAnalysis:
             )
             return
 
-        if fdef == (
-            "array_to_repeated_array_item_array",
-            "bodo.libs.array_item_arr_ext",
-        ):
-            if lhs not in array_dists:
-                array_dists[lhs] = Distribution.OneD
-            # array_to_repeated_array_item_array is used to create an ArrayItemArray with an array.
-            # This requires the input array to be replicated.
-            self._set_REP(
-                rhs.args[0],
-                array_dists,
-                "The scalar array must be duplicated for array_to_repeated_array_item_array.",
-                rhs.loc,
-            )
-            return
-
         # Scalar to array functions are similar to allocations and can return
         # distributed data
         if fdef in (

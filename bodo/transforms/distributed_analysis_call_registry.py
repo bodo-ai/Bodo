@@ -8,6 +8,7 @@ from numba.core.ir_utils import guard
 from bodo.transforms.distributed_analysis import (
     Distribution,
     _meet_array_dists,
+    _set_REP,
     _set_var_dist,
 )
 from bodo.utils.typing import BodoError, get_overload_const_str, is_overload_none
@@ -102,6 +103,10 @@ class DistributedAnalysisCallRegistry:
             ("table_subset", "bodo.hiframes.table"): meet_out_first_arg_analysis,
             ("create_empty_table", "bodo.hiframes.table"): analyze_create_table_empty,
             ("table_concat", "bodo.utils.table_utils"): analyze_table_concat,
+            (
+                "array_to_repeated_array_item_array",
+                "bodo.libs.array_item_arr_ext",
+            ): analyze_array_to_repeated_array_item_array,
         }
 
     def analyze_call(self, ctx, inst, fdef):
@@ -210,6 +215,22 @@ def analyze_table_concat(ctx, inst):
     ctx.array_dists[lhs] = out_dist
     if out_dist != Distribution.OneD_Var:
         ctx.array_dists[table] = out_dist
+
+
+def analyze_array_to_repeated_array_item_array(ctx, inst):
+    """distributed analysis for array_to_repeated_array_item_array"""
+    lhs = inst.target.name
+    rhs = inst.value
+    if lhs not in ctx.array_dists:
+        ctx.array_dists[lhs] = Distribution.OneD
+    # array_to_repeated_array_item_array is used to create an ArrayItemArray with an array.
+    # This requires the input array to be replicated.
+    _set_REP(
+        rhs.args[0],
+        ctx.array_dists,
+        "The scalar array must be duplicated for array_to_repeated_array_item_array.",
+        rhs.loc,
+    )
 
 
 call_registry = DistributedAnalysisCallRegistry()
