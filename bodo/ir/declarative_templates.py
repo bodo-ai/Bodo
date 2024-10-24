@@ -1,6 +1,8 @@
 import inspect
+import typing as pt
 import warnings
 from abc import ABCMeta, abstractmethod
+from inspect import Parameter, Signature
 from pathlib import Path
 
 from numba.core import types, utils
@@ -13,19 +15,23 @@ from numba.core.typing.templates import (
     infer_getattr,
 )
 
+from bodo.ir.argument_checkers import OverloadArgumentsChecker, OverloadAttributeChecker
 from bodo.utils.typing import BodoError, check_unsupported_args
 
 
 ### Helpers for generating documentation.
-def get_feature_path(feature_name):  # pragma: no cover
+def get_feature_path(feature_name: str) -> str:  # pragma: no cover
+    """
+    Gets the path in Series docs given a `feature_name`.
+    """
     words = feature_name.split(".")
     if words[:2] == ["pd", "Series"]:
         return "docs/docs/api_docs/pandas/series", ".".join(words[2:])
     raise Exception(f"Unrecognized feature path {feature_name}")
 
 
-def replace_package_name(path):  # pragma: no cover
-    """Replace abbreviated package name in path with the full name"""
+def replace_package_name(path: str) -> pt.Tuple[str, str]:  # pragma: no cover
+    """Replace abbreviated package name in `path` with the full name"""
     abrev_package_names = {
         "pd": "pandas",
         "np": "numpy",
@@ -42,10 +48,10 @@ def replace_package_name(path):  # pragma: no cover
     return package_name, path
 
 
-def get_example_from_docs(doc_path):  # pragma: no cover
+def get_example_from_docs(doc_path: str) -> str:  # pragma: no cover
     """
-    Searches for index of "### Example Usage" in a document and returns all text
-    following.
+    Searches for index of "### Example Usage" in a document and returns all
+    text following.
     """
     example_str = ""
     if Path(doc_path).is_file():
@@ -58,28 +64,30 @@ def get_example_from_docs(doc_path):  # pragma: no cover
 
 
 def format_argument_restrictions_str(
-    params, arg_restrictions, unsupported_args
-):  # pragma: no cover
-    """
-    Creates a bulleted list of argument restrictions for documentation. This list
-    starts with a header "### Argument restrictions" and then adds a bullet point
-    for each argument that looks like 'name: restrictions'. If an argument does not
-    have a restriction then _restrictions_ is "None".
+    params: pt.List[Parameter],
+    arg_restrictions: pt.Dict[str, str],
+    unsupported_args: pt.Dict[str, pt.Any],
+) -> str:  # pragma: no cover
+    """Creates a bulleted list of argument restrictions for documentation.
+
+    This list starts with a header "### Argument restrictions" and then adds a
+    bullet point for each argument that looks like 'name: restrictions'. If an
+    argument does not have a restriction then _restrictions_ is "None".
 
     Args:
-        params (List[Parameter]): _description_
-        arg_restrictions (dict): Mapping from parameter's name to a string descripton
+        params: A list of parameters from the overloaded function.
+        arg_restrictions: Mapping from parameter's name to a string descripton
             of it's restrictions.
-        unsupported_args (dict): Mapping from parameter's name to it's default value.
+        unsupported_args: Mapping from parameter's name to it's default value.
 
     Returns:
-        str: A bulleted list of argument restrictions plus a header (or "" if there are
-            no arguments)
+        A bulleted list of argument restrictions plus a header (or "" if there
+            are no arguments)
     """
     if len(params) == 0:
         return ""
 
-    argument_restrictions_str = "### Argument Restrictions: "
+    argument_restrictions_str = "### Argument Restrictions:"
     for param in params:
         argument_restrictions_str += f"\n * `{param.name}`: "
         if param.name in unsupported_args:
@@ -96,19 +104,19 @@ def format_argument_restrictions_str(
 
 class DeclarativeTemplate(metaclass=ABCMeta):
     @abstractmethod
-    def document(self):
+    def document(self) -> str:
         """Generate docstring corresponding to this template"""
 
     @abstractmethod
-    def is_matching_template(self, attr):
-        """Check determine when attribute *attr* matches this template."""
+    def is_matching_template(self, attr: str) -> bool:
+        """Check to determine when attribute `attr` matches this template."""
 
 
 class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTemplate):
-    def document(self, write_out=True):  # pragma: no cover
+    def document(self, write_out: pt.Optional[bool] = True) -> str:  # pragma: no cover
         """
-        Generates a documentation string for the method, writes to corresponding file in
-        documentation if *write_out*
+        Generates a documentation string for the method and writes to
+        corresponding file in the documentation if `write_out`.
         """
         title_str = f"# `{self.path}`"
         params_dict = utils.pysignature(self._overload_func).parameters
@@ -133,7 +141,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         supported_types_str = ""
         if params_list[0].name in arg_restrictions:
             supported_types_str += (
-                "!!! note\n\t" f"Input {arg_restrictions[params_list[0].name]}."
+                "!!! note\n\t" f"Input {arg_restrictions[params_list[0].name]}.\n\n"
             )
         argument_restrictions_str += supported_types_str
 
@@ -165,7 +173,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
             f"{title_str}\n\n"
             f"{hyperlink_str}"
             f"{pysig_str}\n\n"
-            f"{argument_restrictions_str}\n\n"
+            f"{argument_restrictions_str}"
             f"{changed_defaults_str}"
             f"{description}"
             f"{example_str}"
@@ -178,14 +186,24 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
 
         return documentation
 
-    def is_matching_template(self, attr):
+    def is_matching_template(self, attr: str) -> bool:
         return self._attr == attr
 
-    def get_signature(self):
+    def get_signature(self) -> Signature:
         return utils.pysignature(self._overload_func)
 
     @classmethod
-    def _check_unsupported_args(cls, kws):
+    def _check_unsupported_args(cls, kws: pt.Dict[str, pt.Any]):
+        """Checks that unsupported argument requirements are enforced on
+        `kws`.
+
+        Checks that all arguments in `kws` are either supported (at least
+        partially), or if they are unsupported, checks that they are equal to
+        the default value as specified by the `unsupported_args` attribute.
+
+        Args:
+            kws: The key word arguments to check.
+        """
         path = cls.path.split(".")
         assert (
             len(path) > 2
@@ -220,9 +238,20 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         )
 
     @classmethod
-    def _check_argument_types(cls, args, kws):
-        """
-        Check that args and kwargs are valid types
+    def _check_argument_types(cls, args: tuple, kws: pt.Dict[str, pt.Any]):
+        """Checks that `args` and `kws` are valid arguments.
+
+        Checks that `args` and `kws` are valid arguments to the method using
+        `method_args_checkers` (or does nothing if a `method_args_checker`
+        does not exist).
+
+        Args:
+            args: The positional arguments to check.
+            kws: The keyword arguments to check.
+
+        Raises:
+            BodoError: If any of the arguments are invalid or number of
+                arguments is incorrect.
         """
         if cls.method_args_checker is None:
             return
@@ -232,6 +261,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         arg_types = []
         for i, (name, param) in enumerate(overload_params.items()):
             if i < len(args):  # positional only
+                name = "self" if i == 0 else name
                 arg_types.append((name, args[i]))
             elif name in kws:
                 arg_types.append((name, kws[name]))
@@ -283,10 +313,14 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
 class _OverloadDeclarativeAttributeTemplate(
     DeclarativeTemplate, _OverloadAttributeTemplate
 ):
-    def is_matching_template(self, attr):
+    def is_matching_template(self, attr: str) -> bool:
         return self._attr == attr
 
-    def document(self, write_out=True):  # pragma: no cover
+    def document(self, write_out: pt.Optional[bool] = True) -> str:  # pragma: no cover
+        """
+        Generates a documentation string for the method, writes to
+        corresponding file in documentation if `write_out` is True.
+        """
         title_str = f"# `{self.path}`\n\n"
         package_name, path_str = replace_package_name(self.path)
 
@@ -333,6 +367,7 @@ class _OverloadDeclarativeAttributeTemplate(
 
     @classmethod
     def _check_type(cls, typ):
+        """Check that the type of an object is valid for this attribute"""
         if cls.arg_checker is not None:
             # get the argument name from the overload
             cls.arg_checker.check_args(cls.path, typ)
@@ -397,35 +432,41 @@ def make_overload_declarative_method_template(
 
 def overload_method_declarative(
     typ,
-    attr,
-    path,
-    unsupported_args,
-    description,
-    method_args_checker=None,
-    changed_defaults=frozenset(),
-    hyperlink=None,
+    attr: str,
+    path: str,
+    unsupported_args: pt.Set[str],
+    description: str,
+    method_args_checker: pt.Optional[OverloadArgumentsChecker] = None,
+    changed_defaults: pt.Optional[pt.Set[str]] = frozenset(),
+    hyperlink: pt.Optional[str] = None,
     **kwargs,
 ):
-    """A decorator marking the decorated function as typing and implementing
-    attribute *attr* for the given Numba type in nopython mode. The "declarative"
-    aspects of this decorator allow for specifiying verifiable information about the
-    attribute that can be used to generate documentation using the following arguments:
+    """A decorator for creating an overload declarative template for a method.
+
+    This decorator marks the decorated function as typing and implementing
+    attribute `attr` for the given Numba type in nopython mode. The
+    "declarative" aspects of this decorator allow for specifiying verifiable
+    information about the attribute that can be used to generate
+    documentation.
 
     Args:
-        path (str): The path starting with the library that corresponds to *attr*
-        unsupported_defaults (set): The set of arguments that only support their
-            default value.
-        description (str): A description of additional notes to be displayed in
+        path: The path starting with the library that corresponds to *attr*
+        unsupported_defaults (set): The set of arguments that only support
+            their default value.
+        description: A description of additional notes to be displayed in
             documentation.
-        arg_checker (OverloadArgumentsChecker): An overload checker which checks that
-            *typ* and method args obey specific properties at compile time and raises
-            an error. This check is translated into documentation. Defaults to None.
-        changed_defaults (set): The set of arguments whose default value differs from
+        arg_checker: An overload checker which checks that
+            `typ` and method args obey specific properties at compile time and
+            raises an error. This check is translated into documentation.
+            Defaults to None.
+        changed_defaults: The set of arguments whose default value differs from
             the corresponding python API.
-        hyperlink (str, optional): Link to external documentation. Defaults to None.
+        hyperlink: Link to external documentation. Defaults to None.
+        **kwargs: Additional key word arguments accepted by Bodo/Numba for
+            overloaded methods (see numba_compat.py)
     """
 
-    def decorate(overload_func):
+    def decorate(overload_func: pt.Callable):
         copied_kwargs = kwargs.copy()
         base = _OverloadDeclarativeMethodTemplate
         # NOTE: _no_unliteral is a bodo specific attribute and is linked to changes in numba_compat.py
@@ -494,29 +535,35 @@ def make_overload_declarative_attribute_template(
 
 def overload_attribute_declarative(
     typ,
-    attr,
-    path,
-    description,
-    arg_checker=None,
-    hyperlink=None,
+    attr: str,
+    path: str,
+    description: str,
+    arg_checker: pt.Optional[OverloadAttributeChecker] = None,
+    hyperlink: pt.Optional[str] = None,
     **kwargs,
 ):
-    """A decorator marking the decorated function as typing and implementing
-    attribute *attr* for the given Numba type in nopython mode. The "declarative"
-    aspects of this decorator allow for specifiying verifiable information about the
-    attribute that can be used to generate documentation using the following arguments:
+    """A decorator for creating an overload declarative template for an
+    attribute.
+
+    This decorator marks the decorated function as typing and implementing
+    attribute `attr` for the given Numba type in nopython mode. The
+    "declarative" aspects of this decorator allow for specifiying verifiable
+    information about the attribute that can be used to generate
+    documentation.
 
     Args:
-        path (str): The path starting with the library that corresponds to *attr*
-        description (str): A description of additional notes to be displayed in
+        path: The path starting with the library that corresponds to `attr`
+        description: A description of additional notes to be displayed in
             documentation.
-        arg_checker (OverloadAttributeChecker): An overload checker which checks that
-            *typ* obeys specific properties at compile time and raises an error. This
+        arg_checker: An overload checker which checks that `typ` obeys
+            specific properties at compile time and raises an error. This
             check is translated into documentation. Defaults to None.
-        hyperlink (str, optional): Link to external documentation. Defaults to None.
+        hyperlink: Link to external documentation. Defaults to None.
+        **kwargs: Additional key word arguments accepted by Bodo/Numba for
+            overloaded attributes (see numba_compat.py)
     """
 
-    def decorate(overload_func):
+    def decorate(overload_func: pt.Callable):
         copied_kwargs = kwargs.copy()
         base = _OverloadDeclarativeAttributeTemplate
         # NOTE: _no_unliteral is a bodo specific attribute and is linked to changes in numba_compat.py

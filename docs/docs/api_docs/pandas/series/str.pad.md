@@ -4,7 +4,7 @@
 
 ### Argument Restrictions:
  * `width`: must be type `Integer`.
- * `side`: must be a compile time constant and must be `"right"`, `"both"` or `"left"`.
+ * `side`: must be a compile time constant and must be `"left"`, `"right"` or `"both"`.
  * `fillchar`: must be type `Character`.
 
 !!! note

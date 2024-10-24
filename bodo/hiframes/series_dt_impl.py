@@ -163,7 +163,7 @@ def overload_datetime_field_declarative(field, overload_impl):
         field,
         path=f"pd.Series.dt.{field}",
         arg_checker=OverloadAttributeChecker(
-            DatetimeLikeSeriesArgumentChecker("S_dt", type="datetime", is_self=True),
+            DatetimeLikeSeriesArgumentChecker("S_dt", type="datetime"),
         ),
         description=None,
         inline="always",

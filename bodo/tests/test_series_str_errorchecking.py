@@ -134,7 +134,7 @@ def test_pad_fillchar_nonchar(test_sr, memory_leak_check):
     def impl2(test_sr):
         return test_sr.str.pad(width=13, fillchar="**")
 
-    expected_err_msg = "Expected 'fillchar' to be a Character. Got"
+    expected_err_msg = "'fillchar' must be a Character. Got"
 
     with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl)(test_sr)
@@ -150,7 +150,7 @@ def test_pad_width_noint(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.pad(width="1", fillchar="*")
 
-    with pytest.raises(BodoError, match="Expected 'width' to be a Integer. Got:"):
+    with pytest.raises(BodoError, match="'width' must be a Integer. Got:"):
         bodo.jit(impl)(test_sr)
 
 
@@ -165,7 +165,7 @@ def test_pad_side_invalid(test_sr, memory_leak_check):
     def impl2(test_sr):
         return test_sr.str.pad(width=13, side=123, fillchar="*")
 
-    expected_err_msg = 'Expected \'side\' to be a compile time constant and must be "left", "right" or "both". Got:'
+    expected_err_msg = '\'side\' must be a compile time constant and must be "left", "right" or "both". Got:'
 
     with pytest.raises(BodoError, match=expected_err_msg):
         bodo.jit(impl)(test_sr)
@@ -465,7 +465,7 @@ def test_contains_flags(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", flags="x")
 
-    with pytest.raises(BodoError, match="Expected 'flags' to be a Integer"):
+    with pytest.raises(BodoError, match="'flags' must be a Integer"):
         bodo.jit(impl)(test_sr)
 
 
@@ -477,7 +477,7 @@ def test_contains_regex(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", regex="x")
 
-    with pytest.raises(BodoError, match="Expected 'regex' to be a constant Boolean"):
+    with pytest.raises(BodoError, match="'regex' must be a constant Boolean"):
         bodo.jit(impl)(test_sr)
 
 
@@ -489,7 +489,7 @@ def test_contains_case(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", case="x")
 
-    with pytest.raises(BodoError, match="Expected 'case' to be a constant Boolean"):
+    with pytest.raises(BodoError, match="'case' must be a constant Boolean"):
         bodo.jit(impl)(test_sr)
 
 
