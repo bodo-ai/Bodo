@@ -19,6 +19,7 @@ from bodo.ir.argument_checkers import (
     NumericScalarArgumentChecker,
     NumericSeriesArgumentChecker,
     NumericSeriesBinOpChecker,
+    OptionalArgumentChecker,
     OverloadArgumentsChecker,
     OverloadAttributeChecker,
     StringScalarArgumentChecker,
@@ -34,8 +35,8 @@ from bodo.utils.typing import BodoError, is_overload_const_str_equal
 
 def _val_to_string(val):
     """
-    Embed *val* as it's constructor in a string.
-    *val* can be a Series, Index, RangeIndex, numpy array,
+    Embed `val` as it's constructor in a string.
+    `val` can be a Series, Index, RangeIndex, numpy array,
     DataFrame, str, int, float or bool
     """
     if isinstance(val, pd.Series):
@@ -71,13 +72,13 @@ def _val_to_string(val):
         pytest.param(
             (True, 9),
             {"arg3": 0},
-            r"pd.Series.do_something\(\): Expected 'arg2' to be a compile time constant and must be None, 1, 0 or \"10\". Got: ",
+            r"pd.Series.do_something\(\): 'arg2' must be a compile time constant and must be None, 1, 0 or \"10\"",
             id="bad_const_value",
         ),
         pytest.param(
             (True, 0),
             {"arg3": "hello"},
-            r"pd.Series.do_something\(\): Expected 'arg3' to be a constant Integer, Tuple or None. Got: ",
+            r"pd.Series.do_something\(\): 'arg3' must be a constant Integer, Tuple or None",
             id="bad_const_type",
         ),
     ],
@@ -154,25 +155,25 @@ def test_literal_argument_checkers(args, kwargs, expected_err_msg):
         pytest.param(
             (1, 0.0),
             {"arg3": True, "arg4": 2},
-            r"pd.Series.do_something2\(\): Expected 'arg1' to be a String. Got:",
+            r"pd.Series.do_something2\(\): 'arg1' must be a String. Got:",
             id="str_error_message",
         ),
         pytest.param(
             ("hello", 0),
             {"arg3": True, "arg4": 2},
-            r"pd.Series.do_something2\(\): Expected 'arg2' to be a Float. Got:",
+            r"pd.Series.do_something2\(\): 'arg2' must be a Float. Got:",
             id="float_error_message",
         ),
         pytest.param(
             ("hello", 0.0),
             {"arg3": 23, "arg4": 2},
-            r"pd.Series.do_something2\(\): Expected 'arg3' to be a Boolean. Got:",
+            r"pd.Series.do_something2\(\): 'arg3' must be a Boolean. Got:",
             id="bool_error_message",
         ),
         pytest.param(
             ("hello", 0.0),
             {"arg3": True, "arg4": 2.71},
-            r"pd.Series.do_something2\(\): Expected 'arg4' to be a Integer. Got:",
+            r"pd.Series.do_something2\(\): 'arg4' must be a Integer. Got:",
             id="int_error_message",
         ),
     ],
@@ -292,19 +293,19 @@ def test_primative_type_argument_checkers(args, kwargs, expected_err_msg, use_co
         pytest.param(
             pd.DataFrame({"A": [1, 2, 3, 4, 5]}),
             None,
-            r"pd.Series.sub2\(\): Expected 'other' to be a numeric scalar or Series, Index, Array, List or Tuple with numeric data. Got:",
+            r"pd.Series.sub2\(\): 'other' must be a numeric scalar or Series, Index, Array, List or Tuple with numeric data",
             id="other_ndim_err",
         ),
         pytest.param(
             pd.Series(["hi", "goodbye", "why", "2", "3"]),
             None,
-            r"pd.Series.sub2\(\): Expected 'other' to be a numeric scalar or Series, Index, Array, List or Tuple with numeric data. Got:",
+            r"pd.Series.sub2\(\): 'other' must be a numeric scalar or Series, Index, Array, List or Tuple with numeric data",
             id="other_dtype_err",
         ),
         pytest.param(
             pd.Index([1, 2, 3, 4, 5]),
             "hello",
-            r"pd.Series.sub2\(\): Expected 'fill_value' to be a Integer, Float, Boolean or None. Got:",
+            r"pd.Series.sub2\(\): 'fill_value' must be a Float, Integer or Boolean, or it can be None",
             id="scalar_dtype_err",
         ),
     ],
@@ -330,7 +331,7 @@ def test_numeric_series_argument_checkers(
         method_args_checker=OverloadArgumentsChecker(
             [
                 NumericSeriesBinOpChecker("other"),
-                NumericScalarArgumentChecker("fill_value"),
+                OptionalArgumentChecker(NumericScalarArgumentChecker("fill_value")),
             ]
         ),
     )
@@ -384,21 +385,21 @@ def test_numeric_series_argument_checkers(
             pd.Series(["this", "is", "a", "string"]),
             pd.Series(["1", "2", "3", "4"]),
             pd.Series([np.datetime64("2007-01-01T03:30")], dtype="datetime64[ns]"),
-            "Expected 'self' to be a Series of Float or Integer data. Got:",
+            "'self' must be a Series of Float or Integer data. Got:",
             id="self_error",
         ),
         pytest.param(
             pd.Series([1, 2, 3, 4]),
             pd.Series(["1", "2", "3", "4"]),
             pd.Series([np.timedelta64(i) for i in range(5)], dtype="timedelta64[ns]"),
-            "Expected 'arg2' to be a Series of datetime64 data. Got:",
+            "'arg2' must be a Series of datetime64 data. Got:",
             id="datetimelike_series_error",
         ),
         pytest.param(
             pd.Series([1, 2, 3, 4]),
             pd.Series([[1, 2, 3], [2, 3, 4]]),
             pd.Series([np.datetime64("2007-01-01T03:30")], dtype="datetime64[ns]"),
-            "Expected 'arg1' to be a Series of String data. Got:",
+            "'arg1' must be a Series of String data. Got:",
             id="string_series_error",
         ),
     ],
@@ -481,22 +482,22 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
     """
 
     def check_fn(context, arg_typ):
-        series_type = context["S"]
+        series_type = context["self"]
         if isinstance(
             series_type.dtype, types.Integer
         ) and not is_overload_const_str_equal(arg_typ, "int"):
             return (
-                False,
+                arg_typ,
                 "only accepts the constant value 'int' for Series of integer data",
             )
         elif isinstance(
             series_type.dtype, types.Float
         ) and not is_overload_const_str_equal(arg_typ, "float"):
             return (
-                False,
+                arg_typ,
                 "only accepts the constant value 'float' for Series of float data",
             )
-        return True, arg_typ
+        return arg_typ, None
 
     def explain_fn(context):
         return 'only supports constant value "int" for Series of integer data and "float" for Series of float data.'
@@ -548,7 +549,7 @@ def test_series_generic_argument_checkers(S, arg1, expected_err_msg):
         pytest.param(pd.Series(["1", "2", "3", "4", "5"]), None, id="no_errors"),
         pytest.param(
             pd.Series([1, 2, 3, 4]),
-            "Expected 'self' to be a Series of String data.",
+            "input must be a Series of String data",
             id="error",
         ),
     ],
@@ -559,9 +560,7 @@ def test_overload_attr(S, expected_err_msg):
         "some_attr",
         "pd.Series.some_attr",
         description="this is an attribute",
-        arg_checker=OverloadAttributeChecker(
-            StringSeriesArgumentChecker("S", is_self=True)
-        ),
+        arg_checker=OverloadAttributeChecker(StringSeriesArgumentChecker("S")),
         inline="always",
     )
     def overload_series_attr(S):

@@ -51,6 +51,7 @@ from bodo.ir.argument_checkers import (
     NumericScalarArgumentChecker,
     NumericSeriesArgumentChecker,
     NumericSeriesBinOpChecker,
+    OptionalArgumentChecker,
     OverloadArgumentsChecker,
 )
 from bodo.ir.declarative_templates import overload_method_declarative
@@ -4629,7 +4630,7 @@ def overload_binop_declarative(name, overload_impl):
             [
                 NumericSeriesArgumentChecker("S", is_self=True),
                 NumericSeriesBinOpChecker("other"),
-                NumericScalarArgumentChecker("fill_value", is_optional=True),
+                OptionalArgumentChecker(NumericScalarArgumentChecker("fill_value")),
             ]
         ),
         description=None,
