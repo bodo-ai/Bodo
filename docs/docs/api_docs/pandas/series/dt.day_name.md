@@ -2,7 +2,11 @@
 
 `pandas.Series.dt.day_name(locale=None)`
 
-### Supported Arguments None
+### Argument Restrictions:
+ * `locale`: only supports default value `None`.
+
+!!! note
+	Input must be a Series of `datetime64` data.
 
 ### Example Usage
 

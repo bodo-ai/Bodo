@@ -5,7 +5,7 @@
 ### Argument Restrictions:
  * `other`: must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data.
  * `level`: only supports default value `None`.
- * `fill_value`: must be `Integer`, `Float`, `Boolean`, or `None`.
+ * `fill_value`: (optional, defaults to `None`) must be `Integer`, `Float` or `Boolean`.
  * `axis`: only supports default value `0`.
 
 !!! note
