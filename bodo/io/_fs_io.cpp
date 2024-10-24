@@ -14,6 +14,7 @@
 #include <arrow/util/uri.h>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_distributed.h"
 #include "_fs_io.h"
 #include "arrow_compat.h"
 #include "mpi.h"
@@ -284,7 +285,9 @@ void create_dir_posix(int myrank, std::string &dirname,
         // a file)
         std::filesystem::create_directories(dirname);
     }
-    MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
+                                   MPI_COMM_WORLD),
+                     "create_dir_posix: MPI error on MPI_Allreduce:");
     if (error) {
         if (myrank == 0)
             std::cerr << "Bodo parquet write ERROR: a process reports "
@@ -310,7 +313,8 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
         status = hdfs_fs->CreateDir(dirname);
         CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Barrier(MPI_COMM_WORLD),
+                     "create_dir_hdfs: MPI error on MPI_Barrier:");
     Py_DECREF(f_mod);
     Py_DECREF(hdfs_func_obj);
 }
@@ -473,7 +477,7 @@ void parallel_in_order_write(
     const std::string &fname, char *buff, int64_t count, int64_t elem_size,
     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs,
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs) {
-    int myrank, num_ranks, ierr, err_len, err_class;
+    int myrank, num_ranks;
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
 
     int token_tag = 0;
@@ -481,8 +485,6 @@ void parallel_in_order_write(
     int64_t buff_size = count * elem_size;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-    char err_string[MPI_MAX_ERROR_STRING];
-    err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
     MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
     if (fs_option == Bodo_Fs::s3) {
@@ -499,14 +501,16 @@ void parallel_in_order_write(
         // then send buff to rank 0
         if (myrank != 0) {
             // first receives signal from rank 0
-            MPI_Recv(&token, 1, MPI_INT, 0, token_tag, MPI_COMM_WORLD,
-                     MPI_STATUS_IGNORE);
+            HANDLE_MPI_ERROR(MPI_Recv(&token, 1, MPI_INT, 0, token_tag,
+                                      MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                             "parallel_in_order_write: MPI error on MPI_Recv:");
             do {
                 // Always send complete in case our rank has no data.
                 complete = sent_size >= buff_size;
-                ierr = MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
-                                MPI_COMM_WORLD);
-                CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                HANDLE_MPI_ERROR(
+                    MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
+                             MPI_COMM_WORLD),
+                    "parallel_in_order_write: MPI error on MPI_Send:");
                 if (!complete) {
                     // send buff in chunks no bigger than INT_MAX
                     if (buff_size - sent_size > INT_MAX) {
@@ -515,14 +519,15 @@ void parallel_in_order_write(
                         send_size = buff_size - sent_size;
                     }
                     // send chunk size
-                    ierr = MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
-                                    MPI_COMM_WORLD);
-
-                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    HANDLE_MPI_ERROR(
+                        MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
+                                 MPI_COMM_WORLD),
+                        "parallel_in_order_write: MPI error on MPI_Send:");
                     // send chunk data;
-                    ierr = MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
-                                    data_tag, MPI_COMM_WORLD);
-                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    HANDLE_MPI_ERROR(
+                        MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
+                                 data_tag, MPI_COMM_WORLD),
+                        "parallel_in_order_write: MPI error on MPI_Send:");
                     sent_size += send_size;
                 }
             } while (!complete);
@@ -543,26 +548,28 @@ void parallel_in_order_write(
                 } else {
                     do {
                         // receive whether the entire buff is received
-                        ierr =
+                        HANDLE_MPI_ERROR(
                             MPI_Recv(&complete, 1, MPI_INT, rank, complete_tag,
-                                     MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                                     MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                            "parallel_in_order_write: MPI error on MPI_Recv:");
                         if (!complete) {
                             // first receive size of incoming data
-                            ierr = MPI_Recv(&recv_buff_size, 1, MPI_INT, rank,
-                                            size_tag, MPI_COMM_WORLD,
-                                            MPI_STATUS_IGNORE);
-                            CHECK_MPI(ierr, err_class, err_string, &err_len,
-                                      fname);
+                            HANDLE_MPI_ERROR(
+                                MPI_Recv(&recv_buff_size, 1, MPI_INT, rank,
+                                         size_tag, MPI_COMM_WORLD,
+                                         MPI_STATUS_IGNORE),
+                                "parallel_in_order_write: MPI error on "
+                                "MPI_Recv:");
                             // resize recv_buffer to fit incoming data
                             recv_buffer.resize(recv_buff_size);
                             // receive buffer data
 
-                            ierr = MPI_Recv(&recv_buffer[0], recv_buff_size,
-                                            MPI_CHAR, rank, data_tag,
-                                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                            CHECK_MPI(ierr, err_class, err_string, &err_len,
-                                      fname);
+                            HANDLE_MPI_ERROR(
+                                MPI_Recv(&recv_buffer[0], recv_buff_size,
+                                         MPI_CHAR, rank, data_tag,
+                                         MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                                "parallel_in_order_write: MPI error on "
+                                "MPI_Recv:");
                             CHECK_ARROW(out_stream->Write(recv_buffer.data(),
                                                           recv_buff_size),
                                         "arrow::io::S3OutputStream::Write",
@@ -571,9 +578,10 @@ void parallel_in_order_write(
                     } while (!complete);
                 }
                 if (rank != num_ranks - 1) {
-                    ierr = MPI_Send(&token, 1, MPI_INT, rank + 1, token_tag,
-                                    MPI_COMM_WORLD);
-                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    HANDLE_MPI_ERROR(
+                        MPI_Send(&token, 1, MPI_INT, rank + 1, token_tag,
+                                 MPI_COMM_WORLD),
+                        "parallel_in_order_write: MPI error on MPI_Send:");
                 }
             }
             CHECK_ARROW(out_stream->Close(), "arrow::io::S3OutputStream::Close",
@@ -583,9 +591,9 @@ void parallel_in_order_write(
         // all but the first rank receive message first
         // then open append stream
         if (myrank != 0) {
-            ierr = MPI_Recv(&token, 1, MPI_INT, myrank - 1, token_tag,
-                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+            HANDLE_MPI_ERROR(MPI_Recv(&token, 1, MPI_INT, myrank - 1, token_tag,
+                                      MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                             "parallel_in_order_write: MPI error on MPI_Recv:");
             open_file_appendstream(file_type, fname, hdfs_fs, &out_stream);
         } else {  // 0 rank open outstream instead
             open_file_outstream(Bodo_Fs::hdfs, file_type, fname, NULL, hdfs_fs,
@@ -600,10 +608,11 @@ void parallel_in_order_write(
 
         // all but the last rank send message
         if (myrank != num_ranks - 1) {
-            ierr = MPI_Send(&token, 1, MPI_INT, myrank + 1, token_tag,
-                            MPI_COMM_WORLD);
-            CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+            HANDLE_MPI_ERROR(MPI_Send(&token, 1, MPI_INT, myrank + 1, token_tag,
+                                      MPI_COMM_WORLD),
+                             "parallel_in_order_write: MPI error on MPI_Send:");
         }
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Barrier(MPI_COMM_WORLD),
+                     "parallel_in_order_write: MPI error on MPI_Barrier:");
 }
