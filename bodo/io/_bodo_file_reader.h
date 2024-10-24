@@ -39,7 +39,7 @@ class FileReader {
         : csv_header(_csv_header), json_lines(_json_lines) {
         this->assign_f_type(std::string(f_type));
     }
-    virtual ~FileReader(){};
+    virtual ~FileReader() {};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
@@ -77,8 +77,8 @@ class SingleFileReader : public FileReader {
     const char *fname;
     SingleFileReader(const char *_fname, const char *f_type, bool csv_header,
                      bool json_lines)
-        : FileReader(f_type, csv_header, json_lines), fname(_fname){};
-    virtual ~SingleFileReader(){};
+        : FileReader(f_type, csv_header, json_lines), fname(_fname) {};
+    virtual ~SingleFileReader() {};
     virtual uint64_t getSize() = 0;
     virtual bool seek(int64_t pos) = 0;
     virtual bool ok() = 0;
@@ -161,12 +161,12 @@ class DirectoryFileReader : public FileReader {
 
     DirectoryFileReader(const char *_dirname, const char *f_type,
                         bool csv_header, bool json_lines)
-        : FileReader(f_type, csv_header, json_lines), dirname(_dirname){};
+        : FileReader(f_type, csv_header, json_lines), dirname(_dirname) {};
     ~DirectoryFileReader() {
         if (this->f_reader)
             delete this->f_reader;
     };
-    virtual void initFileReader(const char *fname){};
+    virtual void initFileReader(const char *fname) {};
     bool seek(int64_t pos) {
         // find which file to seek at
         this->file_index = this->findFileIndexFromPos(pos);
@@ -410,7 +410,9 @@ class DirectoryFileReader : public FileReader {
             this->f_reader = nullptr;
         }
 
-        MPI_Bcast(&header_size, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Bcast(&header_size, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD),
+            "DirectoryFileReader::findHeaderRowSize: MPI error on MPI_Bcast:");
         this->csv_header_bytes = header_size;
     }
 };

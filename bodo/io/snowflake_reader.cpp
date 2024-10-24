@@ -587,8 +587,10 @@ table_info* snowflake_read_py_entry(
     } else {
         auto has_err_local = err_str.has_value();
         has_err_global = false;
-        MPI_Allreduce(&has_err_local, &has_err_global, 1, MPI_C_BOOL, MPI_LOR,
-                      MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allreduce(&has_err_local, &has_err_global, 1, MPI_C_BOOL,
+                          MPI_LOR, MPI_COMM_WORLD),
+            "snowflake_read_py_entry: MPI error on MPI_Allreduce:");
     }
 
     if (has_err_global) {

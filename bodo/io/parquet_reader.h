@@ -4,6 +4,7 @@
 // functionality that is specific to reading parquet datasets
 
 #include "../libs/_bodo_to_arrow.h"
+#include "../libs/_distributed.h"
 #include "arrow_reader.h"
 
 class ParquetReader : public ArrowReader {
@@ -49,8 +50,10 @@ class ParquetReader : public ArrowReader {
             int num_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
             uint64_t num_pieces = static_cast<uint64_t>(get_num_pieces());
-            MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
-                          MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(
+                MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T,
+                              MPI_SUM, MPI_COMM_WORLD),
+                "ParquetReader::init_pq_reader: MPI error on MPI_Allreduce:");
             avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
         }
         // allocate output partition columns. These are categorical columns

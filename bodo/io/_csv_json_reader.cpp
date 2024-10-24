@@ -254,7 +254,9 @@ class PathInfo {
             }
         }
         ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
-        MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Bcast(&c_is_dir, 1, MPI_INT, 0, MPI_COMM_WORLD),
+            "PathInfo::obtain_is_directory: MPI error on MPI_Bcast:");
         is_valid = (c_is_dir != -1);
         is_dir = bool(c_is_dir);
     }
@@ -358,16 +360,26 @@ class PathInfo {
                     str_data_ptr[fname.size()] = 0;  // null terminate string
                     str_data_ptr += fname.size() + 1;
                 }
-                MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-                MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
-                          MPI_COMM_WORLD);
+                HANDLE_MPI_ERROR(
+                    MPI_Bcast(&total_len, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
+                    "MPI_Bcast:");
+                HANDLE_MPI_ERROR(MPI_Bcast(str_data.data(), str_data.size(),
+                                           MPI_CHAR, 0, MPI_COMM_WORLD),
+                                 "PathInfo::obtain_file_names_and_sizes: MPI "
+                                 "error on MPI_Bcast:");
             } else {
                 // receive file names from rank 0
                 int64_t recv_size;
-                MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+                HANDLE_MPI_ERROR(
+                    MPI_Bcast(&recv_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+                    "PathInfo::obtain_file_names_and_sizes: MPI error on "
+                    "MPI_Bcast:");
                 std::vector<char> str_data(recv_size);
-                MPI_Bcast(str_data.data(), str_data.size(), MPI_CHAR, 0,
-                          MPI_COMM_WORLD);
+                HANDLE_MPI_ERROR(MPI_Bcast(str_data.data(), str_data.size(),
+                                           MPI_CHAR, 0, MPI_COMM_WORLD),
+                                 "PathInfo::obtain_file_names_and_sizes: MPI "
+                                 "error on MPI_Bcast:");
                 char *cur_str = str_data.data();
                 while (cur_str < str_data.data() + recv_size) {
                     file_names.push_back(cur_str);
@@ -378,9 +390,13 @@ class PathInfo {
         }
 
         // communicate file sizes to all processes
-        MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
-                  MPI_COMM_WORLD);
-        MPI_Bcast(&total_ds_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Bcast(file_sizes.data(), file_sizes.size(), MPI_INT64_T, 0,
+                      MPI_COMM_WORLD),
+            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
+        HANDLE_MPI_ERROR(
+            MPI_Bcast(&total_ds_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+            "PathInfo::obtain_file_names_and_sizes: MPI error on MPI_Bcast:");
     }
 
     /**
@@ -880,7 +896,8 @@ int64_t get_header_size(const std::string &fname, int64_t file_size,
     ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_runtime_err, runtime_err_msg);
 
     header_size += 1;
-    MPI_Bcast(&header_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(MPI_Bcast(&header_size, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+                     "get_header_size: MPI error on MPI_Bcast:");
     return header_size;
 }
 
@@ -1152,13 +1169,16 @@ void data_row_correction(MemReader *reader, char row_separator) {
         size_t cur_data_size = data.size();
         MPI_Status status;
         // probe for incoming message from rank + 1
-        MPI_Probe(rank + 1, 0, MPI_COMM_WORLD, &status);
+        HANDLE_MPI_ERROR(MPI_Probe(rank + 1, 0, MPI_COMM_WORLD, &status),
+                         "data_row_correction: MPI error on MPI_Probe:");
         // when probe returns, the status object has the message size
         int recv_size;
         MPI_Get_count(&status, MPI_CHAR, &recv_size);
         data.resize(cur_data_size + recv_size);
-        MPI_Recv(data.data() + cur_data_size, recv_size, MPI_CHAR, rank + 1, 0,
-                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        HANDLE_MPI_ERROR(
+            MPI_Recv(data.data() + cur_data_size, recv_size, MPI_CHAR, rank + 1,
+                     0, MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+            "data_row_correction: MPI error on MPI_Recv:");
     }
     if (rank >
         0) {  // send to left (rank - 1): my data up to the first separator
@@ -1170,13 +1190,16 @@ void data_row_correction(MemReader *reader, char row_separator) {
             }
         }
         if (sep_idx != -1) {
-            MPI_Send(data.data(), sep_idx + 1, MPI_CHAR, rank - 1, 0,
-                     MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(MPI_Send(data.data(), sep_idx + 1, MPI_CHAR,
+                                      rank - 1, 0, MPI_COMM_WORLD),
+                             "data_row_correction: MPI error on MPI_Send:");
             reader->start = sep_idx + 1;
         } else {
             // I have no separator. Send all my data
-            MPI_Send(data.data() + reader->start, data.size() - reader->start,
-                     MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(MPI_Send(data.data() + reader->start,
+                                      data.size() - reader->start, MPI_CHAR,
+                                      rank - 1, 0, MPI_COMM_WORLD),
+                             "data_row_correction: MPI error on MPI_Send:");
             data.clear();
             reader->start = 0;
         }
@@ -1212,8 +1235,10 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
         int64_t num_rows = mem_reader->get_num_rows();
         std::vector<int64_t> num_rows_ranks(
             num_ranks);  // number of rows in each rank
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "set_skiprows_list: MPI error on MPI_Allgather:");
 
         // determine the start/end row number of each rank
         int64_t rank_global_start, rank_global_end;
@@ -1315,8 +1340,10 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
         int64_t num_rows = reader->get_num_rows();
         std::vector<int64_t> num_rows_ranks(
             num_ranks);  // number of rows in each rank
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "skip_rows: MPI error on MPI_Allgather:");
 
         // determine the number of rows we need to skip on each rank,
         // and modify starting offset of data accordingly
@@ -1361,8 +1388,10 @@ void set_nrows(MemReader *reader, int64_t nrows, bool is_parallel) {
         int64_t num_rows = reader->get_num_rows();
         std::vector<int64_t> num_rows_ranks(
             num_ranks);  // number of rows in each rank
-        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                          MPI_INT64_T, MPI_COMM_WORLD),
+            "set_nrows: MPI error on MPI_Allgather:");
 
         // determine the number of rows we need to read on each rank,
         // and modify data accordingly
@@ -1463,8 +1492,10 @@ void balance_rows(MemReader *reader) {
     int64_t num_rows = reader->get_num_rows();
     std::vector<int64_t> num_rows_ranks(
         num_ranks);  // number of rows in each rank
-    MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
-                  MPI_INT64_T, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                      MPI_INT64_T, MPI_COMM_WORLD),
+        "balance_rows: MPI error on MPI_Allgather:");
 
     // check that all ranks have same number of rows. in that case there is no
     // need to do anything
@@ -1505,8 +1536,10 @@ void balance_rows(MemReader *reader) {
     }
 
     // get recv count
-    MPI_Alltoall(sendcounts.data(), 1, MPI_INT64_T, recvcounts.data(), 1,
-                 MPI_INT64_T, MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Alltoall(sendcounts.data(), 1, MPI_INT64_T, recvcounts.data(), 1,
+                     MPI_INT64_T, MPI_COMM_WORLD),
+        "balance_rows: MPI error on MPI_Alltoall:");
 
     // have to receive rows from other processes
     int64_t total_recv_size = 0;
@@ -2196,8 +2229,9 @@ extern "C" PyObject *file_chunk_reader(
                               REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD));
             // If one of the ranks has is_low_memory true,
             // all ranks should switch to scanning first.
-            MPI_Allreduce(MPI_IN_PLACE, &is_low_memory, 1, MPI_C_BOOL, MPI_LOR,
-                          MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(MPI_Allreduce(MPI_IN_PLACE, &is_low_memory, 1,
+                                           MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD),
+                             "file_chunk_reader: MPI error on MPI_Allreduce:");
 
             // If skiprows and/or nrows are used and we decided to scan first,
             // start_global and/or end_global will be shifted.
@@ -2244,23 +2278,34 @@ extern "C" PyObject *file_chunk_reader(
                 }
                 if (is_skiprows_list) {
                     // Brodacast skiprows_list_info object
-                    MPI_Bcast(skiprows_list_info->read_start_offset.data(),
-                              skiprows_list_info->read_start_offset.size(),
-                              MPI_INT64_T, 0, MPI_COMM_WORLD);
-                    MPI_Bcast(skiprows_list_info->read_end_offset.data(),
-                              skiprows_list_info->read_end_offset.size(),
-                              MPI_INT64_T, 0, MPI_COMM_WORLD);
-                    MPI_Bcast(&skiprows_list_info->rows_read, 1, MPI_INT64_T, 0,
-                              MPI_COMM_WORLD);
-                    MPI_Bcast(&skiprows_list_info->skiprows_list_idx, 1,
-                              MPI_INT64_T, 0, MPI_COMM_WORLD);
+                    HANDLE_MPI_ERROR(
+                        MPI_Bcast(skiprows_list_info->read_start_offset.data(),
+                                  skiprows_list_info->read_start_offset.size(),
+                                  MPI_INT64_T, 0, MPI_COMM_WORLD),
+                        "file_chunk_reader: MPI error on MPI_Bcast:");
+                    HANDLE_MPI_ERROR(
+                        MPI_Bcast(skiprows_list_info->read_end_offset.data(),
+                                  skiprows_list_info->read_end_offset.size(),
+                                  MPI_INT64_T, 0, MPI_COMM_WORLD),
+                        "file_chunk_reader: MPI error on MPI_Bcast:");
+                    HANDLE_MPI_ERROR(
+                        MPI_Bcast(&skiprows_list_info->rows_read, 1,
+                                  MPI_INT64_T, 0, MPI_COMM_WORLD),
+                        "file_chunk_reader: MPI error on MPI_Bcast:");
+                    HANDLE_MPI_ERROR(
+                        MPI_Bcast(&skiprows_list_info->skiprows_list_idx, 1,
+                                  MPI_INT64_T, 0, MPI_COMM_WORLD),
+                        "file_chunk_reader: MPI error on MPI_Bcast:");
                 }
-                MPI_Bcast(bytes_meta_data.data(), 3, MPI_INT64_T, 0,
-                          MPI_COMM_WORLD);
-                MPI_Bcast(&chunksize_global_end, 1, MPI_INT64_T, 0,
-                          MPI_COMM_WORLD);
-                MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0,
-                          MPI_COMM_WORLD);
+                HANDLE_MPI_ERROR(MPI_Bcast(bytes_meta_data.data(), 3,
+                                           MPI_INT64_T, 0, MPI_COMM_WORLD),
+                                 "file_chunk_reader: MPI error on MPI_Bcast:");
+                HANDLE_MPI_ERROR(MPI_Bcast(&chunksize_global_end, 1,
+                                           MPI_INT64_T, 0, MPI_COMM_WORLD),
+                                 "file_chunk_reader: MPI error on MPI_Bcast:");
+                HANDLE_MPI_ERROR(MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T,
+                                           0, MPI_COMM_WORLD),
+                                 "file_chunk_reader: MPI error on MPI_Bcast:");
                 // chunksize iterator case
                 // only read size upto number of bytes in the chunk
                 if (chunksize > 0) {
@@ -2491,12 +2536,18 @@ static bool stream_reader_update_reader(stream_reader *self) {
                        l_start_global, l_end_global, '\n', self->chunksize_rows,
                        self->global_end, g_chunksize_bytes, false,
                        self->skiprows_list_info, self->csv_header);
-    MPI_Bcast(&self->global_end, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&self->skiprows_list_info->rows_read, 1, MPI_INT64_T, 0,
-              MPI_COMM_WORLD);
-    MPI_Bcast(&self->skiprows_list_info->skiprows_list_idx, 1, MPI_INT64_T, 0,
-              MPI_COMM_WORLD);
+    HANDLE_MPI_ERROR(
+        MPI_Bcast(&self->global_end, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+        "stream_reader_update_reader: MPI error on MPI_Bcast:");
+    HANDLE_MPI_ERROR(
+        MPI_Bcast(&g_chunksize_bytes, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
+        "stream_reader_update_reader: MPI error on MPI_Bcast:");
+    HANDLE_MPI_ERROR(MPI_Bcast(&self->skiprows_list_info->rows_read, 1,
+                               MPI_INT64_T, 0, MPI_COMM_WORLD),
+                     "stream_reader_update_reader: MPI error on MPI_Bcast:");
+    HANDLE_MPI_ERROR(MPI_Bcast(&self->skiprows_list_info->skiprows_list_idx, 1,
+                               MPI_INT64_T, 0, MPI_COMM_WORLD),
+                     "stream_reader_update_reader: MPI error on MPI_Bcast:");
     // Each rank computes its start and end position to read
     if (self->is_parallel) {
         l_start_global =
