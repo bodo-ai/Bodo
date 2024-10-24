@@ -7,6 +7,7 @@
 #include <string>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
 #include "arrow/filesystem/s3fs.h"
@@ -105,14 +106,18 @@ uint64_t get_file_size(const char* file_name) {
                 }
             }
             // Synchronize throw_error
-            MPI_Bcast(&throw_error, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+            HANDLE_MPI_ERROR(
+                MPI_Bcast(&throw_error, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD),
+                "get_file_size: MPI error on MPI_Bcast:");
             if (throw_error) {
                 throw std::runtime_error(
                     "_io.cpp::get_file_size: No such file or directory " +
                     std::string(file_name));
             }
         }
-        MPI_Bcast(&f_size, 1, MPI_UNSIGNED_LONG_LONG, ROOT, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Bcast(&f_size, 1, MPI_UNSIGNED_LONG_LONG, ROOT, MPI_COMM_WORLD),
+            "get_file_size: MPI error on MPI_Bcast:");
         return f_size;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -239,39 +244,36 @@ void file_read_parallel(const char* file_name, char* buff, int64_t start,
             delete f_reader;
         } else {
             // posix
-            char err_string[MPI_MAX_ERROR_STRING];
-            err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
-            MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
-            int err_len, err_class;
+            HANDLE_MPI_ERROR(
+                MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+                "_io.cpp::file_read_parallel: MPI error on "
+                "MPI_Errhandler_set:");
 
             MPI_File fh;
-            int ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
-                                     MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-            if (ierr != 0) {
-                throw std::runtime_error(
-                    "_io.cpp::file_read_parallel: File open error: " +
-                    std::string(file_name));
-            }
+            HANDLE_MPI_ERROR(
+                MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
+                              MPI_MODE_RDONLY, MPI_INFO_NULL, &fh),
+                "_io.cpp::file_read_parallel: MPI error on MPI_File_open:");
             // work around MPI count limit by using a large dtype
             if (count >= (int64_t)INT_MAX) {
                 MPI_Datatype large_dtype;
-                MPI_Type_contiguous(LARGE_DTYPE_SIZE, MPI_CHAR, &large_dtype);
-                MPI_Type_commit(&large_dtype);
+                HANDLE_MPI_ERROR(MPI_Type_contiguous(LARGE_DTYPE_SIZE, MPI_CHAR,
+                                                     &large_dtype),
+                                 "_io.cpp::file_read_parallel: MPI error on "
+                                 "MPI_Type_contiguous:");
+                HANDLE_MPI_ERROR(MPI_Type_commit(&large_dtype),
+                                 "_io.cpp::file_read_parallel: MPI error on "
+                                 "MPI_Type_commit:");
                 int read_size = (int)(count / LARGE_DTYPE_SIZE);
 
-                ierr =
+                HANDLE_MPI_ERROR(
                     MPI_File_read_at_all(fh, (MPI_Offset)start, buff, read_size,
-                                         large_dtype, MPI_STATUS_IGNORE);
-                if (ierr != 0) {
-                    MPI_Error_class(ierr, &err_class);
-                    MPI_Error_string(ierr, err_string, &err_len);
-                    printf("Error %s\n", err_string);
-                    fflush(stdout);
-                    throw std::runtime_error(
-                        "_io.cpp::file_read_parallel: File large read error: " +
-                        std::to_string(err_class) + file_name);
-                }
-                MPI_Type_free(&large_dtype);
+                                         large_dtype, MPI_STATUS_IGNORE),
+                    "_io.cpp::file_read_parallel: MPI error on "
+                    "MPI_File_read_at_all:");
+                HANDLE_MPI_ERROR(
+                    MPI_Type_free(&large_dtype),
+                    "_io.cpp::file_read_parallel: MPI error on MPI_Type_free:");
                 int64_t left_over = count % LARGE_DTYPE_SIZE;
                 int64_t read_byte_size = count - left_over;
                 // printf("VAL leftover %lld read %lld\n", left_over,
@@ -282,21 +284,14 @@ void file_read_parallel(const char* file_name, char* buff, int64_t start,
             }
             // printf("MPI leftover READ %lld %lld\n", start, count);
 
-            ierr = MPI_File_read_at_all(fh, (MPI_Offset)start, buff, (int)count,
-                                        MPI_CHAR, MPI_STATUS_IGNORE);
-
-            // if (ierr!=0) std::cerr << "File read error: " << file_name <<
-            // '\n';
-            if (ierr != 0) {
-                MPI_Error_class(ierr, &err_class);
-                MPI_Error_string(ierr, err_string, &err_len);
-                printf("Error %s\n", err_string);
-                fflush(stdout);
-                throw std::runtime_error(
-                    "_io.cpp::file_read_parallel: File read error: " +
-                    std::to_string(err_class) + file_name);
-            }
-            MPI_File_close(&fh);
+            HANDLE_MPI_ERROR(
+                MPI_File_read_at_all(fh, (MPI_Offset)start, buff, (int)count,
+                                     MPI_CHAR, MPI_STATUS_IGNORE),
+                "_io.cpp::file_read_parallel: MPI error on "
+                "MPI_File_read_at_all:");
+            HANDLE_MPI_ERROR(
+                MPI_File_close(&fh),
+                "_io.cpp::file_read_parallel: MPI error on MPI_File_close:");
         }
         return;
     } catch (const std::exception& e) {
@@ -348,7 +343,9 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
         char err_string[MPI_MAX_ERROR_STRING];
         err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
         int err_len, err_class;
-        MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+        HANDLE_MPI_ERROR(
+            MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+            "_io.cpp::file_write_parallel: MPI error on MPI_Errhandler_set:");
 
         int ierr;
         bool throw_error = false;
@@ -361,9 +358,13 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
                 }
             }
         }
-        MPI_Barrier(MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Barrier(MPI_COMM_WORLD),
+            "_io.cpp::file_write_parallel: MPI error on MPI_Barrier:");
         // Synchronize throw_error
-        MPI_Bcast(&throw_error, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);
+        HANDLE_MPI_ERROR(
+            MPI_Bcast(&throw_error, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD),
+            "file_write_parallel: MPI error on MPI_Bcast:");
         if (throw_error) {
             throw std::runtime_error(
                 "_io.cpp::file_write_parallel: File delete error: " +
@@ -371,37 +372,32 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
         }
 
         MPI_File fh;
-        ierr = MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
-                             MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL,
-                             &fh);
-        if (ierr != 0) {
-            throw std::runtime_error(
-                "_io.cpp::file_write_parallel: File open error: " +
-                std::string(file_name));
-        }
+        HANDLE_MPI_ERROR(
+            MPI_File_open(MPI_COMM_WORLD, (const char*)file_name,
+                          MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL,
+                          &fh),
+            "_io.cpp::file_write_parallel: MPI error on MPI_File_open:");
 
         // work around MPI count limit by using a large dtype
         if (count >= (int64_t)INT_MAX) {
             MPI_Datatype large_dtype;
             int64_t eProd = LARGE_DTYPE_SIZE * elem_size;
-            MPI_Type_contiguous(eProd, MPI_CHAR, &large_dtype);
-            MPI_Type_commit(&large_dtype);
+            HANDLE_MPI_ERROR(MPI_Type_contiguous(eProd, MPI_CHAR, &large_dtype),
+                             "_io.cpp::file_write_parallel: MPI error on "
+                             "MPI_Type_contiguous:");
+            HANDLE_MPI_ERROR(
+                MPI_Type_commit(&large_dtype),
+                "_io.cpp::file_write_parallel: MPI error on MPI_Type_commit:");
             int read_size = (int)(count / LARGE_DTYPE_SIZE);
 
-            ierr = MPI_File_write_at_all(fh, (MPI_Offset)(start * elem_size),
-                                         buff, read_size, large_dtype,
-                                         MPI_STATUS_IGNORE);
-            if (ierr != 0) {
-                MPI_Error_class(ierr, &err_class);
-                MPI_Error_string(ierr, err_string, &err_len);
-                printf("Error %s\n", err_string);
-                fflush(stdout);
-                throw std::runtime_error(
-                    "_io.cpp::file_write_parallel: File large write "
-                    "error: " +
-                    std::to_string(err_class) + file_name);
-            }
-            MPI_Type_free(&large_dtype);
+            HANDLE_MPI_ERROR(MPI_File_write_at_all(
+                                 fh, (MPI_Offset)(start * elem_size), buff,
+                                 read_size, large_dtype, MPI_STATUS_IGNORE),
+                             "_io.cpp::file_write_parallel: MPI error on "
+                             "MPI_File_write_at_all:");
+            HANDLE_MPI_ERROR(
+                MPI_Type_free(&large_dtype),
+                "_io.cpp::file_write_parallel: MPI error on MPI_Type_free:");
             int64_t left_over = count % LARGE_DTYPE_SIZE;
             int64_t read_byte_size = count - left_over;
             // printf("VAL leftover %lld read %lld\n", left_over,
@@ -412,13 +408,19 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
         }
 
         MPI_Datatype elem_dtype;
-        MPI_Type_contiguous(elem_size, MPI_CHAR, &elem_dtype);
-        MPI_Type_commit(&elem_dtype);
+        HANDLE_MPI_ERROR(
+            MPI_Type_contiguous(elem_size, MPI_CHAR, &elem_dtype),
+            "_io.cpp::file_write_parallel: MPI error on MPI_Type_contiguous:");
+        HANDLE_MPI_ERROR(
+            MPI_Type_commit(&elem_dtype),
+            "_io.cpp::file_write_parallel: MPI error on MPI_Type_commit:");
 
         ierr = MPI_File_write_at_all(fh, (MPI_Offset)(start * elem_size), buff,
                                      (int)count, elem_dtype, MPI_STATUS_IGNORE);
 
-        MPI_Type_free(&elem_dtype);
+        HANDLE_MPI_ERROR(
+            MPI_Type_free(&elem_dtype),
+            "_io.cpp::file_write_parallel: MPI error on MPI_Type_free:");
         // if (ierr!=0) std::cerr << "File write error: " << file_name <<
         // '\n';
         if (ierr != 0) {
@@ -431,7 +433,9 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
                 std::to_string(err_class) + file_name);
         }
 
-        MPI_File_close(&fh);
+        HANDLE_MPI_ERROR(
+            MPI_File_close(&fh),
+            "_io.cpp::file_write_parallel: MPI error on MPI_File_close:");
     }
 }
 
