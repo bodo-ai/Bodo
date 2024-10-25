@@ -120,10 +120,9 @@ double quantile_parallel(void *data, int64_t local_size, int64_t total_size,
                          double quantile, int type_enum) {
     try {
         if (total_size == 0)
-            HANDLE_MPI_ERROR(
-                MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT,
-                              MPI_SUM, MPI_COMM_WORLD),
-                "quantile_parallel: MPI error on MPI_Allreduce:");
+            CHECK_MPI(MPI_Allreduce(&local_size, &total_size, 1,
+                                    MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD),
+                      "quantile_parallel: MPI error on MPI_Allreduce:");
 
         // return NA if no elements
         if (total_size == 0) {
@@ -238,10 +237,9 @@ double quantile_float(T *data, int64_t local_size, double quantile,
     // recalculate total size since there could be NaNs
     int64_t total_size = local_size;
     if (parallel) {
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT,
-                          MPI_SUM, MPI_COMM_WORLD),
-            "quantile_float: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "quantile_float: MPI error on MPI_Allreduce:");
     }
     double at = quantile * (total_size - 1);
     int64_t k1 = (int64_t)at;
@@ -262,9 +260,9 @@ T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
                    int n_pes, int type_enum) {
     int64_t local_size = my_array.size();
     int64_t total_size;
-    HANDLE_MPI_ERROR(MPI_Allreduce(&local_size, &total_size, 1,
-                                   MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD),
-                     "get_nth_parallel: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT,
+                            MPI_SUM, MPI_COMM_WORLD),
+              "get_nth_parallel: MPI error on MPI_Allreduce:");
     // printf("total size: %ld k: %ld\n", total_size, k);
     int64_t threshold = (int64_t)pow(10.0, 7.0);  // 100 million
     // If q is 1.0 we may request a value longer than the array,
@@ -295,18 +293,15 @@ T get_nth_parallel(std::vector<T, Alloc> my_array, int64_t k, int myrank,
                 local_l2_num++;
             }
         }
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&local_l0_num, &l0_num, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                          MPI_COMM_WORLD),
-            "get_nth_parallel: MPI error on MPI_Allreduce[l0_num]:");
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&local_l1_num, &l1_num, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                          MPI_COMM_WORLD),
-            "get_nth_parallel: MPI error on MPI_Allreduce[l1_num]:");
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&local_l2_num, &l2_num, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                          MPI_COMM_WORLD),
-            "get_nth_parallel: MPI error on MPI_Allreduce[l2_num]:");
+        CHECK_MPI(MPI_Allreduce(&local_l0_num, &l0_num, 1, MPI_LONG_LONG_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "get_nth_parallel: MPI error on MPI_Allreduce[l0_num]:");
+        CHECK_MPI(MPI_Allreduce(&local_l1_num, &l1_num, 1, MPI_LONG_LONG_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "get_nth_parallel: MPI error on MPI_Allreduce[l1_num]:");
+        CHECK_MPI(MPI_Allreduce(&local_l2_num, &l2_num, 1, MPI_LONG_LONG_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "get_nth_parallel: MPI error on MPI_Allreduce[l2_num]:");
         // printf("set sizes: %ld %ld %ld\n", l0_num, l1_num, l2_num);
         assert(l0_num + l1_num + l2_num == total_size);
         // []----*---o----*-----]
@@ -382,9 +377,9 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
     int *displs = new int[n_pes];
     int total_sample_size = 0;
     // gather the sample sizes
-    HANDLE_MPI_ERROR(MPI_Gather(&my_sample_size, 1, MPI_INT, rcounts, 1,
-                                MPI_INT, root, MPI_COMM_WORLD),
-                     "get_lower_upper_kth_parallel: MPI error on MPI_Gather:");
+    CHECK_MPI(MPI_Gather(&my_sample_size, 1, MPI_INT, rcounts, 1, MPI_INT, root,
+                         MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Gather:");
     // calculate size and displacements on root
     if (myrank == root) {
         for (int i = 0; i < n_pes; i++) {
@@ -396,10 +391,10 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
         all_sample_vec.resize(total_sample_size);
     }
     // gather sample data
-    HANDLE_MPI_ERROR(MPI_Gatherv(my_sample.data(), my_sample_size, mpi_typ,
-                                 all_sample_vec.data(), rcounts, displs,
-                                 mpi_typ, root, MPI_COMM_WORLD),
-                     "get_lower_upper_kth_parallel: MPI error on MPI_Gatherv:");
+    CHECK_MPI(MPI_Gatherv(my_sample.data(), my_sample_size, mpi_typ,
+                          all_sample_vec.data(), rcounts, displs, mpi_typ, root,
+                          MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Gatherv:");
     T k1_val;
     T k2_val;
     if (myrank == root) {
@@ -419,12 +414,10 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T, Alloc> my_array,
         // printf("k1: %d k2: %d k1_val: %lf k2_val:%lf\n", k1, k2, k1_val,
         // k2_val);
     }
-    HANDLE_MPI_ERROR(
-        MPI_Bcast(&k1_val, 1, mpi_typ, root, MPI_COMM_WORLD),
-        "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k1]:");
-    HANDLE_MPI_ERROR(
-        MPI_Bcast(&k2_val, 1, mpi_typ, root, MPI_COMM_WORLD),
-        "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k2]:");
+    CHECK_MPI(MPI_Bcast(&k1_val, 1, mpi_typ, root, MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k1]:");
+    CHECK_MPI(MPI_Bcast(&k2_val, 1, mpi_typ, root, MPI_COMM_WORLD),
+              "get_lower_upper_kth_parallel: MPI error on MPI_Bcast[k2]:");
     // cleanup
     delete[] rcounts;
     delete[] displs;
@@ -452,9 +445,9 @@ T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
     // gather the data sizes
     int *rcounts = new int[n_pes];
     int *displs = new int[n_pes];
-    HANDLE_MPI_ERROR(MPI_Gather(&my_data_size, 1, MPI_INT, rcounts, 1, MPI_INT,
-                                root, MPI_COMM_WORLD),
-                     "small_get_nth_parallel: MPI error on MPI_Gather:");
+    CHECK_MPI(MPI_Gather(&my_data_size, 1, MPI_INT, rcounts, 1, MPI_INT, root,
+                         MPI_COMM_WORLD),
+              "small_get_nth_parallel: MPI error on MPI_Gather:");
     // calculate size and displacements on root
     if (myrank == root) {
         for (int i = 0; i < n_pes; i++) {
@@ -466,7 +459,7 @@ T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
         all_data_vec.resize(total_data_size);
     }
     // gather data
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Gatherv(my_array.data(), my_data_size, mpi_typ, all_data_vec.data(),
                     rcounts, displs, mpi_typ, root, MPI_COMM_WORLD),
         "small_get_nth_parallel: MPI error on MPI_Gatherv:");
@@ -476,8 +469,8 @@ T small_get_nth_parallel(std::vector<T, Alloc> my_array, int64_t total_size,
                          all_data_vec.end());
         res = all_data_vec[k];
     }
-    HANDLE_MPI_ERROR(MPI_Bcast(&res, 1, mpi_typ, root, MPI_COMM_WORLD),
-                     "small_get_nth_parallel: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(&res, 1, mpi_typ, root, MPI_COMM_WORLD),
+              "small_get_nth_parallel: MPI error on MPI_Bcast:");
     delete[] rcounts;
     delete[] displs;
     return res;
@@ -638,12 +631,12 @@ local_global_stat_nan nb_entries_global(std::shared_ptr<array_info> arr,
     }
     int64_t loc_nb_ok = pair.first, loc_nb_miss = pair.second, glob_nb_ok = 0,
             glob_nb_miss = 0;
-    HANDLE_MPI_ERROR(MPI_Allreduce(&loc_nb_ok, &glob_nb_ok, 1,
-                                   MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD),
-                     "nb_entries_global: MPI error on MPI_Allreduce:");
-    HANDLE_MPI_ERROR(MPI_Allreduce(&loc_nb_miss, &glob_nb_miss, 1,
-                                   MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD),
-                     "nb_entries_global: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(&loc_nb_ok, &glob_nb_ok, 1, MPI_LONG_LONG_INT,
+                            MPI_SUM, MPI_COMM_WORLD),
+              "nb_entries_global: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(&loc_nb_miss, &glob_nb_miss, 1, MPI_LONG_LONG_INT,
+                            MPI_SUM, MPI_COMM_WORLD),
+              "nb_entries_global: MPI error on MPI_Allreduce:");
     return {glob_nb_ok, glob_nb_miss, loc_nb_ok, loc_nb_miss};
 }
 
@@ -822,9 +815,9 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
             V[idx] = loc_nrows;
             T_row_typ *ptr_T = V.data() + idx;
             int tag = 10000 + pe;
-            HANDLE_MPI_ERROR(MPI_Isend((void *)ptr_T, 1, mpi_row_typ, pe, tag,
-                                       MPI_COMM_WORLD, &mpi_send_next),
-                             "compute_ghost_rows: MPI error on MPI_Isend:");
+            CHECK_MPI(MPI_Isend((void *)ptr_T, 1, mpi_row_typ, pe, tag,
+                                MPI_COMM_WORLD, &mpi_send_next),
+                      "compute_ghost_rows: MPI error on MPI_Isend:");
             ListReq.push_back(mpi_send_next);
             idx++;
         }
@@ -835,9 +828,9 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
             int tag = 20000 + pe;
             V[idx] = loc_nrows;
             T_row_typ *ptr_T = V.data() + idx;
-            HANDLE_MPI_ERROR(MPI_Isend((void *)ptr_T, 1, mpi_row_typ, pe, tag,
-                                       MPI_COMM_WORLD, &mpi_send_prev),
-                             "compute_ghost_rows: MPI error on MPI_Isend:");
+            CHECK_MPI(MPI_Isend((void *)ptr_T, 1, mpi_row_typ, pe, tag,
+                                MPI_COMM_WORLD, &mpi_send_prev),
+                      "compute_ghost_rows: MPI error on MPI_Isend:");
             ListReq.push_back(mpi_send_prev);
             idx++;
         }
@@ -847,9 +840,9 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
             int pe = myrank + k;
             int tag = 10000 + myrank;
             T_row_typ *ptr_T = V.data() + idx;
-            HANDLE_MPI_ERROR(MPI_Irecv((void *)ptr_T, 1, mpi_row_typ, pe, tag,
-                                       MPI_COMM_WORLD, &mpi_recv_next),
-                             "compute_ghost_rows: MPI error on MPI_Irecv:");
+            CHECK_MPI(MPI_Irecv((void *)ptr_T, 1, mpi_row_typ, pe, tag,
+                                MPI_COMM_WORLD, &mpi_recv_next),
+                      "compute_ghost_rows: MPI error on MPI_Irecv:");
             idx_recv_next = idx;
             ListReq.push_back(mpi_recv_next);
             idx++;
@@ -860,18 +853,18 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
             int pe = myrank - k;
             int tag = 20000 + myrank;
             T_row_typ *ptr_T = V.data() + idx;
-            HANDLE_MPI_ERROR(MPI_Irecv((void *)ptr_T, 1, mpi_row_typ, pe, tag,
-                                       MPI_COMM_WORLD, &mpi_recv_prev),
-                             "compute_ghost_rows: MPI error on MPI_Irecv:");
+            CHECK_MPI(MPI_Irecv((void *)ptr_T, 1, mpi_row_typ, pe, tag,
+                                MPI_COMM_WORLD, &mpi_recv_prev),
+                      "compute_ghost_rows: MPI error on MPI_Irecv:");
             idx_recv_prev = idx;
             ListReq.push_back(mpi_recv_prev);
             idx++;
         }
         // Now doing the exchanges.
         if (ListReq.size() > 0) {
-            HANDLE_MPI_ERROR(MPI_Waitall(ListReq.size(), ListReq.data(),
-                                         MPI_STATUSES_IGNORE),
-                             "compute_ghost_rows: MPI error on MPI_Waitall:");
+            CHECK_MPI(MPI_Waitall(ListReq.size(), ListReq.data(),
+                                  MPI_STATUSES_IGNORE),
+                      "compute_ghost_rows: MPI error on MPI_Waitall:");
             // Putting the values where they should be.
             if (idx_recv_prev != -1) {
                 ListPrevSizes.push_back(V[idx_recv_prev]);
@@ -897,9 +890,9 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
         int value_tot, value = !test_final;
         // value=0 means all is ok. All nodes should be ok for the loop to
         // terminate
-        HANDLE_MPI_ERROR(MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM,
-                                       MPI_COMM_WORLD),
-                         "compute_ghost_rows: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM,
+                                MPI_COMM_WORLD),
+                  "compute_ghost_rows: MPI error on MPI_Allreduce:");
         if (value_tot == 0) {
             break;
         }
@@ -929,9 +922,9 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
                              siztype * pos_index;
             int tag = 2046 + n_pes * i_next + myrank;
             int pe = myrank + 1 + i_next;
-            HANDLE_MPI_ERROR(MPI_Irecv((void *)ptr_recv, siz_recv, mpi_typ, pe,
-                                       tag, MPI_COMM_WORLD, &mpi_recv),
-                             "compute_ghost_rows: MPI error on MPI_Irecv:");
+            CHECK_MPI(MPI_Irecv((void *)ptr_recv, siz_recv, mpi_typ, pe, tag,
+                                MPI_COMM_WORLD, &mpi_recv),
+                      "compute_ghost_rows: MPI error on MPI_Irecv:");
             ListReq.push_back(mpi_recv);
             pos_index += siz_recv;
         }
@@ -954,15 +947,15 @@ std::shared_ptr<array_info> compute_ghost_rows(std::shared_ptr<array_info> arr,
             char *ptr_send = arr_data1;
             int pe = myrank - 1 - i_prev;
             int tag = 2046 + n_pes * i_prev + pe;
-            HANDLE_MPI_ERROR(MPI_Isend((void *)ptr_send, siz_send, mpi_typ, pe,
-                                       tag, MPI_COMM_WORLD, &mpi_send),
-                             "compute_ghost_rows: MPI error on MPI_Isend:");
+            CHECK_MPI(MPI_Isend((void *)ptr_send, siz_send, mpi_typ, pe, tag,
+                                MPI_COMM_WORLD, &mpi_send),
+                      "compute_ghost_rows: MPI error on MPI_Isend:");
             ListReq.push_back(mpi_send);
             pos_already += siz_prev;
         }
     }
     if (ListReq.size() > 0) {
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Waitall(ListReq.size(), ListReq.data(), MPI_STATUSES_IGNORE),
             "compute_ghost_rows: MPI error on MPI_Waitall:");
     }
@@ -1013,10 +1006,10 @@ void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
             return;
         }
         int value_tot;
-        HANDLE_MPI_ERROR(MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM,
-                                       MPI_COMM_WORLD),
-                         "compute_series_monotonicity_py_entry: MPI error on "
-                         "MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM,
+                                MPI_COMM_WORLD),
+                  "compute_series_monotonicity_py_entry: MPI error on "
+                  "MPI_Allreduce:");
         if (value_tot > 0) {  // At least one node find a contradiction locally.
                               // Enough to conclude
             *res = 0.0;
@@ -1043,10 +1036,10 @@ void compute_series_monotonicity_py_entry(double *res, array_info *p_arr,
                 }
             }
         }
-        HANDLE_MPI_ERROR(MPI_Allreduce(&value_glob, &value_glob_tot, 1, MPI_INT,
-                                       MPI_SUM, MPI_COMM_WORLD),
-                         "compute_series_monotonicity_py_entry: MPI error on "
-                         "MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&value_glob, &value_glob_tot, 1, MPI_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "compute_series_monotonicity_py_entry: MPI error on "
+                  "MPI_Allreduce:");
         if (value_glob_tot > 0) {
             *res = 0.0;
         } else {
@@ -1096,11 +1089,10 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
             return;
         }
         uint64_t n_rows_tot;
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_UNSIGNED_LONG_LONG,
-                          MPI_SUM, MPI_COMM_WORLD),
-            "autocorr_series_computation_py_entry: MPI error on "
-            "MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_UNSIGNED_LONG_LONG,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "autocorr_series_computation_py_entry: MPI error on "
+                  "MPI_Allreduce:");
         if (uint64_t(lag) >= n_rows_tot - 1) {
             *res = std::nan("1.0");
             return;
@@ -1135,10 +1127,10 @@ void autocorr_series_computation_py_entry(double *res, array_info *p_arr,
             }
         }
         std::vector<double> Vtot(5);
-        HANDLE_MPI_ERROR(MPI_Allreduce(V.data(), Vtot.data(), 5, MPI_DOUBLE,
-                                       MPI_SUM, MPI_COMM_WORLD),
-                         "autocorr_series_computation_py_entry: MPI error on "
-                         "MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(V.data(), Vtot.data(), 5, MPI_DOUBLE, MPI_SUM,
+                                MPI_COMM_WORLD),
+                  "autocorr_series_computation_py_entry: MPI error on "
+                  "MPI_Allreduce:");
         double fac = double(1) / double(n_rows_tot - lag);
         double avg1 = Vtot[0] * fac;
         double avg2 = Vtot[1] * fac;
@@ -1276,9 +1268,9 @@ double percentile_util(const std::unique_ptr<array_info> &arr,
     // Calculate the total number of elements across all ranks.
     int64_t total_size = len;
     if (parallel) {
-        HANDLE_MPI_ERROR(MPI_Allreduce(&len, &total_size, 1, MPI_LONG_LONG_INT,
-                                       MPI_SUM, MPI_COMM_WORLD),
-                         "percentile_util: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&len, &total_size, 1, MPI_LONG_LONG_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "percentile_util: MPI error on MPI_Allreduce:");
     }
 
     // If there were no non-null entries, output null
@@ -1397,8 +1389,8 @@ double percentile_py_entrypt(array_info *arr_raw, double percentile,
         int myrank;
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::FLOAT64);
-        HANDLE_MPI_ERROR(MPI_Bcast(&res, 1, mpi_typ, 0, MPI_COMM_WORLD),
-                         "percentile_py_entrypt: MPI error on MPI_Bcast:");
+        CHECK_MPI(MPI_Bcast(&res, 1, mpi_typ, 0, MPI_COMM_WORLD),
+                  "percentile_py_entrypt: MPI error on MPI_Bcast:");
     }
     return res;
 }

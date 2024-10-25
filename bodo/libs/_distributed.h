@@ -16,14 +16,18 @@
 
 // Helper macro to make an MPI call that returns an error code. In case of an
 // error, this raises a runtime_error (with MPI error details).
-#define HANDLE_MPI_ERROR(CALL, USER_ERR_MSG_PREFIX)                           \
+#define CHECK_MPI(CALL, USER_ERR_MSG_PREFIX)                                  \
     {                                                                         \
         int err = CALL;                                                       \
+        int err_class;                                                        \
         if (err) {                                                            \
             char err_msg[MPI_MAX_ERROR_STRING + 1];                           \
             int err_msg_len = 0;                                              \
             MPI_Error_string(err, err_msg, &err_msg_len);                     \
+            MPI_Error_class(err, &err_class);                                 \
             throw std::runtime_error(USER_ERR_MSG_PREFIX + std::string(" ") + \
+                                     std::to_string(err_class) +              \
+                                     std::string(" ") +                       \
                                      std::string(err_msg, err_msg_len));      \
         }                                                                     \
     }
@@ -222,7 +226,7 @@ static int dist_get_node_count() {
     is_rank0 = (rank == 0) ? 1 : 0;
 
     // Sum how many rank0 found
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Allreduce(&is_rank0, &nodes, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD),
         "dist_get_node_count: MPI error on MPI_Allreduce:");
 
@@ -290,8 +294,8 @@ static int64_t index_rank(int64_t total, int num_pes, int64_t index) {
 
 static double dist_get_time() {
     double wtime;
-    HANDLE_MPI_ERROR(MPI_Barrier(MPI_COMM_WORLD),
-                     "dist_get_time: MPI error on MPI_Barrier:");
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "dist_get_time: MPI error on MPI_Barrier:");
     wtime = MPI_Wtime();
     return wtime;
 }
@@ -303,8 +307,8 @@ static double get_time() {
 }
 
 static int barrier() {
-    HANDLE_MPI_ERROR(MPI_Barrier(MPI_COMM_WORLD),
-                     "barrier: MPI error on MPI_Barrier:");
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "barrier: MPI error on MPI_Barrier:");
     return 0;
 }
 
@@ -376,7 +380,7 @@ static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
     int32_t offset32 = offset;
     memcpy(in_val + sizeof(int64_t), &offset32, sizeof(int32_t));
 
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Allreduce(in_val, out_val, 1, mpi_typ, cmp_ttz, MPI_COMM_WORLD),
         "timestamptz_reduce: MPI error on MPI_Allreduce:");
     MPI_Op_free(&cmp_ttz);
@@ -511,9 +515,9 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
             uint64_t hi = in_ptr[1];
             __int128 val = static_cast<__int128>(hi) << 64 | lo;
 
-            HANDLE_MPI_ERROR(MPI_Allreduce(&val, out_val, 1, decimal_type,
-                                           cmp_decimal, MPI_COMM_WORLD),
-                             "_distributed.h::decimal_reduce");
+            CHECK_MPI(MPI_Allreduce(&val, out_val, 1, decimal_type, cmp_decimal,
+                                    MPI_COMM_WORLD),
+                      "_distributed.h::decimal_reduce");
 
             MPI_Op_free(&cmp_decimal);
             MPI_Type_free(&decimal_type);
@@ -549,10 +553,9 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
             // int64's
             memcpy(in_val, &index, sizeof(uint64_t));
             memcpy(in_val + sizeof(uint64_t), &val, sizeof(__int128));
-            HANDLE_MPI_ERROR(
-                MPI_Allreduce(&in_val, out_val, 1, index_decimal_type,
-                              argcmp_decimal, MPI_COMM_WORLD),
-                "_distributed.h::decimal_reduce");
+            CHECK_MPI(MPI_Allreduce(&in_val, out_val, 1, index_decimal_type,
+                                    argcmp_decimal, MPI_COMM_WORLD),
+                      "_distributed.h::decimal_reduce");
 
             MPI_Op_free(&argcmp_decimal);
             MPI_Type_free(&index_decimal_type);
@@ -649,26 +652,23 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum,
             memcpy(in_val_rank, in_val_ptr, struct_val_size);
         }
         memcpy(in_val_rank + struct_val_size, &rank, sizeof(int));
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(in_val_rank, out_val_rank, 1, val_rank_mpi_typ,
-                          mpi_op, MPI_COMM_WORLD),
-            "_distributed.h::dist_reduce: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(in_val_rank, out_val_rank, 1, val_rank_mpi_typ,
+                                mpi_op, MPI_COMM_WORLD),
+                  "_distributed.h::dist_reduce: MPI error on MPI_Allreduce:");
 
         int target_rank = *((int*)(out_val_rank + struct_val_size));
 
-        HANDLE_MPI_ERROR(
-            MPI_Bcast(out_ptr, value_size + sizeof(int64_t), MPI_BYTE,
-                      target_rank, MPI_COMM_WORLD),
-            "_distributed.h::dist_reduce: MPI error on MPI_Bcast:");
+        CHECK_MPI(MPI_Bcast(out_ptr, value_size + sizeof(int64_t), MPI_BYTE,
+                            target_rank, MPI_COMM_WORLD),
+                  "_distributed.h::dist_reduce: MPI error on MPI_Bcast:");
         free(in_val_rank);
         free(out_val_rank);
         return;
     }
 
     try {
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
-            "_distributed.h::dist_reduce:");
+        CHECK_MPI(MPI_Allreduce(in_ptr, out_ptr, 1, mpi_typ, mpi_op, comm),
+                  "_distributed.h::dist_reduce:");
         return;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -680,7 +680,7 @@ template <typename Alloc>
 static void MPI_Allreduce_bool_or(std::vector<uint8_t, Alloc>& V) {
     int len = V.size();
     MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Allreduce(MPI_IN_PLACE, V.data(), len, mpi_typ8, MPI_BOR,
                       MPI_COMM_WORLD),
         "_distributed.h::MPI_Allreduce_bool_or: MPI error on MPI_Allreduce:");
@@ -692,10 +692,9 @@ static void dist_arr_reduce(void* out, int64_t total_size, int op_enum,
     MPI_Op mpi_op = get_MPI_op(op_enum);
     int elem_size = get_elem_size(type_enum);
     void* res_buf = malloc(total_size * elem_size);
-    HANDLE_MPI_ERROR(
-        MPI_Allreduce(out, res_buf, total_size, mpi_typ, mpi_op,
-                      MPI_COMM_WORLD),
-        "_distributed.h::dist_arr_reduce: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(out, res_buf, total_size, mpi_typ, mpi_op,
+                            MPI_COMM_WORLD),
+              "_distributed.h::dist_arr_reduce: MPI error on MPI_Allreduce:");
     memcpy(out, res_buf, total_size * elem_size);
     free(res_buf);
     return;
@@ -705,23 +704,22 @@ static void dist_exscan(char* in_ptr, char* out_ptr, int op_enum,
                         int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
     MPI_Op mpi_op = get_MPI_op(op_enum);
-    HANDLE_MPI_ERROR(
-        MPI_Exscan(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD),
-        "_distributed.h::dist_exscan: MPI error on MPI_Exscan:");
+    CHECK_MPI(MPI_Exscan(in_ptr, out_ptr, 1, mpi_typ, mpi_op, MPI_COMM_WORLD),
+              "_distributed.h::dist_exscan: MPI error on MPI_Exscan:");
     return;
 }
 
 static void dist_recv(void* out, int size, int type_enum, int pe, int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-    HANDLE_MPI_ERROR(MPI_Recv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD,
-                              MPI_STATUS_IGNORE),
-                     "_distributed.h::dist_recv: MPI error on MPI_Recv:");
+    CHECK_MPI(MPI_Recv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD,
+                       MPI_STATUS_IGNORE),
+              "_distributed.h::dist_recv: MPI error on MPI_Recv:");
 }
 
 static void dist_send(void* out, int size, int type_enum, int pe, int tag) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-    HANDLE_MPI_ERROR(MPI_Send(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD),
-                     "_distributed.h::dist_send: MPI error on MPI_Send:");
+    CHECK_MPI(MPI_Send(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD),
+              "_distributed.h::dist_send: MPI error on MPI_Send:");
 }
 
 static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
@@ -731,9 +729,9 @@ static MPI_Request dist_irecv(void* out, int size, int type_enum, int pe,
     // fflush(stdout);
     if (cond) {
         MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-        HANDLE_MPI_ERROR(MPI_Irecv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD,
-                                   &mpi_req_recv),
-                         "_distributed.h::dist_irecv: MPI error on MPI_Irecv:");
+        CHECK_MPI(MPI_Irecv(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD,
+                            &mpi_req_recv),
+                  "_distributed.h::dist_irecv: MPI error on MPI_Irecv:");
     }
     // printf("after irecv size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag,
     // cond);
@@ -748,9 +746,9 @@ static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
     // fflush(stdout);
     if (cond) {
         MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-        HANDLE_MPI_ERROR(MPI_Isend(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD,
-                                   &mpi_req_recv),
-                         "_distributed.h::dist_isend: MPI error on MPI_Isend:");
+        CHECK_MPI(MPI_Isend(out, size, mpi_typ, pe, tag, MPI_COMM_WORLD,
+                            &mpi_req_recv),
+                  "_distributed.h::dist_isend: MPI error on MPI_Isend:");
     }
     // printf("after isend size:%d pe:%d tag:%d, cond:%d\n", size, pe, tag,
     // cond);
@@ -760,15 +758,15 @@ static MPI_Request dist_isend(void* out, int size, int type_enum, int pe,
 
 static void dist_wait(MPI_Request req, bool cond) {
     if (cond)
-        HANDLE_MPI_ERROR(MPI_Wait(&req, MPI_STATUS_IGNORE),
-                         "_distributed.h::dist_wait: MPI error on MPI_Wait:");
+        CHECK_MPI(MPI_Wait(&req, MPI_STATUS_IGNORE),
+                  "_distributed.h::dist_wait: MPI error on MPI_Wait:");
 }
 
 static void allgather(void* out_data, int size, void* in_data, int type_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(type_enum);
-    HANDLE_MPI_ERROR(MPI_Allgather(in_data, size, mpi_typ, out_data, size,
-                                   mpi_typ, MPI_COMM_WORLD),
-                     "_distributed.h::allgather: MPI error on MPI_Allgather:");
+    CHECK_MPI(MPI_Allgather(in_data, size, mpi_typ, out_data, size, mpi_typ,
+                            MPI_COMM_WORLD),
+              "_distributed.h::allgather: MPI error on MPI_Allgather:");
     return;
 }
 
@@ -955,14 +953,13 @@ static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
         comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
     if (allgather) {
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Allgather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, comm),
             "_distributed.h::c_gather_scalar: MPI error on MPI_Gather:");
     } else {
-        HANDLE_MPI_ERROR(
-            MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, root,
-                       comm),
-            "_distributed.h::c_gather_scalar: MPI error on MPI_Gather:");
+        CHECK_MPI(MPI_Gather(send_data, 1, mpi_typ, recv_data, 1, mpi_typ, root,
+                             comm),
+                  "_distributed.h::c_gather_scalar: MPI error on MPI_Gather:");
     }
     return;
 }
@@ -976,15 +973,13 @@ static void c_gatherv(void* send_data, int sendcount, void* recv_data,
         comm = *(reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
     if (allgather) {
-        HANDLE_MPI_ERROR(
-            MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data,
-                           recv_counts, displs, mpi_typ, comm),
-            "_distributed.h::c_gatherv: MPI error on MPI_Allgatherv:");
+        CHECK_MPI(MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data,
+                                 recv_counts, displs, mpi_typ, comm),
+                  "_distributed.h::c_gatherv: MPI error on MPI_Allgatherv:");
     } else {
-        HANDLE_MPI_ERROR(
-            MPI_Gatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
-                        displs, mpi_typ, root, comm),
-            "_distributed.h::c_gatherv: MPI error on MPI_Gatherv:");
+        CHECK_MPI(MPI_Gatherv(send_data, sendcount, mpi_typ, recv_data,
+                              recv_counts, displs, mpi_typ, root, comm),
+                  "_distributed.h::c_gatherv: MPI error on MPI_Gatherv:");
     }
     return;
 }
@@ -992,10 +987,9 @@ static void c_gatherv(void* send_data, int sendcount, void* recv_data,
 static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs, int typ_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    HANDLE_MPI_ERROR(
-        MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data, recv_counts,
-                       displs, mpi_typ, MPI_COMM_WORLD),
-        "_distributed.h::c_allgatherv: MPI error on MPI_Allgatherv:");
+    CHECK_MPI(MPI_Allgatherv(send_data, sendcount, mpi_typ, recv_data,
+                             recv_counts, displs, mpi_typ, MPI_COMM_WORLD),
+              "_distributed.h::c_allgatherv: MPI error on MPI_Allgatherv:");
     return;
 }
 
@@ -1008,9 +1002,9 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
     if (comm_ptr != 0) {
         comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
-    HANDLE_MPI_ERROR(MPI_Scatterv(send_data, sendcounts, displs, mpi_typ,
-                                  recv_data, recv_count, mpi_typ, root, comm),
-                     "_distributed.h::c_scatterv: MPI error on MPI_Scatterv:");
+    CHECK_MPI(MPI_Scatterv(send_data, sendcounts, displs, mpi_typ, recv_data,
+                           recv_count, mpi_typ, root, comm),
+              "_distributed.h::c_scatterv: MPI error on MPI_Scatterv:");
 }
 
 /**
@@ -1057,8 +1051,8 @@ static void c_bcast(void* send_data, int sendcount, int typ_enum, int root,
     if (comm_ptr != 0) {
         comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
     }
-    HANDLE_MPI_ERROR(MPI_Bcast(send_data, sendcount, mpi_typ, root, comm),
-                     "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(send_data, sendcount, mpi_typ, root, comm),
+              "_distributed.h::c_bcast: MPI error on MPI_Bcast:");
 }
 
 static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
@@ -1088,9 +1082,9 @@ static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
 static void c_alltoall(void* send_data, void* recv_data, int count,
                        int typ_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    HANDLE_MPI_ERROR(MPI_Alltoall(send_data, count, mpi_typ, recv_data, count,
-                                  mpi_typ, MPI_COMM_WORLD),
-                     "_distributed.h::c_alltoall: MPI error on MPI_Alltoall:");
+    CHECK_MPI(MPI_Alltoall(send_data, count, mpi_typ, recv_data, count, mpi_typ,
+                           MPI_COMM_WORLD),
+              "_distributed.h::c_alltoall: MPI error on MPI_Alltoall:");
 }
 
 static int finalize() {
@@ -1114,9 +1108,8 @@ static int finalize() {
 }
 
 static void permutation_int(int64_t* output, int n) {
-    HANDLE_MPI_ERROR(
-        MPI_Bcast(output, n, MPI_INT64_T, 0, MPI_COMM_WORLD),
-        "_distributed.h::permutation_int: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(output, n, MPI_INT64_T, 0, MPI_COMM_WORLD),
+              "_distributed.h::permutation_int: MPI error on MPI_Bcast:");
 }
 
 // Given the permutation index |p| and |rank|, and the number of ranks
@@ -1142,10 +1135,9 @@ static bodo::vector<int64_t> find_dest_ranks(int64_t rank,
     int64_t my_chunk_start = 0;
     // get current chunk sizes of all ranks
     std::vector<int64_t> AllSizes(num_ranks);
-    HANDLE_MPI_ERROR(
-        MPI_Allgather(&n_elems_local, 1, MPI_INT64_T, AllSizes.data(), 1,
-                      MPI_INT64_T, MPI_COMM_WORLD),
-        "_distributed.h::find_dest_ranks: MPI error on MPI_Allgather:");
+    CHECK_MPI(MPI_Allgather(&n_elems_local, 1, MPI_INT64_T, AllSizes.data(), 1,
+                            MPI_INT64_T, MPI_COMM_WORLD),
+              "_distributed.h::find_dest_ranks: MPI error on MPI_Allgather:");
     for (int i = 0; i < rank; i++)
         my_chunk_start += AllSizes[i];
 
@@ -1186,10 +1178,9 @@ static std::vector<int> find_disps(const std::vector<int>& counts) {
 static std::vector<int> find_recv_counts(int64_t num_ranks,
                                          const std::vector<int>& send_counts) {
     std::vector<int> recv_counts(num_ranks);
-    HANDLE_MPI_ERROR(
-        MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1,
-                     MPI_INT, MPI_COMM_WORLD),
-        "_distributed.h::find_recv_counts: MPI error on MPI_Alltoall:");
+    CHECK_MPI(MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(),
+                           1, MPI_INT, MPI_COMM_WORLD),
+              "_distributed.h::find_recv_counts: MPI error on MPI_Alltoall:");
     return recv_counts;
 }
 
@@ -1274,7 +1265,7 @@ static void permutation_array_index(unsigned char* lhs, uint64_t len,
             std::copy(rhs_begin, rhs_begin + elem_size, send_buf_begin);
         }
 
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Alltoallv(send_buf.data(), send_counts.data(),
                           send_disps.data(), element_t, lhs, recv_counts.data(),
                           recv_disps.data(), element_t, MPI_COMM_WORLD),
@@ -1353,10 +1344,9 @@ static void bodo_alltoallv(const void* sendbuf,
                 big_shuffle = 2;
         }
     }
-    HANDLE_MPI_ERROR(
-        MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_MAX,
-                      MPI_COMM_WORLD),
-        "_distributed.h::bodo_alltoallv: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &big_shuffle, 1, MPI_INT, MPI_MAX,
+                            MPI_COMM_WORLD),
+              "_distributed.h::bodo_alltoallv: MPI error on MPI_Allreduce:");
     if (big_shuffle == 2)
         // very improbable but not impossible
         throw std::runtime_error("Data is too big to shuffle");
@@ -1369,7 +1359,7 @@ static void bodo_alltoallv(const void* sendbuf,
                                          recv_counts.end());
         std::vector<int> send_disp_int(send_disp.begin(), send_disp.end());
         std::vector<int> recv_disp_int(recv_disp.begin(), recv_disp.end());
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Alltoallv(sendbuf, send_counts_int.data(), send_disp_int.data(),
                           sendtype, recvbuf, recv_counts_int.data(),
                           recv_disp_int.data(), recvtype, comm),
@@ -1391,13 +1381,13 @@ static void bodo_alltoallv(const void* sendbuf,
                 send_counts[dest] * send_typ_size / A2AV_LARGE_DTYPE_SIZE;
             int recv_count =
                 recv_counts[src] * recv_typ_size / A2AV_LARGE_DTYPE_SIZE;
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Sendrecv(send_ptr, send_count, large_dtype, dest, TAG,
                              recv_ptr, recv_count, large_dtype, src, TAG,
                              MPI_COMM_WORLD, MPI_STATUS_IGNORE),
                 "_distributed.h::bodo_alltoallv: MPI error on MPI_Sendrecv:");
             // send leftover
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Sendrecv(
                     send_ptr + int64_t(send_count) * A2AV_LARGE_DTYPE_SIZE,
                     send_counts[dest] * send_typ_size % A2AV_LARGE_DTYPE_SIZE,
@@ -1437,11 +1427,11 @@ static void oneD_reshape_shuffle(char* output, char* input,
 
         // local sizes on all ranks
         std::vector<int64_t> all_old_dim0_local_sizes(num_pes);
-        HANDLE_MPI_ERROR(MPI_Allgather(&old_dim0_local_len, 1, MPI_INT64_T,
-                                       all_old_dim0_local_sizes.data(), 1,
-                                       MPI_INT64_T, MPI_COMM_WORLD),
-                         "_distributed.h::oneD_reshape_shuffle: MPI error on "
-                         "MPI_Allgather:");
+        CHECK_MPI(MPI_Allgather(&old_dim0_local_len, 1, MPI_INT64_T,
+                                all_old_dim0_local_sizes.data(), 1, MPI_INT64_T,
+                                MPI_COMM_WORLD),
+                  "_distributed.h::oneD_reshape_shuffle: MPI error on "
+                  "MPI_Allgather:");
         // dim0 start offset (not byte offset) on all pes
         std::vector<int64_t> all_old_starts(num_pes);
         all_old_starts[0] = 0;

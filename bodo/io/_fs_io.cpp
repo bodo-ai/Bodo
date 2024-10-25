@@ -55,18 +55,6 @@ static void ensure_pa_wrappers_imported() {
         return;                                                            \
     }
 
-#define CHECK_MPI(ierr, err_class, err_string, err_len, file_name)         \
-    if (ierr != 0) {                                                       \
-        MPI_Error_class(ierr, &err_class);                                 \
-        MPI_Error_string(ierr, err_string, err_len);                       \
-        printf("Error %s\n", err_string);                                  \
-        fflush(stdout);                                                    \
-        Bodo_PyErr_SetString(                                              \
-            PyExc_RuntimeError,                                            \
-            ("File write error: " + std::to_string(err_class) + file_name) \
-                .c_str());                                                 \
-    }
-
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
 // and assign it to lhs using std::move
@@ -285,9 +273,9 @@ void create_dir_posix(int myrank, std::string &dirname,
         // a file)
         std::filesystem::create_directories(dirname);
     }
-    HANDLE_MPI_ERROR(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
-                                   MPI_COMM_WORLD),
-                     "create_dir_posix: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
+                            MPI_COMM_WORLD),
+              "create_dir_posix: MPI error on MPI_Allreduce:");
     if (error) {
         if (myrank == 0)
             std::cerr << "Bodo parquet write ERROR: a process reports "
@@ -313,8 +301,8 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
         status = hdfs_fs->CreateDir(dirname);
         CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
     }
-    HANDLE_MPI_ERROR(MPI_Barrier(MPI_COMM_WORLD),
-                     "create_dir_hdfs: MPI error on MPI_Barrier:");
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "create_dir_hdfs: MPI error on MPI_Barrier:");
     Py_DECREF(f_mod);
     Py_DECREF(hdfs_func_obj);
 }
@@ -501,16 +489,15 @@ void parallel_in_order_write(
         // then send buff to rank 0
         if (myrank != 0) {
             // first receives signal from rank 0
-            HANDLE_MPI_ERROR(MPI_Recv(&token, 1, MPI_INT, 0, token_tag,
-                                      MPI_COMM_WORLD, MPI_STATUS_IGNORE),
-                             "parallel_in_order_write: MPI error on MPI_Recv:");
+            CHECK_MPI(MPI_Recv(&token, 1, MPI_INT, 0, token_tag, MPI_COMM_WORLD,
+                               MPI_STATUS_IGNORE),
+                      "parallel_in_order_write: MPI error on MPI_Recv:");
             do {
                 // Always send complete in case our rank has no data.
                 complete = sent_size >= buff_size;
-                HANDLE_MPI_ERROR(
-                    MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
-                             MPI_COMM_WORLD),
-                    "parallel_in_order_write: MPI error on MPI_Send:");
+                CHECK_MPI(MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
+                                   MPI_COMM_WORLD),
+                          "parallel_in_order_write: MPI error on MPI_Send:");
                 if (!complete) {
                     // send buff in chunks no bigger than INT_MAX
                     if (buff_size - sent_size > INT_MAX) {
@@ -519,12 +506,12 @@ void parallel_in_order_write(
                         send_size = buff_size - sent_size;
                     }
                     // send chunk size
-                    HANDLE_MPI_ERROR(
+                    CHECK_MPI(
                         MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
                                  MPI_COMM_WORLD),
                         "parallel_in_order_write: MPI error on MPI_Send:");
                     // send chunk data;
-                    HANDLE_MPI_ERROR(
+                    CHECK_MPI(
                         MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
                                  data_tag, MPI_COMM_WORLD),
                         "parallel_in_order_write: MPI error on MPI_Send:");
@@ -548,23 +535,22 @@ void parallel_in_order_write(
                 } else {
                     do {
                         // receive whether the entire buff is received
-                        HANDLE_MPI_ERROR(
+                        CHECK_MPI(
                             MPI_Recv(&complete, 1, MPI_INT, rank, complete_tag,
                                      MPI_COMM_WORLD, MPI_STATUS_IGNORE),
                             "parallel_in_order_write: MPI error on MPI_Recv:");
                         if (!complete) {
                             // first receive size of incoming data
-                            HANDLE_MPI_ERROR(
-                                MPI_Recv(&recv_buff_size, 1, MPI_INT, rank,
-                                         size_tag, MPI_COMM_WORLD,
-                                         MPI_STATUS_IGNORE),
-                                "parallel_in_order_write: MPI error on "
-                                "MPI_Recv:");
+                            CHECK_MPI(MPI_Recv(&recv_buff_size, 1, MPI_INT,
+                                               rank, size_tag, MPI_COMM_WORLD,
+                                               MPI_STATUS_IGNORE),
+                                      "parallel_in_order_write: MPI error on "
+                                      "MPI_Recv:");
                             // resize recv_buffer to fit incoming data
                             recv_buffer.resize(recv_buff_size);
                             // receive buffer data
 
-                            HANDLE_MPI_ERROR(
+                            CHECK_MPI(
                                 MPI_Recv(&recv_buffer[0], recv_buff_size,
                                          MPI_CHAR, rank, data_tag,
                                          MPI_COMM_WORLD, MPI_STATUS_IGNORE),
@@ -578,7 +564,7 @@ void parallel_in_order_write(
                     } while (!complete);
                 }
                 if (rank != num_ranks - 1) {
-                    HANDLE_MPI_ERROR(
+                    CHECK_MPI(
                         MPI_Send(&token, 1, MPI_INT, rank + 1, token_tag,
                                  MPI_COMM_WORLD),
                         "parallel_in_order_write: MPI error on MPI_Send:");
@@ -591,9 +577,9 @@ void parallel_in_order_write(
         // all but the first rank receive message first
         // then open append stream
         if (myrank != 0) {
-            HANDLE_MPI_ERROR(MPI_Recv(&token, 1, MPI_INT, myrank - 1, token_tag,
-                                      MPI_COMM_WORLD, MPI_STATUS_IGNORE),
-                             "parallel_in_order_write: MPI error on MPI_Recv:");
+            CHECK_MPI(MPI_Recv(&token, 1, MPI_INT, myrank - 1, token_tag,
+                               MPI_COMM_WORLD, MPI_STATUS_IGNORE),
+                      "parallel_in_order_write: MPI error on MPI_Recv:");
             open_file_appendstream(file_type, fname, hdfs_fs, &out_stream);
         } else {  // 0 rank open outstream instead
             open_file_outstream(Bodo_Fs::hdfs, file_type, fname, NULL, hdfs_fs,
@@ -608,11 +594,11 @@ void parallel_in_order_write(
 
         // all but the last rank send message
         if (myrank != num_ranks - 1) {
-            HANDLE_MPI_ERROR(MPI_Send(&token, 1, MPI_INT, myrank + 1, token_tag,
-                                      MPI_COMM_WORLD),
-                             "parallel_in_order_write: MPI error on MPI_Send:");
+            CHECK_MPI(MPI_Send(&token, 1, MPI_INT, myrank + 1, token_tag,
+                               MPI_COMM_WORLD),
+                      "parallel_in_order_write: MPI error on MPI_Send:");
         }
     }
-    HANDLE_MPI_ERROR(MPI_Barrier(MPI_COMM_WORLD),
-                     "parallel_in_order_write: MPI error on MPI_Barrier:");
+    CHECK_MPI(MPI_Barrier(MPI_COMM_WORLD),
+              "parallel_in_order_write: MPI error on MPI_Barrier:");
 }
