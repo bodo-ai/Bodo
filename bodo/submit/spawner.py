@@ -8,7 +8,6 @@ import logging
 import os
 import sys
 import time
-import types
 
 import cloudpickle
 import numba
@@ -18,7 +17,6 @@ import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
 from bodo.submit.utils import CommandType, poll_for_barrier
-from bodo.submit.worker_state import is_worker
 from bodo.utils.utils import is_array_typ
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
@@ -143,14 +141,15 @@ class Spawner:
     def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
 
-        # Send pyfunc:
-        pickled_func = cloudpickle.dumps(dispatcher)
         bcast_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, bcast_root)
-        self.worker_intercomm.bcast(pickled_func, root=bcast_root)
 
-        # Send arguments
-        self._send_func_args(dispatcher, args, kwargs, bcast_root)
+        # Send arguments and update dispatcher distributed flags for arguments
+        self._send_args_update_dist_flags(dispatcher, args, kwargs, bcast_root)
+
+        # Send dispatcher
+        pickled_func = cloudpickle.dumps(dispatcher)
+        self.worker_intercomm.bcast(pickled_func, root=bcast_root)
 
         # Wait for execution to finish
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
@@ -197,14 +196,16 @@ class Spawner:
 
         return res
 
-    def _get_arg_metadata(self, arg_name, arg, replicated):
+    def _get_arg_metadata(self, arg_name, arg, replicated, dist_flags):
         """Replace argument with metadata for later bcast/scatter if it is a DataFrame,
         Series, Index or array type.
+        Also adds scatter argument to distributed flags list to upate dispatcher later.
 
         Args:
             arg_name (str): argument name
             arg (Any): argument value
             replicated (set[str]): set of replicated arguments (based on flags)
+            dist_flags (list[str]): list of distributed arguments
 
         Returns:
             ArgMetadata or Any: argument potentially replaced with ArgMetadata
@@ -214,6 +215,7 @@ class Spawner:
         if is_array_typ(data_type, True) or isinstance(
             data_type, (bodo.DataFrameType, bodo.TableType)
         ):
+            dist_flags.append(arg_name)
             return ArgMetadata(arg_name in replicated)
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
@@ -227,13 +229,19 @@ class Spawner:
                 tname: ArgMetadata(arg_name in replicated)
                 for tname in arg.tables.keys()
             }
+            dist_flags.append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
 
         return arg
 
-    def _send_func_args(self, dispatcher: "SubmitDispatcher", args, kwargs, bcast_root):
+    def _send_args_update_dist_flags(
+        self, dispatcher: "SubmitDispatcher", args, kwargs, bcast_root
+    ):
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
+
+        Also adds scattered arguments to the dispatchers distributed flags for proper
+        compilation on the worker.
 
         Args:
             dispatcher (SubmitDispatcher): dispatcher to run on workers
@@ -243,15 +251,19 @@ class Spawner:
         """
         param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
         replicated = set(dispatcher.decorator_args.get("replicated", ()))
+        dist_flags = []
         out_args = tuple(
-            self._get_arg_metadata(param_names[i], arg, replicated)
+            self._get_arg_metadata(param_names[i], arg, replicated, dist_flags)
             for i, arg in enumerate(args)
         )
         out_kwargs = {
-            name: self._get_arg_metadata(name, arg, replicated)
+            name: self._get_arg_metadata(name, arg, replicated, dist_flags)
             for name, arg in kwargs.items()
         }
         self.worker_intercomm.bcast((out_args, out_kwargs), root=bcast_root)
+        dispatcher.decorator_args["distributed_block"] = (
+            dispatcher.decorator_args.get("distributed_block", []) + dist_flags
+        )
 
         # Send DataFrame/Series/Index/array arguments
         for arg, out_arg in itertools.chain(
@@ -347,29 +359,3 @@ class SubmitDispatcher:
         # guaranteed to have the extra properties necessary to build the actual
         # dispatcher via bodo.jit on the worker side)
         return SubmitDispatcher.get_dispatcher, (self.py_func, self.decorator_args)
-
-
-def submit_jit(signature_or_function=None, pipeline_class=None, **options):
-    """Spawn mode execution entry point decorator. Functions decorated with submit_jit
-    will be compiled and executed on a spawned group."""
-    if is_worker():
-        # If we are already in the worker, just use `bodo.jit` to
-        # compile/execute directly
-        return bodo.jit(
-            signature_or_function=signature_or_function,
-            pipeline_class=pipeline_class,
-            **options,
-        )
-
-    # Spawner distributes arguments by default (with scatterv)
-    options["all_args_distributed_block"] = True
-
-    def return_wrapped_fn(py_func):
-        submit_jit_args = {**options}
-        submit_jit_args["pipeline_class"] = pipeline_class
-        return SubmitDispatcher(py_func, submit_jit_args)
-
-    if isinstance(signature_or_function, types.FunctionType):
-        py_func = signature_or_function
-        return return_wrapped_fn(py_func)
-    return return_wrapped_fn

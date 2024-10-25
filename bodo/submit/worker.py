@@ -53,15 +53,14 @@ def exec_func_handler(
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
 
-    ## Receive pyfunc ##
-    # Get the python function and arguments
-    pickled_func = spawner_intercomm.bcast(None, 0)
-    logger.debug("Received pickled pyfunc from spawner.")
-
     # Receive function arguments
     (args, kwargs) = spawner_intercomm.bcast(None, 0)
     args = tuple(_recv_arg(arg, spawner_intercomm) for arg in args)
     kwargs = {name: _recv_arg(arg, spawner_intercomm) for name, arg in kwargs.items()}
+
+    # Receive function dispatcher
+    pickled_func = spawner_intercomm.bcast(None, 0)
+    logger.debug("Received pickled pyfunc from spawner.")
 
     caught_exception = None
     res = None

@@ -1,22 +1,18 @@
 import numpy as np
-import pytest
 
-from bodo.submit.spawner import submit_jit
+import bodo
 from bodo.tests.utils import pytest_spawn_mode
 
 pytestmark = pytest_spawn_mode
 
 
-@submit_jit
+@bodo.jit(spawn=True)
 def setitem_jit(A):
     A[0] = 1
 
 
-@pytest.mark.skip(
-    reason="[BSE-4054] needs update after recursive compilation PR is merged"
-)
 def test_setitem(memory_leak_check):
-    @submit_jit
+    @bodo.jit(spawn=True)
     def do_test():
         arr = np.zeros(1)
         setitem_jit(arr)
@@ -27,7 +23,7 @@ def test_setitem(memory_leak_check):
 
 
 def test_getitem(memory_leak_check):
-    @submit_jit
+    @bodo.jit(spawn=True)
     def test_impl():
         N = 128
         A = np.ones(N)

@@ -1,4 +1,4 @@
-from bodo.submit.spawner import submit_jit
+import bodo
 
 # TODO(aneesh): this print stmt helps us track how many times mymodule was
 # imported. In the future, when we can pass environment variables across the
@@ -14,6 +14,6 @@ def f():
     print("called mymodule.f")
 
 
-@submit_jit
+@bodo.jit(spawn=True)
 def jit_fn():
     print("called mymodule.jit_fn")
