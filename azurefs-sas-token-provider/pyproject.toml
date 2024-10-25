@@ -29,3 +29,12 @@ Documentation = "https://docs.bodo.ai"
 
 [tool.setuptools]
 packages = ["bodo_azurefs_sas_token_provider"]
+
+[tool.setuptools.package-data]
+bodo_azurefs_sas_token_provider = [
+    "jars/bodo-azurefs-sas-token-provider.jar",
+    "jars/libs/*.jar",
+]
+
+[tool.setuptools.exclude-package-data]
+bodo_azurefs_sas_token_provider = ["*.java", "*.kt"]
