@@ -5,6 +5,7 @@ Defines decorators of Bodo. Currently just @jit.
 
 import hashlib
 import inspect
+import types as pytypes
 import warnings
 
 import numba
@@ -36,6 +37,7 @@ numba.core.cpu.CPUTargetOptions.replicated = _mapping("replicated")
 numba.core.cpu.CPUTargetOptions.threaded = _mapping("threaded")
 numba.core.cpu.CPUTargetOptions.pivots = _mapping("pivots")
 numba.core.cpu.CPUTargetOptions.h5_types = _mapping("h5_types")
+numba.core.cpu.CPUTargetOptions.spawn = _mapping("spawn")
 
 
 class Flags(TargetConfig):
@@ -227,6 +229,12 @@ detail""",
         doc="HDF5 read data types",
     )
 
+    spawn = Option(
+        type=bool,
+        default=False,
+        doc="Spawn MPI processes",
+    )
+
 
 DEFAULT_FLAGS = Flags()
 DEFAULT_FLAGS.nrt = True
@@ -296,6 +304,36 @@ def is_jit_execution_overload():
 
 
 def jit(signature_or_function=None, pipeline_class=None, **options):
+    # Use spawn mode if specified in decorator or enabled globally (decorator takes
+    # precedence)
+    if options.get("spawn", bodo.spawn_mode):
+        from bodo.submit.spawner import SubmitDispatcher
+        from bodo.submit.worker_state import is_worker
+
+        if is_worker():
+            # If we are already in the worker, just use regular to
+            # compile/execute directly
+            return _jit(
+                signature_or_function=signature_or_function,
+                pipeline_class=pipeline_class,
+                **options,
+            )
+
+        def return_wrapped_fn(py_func):
+            submit_jit_args = {**options}
+            submit_jit_args["pipeline_class"] = pipeline_class
+            return SubmitDispatcher(py_func, submit_jit_args)
+
+        if isinstance(signature_or_function, pytypes.FunctionType):
+            py_func = signature_or_function
+            return return_wrapped_fn(py_func)
+
+        return return_wrapped_fn
+
+    return _jit(signature_or_function, pipeline_class, **options)
+
+
+def _jit(signature_or_function=None, pipeline_class=None, **options):
     _init_extensions()
 
     # set nopython by default

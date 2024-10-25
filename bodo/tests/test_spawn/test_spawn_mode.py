@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.submit.spawner import get_num_workers, submit_jit
+from bodo.submit.spawner import get_num_workers
 from bodo.tests.utils import _test_equal, pytest_spawn_mode
 
 pytestmark = pytest_spawn_mode
@@ -14,7 +14,7 @@ pytestmark = pytest_spawn_mode
 def test_propogate_same_exception_all_ranks():
     """Test that a concise message is returned when all ranks fail"""
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def fn():
         # This will actually fail to compile since all paths end in an
         # exception, but that's ok for this test
@@ -31,7 +31,7 @@ def test_propogate_same_exception_all_ranks():
 def test_propogate_different_exceptions_some_ranks():
     """Test that a detailed message is returned when some ranks fail"""
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def fn():
         rank = bodo.get_rank()
         if rank != 0:
@@ -52,7 +52,7 @@ def modify_global():
 def test_modify_global():
     """Test that modifying a global value isn't supported and returns an
     informative error to the user"""
-    fn = submit_jit(cache=True)(modify_global)
+    fn = bodo.jit(spawn=True, cache=True)(modify_global)
     with pytest.raises(Exception):
         fn()
 
@@ -67,10 +67,10 @@ def test_import_module(capfd):
         with bodo.no_warning_objmode:
             mymod.f()
 
-    fn = submit_jit(cache=True)(impl)
+    fn = bodo.jit(spawn=True, cache=True)(impl)
     fn()
 
-    fn2 = submit_jit(cache=True)(impl)
+    fn2 = bodo.jit(spawn=True, cache=True)(impl)
     fn2()
 
     with capfd.disabled():
@@ -101,14 +101,14 @@ def test_closure():
 
         return closure
 
-    fn = submit_jit(cache=True)(create_closure())
+    fn = bodo.jit(spawn=True, cache=True)(create_closure())
     assert fn() == "in closure: 10"
 
 
 def test_return_scalar():
     """Test that scalars can be returned"""
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def fn():
         return 42
 
@@ -118,7 +118,7 @@ def test_return_scalar():
 def test_return_array():
     """Test that arrays can be returned"""
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def fn():
         A = np.zeros(100, dtype=np.int64)
         return A
@@ -141,7 +141,7 @@ def test_compute_return_df(datapath):
         )
         return max_acctbal
 
-    submit_fn = submit_jit(cache=True)(impl)
+    submit_fn = bodo.jit(spawn=True, cache=True)(impl)
     py_out = impl()
     bodo_submit_out = submit_fn()
     _test_equal(
@@ -163,7 +163,7 @@ def test_compute_return_scalar(datapath):
         )
         return max_acctbal.sum()
 
-    submit_fn = submit_jit(cache=True)(impl)
+    submit_fn = bodo.jit(spawn=True, cache=True)(impl)
     py_out = impl()
     bodo_submit_out = submit_fn()
     _test_equal(bodo_submit_out, py_out)
@@ -174,7 +174,7 @@ def test_environment():
     os.environ["BODO_TESTS_VARIABLE"] = "42"
     try:
 
-        @submit_jit
+        @bodo.jit(spawn=True)
         def get_from_env():
             with bodo.no_warning_objmode(ret_val="int64"):
                 ret_val = int(os.environ["BODO_TESTS_VARIABLE"])
@@ -189,7 +189,7 @@ def test_environment():
 def test_args():
     """Make sure arguments work for submit_jit functions properly"""
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def impl1(a, arr, c=1):
         print(a + c, arr.sum())
 
@@ -198,7 +198,7 @@ def test_args():
     impl1(1, arr=A, c=3)
 
     # Test replicated flag
-    @submit_jit(replicated=["arr"])
+    @bodo.jit(spawn=True, replicated=["arr"])
     def impl2(a, arr, c=1):
         print(a + c, arr.sum())
 
@@ -212,7 +212,7 @@ def test_args():
     except ImportError:
         return
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def impl3(a, bc, b):
         df = bc.sql('select * from "source"')
         print(df, a + b)

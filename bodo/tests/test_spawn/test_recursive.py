@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from bodo.submit.spawner import submit_jit
+import bodo
 from bodo.tests.conftest import datapath_util
 from bodo.tests.utils import pytest_spawn_mode
 
@@ -11,13 +11,13 @@ pytestmark = pytest_spawn_mode
 CUSTOMER_TABLE_PATH = datapath_util("tpch-test_data/parquet/customer.parquet")
 
 
-@submit_jit
+@bodo.jit(spawn=True)
 def read_customer_table():
     df = pd.read_parquet(CUSTOMER_TABLE_PATH)
     return df
 
 
-@submit_jit
+@bodo.jit(spawn=True)
 def aggregate_customer_data(df):
     max_acctbal = (
         df[df["C_ACCTBAL"] > 1000.0]
@@ -27,9 +27,9 @@ def aggregate_customer_data(df):
     return max_acctbal
 
 
-@submit_jit
+@bodo.jit(spawn=True)
 def jit_fn_that_calls_other_jit_fns():
-    """Function decorated with @submit_jit that calls other functions that are
+    """Function decorated with @bodo.jit(spawn=True) that calls other functions that are
     also decorated"""
     df = read_customer_table()
     max_acctbal = aggregate_customer_data(df)
@@ -47,7 +47,7 @@ def test_recursive():
 def test_recursive_across_module(capfd):
     import bodo.tests.test_spawn.mymodule as mymod
 
-    @submit_jit
+    @bodo.jit(spawn=True)
     def f():
         mymod.jit_fn()
 
