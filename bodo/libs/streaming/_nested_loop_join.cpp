@@ -108,7 +108,7 @@ void NestedLoopJoinState::FinalizeBuild() {
             // https://bodo.atlassian.net/browse/BSE-874 will resolve this.
             table_size += table_local_memory_size(table, false);
         }
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Allreduce(MPI_IN_PLACE, &table_size, 1, MPI_INT64_T, MPI_SUM,
                           MPI_COMM_WORLD),
             "NestedLoopJoinState::FinalizeBuild: MPI error on MPI_Allreduce:");
@@ -118,11 +118,10 @@ void NestedLoopJoinState::FinalizeBuild() {
             time_pt start_bcast = start_timer();
             // calculate the max number of chunks for all partitions
             int64_t n_chunks = this->build_table_buffer->chunks.size();
-            HANDLE_MPI_ERROR(
-                MPI_Allreduce(MPI_IN_PLACE, &n_chunks, 1, MPI_INT64_T, MPI_MAX,
-                              MPI_COMM_WORLD),
-                "NestedLoopJoinState::FinalizeBuild: MPI error on "
-                "MPI_Allreduce:");
+            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &n_chunks, 1, MPI_INT64_T,
+                                    MPI_MAX, MPI_COMM_WORLD),
+                      "NestedLoopJoinState::FinalizeBuild: MPI error on "
+                      "MPI_Allreduce:");
             // Create a new chunked table which will store the chunks gathered
             // from all ranks. This will eventually become the new
             // build_table_buffer of this JoinState.
@@ -449,7 +448,7 @@ static inline bool nested_loop_join_stream_sync_is_last(bool local_is_last,
         bool global_is_last = false;
         if (((iter + 1) % join_state->sync_iter) ==
             0) {  // Use iter + 1 to avoid a sync on the first iteration
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Allreduce(&local_is_last, &global_is_last, 1,
                               MPI_UNSIGNED_CHAR, MPI_LAND, MPI_COMM_WORLD),
                 "nested_loop_join_stream_sync_is_last: MPI error on "

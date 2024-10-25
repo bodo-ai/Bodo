@@ -103,10 +103,9 @@ std::shared_ptr<array_info> compute_categorical_index(
         drop_duplicates_keys(in_table, num_keys, is_parallel, key_dropna);
     size_t n_rows_full, n_rows = red_table->nrows();
     if (is_parallel) {
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&n_rows, &n_rows_full, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                          MPI_COMM_WORLD),
-            "compute_categorical_index: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&n_rows, &n_rows_full, 1, MPI_LONG_LONG_INT,
+                                MPI_SUM, MPI_COMM_WORLD),
+                  "compute_categorical_index: MPI error on MPI_Allreduce:");
     } else {
         n_rows_full = n_rows;
     }
@@ -265,25 +264,25 @@ void mpi_exscan_computation_numpy_T(
         T* data_r = cumulative_recv.data() + max_row_idx * (j - start);
         int ftype = ftypes[j];
         if (ftype == Bodo_FTypes::cumsum) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_SUM, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_numpy_T[cumsum]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_SUM,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_numpy_T[cumsum]: MPI "
+                      "error on MPI_Exscan:");
         } else if (ftype == Bodo_FTypes::cumprod) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_PROD, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_numpy_T[cumprod]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_PROD,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_numpy_T[cumprod]: MPI "
+                      "error on MPI_Exscan:");
         } else if (ftype == Bodo_FTypes::cummax) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_MAX, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_numpy_T[cummax]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MAX,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_numpy_T[cummax]: MPI "
+                      "error on MPI_Exscan:");
         } else if (ftype == Bodo_FTypes::cummin) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_MIN, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_numpy_T[cummin]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MIN,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_numpy_T[cummin]: MPI "
+                      "error on MPI_Exscan:");
         }
     }
     for (int j = start; j != end; j++) {
@@ -436,30 +435,30 @@ void mpi_exscan_computation_nullable_T(
         T* data_r = cumulative_recv.data() + max_row_idx * (j - start);
         int ftype = ftypes[j];
         if (ftype == Bodo_FTypes::cumsum) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_SUM, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_nullable_T[cumsum]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_SUM,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_nullable_T[cumsum]: MPI "
+                      "error on MPI_Exscan:");
         } else if (ftype == Bodo_FTypes::cumprod) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_PROD, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_nullable_T[cumprod]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_PROD,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_nullable_T[cumprod]: MPI "
+                      "error on MPI_Exscan:");
         } else if (ftype == Bodo_FTypes::cummax) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_MAX, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_nullable_T[cummax]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MAX,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_nullable_T[cummax]: MPI "
+                      "error on MPI_Exscan:");
         } else if (ftype == Bodo_FTypes::cummin) {
-            HANDLE_MPI_ERROR(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ,
-                                        MPI_MIN, MPI_COMM_WORLD),
-                             "mpi_exscan_computation_nullable_T[cummin]: MPI "
-                             "error on MPI_Exscan:");
+            CHECK_MPI(MPI_Exscan(data_s, data_r, max_row_idx, mpi_typ, MPI_MIN,
+                                 MPI_COMM_WORLD),
+                      "mpi_exscan_computation_nullable_T[cummin]: MPI "
+                      "error on MPI_Exscan:");
         }
     }
     if (!skip_na_data) {
         mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Exscan(cumulative_mask.data(), cumulative_mask_recv.data(),
                        max_row_idx * n_oper, mpi_typ, MPI_MAX, MPI_COMM_WORLD),
             "mpi_exscan_computation_nullable_T: MPI error on MPI_Exscan:");

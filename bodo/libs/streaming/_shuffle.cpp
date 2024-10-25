@@ -632,9 +632,9 @@ void shuffle_irecv(std::shared_ptr<table_info> in_table, MPI_Comm shuffle_comm,
         // states that "Unlike MPI_IPROBE, no other probe or receive operation
         // may match the message returned by MPI_IMPROBE.".
         MPI_Message m;
-        HANDLE_MPI_ERROR(MPI_Improbe(MPI_ANY_SOURCE, SHUFFLE_METADATA_MSG_TAG,
-                                     shuffle_comm, &flag, &m, &status),
-                         "shuffle_irecv: MPI error on MPI_Improbe:")
+        CHECK_MPI(MPI_Improbe(MPI_ANY_SOURCE, SHUFFLE_METADATA_MSG_TAG,
+                              shuffle_comm, &flag, &m, &status),
+                  "shuffle_irecv: MPI error on MPI_Improbe:")
         if (!flag) {
             break;
         }
@@ -1029,7 +1029,7 @@ void AsyncShuffleSendState::send_metadata(
             rank_to_lens[rank].end());
 
         MPI_Request req;
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Issend(this->rank_to_metadata_vec[rank].data(),
                        this->rank_to_metadata_vec[rank].size(), MPI_UINT64_T,
                        rank, SHUFFLE_METADATA_MSG_TAG, shuffle_comm, &req),
@@ -1056,9 +1056,8 @@ std::optional<std::vector<uint64_t>> AsyncShuffleRecvState::GetRecvMetadata(
     MPI_Comm shuffle_comm) {
     int flag;
     assert(this->metadata_request != MPI_REQUEST_NULL);
-    HANDLE_MPI_ERROR(
-        MPI_Test(&this->metadata_request, &flag, MPI_STATUS_IGNORE),
-        "AsyncShuffleRecvState::GetRecvMetadata: MPI error on MPI_Test:");
+    CHECK_MPI(MPI_Test(&this->metadata_request, &flag, MPI_STATUS_IGNORE),
+              "AsyncShuffleRecvState::GetRecvMetadata: MPI error on MPI_Test:");
     if (!flag) {
         return std::nullopt;
     }
@@ -1073,12 +1072,12 @@ void AsyncShuffleRecvState::PostMetadataRecv(MPI_Status& status,
                                              MPI_Message& m) {
     assert(this->metadata_request == MPI_REQUEST_NULL);
     int md_size;
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Get_count(&status, MPI_UINT64_T, &md_size),
         "AsyncShuffleRecvState::PostMetadataRecv: MPI error on MPI_Get_count:");
     this->metadata_vec.resize(md_size);
 
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Imrecv(this->metadata_vec.data(), this->metadata_vec.size(),
                    MPI_UINT64_T, &m, &this->metadata_request),
         "AsyncShuffleRecvState::PostMetadataRecv: MPI error on MPI_Imrecv:");

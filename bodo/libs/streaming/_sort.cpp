@@ -1243,7 +1243,7 @@ void StreamSortState::FinalizeBuild() {
     in_info[1] = row_info.second;
     std::unique_ptr<int64_t[]> sum_row_info = std::make_unique<int64_t[]>(2);
     if (parallel) {
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Allreduce(in_info.get(), sum_row_info.get(), 2,
                           MPI_LONG_LONG_INT, MPI_SUM, MPI_COMM_WORLD),
             "StreamSortState::FinalizeBuild: MPI error on MPI_Allreduce:");
@@ -1327,7 +1327,7 @@ StreamSortState::PartitionChunksByRank(
     // rank. 'bytes_per_row' is already averaged globally.
     assert(this->parallel);
     uint64_t global_min_mem_budget_bytes = this->mem_budget_bytes;
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Allreduce(&this->mem_budget_bytes, &global_min_mem_budget_bytes, 1,
                       MPI_UINT64_T, MPI_MIN, MPI_COMM_WORLD),
         "StreamSortState::PartitionChunksByRank: MPI error on MPI_Allreduce:");
@@ -1518,7 +1518,7 @@ SortLimits StreamSortLimitOffsetState::ComputeLocalLimit(
     size_t limit = this->sortlimit.limit;
     size_t offset = this->sortlimit.offset;
     std::vector<size_t> nrows_collect(n_pes);
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Allgather(&local_nrows, 1, MPI_UNSIGNED_LONG, nrows_collect.data(),
                       1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD),
         "StreamSortLimitOffsetState::ComputeLocalLimit: MPI error on "
@@ -1568,9 +1568,8 @@ void StreamSortState::GlobalSort_NonParallel(
 static int get_max_allowed_tag_value() {
     int flag = 0;
     void* tag_ub;
-    HANDLE_MPI_ERROR(
-        MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
-        "[get_max_allowed_tag_value] MPI Error in MPI_Comm_get_attr:");
+    CHECK_MPI(MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag),
+              "[get_max_allowed_tag_value] MPI Error in MPI_Comm_get_attr:");
     if (flag) {
         // This value is typically in the 10s or 100s of millions.
         return *(int*)tag_ub;
@@ -1771,9 +1770,9 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
             return done;
         });
         if (!barrier_posted && send_states.empty() && !have_chunks_to_send) {
-            HANDLE_MPI_ERROR(MPI_Ibarrier(MPI_COMM_WORLD, &is_last_request),
-                             "StreamSortState::GlobalSort_Partition: MPI error "
-                             "on MPI_Ibarrier:");
+            CHECK_MPI(MPI_Ibarrier(MPI_COMM_WORLD, &is_last_request),
+                      "StreamSortState::GlobalSort_Partition: MPI error "
+                      "on MPI_Ibarrier:");
             barrier_posted = true;
         }
 
@@ -1820,10 +1819,9 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
         if (!is_last && barrier_posted) {
             start_barrier_test = start_timer();
             int flag = 0;
-            HANDLE_MPI_ERROR(
-                MPI_Test(&is_last_request, &flag, MPI_STATUS_IGNORE),
-                "StreamSortState::GlobalSort_Partition: MPI error on "
-                "MPI_Ibarrier:");
+            CHECK_MPI(MPI_Test(&is_last_request, &flag, MPI_STATUS_IGNORE),
+                      "StreamSortState::GlobalSort_Partition: MPI error on "
+                      "MPI_Ibarrier:");
             is_last = flag;
             this->metrics.shuffle_barrier_test_time +=
                 end_timer(start_barrier_test);

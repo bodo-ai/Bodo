@@ -259,7 +259,7 @@ class AsyncShuffleSendState {
             comm_info.send_disp_null[p] * numpy_item_size[Bodo_CTypes::UINT8];
 
         MPI_Request send_req_null;
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Issend(buf, comm_info.send_count_null[p], mpi_type_null, p,
                        curr_tags[p]++, shuffle_comm, &send_req_null),
             "AsyncShuffleSendState::send_shuffle_null_bitmask: MPI error on "
@@ -294,7 +294,7 @@ class AsyncShuffleSendState {
                 send_arr->template data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
             MPI_Request send_req;
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[NUMPY]: MPI error on "
@@ -332,7 +332,7 @@ class AsyncShuffleSendState {
             const void* buff =
                 send_arr->template data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[NULLABLE, !BOOL]: "
@@ -374,7 +374,7 @@ class AsyncShuffleSendState {
             MPI_Request send_req;
             char* buff = send_arr->template data1<arr_type>() +
                          comm_info.send_disp_null[p];
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count_null[p], mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[NULLABLE][BOOL]: MPI "
@@ -415,7 +415,7 @@ class AsyncShuffleSendState {
             MPI_Request data_send_req;
             const void* data_buff = send_arr->template data1<arr_type>() +
                                     str_comm_info.send_disp_sub[p];
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(data_buff, str_comm_info.send_count_sub[p],
                            data_mpi_type, p, curr_tags[p]++, shuffle_comm,
                            &data_send_req),
@@ -427,7 +427,7 @@ class AsyncShuffleSendState {
             const void* len_buff = send_arr->data2<arr_type>() +
                                    (sizeof(uint32_t) * comm_info.send_disp[p]);
 
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(len_buff, comm_info.send_count[p], len_mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &len_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[STRING]: MPI error "
@@ -476,7 +476,7 @@ class AsyncShuffleSendState {
             }
             MPI_Request data_send_req;
             const void* data_buff = dict_arr->data1<bodo_array_type::STRING>();
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(data_buff, dict_arr->n_sub_elems(), data_mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &data_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[DICT]: MPI error on "
@@ -486,7 +486,7 @@ class AsyncShuffleSendState {
             MPI_Request offset_send_req;
             const void* offset_buff =
                 dict_arr->data2<bodo_array_type::STRING>();
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(offset_buff, dict_arr->length + 1, offset_mpi_type,
                            p, curr_tags[p]++, shuffle_comm, &offset_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[DICT]: MPI error on "
@@ -496,7 +496,7 @@ class AsyncShuffleSendState {
             MPI_Request null_send_req;
             const void* null_buff =
                 dict_arr->null_bitmask<bodo_array_type::STRING>();
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(null_buff,
                            arrow::bit_util::BytesForBits(dict_arr->length),
                            MPI_UNSIGNED_CHAR, p, curr_tags[p]++, shuffle_comm,
@@ -539,7 +539,7 @@ class AsyncShuffleSendState {
             MPI_Request send_req;
             const void* buff = send_arr->data1<arr_type>() +
                                (sizeof(uint32_t) * comm_info.send_disp[p]);
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], lens_mpi_type, p,
                            curr_tags[p]++, shuffle_comm, &send_req),
                 "AsyncShuffleSendState::send_shuffle_data[ARRAY_ITEM]: MPI "
@@ -588,7 +588,7 @@ class AsyncShuffleSendState {
             const void* buff =
                 send_arr->data1<arr_type>() +
                 (numpy_item_size[dtype] * comm_info.send_disp[p]);
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_datetime_type, p,
                            curr_tags[p]++, shuffle_comm, &datetime_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[TIMESTAMPTZ]: MPI "
@@ -598,7 +598,7 @@ class AsyncShuffleSendState {
             MPI_Request tz_offset_send_req;
             buff = send_arr->data2<arr_type>() +
                    (numpy_item_size[offset_type] * comm_info.send_disp[p]);
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Issend(buff, comm_info.send_count[p], mpi_tz_offset_type, p,
                            curr_tags[p]++, shuffle_comm, &tz_offset_send_req),
                 "AsyncShuffleSendState::send_shuffle_data[TIMESTAMPTZ]: MPI "
@@ -1066,10 +1066,10 @@ void recv_null_bitmask(std::unique_ptr<array_info>& out_arr,
     const MPI_Datatype mpi_type_null = MPI_UNSIGNED_CHAR;
     int recv_size_null = arrow::bit_util::BytesForBits(out_arr->length);
     MPI_Request recv_req_null;
-    HANDLE_MPI_ERROR(MPI_Irecv(out_arr->null_bitmask<arr_type>(),
-                               recv_size_null, mpi_type_null, source,
-                               curr_tag++, shuffle_comm, &recv_req_null),
-                     "recv_null_bitmask: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->null_bitmask<arr_type>(), recv_size_null,
+                        mpi_type_null, source, curr_tag++, shuffle_comm,
+                        &recv_req_null),
+              "recv_null_bitmask: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(recv_req_null);
 }
 
@@ -1090,9 +1090,9 @@ std::unique_ptr<array_info> recv_shuffle_data(
     std::unique_ptr<array_info> out_arr = alloc_array_top_level<arr_type>(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
     MPI_Request recv_req;
-    HANDLE_MPI_ERROR(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type,
-                               source, curr_tag++, shuffle_comm, &recv_req),
-                     "recv_shuffle_data[NUMPY]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,
+                        curr_tag++, shuffle_comm, &recv_req),
+              "recv_shuffle_data[NUMPY]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(recv_req);
     return out_arr;
 }
@@ -1115,10 +1115,9 @@ std::unique_ptr<array_info> recv_shuffle_data(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request recv_req;
-    HANDLE_MPI_ERROR(
-        MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,
-                  curr_tag++, shuffle_comm, &recv_req),
-        "recv_shuffle_data[NULLABLE][!BOOL]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_type, source,
+                        curr_tag++, shuffle_comm, &recv_req),
+              "recv_shuffle_data[NULLABLE][!BOOL]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(recv_req);
 
     recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
@@ -1146,11 +1145,10 @@ std::unique_ptr<array_info> recv_shuffle_data(
         arr_len, 0, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request recv_req;
-    HANDLE_MPI_ERROR(
-        MPI_Irecv(out_arr->data1<arr_type>(),
-                  arrow::bit_util::BytesForBits(arr_len), mpi_type, source,
-                  curr_tag++, shuffle_comm, &recv_req),
-        "recv_shuffle_data[NULLABLE][BOOL]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(),
+                        arrow::bit_util::BytesForBits(arr_len), mpi_type,
+                        source, curr_tag++, shuffle_comm, &recv_req),
+              "recv_shuffle_data[NULLABLE][BOOL]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(recv_req);
 
     recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
@@ -1179,16 +1177,15 @@ std::unique_ptr<array_info> recv_shuffle_data(
         arr_len, n_chars, 0, arr_type, dtype, -1, 0, 0);
 
     MPI_Request data_req;
-    HANDLE_MPI_ERROR(
-        MPI_Irecv(out_arr->data1<arr_type>(), n_chars, data_mpi_type, source,
-                  curr_tag++, shuffle_comm, &data_req),
-        "recv_shuffle_data[STRING]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), n_chars, data_mpi_type,
+                        source, curr_tag++, shuffle_comm, &data_req),
+              "recv_shuffle_data[STRING]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(data_req);
 
     MPI_Request len_req;
     // Receive the lens, we know we can fit them in the offset buffer because
     // sizeof(offset_t) >= sizeof(uint32_t)
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Irecv(out_arr->data2<arr_type, offset_t>(), arr_len, len_mpi_type,
                   source, curr_tag++, shuffle_comm, &len_req),
         "recv_shuffle_data[STRING]: MPI error on MPI_Irecv:");
@@ -1225,24 +1222,23 @@ std::unique_ptr<array_info> recv_shuffle_data(
         alloc_string_array(Bodo_CTypes::STRING, dict_len, dict_data_len);
     // Receive the dict data, offsets and null bitmask
     MPI_Request data_req;
-    HANDLE_MPI_ERROR(MPI_Irecv(dict_arr->data1<bodo_array_type::STRING>(),
-                               dict_data_len, MPI_UNSIGNED_CHAR, source,
-                               curr_tag++, shuffle_comm, &data_req),
-                     "recv_shuffle_data[DICT]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(dict_arr->data1<bodo_array_type::STRING>(),
+                        dict_data_len, MPI_UNSIGNED_CHAR, source, curr_tag++,
+                        shuffle_comm, &data_req),
+              "recv_shuffle_data[DICT]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(data_req);
     MPI_Request offset_req;
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Irecv(dict_arr->data2<bodo_array_type::STRING>(), dict_len + 1,
                   MPI_UINT64_T, source, curr_tag++, shuffle_comm, &offset_req),
         "recv_shuffle_data[DICT]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(offset_req);
     MPI_Request null_req;
-    HANDLE_MPI_ERROR(
-        MPI_Irecv(dict_arr->null_bitmask<bodo_array_type::STRING>(),
-                  arrow::bit_util::BytesForBits(dict_arr->length),
-                  MPI_UNSIGNED_CHAR, source, curr_tag++, shuffle_comm,
-                  &null_req),
-        "recv_shuffle_data[DICT]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(dict_arr->null_bitmask<bodo_array_type::STRING>(),
+                        arrow::bit_util::BytesForBits(dict_arr->length),
+                        MPI_UNSIGNED_CHAR, source, curr_tag++, shuffle_comm,
+                        &null_req),
+              "recv_shuffle_data[DICT]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(null_req);
 
     return create_dict_string_array(std::move(dict_arr), std::move(indices));
@@ -1264,9 +1260,9 @@ std::unique_ptr<array_info> recv_shuffle_data(
     std::unique_ptr<array_info> arr = alloc_array_item(arr_len, nullptr);
 
     MPI_Request len_recv_req;
-    HANDLE_MPI_ERROR(MPI_Irecv(arr->data1<arr_type>(), arr_len, len_mpi_type,
-                               source, curr_tag++, shuffle_comm, &len_recv_req),
-                     "recv_shuffle_data[ARRAY_ITEM]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(arr->data1<arr_type>(), arr_len, len_mpi_type, source,
+                        curr_tag++, shuffle_comm, &len_recv_req),
+              "recv_shuffle_data[ARRAY_ITEM]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(len_recv_req);
 
     recv_null_bitmask<arr_type>(arr, shuffle_comm, source, curr_tag,
@@ -1299,17 +1295,15 @@ std::unique_ptr<array_info> recv_shuffle_data(
     std::unique_ptr<array_info> out_arr = alloc_timestamptz_array(arr_len);
 
     MPI_Request datetime_req;
-    HANDLE_MPI_ERROR(
-        MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_datetime_type,
-                  source, curr_tag++, shuffle_comm, &datetime_req),
-        "recv_shuffle_data[TIMESTAMPTZ]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->data1<arr_type>(), arr_len, mpi_datetime_type,
+                        source, curr_tag++, shuffle_comm, &datetime_req),
+              "recv_shuffle_data[TIMESTAMPTZ]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(datetime_req);
 
     MPI_Request tz_offset_req;
-    HANDLE_MPI_ERROR(
-        MPI_Irecv(out_arr->data2<arr_type>(), arr_len, mpi_tz_offset_type,
-                  source, curr_tag++, shuffle_comm, &tz_offset_req),
-        "recv_shuffle_data[TIMESTAMPTZ]: MPI error on MPI_Irecv:");
+    CHECK_MPI(MPI_Irecv(out_arr->data2<arr_type>(), arr_len, mpi_tz_offset_type,
+                        source, curr_tag++, shuffle_comm, &tz_offset_req),
+              "recv_shuffle_data[TIMESTAMPTZ]: MPI error on MPI_Irecv:");
     recv_state.recv_requests.push_back(tz_offset_req);
 
     recv_null_bitmask<arr_type>(out_arr, shuffle_comm, source, curr_tag,
