@@ -132,7 +132,8 @@ def launch_jvm() -> JavaGateway:
         # TODO: Test out auto_convert=True for converting collections (esp lists)
         # https://www.py4j.org/advanced_topics.html#collections-conversion
         gateway = JavaGateway(gateway_parameters=GatewayParameters(port=gateway_port))
-        CLASSES = {}
+        CLASSES.clear()
+        catalog_dict.clear()
 
     # NOTE: currently, gateway.entry_point returns a non existent java object. Additionally, the
     # "main" function of the IcebergReadEntryPoint never seems to run. This is very strange.
