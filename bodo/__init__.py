@@ -149,6 +149,8 @@ bodo_disable_streaming_window_sort = (
 # Snowflake-managed Iceberg tables in the BodoSQL plan.
 prefetch_sf_iceberg = os.environ.get("BODO_PREFETCH_SF_ICEBERG", "1") != "0"
 
+spawn_mode = os.environ.get("BODO_SPAWN_MODE", "0") != "0"
+
 
 def get_sql_config_str() -> str:
     """
@@ -162,7 +164,7 @@ def get_sql_config_str() -> str:
         f"{bodosql_use_streaming_plan=};{bodosql_streaming_batch_size=};{stream_loop_sync_iters=};{enable_snowflake_iceberg=};"
         f"{enable_timestamp_tz=};{enable_runtime_join_filters=};{runtime_join_filters_copy_threshold=};{enable_streaming_sort=};"
         f"{enable_streaming_sort_limit_offset=};{enable_theta_sketches=};{bodo_use_decimal=};"
-        f"{bodo_sql_style=};{bodosql_full_caching=};{bodo_disable_streaming_window_sort=};"
+        f"{bodo_sql_style=};{bodosql_full_caching=};{bodo_disable_streaming_window_sort=};{prefetch_sf_iceberg=};{spawn_mode=};"
     )
     return conf_str
 

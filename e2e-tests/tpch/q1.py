@@ -5,14 +5,13 @@ import time
 import pandas as pd
 
 import bodo
-from bodo.submit.spawner import submit_jit
 
 bodo.set_verbose_level(2)
 
 DATA_LOC = "s3://tpch-data-parquet/SF10/lineitem.pq/"
 
 
-@submit_jit(cache=True)
+@bodo.jit(spawn=True, cache=True)
 def q01():
     t1 = time.time()
     lineitem = pd.read_parquet(DATA_LOC)

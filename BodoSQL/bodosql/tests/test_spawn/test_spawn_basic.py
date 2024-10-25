@@ -1,5 +1,5 @@
+import bodo
 import bodosql
-from bodo.submit.spawner import submit_jit
 from bodo.tests.utils import pytest_mark_snowflake, pytest_spawn_mode
 from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
     snowflake_sample_data_snowflake_catalog,
@@ -12,7 +12,7 @@ SELECT * FROM SUPPLIER
 """
 
 
-@submit_jit
+@bodo.jit(spawn=True)
 def exec_query(bc):
     # We only support passing in BodoSQLContext to Spawn mode, so
     # we will read the query as a global.
