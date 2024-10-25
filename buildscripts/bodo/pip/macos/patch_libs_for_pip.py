@@ -82,7 +82,7 @@ def patch_wheel(path):
     # Delete the original wheel
     os.remove(path)
     # This packs the wheel back
-    with zipfile.ZipFile(path, "w") as z:
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk("whl_tmp"):
             for f in files:
                 z.write(
