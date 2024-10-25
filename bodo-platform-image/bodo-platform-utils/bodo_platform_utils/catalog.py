@@ -221,6 +221,31 @@ def get_data(name=None, _parallel=True):
     # Default secret group will be created at the time of workspace creation.
     return get(catalog_name, DEFAULT_SECRET_GROUP, _parallel)
 
+def get_bodosql_context(catalog_name: str) -> bodosql.BodoSQLContext:
+    """Create a BodoSQLContext given a catalog name"""
+    # Get catalog details
+    credentials = get_data(catalog_name)
+
+    # check whether the catalog is tabular or snowflake add more conditions once
+    # more catalog types are supported
+    # Note that BodoSQL Catalogs and Contexts need to be created outside JIT
+    # functions.
+    if "icebergRestUrl" in credentials:
+        bsql_catalog = bodosql.TabularCatalog(
+            warehouse=credentials["warehouse"],
+            rest_uri=credentials["icebergRestUrl"],
+            credential=credentials["credential"],
+        )
+    else:
+        bsql_catalog = bodosql.SnowflakeCatalog(
+                username=credentials["username"],
+                password=credentials["password"],
+                account=credentials["accountName"],
+                warehouse=credentials["warehouse"],
+                database=credentials["database"],
+            )
+
+    return bodosql.BodoSQLContext(catalog=bsql_catalog)
 
 def display_version():
     return "2.0.0"
