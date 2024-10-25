@@ -28,6 +28,5 @@ export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
 export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
 cd azurefs-sas-token-provider
-# TODO: Install pip on Docker image to properly build
-python setup.py develop
+pip install .
 cd ..
