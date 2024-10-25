@@ -598,12 +598,12 @@ equi_join_shuffle(std::shared_ptr<table_info> left_table,
                 int64_t left_table_global_nrows;
                 int64_t right_table_global_nrows;
                 // TODO do this in a single reduction?
-                HANDLE_MPI_ERROR(
+                CHECK_MPI(
                     MPI_Allreduce(&left_table_nrows, &left_table_global_nrows,
                                   1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD),
                     "equi_join_shuffle: MPI error on MPI_Allreduce [left "
                     "table]:");
-                HANDLE_MPI_ERROR(
+                CHECK_MPI(
                     MPI_Allreduce(&right_table_nrows, &right_table_global_nrows,
                                   1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD),
                     "equi_join_shuffle: MPI error on MPI_Allreduce [right "

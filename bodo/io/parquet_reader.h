@@ -50,7 +50,7 @@ class ParquetReader : public ArrowReader {
             int num_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
             uint64_t num_pieces = static_cast<uint64_t>(get_num_pieces());
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T,
                               MPI_SUM, MPI_COMM_WORLD),
                 "ParquetReader::init_pq_reader: MPI error on MPI_Allreduce:");

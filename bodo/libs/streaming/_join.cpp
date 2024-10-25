@@ -1965,10 +1965,9 @@ void HashJoinState::FinalizeBuild() {
         this->partitions.empty() ||
         this->partitions[0]->build_table_buffer->data_table->nrows() == 0;
     if (this->build_parallel) {
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(&local_empty_build, &this->global_build_empty, 1,
-                          MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD),
-            "HashJoinState::FinalizeBuild: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&local_empty_build, &this->global_build_empty,
+                                1, MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD),
+                  "HashJoinState::FinalizeBuild: MPI error on MPI_Allreduce:");
     } else {
         this->global_build_empty = local_empty_build;
     }
@@ -3017,10 +3016,10 @@ void HashJoinState::FinalizeKeysUniqueValues() {
     for (size_t col_idx = 0; col_idx < unique_values.size(); col_idx++) {
         bool local_has_unique = unique_values[col_idx].has_value();
         bool global_has_unique;
-        HANDLE_MPI_ERROR(MPI_Allreduce(&local_has_unique, &global_has_unique, 1,
-                                       MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD),
-                         "HashJoinState::FinalizeKeysUniqueValues: MPI error "
-                         "on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(&local_has_unique, &global_has_unique, 1,
+                                MPI_C_BOOL, MPI_LAND, MPI_COMM_WORLD),
+                  "HashJoinState::FinalizeKeysUniqueValues: MPI error "
+                  "on MPI_Allreduce:");
         if (global_has_unique) {
             std::unordered_set<int64_t>& existing_values =
                 unique_values[col_idx].value();
@@ -3070,18 +3069,16 @@ bool stream_join_sync_is_last(bool local_is_last, JoinState* join_state) {
          (join_state->build_table_outer && join_state->probe_parallel)) &&
         local_is_last) {
         if (!join_state->is_last_barrier_started) {
-            HANDLE_MPI_ERROR(
-                MPI_Ibarrier(join_state->shuffle_comm,
-                             &join_state->is_last_request),
-                "stream_join_sync_is_last: MPI error on MPI_Ibarrier:");
+            CHECK_MPI(MPI_Ibarrier(join_state->shuffle_comm,
+                                   &join_state->is_last_request),
+                      "stream_join_sync_is_last: MPI error on MPI_Ibarrier:");
             join_state->is_last_barrier_started = true;
             return false;
         } else {
             int flag = 0;
-            HANDLE_MPI_ERROR(
-                MPI_Test(&join_state->is_last_request, &flag,
-                         MPI_STATUS_IGNORE),
-                "stream_join_sync_is_last: MPI error on MPI_Test:");
+            CHECK_MPI(MPI_Test(&join_state->is_last_request, &flag,
+                               MPI_STATUS_IGNORE),
+                      "stream_join_sync_is_last: MPI error on MPI_Test:");
             if (flag) {
                 join_state->global_is_last = true;
             }
@@ -3292,10 +3289,9 @@ bool join_build_consume_batch(HashJoinState* join_state,
     if (is_last && join_state->build_parallel && join_state->probe_parallel) {
         // Only consider a broadcast join if we have a single partition
         bool single_partition = join_state->partitions.size() == 1;
-        HANDLE_MPI_ERROR(
-            MPI_Allreduce(MPI_IN_PLACE, &single_partition, 1, MPI_C_BOOL,
-                          MPI_LAND, MPI_COMM_WORLD),
-            "join_build_consume_batch: MPI error on MPI_Allreduce:");
+        CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &single_partition, 1, MPI_C_BOOL,
+                                MPI_LAND, MPI_COMM_WORLD),
+                  "join_build_consume_batch: MPI error on MPI_Allreduce:");
         if (single_partition) {
             int64_t global_table_size = table_global_memory_size(
                 join_state->partitions[0]->build_table_buffer->data_table);
@@ -3833,7 +3829,7 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 auto& build_table_matched_ =
                     active_partition.get()->build_table_matched_guard.value();
                 MPI_Datatype mpi_type = get_MPI_typ(Bodo_CTypes::UINT8);
-                HANDLE_MPI_ERROR(
+                CHECK_MPI(
                     MPI_Iallreduce(MPI_IN_PLACE, build_table_matched_->data(),
                                    build_table_matched_->size(), mpi_type,
                                    MPI_BOR, MPI_COMM_WORLD,
@@ -3842,10 +3838,9 @@ bool join_probe_consume_batch(HashJoinState* join_state,
                 join_state->probe_reduce_started = true;
             } else {
                 int flag = 0;
-                HANDLE_MPI_ERROR(
-                    MPI_Test(&join_state->probe_reduce_request, &flag,
-                             MPI_STATUS_IGNORE),
-                    "join_probe_consume_batch: MPI error on MPI_Test:");
+                CHECK_MPI(MPI_Test(&join_state->probe_reduce_request, &flag,
+                                   MPI_STATUS_IGNORE),
+                          "join_probe_consume_batch: MPI error on MPI_Test:");
                 if (flag) {
                     join_state->global_probe_reduce_done = true;
                 }

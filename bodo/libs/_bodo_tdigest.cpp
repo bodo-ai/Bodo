@@ -426,7 +426,7 @@ class TDigest::TDigestImpl {
         }
         if (parallel) {
             MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::FLOAT64);
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Bcast(&res, 1, mpi_typ, 0, MPI_COMM_WORLD),
                 "TDigest::TDigestImpl::Quantile: MPI error on MPI_Bcast:");
         }

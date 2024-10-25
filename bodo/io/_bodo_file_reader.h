@@ -410,7 +410,7 @@ class DirectoryFileReader : public FileReader {
             this->f_reader = nullptr;
         }
 
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Bcast(&header_size, 1, MPI_UINT64_T, 0, MPI_COMM_WORLD),
             "DirectoryFileReader::findHeaderRowSize: MPI error on MPI_Bcast:");
         this->csv_header_bytes = header_size;

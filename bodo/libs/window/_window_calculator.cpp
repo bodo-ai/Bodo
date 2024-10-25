@@ -1849,7 +1849,7 @@ class WindowCollectionComputer {
             // corresponding to the current rank.
             int64_t send_rows = static_cast<int64_t>(!is_empty);
             int64_t _rank_idx = 0;
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Exscan(&send_rows, &_rank_idx, 1, MPI_LONG_LONG_INT,
                            MPI_SUM, MPI_COMM_WORLD),
                 "WindowCollectionComputer::CommunicateBoundary: MPI error on "

@@ -642,11 +642,10 @@ class IcebergParquetReader : public ArrowReader {
             int num_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
             uint64_t num_pieces = static_cast<uint64_t>(get_num_pieces());
-            HANDLE_MPI_ERROR(
-                MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T,
-                              MPI_SUM, MPI_COMM_WORLD),
-                "IcebergParquetReader::init_iceberg_reader: MPI error on "
-                "MPI_Allreduce:");
+            CHECK_MPI(MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T,
+                                    MPI_SUM, MPI_COMM_WORLD),
+                      "IcebergParquetReader::init_iceberg_reader: MPI error on "
+                      "MPI_Allreduce:");
             this->avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
         }
         // Initialize the Arrow Dataset Scanners for reading the file segments
@@ -1652,10 +1651,9 @@ table_info* iceberg_pq_read_py_entry(
         uint64_t local_nrows = read_output->nrows();
         uint64_t global_nrows = local_nrows;
         if (parallel) {
-            HANDLE_MPI_ERROR(
-                MPI_Allreduce(&local_nrows, &global_nrows, 1, MPI_UINT64_T,
-                              MPI_SUM, MPI_COMM_WORLD),
-                "iceberg_pq_read_py_entry: MPI error on MPI_Allreduce:");
+            CHECK_MPI(MPI_Allreduce(&local_nrows, &global_nrows, 1,
+                                    MPI_UINT64_T, MPI_SUM, MPI_COMM_WORLD),
+                      "iceberg_pq_read_py_entry: MPI error on MPI_Allreduce:");
         }
         *total_rows_out = global_nrows;
 
@@ -1671,7 +1669,7 @@ table_info* iceberg_pq_read_py_entry(
             // TODO: Replace with start_idx from ArrowReader
             int64_t init_val = 0;
             if (parallel) {
-                HANDLE_MPI_ERROR(
+                CHECK_MPI(
                     MPI_Exscan(&num_local_rows, &init_val, 1, MPI_LONG_LONG_INT,
                                MPI_SUM, MPI_COMM_WORLD),
                     "iceberg_pq_read_py_entry: MPI error on MPI_Exscan:");

@@ -209,7 +209,7 @@ mpi_comm_info::mpi_comm_info(
     // NOTE: avoiding alltoall collective for async shuffle cases
     if (!send_only) {
         // get recv count
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(),
                          1, MPI_INT64_T, MPI_COMM_WORLD),
             "mpi_comm_info::mpi_comm_info: MPI error on MPI_Alltoall:");
@@ -269,7 +269,7 @@ mpi_comm_info::mpi_comm_info(const std::shared_ptr<array_info>& parent_arr,
     // NOTE: avoiding alltoall collective for async shuffle cases
     if (!send_only) {
         // get recv count
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(),
                          1, MPI_INT64_T, MPI_COMM_WORLD),
             "mpi_comm_info::mpi_comm_info: MPI error on MPI_Alltoall:");
@@ -324,11 +324,11 @@ mpi_str_comm_info::mpi_str_comm_info(
         // NOTE: avoiding alltoall collective for async shuffle cases
         if (!send_only) {
             // get recv count
-            HANDLE_MPI_ERROR(MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
-                                          recv_count_sub.data(), 1, MPI_INT64_T,
-                                          MPI_COMM_WORLD),
-                             "mpi_str_comm_info::mpi_str_comm_info: MPI error "
-                             "on MPI_Alltoall:");
+            CHECK_MPI(MPI_Alltoall(send_count_sub.data(), 1, MPI_INT64_T,
+                                   recv_count_sub.data(), 1, MPI_INT64_T,
+                                   MPI_COMM_WORLD),
+                      "mpi_str_comm_info::mpi_str_comm_info: MPI error "
+                      "on MPI_Alltoall:");
         }
         // get displacements
         calc_disp(send_disp_sub, send_count_sub);
@@ -1128,7 +1128,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
         int64_t n_char = string_array->value_length(i_row);
         send_count_char[node] += n_char;
     }
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Alltoall(send_count_char.data(), 1, MPI_INT64_T,
                      recv_count_char.data(), 1, MPI_INT64_T, MPI_COMM_WORLD),
         "shuffle_string_buffer: MPI error on MPI_Alltoall:");
@@ -1335,7 +1335,7 @@ std::shared_ptr<array_info> reverse_shuffle_string_array(
             in_offset[comm_info.recv_disp[i]];
     std::vector<int64_t> send_count_sub(n_pes), send_disp_sub(n_pes);
 
-    HANDLE_MPI_ERROR(
+    CHECK_MPI(
         MPI_Alltoall(recv_count_sub.data(), 1, MPI_INT64_T,
                      send_count_sub.data(), 1, MPI_INT64_T, MPI_COMM_WORLD),
         "reverse_shuffle_string_array: MPI error on MPI_Alltoall:");
@@ -1757,8 +1757,8 @@ std::shared_ptr<array_info> broadcast_array(
         arr_bcast[4] = in_arr->num_categories;
         arr_bcast[5] = (int64_t)in_arr->precision;
     }
-    HANDLE_MPI_ERROR(MPI_Bcast(arr_bcast, 6, MPI_LONG_LONG_INT, root, comm),
-                     "broadcast_array: MPI error on MPI_Bcast:");
+    CHECK_MPI(MPI_Bcast(arr_bcast, 6, MPI_LONG_LONG_INT, root, comm),
+              "broadcast_array: MPI error on MPI_Bcast:");
     int64_t n_rows = arr_bcast[0];
     Bodo_CTypes::CTypeEnum dtype = Bodo_CTypes::CTypeEnum(arr_bcast[1]);
     bodo_array_type::arr_type_enum arr_type =
@@ -1795,9 +1795,8 @@ std::shared_ptr<array_info> broadcast_array(
         } else {
             bcast_size = n_rows;
         }
-        HANDLE_MPI_ERROR(
-            MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, root, comm),
-            "broadcast_array: MPI error on MPI_Bcast:");
+        CHECK_MPI(MPI_Bcast(out_arr->data1(), bcast_size, mpi_typ, root, comm),
+                  "broadcast_array: MPI error on MPI_Bcast:");
     } else if (arr_type == bodo_array_type::INTERVAL) {
         MPI_Datatype mpi_typ = get_MPI_typ(dtype);
         if (is_sender) {
@@ -1805,12 +1804,10 @@ std::shared_ptr<array_info> broadcast_array(
         } else {
             out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
-        HANDLE_MPI_ERROR(
-            MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, root, comm),
-            "broadcast_array: MPI error on MPI_Bcast:");
-        HANDLE_MPI_ERROR(
-            MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, root, comm),
-            "broadcast_array: MPI error on MPI_Bcast:");
+        CHECK_MPI(MPI_Bcast(out_arr->data1(), n_rows, mpi_typ, root, comm),
+                  "broadcast_array: MPI error on MPI_Bcast:");
+        CHECK_MPI(MPI_Bcast(out_arr->data2(), n_rows, mpi_typ, root, comm),
+                  "broadcast_array: MPI error on MPI_Bcast:");
     } else if (arr_type == bodo_array_type::TIMESTAMPTZ) {
         MPI_Datatype utc_mpi_typ = get_MPI_typ(dtype);
         MPI_Datatype offset_mpi_typ = get_MPI_typ(Bodo_CTypes::INT16);
@@ -1819,10 +1816,9 @@ std::shared_ptr<array_info> broadcast_array(
         } else {
             out_arr = alloc_array_top_level(n_rows, -1, -1, arr_type, dtype);
         }
-        HANDLE_MPI_ERROR(
-            MPI_Bcast(out_arr->data1(), n_rows, utc_mpi_typ, root, comm),
-            "broadcast_array: MPI error on MPI_Bcast:");
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(MPI_Bcast(out_arr->data1(), n_rows, utc_mpi_typ, root, comm),
+                  "broadcast_array: MPI error on MPI_Bcast:");
+        CHECK_MPI(
             MPI_Bcast(out_arr->data2(), n_rows, offset_mpi_typ, root, comm),
             "broadcast_array: MPI error on MPI_Bcast:");
     } else if (arr_type == bodo_array_type::STRING) {
@@ -1834,10 +1830,10 @@ std::shared_ptr<array_info> broadcast_array(
             out_arr = alloc_array_top_level(n_rows, n_sub_elems, -1, arr_type,
                                             dtype, -1, 0, num_categories);
         }
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Bcast(out_arr->data1(), n_sub_elems, mpi_typ8, root, comm),
             "broadcast_array: MPI error on MPI_Bcast:");
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Bcast(out_arr->data2(), n_rows, mpi_typ_offset, root, comm),
             "broadcast_array: MPI error on MPI_Bcast:");
     } else if (arr_type == bodo_array_type::DICT) {
@@ -1869,7 +1865,7 @@ std::shared_ptr<array_info> broadcast_array(
             broadcast_array(ref_arr ? ref_arr->child_arrays.front() : nullptr,
                             out_arr->child_arrays.front(), comm_ranks,
                             is_parallel, root, myrank);
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Bcast(out_arr->data1(), n_rows + 1, mpi_typ_offset, root, comm),
             "broadcast_array: MPI error on MPI_Bcast:");
     } else if (arr_type == bodo_array_type::STRUCT) {
@@ -1877,9 +1873,8 @@ std::shared_ptr<array_info> broadcast_array(
         if (ref_arr) {
             n_child_arrs = ref_arr->child_arrays.size();
         } else {
-            HANDLE_MPI_ERROR(
-                MPI_Bcast(&n_child_arrs, 1, MPI_INT32_T, root, comm),
-                "broadcast_array: MPI error on MPI_Bcast:");
+            CHECK_MPI(MPI_Bcast(&n_child_arrs, 1, MPI_INT32_T, root, comm),
+                      "broadcast_array: MPI error on MPI_Bcast:");
         }
         if (is_sender) {
             out_arr = in_arr;
@@ -1915,7 +1910,7 @@ std::shared_ptr<array_info> broadcast_array(
         // broadcasting the null bitmask
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT8);
         int n_bytes = (n_rows + 7) >> 3;
-        HANDLE_MPI_ERROR(
+        CHECK_MPI(
             MPI_Bcast(out_arr->null_bitmask(), n_bytes, mpi_typ, root, comm),
             "broadcast_array: MPI error on MPI_Bcast:");
     }
@@ -2025,12 +2020,12 @@ bool need_reshuffling(std::shared_ptr<table_info> in_table,
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     if (n_pes == 1)
         return false;
-    HANDLE_MPI_ERROR(MPI_Allreduce(&n_rows, &sum_n_rows, 1, MPI_LONG_LONG_INT,
-                                   MPI_SUM, MPI_COMM_WORLD),
-                     "need_reshuffling: MPI error on MPI_Allreduce:");
-    HANDLE_MPI_ERROR(MPI_Allreduce(&n_rows, &max_n_rows, 1, MPI_LONG_LONG_INT,
-                                   MPI_MAX, MPI_COMM_WORLD),
-                     "need_reshuffling: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(&n_rows, &sum_n_rows, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                            MPI_COMM_WORLD),
+              "need_reshuffling: MPI error on MPI_Allreduce:");
+    CHECK_MPI(MPI_Allreduce(&n_rows, &max_n_rows, 1, MPI_LONG_LONG_INT, MPI_MAX,
+                            MPI_COMM_WORLD),
+              "need_reshuffling: MPI error on MPI_Allreduce:");
     double avg_n_rows = ceil(double(sum_n_rows) / double(n_pes));
     double objective_measure = double(max_n_rows) / avg_n_rows;
     bool result = objective_measure > crit_fraction;
@@ -2054,10 +2049,9 @@ std::shared_ptr<table_info> shuffle_renormalization_group(
     int64_t shift = 0;
     if (parallel) {
         std::vector<int64_t> AllSizes(n_src_pes);
-        HANDLE_MPI_ERROR(
-            MPI_Allgather(&n_rows, 1, MPI_INT64_T, AllSizes.data(), 1,
-                          MPI_INT64_T, MPI_COMM_WORLD),
-            "shuffle_renormalization_group: MPI error on MPI_Allgather:");
+        CHECK_MPI(MPI_Allgather(&n_rows, 1, MPI_INT64_T, AllSizes.data(), 1,
+                                MPI_INT64_T, MPI_COMM_WORLD),
+                  "shuffle_renormalization_group: MPI error on MPI_Allgather:");
         n_rows_tot =
             std::accumulate(AllSizes.begin(), AllSizes.end(), int64_t(0));
         for (int i_p = 0; i_p < myrank; i_p++) {
@@ -2077,7 +2071,7 @@ std::shared_ptr<table_info> shuffle_renormalization_group(
                 std::random_device rd;
                 random_seed = rd();
             }
-            HANDLE_MPI_ERROR(
+            CHECK_MPI(
                 MPI_Bcast(&random_seed, 1, MPI_INT64_T, 0, MPI_COMM_WORLD),
                 "shuffle_renormalization_group: MPI error on MPI_Bcast:");
         }
