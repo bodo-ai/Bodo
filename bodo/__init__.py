@@ -58,7 +58,12 @@ def _global_except_hook(exctype, value, traceback):
     finally:
         if is_hang:
             try:
-                MPI.COMM_WORLD.Abort(1)
+                from bodo.submit.worker_state import is_worker
+
+                if is_worker():
+                    MPI.COMM_WORLD.Get_parent().Abort(1)
+                else:
+                    MPI.COMM_WORLD.Abort(1)
             except:
                 sys.stderr.write(
                     "*****************************************************\n"
