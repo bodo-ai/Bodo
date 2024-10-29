@@ -93,7 +93,7 @@ class Spawner:
         self.comm_world = MPI.COMM_WORLD
 
         n_pes = get_num_workers()
-        self.logger.debug(f"Trying to spawn {n_pes} workers...")
+        debug_msg(self.logger, f"Trying to spawn {n_pes} workers...")
         errcodes = [0] * n_pes
         t0 = time.monotonic()
 
@@ -126,6 +126,12 @@ class Spawner:
             if "LD_PRELOAD" in os.environ:
                 preload = os.environ["LD_PRELOAD"]
                 environ_args.append(f"LD_PRELOAD={preload}")
+
+            # Send spawner log level to workers
+            environ_args.append(
+                f"BODO_WORKER_VERBOSE_LEVEL={bodo.user_logging.get_verbose_level()}"
+            )
+
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
                 # get the same python executable that is currently running
@@ -136,7 +142,9 @@ class Spawner:
                 0,
                 errcodes,
             )
-        self.logger.debug(f"Spawned {n_pes} workers in {(time.monotonic()-t0):0.4f}s")
+        debug_msg(
+            self.logger, f"Spawned {n_pes} workers in {(time.monotonic()-t0):0.4f}s"
+        )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
     def _recv_output(self, output_is_distributed: pt.Union[bool, list[bool]]):
@@ -337,7 +345,7 @@ class Spawner:
     def reset(self):
         """Destroy spawned processes"""
         try:
-            self.logger.debug("Destroying spawned processes")
+            debug_msg(self.logger, "Destroying spawned processes")
         except Exception:
             # We might not be able to log during process teardown
             pass
@@ -367,6 +375,12 @@ def destroy_spawner():
 
 
 atexit.register(destroy_spawner)
+
+
+def debug_msg(logger: logging.Logger, msg: str):
+    """Send debug message to logger if Bodo verbose level 2 is enabled"""
+    if bodo.user_logging.get_verbose_level() >= 2:
+        logger.debug(msg)
 
 
 def submit_func_to_workers(dispatcher: "SubmitDispatcher", *args, **kwargs):

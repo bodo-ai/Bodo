@@ -13,7 +13,7 @@ import numba
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata
+from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata, debug_msg
 from bodo.submit.utils import CommandType, poll_for_barrier
 from bodo.submit.worker_state import set_is_worker
 
@@ -96,7 +96,7 @@ def exec_func_handler(
 
     # Receive function dispatcher
     pickled_func = spawner_intercomm.bcast(None, 0)
-    logger.debug("Received pickled pyfunc from spawner.")
+    debug_worker_msg(logger, "Received pickled pyfunc from spawner.")
 
     caught_exception = None
     res = None
@@ -117,7 +117,7 @@ def exec_func_handler(
     if caught_exception is None:
         try:
             # Try to compile and execute it. Catch and share any errors with the spawner.
-            logger.debug("Compiling and executing func")
+            debug_worker_msg(logger, "Compiling and executing func")
             res = func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Exception while trying to execute code: {e}")
@@ -125,7 +125,7 @@ def exec_func_handler(
 
     poll_for_barrier(spawner_intercomm)
     has_exception = caught_exception is not None
-    logger.debug(f"Propagating exception {has_exception=}")
+    debug_worker_msg(logger, f"Propagating exception {has_exception=}")
     # Propagate any exceptions
     spawner_intercomm.gather(caught_exception, root=0)
 
@@ -136,7 +136,7 @@ def exec_func_handler(
         assert sig in func.overloads
         # Extract return value distribution from metadata
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
-    logger.debug(f"Gathering result {is_distributed=}")
+    debug_worker_msg(logger, f"Gathering result {is_distributed=}")
 
     if bodo.get_rank() == 0:
         spawner_intercomm.send(is_distributed, dest=0)
@@ -152,34 +152,39 @@ def worker_loop(
     last_received_data = None
 
     while True:
-        logger.debug("Waiting for command")
+        debug_worker_msg(logger, "Waiting for command")
         # TODO Change this to a wait that doesn't spin cycles
         # unnecessarily (e.g. see end_py in bodo/dl/utils.py)
         command = spawner_intercomm.bcast(None, 0)
-        logger.debug(f"Received command: {command}")
+        debug_worker_msg(logger, f"Received command: {command}")
 
         if command == CommandType.EXEC_FUNCTION.value:
             exec_func_handler(comm_world, spawner_intercomm, logger)
         elif command == CommandType.EXIT.value:
-            logger.debug("Exiting...")
+            debug_worker_msg(logger, "Exiting...")
             return
         elif command == CommandType.BROADCAST.value:
             last_received_data = bodo.libs.distributed_api.bcast(
                 None, root=0, comm=spawner_intercomm
             )
-            logger.debug("Broadcast done")
+            debug_worker_msg(logger, "Broadcast done")
         elif command == CommandType.SCATTER.value:
             last_received_data = bodo.libs.distributed_api.scatterv(
                 None, root=0, comm=spawner_intercomm
             )
-            logger.debug("Scatter done")
+            debug_worker_msg(logger, "Scatter done")
         elif command == CommandType.GATHER.value:
             bodo.libs.distributed_api.gatherv(
                 last_received_data, root=0, comm=spawner_intercomm
             )
-            logger.debug("Gather done")
+            debug_worker_msg(logger, "Gather done")
         else:
             raise ValueError(f"Unsupported command '{command}!")
+
+
+def debug_worker_msg(logger, msg):
+    """Add worker number to message and send it to logger"""
+    debug_msg(logger, f"Bodo Worker {bodo.get_rank()} {msg}")
 
 
 if __name__ == "__main__":
@@ -203,22 +208,14 @@ if __name__ == "__main__":
     else:
         sys.stdin.close()
 
-    logger = logging.getLogger(f"Bodo Worker {bodo.get_rank()}")
-
-    log_lvl = int(os.environ.get("BODO_WORKER_LOG_LEVEL", "10"))
-    logger.setLevel(log_lvl)
-
-    # Create handler
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.DEBUG)
-
-    # create formatter
-    formater = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-    handler.setFormatter(formater)
-    logger.addHandler(handler)
+    log_lvl = int(os.environ.get("BODO_WORKER_VERBOSE_LEVEL", "0"))
+    bodo.set_verbose_level(log_lvl)
 
     comm_world: MPI.Intracomm = MPI.COMM_WORLD
     spawner_intercomm: MPI.Intercomm | None = comm_world.Get_parent()
 
-    worker_loop(comm_world, spawner_intercomm, logger)
+    worker_loop(
+        comm_world,
+        spawner_intercomm,
+        bodo.user_logging.get_current_bodo_verbose_logger(),
+    )
