@@ -29,14 +29,15 @@ dependencies = ["py4j==0.10.9.7"]
 Homepage = "https://bodo.ai"
 Documentation = "https://docs.bodo.ai"
 
-[tool.setuptools]
-packages = ["bodosql"]
+[tool.setuptools.packages.find]
+where = ["bodosql"]
+exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 bodosql = ["jars/*.jar", "opensource/*.NOTICE"]
 
 [tool.setuptools.exclude-package-data]
-bodosql =["tests*"]
+bodosql =["pytest.ini", "runtests*", "tests*"]
 
 [tool.setuptools_scm]
 root = ".."
