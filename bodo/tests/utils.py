@@ -1318,7 +1318,9 @@ def _test_equal(
     elif isinstance(py_out, (float, np.floating, np.complex128, np.complex64)):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, rtol=rtol, atol=atol)
-    elif isinstance(py_out, tuple):
+    elif isinstance(py_out, tuple) or (
+        isinstance(py_out, list) and is_distributable_typ(bodo.typeof(py_out))
+    ):
         assert len(py_out) == len(bodo_out)
         for p, b in zip(py_out, bodo_out):
             _test_equal(

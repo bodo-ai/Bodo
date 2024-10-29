@@ -84,6 +84,7 @@ from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     empty_like_type,
     is_array_typ,
+    is_distributable_typ,
     numba_to_c_type,
 )
 
@@ -1285,6 +1286,80 @@ def gatherv_impl_jit(
 
         return impl
 
+    # List of distributable data
+    if isinstance(data, types.List) and is_distributable_typ(data.dtype):
+
+        def impl_list(
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            rank = bodo.get_rank()
+            is_receiver = rank == root
+            is_intercomm = comm != 0
+            if is_intercomm:
+                is_receiver = root == MPI.ROOT
+
+            length = len(data)
+            # Send length from workers to receiver in case of intercomm since not
+            # available on receiver
+            if is_intercomm:
+                bcast_root = MPI.PROC_NULL
+                if is_receiver:
+                    bcast_root = 0
+                elif rank == 0:
+                    bcast_root = MPI.ROOT
+                length = bcast_scalar(length, bcast_root, comm)
+
+            out = []
+            for i in range(length):
+                in_val = data[i] if not is_receiver else data[0]
+                out.append(bodo.gatherv(in_val, allgather, warn_if_rep, root, comm))
+
+            return out
+
+        return impl_list
+
+    # Dict of distributable data
+    if isinstance(data, types.DictType) and is_distributable_typ(data.value_type):
+
+        def impl_dict(
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            rank = bodo.get_rank()
+            is_receiver = rank == root
+            is_intercomm = comm != 0
+            if is_intercomm:
+                is_receiver = root == MPI.ROOT
+
+            length = len(data)
+            # Send length from workers to receiver in case of intercomm since not
+            # available on receiver
+            if is_intercomm:
+                bcast_root = MPI.PROC_NULL
+                if is_receiver:
+                    bcast_root = 0
+                elif rank == 0:
+                    bcast_root = MPI.ROOT
+                length = bcast_scalar(length, bcast_root, comm)
+
+            in_keys = list(data.keys())
+            in_values = list(data.values())
+            out = {}
+            for i in range(length):
+                key = in_keys[i] if not is_receiver else in_keys[0]
+                if is_intercomm:
+                    bcast_root = MPI.PROC_NULL
+                    if is_receiver:
+                        bcast_root = 0
+                    elif rank == 0:
+                        bcast_root = MPI.ROOT
+                    key = bcast_scalar(key, bcast_root, comm)
+                value = in_values[i] if not is_receiver else in_values[0]
+                out[key] = bodo.gatherv(value, allgather, warn_if_rep, root, comm)
+
+            return out
+
+        return impl_dict
+
     try:
         import bodosql
         from bodosql.context_ext import BodoSQLContextType
@@ -1804,6 +1879,20 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     if dtype == bodo.timestamptz_array_type:
         return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+
+    if isinstance(dtype, types.List):
+        return [get_value_for_type(dtype.dtype)]
+
+    if isinstance(dtype, types.DictType):
+        return {
+            get_value_for_type(dtype.key_type): get_value_for_type(dtype.value_type)
+        }
+
+    if dtype == bodo.string_type:
+        return "sample_str"
+
+    if dtype == types.int64:
+        return 1
 
     # TODO: Add missing data types
     raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
@@ -2571,6 +2660,58 @@ def scatterv_impl_jit(
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl_tuple = loc_vars["impl_tuple"]
         return impl_tuple
+
+    # List of distributable data
+    if isinstance(data, types.List) and is_distributable_typ(data.dtype):
+
+        def impl_list(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            is_sender = rank == root
+            if comm != 0:
+                is_sender = root == MPI.ROOT
+
+            length = bcast_scalar(len(data), root, comm)
+            out = []
+            for i in range(length):
+                in_val = data[i] if is_sender else data[0]
+                out.append(
+                    bodo.libs.distributed_api.scatterv_impl(
+                        in_val, send_counts, warn_if_dist, root, comm
+                    )
+                )
+
+            return out
+
+        return impl_list
+
+    # Dictionary of distributable data
+    if isinstance(data, types.DictType) and is_distributable_typ(data.value_type):
+
+        def impl_dict(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            rank = bodo.libs.distributed_api.get_rank()
+            is_sender = rank == root
+            if comm != 0:
+                is_sender = root == MPI.ROOT
+
+            length = bcast_scalar(len(data), root, comm)
+            in_keys = list(data.keys())
+            in_values = list(data.values())
+            out = {}
+            for i in range(length):
+                key = in_keys[i] if is_sender else in_keys[0]
+                value = in_values[i] if is_sender else in_values[0]
+                out_key = bcast_scalar(key, root, comm)
+                out[out_key] = bodo.libs.distributed_api.scatterv_impl(
+                    value, send_counts, warn_if_dist, root, comm
+                )
+
+            return out
+
+        return impl_dict
 
     if data is types.none:  # pragma: no cover
         return (

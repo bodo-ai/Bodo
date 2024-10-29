@@ -6,6 +6,7 @@ directly"""
 import logging
 import os
 import sys
+import typing as pt
 
 import cloudpickle
 import numba
@@ -17,12 +18,12 @@ from bodo.submit.utils import CommandType, poll_for_barrier
 from bodo.submit.worker_state import set_is_worker
 
 
-def _recv_arg(arg, spawner_intercomm):
+def _recv_arg(arg: pt.Union[pt.Any, ArgMetadata], spawner_intercomm: MPI.Intercomm):
     """Receive argument if it is a DataFrame/Series/Index/array value.
 
     Args:
-        arg (Any or ArgMetadata): argument value or metadata
-        spawner_intercomm (MPI.Intercomm): spawner intercomm handle
+        arg: argument value or metadata
+        spawner_intercomm: spawner intercomm handle
 
     Returns:
         Any: received function argument
@@ -44,7 +45,42 @@ def _recv_arg(arg, spawner_intercomm):
         }
         return BodoSQLContext(tables, arg.catalog, arg.default_tz)
 
+    # Handle distributed data nested inside tuples
+    if isinstance(arg, tuple):
+        return tuple(_recv_arg(v, spawner_intercomm) for v in arg)
+
     return arg
+
+
+def _send_output(
+    res,
+    is_distributed: pt.Union[bool, pt.Union[list, tuple]],
+    spawner_intercomm: MPI.Intercomm,
+):
+    """Send function output to spawner. Uses gatherv for distributed data and also
+    handles tuples.
+
+    Args:
+        res: output to send to spawner
+        is_distributed: distribution info for output
+        spawner_intercomm: MPI intercomm for spawner
+    """
+
+    if isinstance(res, tuple):
+        assert isinstance(
+            is_distributed, (tuple, list)
+        ), "_send_output(): invalid output distributed flags type"
+        for val, dist in zip(res, is_distributed):
+            _send_output(val, dist, spawner_intercomm)
+        return
+
+    if is_distributed:
+        # Combine distributed results with gatherv
+        bodo.gatherv(res, root=0, comm=spawner_intercomm)
+    else:
+        if bodo.get_rank() == 0:
+            # Send non-distributed results
+            spawner_intercomm.send(res, dest=0)
 
 
 def exec_func_handler(
@@ -102,14 +138,10 @@ def exec_func_handler(
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
     logger.debug(f"Gathering result {is_distributed=}")
 
-    spawner_intercomm.gather(is_distributed, root=0)
-    if is_distributed:
-        # Combine distributed results with gatherv
-        bodo.gatherv(res, root=0, comm=spawner_intercomm)
-    else:
-        if bodo.get_rank() == 0:
-            # broadcast non-distributed results
-            spawner_intercomm.send(res, dest=0)
+    if bodo.get_rank() == 0:
+        spawner_intercomm.send(is_distributed, dest=0)
+
+    _send_output(res, is_distributed, spawner_intercomm)
 
 
 def worker_loop(
