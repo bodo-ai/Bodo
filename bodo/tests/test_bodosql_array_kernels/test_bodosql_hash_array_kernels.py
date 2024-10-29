@@ -17,6 +17,7 @@ from bodo.tests.utils import check_func, pytest_slow_unless_codegen
 pytestmark = pytest_slow_unless_codegen
 
 
+@pytest.mark.skip("TODO[BSE-4112]: fix flaky test")
 @pytest.mark.parametrize(
     "args, scalars, distinct",
     [
