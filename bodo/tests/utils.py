@@ -43,6 +43,8 @@ from bodo.utils.utils import (
     run_rank0,  # noqa
 )
 
+test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
+
 # TODO: Include testing DBs for other systems: MSSQL, SQLite, ...
 sql_user_pass_and_hostname = (
     "user:pass@localhost"
@@ -169,6 +171,7 @@ def check_func(
     only_seq=False,
     only_1D=False,
     only_1DVar=None,
+    only_spawn=None,
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
@@ -176,7 +179,6 @@ def check_func(
     use_dict_encoded_strings=None,
     use_map_arrays: bool = False,
     convert_to_nullable_float=True,
-    use_spawn_mode: bool = False,
 ) -> dict[str, Callable]:
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -227,16 +229,13 @@ def check_func(
       submit_jit instead of bodo.jit)
     """
 
-    if use_spawn_mode:
-        raise NotImplementedError("Spawn mode not supported by check_func yet")
-
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
     # testing behavior, to test with only 1D_var. This environment variable is set in our
     # AWS PR CI environment
     if only_1DVar is None and not (only_seq or only_1D):
         only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
 
-    run_seq, run_1D, run_1DVar = False, False, False
+    run_seq, run_1D, run_1DVar, run_spawn = False, False, False, False
     if only_seq:
         if only_1D or only_1DVar:
             warnings.warn(
@@ -250,8 +249,20 @@ def check_func(
         run_1D = True
     elif only_1DVar:
         run_1DVar = True
+    elif only_spawn:
+        run_spawn = True
     else:
         run_seq, run_1D, run_1DVar = True, True, True
+
+    # Only run spawn mode if environment variable is set (which is used to test spawn
+    # mode manually, not regular nightly runs)
+    if test_spawn_mode_enabled:
+        run_seq, run_1D, run_1DVar, run_spawn = False, False, False, True
+
+    if run_spawn:
+        # _use_dict_str_type flag doesn't propagate to worker processes currently
+        # so this option doesn't work yet.
+        use_dict_encoded_strings = False
 
     n_pes = bodo.get_size()
 
@@ -438,7 +449,29 @@ def check_func(
                 rtol,
             )
             bodo_funcs["1D_var"] = bodo_func
-
+        if run_spawn:
+            bodo_func = check_func_spawn(
+                func,
+                args,
+                py_output,
+                is_out_distributed,
+                distributed,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                additional_compiler_arguments,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+            )
+            bodo_funcs["spawn"] = bodo_func
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
         bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
@@ -805,6 +838,66 @@ def check_func_1D_var(
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Parallel 1D Var test failed"
     return bodo_func
+
+
+def check_func_spawn(
+    func,
+    args,
+    py_output,
+    is_out_distributed,
+    distributed: Union[list[tuple[str, int]], bool, None],
+    copy_input,
+    sort_output,
+    check_names,
+    check_dtype,
+    reset_index,
+    check_typing_issues,
+    convert_columns_to_pandas,
+    additional_compiler_arguments,
+    set_columns_name_to_none,
+    reorder_columns,
+    n_pes,
+    check_categorical,
+    atol,
+    rtol,
+):
+    """Check function output against Python while setting the inputs/outputs as
+    1D distributed
+    """
+
+    # Skip spawn testing if the test requires specific data distributions which may
+    # confict with spawn's defaults
+    if distributed is not None:
+        return
+
+    assert n_pes == 1, "Spawn mode tests should only run with 1 rank"
+
+    kwargs = {"spawn": True}
+    if additional_compiler_arguments != None:
+        kwargs.update(additional_compiler_arguments)
+
+    args = tuple(_get_arg(a, copy_input) for a in args)
+
+    bodo_func = bodo.jit(func, **kwargs)
+    bodo_output = bodo_func(*args)
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
+
+    _test_equal(
+        bodo_output,
+        py_output,
+        sort_output,
+        check_names,
+        check_dtype,
+        reset_index,
+        check_categorical,
+        atol,
+        rtol,
+    )
 
 
 def _get_arg(a, copy=False):
