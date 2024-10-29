@@ -546,7 +546,6 @@ def is_np_array_typ(var_typ):
     return isinstance(var_typ, types.Array)
 
 
-# TODO: fix tuple, dataframe distribution
 def is_distributable_typ(var_typ):
     return (
         is_array_typ(var_typ)

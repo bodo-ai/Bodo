@@ -184,20 +184,20 @@ def test_args():
 
     @bodo.jit(spawn=True)
     def impl1(a, arr, c=1):
-        print(a + c, arr.sum())
+        return a + c + arr.sum()
 
     A = np.arange(6)
-    impl1(1, A, 3)
-    impl1(1, arr=A, c=3)
+    _test_equal(impl1(1, A, 3), 19)
+    _test_equal(impl1(1, arr=A, c=3), 19)
 
     # Test replicated flag
     @bodo.jit(spawn=True, replicated=["arr"])
     def impl2(a, arr, c=1):
-        print(a + c, arr.sum())
+        return a + c + arr.sum()
 
     A = np.arange(6)
-    impl2(1, A, 3)
-    impl2(1, arr=A, c=3)
+    _test_equal(impl2(1, A, 3), 19)
+    _test_equal(impl2(1, arr=A, c=3), 19)
 
     # Test BodoSQLContext if bodosql installed in test environment
     try:
@@ -208,9 +208,26 @@ def test_args():
     @bodo.jit(spawn=True)
     def impl3(a, bc, b):
         df = bc.sql('select * from "source"')
-        print(df, a + b)
+        return df
 
     df1 = pd.DataFrame({"id": [1, 1], "dep": ["software", "hr"]})
     df2 = pd.DataFrame({"id": [1, 2], "dep": ["finance", "hardware"]})
     bc = bodosql.context.BodoSQLContext({"target": df1, "source": df2})
-    impl3(1, bc, 4)
+    _test_equal(impl3(1, bc, 4), df2)
+
+
+def test_args_tuple_list_dict():
+    """Make sure nested distributed data arguments work for spawn functions properly"""
+
+    @bodo.jit(spawn=True)
+    def impl(A):
+        return A
+
+    n = 11
+    df = pd.DataFrame({"a1": np.arange(n), "a23": np.ones(n)})
+    arg = (3, df)
+    _test_equal(impl(arg), arg)
+    arg = [df, df]
+    _test_equal(impl(arg), arg)
+    arg = {"k1": df, "k23": df}
+    _test_equal(impl(arg), arg)

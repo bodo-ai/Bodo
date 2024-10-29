@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import time
+import typing as pt
 
 import cloudpickle
 import numba
@@ -17,7 +18,7 @@ import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
 from bodo.submit.utils import CommandType, poll_for_barrier
-from bodo.utils.utils import is_array_typ
+from bodo.utils.utils import is_distributable_typ
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
 # is detected
@@ -138,6 +139,29 @@ class Spawner:
         self.logger.debug(f"Spawned {n_pes} workers in {(time.monotonic()-t0):0.4f}s")
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
+    def _recv_output(self, output_is_distributed: pt.Union[bool, list[bool]]):
+        """Receive output of function execution from workers
+
+        Args:
+            output_is_distributed: distribution info of output
+
+        Returns:
+            Any: output value
+        """
+        if isinstance(output_is_distributed, (tuple, list)):
+            return tuple(self._recv_output(d) for d in output_is_distributed)
+
+        if output_is_distributed:
+            res = bodo.gatherv(
+                None,
+                root=MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL,
+                comm=self.worker_intercomm,
+            )
+        else:
+            res = self.worker_intercomm.recv(source=0)
+
+        return res
+
     def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
 
@@ -155,16 +179,10 @@ class Spawner:
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         poll_for_barrier(self.worker_intercomm)
         caught_exceptions = self.worker_intercomm.gather(None, root=gather_root)
-        output_is_distributed = self.worker_intercomm.gather(None, root=gather_root)[0]
-        # TODO(aneesh) handle returned tuples/nested distributed data
-        if output_is_distributed:
-            res = bodo.gatherv(
-                None,
-                root=MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL,
-                comm=self.worker_intercomm,
-            )
-        else:
-            res = self.worker_intercomm.recv(source=0)
+        output_is_distributed = self.worker_intercomm.recv(source=0)
+
+        res = self._recv_output(output_is_distributed)
+
         assert caught_exceptions is not None
         if any(caught_exceptions):
             types = {type(excep) for excep in caught_exceptions}
@@ -196,27 +214,25 @@ class Spawner:
 
         return res
 
-    def _get_arg_metadata(self, arg_name, arg, replicated, dist_flags):
+    def _get_arg_metadata(self, arg, arg_name, is_replicated, dist_flags):
         """Replace argument with metadata for later bcast/scatter if it is a DataFrame,
         Series, Index or array type.
         Also adds scatter argument to distributed flags list to upate dispatcher later.
 
         Args:
-            arg_name (str): argument name
             arg (Any): argument value
-            replicated (set[str]): set of replicated arguments (based on flags)
-            dist_flags (list[str]): list of distributed arguments
+            arg_name (str): argument name
+            is_replicated (bool): true if the argument is set to be replicated by user
+            dist_flags (list[str]): list of distributed arguments to update
 
         Returns:
             ArgMetadata or Any: argument potentially replaced with ArgMetadata
         """
         data_type = bodo.typeof(arg)
 
-        if is_array_typ(data_type, True) or isinstance(
-            data_type, (bodo.DataFrameType, bodo.TableType)
-        ):
+        if is_distributable_typ(data_type):
             dist_flags.append(arg_name)
-            return ArgMetadata(arg_name in replicated)
+            return ArgMetadata(is_replicated)
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
         # properly.
@@ -226,13 +242,58 @@ class Spawner:
 
             assert isinstance(arg, BodoSQLContext), "invalid BodoSQLContext"
             table_metas = {
-                tname: ArgMetadata(arg_name in replicated)
-                for tname in arg.tables.keys()
+                tname: ArgMetadata(is_replicated) for tname in arg.tables.keys()
             }
             dist_flags.append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
 
+        # Handle distributed data inside tuples
+        if isinstance(arg, tuple):
+            return tuple(
+                self._get_arg_metadata(val, arg_name, is_replicated, dist_flags)
+                for val in arg
+            )
+
         return arg
+
+    def _send_arg_meta(self, arg: pt.Any, out_arg: pt.Any, bcast_root: int):
+        """Send arguments that are replaced with metadata (bcast or scatter)
+
+        Args:
+            arg: input argument
+            out_arg: input argument potentially replaced with metadata
+            bcast_root: MPI bcast root rank
+        """
+        if isinstance(out_arg, ArgMetadata):
+            if out_arg.is_broadcast:
+                bodo.libs.distributed_api.bcast(
+                    arg, root=bcast_root, comm=spawner.worker_intercomm
+                )
+            else:
+                bodo.libs.distributed_api.scatterv(
+                    arg, root=bcast_root, comm=spawner.worker_intercomm
+                )
+
+        # Send table DataFrames for BodoSQLContext
+        if isinstance(out_arg, BodoSQLContextMetadata):
+            for tname, tmeta in out_arg.tables.items():
+                if tmeta.is_broadcast:
+                    bodo.libs.distributed_api.bcast(
+                        arg.tables[tname],
+                        root=bcast_root,
+                        comm=spawner.worker_intercomm,
+                    )
+                else:
+                    bodo.libs.distributed_api.scatterv(
+                        arg.tables[tname],
+                        root=bcast_root,
+                        comm=spawner.worker_intercomm,
+                    )
+
+        # Send distributed data nested inside tuples
+        if isinstance(out_arg, tuple):
+            for val, out_val in zip(arg, out_arg):
+                self._send_arg_meta(val, out_val, bcast_root)
 
     def _send_args_update_dist_flags(
         self, dispatcher: "SubmitDispatcher", args, kwargs, bcast_root
@@ -253,11 +314,13 @@ class Spawner:
         replicated = set(dispatcher.decorator_args.get("replicated", ()))
         dist_flags = []
         out_args = tuple(
-            self._get_arg_metadata(param_names[i], arg, replicated, dist_flags)
+            self._get_arg_metadata(
+                arg, param_names[i], param_names[i] in replicated, dist_flags
+            )
             for i, arg in enumerate(args)
         )
         out_kwargs = {
-            name: self._get_arg_metadata(name, arg, replicated, dist_flags)
+            name: self._get_arg_metadata(arg, name, name in replicated, dist_flags)
             for name, arg in kwargs.items()
         }
         self.worker_intercomm.bcast((out_args, out_kwargs), root=bcast_root)
@@ -265,35 +328,11 @@ class Spawner:
             dispatcher.decorator_args.get("distributed_block", []) + dist_flags
         )
 
-        # Send DataFrame/Series/Index/array arguments
+        # Send DataFrame/Series/Index/array arguments (others are already sent)
         for arg, out_arg in itertools.chain(
             zip(args, out_args), zip(kwargs.values(), out_kwargs.values())
         ):
-            if isinstance(out_arg, ArgMetadata):
-                if out_arg.is_broadcast:
-                    bodo.libs.distributed_api.bcast(
-                        arg, root=bcast_root, comm=spawner.worker_intercomm
-                    )
-                else:
-                    bodo.libs.distributed_api.scatterv(
-                        arg, root=bcast_root, comm=spawner.worker_intercomm
-                    )
-
-            # Send table DataFrames for BodoSQLContext
-            if isinstance(out_arg, BodoSQLContextMetadata):
-                for tname, tmeta in out_arg.tables.items():
-                    if tmeta.is_broadcast:
-                        bodo.libs.distributed_api.bcast(
-                            arg.tables[tname],
-                            root=bcast_root,
-                            comm=spawner.worker_intercomm,
-                        )
-                    else:
-                        bodo.libs.distributed_api.scatterv(
-                            arg.tables[tname],
-                            root=bcast_root,
-                            comm=spawner.worker_intercomm,
-                        )
+            self._send_arg_meta(arg, out_arg, bcast_root)
 
     def reset(self):
         """Destroy spawned processes"""
