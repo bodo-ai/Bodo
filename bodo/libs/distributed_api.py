@@ -1796,9 +1796,7 @@ def get_value_for_type(dtype):  # pragma: no cover
         return tuple(get_value_for_type(t) for t in dtype.types)
 
     if isinstance(dtype, ArrayItemArrayType):
-        return pd.Series(
-            [get_value_for_type(dtype.dtype), get_value_for_type(dtype.dtype)]
-        ).values
+        return pd.Series([get_value_for_type(dtype.dtype)]).values
 
     if isinstance(dtype, IntervalArrayType):
         arr_type = get_value_for_type(dtype.arr_type)

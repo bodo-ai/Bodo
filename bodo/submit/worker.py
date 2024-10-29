@@ -153,7 +153,23 @@ def worker_loop(
 if __name__ == "__main__":
     set_is_worker()
     # See comment in spawner about STDIN and MPI_Spawn
-    sys.stdin.close()
+    # To allow some way to access stdin for debugging with pdb, the environment
+    # variable BODO_WORKER0_INPUT can be set to a pipe, e.g.:
+    # Run the following in a shell
+    #   mkfifo /tmp/input # create a FIFO pipe
+    #   export BODO_WORKER0_INPUT=/tmp/input
+    #   export BODO_NUM_WORKERS=1
+    #   python -u some_script_that_has_breakpoint_in_code_executed_by_worker.py
+    # In a separate shell, do:
+    #   cat > /tmp/input
+    # Now you can write to the stdin of rank 0 by submitting input in the second
+    # shell. Note that the worker will hang until there is at least one writer on
+    # the pipe.
+    if bodo.get_rank() == 0 and (infile := os.environ.get("BODO_WORKER0_INPUT")):
+        fd = os.open(infile, os.O_RDONLY)
+        os.dup2(fd, 0)
+    else:
+        sys.stdin.close()
 
     logger = logging.getLogger(f"Bodo Worker {bodo.get_rank()}")
 

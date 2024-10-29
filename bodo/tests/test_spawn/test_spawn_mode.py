@@ -6,7 +6,7 @@ import pytest
 
 import bodo
 from bodo.submit.spawner import get_num_workers
-from bodo.tests.utils import _test_equal, pytest_spawn_mode
+from bodo.tests.utils import check_func, pytest_spawn_mode
 
 pytestmark = pytest_spawn_mode
 
@@ -85,10 +85,6 @@ def test_import_module(capfd):
         assert sum("called mymodule.f" in l for l in lines) == 2 * n_pes
 
 
-def f0():
-    return 0
-
-
 def test_closure():
     """Check that cloudpickle correctly handles variables captured by a
     closure"""
@@ -101,29 +97,27 @@ def test_closure():
 
         return closure
 
-    fn = bodo.jit(spawn=True, cache=True)(create_closure())
-    assert fn() == "in closure: 10"
+    fn = create_closure()
+    check_func(fn, (), only_spawn=True)
 
 
 def test_return_scalar():
     """Test that scalars can be returned"""
 
-    @bodo.jit(spawn=True)
     def fn():
         return 42
 
-    assert fn() == 42
+    check_func(fn, (), only_spawn=True)
 
 
 def test_return_array():
     """Test that arrays can be returned"""
 
-    @bodo.jit(spawn=True)
     def fn():
         A = np.zeros(100, dtype=np.int64)
         return A
 
-    _test_equal(fn(), np.zeros(100, dtype=np.int64))
+    check_func(fn, (), only_spawn=True)
 
 
 def test_compute_return_df(datapath):
@@ -141,11 +135,13 @@ def test_compute_return_df(datapath):
         )
         return max_acctbal
 
-    submit_fn = bodo.jit(spawn=True, cache=True)(impl)
-    py_out = impl()
-    bodo_submit_out = submit_fn()
-    _test_equal(
-        bodo_submit_out, py_out, sort_output=True, reset_index=True, check_dtype=False
+    check_func(
+        impl,
+        (),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        only_spawn=True,
     )
 
 
@@ -163,10 +159,7 @@ def test_compute_return_scalar(datapath):
         )
         return max_acctbal.sum()
 
-    submit_fn = bodo.jit(spawn=True, cache=True)(impl)
-    py_out = impl()
-    bodo_submit_out = submit_fn()
-    _test_equal(bodo_submit_out, py_out)
+    check_func(impl, (), is_out_distributed=False, only_spawn=True)
 
 
 @pytest.mark.skip("submit_jit does not support output")
