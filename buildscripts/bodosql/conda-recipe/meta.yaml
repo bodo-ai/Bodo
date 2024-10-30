@@ -27,6 +27,8 @@ requirements:
 test:
     imports:
         - bodosql
+    files:
+        - test.py
 
 
 about:

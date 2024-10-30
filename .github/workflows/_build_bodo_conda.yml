@@ -61,7 +61,6 @@ jobs:
           conda activate bodo_build
           cd buildscripts/bodo/bodo-conda-recipe
 
-          # TODO: Remove --no-test
           # --no-verify because it doesn't work for Conda v2 packages
           # --no-anaconda-upload because we'll upload ourselves
           # Sccache works when the files are located in the same path.
@@ -69,7 +68,7 @@ jobs:
           # --croot for consistent base directory path for sccache
           # --build-id-pat for consistent build directory path for sccache
           conda build . $PLATFORM_CHANNEL -c conda-forge \
-            --no-test --no-verify --no-anaconda-upload \
+            --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             -e nightly_conda_build_config.yaml --python '${{ inputs.python-version }}'
         env:
