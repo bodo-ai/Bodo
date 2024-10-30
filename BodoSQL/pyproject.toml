@@ -30,8 +30,9 @@ Homepage = "https://bodo.ai"
 Documentation = "https://docs.bodo.ai"
 
 [tool.setuptools.packages.find]
-where = ["bodosql"]
-exclude = ["tests*"]
+where = ["."]
+include = ["bodosql*"]
+exclude = ["*tests*"]
 
 [tool.setuptools.package-data]
 bodosql = ["jars/*.jar", "opensource/*.NOTICE"]
