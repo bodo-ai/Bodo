@@ -1,8 +1,8 @@
 #include "_fft.h"
-#include <mpi.h>
 #include <numeric>
 #include "_array_utils.h"
 #include "_distributed.h"
+#include "_mpi.h"
 #include "tracing.h"
 
 template <Bodo_CTypes::CTypeEnum dtype>
@@ -24,8 +24,9 @@ void export_wisdom(int rank) {
     // with shared memory, which should be 1 per host.
     fftw_mpi_broadcast_wisdom_fn<dtype>(MPI_COMM_WORLD);
     MPI_Comm shmcomm;
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
-                        &shmcomm);
+    CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                                  MPI_INFO_NULL, &shmcomm),
+              "export_wisdom: MPI error on MPI_Comm_split_type:");
     int shmrank;
     MPI_Comm_rank(shmcomm, &shmrank);
 

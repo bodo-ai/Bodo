@@ -5,7 +5,7 @@
 #include <span>
 
 #include <arrow/api.h>
-#include <mpi.h>
+#include "_mpi.h"
 
 #include "_array_hash.h"
 #include "_array_operations.h"

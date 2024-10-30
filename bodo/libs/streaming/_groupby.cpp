@@ -1931,7 +1931,9 @@ GroupbyOutputState::GroupbyOutputState(
         static_cast<uint64_t>(1), this->work_stealing_num_ranks_done_threshold);
 
     if (this->enable_work_stealing) {
-        MPI_Comm_dup(MPI_COMM_WORLD, &this->mpi_comm);
+        CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->mpi_comm),
+                  "GroupbyOutputState::GroupbyOutputState: MPI error on "
+                  "MPI_Comm_dup:");
     }
 }
 
@@ -2985,7 +2987,8 @@ GroupbyState::GroupbyState(
     }
     this->curr_stage_id++;
 
-    MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm);
+    CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm),
+              "GroupbyState::GroupbyState: MPI error on MPI_Comm_dup:");
 }
 
 std::unique_ptr<bodo::Schema> GroupbyState::getRunningValueColumnTypes(

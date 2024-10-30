@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "mpi.h"
+#include "_mpi.h"
 
 #include "./_utils.h"
 

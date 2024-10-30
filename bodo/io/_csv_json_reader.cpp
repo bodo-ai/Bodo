@@ -74,15 +74,20 @@
 // needed) with this err msg on all the processes, ensuring there wouldn't be
 // hangs.
 
-#define ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_err_bool, err_msg_var)  \
-    MPI_Bcast(&raise_err_bool, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD);       \
-    if (raise_err_bool) {                                               \
-        int err_msg_size = err_msg_var.size();                          \
-        MPI_Bcast(&err_msg_size, 1, MPI_INT, 0, MPI_COMM_WORLD);        \
-        err_msg_var.resize(err_msg_size);                               \
-        MPI_Bcast(const_cast<char *>(err_msg_var.data()), err_msg_size, \
-                  MPI_CHAR, 0, MPI_COMM_WORLD);                         \
-        throw std::runtime_error(err_msg_var);                          \
+#define ARROW_ONE_PROC_ERR_SYNC_USING_MPI(raise_err_bool, err_msg_var)       \
+    CHECK_MPI(MPI_Bcast(&raise_err_bool, 1, MPI_C_BOOL, 0, MPI_COMM_WORLD),  \
+              "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:"); \
+    if (raise_err_bool) {                                                    \
+        int err_msg_size = err_msg_var.size();                               \
+        CHECK_MPI(                                                           \
+            MPI_Bcast(&err_msg_size, 1, MPI_INT, 0, MPI_COMM_WORLD),         \
+            "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:");   \
+        err_msg_var.resize(err_msg_size);                                    \
+        CHECK_MPI(                                                           \
+            MPI_Bcast(const_cast<char *>(err_msg_var.data()), err_msg_size,  \
+                      MPI_CHAR, 0, MPI_COMM_WORLD),                          \
+            "ARROW_ONE_PROC_ERR_SYNC_USING_MPI: MPI error on MPI_Bcast:");   \
+        throw std::runtime_error(err_msg_var);                               \
     }
 
 /**
@@ -1172,7 +1177,8 @@ void data_row_correction(MemReader *reader, char row_separator) {
                   "data_row_correction: MPI error on MPI_Probe:");
         // when probe returns, the status object has the message size
         int recv_size;
-        MPI_Get_count(&status, MPI_CHAR, &recv_size);
+        CHECK_MPI(MPI_Get_count(&status, MPI_CHAR, &recv_size),
+                  "data_row_correction: MPI error on MPI_Get_count:");
         data.resize(cur_data_size + recv_size);
         CHECK_MPI(MPI_Recv(data.data() + cur_data_size, recv_size, MPI_CHAR,
                            rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE),

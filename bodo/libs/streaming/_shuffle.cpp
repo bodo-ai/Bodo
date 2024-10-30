@@ -5,7 +5,7 @@
 #include <optional>
 
 #include <arrow/util/bit_util.h>
-#include <mpi.h>
+#include "../_mpi.h"
 
 #include "../_array_hash.h"
 #include "../_array_utils.h"

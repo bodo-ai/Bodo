@@ -30,7 +30,7 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
-#include <mpi.h>
+#include "_mpi.h"
 
 #include "_utils.h"
 

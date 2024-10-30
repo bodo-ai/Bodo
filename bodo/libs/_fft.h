@@ -1,8 +1,8 @@
 #include <fftw3-mpi.h>
 #include <fftw3.h>
-#include <mpi.h>
 #include "_array_utils.h"
 #include "_bodo_common.h"
+#include "_mpi.h"
 
 // All of the below code is to allow for templating on the dtype of the array.
 // FFTW has two different sets of functions and types, one for single precision
