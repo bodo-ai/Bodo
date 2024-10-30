@@ -4,10 +4,10 @@ Python Objects usable inside Bodo.
 """
 
 import os
+import typing as pt
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-import pyarrow as pa
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import parse_conn_str
@@ -15,6 +15,9 @@ from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import FilterExpr
 from bodo_iceberg_connector.py4j_support import get_catalog
 from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
+
+if pt.TYPE_CHECKING:
+    import pyarrow as pa
 
 
 @dataclass
@@ -33,7 +36,7 @@ class IcebergParquetInfo:
 
 def get_bodo_parquet_info(
     conn_str: str, db_name: str, table: str, filters: FilterExpr | None
-) -> tuple[list[IcebergParquetInfo], dict[int, pa.Schema], int]:
+) -> tuple[list[IcebergParquetInfo], dict[int, "pa.Schema"], int]:
     """
     Returns the IcebergParquetInfo for a table.
     Port is unused and kept in case we opt to switch back to py4j
@@ -117,7 +120,7 @@ def _has_uri_scheme(path: str):
 
 def bodo_connector_get_total_num_pq_files_in_table(
     conn_str: str, db_name: str, table: str
-):
+) -> int:
     """
     Returns the number of parquet files in the given Iceberg table.
     Throws a IcebergJavaError if an error occurs.
