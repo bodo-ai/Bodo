@@ -2,7 +2,6 @@
 #pragma once
 
 #include <Python.h>
-#include <mpi.h>
 #include <stdbool.h>
 #include <algorithm>
 #include <cmath>
@@ -13,6 +12,7 @@
 #include <vector>
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
+#include "_mpi.h"
 
 // Helper macro to make an MPI call that returns an error code. In case of an
 // error, this raises a runtime_error (with MPI error details).
@@ -212,14 +212,16 @@ static int dist_get_node_count() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized)
-        MPI_Init(NULL, NULL);
+        CHECK_MPI(MPI_Init(NULL, NULL),
+                  "dist_get_node_count: MPI error on MPI_Init:");
 
     int rank, is_rank0, nodes;
     MPI_Comm shmcomm;
 
     // Split comm, into comms that has same shared memory
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
-                        &shmcomm);
+    CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                                  MPI_INFO_NULL, &shmcomm),
+              "dist_get_node_count: MPI error on MPI_Comm_split_type:");
     MPI_Comm_rank(shmcomm, &rank);
 
     // Identify rank 0 in each node
@@ -238,7 +240,8 @@ static int dist_get_rank() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized)
-        MPI_Init(NULL, NULL);
+        CHECK_MPI(MPI_Init(NULL, NULL),
+                  "dist_get_rank: MPI error on MPI_Init:");
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     // printf("my_rank:%d\n", rank);
@@ -254,7 +257,8 @@ static int dist_get_size() {
 static int dist_get_remote_size(int64_t comm_ptr) {
     int size;
     MPI_Comm comm = (*reinterpret_cast<MPI_Comm*>(comm_ptr));
-    MPI_Comm_remote_size(comm, &size);
+    CHECK_MPI(MPI_Comm_remote_size(comm, &size),
+              "dist_get_remote_size: MPI error on MPI_Comm_remote_size:");
     return size;
 }
 
@@ -356,7 +360,9 @@ static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
                                int64_t* out_timestamp, int64_t* out_offset,
                                bool is_max) {
     MPI_Op cmp_ttz;
-    MPI_Op_create(is_max ? max_timestamptz : min_timestamptz, 1, &cmp_ttz);
+    CHECK_MPI(
+        MPI_Op_create(is_max ? max_timestamptz : min_timestamptz, 1, &cmp_ttz),
+        "timestamptz_reduce: MPI error on MPI_Op_create:");
 
     // If we pack the value and the offset together we can create a stable
     // value for reducing - while only the value is needed for correctness, it
@@ -369,7 +375,8 @@ static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
     // not use any padding
     constexpr int struct_size = sizeof(int64_t) + sizeof(int32_t);
     int mpi_struct_size;
-    MPI_Type_size(mpi_typ, &mpi_struct_size);
+    CHECK_MPI(MPI_Type_size(mpi_typ, &mpi_struct_size),
+              "timestamptz_reduce: MPI error on MPI_Type_size:");
     assert(mpi_struct_size == struct_size);
 
     char in_val[struct_size];
@@ -383,7 +390,8 @@ static void timestamptz_reduce(int64_t in_timestamp, int64_t in_offset,
     CHECK_MPI(
         MPI_Allreduce(in_val, out_val, 1, mpi_typ, cmp_ttz, MPI_COMM_WORLD),
         "timestamptz_reduce: MPI error on MPI_Allreduce:");
-    MPI_Op_free(&cmp_ttz);
+    CHECK_MPI(MPI_Op_free(&cmp_ttz),
+              "timestamptz_reduce: MPI error on MPI_Op_free:");
 
     // Extract timestamp and offset from the reduced value
     *out_timestamp = *((int64_t*)out_val);
@@ -496,17 +504,22 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
         if (mpi_op == MPI_MIN || mpi_op == MPI_MAX) {
             // create MPI OP corresponding to min/max for decimals
             MPI_Op cmp_decimal;
-            MPI_Op_create(mpi_op == MPI_MAX ? max_decimal : min_decimal, 1,
-                          &cmp_decimal);
+            CHECK_MPI(
+                MPI_Op_create(mpi_op == MPI_MAX ? max_decimal : min_decimal, 1,
+                              &cmp_decimal),
+                "decimal_reduce: MPI error on MPI_Op_create:");
 
             // type consisting of a decimal (represented as 2 int64's)
             MPI_Datatype decimal_type;
-            MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_type);
-            MPI_Type_commit(&decimal_type);
+            CHECK_MPI(MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_type),
+                      "decimal_reduce: MPI error on MPI_Type_contiguous:");
+            CHECK_MPI(MPI_Type_commit(&decimal_type),
+                      "decimal_reduce: MPI error on MPI_Type_commit:");
 
             constexpr int struct_size = 2 * sizeof(uint64_t);
             int mpi_struct_size;
-            MPI_Type_size(decimal_type, &mpi_struct_size);
+            CHECK_MPI(MPI_Type_size(decimal_type, &mpi_struct_size),
+                      "decimal_reduce: MPI error on MPI_Type_size:");
             assert(mpi_struct_size == struct_size);
 
             char out_val[struct_size];
@@ -519,27 +532,34 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
                                     MPI_COMM_WORLD),
                       "_distributed.h::decimal_reduce");
 
-            MPI_Op_free(&cmp_decimal);
-            MPI_Type_free(&decimal_type);
+            CHECK_MPI(MPI_Op_free(&cmp_decimal),
+                      "decimal_reduce: MPI error on MPI_Op_free:");
+            CHECK_MPI(MPI_Type_free(&decimal_type),
+                      "decimal_reduce: MPI error on MPI_Type_free:");
 
             // copy over the min/max decimal into the result
             memcpy(out_ptr, out_val, sizeof(__int128_t));
         } else {
             // create MPI OP corresponding to argmax/argmin for decimals
             MPI_Op argcmp_decimal;
-            MPI_Op_create(
-                mpi_op == MPI_MAXLOC ? argmax_decimal : argmin_decimal, 1,
-                &argcmp_decimal);
+            CHECK_MPI(MPI_Op_create(mpi_op == MPI_MAXLOC ? argmax_decimal
+                                                         : argmin_decimal,
+                                    1, &argcmp_decimal),
+                      "decimal_reduce: MPI error on MPI_Op_create:");
 
             // type consisting of an int64 index and a decimal (represented as 2
             // int64's)
             MPI_Datatype index_decimal_type;
-            MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &index_decimal_type);
-            MPI_Type_commit(&index_decimal_type);
+            CHECK_MPI(
+                MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &index_decimal_type),
+                "decimal_reduce: MPI error on MPI_Type_contiguous:");
+            CHECK_MPI(MPI_Type_commit(&index_decimal_type),
+                      "decimal_reduce: MPI error on MPI_Type_commit:");
 
             constexpr int struct_size = 3 * sizeof(uint64_t);
             int mpi_struct_size;
-            MPI_Type_size(index_decimal_type, &mpi_struct_size);
+            CHECK_MPI(MPI_Type_size(index_decimal_type, &mpi_struct_size),
+                      "decimal_reduce: MPI error on MPI_Type_size:");
             assert(mpi_struct_size == struct_size);
 
             char in_val[struct_size];
@@ -557,8 +577,10 @@ static void decimal_reduce(int64_t index, uint64_t* in_ptr, char* out_ptr,
                                     argcmp_decimal, MPI_COMM_WORLD),
                       "_distributed.h::decimal_reduce");
 
-            MPI_Op_free(&argcmp_decimal);
-            MPI_Type_free(&index_decimal_type);
+            CHECK_MPI(MPI_Op_free(&argcmp_decimal),
+                      "decimal_reduce: MPI error on MPI_Op_free:");
+            CHECK_MPI(MPI_Type_free(&index_decimal_type),
+                      "decimal_reduce: MPI error on MPI_Type_free:");
 
             // copy over the index into the result
             memcpy(out_ptr, out_val, sizeof(uint64_t));
@@ -591,7 +613,8 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum,
 
         // allreduce struct is value + integer
         int value_size;
-        MPI_Type_size(mpi_typ, &value_size);
+        CHECK_MPI(MPI_Type_size(mpi_typ, &value_size),
+                  "dist_reduce: MPI error on MPI_Type_size:");
         // TODO: support int64_int value on Windows
         MPI_Datatype val_rank_mpi_typ = get_val_rank_MPI_typ(type_enum);
         // copy input index_value to output
@@ -601,7 +624,8 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum, int type_enum,
         // argmin/argmax in MPI communicates a struct of 2 values:
         // the actual value and a 32-bit index.
         int val_idx_struct_size;
-        MPI_Type_size(val_rank_mpi_typ, &val_idx_struct_size);
+        CHECK_MPI(MPI_Type_size(val_rank_mpi_typ, &val_idx_struct_size),
+                  "dist_reduce: MPI error on MPI_Type_size:");
 
         // format: value + int (input format is int64+value)
         char* in_val_rank = (char*)malloc(val_idx_struct_size);
@@ -810,8 +834,13 @@ static MPI_Datatype get_MPI_typ() {
             // initialize decimal_mpi_type
             // TODO: free when program exits
             if (decimal_mpi_type == MPI_DATATYPE_NULL) {
-                MPI_Type_contiguous(2, MPI_LONG_LONG_INT, &decimal_mpi_type);
-                MPI_Type_commit(&decimal_mpi_type);
+                CHECK_MPI(MPI_Type_contiguous(2, MPI_LONG_LONG_INT,
+                                              &decimal_mpi_type),
+                          "_distributed.h::get_MPI_typ: MPI error on "
+                          "MPI_Type_contiguous:");
+                CHECK_MPI(MPI_Type_commit(&decimal_mpi_type),
+                          "_distributed.h::get_MPI_typ: MPI error on "
+                          "MPI_Type_commit:");
             }
             return decimal_mpi_type;
         case Bodo_CTypes::COMPLEX128:
@@ -897,8 +926,13 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
         if (decimal_index_mpi_type == MPI_DATATYPE_NULL) {
             // two int64's representing the decimal and one representing the
             // index
-            MPI_Type_contiguous(3, MPI_LONG_LONG_INT, &decimal_index_mpi_type);
-            MPI_Type_commit(&decimal_index_mpi_type);
+            CHECK_MPI(MPI_Type_contiguous(3, MPI_LONG_LONG_INT,
+                                          &decimal_index_mpi_type),
+                      "_distributed.h::get_val_rank_MPI_typ: MPI error on "
+                      "MPI_Type_contiguous:");
+            CHECK_MPI(MPI_Type_commit(&decimal_index_mpi_type),
+                      "_distributed.h::get_val_rank_MPI_typ: MPI error on "
+                      "MPI_Type_commit:");
         }
         return decimal_index_mpi_type;
     }
@@ -1016,21 +1050,12 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
 static void c_comm_create(const int* comm_ranks, int n, MPI_Comm* comm) {
     MPI_Group new_group;
     MPI_Group world_group;
-    int err = MPI_Comm_group(MPI_COMM_WORLD, &world_group);
-    if (err != MPI_SUCCESS) {
-        PyErr_SetString(PyExc_RuntimeError, "MPI_Comm_group failed");
-        return;
-    }
-    err = MPI_Group_incl(world_group, n, comm_ranks, &new_group);
-    if (err != MPI_SUCCESS) {
-        PyErr_SetString(PyExc_RuntimeError, "MPI_Group_incl failed");
-        return;
-    }
-    err = MPI_Comm_create(MPI_COMM_WORLD, new_group, comm);
-    if (err != MPI_SUCCESS) {
-        PyErr_SetString(PyExc_RuntimeError, "MPI_Comm_create failed");
-        return;
-    }
+    CHECK_MPI(MPI_Comm_group(MPI_COMM_WORLD, &world_group),
+              "_distributed.h::c_comm_create: MPI error on MPI_Comm_group:");
+    CHECK_MPI(MPI_Group_incl(world_group, n, comm_ranks, &new_group),
+              "_distributed.h::c_comm_create: MPI error on MPI_Comm_group:");
+    CHECK_MPI(MPI_Comm_create(MPI_COMM_WORLD, new_group, comm),
+              "_distributed.h::c_comm_create: MPI error on MPI_Comm_group:");
 }
 
 /**
@@ -1059,24 +1084,12 @@ static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                         int* recv_counts, int* send_disp, int* recv_disp,
                         int typ_enum) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
-    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
-    int err_code =
+    CHECK_MPI(MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN),
+              "_distributed.h::c_alltoallv: MPI error on MPI_Errhandler_set:");
+    CHECK_MPI(
         MPI_Alltoallv(send_data, send_counts, send_disp, mpi_typ, recv_data,
-                      recv_counts, recv_disp, mpi_typ, MPI_COMM_WORLD);
-
-    // TODO: create a macro for this and add to all MPI calls
-    if (err_code != MPI_SUCCESS) {
-        char err_string[MPI_MAX_ERROR_STRING];
-        err_string[MPI_MAX_ERROR_STRING - 1] = '\0';
-        int err_len, err_class, my_rank;
-        MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-        MPI_Error_class(err_code, &err_class);
-        MPI_Error_string(err_class, err_string, &err_len);
-        fprintf(stderr, "%d: %s\n", my_rank, err_string);
-        MPI_Error_string(err_code, err_string, &err_len);
-        fprintf(stderr, "%d: %s\n", my_rank, err_string);
-        MPI_Abort(MPI_COMM_WORLD, err_code);
-    }
+                      recv_counts, recv_disp, mpi_typ, MPI_COMM_WORLD),
+        "_distributed.h::c_alltoallv: MPI error on MPI_Alltoallv:");
 }
 
 static void c_alltoall(void* send_data, void* recv_data, int count,
@@ -1096,13 +1109,15 @@ static int finalize() {
 
     // Free user-defined decimal MPI type to avoid leaks
     MPI_Datatype decimal_mpi_type = get_MPI_typ(Bodo_CTypes::DECIMAL);
-    MPI_Type_free(&decimal_mpi_type);
+    CHECK_MPI(MPI_Type_free(&decimal_mpi_type),
+              "_distributed.h::finalize: MPI error on MPI_Type_free:");
 
     int is_finalized;
     MPI_Finalized(&is_finalized);
     if (!is_finalized) {
         // printf("finalizing\n");
-        MPI_Finalize();
+        CHECK_MPI(MPI_Finalize(),
+                  "_distributed.h::finalize: MPI error on MPI_Finalize:");
     }
     return 0;
 }
@@ -1239,8 +1254,12 @@ static void permutation_array_index(unsigned char* lhs, uint64_t len,
         }
 
         MPI_Datatype element_t;
-        MPI_Type_contiguous(elem_size, MPI_UNSIGNED_CHAR, &element_t);
-        MPI_Type_commit(&element_t);
+        CHECK_MPI(MPI_Type_contiguous(elem_size, MPI_UNSIGNED_CHAR, &element_t),
+                  "_distributed.h::permutation_array_index: MPI error on "
+                  "MPI_Type_contiguous:");
+        CHECK_MPI(MPI_Type_commit(&element_t),
+                  "_distributed.h::permutation_array_index: MPI error on "
+                  "MPI_Type_commit:");
 
         auto num_ranks = dist_get_size();
         auto rank = dist_get_rank();
@@ -1301,7 +1320,9 @@ static void permutation_array_index(unsigned char* lhs, uint64_t len,
         // [b c d e] to obtain the target output [e c d b].
         apply_permutation(lhs, elem_size, my_p);
 
-        MPI_Type_free(&element_t);
+        CHECK_MPI(MPI_Type_free(&element_t),
+                  "_distributed.h::permutation_array_index: MPI error on "
+                  "MPI_Type_free:");
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -1321,8 +1342,10 @@ static void bodo_alltoallv(const void* sendbuf,
     int recv_typ_size;
     int n_pes;
     MPI_Comm_size(comm, &n_pes);
-    MPI_Type_size(sendtype, &send_typ_size);
-    MPI_Type_size(recvtype, &recv_typ_size);
+    CHECK_MPI(MPI_Type_size(sendtype, &send_typ_size),
+              "_distributed.h::bodo_alltoallv: MPI error on MPI_Type_size:");
+    CHECK_MPI(MPI_Type_size(recvtype, &recv_typ_size),
+              "_distributed.h::bodo_alltoallv: MPI error on MPI_Type_size:");
     int big_shuffle = 0;
     for (int i = 0; i < n_pes; i++) {
         if (big_shuffle > 1)
@@ -1370,8 +1393,13 @@ static void bodo_alltoallv(const void* sendbuf,
         int rank;
         MPI_Comm_rank(comm, &rank);
         MPI_Datatype large_dtype;
-        MPI_Type_contiguous(A2AV_LARGE_DTYPE_SIZE, MPI_CHAR, &large_dtype);
-        MPI_Type_commit(&large_dtype);
+        CHECK_MPI(
+            MPI_Type_contiguous(A2AV_LARGE_DTYPE_SIZE, MPI_CHAR, &large_dtype),
+            "_distributed.h::bodo_alltoallv: MPI error on "
+            "MPI_Type_contiguous:");
+        CHECK_MPI(
+            MPI_Type_commit(&large_dtype),
+            "_distributed.h::bodo_alltoallv: MPI error on MPI_Type_commit:");
         for (int i = 0; i < n_pes; i++) {
             int dest = (rank + i + n_pes) % n_pes;
             int src = (rank - i + n_pes) % n_pes;
@@ -1397,7 +1425,9 @@ static void bodo_alltoallv(const void* sendbuf,
                     MPI_CHAR, src, TAG + 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE),
                 "_distributed.h::bodo_alltoallv: MPI error on MPI_Sendrecv:");
         }
-        MPI_Type_free(&large_dtype);
+        CHECK_MPI(
+            MPI_Type_free(&large_dtype),
+            "_distributed.h::bodo_alltoallv: MPI error on MPI_Type_free:");
     }
 }
 

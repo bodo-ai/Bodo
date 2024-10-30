@@ -737,8 +737,10 @@ bodo::tests::suite external_sort_tests([] {
                 }
             } else {
                 bodo::tests::check(int_arr->length() == 0);
-                MPI_Gather(&range, 1, MPI_2INT, gather.data(), 1, MPI_2INT, 0,
-                           MPI_COMM_WORLD);
+                CHECK_MPI(MPI_Gather(&range, 1, MPI_2INT, gather.data(), 1,
+                                     MPI_2INT, 0, MPI_COMM_WORLD),
+                          "test_external_sort::test_unbalanced_data: MPI error "
+                          "on MPI_Gather:");
                 if (myrank == 0) {
                     for (int i = 0; i < n_pes; i++) {
                         if (i == 0)
@@ -817,8 +819,10 @@ bodo::tests::suite external_sort_tests([] {
                 }
             } else {
                 bodo::tests::check(int_arr->length() == 0);
-                MPI_Gather(&range, 1, MPI_2INT, gather.data(), 1, MPI_2INT, 0,
-                           MPI_COMM_WORLD);
+                CHECK_MPI(MPI_Gather(&range, 1, MPI_2INT, gather.data(), 1,
+                                     MPI_2INT, 0, MPI_COMM_WORLD),
+                          "test_external_sort::test_parallel_all_local: MPI "
+                          "error on MPI_Gather:");
                 if (myrank == 0) {
                     for (int i = 0; i < n_pes; i++) {
                         if (i == 0)
@@ -851,8 +855,10 @@ bodo::tests::suite external_sort_tests([] {
             unsort_vector(global_data);
         }
         // Broadcast data from rank0 to all hosts
-        MPI_Bcast(global_data.data(), n_elem, get_MPI_typ<Bodo_CTypes::INT64>(),
-                  0, MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Bcast(global_data.data(), n_elem,
+                      get_MPI_typ<Bodo_CTypes::INT64>(), 0, MPI_COMM_WORLD),
+            "test_external_sort::test_parallel: MPI error on MPI_Bcast:");
 
         std::vector<int64_t> local_data(n_elems_per_host);
         int64_t start_elem = myrank * n_elems_per_host;
@@ -889,9 +895,11 @@ bodo::tests::suite external_sort_tests([] {
         int64_t max = int_arr->Value(int_arr->length() - 1);
         // Get the maximum element from every rank
         std::vector<int64_t> maximums(n_pes);
-        MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                      maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                      MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                          maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                          MPI_COMM_WORLD),
+            "test_external_sort::test_parallel: MPI error on MPI_Allgather:");
 
         // Check that element 0 is the max value on the previous rank + 1
         if (myrank == 0) {
@@ -973,9 +981,12 @@ bodo::tests::suite external_sort_tests([] {
         int64_t max = int_arr->Value(int_arr->length() - 1);
         // Get the maximum element from every rank
         std::vector<int64_t> maximums(n_pes);
-        MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                      maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                      MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                          maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                          MPI_COMM_WORLD),
+            "test_external_sort::test_parallel_edgecase: MPI error on "
+            "MPI_Allgather:");
 
         // Check that element 0 is the max value on the previous rank + 1
         if (myrank == 0) {
@@ -1072,9 +1083,12 @@ bodo::tests::suite external_sort_tests([] {
                               ? int_arr->Value(int_arr->length() - 1)
                               : -1;
             std::vector<int64_t> maximums(n_pes);
-            MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                          maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                          MPI_COMM_WORLD);
+            CHECK_MPI(MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                                    maximums.data(), 1,
+                                    get_MPI_typ<Bodo_CTypes::INT64>(),
+                                    MPI_COMM_WORLD),
+                      "test_external_sort::test_parallel_stress: MPI error on "
+                      "MPI_Allgather:");
             int64_t start = offset >= 0 ? offset : 0;
             for (int64_t i = 0; i < myrank; i++)
                 start = std::max(start, maximums[i] + 1);
@@ -1190,9 +1204,12 @@ bodo::tests::suite external_sort_tests([] {
         int64_t max = int_arr->Value(int_arr->length() - 1);
         // Get the maximum element from every rank
         std::vector<int64_t> maximums(n_pes);
-        MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                      maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
-                      MPI_COMM_WORLD);
+        CHECK_MPI(
+            MPI_Allgather(&max, 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                          maximums.data(), 1, get_MPI_typ<Bodo_CTypes::INT64>(),
+                          MPI_COMM_WORLD),
+            "test_external_sort::test_shuffle_stress: MPI error on "
+            "MPI_Allgather:");
 
         // Check that element 0 is the max value on the previous rank + 1
         if (myrank != 0) {

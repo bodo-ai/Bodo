@@ -16,8 +16,8 @@
 // Needed for 'malloc_trim'
 #include <malloc.h>
 #endif
-#include <mpi.h>
 #include <sys/mman.h>
+#include "_mpi.h"
 
 #include <fmt/args.h>
 #include <fmt/chrono.h>

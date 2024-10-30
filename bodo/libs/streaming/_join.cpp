@@ -1321,7 +1321,8 @@ HashJoinState::HashJoinState(
 
     this->global_bloom_filter = create_bloom_filter();
 
-    MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm);
+    CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->shuffle_comm),
+              "HashJoinState: MPI error on MPI_Comm_dup:");
 
     if (char* unique_vals_limit_env_ =
             std::getenv("BODO_JOIN_UNIQUE_VALUES_LIMIT")) {

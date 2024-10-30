@@ -8,7 +8,7 @@
 #include <random>
 #include <span>
 #include <vector>
-#include "mpi.h"
+#include "_mpi.h"
 
 #include "_array_utils.h"
 #include "_bodo_common.h"

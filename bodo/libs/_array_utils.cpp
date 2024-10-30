@@ -10,12 +10,12 @@
 #include <arrow/compute/cast.h>
 #include <arrow/type_fwd.h>
 #include <fmt/format.h>
-#include <mpi.h>
 #include <complex>
 #include <iostream>
 #include <span>
 #include <string>
 #include <unordered_map>
+#include "_mpi.h"
 
 #include <arrow/builder.h>
 

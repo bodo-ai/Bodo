@@ -571,7 +571,10 @@ class IsLastState {
     bool global_is_last = false;
     MPI_Comm is_last_comm;
 
-    IsLastState() { MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm); }
+    IsLastState() {
+        CHECK_MPI(MPI_Comm_dup(MPI_COMM_WORLD, &this->is_last_comm),
+                  "IsLastState: MPI error on MPI_Comm_dup:");
+    }
     ~IsLastState() { MPI_Comm_free(&this->is_last_comm); }
 };
 
@@ -661,7 +664,8 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
         is_intercomm = true;
         is_receiver = (mpi_root == MPI_ROOT);
         if (is_receiver) {
-            MPI_Comm_remote_size(*comm_ptr, &n_pes);
+            CHECK_MPI(MPI_Comm_remote_size(*comm_ptr, &n_pes),
+                      "gather_array: MPI error on MPI_Comm_remote_size:");
             n_rows = 0;
             n_sub_elems = 0;
         }
@@ -1030,7 +1034,9 @@ array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
         if (mpi_comm_ptr != nullptr) {
             is_receiver = (mpi_root == MPI_ROOT);
             if (is_receiver) {
-                MPI_Comm_remote_size(*mpi_comm_ptr, &n_pes);
+                CHECK_MPI(MPI_Comm_remote_size(*mpi_comm_ptr, &n_pes),
+                          "gather_array_py_entry: MPI error on "
+                          "MPI_Comm_remote_size:");
             }
         }
 
@@ -1133,7 +1139,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized)
-        MPI_Init(NULL, NULL);
+        CHECK_MPI(MPI_Init(NULL, NULL), "PyInit_hdist: MPI error on MPI_Init:");
 
 #if defined(CHECK_LICENSE_PLATFORM)
     int num_pes_plat;
@@ -1235,7 +1241,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
 #endif
 
     int decimal_bytes;
-    MPI_Type_size(get_MPI_typ(Bodo_CTypes::DECIMAL), &decimal_bytes);
+    CHECK_MPI(MPI_Type_size(get_MPI_typ(Bodo_CTypes::DECIMAL), &decimal_bytes),
+              "PyInit_hdist: MPI error on MPI_Type_size:");
     // decimal_value should be exactly 128 bits to match Python
     if (decimal_bytes != 16)
         std::cerr << "invalid decimal mpi type size" << std::endl;
