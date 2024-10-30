@@ -10,8 +10,6 @@ import warnings
 from py4j.java_collections import ListConverter, MapConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway
 
-from bodo.mpi4py import MPI
-
 if pt.TYPE_CHECKING:
     from py4j.java_gateway import JavaClass
 
@@ -93,11 +91,6 @@ def launch_jvm() -> JavaGateway:
     """
     global CLASSES, gateway, global_redirect_path
 
-    rank = MPI.COMM_WORLD.Get_rank()
-    assert (
-        rank == 0
-    ), f"Rank {rank} is trying to launch the JVM. Only rank 0 should launch it."
-
     # If provided, redirect stdout and stderr to the specified file.
     # Useful for testing because capsys will error when capturing Java output
     # If the environment variable changes, we will relaunch the JVM
@@ -115,6 +108,7 @@ def launch_jvm() -> JavaGateway:
         # We don't need to specify a classpath here, as the executable JAR has a baked in default
         # classpath, which will point to the folder that contains all the needed dependencies.
         java_path = get_java_path()
+        print(f"Launching JVM with Java executable: {java_path}", file=sys.stderr)
 
         redirectf = None if redirect_path is None else open(redirect_path, "w")
 

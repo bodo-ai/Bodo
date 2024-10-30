@@ -22,7 +22,12 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 
-dependencies = ["py4j==0.10.9.7"]
+dependencies = [
+    "py4j==0.10.9.7",
+    "pyarrow==17.0.0",
+    "numpy>=1.24,<1.27",
+    "pandas>=2.1,<2.2",
+]
 
 [project.urls]
 Homepage = "https://bodo.ai"
@@ -30,9 +35,13 @@ Documentation = "https://docs.bodo.ai"
 
 [tool.setuptools]
 packages = ["bodo_iceberg_connector"]
+include-package-data = false
 
 [tool.setuptools.package-data]
 bodo_iceberg_connector = ["jars/bodo-iceberg-reader.jar", "jars/libs/*.jar"]
+
+[tool.setuptools.exclude-package-data]
+bodo_iceberg_connector = ["iceberg-java"]
 
 [tool.setuptools_scm]
 root = ".."

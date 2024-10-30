@@ -1,9 +1,9 @@
 import base64
 import json
+import typing as pt
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
-import pyarrow as pa
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
@@ -25,6 +25,9 @@ from bodo_iceberg_connector.schema_helper import (
     arrow_to_iceberg_schema,
     convert_arrow_schema_to_large_types,
 )
+
+if pt.TYPE_CHECKING:
+    import pyarrow as pa
 
 
 @dataclass
@@ -83,7 +86,7 @@ def process_file_infos(
     return json.dumps(file_infos, cls=BytesEncoder)
 
 
-def get_schema_with_init_field_ids(schema: pa.Schema) -> pa.Schema:
+def get_schema_with_init_field_ids(schema: "pa.Schema") -> "pa.Schema":
     """
     Python wrapper around BodoIcebergHandler.getInitSchema.
     See the docstring of that function for more details about
@@ -117,7 +120,7 @@ def start_write(
     table_loc: str,
     iceberg_schema_id: int,
     create_table_info,
-    pa_schema: pa.Schema,
+    pa_schema: "pa.Schema",
     partition_spec: Optional[str],
     sort_order: Optional[str],
     mode: str,
