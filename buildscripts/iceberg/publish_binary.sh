@@ -36,7 +36,7 @@ if [[ -n "$IS_RELEASE" ]] && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
 fi
 
 cd buildscripts/iceberg/conda-recipe/
-conda mambabuild . --no-test -c conda-forge
+conda build . -c conda-forge
 
 # Upload to Anaconda
 package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.tar.bz2`

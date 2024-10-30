@@ -21,7 +21,7 @@ ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '
 label="main"
 
 cd buildscripts/azurefs-sas-token-provider/conda-recipe/
-conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
+conda build . -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
 
 # Upload to Anaconda
 package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-azurefs-sas-token-provider*.tar.bz2`

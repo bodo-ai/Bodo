@@ -29,11 +29,12 @@ jobs:
     secrets: inherit
 
   iceberg-conda:
-    uses: Bodo-inc/Bodo/.github/workflows/_build_iceberg_conda.yml@slade/connect-iceberg-sas
+    uses: Bodo-inc/Bodo/.github/workflows/_build_iceberg_conda.yml@develop
     secrets: inherit
 
   azurefs-sas-conda:
-    uses: Bodo-inc/Bodo/.github/workflows/_build_azurefs_sas_token_provider_conda.yml@slade/connect-iceberg-sas
+    if: github.event_name == 'release'
+    uses: Bodo-inc/Bodo/.github/workflows/_build_azurefs_sas_token_provider_conda.yml@develop
     secrets: inherit
 
   # TODO: Include BodoSQL, E2E tests, and AMI
