@@ -8,13 +8,15 @@
 #include <sys/sysctl.h>
 #endif
 
-#include <mpi.h>
+#include "_distributed.h"
+#include "_mpi.h"
 
 std::tuple<int, int> dist_get_ranks_on_node() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) {
-        MPI_Init(NULL, NULL);
+        CHECK_MPI(MPI_Init(NULL, NULL),
+                  "dist_get_ranks_on_node: MPI error on MPI_Init:");
     }
 
     int npes_node;
@@ -23,8 +25,9 @@ std::tuple<int, int> dist_get_ranks_on_node() {
 
     // Split comm into comms that has same shared memory.
     // This is a collective operation and all ranks must call it.
-    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
-                        &shmcomm);
+    CHECK_MPI(MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0,
+                                  MPI_INFO_NULL, &shmcomm),
+              "dist_get_ranks_on_node: MPI error on MPI_Comm_split_type:");
     // Get number of ranks on this sub-communicator (i.e. node).
     // By definition, all ranks on the same node will get the same
     // output.

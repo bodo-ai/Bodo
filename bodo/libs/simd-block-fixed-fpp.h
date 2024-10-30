@@ -34,7 +34,7 @@
 #include <cstdlib>
 #include <memory>
 
-#include <mpi.h>
+#include "_mpi.h"
 #include "hashutil.h"
 #include "tracing.h"
 
@@ -133,9 +133,15 @@ class SimdBlockFilterFixed {
             reinterpret_cast<void**>(&recv_directory_), 64, alloc_size);
         if (recv_malloc_failed)
             throw ::std::bad_alloc();
-        MPI_Allreduce(directory_, recv_directory_,
-                      static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
-                      MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
+        int err =
+            MPI_Allreduce(directory_, recv_directory_,
+                          static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
+                          MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
+        if (err) {
+            throw std::runtime_error(
+                "SimdBlockFilterFixed::union_reduction: MPI error on "
+                "MPI_Allreduce:");
+        }
         free(directory_);
         directory_ = recv_directory_;
     }
@@ -454,9 +460,15 @@ class SimdBlockFilterFixed {
             reinterpret_cast<void**>(&recv_directory_), 64, alloc_size);
         if (recv_malloc_failed)
             throw ::std::bad_alloc();
-        MPI_Allreduce(directory_, recv_directory_,
-                      static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
-                      MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
+        int err =
+            MPI_Allreduce(directory_, recv_directory_,
+                          static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
+                          MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
+        if (err) {
+            throw std::runtime_error(
+                "SimdBlockFilterFixed::union_reduction: MPI error on "
+                "MPI_Allreduce:");
+        }
         free(directory_);
         directory_ = recv_directory_;
     }

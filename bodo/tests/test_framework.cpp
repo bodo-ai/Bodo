@@ -1,5 +1,6 @@
 #include <sstream>
 #include "../libs/_bodo_common.h"
+#include "../libs/_distributed.h"
 #include "./test.hpp"
 #include "mpi.h"
 
@@ -255,8 +256,9 @@ void bodo::tests::check_exception(std::function<void()> f,
 
 void bodo::tests::check_parallel(bool b, std::source_location loc) {
     bool global_b = b;
-    MPI_Allreduce(&b, &global_b, 1, MPI_UNSIGNED_CHAR, MPI_LAND,
-                  MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Allreduce(&b, &global_b, 1, MPI_UNSIGNED_CHAR, MPI_LAND,
+                            MPI_COMM_WORLD),
+              "bodo::tests::check_parallel: MPI error on MPI_Allreduce:");
     if (global_b) {
         return;
     }

@@ -1,7 +1,6 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved.
 #include "./_query_profile_collector.h"
 #include <fmt/core.h>
-#include <mpi.h>
 #include <sys/stat.h>
 #include <boost/json.hpp>
 #include <chrono>
@@ -12,6 +11,7 @@
 #include "_distributed.h"
 #include "_memory.h"
 #include "_memory_budget.h"
+#include "_mpi.h"
 
 #define DISABLE_IF_TRACING_DISABLED \
     if (tracing_level == 0) {       \
