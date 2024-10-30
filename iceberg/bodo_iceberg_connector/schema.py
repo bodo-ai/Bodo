@@ -3,10 +3,10 @@ API used to translate a Java Schema object into various Pythonic
 representations (Arrow and Bodo)
 """
 
+import typing as pt
 from collections import namedtuple
 from typing import Dict, List, Optional, Tuple
 
-import pyarrow as pa
 from py4j.protocol import Py4JError
 
 from bodo_iceberg_connector.catalog_conn import (
@@ -24,6 +24,10 @@ from bodo_iceberg_connector.schema_helper import (
     b_ICEBERG_FIELD_ID_MD_KEY,
     convert_arrow_schema_to_large_types,
 )
+
+if pt.TYPE_CHECKING:
+    import pyarrow as pa
+
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType
@@ -125,7 +129,7 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
             java_schema = java_table_info.getIcebergSchema()
             py_schema = iceberg_schema_java_to_py(java_schema)
 
-            pyarrow_schema: pa.Schema = arrow_schema_j2py(
+            pyarrow_schema: "pa.Schema" = arrow_schema_j2py(
                 java_table_info.getArrowSchema()
             )
             pyarrow_schema = convert_arrow_schema_to_large_types(pyarrow_schema)

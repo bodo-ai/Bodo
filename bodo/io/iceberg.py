@@ -3034,7 +3034,11 @@ def add_iceberg_field_id_md_to_pa_schema(
         pa.Schema: Schema with Iceberg Field IDs correctly assigned
             in the metadata of all its fields.
     """
-    import bodo_iceberg_connector as connector
+    import bodo_iceberg_connector as bic
+
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::add_iceberg_field_id_md_to_pa_schema must be called from rank 0 only"
 
     if ref_schema is None:
         new_fields = []
@@ -3049,7 +3053,7 @@ def add_iceberg_field_id_md_to_pa_schema(
             )
             new_fields.append(new_field)
         intermediate_schema = pa.schema(new_fields)
-        return connector.get_schema_with_init_field_ids(intermediate_schema)
+        return bic.get_schema_with_init_field_ids(intermediate_schema)
     else:
         new_fields = []
         for field in schema:
@@ -3059,9 +3063,7 @@ def add_iceberg_field_id_md_to_pa_schema(
             new_field = with_iceberg_field_id_md_from_ref_field(field, ref_field)
             new_fields.append(new_field)
         pyarrow_schema = pa.schema(new_fields)
-        return connector.schema_helper.convert_arrow_schema_to_large_types(
-            pyarrow_schema
-        )
+        return bic.schema_helper.convert_arrow_schema_to_large_types(pyarrow_schema)
 
 
 def get_table_details_before_write(
@@ -3079,7 +3081,7 @@ def get_table_details_before_write(
     """
     ev = tracing.Event("iceberg_get_table_details_before_write")
 
-    import bodo_iceberg_connector as connector
+    import bodo_iceberg_connector as bic
 
     comm = MPI.COMM_WORLD
 
@@ -3110,7 +3112,7 @@ def get_table_details_before_write(
                 iceberg_schema_str,
                 partition_spec,
                 sort_order,
-            ) = connector.get_typing_info(conn, database_schema, table_name)
+            ) = bic.get_typing_info(conn, database_schema, table_name)
             already_exists = iceberg_schema_id is not None
             iceberg_schema_id = iceberg_schema_id if already_exists else -1
 
@@ -3184,11 +3186,11 @@ def get_table_details_before_write(
                 # When the table doesn't exist, i.e. we're creating a new one,
                 # we need to create iceberg_schema_str from the PyArrow schema
                 # of the dataframe.
-                iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(
+                iceberg_schema_str = bic.pyarrow_to_iceberg_schema_str(
                     output_pyarrow_schema
                 )
 
-        except connector.IcebergError as e:
+        except bic.IcebergError as e:
             comm_exc = BodoError(e.message)
         except Exception as e:
             comm_exc = e
@@ -3350,6 +3352,10 @@ def remove_transaction(
     """
     import bodo_iceberg_connector
 
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::remove_transaction must be called from rank 0 only"
+
     bodo_iceberg_connector.remove_transaction(
         transaction_id, conn_str, db_name, table_name
     )
@@ -3379,6 +3385,10 @@ def fetch_puffin_metadata(
         location at which to write the puffin file.
     """
     import bodo_iceberg_connector
+
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::fetch_puffin_metadata must be called from rank 0 only"
 
     ev = tracing.Event("fetch_puffin_file_metadata")
     metadata = bodo_iceberg_connector.fetch_puffin_metadata(
@@ -3410,6 +3420,10 @@ def commit_statistics_file(
     """
     import bodo_iceberg_connector
 
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::commit_statistics_file must be called from rank 0 only"
+
     ev = tracing.Event("commit_statistics_file")
     bodo_iceberg_connector.commit_statistics_file(
         conn_str, db_name, table_name, snapshot_id, statistic_file_info
@@ -3421,6 +3435,9 @@ def commit_statistics_file(
 def table_columns_have_theta_sketches(conn_str: str, db_name: str, table_name: str):
     import bodo_iceberg_connector
 
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::table_columns_have_theta_sketches must be called from rank 0 only"
     return bodo_iceberg_connector.table_columns_have_theta_sketches(
         conn_str, db_name, table_name
     )
@@ -3440,6 +3457,9 @@ def table_columns_enabled_theta_sketches(conn_str: str, db_name: str, table_name
     """
     import bodo_iceberg_connector
 
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::table_columns_enabled_theta_sketches must be called from rank 0 only"
     return bodo_iceberg_connector.table_columns_enabled_theta_sketches(
         conn_str, db_name, table_name
     )
@@ -3455,6 +3475,9 @@ def get_old_statistics_file_path(
     """
     import bodo_iceberg_connector
 
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::get_old_statistics_file_path must be called from rank 0 only"
     return bodo_iceberg_connector.get_old_statistics_file_path(
         txn_id, conn_str, db_name, table_name
     )
@@ -3824,35 +3847,35 @@ def iceberg_merge_cow_py(
 
     else:
         data_args = ", ".join(
-            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(bodo_df, {}))".format(
-                i
-            )
+            f"array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(bodo_df, {i}))"
             for i in range(len(bodo_df.columns))
         )
 
-        func_text = "def impl(\n"
-        func_text += "    table_name,\n"
-        func_text += "    conn,\n"
-        func_text += "    database_schema,\n"
-        func_text += "    bodo_df,\n"
-        func_text += "    snapshot_id,\n"
-        func_text += "    old_fnames,\n"
-        func_text += "    is_parallel=True,\n"
-        func_text += "):\n"
-        func_text += "    info_list = [{}]\n".format(data_args)
-        func_text += "    table = arr_info_list_to_table(info_list)\n"
-        func_text += "    iceberg_merge_cow(\n"
-        func_text += "        table_name,\n"
-        func_text += "        format_iceberg_conn_njit(conn),\n"
-        func_text += "        database_schema,\n"
-        func_text += "        table,\n"
-        func_text += "        snapshot_id,\n"
-        func_text += "        old_fnames,\n"
-        func_text += "        array_to_info(col_names_py),\n"
-        func_text += "        df_pyarrow_schema,\n"
-        func_text += f"        {num_cols},\n"
-        func_text += "        is_parallel,\n"
-        func_text += "    )\n"
+        func_text = (
+            "def impl(\n"
+            "    table_name,\n"
+            "    conn,\n"
+            "    database_schema,\n"
+            "    bodo_df,\n"
+            "    snapshot_id,\n"
+            "    old_fnames,\n"
+            "    is_parallel=True,\n"
+            "):\n"
+            f"    info_list = [{data_args}]\n"
+            "    table = arr_info_list_to_table(info_list)\n"
+            "    iceberg_merge_cow(\n"
+            "        table_name,\n"
+            "        format_iceberg_conn_njit(conn),\n"
+            "        database_schema,\n"
+            "        table,\n"
+            "        snapshot_id,\n"
+            "        old_fnames,\n"
+            "        array_to_info(col_names_py),\n"
+            "        df_pyarrow_schema,\n"
+            f"        {num_cols},\n"
+            "        is_parallel,\n"
+            "    )\n"
+        )
 
         locals = {}
         globals = {
@@ -4096,9 +4119,13 @@ def wrap_start_write(
     mode (str): What write operation we are doing. This must be one of
         ['create', 'append', 'replace']
     """
-    import bodo_iceberg_connector as connector
+    import bodo_iceberg_connector as bic
 
-    return connector.start_write(
+    assert (
+        bodo.get_rank() == 0
+    ), "bodo/io/iceberg.py::wrap_start_write must be called from rank 0 only"
+
+    return bic.start_write(
         conn,
         database_schema,
         table_name,
