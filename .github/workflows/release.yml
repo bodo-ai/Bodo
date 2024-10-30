@@ -1,7 +1,10 @@
 name: Release
 on:
+  schedule:
+    - cron: '0 21 * * *'  # Every day at 9PM EST
   release:
-    types: [created]
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   bodo-conda-community:
@@ -9,7 +12,7 @@ jobs:
       # Don't cancel other jobs if one fails
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.12', '3.11', '3.10']
     uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda.yml@develop
     with:
       python-version: ${{ matrix.python-version }}
@@ -25,4 +28,12 @@ jobs:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit
 
-  # TODO: Include BodoSQL, Iceberg, Azure SAS, E2E tests, and AMI
+  iceberg-conda:
+    uses: Bodo-inc/Bodo/.github/workflows/_build_iceberg_conda.yml@slade/connect-iceberg-sas
+    secrets: inherit
+
+  azurefs-sas-conda:
+    uses: Bodo-inc/Bodo/.github/workflows/_build_azurefs_sas_token_provider_conda.yml@slade/connect-iceberg-sas
+    secrets: inherit
+
+  # TODO: Include BodoSQL, E2E tests, and AMI
