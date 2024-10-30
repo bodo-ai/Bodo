@@ -47,7 +47,7 @@ jobs:
       # Build Conda Package with Conda-Build
       # -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ points to previously
       # build Bodo package for Linux
-      conda build buildscripts/bodosql/conda-recipe -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge --no-test
+      conda build buildscripts/bodosql/conda-recipe -c $(Pipeline.Workspace)/Bodo-CondaPkg-Linux/ -c conda-forge
 
       # Copy Build Folder to Working Directory
       cp -r $HOME/miniforge3/envs/$CONDA_ENV/conda-bld/ $(System.DefaultWorkingDirectory)/conda-bld/

@@ -14,7 +14,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup up Micromamba and Install Dependencies
         uses: mamba-org/setup-micromamba@v1
         with:

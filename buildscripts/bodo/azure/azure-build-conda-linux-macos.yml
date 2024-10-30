@@ -189,8 +189,10 @@ jobs:
       # macOS_ARM
       if [[ "$unamestr" == 'Darwin' ]] && [[ "${{ parameters.buildARM }}" == "True" ]]; then
         cd buildscripts/bodo/bodo-m1-conda-recipe/
+        export TEST="--no-test"
       else
         cd buildscripts/bodo/bodo-conda-recipe/
+        export TEST=""
       fi
 
       if [[ "${{ parameters.platformBuild }}" == "True" ]]; then
@@ -236,7 +238,7 @@ jobs:
 
       # --keep-old-work --dirty --merge-build-host for keeping all intermediate files around
       conda build . $PLATFORM_CHANNEL -c conda-forge \
-        --no-test --no-verify --no-anaconda-upload \
+        $TEST --no-verify --no-anaconda-upload \
         $CONDA_VARIANT_ARG $BUILD_PY_VERSION \
         --croot $HOME/conda-bld --build-id-pat='bb'
 
