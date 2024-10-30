@@ -121,7 +121,8 @@ jobs:
       export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
 
       set +x
-      source activate bodo_build
+      mamba create -y -n bodo_obfuscate python=3.11
+      source activate bodo_obfuscate
       set -x
 
 
