@@ -47,7 +47,8 @@ jobs:
       - name: Obfuscate
         run: |
           source /opt/conda/etc/profile.d/conda.sh
-          conda activate bodo_build
+          mamba create -y -n bodo_obfuscate python=3.11
+          conda activate bodo_obfuscate
           set -exo pipefail
           
           cd obfuscation
