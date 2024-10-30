@@ -1,8 +1,8 @@
 name: Build AzureFS-SAS-Token-Provider
 
 on:
+  workflow_call:
   workflow_dispatch:
-
 
 jobs:
   build:
