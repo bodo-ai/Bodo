@@ -1,10 +1,6 @@
-import bodosql.context_ext
-import bodosql.ddl_ext
-import bodosql.remove_pure_calls
-
 # Import BodoSQL types
-from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
+from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.bodosql_types.filesystem_catalog import (
     FileSystemCatalog,
     FileSystemCatalogType,
@@ -23,6 +19,10 @@ from bodosql.bodosql_types.glue_catalog import (
     GlueCatalogType,
     get_glue_connection,
 )
+
+import bodosql.context_ext
+import bodosql.ddl_ext
+import bodosql.remove_pure_calls
 
 # Import BodoSQL libs
 import bodosql.libs.regex
