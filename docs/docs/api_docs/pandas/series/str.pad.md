@@ -1,5 +1,7 @@
 # `pd.Series.str.pad`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.pad.html#pandas.Series.str.pad)
+
 `pandas.Series.str.pad(width, side='left', fillchar=' ')`
 
 ### Argument Restrictions:

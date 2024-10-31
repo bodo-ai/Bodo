@@ -4,6 +4,8 @@ methods/attributes we are currently not supporting that lack proper error messag
 This script will be run during the import bodo step if specified by _check_pandas_docs
 """
 
+import typing as pt
+
 import numba
 import requests
 from numba.core.target_extension import dispatcher_registry
@@ -12,27 +14,28 @@ from bodo.pandas_compat import _check_pandas_change
 from bodo.utils import search_templates
 
 # URL of the Pandas API reference pages
-urls = [
-    "https://pandas.pydata.org/docs/reference/io.html",
-    "https://pandas.pydata.org/docs/reference/general_functions.html",
-    "https://pandas.pydata.org/docs/reference/series.html",
-    "https://pandas.pydata.org/docs/reference/frame.html",
-    "https://pandas.pydata.org/docs/reference/arrays.html",
-    "https://pandas.pydata.org/docs/reference/indexing.html",
-    "https://pandas.pydata.org/docs/reference/offset_frequency.html",
-    "https://pandas.pydata.org/docs/reference/window.html",
-    "https://pandas.pydata.org/docs/reference/groupby.html",
-    "https://pandas.pydata.org/docs/reference/resampling.html",
-    "https://pandas.pydata.org/docs/reference/style.html",
-    "https://pandas.pydata.org/docs/reference/plotting.html",
-    "https://pandas.pydata.org/docs/reference/options.html",
-    "https://pandas.pydata.org/docs/reference/extensions.html",
-    "https://pandas.pydata.org/docs/reference/testing.html",
-    "https://pandas.pydata.org/docs/reference/missing_value.html",
-]
+PANDAS_URLS: pt.Dict[str, str] = {
+    "IO": "https://pandas.pydata.org/docs/reference/io.html",
+    "GENERAL_FUNCTIONS": "https://pandas.pydata.org/docs/reference/general_functions.html",
+    "SERIES": "https://pandas.pydata.org/docs/reference/series.html",
+    "DATAFRAME": "https://pandas.pydata.org/docs/reference/frame.html",
+    "ARRAY": "https://pandas.pydata.org/docs/reference/arrays.html",
+    "INDEX": "https://pandas.pydata.org/docs/reference/indexing.html",
+    "OFFSET": "https://pandas.pydata.org/docs/reference/offset_frequency.html",
+    "WINDOW": "https://pandas.pydata.org/docs/reference/window.html",
+    "GROUPBY": "https://pandas.pydata.org/docs/reference/groupby.html",
+    "RESAMPLING": "https://pandas.pydata.org/docs/reference/resampling.html",
+    "STYLE": "https://pandas.pydata.org/docs/reference/style.html",
+    "PLOTTING": "https://pandas.pydata.org/docs/reference/plotting.html",
+    "OPTIONS": "https://pandas.pydata.org/docs/reference/options.html",
+    "EXTENSIONS": "https://pandas.pydata.org/docs/reference/extensions.html",
+    "TESTING": "https://pandas.pydata.org/docs/reference/testing.html",
+    "VALUE": "https://pandas.pydata.org/docs/reference/missing_value.html",
+}
 
 
-def get_pandas_apis_from_url(url):
+def get_pandas_refs_from_url(url: str) -> list:
+    """Gets all API refs from an index page `url`."""
     from bs4 import BeautifulSoup
 
     result = []
@@ -49,19 +52,21 @@ def get_pandas_apis_from_url(url):
     # with class 'py-obj' (to avoid links in description to other APIs those have 'py-func')
     for ref in api_refs:
         if ref.find("code", {"class": "py-obj"}):
-            result.append(ref.text.strip())
+            result.append(ref)
 
     return result
 
 
-def get_all_pandas_apis():
-    """Get all pandas api's as a list
+def get_pandas_apis_from_url(url: str) -> pt.List[str]:
+    """Get the names of all pandas apis from an index page."""
+    refs = get_pandas_refs_from_url(url)
+    return [ref.text.strip() for ref in refs]
 
-    Returns:
-        List[str]: Get all pandas api's as a list of paths (excluding the pd. part)
-    """
+
+def get_all_pandas_apis() -> pt.List[str]:
+    """Get all pandas api's as a list of paths (excluding the pd. part)."""
     result = []
-    for url in urls:
+    for url in PANDAS_URLS.values():
         result.extend(get_pandas_apis_from_url(url))
 
     return result

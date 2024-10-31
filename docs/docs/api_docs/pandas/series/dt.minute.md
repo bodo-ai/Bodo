@@ -1,5 +1,7 @@
 # `pd.Series.dt.minute`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.minute.html#pandas.Series.dt.minute)
+
 `pandas.Series.dt.minute`
 
 !!! note
