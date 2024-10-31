@@ -19,7 +19,7 @@ pip install conda-lock
 # Create the lock file
 conda-lock -f "$ENVS_PATH"/main.yml -f "$ENVS_PATH"/dev.yml
 # Create the environment
-micromamba install -y -r /Users/runner/micromamba -n build-env --rc-file /Users/runner/work/_temp/setup-micromamba/.condarc --category main --category dev -f conda-lock.yml 
+micromamba install -y -r /Users/runner/micromamba -n build-env --rc-file /Users/runner/work/_temp/setup-micromamba/.condarc --category main --category dev -f conda-lock.yml
 
-# Activate the environment 
-micromamba activate build-env 
+# Activate the environment
+micromamba activate build-env

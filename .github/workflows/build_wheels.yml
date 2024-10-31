@@ -1,7 +1,7 @@
 name: Build Wheels
 
-on: 
-  workflow_dispatch: 
+on:
+  workflow_dispatch:
   release:
     types: [published]
 
@@ -16,7 +16,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    name: Build wheels on ${{ matrix.os }}
+    name: Build Bodo wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -64,13 +64,12 @@ jobs:
           init-shell: >-
             bash
             zsh
-            powershell
 
       - name: Build wheels
-        env: 
+        env:
           CIBW_BEFORE_BUILD_MACOS: |
             rm -r {package}/bodo/mpi4py
-            eval "$(micromamba shell hook --shell bash)" 
+            eval "$(micromamba shell hook --shell bash)"
             micromamba deactivate
             micromamba deactivate
             PYTHON_VERSION=$(python --version | awk -F 'Python ' '{print$2}')
@@ -104,7 +103,7 @@ jobs:
     strategy:
       matrix:
         python_version: ["3.10", "3.11", "3.12"]
-    # The manylinux image we use to build the wheels can't install the wheels since it's too old. 
+    # The manylinux image we use to build the wheels can't install the wheels since it's too old.
     # For this reason we test them separately
     runs-on: ubuntu-latest
     container:
@@ -119,13 +118,13 @@ jobs:
       - name: Install
         run: |
           # Install bodo from the local wheel
-          pip install bodo --find-links $(find . -name "cibw-wheels-*" -print) --no-index --no-deps 
+          pip install bodo --find-links $(find . -name "cibw-wheels-*" -print) --no-index --no-deps
           # Install dependencies from pypi
           pip install bodo
       - name: Test
         run: |
           mpiexec -n 2 python -c '\
-          import bodo 
+          import bodo
           import pandas as pd
           if bodo.get_rank() == 0:
               pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
@@ -135,7 +134,7 @@ jobs:
               df = pd.read_parquet("test.parquet")
               return df.a.sum()
           assert f() == 6' && \
-          
+
           # Check that only expected dylibs are included in the wheel
           LIB_WHITELIST="^(libcom_err|libcrypto|libcurl|libfftw3_mpi|libfftw3f_mpi|libfftw3|libfftw3f|libgssapi_krb5|libhdf5|libk5crypto|libkeyutils|libkrb5support|libkrb5|libnghttp2|libs2n|libssh2|libssl|libsz|libzstd|libaws-.*)-.*\.so(\.[0-9]+)*"
           LIBS_DIR="$(pip show  bodo | grep Location | awk -F 'Location: ' '{print $2}')/bodo.libs" && \
@@ -145,6 +144,89 @@ jobs:
                   exit 1
               fi
           done
+
+  build_bodosql_wheels:
+    permissions:
+      id-token: write
+      contents: read
+    name: Build no-arch BodoSQL wheels on ubuntu-latest
+    runs-on: ubuntu-latest
+    needs: build_bodo_wheels
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineBuildWheelRole
+          role-session-name: BodoEngineBuildWheelSession
+          role-skip-session-tagging: true
+
+      - uses: actions/checkout@v4
+        with:
+          # For setuptools_scm to be able to determine version,
+          # we need to fetch the entire history
+          fetch-depth: 0
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+            environment-name: build-env
+            environment-file: buildscripts/envs/conda-lock.yml
+            cache-environment: true
+            create-args: --category main --category dev
+            init-shell: >-
+                bash
+                zsh
+      - uses: actions/download-artifact@v4
+        id: download-artifact
+        with:
+          pattern: cibw-wheels-ubuntu-*
+          path: .
+
+      - name: Build BodoSQL wheels
+        run: |
+          ./buildscripts/bodosql/pip/build_wheels.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bodosql-wheel-no-arch
+          path: ./BodoSQL/*.whl
+
+  test-bodosql:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python_version: ["3.10", "3.11", "3.12"]
+    needs: build_bodosql_wheels
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+      - uses: actions/download-artifact@v4
+        id: download-bodo-artifact
+        with:
+          pattern: cibw-wheels-ubuntu-*
+          path: .
+      - uses: actions/download-artifact@v4
+        id: download-bodosql-artifact
+        with:
+          pattern: bodosql-wheel-no-arch
+          path: .
+      - name: Install
+        run: |
+          # Install bodo and bodosql from the local wheel
+          pip install bodo  --find-links $(find . -name "cibw-wheels-*" -print) bodosql --find-links bodosql-wheel-no-arch --no-index --no-deps
+          # Install dependencies from pypi
+          pip install bodosql
+      - name: Test
+        run: |
+          mpiexec -n 2 python -c '\
+          import pandas as pd
+          import bodosql
+          df = pd.DataFrame({"A": [1, 2, 3]})
+          bc = bodosql.BodoSQLContext({"TABLE1": df})
+          res = bc.sql("SELECT SUM(A) as OUTPUT FROM TABLE1")
+          assert res["OUTPUT"].iloc[0] == 6'
 
   build-iceberg:
     runs-on: ubuntu-latest
@@ -192,16 +274,16 @@ jobs:
       # TODO: Chain with E2E tests for effective testing
 
   upload-all:
-    needs: [build-iceberg, test-iceberg-import, build_bodo_wheels, test-bodo-linux]
+    needs: [build-iceberg, test-iceberg-import, build_bodo_wheels, test-bodo-linux, build_bodosql_wheels, test-bodosql]
     permissions:
       id-token: write
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
     steps:
-    - uses: actions/download-artifact@v4
-      with:
-        pattern: cibw-*
-        path: dist
-        merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cibw-*
+          path: dist
+          merge-multiple: true
 
-    - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1

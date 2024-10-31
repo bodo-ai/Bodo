@@ -7,7 +7,7 @@ can be imported in multiple locations.
 import bodo
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.utils.typing import BodoError
-from bodosql.py4j_gateway import get_gateway
+from bodosql.py4j_gateway import configure_java_logging, get_gateway
 
 error = None
 # Based on my understanding of the Py4J Memory model, it should be safe to just
@@ -47,6 +47,9 @@ if bodo.get_rank() == 0:
         WriteTargetEnum = gateway.jvm.com.bodosql.calcite.application.write.WriteTarget.WriteTargetEnum
         TabularCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.TabularCatalog
         BodoGlueCatalogClass = gateway.jvm.com.bodosql.calcite.catalog.BodoGlueCatalog
+        # Initialize logging. Must be done after importing all classes to ensure
+        # PythonLoggersClass is available.
+        configure_java_logging(bodo.user_logging.get_verbose_level())
     except Exception as e:
         saw_error = True
         msg = str(e)
