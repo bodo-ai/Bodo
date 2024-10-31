@@ -178,7 +178,6 @@ stages:
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Bodo_Tests
-      useNumbaDev: false
       caching_test: false
       spawn_mode_test: false
       CONDA_ENV: 'bodo'
@@ -198,7 +197,6 @@ stages:
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: Linux_cache
-      useNumbaDev: false
       caching_test: true
       spawn_mode_test: false
       CONDA_ENV: 'bodo'
@@ -211,7 +209,6 @@ stages:
     parameters:
       name: Bodo_Spawn_mode_tests
       CONDA_ENV: 'bodo'
-      useNumbaDev: false
       caching_test: false
       spawn_mode_test: true
       matrix:
