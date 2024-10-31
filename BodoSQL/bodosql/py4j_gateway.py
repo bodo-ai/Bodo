@@ -92,10 +92,9 @@ def get_gateway():
                 ),
             )
             gateway = JavaGateway(gateway_parameters=GatewayParameters(port=port_no))
-            # Initialize logging
-            configure_java_logging(bodo.get_verbose_level())
         except Exception as e:
             msg = f"Error when launching the BodoSQL JVM. {str(e)}"
+            failed = True
 
     failed = bcast_scalar(failed)
     msg = bcast_scalar(msg)
