@@ -6,7 +6,7 @@ import pytest
 
 import bodo
 from bodo.submit.spawner import get_num_workers
-from bodo.tests.utils import check_func, pytest_spawn_mode
+from bodo.tests.utils import _test_equal, check_func, pytest_spawn_mode
 
 pytestmark = pytest_spawn_mode
 
