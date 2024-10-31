@@ -16,6 +16,8 @@ from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.weekly
+
 
 def compress_file(fname):
     assert not os.path.isdir(fname)

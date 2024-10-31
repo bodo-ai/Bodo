@@ -42,12 +42,12 @@ if (BUILD_WITH_V8)
     add_compile_definitions("__STDC_FORMAT_MACROS")
     include(FetchContent)
 
-    FetchContent_Declare(
-      v8
-      GIT_REPOSITORY https://github.com/bnoordhuis/v8-cmake.git
-      GIT_TAG "tags/11.6.189.4"
-    )
-    FetchContent_MakeAvailable(v8)
+  FetchContent_Declare(
+    v8
+    GIT_REPOSITORY https://github.com/bnoordhuis/v8-cmake.git
+    GIT_TAG "tags/11.6.189.4"
+  )
+  FetchContent_MakeAvailable(v8)
 endif()
 
 # Download and Build 'fmt' from Git Directly
@@ -77,6 +77,10 @@ ExternalProject_Add(datasketches
   # an RPM for a dependent package. (RPM scans the directory for files in addition to installing
   # those files referenced in an "install" rule in the cmake file)
   INSTALL_COMMAND env DESTDIR= ${CMAKE_COMMAND} --build . --target install
+  LOG_CONFIGURE ON
+  LOG_BUILD ON
+  LOG_INSTALL ON
+  LOG_OUTPUT_ON_FAILURE ON
 )
 
 ExternalProject_Get_property(datasketches INSTALL_DIR)
@@ -361,7 +365,7 @@ python_add_library(
 target_include_directories(memory_tester PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/tests/")
 target_link_directories(memory_tester PRIVATE ${PYARROW_LIB_DIR})
 target_link_directories(memory_tester PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt)
+target_link_libraries(memory_tester PRIVATE mpi arrow arrow_python fmt::fmt)
 if(NOT(CMAKE_BUILD_TYPE STREQUAL "Release"))
   target_compile_definitions(
     memory_tester
@@ -395,7 +399,7 @@ python_add_library(
 target_include_directories(native_typer PRIVATE ${BASE_INCLUDE_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/bodo/transforms/type_inference/" "${CMAKE_CURRENT_BINARY_DIR}/bodo/transforms/type_inference/")
 target_link_directories(native_typer PRIVATE ${PYARROW_LIB_DIR})
 target_link_directories(native_typer PRIVATE ${CONDA_LIB_DIR})
-target_link_libraries(native_typer PRIVATE fmt)
+target_link_libraries(native_typer PRIVATE fmt::fmt)
 install(TARGETS native_typer DESTINATION "bodo/transforms/type_inference/")
 
 
@@ -629,7 +633,7 @@ target_link_libraries(ext PRIVATE
   fftw3_mpi
   fftw3f_mpi
   m
-  fmt
+  fmt::fmt
   aws-cpp-sdk-core
 )
 

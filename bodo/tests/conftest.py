@@ -11,20 +11,32 @@ import subprocess
 import time
 import traceback
 from pathlib import Path
-from typing import Callable, Generator, List, Optional, Protocol, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Generator,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    Union,
+)
 
 import pandas as pd
 import psutil
 import pyarrow as pa
 import pytest
 from numba.core.runtime import rtsys
-from pyspark.sql import SparkSession
 
 import bodo
 import bodo.utils.allocation_tracking
 from bodo.mpi4py import MPI
 from bodo.tests.iceberg_database_helpers.utils import DATABASE_NAME
 from bodo.tests.utils import temp_env_override
+
+if TYPE_CHECKING:
+    from pyspark.sql import SparkSession
+
 
 # Disable broadcast join as the default
 os.environ["BODO_BCAST_JOIN_THRESHOLD"] = "0"
@@ -554,7 +566,7 @@ def iceberg_database() -> (
     # make this safer to use - calling this function will invalidate all old
     # spark referneces.
     def create_tables_on_rank_one(
-        tables: Union[List[str], str] = [], spark: Optional[SparkSession] = None
+        tables: Union[List[str], str] = [], spark: Optional["SparkSession"] = None
     ) -> Tuple[str, str]:
         if not isinstance(tables, list):
             tables = [tables]

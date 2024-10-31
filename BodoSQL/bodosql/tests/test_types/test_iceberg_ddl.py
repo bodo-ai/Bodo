@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -29,8 +30,8 @@ def test_harness_path(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def filesystem_test_harness(test_harness_path):
-    catalog = bodosql.FileSystemCatalog(test_harness_path, "iceberg")
+def filesystem_test_harness():
+    catalog = bodosql.FileSystemCatalog(os.path.curdir, "iceberg")
     return FilesystemTestHarness(catalog)
 
 

@@ -15,9 +15,9 @@ from sklearn.utils._testing import assert_allclose, assert_array_equal
 from sklearn.utils.validation import check_random_state
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
+from bodo.tests.utils import _get_dist_arg, check_func
 
-pytestmark = pytest_ml
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 # --------------------KMeans Clustering Tests-----------------#
 

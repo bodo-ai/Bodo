@@ -6,9 +6,9 @@ import pytest
 import scipy.sparse
 
 import bodo
-from bodo.tests.utils import check_func, pytest_ml
+from bodo.tests.utils import check_func
 
-pytestmark = pytest_ml
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 
 @pytest.fixture(

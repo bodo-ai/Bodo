@@ -2037,24 +2037,16 @@ def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
     """test basic input_col_name functionality for read_parquet"""
     fname = datapath("decimal1.pq")
 
-    import pyspark.sql.functions as F
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-
     def test_impl(fname):
         df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
-        # pyspark adds this prefix for local files, so we're adding it
-        # here for comparison
+        # pyspark adds prefix `file://` for local files, but we follow PyArrow
         # XXX Should we do this by default?
-        df.fname = df.fname.apply(lambda x: f"file://{x}")
         return df
 
-    py_output = (
-        spark.read.format("parquet")
-        .load(fname)
-        .withColumn("fname", F.input_file_name())
-    ).toPandas()
+    # PyArrow engine for Pandas supports reading the input file name via the
+    # __filename column
+    df: pd.DataFrame = pq.read_table(fname, columns=["A", "__filename"]).to_pandas()
+    py_output = df.rename({"__filename": "fname"}, axis=1)
 
     check_func(
         test_impl,
@@ -2075,27 +2067,18 @@ def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_
 
     fname = datapath("test_partitioned.pq")
 
-    import pyspark.sql.functions as F
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-
     def test_impl(fname):
         df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
-        # pyspark adds this prefix for local files, so we're adding it
-        # here for comparison
+        # pyspark adds prefix `file://` for local files, but we follow PyArrow
         # XXX Should we do this by default?
-        df.fname = df.fname.apply(lambda x: f"file://{x}")
         return df
 
-    py_output = (
-        spark.read.format("parquet")
-        .load(fname)
-        .withColumn("fname", F.input_file_name())
-    ).toPandas()
-    # Spark reads it as int32 by default, so to make it comparable
-    # we convert it to categorical
-    py_output["A"] = py_output["A"].astype("category")
+    # PyArrow engine for Pandas supports reading the input file name via the
+    # __filename column
+    df: pd.DataFrame = pq.read_table(
+        fname, columns=["B", "A", "__filename"]
+    ).to_pandas()
+    py_output = df.rename({"__filename": "fname"}, axis=1)
 
     check_func(
         test_impl,
@@ -2180,16 +2163,10 @@ def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
     """
     fname = datapath("decimal1.pq")
 
-    import pyspark.sql.functions as F
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-
     def test_impl(fname):
         df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
-        # pyspark adds this prefix for local files, so we're adding it
-        # here for comparison
-        df.fname = df.fname.apply(lambda x: f"file://{x}")
+        # pyspark adds prefix `file://` for local files, but we follow PyArrow
+        # XXX Should we do this by default?
         return df[["fname"]]
 
     # Check that columns were pruned using verbose logging
@@ -2200,12 +2177,10 @@ def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['fname']")
 
     # Check that output is correct
-    py_output = (
-        spark.read.format("parquet")
-        .load(fname)
-        .withColumn("fname", F.input_file_name())
-    ).toPandas()
-    py_output = py_output[["fname"]]
+    # PyArrow engine for Pandas supports reading the input file name via the
+    # __filename column
+    df: pd.DataFrame = pq.read_table(fname, columns=["__filename"]).to_pandas()
+    py_output = df.rename({"__filename": "fname"}, axis=1)
 
     check_func(
         test_impl,

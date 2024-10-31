@@ -1,5 +1,6 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_update.h"
+
 #include <arrow/util/decimal.h>
 #include "../_array_operations.h"
 #include "../_array_utils.h"
@@ -9,7 +10,6 @@
 #include "../_gandiva_decimal_copy.h"
 #include "../_shuffle.h"
 #include "_groupby_common.h"
-#include "_groupby_do_apply_to_column.h"
 #include "_groupby_hashing.h"
 
 // Really should be defined in something like _decimal_ext.h,

@@ -24,10 +24,10 @@ from sklearn.preprocessing import (
 from sklearn.utils._testing import assert_array_equal
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
+from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest_ml
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 # ----------------------- LeavePOut -----------------------------
 

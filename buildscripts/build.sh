@@ -35,6 +35,13 @@ export USE_BODO_ARROW_FORK=1
 # Bodo Install
 pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
+# Report sscache stats for debugging
+sccache --show-stats
+
+if [[ "$ONLY_BODO" == "1" ]]; then
+    exit 0
+fi
+
 # NOTE: we need to cd into the directory before building,
 # as the run leaves behind a .egg-info in the working directory,
 # and if we have multiple of these in the same directory,

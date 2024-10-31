@@ -2488,6 +2488,58 @@ def test_merge_all_nan_cols(memory_leak_check):
     check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+def merge_general_outer_helper(
+    df1: pd.DataFrame, df2: pd.DataFrame, how, eq_keys: list[str], cond
+):
+    """
+    Helper function to perform SQL-like outer non-equijoins using Pandas operations
+    Essentially performs a:
+    1) Normal Join with Equality Keys
+    2) Filter using non-equi condition
+    3) Extra Joins on the Index and Coalesce (combine_first) to fill in missing rows
+
+    Note: This is implemented to specifically avoid using Spark in testing.
+    TODO: Consider using DuckDB or Polars for testing instead
+    """
+
+    idf1 = df1.reset_index(names=["lidx"])
+    idf2 = df2.reset_index(names=["ridx"])
+    df1_cols = list(df1.columns)
+    df2_cols = list(df2.columns)
+
+    # Perform initial join
+    if eq_keys:
+        # Pandas joins NULL rows, SQL doesn't
+        idf1_notna = idf1.dropna(subset=eq_keys)
+        idf2_notna = idf2.dropna(subset=eq_keys)
+        py_out = idf1_notna.merge(idf2_notna, how=how, on=eq_keys)
+    else:
+        py_out = idf1.merge(idf2, how="cross")
+    # Filter using condition
+    py_out = py_out.query(cond)
+    # Fix outer rows
+    if how in ("left", "outer"):
+        py_out = idf1.merge(py_out, on="lidx", how="left")
+        for col in df1_cols:
+            py_out[col] = py_out[f"{col}_x"].combine_first(py_out[f"{col}_y"])
+            py_out = py_out.drop(columns=[f"{col}_x", f"{col}_y"])
+    if how in ("right", "outer"):
+        in_how = "left" if how == "right" else "outer"
+        py_out = idf2.merge(py_out, on="ridx", how=in_how)
+        for col in df2_cols:
+            py_out[col] = py_out[f"{col}_x"].combine_first(py_out[f"{col}_y"])
+            py_out = py_out.drop(columns=[f"{col}_x", f"{col}_y"])
+
+    py_out = py_out.drop(columns=["lidx", "ridx"])
+    py_out = py_out.reset_index(drop=True)
+
+    # Remove to avoid duplicating columns
+    for col in eq_keys:
+        df2_cols.remove(col)
+    py_out = py_out[df1_cols + df2_cols]
+    return py_out
+
+
 def test_merge_general_cond(memory_leak_check):
     """
     test merge(): with general condition expressions like "left.A == right.A"
@@ -2606,7 +2658,7 @@ def test_merge_general_cond(memory_leak_check):
         py_output=py_out,
     )
 
-    # # hit corner case
+    # hit corner case
     df11 = pd.DataFrame({"A": [1, 1], "B": [1, 3]})
     df22 = pd.DataFrame(
         {
@@ -2652,32 +2704,10 @@ def test_merge_general_cond(memory_leak_check):
     # avoid duplicated names for non-equi case
     df3 = df2.rename(columns={"A": "A1"})
     df7 = df6.rename(columns={"A": "A1"})
-    from pyspark.sql import SparkSession
 
-    spark = SparkSession.builder.getOrCreate()
-    sdf1 = spark.createDataFrame(df1)
-    sdf2 = spark.createDataFrame(df2)
-    sdf3 = spark.createDataFrame(df3)
-    sdf5 = spark.createDataFrame(df5)
-    sdf6 = spark.createDataFrame(df6)
-    sdf7 = spark.createDataFrame(df7)
-    sdf1.createOrReplaceTempView("table1")
-    sdf2.createOrReplaceTempView("table2")
-    sdf3.createOrReplaceTempView("table3")
-    sdf5.createOrReplaceTempView("table5")
-    sdf6.createOrReplaceTempView("table6")
-    sdf7.createOrReplaceTempView("table7")
     for how in ("left", "right", "outer"):
-        # Spark requires "full outer" for some reason
-        spark_how = "full outer" if how == "outer" else how
         # test with equality
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B + 1 or table2.C > table1.B) and table1.A == table2.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
+        py_out = merge_general_outer_helper(df1, df2, how, ["A"], "D < B + 1 | C > B")
         check_func(
             impl5,
             (df1, df2, how),
@@ -2687,9 +2717,7 @@ def test_merge_general_cond(memory_leak_check):
             py_output=py_out,
         )
         # test without equality
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table3 on (table3.D < table1.B + 1 or table3.C > table1.B)"
-        ).toPandas()
+        py_out = merge_general_outer_helper(df1, df3, how, [], "D < B + 1 | C > B")
         check_func(
             impl7,
             (df1, df3, how),
@@ -2719,13 +2747,7 @@ def test_merge_general_cond(memory_leak_check):
             )
         # ---- Test nullable float arrays ----
         # test with equality
-        py_out = spark.sql(
-            f"select * from table5 {spark_how} join table6 on (table6.D < table5.B + 1 or table6.C > table5.B) and table5.A == table6.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
+        py_out = merge_general_outer_helper(df5, df6, how, ["A"], "D < B + 1 | C > B")
         check_func(
             impl5,
             (df5, df6, how),
@@ -2735,9 +2757,7 @@ def test_merge_general_cond(memory_leak_check):
             py_output=py_out,
         )
         # test without equality
-        py_out = spark.sql(
-            f"select * from table5 {spark_how} join table7 on (table7.D < table5.B + 1 or table7.C > table5.B)"
-        ).toPandas()
+        py_out = merge_general_outer_helper(df5, df7, how, [], "D < B + 1 | C > B")
         check_func(
             impl7,
             (df5, df7, how),
@@ -3136,30 +3156,8 @@ def test_merge_general_cond_binary(memory_leak_check):
         py_output=py_out,
     )
 
-    # test left/right/outer cases, needs Spark to generate reference output
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    sdf1 = spark.createDataFrame(df1)
-    sdf2 = spark.createDataFrame(df2)
-    sdf1.createOrReplaceTempView("table1")
-    sdf2.createOrReplaceTempView("table2")
     for how in ("left", "right", "outer"):
-        # Spark requires "full outer" for some reason
-        spark_how = "full outer" if how == "outer" else how
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B or table2.C < table1.B) and table1.A == table2.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
-        # Spark uses a different array type from Bodo
-        py_out[py_out.columns] = py_out[py_out.columns].apply(
-            lambda x: [bytes(y) if isinstance(y, bytearray) else y for y in x],
-            axis=1,
-            result_type="expand",
-        )
+        py_out = merge_general_outer_helper(df1, df2, how, ["A"], "D < B | C < B")
         check_func(
             impl6,
             (df1, df2, how),
@@ -3293,24 +3291,9 @@ def test_merge_general_cond_strings(memory_leak_check):
         py_output=py_out,
     )
 
-    # test left/right/outer cases, needs Spark to generate reference output
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    sdf1 = spark.createDataFrame(df1)
-    sdf2 = spark.createDataFrame(df2)
-    sdf1.createOrReplaceTempView("table1")
-    sdf2.createOrReplaceTempView("table2")
     for how in ("left", "right", "outer"):
-        # Spark requires "full outer" for some reason
-        spark_how = "full outer" if how == "outer" else how
-        py_out = spark.sql(
-            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B or table2.C < table1.B) and table1.A == table2.A"
-        ).toPandas()
-        # spark duplicates key columns with nulls
-        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
-        py_out = py_out.drop(columns="A")
-        py_out.insert(0, "A", py_out_A)
+        py_out = merge_general_outer_helper(df1, df2, how, ["A"], "D < B | C < B")
+
         check_func(
             impl5,
             (df1, df2, how),
