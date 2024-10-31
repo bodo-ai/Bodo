@@ -24,7 +24,6 @@ from typing import (
 
 import pandas as pd
 import psutil
-import pyarrow as pa
 import pytest
 from numba.core.runtime import rtsys
 
@@ -642,29 +641,6 @@ def cmp_op(request):
     return request.param
 
 
-@pytest.fixture(
-    params=[
-        "quarter",
-        pytest.param("yyyy", marks=pytest.mark.slow),
-        "week",
-        pytest.param("mm", marks=pytest.mark.slow),
-        "days",
-        pytest.param("hour", marks=pytest.mark.slow),
-        "minute",
-        pytest.param("S", marks=pytest.mark.slow),
-        "ms",
-        pytest.param("us", marks=pytest.mark.slow),
-        "nsecond",
-    ]
-)
-def datetime_part_strings(request):
-    """
-    Fixture containing a representative set of datetime part strings
-    for use in testing, including aliases.
-    """
-    return request.param
-
-
 @pytest.fixture
 def time_df():
     """
@@ -705,47 +681,6 @@ def time_df():
             }
         )
     }
-
-
-@pytest.fixture(
-    params=[
-        "quarter",
-        "yyy",
-        pytest.param("MONTH", marks=pytest.mark.slow),
-        "mon",
-        "WEEK",
-        pytest.param("wk", marks=pytest.mark.slow),
-        pytest.param("DAY", marks=pytest.mark.slow),
-        "dd",
-    ]
-)
-def day_part_strings(request):
-    """
-    Fixture containing a representative set of large time unit part strings
-    (larger or equal to day) for use in testing, including aliases.
-    """
-    return request.param
-
-
-@pytest.fixture(
-    params=[
-        "HOUR",
-        pytest.param("hr", marks=pytest.mark.slow),
-        pytest.param("MINUTE", marks=pytest.mark.slow),
-        "min",
-        "SECOND",
-        "ms",
-        pytest.param("microsecond", marks=pytest.mark.slow),
-        pytest.param("usec", marks=pytest.mark.slow),
-        "nanosecs",
-    ]
-)
-def time_part_strings(request):
-    """
-    Fixture containing a representative set of small time unit part strings
-    (smaller or equal to hour) for use in testing, including aliases.
-    """
-    return request.param
 
 
 @pytest.fixture
@@ -885,12 +820,6 @@ def pytest_collect_file(parent, file_path: Path):
         )
 
 
-pytest_mark_javascript = pytest.mark.skipif(
-    not bodo.libs.bodosql_javascript_udf_array_kernels.javascript_udf_enabled,
-    reason="JavaScript UDFs are not enabled",
-)
-
-
 def get_tabular_connection(tabular_credential: str):
     return (
         "https://api.tabular.io/ws",
@@ -930,23 +859,63 @@ def pytest_runtest_setup(item):
 
 @pytest.fixture(
     params=[
-        pytest.param(
-            pd.array(
-                [
-                    "1",
-                    "1.55",
-                    "1.56",
-                    "10.56",
-                    "1000.5",
-                    None,
-                    None,
-                    "10004.1",
-                    "-11.41",
-                ],
-                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
-            )
-        ),
+        "quarter",
+        "yyy",
+        pytest.param("MONTH", marks=pytest.mark.slow),
+        "mon",
+        "WEEK",
+        pytest.param("wk", marks=pytest.mark.slow),
+        pytest.param("DAY", marks=pytest.mark.slow),
+        "dd",
     ]
 )
-def precision_scale_decimal_array(request):
+def day_part_strings(request):
+    """
+    Fixture containing a representative set of large time unit part strings
+    (larger or equal to day) for use in testing, including aliases.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        "HOUR",
+        pytest.param("hr", marks=pytest.mark.slow),
+        pytest.param("MINUTE", marks=pytest.mark.slow),
+        "min",
+        "SECOND",
+        "ms",
+        pytest.param("microsecond", marks=pytest.mark.slow),
+        pytest.param("usec", marks=pytest.mark.slow),
+        "nanosecs",
+    ]
+)
+def time_part_strings(request):
+    """
+    Fixture containing a representative set of small time unit part strings
+    (smaller or equal to hour) for use in testing, including aliases.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        "quarter",
+        pytest.param("yyyy", marks=pytest.mark.slow),
+        "week",
+        pytest.param("mm", marks=pytest.mark.slow),
+        "days",
+        pytest.param("hour", marks=pytest.mark.slow),
+        "minute",
+        pytest.param("S", marks=pytest.mark.slow),
+        "ms",
+        pytest.param("us", marks=pytest.mark.slow),
+        "nsecond",
+    ]
+)
+def datetime_part_strings(request):
+    """
+    Fixture containing a representative set of datetime part strings
+    for use in testing, including aliases.
+    """
     return request.param

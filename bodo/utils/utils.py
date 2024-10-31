@@ -9,6 +9,7 @@ import inspect
 import keyword
 import re
 import traceback
+import typing as pt
 import warnings
 from dataclasses import dataclass
 from enum import Enum
@@ -558,6 +559,13 @@ def is_distributable_typ(var_typ):
             and is_distributable_typ(var_typ.value_type)
         )
     )
+
+
+def is_bodosql_kernel_mod(module: pt.Any) -> bool:
+    """
+    Checks that `func_mod` is a submodule of bodosql.kernels
+    """
+    return isinstance(module, str) and module.startswith("bodosql.kernels")
 
 
 def is_distributable_tuple_typ(var_typ):

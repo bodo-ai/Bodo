@@ -122,18 +122,6 @@ def test_astype_check(memory_leak_check):
     check_func(test_impl, (n,), py_output=py_output)
 
 
-@pytest.mark.slow
-def test_nullarray_to_char():
-    def impl(n):
-        null_arr = bodo.libs.null_arr_ext.init_null_array(n)
-
-        return pd.Series(bodo.libs.bodosql_array_kernels.to_char(null_arr))
-
-    n = 10
-    py_output = pd.Series([None] * n)
-    check_func(impl, (n,), py_output=py_output)
-
-
 def test_nullarray_cast():
     """Test casting arrays to null array, which is necessary for BodoSQL"""
 

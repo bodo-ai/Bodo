@@ -14,7 +14,7 @@ public class CondOpCodeGen {
   // Hashmap of functions for which there is a one to one mapping between the SQL function call,
   // and a function call where any of the arguments can be scalars or vectors.
   // IE SQLFN(C1, s1, C2, s2) => FN(C1, s1, C2, s2)
-  // EX REGR_VALY(A, 3.1) => bodo.libs.bodosql_array_kernels.regr_valy(table1['A'], 3.1)
+  // EX REGR_VALY(A, 3.1) => bodosql.kernels.regr_valy(table1['A'], 3.1)
   static HashMap<String, String> equivalentFnMap;
 
   static {

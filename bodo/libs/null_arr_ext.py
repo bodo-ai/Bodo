@@ -284,7 +284,7 @@ def null_arr_getitem(A, ind):
 def null_arr_setitem(arr, ind, val):
     """Null array setitem may be called in internal code like trim_excess_data
     See
-    tests/test_bodosql_array_kernels/test_bodosql_variadic_array_kernels.py::test_object_construct_keep_null"[2-int_vector-null]"
+    bodosql/tests/test_kernels/test_variadic_array_kernels.py::test_object_construct_keep_null"[2-int_vector-null]"
     """
     if arr != null_array_type:
         return

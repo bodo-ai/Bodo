@@ -940,9 +940,9 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
     }
 }
 
-PyMODINIT_FUNC PyInit_lateral(void) {
+PyMODINIT_FUNC PyInit_lateral_cpp(void) {
     PyObject *m;
-    MOD_DEF(m, "lateral", "No docs", NULL);
+    MOD_DEF(m, "lateral_cpp", "No docs", NULL);
     if (m == NULL) {
         return NULL;
     }

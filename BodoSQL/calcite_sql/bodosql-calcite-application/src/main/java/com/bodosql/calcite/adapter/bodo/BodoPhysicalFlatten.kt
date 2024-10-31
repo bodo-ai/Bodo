@@ -29,17 +29,16 @@ class BodoPhysicalFlatten(
     callType: RelDataType,
     usedColOutputs: ImmutableBitSet,
     repeatColumns: ImmutableBitSet,
-) :
-    FlattenBase(
-            cluster,
-            traits.replace(BodoPhysicalRel.CONVENTION),
-            input,
-            call,
-            callType,
-            usedColOutputs,
-            repeatColumns,
-        ),
-        BodoPhysicalRel {
+) : FlattenBase(
+        cluster,
+        traits.replace(BodoPhysicalRel.CONVENTION),
+        input,
+        call,
+        callType,
+        usedColOutputs,
+        repeatColumns,
+    ),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
@@ -47,9 +46,7 @@ class BodoPhysicalFlatten(
         callType: RelDataType,
         usedColOutputs: ImmutableBitSet,
         repeatColumns: ImmutableBitSet,
-    ): BodoPhysicalFlatten {
-        return BodoPhysicalFlatten(cluster, traitSet, input, call, callType, usedColOutputs, repeatColumns)
-    }
+    ): BodoPhysicalFlatten = BodoPhysicalFlatten(cluster, traitSet, input, call, callType, usedColOutputs, repeatColumns)
 
     /**
      * Emits the code necessary for implementing this relational operator.
@@ -85,8 +82,7 @@ class BodoPhysicalFlatten(
                 )
             implementor.buildStreaming(operatorEmission)!!
         } else {
-            (implementor::build)(listOf(this.input)) {
-                    ctx, inputs ->
+            (implementor::build)(listOf(this.input)) { ctx, inputs ->
                 val inputVar = inputs[0]
                 emitFlatten(ctx, call, inputVar)
             }
@@ -120,7 +116,10 @@ class BodoPhysicalFlatten(
         val outputColsGlobal = ctx.lowerAsGlobal(Expr.Call("MetaType", Expr.Tuple(outputColsExpressions)))
         val outer = Expr.BooleanLiteral(RexLiteral.booleanValue(flattenCall.operands[2]))
         return ctx.returns(
-            Expr.Call("bodo.libs.lateral.lateral_flatten", listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal, outer)),
+            Expr.Call(
+                "bodosql.kernels.lateral.lateral_flatten",
+                listOf(inputVar, replicatedColsGlobal, explodeCol, outputColsGlobal, outer),
+            ),
         )
     }
 
@@ -128,9 +127,7 @@ class BodoPhysicalFlatten(
      * Function to create the initial state for a streaming pipeline.
      * This should be called from emit.
      */
-    override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
-        return UnusedStateVariable
-    }
+    override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable = UnusedStateVariable
 
     /**
      * Function to delete the initial state for a streaming pipeline.
@@ -141,9 +138,8 @@ class BodoPhysicalFlatten(
         stateVar: StateVariable,
     ) {}
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
 
     companion object {
         @JvmStatic
@@ -152,9 +148,7 @@ class BodoPhysicalFlatten(
             input: RelNode,
             call: RexCall,
             callType: RelDataType,
-        ): BodoPhysicalFlatten {
-            return create(cluster, input, call, callType, ImmutableBitSet.range(callType.fieldCount), ImmutableBitSet.of())
-        }
+        ): BodoPhysicalFlatten = create(cluster, input, call, callType, ImmutableBitSet.range(callType.fieldCount), ImmutableBitSet.of())
 
         @JvmStatic
         fun create(
@@ -163,9 +157,7 @@ class BodoPhysicalFlatten(
             call: RexCall,
             callType: RelDataType,
             usedColOutputs: ImmutableBitSet,
-        ): BodoPhysicalFlatten {
-            return create(cluster, input, call, callType, usedColOutputs, ImmutableBitSet.of())
-        }
+        ): BodoPhysicalFlatten = create(cluster, input, call, callType, usedColOutputs, ImmutableBitSet.of())
 
         @JvmStatic
         fun create(
@@ -175,8 +167,6 @@ class BodoPhysicalFlatten(
             callType: RelDataType,
             usedColOutputs: ImmutableBitSet,
             repeatColumns: ImmutableBitSet,
-        ): BodoPhysicalFlatten {
-            return BodoPhysicalFlatten(cluster, cluster.traitSet(), input, call, callType, usedColOutputs, repeatColumns)
-        }
+        ): BodoPhysicalFlatten = BodoPhysicalFlatten(cluster, cluster.traitSet(), input, call, callType, usedColOutputs, repeatColumns)
     }
 }

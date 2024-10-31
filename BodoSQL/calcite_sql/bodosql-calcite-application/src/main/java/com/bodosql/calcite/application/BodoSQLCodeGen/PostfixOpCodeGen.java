@@ -33,7 +33,7 @@ public class PostfixOpCodeGen {
       case IS_FALSE:
         // fn_name will be one of is_not_false, is_not_true,
         // is_true, or is_false.
-        fnName = "bodo.libs.bodosql_array_kernels." + kind.toString().toLowerCase(Locale.ROOT);
+        fnName = "bodosql.kernels." + kind.toString().toLowerCase(Locale.ROOT);
         break;
       default:
         throw new BodoSQLCodegenException(

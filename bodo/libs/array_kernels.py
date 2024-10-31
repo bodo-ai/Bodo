@@ -48,7 +48,6 @@ from bodo.libs.array import (
     sample_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
-from bodo.libs.bodosql_array_kernel_utils import is_valid_float_arg
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
@@ -84,6 +83,8 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     is_str_arr_type,
+    is_valid_float_arg,
+    is_valid_int_arg,
     raise_bodo_error,
     to_str_arr_if_dict_array,
 )
@@ -3401,6 +3402,62 @@ def repeat_like(A, dist_like_arr):
     return impl
 
 
+@numba.generated_jit(nopython=True)
+def round_half_always_up(x, places):
+    """Variant of builtin round() that avoids Python's tie-breaking behavior:
+
+                             x: 0.5, 1.5, 2.5, 3.5
+                   round(x, 0): 0.0, 2.0, 2.0, 4.0
+    round_half_always_up(x, 0): 0.0, 1.0, 2.0, 3.0
+
+    Args:
+        x (integer/float): the number to be rounded
+        places (integer): how many places to round to (can be positive or negative)
+
+    Returns:
+        integer/float: x rounded to the specified number of places (same type as x)
+    """
+    func_text = "def impl(x, places):\n"
+    func_text += "  sign = -1 if x < 0 else 1\n"
+    func_text += "  x = abs(x)\n"
+    func_text += "  shift = 10 ** abs(places)\n"
+    func_text += "  if places < 0:\n"
+    func_text += "    x /= shift\n"
+    func_text += "    r = x % 1\n"
+    func_text += "    if r < 0.5: x = floor(x)\n"
+    func_text += "    else: x = ceil(x)\n"
+    func_text += "    x *= shift\n"
+    func_text += "  else:\n"
+    func_text += "    x *= shift\n"
+    func_text += "    r = x % 1\n"
+    func_text += "    if r < 0.5: x = floor(x)\n"
+    func_text += "    else: x = ceil(x)\n"
+    func_text += "    x /= shift\n"
+    if is_valid_int_arg(x):
+        func_text += "  x = np.int64(x)\n"
+    func_text += "  return x * sign\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        # We must use np.floor/ceil and not math.floor/ceil to handle
+        # potential intermediate overflows in the float case.
+        # The multiplication/division by 'shifts' may create a value
+        # not representable as an integer. However, math.floor/ceil
+        # will force it to an integer, leading to be an incorrect result.
+        # See 'test_round_half_always_up_intermediate_overflows' for
+        # an example.
+        {
+            "bodo": bodo,
+            "floor": np.floor,
+            "ceil": np.ceil,
+            "np": np,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 @numba.generated_jit
 def boolor_agg(A, parallel=False):
     """Performs the BOOLOR_AGG operation on an array
@@ -3568,7 +3625,7 @@ def make_bitX_agg_fn(func_type):
                 "bitor_op": bitor_op,
                 "bitand_op": bitand_op,
                 "bitxor_op": bitxor_op,
-                "round_half_always_up": bodo.libs.bodosql_array_kernels.round_half_always_up,
+                "round_half_always_up": round_half_always_up,
             },
             loc_vars,
         )

@@ -10,7 +10,7 @@ from bodosql.tests.utils import check_query
 
 
 def check_codegen_uses_optimized_is_in(codegen):
-    return "bodo.libs.bodosql_array_kernels.is_in" in codegen
+    return "bodosql.kernels.is_in" in codegen
 
 
 def test_in_columns(basic_df, spark_info, memory_leak_check):

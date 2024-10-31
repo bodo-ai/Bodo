@@ -264,7 +264,7 @@ internal object WindowAggregateApplyFuncTable {
             }
 
         return Expr.Call(
-            "bodo.libs.bodosql_array_kernels.rank_sql",
+            "bodosql.kernels.rank_sql",
             args = listOf(sortedCols),
             namedArgs =
                 listOf(
@@ -357,7 +357,7 @@ internal object WindowAggregateApplyFuncTable {
         val fill = operands.getOrElse(2) { Expr.None }
         val ignoreNulls = Expr.BooleanLiteral(call.ignoreNulls())
         return Expr.Call(
-            "bodo.libs.bodosql_lead_lag.lead_lag_seq",
+            "bodosql.kernels.lead_lag.lead_lag_seq",
             column,
             shift,
             fill,
@@ -726,7 +726,9 @@ internal object WindowAggregateApplyFuncTable {
     // This will be easier to do when more of the logic for frames and the builder
     // are moved out of BodoCodeGenVisitor, but that's hard for now so just want
     // to be able to utilize Op.If without rewriting everything around it.
-    private class StatementList(private val body: List<Op>) : Frame {
+    private class StatementList(
+        private val body: List<Op>,
+    ) : Frame {
         constructor(vararg body: Op) : this(body.toList())
 
         override fun emit(doc: Doc) = body.forEach { it.emit(doc) }

@@ -11,10 +11,11 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
+from bodo.tests.timezone_common import representative_tz  # noqa
+from bodosql.tests.test_datetime_fns import dt_fn_dataframe  # noqa
+from bodosql.tests.test_kernels.test_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
 )
-from bodosql.tests.test_datetime_fns import dt_fn_dataframe  # noqa
 from bodosql.tests.utils import check_query, make_tables_nullable
 
 

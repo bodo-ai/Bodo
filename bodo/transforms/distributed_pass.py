@@ -536,7 +536,7 @@ class DistributedPass:
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 set_last_arg_to_true(self, assign.value)
 
-        if fdef == ("bodosql_listagg", "bodo.libs.bodosql_listagg"):
+        if fdef == ("bodosql_listagg", "bodosql.kernels.listagg"):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 set_last_arg_to_true(self, assign.value)
 
@@ -1938,7 +1938,7 @@ class DistributedPass:
 
         if fdef == (
             "is_in",
-            "bodo.libs.bodosql_array_kernels",
+            "bodosql.kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
             set_last_arg_to_true(self, assign.value)
             return

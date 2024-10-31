@@ -2937,7 +2937,7 @@ class SeriesPass:
                 )
 
         # Fuse consequtive calls to concat_ws
-        if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
+        if fdef == ("concat_ws", "bodosql.kernels"):
             args = rhs.args
             sep_typ = self.typemap[args[1].name]
             if is_overload_constant_str(sep_typ):
@@ -2960,8 +2960,7 @@ class SeriesPass:
                             find_callname, self.func_ir, tup_var_def, self.typemap
                         )
                         if (
-                            func_call
-                            == ("concat_ws", "bodo.libs.bodosql_array_kernels")
+                            func_call == ("concat_ws", "bodosql.kernels")
                             and is_overload_constant_str(
                                 self.typemap[tup_var_def.args[1].name]
                             )
@@ -2983,15 +2982,21 @@ class SeriesPass:
                         else:
                             new_tup_list.append(tup_var)
                 if is_fused:
+                    import bodosql
+
                     # If we are fusing generate a new function call.
                     replace_vars = ", ".join(
                         f"tup_var{i}" for i in range(len(new_tup_list))
                     )
                     total_vars = tuple(new_tup_list + [rhs.args[1]])
+                    glbls = {"bodosql": bodosql}
+                    locals = {}
                     return replace_func(
                         self,
                         eval(
-                            f"lambda {replace_vars}, sep: bodo.libs.bodosql_array_kernels.concat_ws(({replace_vars},), sep)"
+                            f"lambda {replace_vars}, sep: bodosql.kernels.concat_ws(({replace_vars},), sep)",
+                            glbls,
+                            locals,
                         ),
                         total_vars,
                     )

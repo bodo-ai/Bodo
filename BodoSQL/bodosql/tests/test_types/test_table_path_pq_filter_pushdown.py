@@ -1223,9 +1223,7 @@ def test_in_filter_pushdown_e2e(datapath):
     def impl(bc, test_in_query):
         return bc.sql(test_in_query)
 
-    assert "bodo.libs.bodosql_array_kernels.is_in" in bc.convert_to_pandas(
-        test_in_query
-    )
+    assert "bodosql.kernels.is_in" in bc.convert_to_pandas(test_in_query)
 
     stream = io.StringIO()
     logger = create_string_io_logger(stream)

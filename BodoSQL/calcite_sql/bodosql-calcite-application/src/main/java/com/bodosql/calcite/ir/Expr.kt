@@ -13,11 +13,15 @@ abstract class Expr {
      * Represents raw python code to insert directly into the document.
      * @param code The code to insert directly into the document.
      */
-    class Raw(val code: String) : Expr() {
+    class Raw(
+        val code: String,
+    ) : Expr() {
         override fun emit(): String = code
     }
 
-    open class DelegateExpr(private val delegate: Expr) : Expr() {
+    open class DelegateExpr(
+        private val delegate: Expr,
+    ) : Expr() {
         override fun emit(): String = delegate.emit()
     }
 
@@ -57,9 +61,11 @@ abstract class Expr {
         }
     }
 
-    class Len(expr: Expr) : DelegateExpr(
-        Call("len", expr),
-    )
+    class Len(
+        expr: Expr,
+    ) : DelegateExpr(
+            Call("len", expr),
+        )
 
     /**
      * Controls access to fields for an input. This can be used to access member variables
@@ -68,7 +74,10 @@ abstract class Expr {
      * @param inputVar the expression to access a field for.
      * @param attributeName the field to access.
      */
-    class Attribute(val inputVar: Expr, val attributeName: String) : Expr() {
+    class Attribute(
+        val inputVar: Expr,
+        val attributeName: String,
+    ) : Expr() {
         override fun emit(): String = "${inputVar.emit()}.$attributeName"
     }
 
@@ -79,12 +88,16 @@ abstract class Expr {
      * @param lowerBound: The integer lower bound of the slice
      * @param upperBound: The integer upper bound of the slice
      */
-    class DataFrameSlice(inputDf: Expr, lowerBound: Expr, upperBound: Expr) : DelegateExpr(
-        Index(
-            Attribute(inputDf, "iloc"),
-            Slice(lowerBound, upperBound),
-        ),
-    )
+    class DataFrameSlice(
+        inputDf: Expr,
+        lowerBound: Expr,
+        upperBound: Expr,
+    ) : DelegateExpr(
+            Index(
+                Attribute(inputDf, "iloc"),
+                Slice(lowerBound, upperBound),
+            ),
+        )
 
     /**
      * Represents a Python method call. This should be used as a generic call for certain methods that are unlikely to repeat.
@@ -101,10 +114,9 @@ abstract class Expr {
         methodName: String,
         args: kotlin.collections.List<Expr> = listOf(),
         namedArgs: kotlin.collections.List<Pair<String, Expr>> = listOf(),
-    ) :
-        DelegateExpr(
-                Call(Attribute(inputVar, methodName), args, namedArgs),
-            )
+    ) : DelegateExpr(
+            Call(Attribute(inputVar, methodName), args, namedArgs),
+        )
 
     /**
      * Represents a call to groupby with the arguments that could change depending on the call.
@@ -115,8 +127,12 @@ abstract class Expr {
      * @param dropna: Should NA values be dropped.
      *
      */
-    class Groupby(inputVar: Expr, keys: List, asIndex: Boolean, dropna: Boolean) :
-        DelegateExpr(
+    class Groupby(
+        inputVar: Expr,
+        keys: List,
+        asIndex: Boolean,
+        dropna: Boolean,
+    ) : DelegateExpr(
             Method(
                 inputVar,
                 "groupby",
@@ -133,7 +149,10 @@ abstract class Expr {
      * Represents an index operation into an expression. This it the equivalent
      * of getitem most of the time.
      */
-    class Index(val input: Expr, val args: kotlin.collections.List<Expr>) : Expr() {
+    class Index(
+        val input: Expr,
+        val args: kotlin.collections.List<Expr>,
+    ) : Expr() {
         constructor(input: Expr, vararg args: Expr) : this(input, args.toList())
 
         override fun emit(): String {
@@ -150,7 +169,12 @@ abstract class Expr {
      * @param naPosition: Puts NaNs at the beginning if 'first'; 'last' puts NaNs at the end.
      *
      */
-    class SortValues(val inputVar: Expr, val by: List, val ascending: List, val naPosition: List) : Expr() {
+    class SortValues(
+        val inputVar: Expr,
+        val by: List,
+        val ascending: List,
+        val naPosition: List,
+    ) : Expr() {
         override fun emit(): String {
             // Generate the keyword args
             val keywordArgs =
@@ -175,9 +199,12 @@ abstract class Expr {
      * @param inputExpr: The input array/DataFrame.
      * @param index: The index into the array/DataFrame
      */
-    class GetItem(inputExpr: Expr, index: Expr) : DelegateExpr(
-        Index(inputExpr, index),
-    )
+    class GetItem(
+        inputExpr: Expr,
+        index: Expr,
+    ) : DelegateExpr(
+            Index(inputExpr, index),
+        )
 
     /**
      * Represents the unary operator. This should only
@@ -188,10 +215,11 @@ abstract class Expr {
      * not a name.
      * @param inputExpr: The input expression to apply the op to.
      */
-    class Unary(private val opString: String, private val inputExpr: Expr) : Expr() {
-        override fun emit(): String {
-            return "$opString(${inputExpr.emit()})"
-        }
+    class Unary(
+        private val opString: String,
+        private val inputExpr: Expr,
+    ) : Expr() {
+        override fun emit(): String = "$opString(${inputExpr.emit()})"
     }
 
     /**
@@ -204,7 +232,11 @@ abstract class Expr {
      * @param input1: The first input to the op.
      * @param input2: The second input to the op.
      */
-    class Binary(private val opString: String, private val input1: Expr, private val input2: Expr) : Expr() {
+    class Binary(
+        private val opString: String,
+        private val input1: Expr,
+        private val input2: Expr,
+    ) : Expr() {
         override fun emit(): String {
             // TODO(jsternberg): As things get more complex in here, we'll have to mark
             // operations with their precedence.
@@ -218,15 +250,21 @@ abstract class Expr {
      * @param stop The stop Expr.
      * @param step The step Expr. Null if there is no step.
      */
-    class Range(start: Expr, stop: Expr, step: Expr? = null) : DelegateExpr(
-        Call("range", sequenceOf(start, stop, step).filterNotNull().toList()),
-    )
+    class Range(
+        start: Expr,
+        stop: Expr,
+        step: Expr? = null,
+    ) : DelegateExpr(
+            Call("range", sequenceOf(start, stop, step).filterNotNull().toList()),
+        )
 
     /**
      * Represents a tuple creation.
      * @param args The inputs to the tuple.
      */
-    class Tuple(val args: kotlin.collections.List<Expr>) : Expr() {
+    class Tuple(
+        val args: kotlin.collections.List<Expr>,
+    ) : Expr() {
         constructor(vararg args: Expr) : this(args.toList())
 
         override fun emit(): String =
@@ -248,7 +286,11 @@ abstract class Expr {
      * @param start start index of the slice or null if empty
      * @param stop stop index of the slice or null if empty
      */
-    class Slice(val start: Expr? = null, val stop: Expr? = null, val step: Expr? = null) : Expr() {
+    class Slice(
+        val start: Expr? = null,
+        val stop: Expr? = null,
+        val step: Expr? = null,
+    ) : Expr() {
         /**
          * Constructor without step mostly for Java.
          */
@@ -268,7 +310,9 @@ abstract class Expr {
      * Represents a List creation.
      * @param args The inputs to the list.
      */
-    class List(val args: kotlin.collections.List<Expr>) : Expr() {
+    class List(
+        val args: kotlin.collections.List<Expr>,
+    ) : Expr() {
         constructor(vararg args: Expr) : this(args.toList())
 
         override fun emit(): String = args.joinToString(separator = ", ", prefix = "[", postfix = "]") { it.emit() }
@@ -280,9 +324,12 @@ abstract class Expr {
      * @param keys The key inputs to the dictionary.
      * @param values The value inputs to the dictionary
      */
-    class Dict(val items: kotlin.collections.List<Pair<Expr, Expr>>) : Expr() {
+    class Dict(
+        val items: kotlin.collections.List<Pair<Expr, Expr>>,
+    ) : Expr() {
         constructor(items: Iterator<Map.Entry<Expr, Expr>>) : this(
-            items.asSequence()
+            items
+                .asSequence()
                 .map { (k, v) -> k to v }
                 .toList(),
         )
@@ -299,7 +346,9 @@ abstract class Expr {
      * Represents a triple quoted String.
      * @param arg The body of the string.
      */
-    class TripleQuotedString(arg: String) : Expr() {
+    class TripleQuotedString(
+        arg: String,
+    ) : Expr() {
         private val s = arg.replace("\"\"\"", """\"\"\"""")
 
         override fun emit(): String = "\"\"\"$s\"\"\""
@@ -311,7 +360,10 @@ abstract class Expr {
      * @param arg The body of the string as a Frame.
      * @param indentLevel The indent level used for emitting the Frame.
      */
-    class FrameTripleQuotedString(val arg: Frame, private val indentLevel: Int) : Expr() {
+    class FrameTripleQuotedString(
+        val arg: Frame,
+        private val indentLevel: Int,
+    ) : Expr() {
         override fun emit(): String {
             // Generate a doc with indent level provided + emit the frame
             val doc = Doc(level = indentLevel)
@@ -331,7 +383,9 @@ abstract class Expr {
      * double quotes.
      * @param arg The body of the string.
      */
-    class StringLiteral(val arg: String) : Expr() {
+    class StringLiteral(
+        val arg: String,
+    ) : Expr() {
         override fun emit(): String {
             val literal =
                 arg
@@ -353,7 +407,9 @@ abstract class Expr {
      * Represents a Binary literal wrapped in double quotes for binary strings.
      * @param arg The body of the binary.
      */
-    class BinaryLiteral(val arg: String) : Expr() {
+    class BinaryLiteral(
+        val arg: String,
+    ) : Expr() {
         override fun emit(): String = "bytes.fromhex(\"$arg\")"
     }
 
@@ -361,7 +417,9 @@ abstract class Expr {
      * Represents a Boolean Literal.
      * @param arg The value of the literal.
      */
-    class BooleanLiteral(val arg: Boolean) : Expr() {
+    class BooleanLiteral(
+        val arg: Boolean,
+    ) : Expr() {
         override fun emit(): String =
             if (arg) {
                 "True"
@@ -378,7 +436,9 @@ abstract class Expr {
      * Represents an Integer Literal.
      * @param arg The value of the literal.
      */
-    class IntegerLiteral(val arg: Int) : Expr() {
+    class IntegerLiteral(
+        val arg: Int,
+    ) : Expr() {
         override fun emit(): String = arg.toString()
     }
 
@@ -386,7 +446,9 @@ abstract class Expr {
      * Represents a Decimal Literal.
      * @param arg The value of the literal.
      */
-    class DecimalLiteral(val arg: BigDecimal) : Expr() {
+    class DecimalLiteral(
+        val arg: BigDecimal,
+    ) : Expr() {
         override fun emit(): String = arg.toString()
     }
 
@@ -394,7 +456,9 @@ abstract class Expr {
      * Represents a Double Literal.
      * @param arg The value of the literal.
      */
-    class DoubleLiteral(val arg: Double) : Expr() {
+    class DoubleLiteral(
+        val arg: Double,
+    ) : Expr() {
         override fun emit(): String = arg.toString()
     }
 
@@ -416,13 +480,9 @@ fun bodoSQLKernel(
     callee: String,
     args: List<Expr> = listOf(),
     namedArgs: List<Pair<String, Expr>> = listOf(),
-): Expr {
-    return Expr.Call("bodo.libs.bodosql_array_kernels.$callee", args, namedArgs)
-}
+): Expr = Expr.Call("bodosql.kernels.$callee", args, namedArgs)
 
 fun initRangeIndex(
     args: List<Expr> = listOf(),
     namedArgs: List<Pair<String, Expr>> = listOf(),
-): Expr {
-    return Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs)
-}
+): Expr = Expr.Call("bodo.hiframes.pd_index_ext.init_range_index", args, namedArgs)
