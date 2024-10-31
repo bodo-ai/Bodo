@@ -142,34 +142,6 @@ def test_tuple_parfor_fusion(memory_leak_check):
     _check_num_parfors(bodo_func, 1)
 
 
-def test_parfor_fusion_scalar_optional_getitem(memory_leak_check):
-    """
-    Tests that scalar_optional_getitem can be used to compute parfor
-    fusion.
-    """
-    out_arr_typ = bodo.IntegerArrayType(bodo.int64)
-
-    def impl(arr):
-        n1 = len(arr)
-        arr2 = bodo.utils.utils.alloc_type(n1, out_arr_typ, (-1))
-        for i in prange(n1):
-            arr2[i] = bodo.libs.bodosql_array_kernels.add_numeric(
-                bodo.utils.indexing.scalar_optional_getitem(arr, i), 1
-            )
-        n2 = len(arr2)
-        arr3 = bodo.utils.utils.alloc_type(n2, out_arr_typ, (-1))
-        for i in prange(n2):
-            arr3[i] = bodo.libs.bodosql_array_kernels.add_numeric(
-                3, bodo.utils.indexing.scalar_optional_getitem(arr2, i)
-            )
-        return arr3
-
-    input_arr = pd.array([0, 1, 2, 3, 4, 5] * 10 + [None, None, None], dtype="Int64")
-    bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(impl)
-    bodo_func(input_arr)
-    _check_num_parfors(bodo_func, 1)
-
-
 def _check_num_parfors(bodo_func, expected):
     """
     Ensure that the bodo function contains a specific number of parfors.

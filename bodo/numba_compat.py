@@ -538,7 +538,7 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                         if isinstance(rhs, ir.Expr) and rhs.op == "call":
                             call_name = guard(find_callname, func_ir, rhs, typemap)
                             if call_name is not None and call_name[1:] == (
-                                "bodo.libs.bodosql_array_kernels",
+                                "bodosql.kernels"
                             ):
                                 continue
                             elif call_name == (

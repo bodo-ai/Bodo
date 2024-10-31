@@ -32,6 +32,13 @@ import bodosql.libs.sql_operators
 import bodosql.libs.ntile_helper
 import bodosql.libs.iceberg_merge_into
 
+# Import BodoSQL kernels
+import bodosql.kernels
+import bodosql.kernels.lead_lag
+import bodosql.kernels.lateral
+import bodosql.kernels.listagg
+import bodosql.kernels.crypto_funcs
+
 from bodosql.context import BodoSQLContext
 
 # ------------------------------ Version Import ------------------------------
