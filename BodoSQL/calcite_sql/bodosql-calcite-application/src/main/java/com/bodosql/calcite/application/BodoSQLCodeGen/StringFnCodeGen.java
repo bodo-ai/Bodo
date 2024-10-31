@@ -22,7 +22,7 @@ public class StringFnCodeGen {
   // Hashmap of functions for which there is a one to one mapping between the SQL function call,
   // and a function call where any of the arguments can be scalars or vectors.
   // IE SQLFN(C1, s1, C2, s2) => FN(C1, s1, C2, s2)
-  // EX LPAD(A, 10, S) => bodo.libs.bodosql_array_kernels.lpad(A, 10, S)
+  // EX LPAD(A, 10, S) => bodosql.kernels.lpad(A, 10, S)
   static HashMap<String, String> equivalentFnMapBroadcast;
 
   static {

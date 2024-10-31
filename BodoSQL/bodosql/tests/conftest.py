@@ -1985,3 +1985,33 @@ def glue_catalog():
 
     warehouse = "s3://icebergglue-ci"
     return bodosql.GlueCatalog(warehouse=warehouse)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.array(
+                [
+                    "1",
+                    "1.55",
+                    "1.56",
+                    "10.56",
+                    "1000.5",
+                    None,
+                    None,
+                    "10004.1",
+                    "-11.41",
+                ],
+                dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
+            )
+        ),
+    ]
+)
+def precision_scale_decimal_array(request):
+    return request.param
+
+
+pytest_mark_javascript = pytest.mark.skipif(
+    not bodosql.kernels.javascript_udf_array_kernels.javascript_udf_enabled,
+    reason="JavaScript UDFs are not enabled",
+)

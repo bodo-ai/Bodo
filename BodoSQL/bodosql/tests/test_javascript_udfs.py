@@ -52,20 +52,20 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.libs.bodosql_array_kernels import (
-    create_javascript_udf,
-    delete_javascript_udf,
-    execute_javascript_udf,
-)
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.tests.conftest import (  # noqa
     enable_numba_alloc_stats,
     memory_leak_check,
-    pytest_mark_javascript,
 )
 from bodo.tests.utils import check_func
 from bodo.utils.typing import MetaType
+from bodosql.kernels import (
+    create_javascript_udf,
+    delete_javascript_udf,
+    execute_javascript_udf,
+)
+from bodosql.tests.conftest import pytest_mark_javascript
 from bodosql.tests.test_types.snowflake_catalog_common import (
     test_db_snowflake_catalog,  # noqa
 )

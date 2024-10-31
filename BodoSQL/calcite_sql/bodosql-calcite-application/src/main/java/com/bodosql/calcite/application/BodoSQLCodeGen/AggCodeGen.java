@@ -104,8 +104,7 @@ public class AggCodeGen {
 
     // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
     // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
-    equivalentHelperFnMap.put(
-        "SINGLE_VALUE", "bodo.libs.bodosql_array_kernels.ensure_single_value");
+    equivalentHelperFnMap.put("SINGLE_VALUE", "bodosql.kernels.ensure_single_value");
     equivalentHelperFnMap.put("APPROX_PERCENTILE", "approx_percentile");
 
     equivalentExtendedNamedAggAggregates.put("LISTAGG", "listagg");
@@ -169,7 +168,7 @@ public class AggCodeGen {
             new Expr.Tuple(nullDirList),
             sepExpr);
 
-    String fn_name = "bodo.libs.bodosql_listagg.bodosql_listagg";
+    String fn_name = "bodosql.kernels.listagg.bodosql_listagg";
     return new Expr.Call(fn_name, argsList);
   }
 

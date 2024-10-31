@@ -100,8 +100,7 @@ open class RexToBodoTranslator(
     private val dynamicParamTypes: List<RelDataType>,
     private val namedParamTypeMap: Map<String, RelDataType>,
     private val localRefs: List<Expr>,
-) :
-    RexVisitor<Expr> {
+) : RexVisitor<Expr> {
     constructor(
         visitor: BodoCodeGenVisitor,
         builder: Module.Builder,
@@ -131,24 +130,18 @@ open class RexToBodoTranslator(
         }
     }
 
-    fun getInput(): BodoEngineTable {
-        return input ?: throw BodoSQLCodegenException("Illegal use of Input in a context that doesn't support table references.")
-    }
+    fun getInput(): BodoEngineTable =
+        input ?: throw BodoSQLCodegenException("Illegal use of Input in a context that doesn't support table references.")
 
-    override fun visitInputRef(inputRef: RexInputRef): Expr {
-        return Expr.Call(
+    override fun visitInputRef(inputRef: RexInputRef): Expr =
+        Expr.Call(
             "bodo.hiframes.table.get_table_data",
             listOf(getInput(), Expr.IntegerLiteral(inputRef.index)),
         )
-    }
 
-    override fun visitLocalRef(localRef: RexLocalRef): Expr {
-        return localRefs[localRef.index]
-    }
+    override fun visitLocalRef(localRef: RexLocalRef): Expr = localRefs[localRef.index]
 
-    override fun visitLiteral(literal: RexLiteral): Expr {
-        return LiteralCodeGen.generateLiteralCode(literal, visitor)
-    }
+    override fun visitLiteral(literal: RexLiteral): Expr = LiteralCodeGen.generateLiteralCode(literal, visitor)
 
     override fun visitCall(call: RexCall): Expr {
         // TODO(jsternberg): Using instanceof here is problematic.
@@ -242,17 +235,13 @@ open class RexToBodoTranslator(
         }
     }
 
-    protected open fun visitBinOpScan(operation: RexCall): Expr {
-        return this.visitBinOpScan(operation, listOf())
-    }
+    protected open fun visitBinOpScan(operation: RexCall): Expr = this.visitBinOpScan(operation, listOf())
 
     /**
      * @param operand
      * @return True if the operand is a scalar
      */
-    protected open fun isOperandScalar(operand: RexNode): Boolean {
-        return IsScalar.isScalar(operand)
-    }
+    protected open fun isOperandScalar(operand: RexNode): Boolean = IsScalar.isScalar(operand)
 
     /**
      * Generate the code for a Binary operation.
@@ -321,9 +310,7 @@ open class RexToBodoTranslator(
         }
     }
 
-    protected open fun visitLikeOp(node: RexCall): Expr {
-        return visitLikeOp(node, listOf())
-    }
+    protected open fun visitLikeOp(node: RexCall): Expr = visitLikeOp(node, listOf())
 
     /**
      * Generate the code for a like operation.
@@ -487,29 +474,17 @@ open class RexToBodoTranslator(
         private val refs: MutableList<RexSlot> = java.util.ArrayList()
         private val dynamicParams: MutableSet<String> = HashSet()
 
-        fun getRefs(): List<RexSlot> {
-            return ImmutableList.copyOf(refs)
-        }
+        fun getRefs(): List<RexSlot> = ImmutableList.copyOf(refs)
 
-        fun getDynamicParams(): List<String> {
-            return ImmutableList.copyOf(dynamicParams)
-        }
+        fun getDynamicParams(): List<String> = ImmutableList.copyOf(dynamicParams)
 
-        fun size(): Int {
-            return refs.size
-        }
+        fun size(): Int = refs.size
 
-        override fun visitInputRef(inputRef: RexInputRef): RexNode {
-            return visitGenericRef(inputRef)
-        }
+        override fun visitInputRef(inputRef: RexInputRef): RexNode = visitGenericRef(inputRef)
 
-        override fun visitLocalRef(localRef: RexLocalRef): RexNode {
-            return visitGenericRef(localRef)
-        }
+        override fun visitLocalRef(localRef: RexLocalRef): RexNode = visitGenericRef(localRef)
 
-        override fun visitCall(call: RexCall): RexNode {
-            return super.visitCall(call)
-        }
+        override fun visitCall(call: RexCall): RexNode = super.visitCall(call)
 
         override fun visitDynamicParam(dynamicParam: RexDynamicParam): RexNode {
             val paramName =
@@ -565,10 +540,10 @@ open class RexToBodoTranslator(
      *
      *
      * `
-     * if bodo.libs.bodosql_array_kernels.is_true(cond1):
+     * if bodosql.kernels.is_true(cond1):
      * out_arr[i] = truepath1
      * continue
-     * if bodo.libs.bodosql_array_kernels.is_true(cond2):
+     * if bodosql.kernels.is_true(cond2):
      * out_arr[i] = truepath2
      * continue
      * out_arr[i] = elsepath
@@ -577,10 +552,10 @@ open class RexToBodoTranslator(
      *
      *
      * `
-     * if bodo.libs.bodosql_array_kernels.is_true(cond1):
+     * if bodosql.kernels.is_true(cond1):
      * var = truepath1
      * return var
-     * if bodo.libs.bodosql_array_kernels.is_true(cond2):
+     * if bodosql.kernels.is_true(cond2):
      * var = truepath2
      * return var
      * var = elsepath
@@ -655,9 +630,7 @@ open class RexToBodoTranslator(
     protected open fun visitCastScan(
         operation: RexCall,
         isSafe: Boolean,
-    ): Expr {
-        return visitCastScan(operation, isSafe, IsScalar.isScalar(operation), listOf())
-    }
+    ): Expr = visitCastScan(operation, isSafe, IsScalar.isScalar(operation), listOf())
 
     /**
      * Generate the code for a cast operation.
@@ -712,9 +685,7 @@ open class RexToBodoTranslator(
         )
     }
 
-    protected open fun visitSubstringScan(node: RexCall): Expr {
-        return visitSubstringScan(node, listOf())
-    }
+    protected open fun visitSubstringScan(node: RexCall): Expr = visitSubstringScan(node, listOf())
 
     /**
      * Generate the code for a substring operation.
@@ -738,17 +709,13 @@ open class RexToBodoTranslator(
         return StringFnCodeGen.generateSubstringCode(operands, streamingNamedArgs)
     }
 
-    protected open fun visitGenericFuncOp(fnOperation: RexCall): Expr {
-        return visitGenericFuncOp(fnOperation, false)
-    }
+    protected open fun visitGenericFuncOp(fnOperation: RexCall): Expr = visitGenericFuncOp(fnOperation, false)
 
     protected open fun visitNullIgnoringGenericFunc(
         fnOperation: RexCall,
         isSingleRow: Boolean,
         argScalars: List<Boolean>,
-    ): Expr {
-        return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, listOf(), argScalars)
-    }
+    ): Expr = visitNullIgnoringGenericFunc(fnOperation, isSingleRow, listOf(), argScalars)
 
     /**
      * Generate the code for generic functions that have special handling for null values.
@@ -787,7 +754,8 @@ open class RexToBodoTranslator(
             if (isSingleRow || IsScalar.isScalar(operand)) {
                 operandInfo =
                     Expr.Call(
-                        "bodo.utils.conversion.unbox_if_tz_naive_timestamp", listOf(operandInfo),
+                        "bodo.utils.conversion.unbox_if_tz_naive_timestamp",
+                        listOf(operandInfo),
                     )
             }
             codeExprs.add(operandInfo)
@@ -834,9 +802,7 @@ open class RexToBodoTranslator(
         inputType: RelDataType,
         outputType: RelDataType,
         isScalar: Boolean,
-    ): Expr {
-        return visitDynamicCast(arg, inputType, outputType, isScalar, listOf())
-    }
+    ): Expr = visitDynamicCast(arg, inputType, outputType, isScalar, listOf())
 
     /**
      * Generate the code for a cast operation that isn't generated by the planner. TODO(njriasan):
@@ -880,9 +846,7 @@ open class RexToBodoTranslator(
         fnName: String,
         stringToBeTrimmed: Expr,
         charactersToBeTrimmed: Expr,
-    ): Expr {
-        return visitTrimFunc(fnName, stringToBeTrimmed, charactersToBeTrimmed, listOf())
-    }
+    ): Expr = visitTrimFunc(fnName, stringToBeTrimmed, charactersToBeTrimmed, listOf())
 
     /**
      * Generate the code for the TRIM functions.
@@ -899,9 +863,7 @@ open class RexToBodoTranslator(
         stringToBeTrimmed: Expr,
         charactersToBeTrimmed: Expr,
         streamingNamedArgs: List<Pair<String, Expr>>,
-    ): Expr {
-        return StringFnCodeGen.generateTrimFnCode(fnName, stringToBeTrimmed, charactersToBeTrimmed, streamingNamedArgs)
-    }
+    ): Expr = StringFnCodeGen.generateTrimFnCode(fnName, stringToBeTrimmed, charactersToBeTrimmed, streamingNamedArgs)
 
     /**
      * Generate the code for a NULLIF function.
@@ -914,13 +876,9 @@ open class RexToBodoTranslator(
     protected fun visitNullIfFunc(
         operands: List<Expr>,
         streamingNamedArgs: List<Pair<String, Expr>>,
-    ): Expr {
-        return bodoSQLKernel("nullif", operands, streamingNamedArgs)
-    }
+    ): Expr = bodoSQLKernel("nullif", operands, streamingNamedArgs)
 
-    protected open fun visitNullIfFunc(operands: List<Expr>): Expr {
-        return visitNullIfFunc(operands, listOf())
-    }
+    protected open fun visitNullIfFunc(operands: List<Expr>): Expr = visitNullIfFunc(operands, listOf())
 
     /**
      * Generate the code for the Least/Greatest.
@@ -935,16 +893,12 @@ open class RexToBodoTranslator(
         fnName: String,
         operands: List<Expr>,
         streamingNamedArgs: List<Pair<String, Expr>>,
-    ): Expr {
-        return NumericCodeGen.generateLeastGreatestCode(fnName, operands, streamingNamedArgs)
-    }
+    ): Expr = NumericCodeGen.generateLeastGreatestCode(fnName, operands, streamingNamedArgs)
 
     protected open fun visitLeastGreatest(
         fnName: String,
         operands: List<Expr>,
-    ): Expr {
-        return visitLeastGreatest(fnName, operands, listOf())
-    }
+    ): Expr = visitLeastGreatest(fnName, operands, listOf())
 
     /**
      * Generate the code for Position.
@@ -957,13 +911,9 @@ open class RexToBodoTranslator(
     protected fun visitPosition(
         operands: List<Expr>,
         streamingNamedArgs: List<Pair<String, Expr>>,
-    ): Expr {
-        return StringFnCodeGen.generatePosition(operands, streamingNamedArgs)
-    }
+    ): Expr = StringFnCodeGen.generatePosition(operands, streamingNamedArgs)
 
-    protected open fun visitPosition(operands: List<Expr>): Expr {
-        return StringFnCodeGen.generatePosition(operands, listOf())
-    }
+    protected open fun visitPosition(operands: List<Expr>): Expr = StringFnCodeGen.generatePosition(operands, listOf())
 
     /** Wrapper to unpack the RexCall so the implementation can be reused for cast/try_cast.  */
     protected open fun visitCastFunc(
@@ -1010,8 +960,8 @@ open class RexToBodoTranslator(
         outputType: RelDataType,
         precision: Int,
         scale: Int,
-    ): Boolean {
-        return if (inputType == outputType) {
+    ): Boolean =
+        if (inputType == outputType) {
             true
         } else if (inputType.sqlTypeName == outputType.sqlTypeName && inputType.sqlTypeName != SqlTypeName.DECIMAL) {
             // Can omit cast if the input and output types are the same, and it's not a type where precision matters
@@ -1025,7 +975,6 @@ open class RexToBodoTranslator(
         } else {
             false
         }
-    }
 
     /**
      * Generate the code for Cast function calls.
@@ -1153,9 +1102,7 @@ open class RexToBodoTranslator(
         fnOperation: RexCall,
         operands: List<Expr>,
         argScalars: List<Boolean>,
-    ): Expr {
-        return visitCastFunc(fnOperation, operands, argScalars, listOf())
-    }
+    ): Expr = visitCastFunc(fnOperation, operands, argScalars, listOf())
 
     /**
      * Generate the code for Regex function calls.
@@ -1258,9 +1205,7 @@ open class RexToBodoTranslator(
         fnOperation: RexCall,
         operands: List<Expr>,
         isSingleRow: Boolean,
-    ): Expr {
-        return visitStringFunc(fnOperation, operands, listOf(), isSingleRow)
-    }
+    ): Expr = visitStringFunc(fnOperation, operands, listOf(), isSingleRow)
 
     /**
      * Generate the code for String function calls.
@@ -1402,9 +1347,7 @@ open class RexToBodoTranslator(
         return finalVar
     }
 
-    protected open fun visitGeneralContextFunction(fnOperation: RexCall): Variable {
-        return visitGeneralContextFunction(fnOperation, true)
-    }
+    protected open fun visitGeneralContextFunction(fnOperation: RexCall): Variable = visitGeneralContextFunction(fnOperation, true)
 
     /**
      * Implementation for functions that use nested arrays.
@@ -1573,9 +1516,7 @@ open class RexToBodoTranslator(
         fnName: String,
         operands: List<Expr>,
         argScalars: List<Boolean>,
-    ): Expr {
-        return visitNestedArrayFunc(fnName, operands, argScalars, listOf())
-    }
+    ): Expr = visitNestedArrayFunc(fnName, operands, argScalars, listOf())
 
     protected fun visitGenericFuncOp(
         fnOperation: RexCall,
@@ -1589,37 +1530,53 @@ open class RexToBodoTranslator(
         // Handle functions that do not care about nulls separately
         if ((
                 fnName === "ARRAY_CONSTRUCT"
-            ) || (
+            ) ||
+            (
                 fnName === "ARRAY_CONSTRUCT_COMPACT"
-            ) || (
+            ) ||
+            (
                 fnName === "BOOLAND"
-            ) || (
+            ) ||
+            (
                 fnName === "BOOLNOT"
-            ) || (
+            ) ||
+            (
                 fnName === "BOOLOR"
-            ) || (
+            ) ||
+            (
                 fnName === "BOOLXOR"
-            ) || (
+            ) ||
+            (
                 fnName === "COALESCE"
-            ) || (
+            ) ||
+            (
                 fnName === "DECODE"
-            ) || (
+            ) ||
+            (
                 fnName === "EQUAL_NULL"
-            ) || (
+            ) ||
+            (
                 fnName === "HASH"
-            ) || (
+            ) ||
+            (
                 fnName === "IF"
-            ) || (
+            ) ||
+            (
                 fnName === "IFF"
-            ) || (
+            ) ||
+            (
                 fnName === "NVL"
-            ) || (
+            ) ||
+            (
                 fnName === "NVL2"
-            ) || (
+            ) ||
+            (
                 fnName === "OBJECT_CONSTRUCT"
-            ) || (
+            ) ||
+            (
                 fnName === "OBJECT_CONSTRUCT_KEEP_NULL"
-            ) || (fnName === "ZEROIFNULL")
+            ) ||
+            (fnName === "ZEROIFNULL")
         ) {
             return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, argScalars)
         }
@@ -2216,15 +2173,12 @@ open class RexToBodoTranslator(
         }
     }
 
-    override fun visitOver(over: RexOver): Expr {
+    override fun visitOver(over: RexOver): Expr =
         throw BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported RexOver: " + over.operator,
         )
-    }
 
-    override fun visitCorrelVariable(correlVariable: RexCorrelVariable): Expr {
-        throw unsupportedNode("RexCorrelVariable")
-    }
+    override fun visitCorrelVariable(correlVariable: RexCorrelVariable): Expr = throw unsupportedNode("RexCorrelVariable")
 
     override fun visitDynamicParam(dynamicParam: RexDynamicParam): Expr {
         val (paramName, actualType) =
@@ -2266,39 +2220,24 @@ open class RexToBodoTranslator(
         }
     }
 
-    override fun visitRangeRef(rangeRef: RexRangeRef): Expr {
-        throw unsupportedNode("RexRangeRef")
-    }
+    override fun visitRangeRef(rangeRef: RexRangeRef): Expr = throw unsupportedNode("RexRangeRef")
 
-    override fun visitFieldAccess(fieldAccess: RexFieldAccess): Expr {
-        throw unsupportedNode("RexFieldAccess")
-    }
+    override fun visitFieldAccess(fieldAccess: RexFieldAccess): Expr = throw unsupportedNode("RexFieldAccess")
 
-    override fun visitSubQuery(subQuery: RexSubQuery): Expr {
-        throw unsupportedNode("RexSubQuery")
-    }
+    override fun visitSubQuery(subQuery: RexSubQuery): Expr = throw unsupportedNode("RexSubQuery")
 
-    override fun visitTableInputRef(fieldRef: RexTableInputRef): Expr {
-        return visitInputRef(fieldRef)
-    }
+    override fun visitTableInputRef(fieldRef: RexTableInputRef): Expr = visitInputRef(fieldRef)
 
-    override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): Expr {
-        return visitInputRef(fieldRef)
-    }
+    override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): Expr = visitInputRef(fieldRef)
 
-    override fun visitLambda(var1: RexLambda): Expr {
-        throw unsupportedNode("RexLambda")
-    }
+    override fun visitLambda(var1: RexLambda): Expr = throw unsupportedNode("RexLambda")
 
-    override fun visitLambdaRef(var1: RexLambdaRef): Expr {
-        throw unsupportedNode("RexLambdaRef")
-    }
+    override fun visitLambdaRef(var1: RexLambdaRef): Expr = throw unsupportedNode("RexLambdaRef")
 
-    private fun unsupportedNode(nodeType: String): BodoSQLCodegenException {
-        return BodoSQLCodegenException(
+    private fun unsupportedNode(nodeType: String): BodoSQLCodegenException =
+        BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported RexNode: $nodeType",
         )
-    }
 
     /**
      * A version of the RexToBodoTranslator that is used when the expression is occurring in a
@@ -2314,8 +2253,7 @@ open class RexToBodoTranslator(
         localRefs: List<Expr>,
         /** Variable names used in generated closures.  */
         private val closureVars: List<Variable>,
-    ) :
-        RexToBodoTranslator(visitor, builder, typeSystem, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
+    ) : RexToBodoTranslator(visitor, builder, typeSystem, input, dynamicParamTypes, namedParamTypeMap, localRefs) {
         /**
          * List of functions generated by this scalar context. This is needed for nested case statements
          * to maintain control flow.
@@ -2325,13 +2263,9 @@ open class RexToBodoTranslator(
         override fun visitCastScan(
             operation: RexCall,
             isSafe: Boolean,
-        ): Expr {
-            return visitCastScan(operation, isSafe, true, listOf())
-        }
+        ): Expr = visitCastScan(operation, isSafe, true, listOf())
 
-        override fun isOperandScalar(operand: RexNode): Boolean {
-            return true
-        }
+        override fun isOperandScalar(operand: RexNode): Boolean = true
 
         /**
          * Generating code in a scalar context requires building a closure that will be "bubbled up" to
@@ -2364,21 +2298,16 @@ open class RexToBodoTranslator(
             return visitGeneralContextFunction(fnOperation, false)
         }
 
-        override fun visitGenericFuncOp(fnOperation: RexCall): Expr {
-            return visitGenericFuncOp(fnOperation, true)
-        }
+        override fun visitGenericFuncOp(fnOperation: RexCall): Expr = visitGenericFuncOp(fnOperation, true)
 
-        override fun visitOver(over: RexOver): Expr {
+        override fun visitOver(over: RexOver): Expr =
             throw BodoSQLCodegenException(
                 "Internal Error: Calcite Plan Produced an Unsupported RexOver: " + over.operator,
             )
-        }
 
         /** @return The closures generated by this scalar context.
          */
-        fun getClosures(): List<Op.Function> {
-            return closures
-        }
+        fun getClosures(): List<Op.Function> = closures
     }
 
     companion object {

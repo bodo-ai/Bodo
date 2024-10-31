@@ -556,6 +556,46 @@ def is_overload_float(val):
     return is_overload_constant_float(val) or isinstance(val, types.Float)
 
 
+def is_valid_int_arg(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an integer
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is an integer, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, types.Integer)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Integer)
+        )
+        and not is_overload_int(arg)
+    )
+
+
+def is_valid_float_arg(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a float
+        (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is a float, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, types.Float)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Float)
+        )
+        and not is_overload_float(arg)
+    )
+
+
 def is_overload_numeric_scalar(val):
     return is_overload_bool(val) or is_overload_float(val) or is_overload_int(val)
 

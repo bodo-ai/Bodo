@@ -12,12 +12,12 @@ from bodo.tests.conftest import (  # noqa
     time_df,
     time_part_strings,
 )
-from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels import (
-    diff_fn,
-)
 from bodo.tests.utils import pytest_slow_unless_codegen
 from bodosql.context import BodoSQLContext
 from bodosql.tests.conftest import timeadd_arguments, timeadd_dataframe  # noqa
+from bodosql.tests.test_kernels.test_datetime_array_kernels import (
+    diff_fn,
+)
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed

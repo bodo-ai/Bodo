@@ -41,7 +41,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.table import TableType
-from bodo.libs.bodosql_array_kernels import (
+from bodo.libs.bodosql_kernels.bodosql_array_kernels import (
     broadcasted_fixed_arg_functions,
     broadcasted_variadic_functions,
 )
@@ -69,6 +69,7 @@ from bodo.utils.utils import (
     get_getsetitem_index_var,
     is_alloc_callname,
     is_array_typ,
+    is_bodosql_kernel_mod,
     is_call,
     is_call_assign,
     is_distributable_tuple_typ,
@@ -1987,7 +1988,7 @@ class DistributedAnalysis:
             # bitxor_agg doesn't affect input's distribution
             return
 
-        if fdef == ("lateral_flatten", "bodo.libs.lateral"):
+        if fdef == ("lateral_flatten", "bodosql.kernels.lateral"):
             # If the input is replicated the output is replicated, otherwise
             # the output is always 1D_Var since each rank may explode its
             # rows into different sizes.
@@ -2035,7 +2036,7 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("random_seedless", "bodo.libs.bodosql_array_kernels"):
+        if fdef == ("random_seedless", "bodosql.kernels"):
             if self.typemap[rhs.args[0].name] != bodo.none:
                 self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -2049,14 +2050,12 @@ class DistributedAnalysis:
 
         if fdef == (
             "bodosql_listagg_distributed",
-            "bodo.libs.bodosql_listagg",
-        ) or fdef == ("bodosql_listagg", "bodo.libs.bodosql_listagg"):
+            "bodosql.kernels.listagg",
+        ) or fdef == ("bodosql_listagg", "bodosql.kernels.listagg"):
             # Output is a string, so we don't need to explicitly set the distribution
             return
-
-        if (
-            func_name in broadcasted_fixed_arg_functions
-            and func_mod == "bodo.libs.bodosql_array_kernels"
+        if func_name in broadcasted_fixed_arg_functions and is_bodosql_kernel_mod(
+            func_mod
         ):
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another
@@ -2070,7 +2069,7 @@ class DistributedAnalysis:
 
         if (
             func_name in broadcasted_variadic_functions
-            and func_mod == "bodo.libs.bodosql_array_kernels"
+            and is_bodosql_kernel_mod(func_mod)
         ) and not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
             assert (
@@ -2102,7 +2101,7 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
-        if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
+        if fdef == ("concat_ws", "bodosql.kernels"):
             # If the generate tuple is a constant we skip this path and
             # cannot have any arrays.
             if not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
@@ -2123,7 +2122,7 @@ class DistributedAnalysis:
                     self._meet_several_array_dists(arrays, array_dists)
                 return
 
-        if fdef == ("is_in", "bodo.libs.bodosql_array_kernels"):
+        if fdef == ("is_in", "bodosql.kernels"):
             # Case 1: DIST DIST -> DIST, is_parallel=True
             # Case 2: REP  REP  -> REP, is_parallel=False
             # Case 3: DIST REP  -> DIST, is_parallel=False
@@ -3236,7 +3235,7 @@ class DistributedAnalysis:
         if fdef == ("file_read", "bodo.io.np_io"):
             return
 
-        if fdef == ("array_to_string", "bodo.libs.bodosql_array_kernels"):
+        if fdef == ("array_to_string", "bodosql.kernels"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
@@ -3332,8 +3331,8 @@ class DistributedAnalysis:
             return
 
         if func_name == "execute_javascript_udf" and (
-            func_mod == "bodo.libs.bodosql_javascript_udf_array_kernels"
-            or func_mod == "bodo.libs.bodosql_array_kernels"
+            func_mod == "bodosql.kernels.javascript_udf_array_kernels"
+            or func_mod == "bodosql.kernels"
         ):  # pragma: no cover
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another

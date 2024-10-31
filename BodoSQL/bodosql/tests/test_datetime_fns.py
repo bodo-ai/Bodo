@@ -11,28 +11,30 @@ import pytest
 
 import bodo
 import bodosql
-from bodo.libs.bodosql_datetime_array_kernels import (
-    standardize_snowflake_date_time_part_compile_time,
-)
 from bodo.tests.conftest import (  # noqa
     date_df,
     day_part_strings,
     time_df,
     time_part_strings,
 )
-from bodo.tests.test_bodosql_array_kernels.test_bodosql_datetime_array_kernels import (
-    last_day_scalar_fn,
-)
 from bodo.tests.timezone_common import (  # noqa
-    generate_date_trunc_date_func,
-    generate_date_trunc_func,
-    generate_date_trunc_time_func,
     representative_tz,
 )
 from bodo.tests.utils import (
     DistTestPipeline,
     dist_IR_contains,
     pytest_slow_unless_codegen,
+)
+from bodosql.kernels.datetime_array_kernels import (
+    standardize_snowflake_date_time_part_compile_time,
+)
+from bodosql.tests.test_kernels.test_datetime_array_kernels import (
+    last_day_scalar_fn,
+)
+from bodosql.tests.timezone_utils import (
+    generate_date_trunc_date_func,
+    generate_date_trunc_func,
+    generate_date_trunc_time_func,
 )
 from bodosql.tests.utils import check_query
 

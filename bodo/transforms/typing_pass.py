@@ -1705,7 +1705,7 @@ class TypingTransforms:
             and (
                 isinstance(call_list[1], ir.Var)
                 or call_list[1] == "pandas"
-                or call_list[1] == "bodo.libs.bodosql_array_kernels"
+                or call_list[1] == "bodosql.kernels"
             )
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
@@ -1730,7 +1730,7 @@ class TypingTransforms:
             )
         elif call_list == (
             "is_in",
-            "bodo.libs.bodosql_array_kernels",
+            "bodosql.kernels",
         ):  # pragma: no cover
             return self._get_bodosql_array_kernel_is_in_filter(
                 call_def,
@@ -1752,7 +1752,7 @@ class TypingTransforms:
             )
         elif call_list == (
             "like_kernel",
-            "bodo.libs.bodosql_array_kernels",
+            "bodosql.kernels",
         ):  # pragma: no cover
             return self._get_like_filter(
                 call_def,
@@ -1766,7 +1766,7 @@ class TypingTransforms:
             )
         elif call_list == (
             "regexp_like",
-            "bodo.libs.bodosql_array_kernels",
+            "bodosql.kernels",
         ):  # pragma: no cover
             return self._get_regexp_like_filter(
                 call_def,
@@ -2032,7 +2032,7 @@ class TypingTransforms:
                 must_match_start,
                 must_match_end,
                 match_anything,
-            ) = bodo.libs.bodosql_like_array_kernels.convert_sql_pattern_to_python_compile_time(
+            ) = bodo.ir.filter.convert_sql_pattern_to_python_compile_time(
                 pattern_const, escape_const, is_case_insensitive
             )
 
@@ -2354,7 +2354,7 @@ class TypingTransforms:
                 col_val = df_col_names[col_ind]
                 return bif.Ref(col_val), get_col_type(col_val)
 
-            is_bodosql_array_kernel = fdef[1] == "bodo.libs.bodosql_array_kernels"
+            is_bodosql_array_kernel = fdef[1] == "bodosql.kernels"
 
             # coalesce can be called on the filter column, which will be pushed down
             # e.g. where coalesce(L_COMMITDATE, current_date()) >= '1998-10-30'
@@ -7341,7 +7341,7 @@ class TypingTransforms:
                 # checking call_list[1] == "pandas" to handle pd.isna/pd.notna cases generated
                 # by BodoSQL
                 or call_list[1] == "pandas"
-                or call_list[1] == "bodo.libs.bodosql_array_kernels"
+                or call_list[1] == "bodosql.kernels"
             ):
                 return call_list[0] in (
                     "notna",
@@ -7352,9 +7352,9 @@ class TypingTransforms:
                     "startswith",
                     "endswith",
                 ) or call_list in (
-                    ("is_in", "bodo.libs.bodosql_array_kernels"),
-                    ("like_kernel", "bodo.libs.bodosql_array_kernels"),
-                    ("regexp_like", "bodo.libs.bodosql_array_kernels"),
+                    ("is_in", "bodosql.kernels"),
+                    ("like_kernel", "bodosql.kernels"),
+                    ("regexp_like", "bodosql.kernels"),
                 )
         return False
 
@@ -7376,7 +7376,7 @@ class TypingTransforms:
             return index_def.fn == operator.invert
         elif is_call(index_def):
             call_name = guard(find_callname, func_ir, index_def, self.typemap)
-            return call_name == ("boolnot", "bodo.libs.bodosql_array_kernels")
+            return call_name == ("boolnot", "bodosql.kernels")
         return False
 
     def _is_logical_op_filter_pushdown(
@@ -7407,7 +7407,7 @@ class TypingTransforms:
         """
         Performs an equality check on the index_def expr with the valid
         comparison operators (e.g. !=) or their equivalent BodoSQL array kernels
-        (e.g. bodo.libs.bodosql_array_kernels.not_equal). This is to ensure that
+        (e.g. bodosql.kernels.not_equal). This is to ensure that
         we can support filter pushdown for both the Pythonic version of these
         comparison operators and their SQL array kernels.
 
@@ -7429,10 +7429,7 @@ class TypingTransforms:
             )
         elif is_call(index_def):
             call_name = guard(find_callname, func_ir, index_def, self.typemap)
-            if (
-                len(call_name) == 2
-                and call_name[1] == "bodo.libs.bodosql_array_kernels"
-            ):
+            if len(call_name) == 2 and call_name[1] == "bodosql.kernels":
                 return call_name[0] in (
                     "equal",
                     "not_equal",
@@ -7462,7 +7459,7 @@ class TypingTransforms:
             return index_def.fn == operator.and_
         elif is_call(index_def):
             call_name = guard(find_callname, func_ir, index_def, self.typemap)
-            return call_name == ("booland", "bodo.libs.bodosql_array_kernels")
+            return call_name == ("booland", "bodosql.kernels")
         else:
             return False
 
@@ -7485,7 +7482,7 @@ class TypingTransforms:
             return index_def.fn == operator.or_
         elif is_call(index_def):
             call_name = guard(find_callname, func_ir, index_def, self.typemap)
-            return call_name == ("boolor", "bodo.libs.bodosql_array_kernels")
+            return call_name == ("boolor", "bodosql.kernels")
         else:
             return False
 
@@ -7555,7 +7552,7 @@ class TypingTransforms:
                     bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
                 )
             )
-        elif index_call_name == ("is_in", "bodo.libs.bodosql_array_kernels"):
+        elif index_call_name == ("is_in", "bodosql.kernels"):
             # In the case that we're hadling the bodsql is_in array kernel, we expect arg1 to be
             # an array. We need to rerun type inference if we don't have the type yet
             arg1_arr_type = self.typemap.get(index_def.args[1].name, None)
@@ -7619,8 +7616,7 @@ class TypingTransforms:
             index_call_name (Tuple[str, str | ir.Var]): A 2-tuple identifying the function call.
         """
         if not (
-            is_call(index_def)
-            and index_call_name == ("like_kernel", "bodo.libs.bodosql_array_kernels")
+            is_call(index_def) and index_call_name == ("like_kernel", "bodosql.kernels")
         ):
             return False
 

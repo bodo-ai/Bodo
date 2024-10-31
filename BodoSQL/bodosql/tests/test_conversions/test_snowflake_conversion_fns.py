@@ -10,7 +10,7 @@ from pandas.api.types import is_bool_dtype, is_float_dtype
 
 import bodosql
 from bodo import Time
-from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
+from bodosql.tests.test_kernels.test_snowflake_conversion_array_kernels import (
     _dates,
     _dates_nans,
     _timestamps,
