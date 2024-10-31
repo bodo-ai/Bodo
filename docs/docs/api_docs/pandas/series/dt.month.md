@@ -1,5 +1,7 @@
 # `pd.Series.dt.month`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.month.html#pandas.Series.dt.month)
+
 `pandas.Series.dt.month`
 
 !!! note

@@ -1,5 +1,7 @@
 # `pd.Series.dt.days_in_month`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.days_in_month.html#pandas.Series.dt.days_in_month)
+
 `pandas.Series.dt.days_in_month`
 
 !!! note

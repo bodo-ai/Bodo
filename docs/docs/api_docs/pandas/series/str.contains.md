@@ -1,5 +1,7 @@
 # `pd.Series.str.contains`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.contains.html#pandas.Series.str.contains)
+
 `pandas.Series.str.contains(pat, case=True, flags=0, na=None, regex=True)`
 
 ### Argument Restrictions:

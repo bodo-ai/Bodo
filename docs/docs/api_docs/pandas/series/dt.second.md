@@ -1,5 +1,7 @@
 # `pd.Series.dt.second`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.second.html#pandas.Series.dt.second)
+
 `pandas.Series.dt.second`
 
 !!! note
