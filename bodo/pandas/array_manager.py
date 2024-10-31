@@ -9,6 +9,7 @@ from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.submit.spawner import debug_msg
 
 
 class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
@@ -156,7 +157,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         if self._md_result_id is not None:
             assert self._md_head is not None
             assert self._md_nrows is not None
-            self.logger.debug("[LazyArrayManager] Collecting data...")
+            debug_msg(self.logger, "[LazyArrayManager] Collecting data...")
             new_arrays = []
             # TODO:: Get data from workers
             for arr in self._md_head.arrays:
@@ -195,8 +196,9 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         """
         if (r_id := self._md_result_id) is not None:
             # TODO: Delete data BSE-4096
-            self.logger.debug(
-                f"[LazyArrayManager] Asking workers to delete result '{r_id}'"
+            debug_msg(
+                self.logger,
+                f"[LazyArrayManager] Asking workers to delete result '{r_id}'",
             )
 
 
@@ -273,7 +275,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         Collect the data from the workers if we don't have it and clear metadata.
         """
         if self._md_result_id is not None:
-            self.logger.debug("[LazySingleArrayManager] Collecting data...")
+            debug_msg(self.logger, "[LazySingleArrayManager] Collecting data...")
             assert self._md_head is not None
             assert self._md_nrows is not None
 
@@ -363,6 +365,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         """
         if (r_id := self._md_result_id) is not None:
             # TODO: Delete data BSE-4096
-            self.logger.debug(
-                f"[LazySingleArrayManag] Asking workers to delete result '{r_id}'"
+            debug_msg(
+                self.logger,
+                f"[LazySingleArrayManag] Asking workers to delete result '{r_id}'",
             )

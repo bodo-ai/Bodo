@@ -5,6 +5,7 @@ from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.submit.spawner import debug_msg
 
 
 class LazyArrowExtensionArray(
@@ -56,8 +57,8 @@ class LazyArrowExtensionArray(
             # Just duplicate the head to get the full array for testing
             assert self._md_head is not None
             assert self._md_nrows is not None
-            self.logger.debug(
-                "[LazyArrowExtensionArray] Collecting data from workers..."
+            debug_msg(
+                self.logger, "[LazyArrowExtensionArray] Collecting data from workers..."
             )
             repl_ct = (self._md_nrows // len(self._md_head)) + 1
             new_array = type(self._md_head)._concat_same_type(
@@ -85,6 +86,7 @@ class LazyArrowExtensionArray(
         """
         if (r_id := self._md_result_id) is not None:
             # TODO: Delete data BSE-4096
-            self.logger.debug(
-                f"[LazyArrowExtensionArray] Asking workers to delete result '{r_id}'"
+            debug_msg(
+                self.logger,
+                f"[LazyArrowExtensionArray] Asking workers to delete result '{r_id}'",
             )
