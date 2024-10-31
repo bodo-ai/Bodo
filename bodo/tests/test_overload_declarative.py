@@ -391,7 +391,9 @@ def test_numeric_series_argument_checkers(
         pytest.param(
             pd.Series([1, 2, 3, 4]),
             pd.Series(["1", "2", "3", "4"]),
-            pd.Series([np.timedelta64(i) for i in range(5)], dtype="timedelta64[ns]"),
+            pd.Series(
+                [np.timedelta64(i, "Y") for i in range(5)], dtype="timedelta64[ns]"
+            ),
             "'arg2' must be a Series of datetime64 data. Got:",
             id="datetimelike_series_error",
         ),
