@@ -13,7 +13,6 @@
 
 #include "_meminfo.h"
 #include "simd-block-fixed-fpp.h"
-#include "tracing.h"
 
 // Macros for temporarily disabling compiler errors. Example usage:
 //   [[deprecated]] int f() {

@@ -1,11 +1,12 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_common.h"
+
 #include <numeric>
+
 #include "../_array_operations.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "_groupby_ftypes.h"
-#include "_groupby_update.h"
 
 /**
  * This file contains helper functions that are shared by multiple possible
@@ -1020,6 +1021,7 @@ std::shared_ptr<table_info> grouped_sort(
         vect_ascending[i] = asc_vect[i + order_offset - 1];
         na_position[i] = na_pos_vect[i + order_offset - 1];
     }
+
     // Sort the table so that all window functions that use the
     // sorted table can access it
     std::shared_ptr<table_info> iter_table = sort_values_table_local(

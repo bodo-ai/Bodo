@@ -4,12 +4,11 @@
 #include <Python.h>
 #include <stdbool.h>
 #include <algorithm>
-#include <cmath>
 #include <iostream>
 #include <numeric>
-#include <random>
 #include <span>
 #include <vector>
+
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 #include "_mpi.h"

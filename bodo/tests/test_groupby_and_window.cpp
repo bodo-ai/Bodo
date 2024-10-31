@@ -1172,7 +1172,6 @@ static bodo::tests::suite tests([] {
                         Bodo_CTypes::INT64, empty_return_enum::EMPTY_ARRAY);
         TEST_GROUPBY_FN(array_agg_distinct_set, n, bodo_array_type::ARRAY_ITEM,
                         Bodo_CTypes::INT64, empty_return_enum::EMPTY_ARRAY);
-
         auto object_agg_set = new ObjectAggColSet(str_col, int_col, false);
         TEST_GROUPBY_FN(object_agg_set, n, bodo_array_type::MAP,
                         Bodo_CTypes::MAP, empty_return_enum::EMPTY_MAP);

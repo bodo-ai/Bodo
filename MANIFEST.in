@@ -1,3 +1,0 @@
-include README.md
-include bodo/pytest.ini
-graft bodo/tests/data

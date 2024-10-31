@@ -175,6 +175,7 @@ def check_ndv_metadata(
     """
     metadata_path = get_metadata_path(warehouse_loc, db_schema, table_name)
     statistics_lst = get_metadata_field(metadata_path, "statistics")
+    print("statistics_lst", statistics_lst)
     assert (
         len(statistics_lst) == num_statistics
     ), f"Expected only {num_statistics} statistics file(s)"
@@ -274,7 +275,7 @@ def test_full_iceberg_theta_write(
     # These are hardcoded field IDs based upon how IDs are assigned starting from 1.
     ndvs = {1: "10", 3: "5", 5: "1"}
     ndvs_array = pd.array([10, None, 5, None, 1], dtype=pd.Float64Dtype())
-    table_name = "basic_puffin_table"
+    table_name = "basic_puffin_table_full"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     orig_enable_theta = bodo.enable_theta_sketches
@@ -474,7 +475,7 @@ def test_enable_sketches_per_column(
         3: "10",
     }
     expected_ndvs_array = pd.array([None, 10, 10, None, None], dtype=pd.Float64Dtype())
-    table_name = "basic_puffin_table"
+    table_name = "basic_puffin_table_column"
     db_schema, warehouse_loc = iceberg_database(table_name)
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
     orig_enable_theta = bodo.enable_theta_sketches
@@ -484,6 +485,7 @@ def test_enable_sketches_per_column(
         # Create empty table
         if bodo.get_rank() == 0:
             create_iceberg_table(df, sql_schema, table_name, spark)
+
             # Set such that column A does not have theta sketches.
             # BodoSQL would normally enable theta sketches for column A by default.
             spark.sql(
@@ -493,6 +495,7 @@ def test_enable_sketches_per_column(
             spark.sql(
                 f"ALTER TABLE hadoop_prod.iceberg_db.{table_name} SET TBLPROPERTIES ('bodo.write.theta_sketch_enabled.D'='true')"
             )
+
         bodo.barrier()
         # Now write the data.
         f = write_iceberg_table_with_puffin_files(

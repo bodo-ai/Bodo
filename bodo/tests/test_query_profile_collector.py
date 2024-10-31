@@ -1500,6 +1500,7 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
     assert "read_batch_total_time" in read_metrics_dict
 
 
+@pytest.mark.iceberg
 def test_iceberg_metrics_collection(
     memory_leak_check, tmp_path, iceberg_database, iceberg_table_conn
 ):

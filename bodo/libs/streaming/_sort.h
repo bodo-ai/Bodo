@@ -1,4 +1,6 @@
 #include <optional>
+#include <random>
+
 #include "../_array_operations.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"

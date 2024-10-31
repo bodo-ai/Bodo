@@ -45,6 +45,10 @@ def get_spark(path: str = ".") -> SparkSession:
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         )
+        # NOTE: This is deprecated, but some Iceberg tests with nested data types
+        # don't work without it. Let's try to avoid using Spark for those tests
+        # as much as possible.
+        builder.config("spark.sql.execution.arrow.enabled", "true")
 
         # Note that we need to have all catalogs registered on the same instance
         # because otherwise spark will cache the instance, and not pick up new
@@ -73,13 +77,6 @@ def get_spark(path: str = ".") -> SparkSession:
                 "org.apache.iceberg.aws.s3.S3FileIO",
             )
 
-        builder.config(
-            "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-        )
-        builder.config("spark.sql.session.timeZone", "UTC")
-        # https://spark.apache.org/docs/3.0.1/sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
-        builder.config("spark.sql.execution.arrow.enabled", "true")
         spark = builder.getOrCreate()
 
         # Spark throws a WARNING with a very long stacktrace whenever creating am

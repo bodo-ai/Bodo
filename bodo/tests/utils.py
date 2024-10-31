@@ -3001,9 +3001,7 @@ def _pytest_snowflake_rerun_filter(err, *args):
 pytest_mark_snowflake = compose_decos(
     (
         pytest.mark.snowflake,
-        pytest.mark.skipif(
-            "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-        ),
+        pytest.mark.slow,
         pytest.mark.flaky(max_runs=3, rerun_filter=_pytest_snowflake_rerun_filter),
     )
 )
@@ -3012,9 +3010,7 @@ pytest_mark_snowflake = compose_decos(
 # (pytestmark = pytest_snowflake)
 pytest_snowflake = [
     pytest.mark.snowflake,
-    pytest.mark.skipif(
-        "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-    ),
+    pytest.mark.slow,
     pytest.mark.flaky(max_runs=3, rerun_filter=_pytest_snowflake_rerun_filter),
 ]
 
@@ -3139,37 +3135,17 @@ pytest_slow_unless_join = pytest_slow_unless_changed(["library", "codegen", "joi
 
 # This is for use as a decorator for a single test function.
 # (@pytest_mark_pandas)
-pytest_mark_pandas = compose_decos(
-    (
-        pytest.mark.skipif(
-            not (
-                compiler_files_were_changed
-                or "AGENT_NAME" in os.environ
-                or os.environ.get("NUMBA_DEVELOPER_MODE", False)
-            ),
-            reason="only runs in Azure Pipelines unless compiler files were changed",
-        ),
-        pytest.mark.pandas,
-    )
+pytest_mark_pandas = (
+    compose_decos((pytest.mark.slow, pytest.mark.pandas))
+    if compiler_files_were_changed
+    else pytest.mark.pandas
 )
 
 # This is for marking an entire test file
 # (pytestmark = pytest_pandas)
-pytest_pandas = [
-    pytest.mark.skipif(
-        not (
-            compiler_files_were_changed
-            or "AGENT_NAME" in os.environ
-            or os.environ.get("NUMBA_DEVELOPER_MODE", False)
-        ),
-        reason="only runs in Azure Pipelines unless compiler files were changed",
-    ),
-    pytest.mark.pandas,
-]
-
-# This is for marking an entire test file
-# (pytestmark = pytest_ml)
-pytest_ml = [pytest.mark.ml]
+pytest_pandas = (
+    [pytest.mark.pandas] + [pytest.mark.slow] if compiler_files_were_changed else []
+)
 
 # This is for marking an entire test file
 # (pytestmark = pytest_perf_regression)

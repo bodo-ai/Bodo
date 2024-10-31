@@ -19,10 +19,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, pytest_ml
+from bodo.tests.utils import _get_dist_arg
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest_ml
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 
 def generate_X_y_regression(n_samples, n_features):

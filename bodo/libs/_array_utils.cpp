@@ -1,25 +1,24 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
-#include "../io/arrow_reader.h"
-#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "streaming/_join.h"
 
 #include <arrow/array/array_nested.h>
+#include <arrow/builder.h>
 #include <arrow/compute/cast.h>
 #include <arrow/type_fwd.h>
+
+#include <fmt/core.h>
 #include <fmt/format.h>
 #include <complex>
 #include <iostream>
 #include <span>
 #include <string>
 #include <unordered_map>
-#include "_mpi.h"
-
-#include <arrow/builder.h>
 
 #include "_decimal_ext.h"
+#include "_mpi.h"
 #include "hyperloglog.hpp"
 
 /**
@@ -561,7 +560,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
-    std::shared_ptr<array_info> out_arr = NULL;
+    std::shared_ptr<array_info> out_arr = nullptr;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     switch (arr_type) {

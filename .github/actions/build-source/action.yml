@@ -1,0 +1,51 @@
+name: Build Bodo from Source
+description: Build Bodo and related packages from Source Code
+inputs:
+  build-all:
+    description: 'Build all packages or only Bodo'
+    required: false
+    default: false
+    type: 'boolean'
+
+runs:
+  using: "composite"
+  steps:
+    # -------------------------- Environment Setup -------------------------- #
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: 1.5.10-0
+          environment-name: ci-env
+          environment-file: buildscripts/envs/conda-lock.yml
+          # Include Dev Dependencies
+          create-args: --category main --category dev
+          cache-environment: true
+          generate-run-shell: true
+          init-shell: bash
+          condarc: |
+            channels:
+              - conda-forge
+            remote_max_retries: 5
+            remote_backoff_factor: 60
+            aggressive_update_packages: []
+
+      # -------------------------- Build Packages --------------------------- #
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::427443013497:role/BodoEngineNightlyRole
+          role-session-name: BodoEnginePrCiSession
+          role-skip-session-tagging: true
+
+      - name: Build Bodo
+        env:
+          ONLY_BODO: ${{ inputs.build-all == 'true' && '0' || '1' }}
+        # TODO: Once stable, inline all the scripts
+        run: ./buildscripts/build.sh
+        shell: micromamba-shell {0}
+
+      - name: Disable AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          unset-current-credentials: true
+          aws-region: us-east-2
