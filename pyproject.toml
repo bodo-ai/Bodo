@@ -6,7 +6,7 @@ requires = [
     "cython",
     "numpy>=1.24,<1.27",
     "pyarrow==17.0.0",
-    "pip"
+    "pip",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -17,7 +17,7 @@ description = "The Python Supercomputing Analytics Platform"
 readme = "README_pypi.md"
 requires-python = ">=3.10,<3.13"
 keywords = ["data", "analytics", "cluster"]
-authors = [{name = "Bodo.ai"}]
+authors = [{ name = "Bodo.ai" }]
 
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -41,7 +41,7 @@ dependencies = [
     # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     "fsspec>=2021.09",
     "requests",
-    "cloudpickle>=3.0,<4.0"
+    "cloudpickle>=3.0,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -112,24 +112,24 @@ wheel.exclude = [
 [tool.ruff]
 unsafe-fixes = true
 lint.extend-select = [
-    "I",    # isort
-    "C4",   # flake8-comprehensions
-    "TID",  # flake8-tidy-imports
+    "I",   # isort
+    "C4",  # flake8-comprehensions
+    "TID", # flake8-tidy-imports
 ]
 lint.ignore = [
     # Permanently Disabled Rules
-    "E501",  # Line too long. Black should manage this only
-    "E741",  # Ambiguous variable name: {name}
+    "E501", # Line too long. Black should manage this only
+    "E741", # Ambiguous variable name: {name}
 
     # TODO: Gradually Enable in Next PR
 
     # Flake8 Rules
-    "F405",  # {name} may be undefined, or defined from star imports
-    "F811",  # Redefinition of unused {name} from line
-    "E402",  # Module level import not at top of file
-    "E711",  # Comparison to `None` should be `cond is not None`
-    "E712",  # Comparison to `...` should be `cond is False` or `if not cond:`
-    "E731",  # Do not assign a `lambda` expression, use a `def`
+    "F405", # {name} may be undefined, or defined from star imports
+    "F811", # Redefinition of unused {name} from line
+    "E402", # Module level import not at top of file
+    "E711", # Comparison to `None` should be `cond is not None`
+    "E712", # Comparison to `...` should be `cond is False` or `if not cond:`
+    "E731", # Do not assign a `lambda` expression, use a `def`
 ]
 exclude = [
     ".git/",
@@ -147,6 +147,7 @@ exclude = [
     "bodo/__init__.py",
     "BodoSQL/bodosql/__init__.py",
     "iceberg/bodo_iceberg_connector/__init__.py",
+    "bodo/pandas/__init__.py",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports]
@@ -158,7 +159,7 @@ known-first-party = ["bodo", "bodosql", "BodoSQL/bodosql", "e2e-tests"]
 
 [tool.ruff.format]
 exclude = [
-    "BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources/com/bodosql/calcite/application/_generated_files/"
+    "BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources/com/bodosql/calcite/application/_generated_files/",
 ]
 
 
