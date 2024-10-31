@@ -6,12 +6,15 @@ for example: "Series.str.decode\n read_csv\n"
 """
 
 import sys
+import typing as pt
 import warnings
 
 import numba
 import pandas as pd  # noqa
 from numba import types
+from numba.core import errors
 from numba.core.target_extension import dispatcher_registry, get_local_target
+from numba.core.typing import Context
 from numba.core.utils import order_by_target_specificity
 
 import bodo
@@ -26,7 +29,9 @@ from bodo.hiframes.pd_offsets_ext import (
     WeekType,
 )
 from bodo.hiframes.pd_rolling_ext import RollingType
+from bodo.ir.declarative_templates import _OverloadAttributeTemplate
 from bodo.ir.unsupported_method_template import _UnsupportedTemplate
+from bodo.utils.typing import BodoError
 
 # Exception message indicating an attribute has an unsupported overload
 unsupported_overload_exception_msg = "not supported yet"
@@ -94,14 +99,25 @@ bodo_pd_types_dict = {
 }
 
 
-def is_attr_supported(typing_ctx, typ, attr):
+class _OverloadMissingOrIncorrect:
+    """
+    Sentinal class to indicate is_attr_supported was unsuccessful in finding a valid
+    overload template
+    """
+
+    pass
+
+
+def is_attr_supported(typing_ctx: Context, typ: pt.Any, attr: str) -> bool | None:
     """Check if an specific attribute or method is supported for the given type.
+
     Args:
         typing_ctx: The context containing function/method/attribute templates to search.
         typ: The object to check.
         attr: The attribute to check.
+
     Returns:
-        Boolean | None: True if there is an implementation of the specified method or
+        True if there is an implementation of the specified method or
         attribute, False if there is an unsupported implementation. None if there is
         no implementation at all or it is unclear.
     """
@@ -134,20 +150,27 @@ def is_attr_supported(typing_ctx, typ, attr):
     return is_supported
 
 
-def lookup_template(typing_ctx, typ, path):
+def lookup_template(
+    typing_ctx: Context, typ: pt.Any, path: pt.List[str]
+) -> bool | None:
     """Search for a method or attribute starting from typ and following path
-    For example, to look up whether Series.str.decode was supported:
+
+    Example:
+        To look up whether `Series.str.decode` was supported:
+        ```
         ser_typ = bodo.SeriesType(bodo.string_array_type)
         result = lookup_template(ser_typ, ["str", "decode"])
+        ```
 
     Args:
-        typing_ctx: The context containing function/method/attribute templates to search
+        typing_ctx: The context containing function/method/attribute templates
+            to search
         typ: The object used as a starting point to find a method or attribute
-        path (List[str]): The path to find the method/attribute starting from typ
+        path: The path to find the method/attribute starting from `typ`
     Returns:
-        Boolean | None: True if there is an implementation of the specified method or
-        attribute, False if there is an unsupported implementation. None if there is
-        no implementation at all.
+        True if there is an implementation of the specified
+        method or attribute, False if there is an unsupported
+        implementation. None if there is no implementation at all.
     """
     for attr in path:
         is_supported = is_attr_supported(typing_ctx, typ, attr)
@@ -157,6 +180,55 @@ def lookup_template(typing_ctx, typ, path):
             # False (as in Unsupported template was found) or None
             return is_supported
     return True
+
+
+def get_overload_template(
+    typing_ctx: Context, types: list, attrs: pt.List[str]
+) -> _OverloadAttributeTemplate | _OverloadMissingOrIncorrect | None:
+    """Get a template of `attrs` from one of the types in `types`.
+
+    Tries to get the template for a method or attribute by starting from one
+    of the types in `types` and following the path of `attrs`. If template is
+    missing or if an supported and unsupported overload template are found,
+    returns an instance of _OverloadMissingOrIncorrect. Otherwise if a
+    template is unsupported, returns None.
+
+    Args:
+        typing_ctx: The context containing function/method/attribute templates
+            to search.
+        types: Possible types to start the search from.
+        attrs: A path of attributes that lead to a specific method or
+            attribute.
+
+    Returns:
+        The template if it exists, or None or _OverloadMissingOrIncorrect
+        otherwise.
+    """
+    typ = None
+    template = None
+    for base_type in types:
+        typ = base_type
+        try:
+            for attr in attrs:
+                is_supported = is_attr_supported(typing_ctx, typ, attr)
+                if is_supported:
+                    result = typing_ctx.find_matching_getattr_template(typ, attr)
+                    typ = result["return_type"]
+                    template = result["template"]
+                elif is_supported is None:
+                    # is_attr_supported was unsuccessful
+                    # No template or inconsistent templates
+                    return _OverloadMissingOrIncorrect()
+                else:
+                    # UnsupportedTemplate case return None
+                    return None
+            return template
+        except (errors.TypingError, BodoError) as _:
+            # typing errors can occur from mismatch between type and attr e.g.
+            # attempting to get the "str" attribute from a Series of ints.
+            continue
+
+    return None
 
 
 def generate_is_supported_str(path, is_supported, no_overload_warn_message):

@@ -139,9 +139,9 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
 
         # Separate restriction on "self" argument from other arguments for clarity
         supported_types_str = ""
-        if params_list[0].name in arg_restrictions:
+        if "self" in arg_restrictions:
             supported_types_str += (
-                "!!! note\n\t" f"Input {arg_restrictions[params_list[0].name]}.\n\n"
+                "!!! note\n\t" f"Input {arg_restrictions["self"]}.\n\n"
             )
         argument_restrictions_str += supported_types_str
 

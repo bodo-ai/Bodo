@@ -1,6 +1,6 @@
 # `pd.Series.any`
 
-[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html)
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html#pandas.Series.any)
 
 `pandas.Series.any(axis=0, bool_only=None, skipna=True)`
 

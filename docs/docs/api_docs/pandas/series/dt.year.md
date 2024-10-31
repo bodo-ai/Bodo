@@ -1,5 +1,7 @@
 # `pd.Series.dt.year`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.year.html#pandas.Series.dt.year)
+
 `pandas.Series.dt.year`
 
 !!! note

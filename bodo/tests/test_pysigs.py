@@ -1,85 +1,33 @@
-import pandas as pd  # noqa
-import pytest
+import typing as pt
+from inspect import Signature
 
 import numba
-from numba.core import utils, errors
+import pandas as pd  # noqa
+import pytest
+from numba.core import utils
 from numba.core.target_extension import dispatcher_registry
 
 import bodo  # noqa
-from bodo.utils.pandas_coverage_tracking import get_pandas_apis_from_url
-from bodo.utils.search_templates import bodo_pd_types_dict, is_attr_supported
 from bodo.ir.declarative_templates import _OverloadDeclarativeMethodTemplate
-from bodo.utils.typing import BodoError
 from bodo.tests.utils import run_rank0
+from bodo.utils.pandas_coverage_tracking import PANDAS_URLS, get_pandas_apis_from_url
+from bodo.utils.search_templates import (
+    _OverloadMissingOrIncorrect,
+    bodo_pd_types_dict,
+    get_overload_template,
+)
 
 
-class _OverloadMissingOrIncorrect:
-    """
-    Sentinal class to indicate is_attr_supported was unsuccessful in finding a valid
-    overload template
-    """
-
-    pass
-
-
-def _get_series_apis():
-    url = "https://pandas.pydata.org/docs/reference/series.html"
+def _get_series_apis() -> pt.List[str]:
+    """Get paths of all Series and attributes"""
+    url = PANDAS_URLS["SERIES"]
     return get_pandas_apis_from_url(url)
 
 
-def _get_method_template(typing_ctx, types, attrs):
-    """
-    Get a template of *attrs* from *types*. If template is missing or if both a
-    supported and unsupported overload template are found, returns an instance of
-    _OverloadMissingOrIncorrect. If the attribute exists as an UnsupportedTemplate,
-    returns None.
-
-    Args:
-        typing_ctx (BaseContext): The registry containing all method/attribute
-            templates
-        types (List[type]): A list of possible types to use as starting points to
-            look up *attrs* in the typing context. These should all be instances of
-            the same type, for example for SeriesType, *types* might consist of a string
-            series, an int series, etc..
-        attrs (List[str]): A path specifying an attribute starting from the types in
-            *types*.
-
-    Returns:
-        AttributeTemplate | None | _OverloadMissingOrIncorrect: An overload template if
-            one exists.
-    """
-    typ = None
-    template = None
-    for base_type in types:
-        typ = base_type
-        try:
-            for attr in attrs:
-                is_supported = is_attr_supported(typing_ctx, typ, attr)
-                if is_supported:
-                    result = typing_ctx.find_matching_getattr_template(typ, attr)
-                    typ = result["return_type"]
-                    template = result["template"]
-                elif is_supported is None:
-                    # is_attr_supported was unsuccessful
-                    # No template or inconsistent templates
-                    return _OverloadMissingOrIncorrect()
-                else:
-                    # UnsupportedTemplate case, return None
-                    return None
-            # return the first template found
-            return template
-        except Exception as e:
-            # catch bodo/numba errors for invalid input type and raise everything else
-            if not isinstance(e, errors.TypingError) and not isinstance(e, BodoError):
-                raise e
-
-    # catch all, if typing errors are raised for all types then maybe this attr should
-    # have an unsupported template
-    return _OverloadMissingOrIncorrect()
-
-
-def _get_pysig_from_path(path, package_name="pd"):
-    """Gets the python signature from a list of strings"""
+def _get_pysig_from_path(
+    path: pt.List[str], package_name: pt.Optional[str] = "pd"
+) -> Signature:
+    """Gets the python signature from `path`"""
     attr = globals()[package_name]
 
     for part in path:
@@ -89,12 +37,27 @@ def _get_pysig_from_path(path, package_name="pd"):
     return utils.pysignature(attr)
 
 
-def signatures_equal(pysig, overload_sig, changed_defaults):
-    """
-    Compare *pysig* to **overload_sig** on all parameters not listed in
-    *changed_defaults* or *args/**kwargs
-    """
+def signatures_equal(
+    pysig: Signature, overload_sig: Signature, changed_defaults: pt.Set[str]
+) -> bool:
+    """Compares overload signature to the signature from the
+    corresponding python API.
 
+    Extra `*args` and `**kwargs` are dropped from the python API
+    signature and explicitly changed defaults get ignored.
+
+    Args:
+        pysig (Signature): The signature of the python API.
+        overload_sig (Signature): The signature of the
+            corresponding overload function.
+        changed_defaults (pt.Set[str]): A set of arguments whose
+            default value differs from the python equivalent.
+            Arguments in this set are excluded from the equality
+            check.
+
+    Returns:
+        bool: True if the two signatures are equivalent.
+    """
     overload_params = list(overload_sig.parameters.values())
     python_params = list(pysig.parameters.values())
 
@@ -120,10 +83,10 @@ def signatures_equal(pysig, overload_sig, changed_defaults):
     return True
 
 
-def _skip_pysig_check(path):
+def _skip_pysig_check(path: str) -> bool:
     """
-    Returns whether to skip the check that pysig for **path** is consistent with
-    external api documentation.
+    Indicates whether to skip the check that pysig for **path** is
+    consistent with external api documentation.
     """
     # TODO (fix in pandas): Series.dt.xxx methods have generic signatures that look
     # like (self, *arg, **kwargs)
@@ -159,7 +122,7 @@ def test_pandas_pysigs(get_apis, keys):
         if path[0] in keys:
             assert path[0] in types_dict, f"Could not match {path[0]} to bodo type(s)"
             base_types = bodo_pd_types_dict[path[0]]
-            template = _get_method_template(typing_ctx, base_types, path[1:])
+            template = get_overload_template(typing_ctx, base_types, path[1:])
 
             # check that method is either supported or unsupported (but not both)
             if isinstance(template, _OverloadMissingOrIncorrect):

@@ -1,5 +1,7 @@
 # `pd.Series.rpow`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.rpow.html#pandas.Series.rpow)
+
 `pandas.Series.rpow(other, level=None, fill_value=None, axis=0)`
 
 ### Argument Restrictions:

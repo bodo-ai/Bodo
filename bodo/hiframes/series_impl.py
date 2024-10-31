@@ -484,7 +484,6 @@ def overload_series_prod(
     Bodo does not accept any additional arguments for Numpy
     compatibility""",
     changed_defaults={"bool_only"},
-    hyperlink="https://pandas.pydata.org/docs/reference/api/pandas.Series.any.html",
     inline="always",
     no_unliteral=True,
 )

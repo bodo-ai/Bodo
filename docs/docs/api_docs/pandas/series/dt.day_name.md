@@ -1,5 +1,7 @@
 # `pd.Series.dt.day_name`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.dt.day_name.html#pandas.Series.dt.day_name)
+
 `pandas.Series.dt.day_name(locale=None)`
 
 ### Argument Restrictions:

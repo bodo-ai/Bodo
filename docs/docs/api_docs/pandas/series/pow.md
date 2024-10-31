@@ -1,5 +1,7 @@
 # `pd.Series.pow`
 
+[Link to Pandas documentation](https://pandas.pydata.org/docs/reference/api/pandas.Series.pow.html#pandas.Series.pow)
+
 `pandas.Series.pow(other, level=None, fill_value=None, axis=0)`
 
 ### Argument Restrictions:
