@@ -14,6 +14,7 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.submit.spawner import debug_msg
 
 
 class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
@@ -119,7 +120,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         Collect data from workers if needed.
         """
         if self._md_result_id is not None:
-            self.logger.debug("[LazyBlockManager] Collecting data from workers...")
+            debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
             new_blocks = []
             assert self._md_nrows is not None
             assert self._md_head is not None
@@ -190,8 +191,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             (r_id := self._md_result_id) is not None
         ):
             # TODO: Delete data BSE-4096
-            self.logger.debug(
-                f"[LazyBlockManager] Asking workers to delete result '{r_id}'"
+            debug_msg(
+                self.logger,
+                f"[LazyBlockManager] Asking workers to delete result '{r_id}'",
             )
 
 
@@ -288,8 +290,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         if self._md_result_id is not None:
             assert self._md_nrows is not None
             assert self._md_head is not None
-            self.logger.debug(
-                "[LazySingleBlockManager] Collecting data from workers..."
+            debug_msg(
+                self.logger, "[LazySingleBlockManager] Collecting data from workers..."
             )
             head_block = self._md_head._block
             arr = head_block.values
@@ -352,6 +354,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             (r_id := self._md_result_id) is not None
         ):
             # TODO: Delete data BSE-4096
-            self.logger.debug(
-                f"[LazySingleBlockManager] Asking workers to delete result '{r_id}'"
+            debug_msg(
+                self.logger,
+                f"[LazySingleBlockManager] Asking workers to delete result '{r_id}'",
             )
