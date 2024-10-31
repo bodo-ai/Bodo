@@ -13,7 +13,12 @@ if [[ "$CI_SOURCE" == "AWS" ]]; then
 fi
 
 # Setup Hadoop
-wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /tmp
+if [[ ! -f hadoop.tar.gz ]]; then
+    wget -O hadoop.tar.gz "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz"
+fi
+
+tar -xzf hadoop.tar.gz -C /tmp
+rm -rf hadoop.tar.gz
 
 export HADOOP_HOME=/tmp/hadoop-3.3.2
 export HADOOP_INSTALL=$HADOOP_HOME

@@ -26,6 +26,7 @@ from bodo.tests.conftest import (  # noqa
     memory_leak_check,
     tabular_connection,
 )
+from bodo.tests.iceberg_database_helpers.utils import get_spark
 from bodo.tests.utils import gen_nonascii_list
 
 # Patch to avoid PySpark's Py4j exception handler in testing.
@@ -46,7 +47,6 @@ pyspark.sql.session.install_exception_handler = lambda: None
 # See: https://stackoverflow.com/a/65010346/14810655
 os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
-from pyspark.sql import SparkSession
 
 # Disable broadcast join as the default.
 # To test broadcast join either remove or increase this.
@@ -106,9 +106,8 @@ def enable_numba_alloc_stats():
 
 @pytest.fixture(scope="module")
 def spark_info():
-    spark = SparkSession.builder.appName("TestSQL").getOrCreate()
+    spark = get_spark()
     yield spark
-    spark.stop()
 
 
 @pytest.fixture

@@ -1,16 +1,15 @@
 #include "_bodo_common.h"
 
 #include <arrow/array.h>
+#include <zstd.h>
 #include <complex>
 #include <memory>
 #include <string>
 
 #include <fmt/format.h>
-#include "_array_utils.h"
 #include "_bodo_to_arrow.h"
 #include "_datetime_utils.h"
 #include "_distributed.h"
-#include "zstd.h"
 
 // for numpy arrays, this maps dtype to sizeof(dtype)
 // Order should match Bodo_CTypes::CTypeEnum

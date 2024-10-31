@@ -8,9 +8,6 @@ parameters:
 - name: CONDA_ENV
   type: string
   default: ''
-- name: useNumbaDev
-  type: boolean
-  default: false
 - name: caching_test
   type: boolean
   default: false
@@ -36,7 +33,6 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
-  # TODO: Use Micromamba when it supports remote_max_retries
   - script: |
       set -exo pipefail
       curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
@@ -61,14 +57,6 @@ jobs:
       pipx run conda-lock install --dev -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
     displayName: 'Create Mamba Env'
     retryCountOnTaskFailure: 5
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-      mamba install -y numba -c numba/label/dev -c conda-forge
-    displayName: 'Install Numba Dev'
-    condition: and(succeeded(), eq('${{ parameters.useNumbaDev }}', 'true'))
 
   - script: |
       set -eo pipefail

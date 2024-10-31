@@ -38,11 +38,11 @@ module "runners" {
 
       runner_config = merge(local.base_runner_config, {
         # Instance Type(s) (Multiple Options to Choose for Spot)
-        instance_types = ["c7i.large", "c6i.large", "t3.large", "m6i.large", "m6id.large", "c5.large"]
+        instance_types = ["c7i.large", "m7i.large", "r7i.large", "c7a.large", "m7a.large", "r7a.large", "c6i.large", "c6a.large", "c6id.large", "m6i.large", "m6a.large", "m6id.large", "r6i.large", "r6a.large", "r6in.large", "r6id.large", "i4i.large"]
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_small_"
         # Max # of Runners of this Size
-        runners_maximum_count = 60
+        runners_maximum_count = 20
       })
     }
 
@@ -57,11 +57,19 @@ module "runners" {
 
       runner_config = merge(local.base_runner_config, {
         # Instance Type(s) (Multiple Options to Choose for Spot)
-        instance_types = ["c7i.xlarge", "c6i.xlarge", "t3.xlarge", "m6i.xlarge", "m6id.xlarge", "c5.xlarge"]
+        instance_types = [
+          "c7i.xlarge", "m7i.xlarge", "r7i.xlarge",
+          "c7i-flex.xlarge", "m7i-flex.xlarge",
+          "c6i.xlarge", "m6i.xlarge", "r6i.xlarge",
+          "c6a.xlarge", "m6a.xlarge", "r6a.xlarge",
+          "c6id.xlarge", "m6id.xlarge", "r6id.xlarge",
+          "c6in.xlarge", "m6in.xlarge", "r6in.xlarge",
+          "i4i.xlarge"
+        ]
         # Prefix runners with the environment name
         runner_name_prefix = "${local.prefix}_medium_"
         # Max # of Runners of this Size
-        runners_maximum_count = 10
+        runners_maximum_count = 100
       })
     }
 

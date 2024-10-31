@@ -9,7 +9,7 @@ from bodo.mpi4py import MPI
 from bodo.tests.utils import _get_dist_arg, check_func, pytest_mark_one_rank
 from bodo.utils.testing import ensure_clean2
 
-pytestmark = pytest.mark.hdfs
+pytestmark = [pytest.mark.hdfs, pytest.mark.weekly]
 
 
 @pytest.mark.parquet

@@ -10,14 +10,18 @@ import bodo
 
 TIMEZONES = [
     "UTC",
-    "US/Pacific",  # timezone behind UTC
-    "Europe/Berlin",  # timezone ahead of UTC
+    pytest.param("US/Pacific", marks=pytest.mark.slow),  # timezone behind UTC
+    pytest.param("Europe/Berlin", marks=pytest.mark.slow),  # timezone ahead of UTC
     "Africa/Casablanca",  # timezone that's ahead of UTC only during DST
-    "Asia/Kolkata",  # timezone that's offset by 30 minutes
-    "Asia/Kathmandu",  # timezone that's offset by 45 minutes
+    pytest.param(
+        "Asia/Kolkata", marks=pytest.mark.slow
+    ),  # timezone that's offset by 30 minutes
+    # timezone that's offset by 45 minutes
+    pytest.param("Asia/Kathmandu", marks=pytest.mark.slow),
     "Australia/Lord_Howe",  # timezone that's offset by 30 minutes only during DST
     "Pacific/Honolulu",  # timezone that has no DST,
-    "Etc/GMT+8",  # timezone that has fixed offset from UTC as opposed to zone
+    # timezone that has fixed offset from UTC as opposed to zone
+    pytest.param("Etc/GMT+8", marks=pytest.mark.slow),
 ]
 
 

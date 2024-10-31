@@ -3,13 +3,14 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.feature_extraction.text import CountVectorizer, HashingVectorizer
 from sklearn.utils._testing import assert_almost_equal
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, check_func, pytest_ml
+from bodo.tests.utils import _get_dist_arg, check_func
 
-pytestmark = pytest_ml
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 # ---------------------- CountVectorizer tests ----------------------
 

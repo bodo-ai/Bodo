@@ -2,6 +2,7 @@
 #include "_shuffle.h"
 
 #include <numeric>
+#include <random>
 #include <span>
 
 #include <arrow/api.h>

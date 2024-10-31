@@ -18,9 +18,9 @@ from sklearn.metrics import precision_score, r2_score
 from sklearn.preprocessing import StandardScaler
 
 import bodo
-from bodo.tests.utils import check_func, pytest_ml
+from bodo.tests.utils import check_func
 
-pytestmark = pytest_ml
+pytestmark = [pytest.mark.ml, pytest.mark.weekly]
 
 
 # ---------------------- SGDClassifer tests ----------------------

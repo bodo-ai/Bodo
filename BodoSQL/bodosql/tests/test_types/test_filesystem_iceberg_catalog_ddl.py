@@ -9,6 +9,7 @@ New tests should be added to test_iceberg_ddl.py instead of this file,
 in order to be consistent with the new harness system.
 """
 
+import os
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -36,17 +37,9 @@ pytestmark = pytest.mark.iceberg
 
 
 @pytest.fixture(scope="session")
-def iceberg_filesystem_catalog(tmp_path_factory):
-    """
-    An Iceberg FileSystemCatalog.
-    """
-    path = None
-    if bodo.get_rank() == 0:
-        path = str(tmp_path_factory.mktemp("iceberg"))
-    path = MPI.COMM_WORLD.bcast(path)
-
-    assert Path(path).exists(), "Failed to create filesystem catalog across all ranks"
-    return bodosql.FileSystemCatalog(path, "iceberg")
+def iceberg_filesystem_catalog():
+    """An Iceberg FileSystemCatalog."""
+    return bodosql.FileSystemCatalog(os.path.curdir, "iceberg")
 
 
 def gen_unique_id(name_prefix: str) -> str:

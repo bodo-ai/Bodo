@@ -4,6 +4,8 @@
 #include <iostream>
 #include <numeric>
 
+#include <fmt/format.h>
+
 #include "../_array_operations.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
@@ -14,7 +16,6 @@
 #include "_groupby_ftypes.h"
 #include "_groupby_mode.h"
 #include "_groupby_update.h"
-#include "fmt/format.h"
 
 /**
  * This file creates the "col set" infrastructure. A col set is the
