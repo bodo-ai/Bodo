@@ -120,6 +120,7 @@ def test_return_array():
     check_func(fn, (), only_spawn=True)
 
 
+@pytest.mark.skip("BSE-4099: Requires pandas multi index support in BodoDataFrame")
 def test_compute_return_df(datapath):
     """Simple test that reads data and computes in spawn mode, returning a
     dataframe"""
@@ -162,7 +163,7 @@ def test_compute_return_scalar(datapath):
     check_func(impl, (), is_out_distributed=False, only_spawn=True)
 
 
-@pytest.mark.skip("submit_jit does not support output")
+@pytest.mark.skip("BSE-3987: Support syncing environment variables")
 def test_environment():
     os.environ["BODO_TESTS_VARIABLE"] = "42"
     try:

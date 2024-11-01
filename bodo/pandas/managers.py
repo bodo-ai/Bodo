@@ -1,11 +1,10 @@
 import typing as pt
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-from pandas.core.arrays import ExtensionArray
 from pandas.core.internals.blocks import (
     Block,
-    new_block,
 )
 from pandas.core.internals.managers import (
     BlockManager,
@@ -14,7 +13,7 @@ from pandas.core.internals.managers import (
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.submit.spawner import debug_msg
+from bodo.submit.utils import debug_msg
 
 
 class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
@@ -32,6 +31,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             # This is the lazy case
             head = kwargs["head"]
             nrows = kwargs["nrows"]
+            collect_func = kwargs["collect_func"]
+            del_func = kwargs["del_func"]
             dummy_blocks = head.blocks
             # XXX Copy?
             col_index = [head.axes[0]]
@@ -47,7 +48,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                         )
                     )
                 else:
-                    raise ValueError("Only RangeIndex is supported!")
+                    raise ValueError(
+                        f"Only RangeIndex is supported! Got {type(ss_axis)}"
+                    )
 
             obj = super().__new__(
                 cls,
@@ -58,6 +61,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             obj._md_nrows = nrows
             obj._md_head = head
             obj._md_result_id = result_id
+            obj._collect_func = collect_func
+            obj._del_func = del_func
             return obj
         else:
             # This is the normal BlockManager case
@@ -65,6 +70,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             obj._md_nrows = None
             obj._md_head = None
             obj._md_result_id = None
+            obj._collect_func = None
+            obj._del_func = None
             return obj
 
     def __init__(
@@ -76,6 +83,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         head=None,
         nrows=None,
         result_id=None,
+        collect_func: Callable[[str], pt.Any] | None = None,
+        del_func: Callable[[str], None] | None = None,
     ):
         super().__init__(
             blocks,
@@ -121,39 +130,13 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         """
         if self._md_result_id is not None:
             debug_msg(self.logger, "[LazyBlockManager] Collecting data from workers...")
-            new_blocks = []
             assert self._md_nrows is not None
             assert self._md_head is not None
-            for block in self._md_head.blocks:
-                arr = block.values
-                # TODO:: Get data from workers BSE-4095
-                # Just duplicate the head to get the full array for testing
-                if isinstance(arr, ExtensionArray):
-                    b_ncols, b_nrows = block.shape
-                    repl_ct = (self._md_nrows // b_nrows) + 1
-                    new_blocks.append(
-                        new_block(
-                            values=type(arr)._concat_same_type([arr] * repl_ct)[
-                                : self._md_nrows
-                            ],
-                            placement=block._mgr_locs,
-                            ndim=self.ndim,
-                        )
-                    )
-                elif isinstance(arr, np.ndarray):
-                    b_ncols, b_nrows = block.shape
-                    repl_ct = (self._md_nrows // b_nrows) + 1
-                    new_blocks.append(
-                        new_block(
-                            values=np.hstack([arr] * repl_ct)[:, : self._md_nrows],
-                            placement=block._mgr_locs,
-                            ndim=self.ndim,
-                        ),
-                    )
-                else:
-                    raise ValueError(f"Unsupported array type: {type(arr)}")
+            assert self._collect_func is not None
+            data = self._collect_func(self._md_result_id)
+            self._collect_func = None
 
-            self.blocks = tuple(new_blocks)
+            self.blocks = data._mgr.blocks
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
@@ -164,7 +147,15 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         Intercept attribute access to collect data from workers if needed.
         """
         # These attributes should be accessed directly but aren't part of the superclass
-        if name in {"_collect", "_md_nrows", "_md_head", "_md_result_id", "logger"}:
+        if name in {
+            "_collect",
+            "_md_nrows",
+            "_md_head",
+            "_md_result_id",
+            "logger",
+            "_collect_func",
+            "_del_func",
+        }:
             return object.__getattribute__(self, name)
         # Most of the time _rebuild_blknos_and_blklocs is called by pandas internals
         # and should require collecting data, but in __init__ we need to call it
@@ -187,14 +178,14 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         """
         Delete the result from the workers if it hasn't been collected yet.
         """
-        if self._md_result_id is not None and (
-            (r_id := self._md_result_id) is not None
-        ):
-            # TODO: Delete data BSE-4096
+        if (r_id := self._md_result_id) is not None:
             debug_msg(
                 self.logger,
                 f"[LazyBlockManager] Asking workers to delete result '{r_id}'",
             )
+            assert self._del_func is not None
+            self._del_func(r_id)
+            self._del_func = None
 
 
 class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockManager]):
@@ -214,16 +205,23 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         nrows=None,
         result_id=None,
         head=None,
+        collect_func: Callable[[str], pt.Any] | None = None,
+        del_func: Callable[[str], None] | None = None,
     ):
         block_ = block
         axis_ = axis
         self._md_nrows = nrows
         self._md_result_id = result_id
         self._md_head = head
+        self._collect_func = collect_func
+        self._del_func = del_func
         if result_id is not None:
             assert nrows is not None
             assert result_id is not None
             assert head is not None
+            assert collect_func is not None
+            assert del_func is not None
+
             # Replace with a dummy block for now.
             block_ = head.blocks[0]
             # Create axis based on head
@@ -236,7 +234,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                     head_axis.step,
                 )
             else:
-                raise ValueError("Only RangeIndex is supported!")
+                raise ValueError(f"Only RangeIndex is supported! Got {type(head_axis)}")
 
         super().__init__(
             block_,
@@ -290,40 +288,17 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         if self._md_result_id is not None:
             assert self._md_nrows is not None
             assert self._md_head is not None
+            assert self._collect_func is not None
             debug_msg(
                 self.logger, "[LazySingleBlockManager] Collecting data from workers..."
             )
-            head_block = self._md_head._block
-            arr = head_block.values
-            # TODO:: Get data from workers BSE-4095
-            # Just duplicate the head to get the full array for testing
-            if isinstance(arr, ExtensionArray):
-                # TODO Verify this logic
-                repl_ct = (self._md_nrows // len(arr)) + 1
-                self.blocks = (
-                    new_block(
-                        values=type(arr)._concat_same_type([arr] * repl_ct)[
-                            : self._md_nrows
-                        ],
-                        placement=head_block._mgr_locs,
-                        ndim=self.ndim,
-                    ),
-                )
-            elif isinstance(arr, np.ndarray):
-                repl_ct = (self._md_nrows // len(arr)) + 1
-                self.blocks = (
-                    new_block(
-                        values=np.hstack([arr] * repl_ct)[: self._md_nrows],
-                        placement=head_block._mgr_locs,
-                        ndim=self.ndim,
-                    ),
-                )
-            else:
-                raise ValueError(f"Unsupported array type: {type(arr)}")
+            data = self._collect_func(self._md_result_id)
+            self.blocks = data._mgr.blocks
 
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
+            self._collect_func = None
 
     # BSE-4097
     # TODO Override get_slice for s.head() support BSE-4097
@@ -340,6 +315,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             "_md_result_id",
             "_md_head",
             "logger",
+            "_collect_func",
+            "_del_func",
         }:
             return object.__getattribute__(self, name)
         if name == "blocks":
@@ -350,11 +327,11 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         """
         Delete the result from the workers if it hasn't been collected yet.
         """
-        if self._md_result_id is not None and (
-            (r_id := self._md_result_id) is not None
-        ):
-            # TODO: Delete data BSE-4096
+        if (r_id := self._md_result_id) is not None:
             debug_msg(
                 self.logger,
                 f"[LazySingleBlockManager] Asking workers to delete result '{r_id}'",
             )
+            assert self._del_func is not None
+            self._del_func(r_id)
+            self._del_func = None

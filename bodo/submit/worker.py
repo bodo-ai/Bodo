@@ -7,15 +7,26 @@ import logging
 import os
 import sys
 import typing as pt
+import uuid
 
 import cloudpickle
 import numba
+import numpy as np
+import pandas as pd
+from numba import typed
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata, debug_msg
-from bodo.submit.utils import CommandType, poll_for_barrier
+from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata
+from bodo.submit.utils import (
+    CommandType,
+    DistributedReturnMetadata,
+    debug_msg,
+    poll_for_barrier,
+)
 from bodo.submit.worker_state import set_is_worker
+
+DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
 
 def _recv_arg(arg: pt.Union[pt.Any, ArgMetadata], spawner_intercomm: MPI.Intercomm):
@@ -52,10 +63,54 @@ def _recv_arg(arg: pt.Union[pt.Any, ArgMetadata], spawner_intercomm: MPI.Interco
     return arg
 
 
+RESULT_REGISTRY: dict[str, pt.Any] = {}
+
+# Once >3.12 is our minimum version we can use the below instead
+# type is_distributed_t = pt.Union[bool, pt.Union[list[is_distributed_t], tuple[is_distributed_t]]]
+is_distributed_t = pt.Union[
+    bool, pt.Union[list["is_distributed_t"], tuple["is_distributed_t"]]
+]
+
+distributed_return_metadata_t = pt.Union[
+    DistributedReturnMetadata,
+    list["distributed_return_metadata_t"],
+    dict[pt.Any, "distributed_return_metadata_t"],
+]
+
+
+def _build_distributed_return_metadata(
+    res: pt.Any, logger: logging.Logger
+) -> distributed_return_metadata_t:
+    if isinstance(res, list):
+        return [_build_distributed_return_metadata(val, logger) for val in res]
+    if isinstance(res, (dict, typed.typeddict.Dict)):
+        return {
+            key: _build_distributed_return_metadata(val, logger)
+            for key, val in res.items()
+        }
+
+    debug_worker_msg(logger, "Generating result id")
+    res_id = str(
+        comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
+    )
+    debug_worker_msg(logger, f"Result id: {res_id}")
+    RESULT_REGISTRY[res_id] = res
+    debug_worker_msg(logger, f"Calculating total result length for {type(res)}")
+    total_res_len = comm_world.reduce(len(res), op=MPI.SUM, root=0)
+    return DistributedReturnMetadata(
+        result_id=res_id,
+        head=res.head(DISTRIBUTED_RETURN_HEAD_SIZE)
+        if isinstance(res, pd.DataFrame)
+        else res[:DISTRIBUTED_RETURN_HEAD_SIZE],
+        nrows=total_res_len,
+    )
+
+
 def _send_output(
     res,
-    is_distributed: pt.Union[bool, pt.Union[list, tuple]],
+    is_distributed: is_distributed_t,
     spawner_intercomm: MPI.Intercomm,
+    logger: logging.Logger,
 ):
     """Send function output to spawner. Uses gatherv for distributed data and also
     handles tuples.
@@ -65,22 +120,66 @@ def _send_output(
         is_distributed: distribution info for output
         spawner_intercomm: MPI intercomm for spawner
     """
-
+    # Tuple elements can have different distributions
     if isinstance(res, tuple):
         assert isinstance(
             is_distributed, (tuple, list)
         ), "_send_output(): invalid output distributed flags type"
         for val, dist in zip(res, is_distributed):
-            _send_output(val, dist, spawner_intercomm)
+            _send_output(val, dist, spawner_intercomm, logger)
         return
 
     if is_distributed:
-        # Combine distributed results with gatherv
-        bodo.gatherv(res, root=0, comm=spawner_intercomm)
+        distributed_return_metadata = _build_distributed_return_metadata(res, logger)
+        debug_worker_msg(logger, f"{distributed_return_metadata=}")
+        if bodo.get_rank() == 0:
+            debug_worker_msg(logger, "Sending distributed result metadata to spawner")
+            # Send the result id and a small chunk to the spawner
+            spawner_intercomm.send(
+                distributed_return_metadata,
+                dest=0,
+            )
     else:
         if bodo.get_rank() == 0:
             # Send non-distributed results
             spawner_intercomm.send(res, dest=0)
+
+
+def _gather_res(
+    is_distributed: is_distributed_t, res: pt.Any
+) -> tuple[is_distributed_t, pt.Any]:
+    """
+    If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
+    """
+    if isinstance(res, tuple):
+        assert isinstance(
+            is_distributed, (tuple, list)
+        ), "_gather_res(): invalid output distributed flags type"
+        all_updated_is_distributed = []
+        all_updated_res = []
+        for val, dist in zip(res, is_distributed):
+            updated_is_distributed, updated_res = _gather_res(dist, val)
+            all_updated_is_distributed.append(updated_is_distributed)
+            all_updated_res.append(updated_res)
+        return tuple(all_updated_is_distributed), tuple(all_updated_res)
+
+    # BSE-4101: Support lazy numpy arrays
+    if is_distributed and (
+        (
+            comm_world.bcast(
+                res is None or len(res) == 0 if bodo.get_rank() == 0 else None, root=0
+            )
+        )
+        or isinstance(res, np.ndarray)
+    ):
+        # If the result is empty on rank 0, we can't send a head to the spawner
+        # so just gather the results and send it all to to the spawner
+        # We could probably optimize this by sending from all worker ranks to the spawner
+        # but this shouldn't happen often
+
+        return False, bodo.gatherv(res, root=0)
+
+    return is_distributed, res
 
 
 def exec_func_handler(
@@ -88,6 +187,7 @@ def exec_func_handler(
 ):
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
+    global RESULT_REGISTRY
 
     # Receive function arguments
     (args, kwargs) = spawner_intercomm.bcast(None, 0)
@@ -125,31 +225,40 @@ def exec_func_handler(
 
     poll_for_barrier(spawner_intercomm)
     has_exception = caught_exception is not None
+    any_has_exception = comm_world.allreduce(has_exception, op=MPI.LOR)
     debug_worker_msg(logger, f"Propagating exception {has_exception=}")
     # Propagate any exceptions
     spawner_intercomm.gather(caught_exception, root=0)
+    if any_has_exception:
+        # Functions that raise exceptions don't have a return value
+        return
 
     is_distributed = False
     if func is not None and len(func.signatures) > 0:
         # There should only be one signature compiled for the input function
         sig = func.signatures[0]
         assert sig in func.overloads
+
         # Extract return value distribution from metadata
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
-    debug_worker_msg(logger, f"Gathering result {is_distributed=}")
+    debug_worker_msg(logger, f"Function result {is_distributed=}")
+    debug_worker_msg(logger, f"Result {res=}")
+
+    is_distributed, res = _gather_res(is_distributed, res)
+    debug_worker_msg(logger, f"Is_distributed after gathering empty {is_distributed=}")
 
     if bodo.get_rank() == 0:
         spawner_intercomm.send(is_distributed, dest=0)
 
-    _send_output(res, is_distributed, spawner_intercomm)
+    _send_output(res, is_distributed, spawner_intercomm, logger)
 
 
 def worker_loop(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
     """Main loop for the worker to listen and receive commands from driver_intercomm"""
+    global RESULT_REGISTRY
     # Stored last data value received from scatterv/bcast for testing gatherv purposes
-    last_received_data = None
 
     while True:
         debug_worker_msg(logger, "Waiting for command")
@@ -164,20 +273,28 @@ def worker_loop(
             debug_worker_msg(logger, "Exiting...")
             return
         elif command == CommandType.BROADCAST.value:
-            last_received_data = bodo.libs.distributed_api.bcast(
-                None, root=0, comm=spawner_intercomm
-            )
+            bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
             debug_worker_msg(logger, "Broadcast done")
         elif command == CommandType.SCATTER.value:
-            last_received_data = bodo.libs.distributed_api.scatterv(
+            data = bodo.libs.distributed_api.scatterv(
                 None, root=0, comm=spawner_intercomm
             )
+            res_id = str(
+                comm_world.bcast(uuid.uuid4() if bodo.get_rank() == 0 else None, root=0)
+            )
+            RESULT_REGISTRY[res_id] = data
+            spawner_intercomm.send(res_id, dest=0)
             debug_worker_msg(logger, "Scatter done")
         elif command == CommandType.GATHER.value:
+            res_id = spawner_intercomm.bcast(None, 0)
             bodo.libs.distributed_api.gatherv(
-                last_received_data, root=0, comm=spawner_intercomm
+                RESULT_REGISTRY[res_id], root=0, comm=spawner_intercomm
             )
-            debug_worker_msg(logger, "Gather done")
+            debug_worker_msg(logger, f"Gather done for result {res_id}")
+        elif command == CommandType.DELETE_RESULT.value:
+            res_id = spawner_intercomm.bcast(None, 0)
+            del RESULT_REGISTRY[res_id]
+            debug_worker_msg(logger, f"Deleted result {res_id}")
         else:
             raise ValueError(f"Unsupported command '{command}!")
 

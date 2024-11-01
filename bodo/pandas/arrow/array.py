@@ -1,11 +1,12 @@
 import typing as pt
+from collections.abc import Callable
 
 import pyarrow as pa
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.submit.spawner import debug_msg
+from bodo.submit.utils import debug_msg
 
 
 class LazyArrowExtensionArray(
@@ -22,14 +23,20 @@ class LazyArrowExtensionArray(
         nrows: int | None = None,
         result_id: str | None = None,
         head: ArrowExtensionArray | None = None,
+        collect_func: Callable[[str], pt.Any] | None = None,
+        del_func: Callable[[str], None] | None = None,
     ):
         self._md_nrows = nrows
         self._md_result_id = result_id
         self._md_head = head
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
+        self._collect_func = collect_func
+        self._del_func = del_func
         if self._md_result_id is not None:
             assert nrows is not None
             assert head is not None
+            assert collect_func is not None
+            assert del_func is not None
             self._pa_array = None
             self._dtype = head._dtype
         else:
@@ -52,22 +59,19 @@ class LazyArrowExtensionArray(
         """
         Collects data from workers if it has not been collected yet.
         """
-        # TODO:: Get data from workers BSE-4095
         if self._md_result_id is not None:
             # Just duplicate the head to get the full array for testing
             assert self._md_head is not None
             assert self._md_nrows is not None
+            assert self._collect_func is not None
             debug_msg(
                 self.logger, "[LazyArrowExtensionArray] Collecting data from workers..."
             )
-            repl_ct = (self._md_nrows // len(self._md_head)) + 1
-            new_array = type(self._md_head)._concat_same_type(
-                [self._md_head] * repl_ct
-            )[: self._md_nrows]
-            self._pa_array = new_array._pa_array
+            self._pa_array = self._collect_func(self._md_result_id)._pa_array
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
+            self._collect_func = None
 
     def __getattribute__(self, name: str) -> pt.Any:
         """
@@ -85,8 +89,10 @@ class LazyArrowExtensionArray(
         Delete the result from workers if it exists.
         """
         if (r_id := self._md_result_id) is not None:
-            # TODO: Delete data BSE-4096
             debug_msg(
                 self.logger,
                 f"[LazyArrowExtensionArray] Asking workers to delete result '{r_id}'",
             )
+            assert self._del_func is not None
+            self._del_func(r_id)
+            self._del_func = None
