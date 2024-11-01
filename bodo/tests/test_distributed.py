@@ -3194,6 +3194,7 @@ def test_scatterv_intercomm(scatter_gather_data, memory_leak_check):
     bodo.libs.distributed_api.scatterv(
         scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
     )
+    _res_id = spawner.worker_intercomm.recv(None, source=0)
 
 
 @pytest_mark_spawn_mode
@@ -3207,7 +3208,10 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
     bodo.libs.distributed_api.scatterv(
         scatter_gather_data, root=bcast_root, comm=spawner.worker_intercomm
     )
+    res_id = spawner.worker_intercomm.recv(None, source=0)
+
     spawner.worker_intercomm.bcast(CommandType.GATHER.value, bcast_root)
+    spawner.worker_intercomm.bcast(res_id, bcast_root)
     out = bodo.libs.distributed_api.gatherv(
         None, root=bcast_root, comm=spawner.worker_intercomm
     )
