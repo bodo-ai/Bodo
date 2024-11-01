@@ -8,7 +8,7 @@ import pytest
 
 import bodo
 from bodo.libs.map_arr_ext import contains_map_array
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -81,8 +81,9 @@ def test_nbytes(memory_leak_check):
         ]
     )
     check_func(impl, (map_value,), py_output=253, only_seq=True)
-    py_out = 240 + 11 * bodo.get_size()
-    if bodo.get_size() == 1:
+    n_pes = get_num_test_workers()
+    py_out = 240 + 11 * n_pes
+    if n_pes == 1:
         py_out += 2
     check_func(impl, (map_value,), py_output=py_out, only_1DVar=True)
 

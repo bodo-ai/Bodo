@@ -20,6 +20,7 @@ from bodo.tests.utils import (
     AnalysisTestPipeline,
     _get_dist_arg,
     check_func,
+    get_num_test_workers,
     is_bool_object_series,
     no_default,
     pytest_pandas,
@@ -3271,7 +3272,7 @@ def test_series_mem_usage(memory_leak_check):
     py_out = 24
     check_func(impl1, (S,), only_seq=True, py_output=py_out, is_out_distributed=False)
     # Test parallel case. Index is replicated across ranks
-    py_out = 24 * bodo.get_size()
+    py_out = 24 * get_num_test_workers()
     check_func(impl1, (S,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.

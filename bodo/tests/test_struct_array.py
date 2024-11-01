@@ -7,7 +7,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -321,5 +321,5 @@ def test_nbytes(memory_leak_check):
         ]
     )
     check_func(impl, (struct_value,), py_output=115, only_seq=True)
-    py_out = 112 + 3 * bodo.get_size()
+    py_out = 112 + 3 * get_num_test_workers()
     check_func(impl, (struct_value,), py_output=py_out, only_1DVar=True)

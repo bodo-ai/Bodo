@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 def get_random_integerarray(tot_size):
@@ -615,6 +615,7 @@ def test_int_arr_nbytes(memory_leak_check):
         np.array([1, -3, 2, 3, 10], np.int64),
         np.array([False, True, True, False, False]),
     )
-    py_out = 40 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
+    n_pes = get_num_test_workers()
+    py_out = 40 + n_pes  # 1 extra byte for null_bit_map per rank
     check_func(impl, (arr,), py_output=py_out, only_1D=True)
     check_func(impl, (arr,), py_output=41, only_seq=True)

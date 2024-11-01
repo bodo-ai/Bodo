@@ -13,7 +13,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import AnalysisTestPipeline, check_func, pytest_pandas
+from bodo.tests.utils import (
+    AnalysisTestPipeline,
+    check_func,
+    get_num_test_workers,
+    pytest_pandas,
+)
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
@@ -3640,12 +3645,14 @@ def test_index_nbytes(index, memory_leak_check):
     def impl(idx):
         return idx.nbytes
 
+    n_pes = get_num_test_workers()
+
     # RangeIndexType has three int64 values, so the total is 24 bytes on
     # each rank.
     if isinstance(index, pd.RangeIndex):
         py_out = 24
         check_func(impl, (index,), py_output=py_out, dist_test=False)
-        check_func(impl, (index,), py_output=py_out * bodo.get_size(), only_1D=True)
+        check_func(impl, (index,), py_output=py_out * n_pes, only_1D=True)
     # String/BinaryIndex has three 3 underlying arrays (data, offsets, null_bit_map)
 
     # In the String example: 15 characters,
@@ -3656,7 +3663,7 @@ def test_index_nbytes(index, memory_leak_check):
     # + 9 (For each rank we get an extra 8 bytes for offset
     # and 1 byte for null_bit_map)
     elif isinstance(index[0], str):
-        py_out = 80 + (bodo.get_size() - 1) * 9
+        py_out = 80 + (n_pes - 1) * 9
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     # In the Binary example:
@@ -3666,7 +3673,7 @@ def test_index_nbytes(index, memory_leak_check):
     # Total = 92 bytes for sequential case
     # + 9 (For each rank we get an extra 8 bytes for offset
     elif isinstance(index[0], bytes):
-        py_out = 92 + (bodo.get_size() - 1) * 9
+        py_out = 92 + (n_pes - 1) * 9
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     # PeriodIndex example:
@@ -3674,7 +3681,7 @@ def test_index_nbytes(index, memory_leak_check):
     # null_bit_map= 1 byte per rank
     # Total = 24 + num_ranks bytes
     elif isinstance(index, pd.PeriodIndex):
-        py_out = 24 + bodo.get_size()
+        py_out = 24 + n_pes
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     # Nullable int index example:
@@ -3686,7 +3693,7 @@ def test_index_nbytes(index, memory_leak_check):
         "UInt64",
         "Float64",
     ]:
-        py_out = 16 + (1 if bodo.get_size() == 1 else 2)
+        py_out = 16 + (1 if n_pes == 1 else 2)
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
     else:
