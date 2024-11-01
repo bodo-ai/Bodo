@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bodosql"
 dynamic = ["version"]
-description = "compile SQL for clusters"
+description = "Bodo's Vectorized SQL execution engine for clusters"
+readme = "README_pypi.md"
 requires-python = ">=3.10,<3.13"
 keywords = ["data", "analytics", "cluster"]
 authors = [{ name = "Bodo.ai" }]
