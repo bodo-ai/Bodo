@@ -2424,6 +2424,52 @@ def get_random_int64index(n):
             ).values,
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            pd.Series(
+                [
+                    [{"A": 0, "B": 1}, {"A": 0, "B": 1, "C": 2}],
+                    [{}, {"A": 0}],
+                    [
+                        {"A": 1, "B": 0},
+                    ],
+                    None,
+                    [{}, {"B": 1, "A": 0}],
+                ],
+                dtype=pd.ArrowDtype(
+                    pa.large_list(pa.map_(pa.large_string(), pa.int16()))
+                ),
+            )
+            .repeat(5)
+            .values,
+            marks=pytest.mark.slow,
+            id="map",
+        ),
+        pytest.param(
+            pd.Series(
+                [{"A": 0, "B": 1}] * 3 + [{"A": 1, "B": 0}] * 3,
+                dtype=pd.ArrowDtype(
+                    pa.struct([pa.field("A", pa.int32()), pa.field("B", pa.int32())])
+                ),
+            ),
+            marks=pytest.mark.slow,
+            id="struct",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    (1, 3.1),
+                    (2, 1.1),
+                    None,
+                    (-1, 7.8),
+                    (3, 4.0),
+                    (-3, -1.2),
+                    (6, 9.0),
+                ],
+                dtype=object,
+            ),
+            marks=pytest.mark.slow,
+            id="tuple",
+        ),
     ],
 )
 def scatter_gather_data(request):
