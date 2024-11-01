@@ -2470,6 +2470,13 @@ def get_random_int64index(n):
             marks=pytest.mark.slow,
             id="tuple",
         ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}
+            ).rename({"A": "a", "B": "a"}, axis=1),
+            marks=pytest.mark.slow,
+            id="df_duplicate_names",
+        ),
     ],
 )
 def scatter_gather_data(request):
