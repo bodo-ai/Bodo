@@ -6,8 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -262,7 +261,7 @@ def test_bool_arr_nbytes(bool_arr_value, memory_leak_check):
         return A.nbytes
 
     # 1 byte per rank for data and 1 per null bitmap
-    py_out = 2 * bodo.get_size()
+    py_out = 2 * get_num_test_workers()
     check_func(impl, (bool_arr_value,), py_output=py_out, only_1D=True)
     check_func(impl, (bool_arr_value,), py_output=2, only_seq=True)
 

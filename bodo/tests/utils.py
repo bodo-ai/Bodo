@@ -3363,3 +3363,18 @@ def get_query_profile_location(output_dir: str, myrank: int) -> str:
     profile_path = os.path.join(output_dir, runs[0], f"query_profile_{myrank}.json")
     assert os.path.isfile(profile_path)
     return profile_path
+
+
+def get_num_test_workers():
+    """Return number of workers actually running tests, which is different from
+    bodo.get_size() in spawn mode.
+    """
+    import bodo
+
+    if bodo.spawn_mode or test_spawn_mode_enabled:
+        import bodo.submit.spawner
+
+        spawner = bodo.submit.spawner.get_spawner()
+        return spawner.worker_intercomm.Get_remote_size()
+
+    return bodo.get_size()

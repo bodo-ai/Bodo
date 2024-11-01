@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import bodo
-from bodo.tests.utils import _test_equal_guard, check_func
+from bodo.tests.utils import _test_equal_guard, check_func, get_num_test_workers
 
 
 @pytest.fixture(
@@ -194,5 +194,5 @@ def test_nbytes(memory_leak_check):
         object,
     )
     check_func(impl, (tuple_value,), py_output=113, only_seq=True)
-    py_out = 112 + bodo.get_size()  # one byte for null_bitmap per rank
+    py_out = 112 + get_num_test_workers()  # one byte for null_bitmap per rank
     check_func(impl, (tuple_value,), py_output=py_out, only_1DVar=True)
