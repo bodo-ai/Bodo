@@ -1524,6 +1524,21 @@ def test_return_maybe_dist(memory_leak_check):
     )
 
 
+def test_return_dist_block_flag(memory_leak_check):
+    """Make sure setting tuple return to distributed_block works"""
+
+    @bodo.jit(distributed_block=["df"])
+    def impl(df):
+        return df, df.A + 1
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    impl(df)
+    sig = impl.signatures[0]
+    is_distributed = impl.overloads[sig].metadata["is_return_distributed"]
+    assert is_distributed == [True, True]
+
+
 # TODO: Add memory_leak_check when bug is solved
 def test_concat_reduction():
     """test dataframe concat reduction, which produces distributed output"""
