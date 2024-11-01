@@ -3051,6 +3051,9 @@ class UntypedPass:
             elif ret_name in self.metadata["replicated"]:
                 flag = "replicated"
             else:
+                assert (
+                    ret_name in self.metadata["threaded"]
+                ), f"invalid return flag for {ret_name}"
                 flag = "threaded"
             # save in metadata that the return value is distributed
             # TODO(ehsan): support other flags like distributed_block?
@@ -3081,11 +3084,18 @@ class UntypedPass:
                 self._return_varnames.add(vname)
                 tup_varnames.append(vname)
                 if vname in flagged_vars or all_returns_distributed:
-                    if vname in self.metadata["distributed"] or all_returns_distributed:
+                    if (
+                        vname in self.metadata["distributed"]
+                        or vname in self.metadata["distributed_block"]
+                        or all_returns_distributed
+                    ):
                         flag = "distributed"
                     elif vname in self.metadata["replicated"]:
                         flag = "replicated"
                     else:
+                        assert (
+                            vname in self.metadata["threaded"]
+                        ), f"invalid return flag for {vname}"
                         flag = "threaded"
                     nodes += self._gen_replace_dist_return(v, flag)
                     new_var_list.append(nodes[-1].target)
