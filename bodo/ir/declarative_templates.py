@@ -141,7 +141,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         supported_types_str = ""
         if "self" in arg_restrictions:
             supported_types_str += (
-                "!!! note\n\t" f"Input {arg_restrictions["self"]}.\n\n"
+                "!!! note\n\t" f"Input {arg_restrictions['self']}.\n\n"
             )
         argument_restrictions_str += supported_types_str
 
