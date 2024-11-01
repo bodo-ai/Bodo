@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     DeadcodeTestPipeline,
     _get_dist_arg,
     check_func,
+    get_num_test_workers,
     has_udf_call,
     pytest_pandas,
 )
@@ -2866,6 +2867,8 @@ def test_df_info(df):
 def test_df_mem_usage(memory_leak_check):
     """Test DataFrame.memory_usage() with and w/o index"""
 
+    n_pes = get_num_test_workers()
+
     def impl1(df):
         return df.memory_usage()
 
@@ -2879,7 +2882,7 @@ def test_df_mem_usage(memory_leak_check):
     # 1 extra byte for null_bit_map per rank
     null_bitmap_byte = 1
     col_B_size = 48 + null_bitmap_byte
-    col_B_size_parallel = col_B_size + null_bitmap_byte * (bodo.get_size() - 1)
+    col_B_size_parallel = col_B_size + null_bitmap_byte * (n_pes - 1)
     py_out = pd.Series([48, 48, col_B_size], index=["Index", "A", "B"])
     py_out_parallel = pd.Series(
         [48, 48, col_B_size_parallel], index=["Index", "A", "B"]
@@ -2913,7 +2916,7 @@ def test_df_mem_usage(memory_leak_check):
     py_out = pd.Series([24], index=pd.Index(["Index"]))
     check_func(impl1, (df,), only_seq=True, py_output=py_out, is_out_distributed=False)
     # Test parallel case. Index is replicated across ranks
-    py_out = pd.Series([24 * bodo.get_size()], index=pd.Index(["Index"]))
+    py_out = pd.Series([24 * n_pes], index=pd.Index(["Index"]))
     check_func(impl1, (df,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.

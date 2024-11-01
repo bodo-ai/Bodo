@@ -12,6 +12,7 @@ from bodo.tests.utils import (
     check_func,
     dist_IR_contains,
     gen_nonascii_list,
+    get_num_test_workers,
 )
 from bodo.utils.typing import BodoError
 
@@ -452,11 +453,12 @@ def test_nbytes(memory_leak_check):
         return arr.nbytes
 
     A = np.array(["AA", "B"] * 4, object)
-    py_output = 8 * (8 + bodo.get_size()) + 12 + bodo.get_size()
+    n_pes = get_num_test_workers()
+    py_output = 8 * (8 + n_pes) + 12 + n_pes
     if bodo.hiframes.boxing._use_dict_str_type:
         # Each rank has a dictionary with 3 8-byte offsets, 3 characters and a null byte
         # There is also an index array with 8 4-byte offsets
-        py_output = (8 * 3 + 3 + 1) * bodo.get_size() + 8 * 4 + bodo.get_size()
+        py_output = (8 * 3 + 3 + 1) * n_pes + 8 * 4 + n_pes
 
     # set use_dict_encoded_strings to avoid automatic testing of dict-encoded strings
     # since py_output will be different leading to errors

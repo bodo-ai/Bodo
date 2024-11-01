@@ -8,7 +8,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func, gen_nonascii_list, pytest_pandas
+from bodo.tests.utils import (
+    check_func,
+    gen_nonascii_list,
+    get_num_test_workers,
+    pytest_pandas,
+)
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest_pandas
@@ -575,6 +580,7 @@ def test_categorical_nbytes(memory_leak_check):
         return A.nbytes
 
     A = pd.Categorical([1, 2, 5, None, 2] * 2, ordered=True)
-    py_out = 10 + 25 * bodo.get_size()  # A.dtype is replicated on ranks
+    n_pes = get_num_test_workers()
+    py_out = 10 + 25 * n_pes  # A.dtype is replicated on ranks
     check_func(impl, (A,), py_output=py_out, only_1D=True)
     check_func(impl, (A,), py_output=35, only_seq=True)
