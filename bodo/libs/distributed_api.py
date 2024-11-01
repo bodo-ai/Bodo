@@ -1853,32 +1853,74 @@ def get_value_for_type(dtype):  # pragma: no cover
         val.name = name
         return val
 
+    # Series
     if isinstance(dtype, bodo.hiframes.pd_series_ext.SeriesType):
         name = _get_name_value_for_type(dtype.name_typ)
         arr = get_value_for_type(dtype.data)
         index = get_value_for_type(dtype.index)
         return pd.Series(arr, index, name=name)
 
+    # DataFrame
     if isinstance(dtype, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         arrs = tuple(get_value_for_type(t) for t in dtype.data)
         index = get_value_for_type(dtype.index)
         return pd.DataFrame(dict(zip(dtype.columns, arrs)), index)
 
+    # CategoricalArray
     if isinstance(dtype, CategoricalArrayType):
         return pd.Categorical.from_codes([0], dtype.dtype.categories)
 
+    # TupleArray
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
+    # ArrayItemArray
     if isinstance(dtype, ArrayItemArrayType):
         return pd.Series([get_value_for_type(dtype.dtype)]).values
 
+    # IntervalArray
     if isinstance(dtype, IntervalArrayType):
         arr_type = get_value_for_type(dtype.arr_type)
         return pd.arrays.IntervalArray([pd.Interval(arr_type[0], arr_type[0])])
 
+    # TimestampTZ array
     if dtype == bodo.timestamptz_array_type:
         return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
+
+    # NullArray
+    if dtype == bodo.null_array_type:
+        return pa.nulls(1)
+
+    # StructArray
+    if isinstance(dtype, bodo.StructArrayType):
+        return np.array(
+            [
+                {
+                    field_name: get_value_for_type(t)[0]
+                    for field_name, t in zip(dtype.names, dtype.data)
+                }
+            ],
+            object,
+        )
+
+    # TupleArray
+    if isinstance(dtype, bodo.TupleArrayType):
+        return pd.array(
+            [tuple(get_value_for_type(t)[0] for t in dtype.data)], object
+        )._ndarray
+
+    # MapArrayType
+    if isinstance(dtype, bodo.MapArrayType):
+        from bodo.hiframes.boxing import BodoMapWrapper
+
+        dict_val = BodoMapWrapper(
+            {
+                get_value_for_type(dtype.key_arr_type)[0]: get_value_for_type(
+                    dtype.value_arr_type
+                )[0]
+            }
+        )
+        return np.array([dict_val], object)
 
     if isinstance(dtype, types.List):
         return [get_value_for_type(dtype.dtype)]
@@ -2317,43 +2359,16 @@ def scatterv_impl_jit(
         def scatterv_impl_int_arr(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
         ):  # pragma: no cover
-            _, _, is_sender, n_pes = get_scatter_comm_info(root, comm)
-
             data_in = data._data
             null_bitmap = data._null_bitmap
             n_in = len(data_in)
 
             data_recv = _scatterv_np(data_in, send_counts, warn_if_dist, root, comm)
-
-            n_all = bcast_scalar(n_in, root, comm)
-            n_recv_bytes = (len(data_recv) + 7) >> 3
-            bitmap_recv = np.empty(n_recv_bytes, np.uint8)
-
-            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
-
-            # compute send counts for nulls
-            send_counts_nulls = np.empty(n_pes, np.int32)
-            for i in range(n_pes):
-                send_counts_nulls[i] = (send_counts[i] + 7) >> 3
-
-            # displacements for nulls
-            displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
-
-            send_null_bitmap = get_scatter_null_bytes_buff(
-                null_bitmap.ctypes, send_counts, send_counts_nulls, is_sender
+            out_null_bitmap = _scatterv_null_bitmap(
+                null_bitmap, send_counts, n_in, root, comm
             )
 
-            c_scatterv(
-                send_null_bitmap.ctypes,
-                send_counts_nulls.ctypes,
-                displs_nulls.ctypes,
-                bitmap_recv.ctypes,
-                np.int32(n_recv_bytes),
-                char_typ_enum,
-                root,
-                comm,
-            )
-            return init_func(data_recv, bitmap_recv)
+            return init_func(data_recv, out_null_bitmap)
 
         return scatterv_impl_int_arr
 
@@ -2713,6 +2728,62 @@ def scatterv_impl_jit(
 
         return impl_dict
 
+    # StructArray
+    if isinstance(data, bodo.StructArrayType):
+        n_fields = len(data.data)
+        func_text = f"def impl_struct(data, send_counts=None, warn_if_dist=True, root={DEFAULT_ROOT}, comm=0):\n"
+        func_text += "  inner_data_arrs = bodo.libs.struct_arr_ext.get_data(data)\n"
+        func_text += "  out_null_bitmap = _scatterv_null_bitmap(bodo.libs.struct_arr_ext.get_null_bitmap(data), send_counts, len(data), root, comm)\n"
+        for i in range(n_fields):
+            func_text += f"  new_inner_data_arr_{i} = bodo.libs.distributed_api.scatterv_impl(inner_data_arrs[{i}], send_counts, warn_if_dist, root, comm)\n"
+
+        new_data_tuple_str = "({}{})".format(
+            ", ".join([f"new_inner_data_arr_{i}" for i in range(n_fields)]),
+            "," if n_fields > 0 else "",
+        )
+        field_names_tuple_str = "({}{})".format(
+            ", ".join([f"'{f}'" for f in data.names]),
+            "," if n_fields > 0 else "",
+        )
+        func_text += f"  return bodo.libs.struct_arr_ext.init_struct_arr({n_fields}, {new_data_tuple_str}, out_null_bitmap, {field_names_tuple_str})\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {"bodo": bodo, "_scatterv_null_bitmap": _scatterv_null_bitmap},
+            loc_vars,
+        )
+        impl_struct = loc_vars["impl_struct"]
+        return impl_struct
+
+    # MapArrayType
+    if isinstance(data, bodo.MapArrayType):
+
+        def impl(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            # Call it recursively on the underlying ArrayItemArray array.
+            new_underlying_data = bodo.libs.distributed_api.scatterv_impl(
+                data._data, send_counts, warn_if_dist, root, comm
+            )
+            # Reconstruct the Map array from the new ArrayItemArray array.
+            new_data = bodo.libs.map_arr_ext.init_map_arr(new_underlying_data)
+            return new_data
+
+        return impl
+
+    # TupleArray
+    if isinstance(data, bodo.TupleArrayType):
+
+        def impl_tuple(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            new_underlying_data = bodo.libs.distributed_api.scatterv_impl(
+                data._data, send_counts, warn_if_dist, root, comm
+            )
+            return bodo.libs.tuple_arr_ext.init_tuple_arr(new_underlying_data)
+
+        return impl_tuple
+
     if data is types.none:  # pragma: no cover
         return (
             lambda data,
@@ -2723,6 +2794,47 @@ def scatterv_impl_jit(
         )
 
     raise BodoError(f"scatterv() not available for {data}")  # pragma: no cover
+
+
+char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+
+@numba.njit(no_cpython_wrapper=True)
+def _scatterv_null_bitmap(null_bitmap, send_counts, n_in, root, comm):
+    """Scatter null bitmap for nullable arrays"""
+    rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
+
+    n_all = bcast_scalar(n_in, root, comm)
+
+    send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
+    n_loc = 0 if (is_intercomm and is_sender) else send_counts[rank]
+
+    n_recv_bytes = (n_loc + 7) >> 3
+    bitmap_recv = np.empty(n_recv_bytes, np.uint8)
+
+    # compute send counts for nulls
+    send_counts_nulls = np.empty(n_pes, np.int32)
+    for i in range(n_pes):
+        send_counts_nulls[i] = (send_counts[i] + 7) >> 3
+
+    # displacements for nulls
+    displs_nulls = bodo.ir.join.calc_disp(send_counts_nulls)
+
+    send_null_bitmap = get_scatter_null_bytes_buff(
+        null_bitmap.ctypes, send_counts, send_counts_nulls, is_sender
+    )
+
+    c_scatterv(
+        send_null_bitmap.ctypes,
+        send_counts_nulls.ctypes,
+        displs_nulls.ctypes,
+        bitmap_recv.ctypes,
+        np.int32(n_recv_bytes),
+        char_typ_enum,
+        root,
+        comm,
+    )
+    return bitmap_recv
 
 
 @intrinsic
