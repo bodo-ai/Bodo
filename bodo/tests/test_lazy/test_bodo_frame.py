@@ -1,26 +1,56 @@
 import pandas as pd
+import pytest
 from pandas.core.internals.array_manager import ArrayManager
 
 from bodo.pandas.frame import BodoDataFrame
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 
 
-def test_pandas_df_lazy_manager_metadata_data(pandas_managers):
-    """
-    Test metadata operations are accurate and performed without
-    collecting data and data operations are accurate and collect data on
-    pandas DataFrame using lazy managers.
-    """
-    head_df = pd.DataFrame(
+@pytest.fixture
+def head_df():
+    return pd.DataFrame(
         {
             "A0": pd.array([1, 2, 3, 4, 5], dtype="Int64"),
             "B5": pd.array(["a", "bc", "def", "ghij", "klmno"]),
         }
     )
+
+
+@pytest.fixture
+def collect_func():
+    return lambda _: pd.DataFrame(
+        {
+            "A0": pd.array([1, 2, 3, 4, 5] * 8, dtype="Int64"),
+            "B5": pd.array(["a", "bc", "def", "ghij", "klmno"] * 8),
+        }
+    )
+
+
+@pytest.fixture
+def del_func():
+    return lambda _: None
+
+
+def test_pandas_df_lazy_manager_metadata_data(
+    pandas_managers, head_df, collect_func, del_func
+):
+    """
+    Test metadata operations are accurate and performed without
+    collecting data and data operations are accurate and collect data on
+    pandas DataFrame using lazy managers.
+    """
     lazy_manager, pandas_manager = pandas_managers
     assert isinstance(head_df._mgr, pandas_manager)
     head_am = head_df._mgr
-    lam = lazy_manager([], [], result_id="abc", nrows=40, head=head_am)
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_am,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
     lam_df: pd.DataFrame = pd.DataFrame._from_mgr(lam, [])
 
     # We haven't fetched data to start
@@ -57,7 +87,9 @@ def test_pandas_df_lazy_manager_metadata_data(pandas_managers):
     assert lam_df._mgr._md_result_id is None
 
 
-def test_pandas_df_lazy_manager_data_metadata(pandas_managers):
+def test_pandas_df_lazy_manager_data_metadata(
+    pandas_managers, head_df, collect_func, del_func
+):
     """
     Test data operations are accurate and collect data and metadata operations
     are accurate after data collection on
@@ -72,7 +104,15 @@ def test_pandas_df_lazy_manager_data_metadata(pandas_managers):
     lazy_manager, pandas_manager = pandas_managers
     assert isinstance(head_df._mgr, pandas_manager)
     head_am = head_df._mgr
-    lam = lazy_manager([], [], result_id="abc", nrows=40, head=head_am)
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_am,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
     lam_df: pd.DataFrame = pd.DataFrame._from_mgr(lam, [])
 
     # We haven't fetched data to start
@@ -105,7 +145,9 @@ def test_pandas_df_lazy_manager_data_metadata(pandas_managers):
     )
 
 
-def test_bodo_df_lazy_managers_metadata_data(pandas_managers):
+def test_bodo_df_lazy_managers_metadata_data(
+    pandas_managers, head_df, collect_func, del_func
+):
     """
     Test metadata operations are accurate and performed without
     collecting data and data operations are accurate and collect data on
@@ -120,7 +162,15 @@ def test_bodo_df_lazy_managers_metadata_data(pandas_managers):
     lazy_manager, pandas_manager = pandas_managers
     assert isinstance(head_df._mgr, pandas_manager)
     head_am = head_df._mgr
-    lam = lazy_manager([], [], result_id="abc", nrows=40, head=head_am)
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_am,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
 
     # We haven't fetched data to start
@@ -155,7 +205,9 @@ def test_bodo_df_lazy_managers_metadata_data(pandas_managers):
     assert lam_df._mgr._md_result_id is None
 
 
-def test_bodo_df_lazy_managers_data_metadata(pandas_managers):
+def test_bodo_df_lazy_managers_data_metadata(
+    pandas_managers, head_df, collect_func, del_func
+):
     """
     Test data operations are accurate and collect data and metadata operations
     are accurate after data collection on
@@ -170,7 +222,15 @@ def test_bodo_df_lazy_managers_data_metadata(pandas_managers):
     lazy_manager, pandas_manager = pandas_managers
     assert isinstance(head_df._mgr, pandas_manager)
     head_am = head_df._mgr
-    lam = lazy_manager([], [], result_id="abc", nrows=40, head=head_am)
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_am,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
     lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
 
     # We haven't fetched data to start
@@ -237,3 +297,48 @@ def test_bodo_data_frame_pandas_manager(pandas_managers):
             dtype="Float64",
         )
     )
+
+
+def test_del_func_called_if_not_collected(pandas_managers, head_df, collect_func):
+    """Tests that the del function is called when the manager is deleted if the data hasn't been collected yet"""
+    lazy_manager, pandas_manager = pandas_managers
+    del_called = False
+
+    def del_func(_):
+        nonlocal del_called
+        del_called = True
+
+    lsa = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+    del lsa
+    assert del_called
+
+
+def test_del_func_not_called_if_collected(pandas_managers, head_df, collect_func):
+    """Tests that the del function is not called when the manager is deleted if the data has been collected"""
+    lazy_manager, pandas_manager = pandas_managers
+    del_called = False
+
+    def del_func(_):
+        nonlocal del_called
+        del_called = True
+
+    lsa = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+    lsa._collect()
+    del lsa
+    assert not del_called

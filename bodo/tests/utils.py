@@ -179,6 +179,7 @@ def check_func(
     use_dict_encoded_strings=None,
     use_map_arrays: bool = False,
     convert_to_nullable_float=True,
+    check_pandas_types=True,
 ) -> dict[str, Callable]:
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -209,6 +210,7 @@ def check_func(
     - only_seq: Run just the sequential check.
     - only_1D: Run just the check on a 1D Distributed input.
     - only_1DVar: Run just the check on a 1DVar Distributed input.
+    - only_spawn: Run just the check with spawn mode.
     - check_categorical: Argument to pass to Pandas assert_frame_equals. We use this if we want to disable
     the check_dtype with a categorical input (as otherwise it will still raise an error).
     - atol: Argument to pass to Pandas assert equals functions. This argument will be used if
@@ -225,8 +227,7 @@ def check_func(
     Runs bodo typing on arguments and converts warnings to errors.
     - convert_to_nullable_float: convert float inputs to nullable float if the global
     nullable float flag is on.
-    - use spawn mode test using Spawn mode instead of SPMD mode (i.e. use
-      submit_jit instead of bodo.jit)
+    - check_pandas_types: check if the output types match exactly, e.g. if Bodo returns a BodoDataFrame and python returns a DataFrame throw an error
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -349,6 +350,7 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
             bodo_funcs["seq"] = bodo_func
 
@@ -372,6 +374,7 @@ def check_func(
                     check_categorical,
                     atol,
                     rtol,
+                    check_pandas_types,
                     True,
                 )
                 bodo_funcs["seq-strlit"] = bodo_func
@@ -423,6 +426,7 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
             bodo_funcs["1D"] = bodo_func
 
@@ -447,6 +451,7 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
             bodo_funcs["1D_var"] = bodo_func
         if run_spawn:
@@ -470,6 +475,7 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
+                check_pandas_types,
             )
             bodo_funcs["spawn"] = bodo_func
     finally:
@@ -509,6 +515,7 @@ def check_func(
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
             convert_to_nullable_float=convert_to_nullable_float,
+            check_pandas_types=check_pandas_types,
         )
         bodo_funcs.update(
             {f"table-format-{name}": func for name, func in inner_funcs.items()}
@@ -548,6 +555,7 @@ def check_func(
             use_dict_encoded_strings=True,
             convert_to_nullable_float=convert_to_nullable_float,
             use_map_arrays=use_map_arrays,
+            check_pandas_types=check_pandas_types,
         )
         bodo_funcs.update(
             {f"dict-encoding-{name}": func for name, func in inner_funcs.items()}
@@ -622,6 +630,7 @@ def check_func_seq(
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
+    check_pandas_types=True,
     test_str_literal=False,
 ) -> tuple[Callable, list[warnings.WarningMessage]]:
     """check function output against Python without manually setting inputs/outputs
@@ -675,6 +684,7 @@ def check_func_seq(
         check_categorical,
         atol,
         rtol,
+        check_pandas_types,
     )
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
@@ -703,6 +713,7 @@ def check_func_1D(
     check_categorical,
     atol,
     rtol,
+    check_pandas_types,
 ) -> Callable:
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
@@ -759,6 +770,7 @@ def check_func_1D(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
 
     n_passed = reduce_sum(passed)
@@ -786,6 +798,7 @@ def check_func_1D_var(
     check_categorical,
     atol,
     rtol,
+    check_pandas_types,
 ) -> Callable:
     """Check function output against Python while setting the inputs/outputs as
     1D distributed variable length
@@ -836,6 +849,7 @@ def check_func_1D_var(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes, "Parallel 1D Var test failed"
@@ -862,6 +876,7 @@ def check_func_spawn(
     check_categorical,
     atol,
     rtol,
+    check_pandas_types,
 ):
     """Check function output against Python while setting the inputs/outputs as
     1D distributed
@@ -899,6 +914,7 @@ def check_func_spawn(
         check_categorical,
         atol,
         rtol,
+        check_pandas_types,
     )
 
 
@@ -971,6 +987,7 @@ def _test_equal_guard(
     check_categorical=False,
     atol=1e-08,
     rtol=1e-05,
+    check_pandas_types=True,
 ):
     # no need to avoid exceptions if running with a single process and hang is not
     # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
@@ -985,6 +1002,7 @@ def _test_equal_guard(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
         return 1
     passed = 1
@@ -999,6 +1017,7 @@ def _test_equal_guard(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
     except Exception as e:
         print(e)
@@ -1087,6 +1106,7 @@ def _test_equal(
     check_categorical=False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
+    check_pandas_types=True,
 ) -> None:
     try:
         from scipy.sparse import csr_matrix
@@ -1135,6 +1155,7 @@ def _test_equal(
             check_dtype=check_dtype,
             check_index_type=False,
             check_freq=False,
+            check_series_type=check_pandas_types,
             atol=atol,
             rtol=rtol,
         )
@@ -1190,6 +1211,7 @@ def _test_equal(
             check_column_type=False,
             check_freq=False,
             check_categorical=check_categorical,
+            check_frame_type=check_pandas_types,
             atol=atol,
             rtol=rtol,
         )
@@ -2408,6 +2430,7 @@ def check_caching(
     py_output=no_default,
     is_out_dist=True,
     args_already_distributed=False,
+    check_pandas_types=True,
 ):
     """Test caching by compiling a BodoSQL function with
     cache=True, then running it again loading from cache.
@@ -2477,6 +2500,7 @@ def check_caching(
             check_categorical,
             atol,
             rtol,
+            check_pandas_types,
         )
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size()

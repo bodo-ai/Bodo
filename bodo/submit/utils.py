@@ -1,9 +1,15 @@
 # Copyright (C) 2024 Bodo Inc. All rights reserved.
 """Utilities for Spawn Mode"""
 
+import logging
+from dataclasses import dataclass
 from enum import Enum
 from time import sleep
 
+import pandas as pd
+from pandas.core.arrays import ArrowExtensionArray
+
+import bodo.user_logging
 from bodo.mpi4py import MPI
 
 
@@ -18,6 +24,7 @@ class CommandType(str, Enum):
     BROADCAST = "broadcast"
     SCATTER = "scatter"
     GATHER = "gather"
+    DELETE_RESULT = "delete_result"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
@@ -37,3 +44,16 @@ def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
         # to 0.1). This could provide a faster response in many cases.
         while not req.Test():
             sleep(poll_freq)
+
+
+@dataclass
+class DistributedReturnMetadata:
+    result_id: str
+    head: pd.DataFrame | pd.Series | ArrowExtensionArray
+    nrows: int
+
+
+def debug_msg(logger: logging.Logger, msg: str):
+    """Send debug message to logger if Bodo verbose level 2 is enabled"""
+    if bodo.user_logging.get_verbose_level() >= 2:
+        logger.debug(msg)

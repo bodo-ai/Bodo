@@ -12,12 +12,26 @@ import typing as pt
 
 import cloudpickle
 import numba
+import pandas as pd
 import psutil
+from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo
 import bodo.user_logging
 from bodo.mpi4py import MPI
-from bodo.submit.utils import CommandType, poll_for_barrier
+from bodo.pandas import (
+    BodoDataFrame,
+    BodoSeries,
+    LazyArrowExtensionArray,
+    get_lazy_manager_class,
+    get_lazy_single_manager_class,
+)
+from bodo.submit.utils import (
+    CommandType,
+    DistributedReturnMetadata,
+    debug_msg,
+    poll_for_barrier,
+)
 from bodo.utils.utils import is_distributable_typ
 
 # Reference to BodoSQLContext class to be lazily initialized if BodoSQLContext
@@ -156,16 +170,18 @@ class Spawner:
         Returns:
             Any: output value
         """
+        # Tuple elements can have different distribution info
         if isinstance(output_is_distributed, (tuple, list)):
             return tuple(self._recv_output(d) for d in output_is_distributed)
-
         if output_is_distributed:
-            res = bodo.gatherv(
-                None,
-                root=MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL,
-                comm=self.worker_intercomm,
+            debug_msg(
+                self.logger,
+                "Getting distributed return metadata for distributed output",
             )
+            distributed_return_metadata = self.worker_intercomm.recv(source=0)
+            res = self.wrap_distributed_result(distributed_return_metadata)
         else:
+            debug_msg(self.logger, "Getting replicated result")
             res = self.worker_intercomm.recv(source=0)
 
         return res
@@ -187,9 +203,6 @@ class Spawner:
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         poll_for_barrier(self.worker_intercomm)
         caught_exceptions = self.worker_intercomm.gather(None, root=gather_root)
-        output_is_distributed = self.worker_intercomm.recv(source=0)
-
-        res = self._recv_output(output_is_distributed)
 
         assert caught_exceptions is not None
         if any(caught_exceptions):
@@ -220,7 +233,75 @@ class Spawner:
                 # Raise the combined exception
                 raise Exception("Some ranks failed") from accumulated_exception
 
+        # Get output from workers
+        output_is_distributed = self.worker_intercomm.recv(source=0)
+        res = self._recv_output(output_is_distributed)
+
         return res
+
+    def wrap_distributed_result(
+        self, distributed_return_metadata: DistributedReturnMetadata | list | dict
+    ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict:
+        """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
+        root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
+
+        def collect_func(res_id: str):
+            self.worker_intercomm.bcast(CommandType.GATHER.value, root=root)
+            self.worker_intercomm.bcast(res_id, root=root)
+            return bodo.libs.distributed_api.gatherv(
+                None, root=root, comm=self.worker_intercomm
+            )
+
+        def del_func(res_id: str):
+            self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
+            self.worker_intercomm.bcast(res_id, root=root)
+
+        if isinstance(distributed_return_metadata, list):
+            return [
+                self.wrap_distributed_result(d) for d in distributed_return_metadata
+            ]
+        if isinstance(distributed_return_metadata, dict):
+            return {
+                key: self.wrap_distributed_result(val)
+                for key, val in distributed_return_metadata.items()
+            }
+        res_id = distributed_return_metadata.result_id
+        nrows = distributed_return_metadata.nrows
+        head = distributed_return_metadata.head
+
+        if isinstance(head, pd.DataFrame):
+            lazy_manager = get_lazy_manager_class()(
+                [],
+                [],
+                result_id=res_id,
+                nrows=nrows,
+                head=head._mgr,
+                collect_func=collect_func,
+                del_func=del_func,
+            )
+            return BodoDataFrame.from_lazy_mgr(lazy_manager, head)
+        elif isinstance(head, pd.Series):
+            lazy_manager = get_lazy_single_manager_class()(
+                None,
+                None,
+                result_id=res_id,
+                nrows=nrows,
+                head=head._mgr,
+                collect_func=collect_func,
+                del_func=del_func,
+            )
+            return BodoSeries.from_lazy_mgr(lazy_manager, head)
+        elif isinstance(head, ArrowExtensionArray):
+            return LazyArrowExtensionArray(
+                None,
+                nrows=nrows,
+                result_id=res_id,
+                head=head,
+                collect_func=collect_func,
+                del_func=del_func,
+            )
+        else:
+            raise Exception(f"Got unexpected distributed result type: {type(head)}")
 
     def _get_arg_metadata(self, arg, arg_name, is_replicated, dist_flags):
         """Replace argument with metadata for later bcast/scatter if it is a DataFrame,
@@ -375,12 +456,6 @@ def destroy_spawner():
 
 
 atexit.register(destroy_spawner)
-
-
-def debug_msg(logger: logging.Logger, msg: str):
-    """Send debug message to logger if Bodo verbose level 2 is enabled"""
-    if bodo.user_logging.get_verbose_level() >= 2:
-        logger.debug(msg)
 
 
 def submit_func_to_workers(dispatcher: "SubmitDispatcher", *args, **kwargs):

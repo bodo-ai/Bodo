@@ -24,7 +24,7 @@ class BodoSeries(pd.Series):
         If you want to create a BodoSeries from a pandas manager use _from_mgr
         """
         series = BodoSeries._from_mgr(lazy_mgr, [])
-        series._name = None
+        series._name = head_s._name
         series._head_s = head_s
         return series
 

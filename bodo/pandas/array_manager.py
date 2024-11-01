@@ -1,6 +1,7 @@
 """LazyArrayManager and LazySingleArrayManager classes for lazily loading data from workers in BodoSeries/DataFrames."""
 
 import typing as pt
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ from pandas.core.internals.array_manager import ArrayManager, SingleArrayManager
 
 import bodo.user_logging
 from bodo.pandas.lazy_metadata import LazyMetadataMixin
-from bodo.submit.spawner import debug_msg
+from bodo.submit.utils import debug_msg
 
 
 class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
@@ -19,7 +20,14 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
     """
 
     # Use __slots__ to avoid creating __dict__ and __weakref__ for each instance, store it like a C struct
-    __slots__ = ["_md_nrows", "_md_head", "_md_result_id", "logger"]
+    __slots__ = [
+        "_md_nrows",
+        "_md_head",
+        "_md_result_id",
+        "_collect_func",
+        "_del_func",
+        "logger",
+    ]
 
     def __init__(
         self,
@@ -32,6 +40,8 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         result_id: str | None = None,
         nrows: int | None = None,
         head: ArrayManager | None = None,
+        collect_func: Callable[[str], pt.Any] | None = None,
+        del_func: Callable[[str], None] | None = None,
     ):
         self._axes = axes
         self.arrays = arrays
@@ -40,10 +50,15 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         self._md_nrows = nrows
         self._md_head = head
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
+        self._collect_func = collect_func
+        self._del_func = del_func
+
         if result_id is not None:
             # This is the lazy case, we don't have the full data yet
             assert nrows is not None
             assert head is not None
+            assert collect_func is not None
+            assert del_func is not None
 
             head_axis0 = head._axes[0]  # Per row
             head_axis1 = head._axes[1]  # Per column
@@ -63,7 +78,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
                 new_axis0,
                 head_axis1,
             ]
-            self.arrays = None  # type: ignore This is can't be None when accessed because we overload __getattribute__
+            self.arrays = None  # type: ignore This can't be None when accessed because we overload __getattribute__
             _arrays = None
         else:
             # This is the base ArrayManager case
@@ -157,32 +172,31 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         if self._md_result_id is not None:
             assert self._md_head is not None
             assert self._md_nrows is not None
+            assert self._collect_func is not None
             debug_msg(self.logger, "[LazyArrayManager] Collecting data...")
-            new_arrays = []
-            # TODO:: Get data from workers
-            for arr in self._md_head.arrays:
-                # Just repeat the array until we have nrows for testing
-                if isinstance(arr, ExtensionArray):
-                    repl_ct = (self._md_nrows // len(arr)) + 1
-                    new_arrays.append(
-                        type(arr)._concat_same_type([arr] * repl_ct)[: self._md_nrows]
-                    )
-                elif isinstance(arr, np.ndarray):
-                    repl_ct = (self._md_nrows // len(arr)) + 1
-                    new_arrays.append(np.concatenate([arr] * repl_ct)[: self._md_nrows])
-                else:
-                    raise ValueError(f"Unsupported array type: {type(arr)}")
-            self.arrays = new_arrays
+            data = self._collect_func(self._md_result_id)
+            self.arrays = data._mgr.arrays
+
             self._md_result_id = None
             self._md_head = None
             self._md_nrows = None
+            # Collect should only be done once
+            self._collect_func = None
 
     def __getattribute__(self, name: str) -> pt.Any:
         """
         Overload __getattribute__ to handle lazy loading of data.
         """
         # Overriding LazyArrayManager attributes so we can use ArrayManager's __getattribute__
-        if name in {"_collect", "_md_nrows", "_md_head", "_md_result_id", "logger"}:
+        if name in {
+            "_collect",
+            "_md_nrows",
+            "_md_head",
+            "_md_result_id",
+            "logger",
+            "_collect_func",
+            "_del_func",
+        }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.
         if name == "arrays":
@@ -195,11 +209,13 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         otherwise we do nothing because the data is already collected/deleted.
         """
         if (r_id := self._md_result_id) is not None:
-            # TODO: Delete data BSE-4096
             debug_msg(
                 self.logger,
                 f"[LazyArrayManager] Asking workers to delete result '{r_id}'",
             )
+            assert self._del_func is not None
+            self._del_func(r_id)
+            self._del_func = None
 
 
 class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayManager]):
@@ -209,7 +225,14 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
     """
 
     # Use __slots__ to avoid creating __dict__ and __weakref__ for each instance, store it like a C struct
-    __slots__ = ["_md_nrows", "_md_head", "_md_result_id", "logger"]
+    __slots__ = [
+        "_md_nrows",
+        "_md_head",
+        "_md_result_id",
+        "_collect_func",
+        "_del_func",
+        "logger",
+    ]
 
     def __init__(
         self,
@@ -221,6 +244,8 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         result_id: str | None = None,
         nrows: int | None = None,
         head: SingleArrayManager | None = None,
+        collect_func: Callable[[str], pt.Any] | None = None,
+        del_func: Callable[[str], None] | None = None,
     ):
         self._axes = axes
         self.arrays = arrays
@@ -230,11 +255,15 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         self._md_nrows = nrows
         self._md_head = head
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
+        self._collect_func = collect_func
+        self._del_func = del_func
 
         if result_id is not None:
             # This is the lazy case, we don't have the full data yet
             assert nrows is not None
             assert head is not None
+            assert collect_func is not None
+            assert del_func is not None
 
             head_axis = head._axes[0]
             new_axis = None
@@ -278,26 +307,14 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             debug_msg(self.logger, "[LazySingleArrayManager] Collecting data...")
             assert self._md_head is not None
             assert self._md_nrows is not None
+            assert self._collect_func is not None
+            data = self._collect_func(self._md_result_id)
 
-            head_arr = self._md_head.arrays[0]
-            new_array = None
-            # TODO:: Get data from workers BSE-4095
-            # Just duplicate the head to get the full array for testing
-            if isinstance(head_arr, ExtensionArray):
-                repl_ct = (self._md_nrows // len(head_arr)) + 1
-                new_array = type(head_arr)._concat_same_type([head_arr] * repl_ct)[
-                    : self._md_nrows
-                ]
-            elif isinstance(head_arr, np.ndarray):
-                repl_ct = (self._md_nrows // len(head_arr)) + 1
-                new_array = np.concatenate([head_arr] * repl_ct)[: self._md_nrows]
-            else:
-                raise ValueError(f"Unsupported array type: {type(head_arr)}")
-
-            self.arrays = [new_array]
+            self.arrays = data._mgr.arrays
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
+            self._collect_func = None
 
     def get_slice(self, slobj: slice, axis: int = 0) -> SingleArrayManager:
         """
@@ -348,7 +365,15 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         Overload __getattribute__ to handle lazy loading of data.
         """
         # Overriding LazyArrayManager attributes so we can use SingleArrayManager's __getattribute__
-        if name in {"_collect", "_md_nrows", "_md_result_id", "_md_head", "logger"}:
+        if name in {
+            "_collect",
+            "_md_nrows",
+            "_md_result_id",
+            "_md_head",
+            "logger",
+            "_collect_func",
+            "_del_func",
+        }:
             return object.__getattribute__(self, name)
         # If the attribute is 'arrays', we ensure we have the data.
         if name == "arrays":
@@ -364,8 +389,10 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         otherwise we do nothing because the data is already collected/deleted.
         """
         if (r_id := self._md_result_id) is not None:
-            # TODO: Delete data BSE-4096
             debug_msg(
                 self.logger,
                 f"[LazySingleArrayManag] Asking workers to delete result '{r_id}'",
             )
+            assert self._del_func is not None
+            self._del_func(r_id)
+            self._del_func = None
