@@ -88,6 +88,12 @@ _use_dict_str_type = False
 struct_size_limit = 100
 
 
+# Wrapper class around dict to make typing treat dict value as map array element not
+# struct array element. See get_value_for_type().
+class BodoMapWrapper(dict):
+    pass
+
+
 def _set_bodo_meta_in_pandas():
     """
     Avoid pandas warnings for Bodo metadata setattr in boxing of Series/DataFrame.
@@ -1666,6 +1672,7 @@ def _infer_ndarray_obj_dtype(val):
         isinstance(first_val, (dict, Dict))
         and (len(first_val.keys()) <= struct_size_limit)
         and all(isinstance(k, str) for k in first_val.keys())
+        and not isinstance(first_val, BodoMapWrapper)
     ):
         field_names = tuple(first_val.keys())
         # TODO: handle None value in first_val elements
@@ -1763,9 +1770,8 @@ def _get_struct_value_arr_type(v):
         return string_array_type
 
     arr_typ = dtype_to_array_type(numba.typeof(v))
-    # use nullable arrays for integer/bool values since there could be None objects
-    if isinstance(v, (int, bool)):
-        arr_typ = to_nullable_type(arr_typ)
+    # use nullable arrays since there could be None objects
+    arr_typ = to_nullable_type(arr_typ)
 
     if _use_dict_str_type and arr_typ == string_array_type:
         arr_typ = bodo.dict_str_arr_type
