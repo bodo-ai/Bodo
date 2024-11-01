@@ -1864,7 +1864,10 @@ def get_value_for_type(dtype):  # pragma: no cover
     if isinstance(dtype, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         arrs = tuple(get_value_for_type(t) for t in dtype.data)
         index = get_value_for_type(dtype.index)
-        return pd.DataFrame(dict(zip(dtype.columns, arrs)), index)
+        # Set column names separately since there could be duplicate names
+        df = pd.DataFrame({f"{i}": A for i, A in enumerate(arrs)}, index)
+        df.columns = dtype.columns
+        return df
 
     # CategoricalArray
     if isinstance(dtype, CategoricalArrayType):
