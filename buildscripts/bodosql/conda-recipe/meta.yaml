@@ -13,12 +13,12 @@ requirements:
         - python >=3.10,<3.13
         - setuptools >=64
         - setuptools_scm >=8
-        - openjdk >=9.0, <12
+        - openjdk >=11.0, <18
         - maven
         - bodo {{ BODO_VERSION }}
 
     run:
-        - openjdk >=9.0, <12
+        - openjdk >=11.0, <18
         - bodo {{ BODO_VERSION }}
         - py4j ==0.10.9.7
         - python >=3.10,<3.13
