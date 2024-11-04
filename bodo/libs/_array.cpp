@@ -589,15 +589,24 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
         PyObject_GetAttrString(pd_arrays_obj, "ArrowStringArray");
     CHECK(pd_arrays_obj, "getting pd.arrays.ArrowStringArray failed");
 
+    PyObject* pd_arrow_ext_arr_obj =
+        PyObject_GetAttrString(pd_arrays_obj, "ArrowExtensionArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.ArrowExtensionArray failed");
+
     // isinstance(arr, ArrowStringArray)
     int is_arrow_str_arr = PyObject_IsInstance(obj, pd_arrow_str_arr_obj);
     CHECK(is_arrow_str_arr >= 0, "isinstance(obj, ArrowStringArray) fails");
 
+    // isinstance(arr, ArrowExtensionArray)
+    int is_arrow_ext_arr = PyObject_IsInstance(obj, pd_arrow_ext_arr_obj);
+    CHECK(is_arrow_str_arr >= 0, "isinstance(obj, ArrowExtensionArray) fails");
+
     Py_DECREF(pandas_mod);
     Py_DECREF(pd_arrays_obj);
     Py_DECREF(pd_arrow_str_arr_obj);
+    Py_DECREF(pd_arrow_ext_arr_obj);
 
-    if (is_arrow_str_arr) {
+    if (is_arrow_str_arr || is_arrow_ext_arr) {
         // pyarrow_chunked_arr = obj._pa_array
         PyObject* pyarrow_chunked_arr =
             PyObject_GetAttrString(obj, "_pa_array");
@@ -644,10 +653,14 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
         allocate_numpy_payload(n + 1, Bodo_CType_offset);
     offset_t* offsets = (offset_t*)offsets_payload.data;
     bodo::vector<const char*> tmp_store(n);
+    // We need to keep the references alive until we copy the data from the
+    // tmp_store
+    bodo::vector<const PyObject*> tmp_unicode_refs(n);
     size_t len = 0;
     for (Py_ssize_t i = 0; i < n; ++i) {
         offsets[i] = len;
         PyObject* s = PySequence_GetItem(obj, i);
+        tmp_unicode_refs[i] = s;
         CHECK(s, "getting element failed");
         // Pandas stores NA as either None, nan, or pd.NA
         if (s == Py_None ||
@@ -674,7 +687,6 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
             CHECK(tmp_store[i], "string conversion failed");
             len += size;
         }
-        Py_DECREF(s);
     }
     offsets[n] = len;
 
@@ -683,6 +695,7 @@ void string_array_from_sequence(PyObject* obj, int64_t* length,
     char* outbuf = outbuf_payload.data;
     for (Py_ssize_t i = 0; i < n; ++i) {
         memcpy(outbuf + offsets[i], tmp_store[i], offsets[i + 1] - offsets[i]);
+        Py_DECREF(tmp_unicode_refs[i]);
     }
 
     Py_DECREF(C_NA);

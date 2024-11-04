@@ -51,6 +51,7 @@ class DistributedReturnMetadata:
     result_id: str
     head: pd.DataFrame | pd.Series | ArrowExtensionArray
     nrows: int
+    index_data: "DistributedReturnMetadata | None"
 
 
 def debug_msg(logger: logging.Logger, msg: str):
