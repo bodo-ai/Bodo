@@ -21,7 +21,7 @@ jobs:
     outputs:
       # https://docs.github.com/en/actions/learn-github-actions/expressions#contains
       # contains is case-insensitive
-      runCI: ${{ contains(steps.check_msg.outputs.runCI, '[run ci]') }}
+      runCI: ${{ contains(steps.check_msg.outputs.commitMsg, '[run ci]') }}
     steps:
       # Fetch the PR branch for the commit history
       - uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
     needs: [commit-prefix-ci]
     name: Pre-Build Bodo for Cache
     runs-on: [self-hosted, large]
-    if: needs.commit-prefix-ci.outputs.runCI
+    if: needs.commit-prefix-ci.outputs.runCI == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Build from Source
