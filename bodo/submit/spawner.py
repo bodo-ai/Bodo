@@ -268,6 +268,11 @@ class Spawner:
         res_id = distributed_return_metadata.result_id
         nrows = distributed_return_metadata.nrows
         head = distributed_return_metadata.head
+        index_data = None
+        if distributed_return_metadata.index_data is not None:
+            index_data = self.wrap_distributed_result(
+                distributed_return_metadata.index_data
+            )
 
         if isinstance(head, pd.DataFrame):
             lazy_manager = get_lazy_manager_class()(
@@ -278,6 +283,7 @@ class Spawner:
                 head=head._mgr,
                 collect_func=collect_func,
                 del_func=del_func,
+                index_data=index_data,
             )
             return BodoDataFrame.from_lazy_mgr(lazy_manager, head)
         elif isinstance(head, pd.Series):
@@ -289,6 +295,7 @@ class Spawner:
                 head=head._mgr,
                 collect_func=collect_func,
                 del_func=del_func,
+                index_data=index_data,
             )
             return BodoSeries.from_lazy_mgr(lazy_manager, head)
         elif isinstance(head, ArrowExtensionArray):

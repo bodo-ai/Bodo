@@ -8,7 +8,9 @@ from pandas.core.indexes.range import RangeIndex
 import bodo
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.series_common import series_val  # noqa
-from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.tests.utils import _get_dist_arg, check_func, pytest_spawn_mode
+
+pytestmark = pytest_spawn_mode
 
 
 def test_distributed_input_scalar():
@@ -35,7 +37,10 @@ def test_distributed_scalar_output():
 
 
 def test_distributed_input_output_df(df_value):
-    if not isinstance(df_value.index, RangeIndex):
+    if (
+        not isinstance(df_value.index, RangeIndex)
+        and type(df_value.index) is not pd.Index
+    ):
         pytest.skip("BSE-4099: Support all pandas index types in lazy wrappers")
 
     def test(df):
@@ -45,7 +50,10 @@ def test_distributed_input_output_df(df_value):
 
 
 def test_distributed_input_output_series(series_val):
-    if not isinstance(series_val.index, RangeIndex):
+    if (
+        not isinstance(series_val.index, RangeIndex)
+        and type(series_val.index) is not pd.Index
+    ):
         pytest.skip("BSE-4099: Support all pandas index types in lazy wrappers")
 
     def test(A):
