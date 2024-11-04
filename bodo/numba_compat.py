@@ -22,6 +22,7 @@ from contextlib import ExitStack
 
 import numba
 import numba.core.boxing
+import numba.core.dispatcher
 import numba.core.inline_closurecall
 import numba.core.lowering
 import numba.core.runtime.context
@@ -5527,6 +5528,74 @@ if _check_numba_change:  # pragma: no cover
 
 numba.core.compiler.CompileResult._reduce = _reduce
 numba.core.compiler.CompileResult._rebuild = _rebuild
+
+
+def _reduce_states(self):
+    """
+    Reduce the instance for pickling.  This will serialize
+    the original function as well the compilation options and
+    compiled signatures, but not the compiled code itself.
+
+    NOTE: part of ReduceMixin protocol
+    """
+    if self._can_compile:
+        sigs = []
+    else:
+        sigs = [cr.signature for cr in self.overloads.values()]
+        
+    return dict(
+        uuid=str(self._uuid),
+        py_func=self.py_func,
+        locals=self.locals,
+        targetoptions=self.targetoptions,
+        can_compile=self._can_compile,
+        sigs=sigs,
+        # bodo change: add pipeline_class to state
+        pipeline_class=self._compiler.pipeline_class
+    )
+
+@classmethod
+def _rebuild_dispatcher(cls, uuid, py_func, locals, targetoptions,
+                can_compile, sigs, pipeline_class):
+    """
+    Rebuild an Dispatcher instance after it was __reduce__'d.
+
+    NOTE: part of ReduceMixin protocol
+    
+    Bodo change: add pipeline_class argument.
+    """
+    try:
+        return cls._memo[uuid]
+    except KeyError:
+        pass
+    self = cls(py_func, locals, targetoptions, pipeline_class)
+    # Make sure this deserialization will be merged with subsequent ones
+    self._set_uuid(uuid)
+    for sig in sigs:
+        self.compile(sig)
+    self._can_compile = can_compile
+    return self
+
+
+if _check_numba_change:  # pragma: no cover
+    for name, orig, hash in (
+        (
+            "numba.core.dispatcher.Dispatcher._reduce_states",
+            numba.core.dispatcher.Dispatcher._reduce_states,
+            "b5eff22f9db75873bb7623137912d42c63204166d84ccae13346a0598ada7afa",
+        ),
+        (
+            "numba.core.dispatcher.Dispatcher._rebuild",
+            numba.core.dispatcher.Dispatcher._rebuild,
+            "b6634a51819746bc86907ac7baeee4b1607c1b5eeb7b9ebf22d7cf7104f5788a",
+        ),
+    ):
+        lines = inspect.getsource(orig)
+        if hashlib.sha256(lines.encode()).hexdigest() != hash:
+            warnings.warn(f"{name} has changed")
+
+numba.core.dispatcher.Dispatcher._reduce_states = _reduce_states
+numba.core.dispatcher.Dispatcher._rebuild = _rebuild_dispatcher
 
 #### END MONKEY PATCH FOR METADATA CACHING SUPPORT ####
 
