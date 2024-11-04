@@ -324,7 +324,17 @@ class Spawner:
         Returns:
             ArgMetadata or Any: argument potentially replaced with ArgMetadata
         """
-        data_type = bodo.typeof(arg)
+        # Arguments could be functions which fail in typeof.
+        # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
+        # Similar to dispatcher argument handling:
+        # https://github.com/numba/numba/blob/53e976f1b0c6683933fa0a93738362914bffc1cd/numba/core/dispatcher.py#L689
+        try:
+            data_type = bodo.typeof(arg)
+        except ValueError:
+            return arg
+
+        if data_type is None:
+            return arg
 
         if is_distributable_typ(data_type):
             dist_flags.append(arg_name)
@@ -419,7 +429,10 @@ class Spawner:
             name: self._get_arg_metadata(arg, name, name in replicated, dist_flags)
             for name, arg in kwargs.items()
         }
-        self.worker_intercomm.bcast((out_args, out_kwargs), root=bcast_root)
+        # Using cloudpickle for arguments since there could be functions.
+        # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
+        pickled_args = cloudpickle.dumps((out_args, out_kwargs))
+        self.worker_intercomm.bcast(pickled_args, root=bcast_root)
         dispatcher.decorator_args["distributed_block"] = (
             dispatcher.decorator_args.get("distributed_block", []) + dist_flags
         )

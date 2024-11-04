@@ -197,7 +197,8 @@ def exec_func_handler(
     global RESULT_REGISTRY
 
     # Receive function arguments
-    (args, kwargs) = spawner_intercomm.bcast(None, 0)
+    pickled_args = spawner_intercomm.bcast(None, 0)
+    (args, kwargs) = cloudpickle.loads(pickled_args)
     args = tuple(_recv_arg(arg, spawner_intercomm) for arg in args)
     kwargs = {name: _recv_arg(arg, spawner_intercomm) for name, arg in kwargs.items()}
 
