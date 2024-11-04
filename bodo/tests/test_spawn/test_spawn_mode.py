@@ -5,6 +5,9 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.pandas.array_manager import LazyArrayManager
+from bodo.pandas.frame import BodoDataFrame
+from bodo.pandas.managers import LazyBlockManager
 from bodo.submit.spawner import get_num_workers
 from bodo.tests.utils import _test_equal, check_func, pytest_spawn_mode
 
@@ -232,3 +235,24 @@ def test_args_tuple_list_dict():
     _test_equal(impl(arg), arg)
     arg = {"k1": df, "k23": df}
     _test_equal(impl(arg), arg)
+
+
+def test_results_deleted_after_collection(datapath):
+    """Test that results are deleted from workers after collection"""
+    CUSTOMER_TABLE_PATH = datapath("tpch-test_data/parquet/customer.parquet")
+
+    @bodo.jit(spawn=True)
+    def impl():
+        df = pd.read_parquet(CUSTOMER_TABLE_PATH)
+        return df
+
+    df = impl()
+    assert isinstance(df, BodoDataFrame)
+    assert isinstance(df._mgr, (LazyBlockManager, LazyArrayManager))
+    res_id = df._mgr._md_result_id
+    assert res_id is not None
+    collect_func = df._mgr._collect_func
+    assert collect_func is not None
+    df._mgr._collect()
+
+    assert collect_func(res_id) is None

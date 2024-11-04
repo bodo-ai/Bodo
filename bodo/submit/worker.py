@@ -13,7 +13,9 @@ import cloudpickle
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba import typed
+from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo
 from bodo.mpi4py import MPI
@@ -81,6 +83,8 @@ distributed_return_metadata_t = pt.Union[
 def _build_distributed_return_metadata(
     res: pt.Any, logger: logging.Logger
 ) -> distributed_return_metadata_t:
+    global RESULT_REGISTRY
+
     if isinstance(res, list):
         return [_build_distributed_return_metadata(val, logger) for val in res]
     if isinstance(res, (dict, typed.typeddict.Dict)):
@@ -97,12 +101,20 @@ def _build_distributed_return_metadata(
     RESULT_REGISTRY[res_id] = res
     debug_worker_msg(logger, f"Calculating total result length for {type(res)}")
     total_res_len = comm_world.reduce(len(res), op=MPI.SUM, root=0)
+    index_data = None
+    if isinstance(res, (pd.DataFrame, pd.Series)) and type(res.index) is pd.Index:
+        # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
+        index_data = _build_distributed_return_metadata(
+            ArrowExtensionArray(pa.array(res.index._data)), logger
+        )
+        assert isinstance(index_data, DistributedReturnMetadata)
     return DistributedReturnMetadata(
         result_id=res_id,
         head=res.head(DISTRIBUTED_RETURN_HEAD_SIZE)
         if isinstance(res, pd.DataFrame)
         else res[:DISTRIBUTED_RETURN_HEAD_SIZE],
         nrows=total_res_len,
+        index_data=index_data,
     )
 
 
@@ -283,9 +295,10 @@ def worker_loop(
         elif command == CommandType.GATHER.value:
             res_id = spawner_intercomm.bcast(None, 0)
             bodo.libs.distributed_api.gatherv(
-                RESULT_REGISTRY[res_id], root=0, comm=spawner_intercomm
+                RESULT_REGISTRY.pop(res_id, None), root=0, comm=spawner_intercomm
             )
             debug_worker_msg(logger, f"Gather done for result {res_id}")
+
         elif command == CommandType.DELETE_RESULT.value:
             res_id = spawner_intercomm.bcast(None, 0)
             del RESULT_REGISTRY[res_id]

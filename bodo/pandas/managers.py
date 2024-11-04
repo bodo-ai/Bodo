@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+from pandas.core.arrays.arrow.array import ArrowExtensionArray
 from pandas.core.internals.blocks import (
     Block,
 )
@@ -33,6 +34,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             nrows = kwargs["nrows"]
             collect_func = kwargs["collect_func"]
             del_func = kwargs["del_func"]
+            index_data = kwargs.get("index_data", None)
             dummy_blocks = head.blocks
             # XXX Copy?
             col_index = [head.axes[0]]
@@ -47,9 +49,12 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                             ss_axis.step,
                         )
                     )
+                elif type(ss_axis) is pd.Index:
+                    assert index_data is not None
+                    row_indexes.append(pd.Index(index_data, name=ss_axis.name))
                 else:
                     raise ValueError(
-                        f"Only RangeIndex is supported! Got {type(ss_axis)}"
+                        f"Index type {type(ss_axis)} not supported in LazyBlockManager"
                     )
 
             obj = super().__new__(
@@ -85,6 +90,8 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         result_id=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        # Can be used for lazy index data
+        index_data=ArrowExtensionArray | None,
     ):
         super().__init__(
             blocks,
@@ -207,6 +214,8 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         head=None,
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
+        # Can be used for lazy index data
+        index_data=ArrowExtensionArray | None,
     ):
         block_ = block
         axis_ = axis
@@ -233,8 +242,13 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                     head_axis.start + (head_axis.step * nrows),
                     head_axis.step,
                 )
+            elif type(head_axis) is pd.Index:
+                assert index_data is not None
+                axis_ = pd.Index(index_data, name=head_axis.name)
             else:
-                raise ValueError(f"Only RangeIndex is supported! Got {type(head_axis)}")
+                raise ValueError(
+                    "Index type {type(head_axis)} not supported in LazySingleBlockManager"
+                )
 
         super().__init__(
             block_,

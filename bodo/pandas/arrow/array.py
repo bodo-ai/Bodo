@@ -67,7 +67,9 @@ class LazyArrowExtensionArray(
             debug_msg(
                 self.logger, "[LazyArrowExtensionArray] Collecting data from workers..."
             )
-            self._pa_array = self._collect_func(self._md_result_id)._pa_array
+            collected = self._collect_func(self._md_result_id)
+            # Collected could be bodo array types too so we need to convert to pyarrow array
+            self._pa_array = pa.array(collected, type=self._md_head._pa_array.type)
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
