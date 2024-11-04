@@ -5,7 +5,6 @@ import sys
 import time
 import warnings
 from collections import defaultdict
-from decimal import Decimal
 from enum import Enum
 
 import llvmlite.binding as ll
@@ -1821,7 +1820,11 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # Decimal array
     if isinstance(dtype, DecimalArrayType):
-        return np.array([Decimal("32.1")])
+        import pyarrow as pa
+
+        return pd.array(
+            [0], dtype=pd.ArrowDtype(pa.decimal128(dtype.precision, dtype.scale))
+        )
 
     # date array
     if dtype == datetime_date_array_type:
@@ -1894,6 +1897,8 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # NullArray
     if dtype == bodo.null_array_type:
+        import pyarrow as pa
+
         return pa.nulls(1)
 
     # StructArray
