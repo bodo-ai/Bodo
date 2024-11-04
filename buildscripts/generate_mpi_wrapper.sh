@@ -14,6 +14,43 @@ MPI_Comm_free
 MPI_Error_string
 MPI_Error_class
 MPI_Wait
+# The following methods are not used anywhere in our code but are also not
+# defined on platform, so to prevent compilation issues we skip adding
+# [[no discard]].
+MPI_T_source_get_num
+MPI_T_source_get_timestamp
+MPI_T_source_get_info
+MPI_T_event_set_dropped_handler
+MPI_T_event_register_callback
+MPI_T_event_read
+MPI_T_event_handle_set_info
+MPI_T_event_handle_get_info
+MPI_T_event_handle_free
+MPI_T_event_handle_alloc
+MPI_T_event_get_timestamp
+MPI_T_event_get_source
+MPI_T_event_get_num
+MPI_T_event_get_info
+MPI_T_event_get_index
+MPI_T_event_copy
+MPI_T_event_callback_set_info
+MPI_T_event_callback_get_info
+MPI_T_category_get_num_events
+MPI_Psend_init
+MPI_Pready_range
+MPI_Pready_list
+MPI_Pready
+MPI_Parrived
+MPI_Isendrecv_replace_c
+MPI_Isendrecv_replace
+MPI_Isendrecv_c
+MPI_Intercomm_create_from_groups
+MPI_Info_get_string
+MPI_Comm_idup_with_info
+MPI_Info_create_env
+MPI_Isendrecv
+MPI_Precv_init
+MPI_T_category_get_events
 EOF
 )
 
