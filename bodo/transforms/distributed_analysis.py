@@ -727,6 +727,10 @@ class DistributedAnalysis:
             and attr == "dataframes"
         ):
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
+        elif isinstance(rhs_typ, DataFrameType) and attr == "dtypes":
+            self._set_REP(
+                lhs, array_dists, "Output of DataFrame.dtypes is replicated", rhs.loc
+            )
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         """analyze Parfor nodes for distribution. Parfor and its accessed arrays should
