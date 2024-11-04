@@ -4,6 +4,8 @@
 
 Bodo Iceberg Connector is a Bodo connector for used to access data that is stored in Apache Iceberg tables. It allows users to read and write Iceberg tables using Bodo's and BodoSQL's IO APIs.
 
+Bodo's Iceberg Documentation: https://docs.bodo.ai/latest/iceberg/intro/
+
 ## Requirements
 
 The Bodo Iceberg Connector depends on having Java installed on your system. You will need to download
