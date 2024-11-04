@@ -1891,6 +1891,10 @@ def get_value_for_type(dtype):  # pragma: no cover
         arr_type = get_value_for_type(dtype.arr_type)
         return pd.arrays.IntervalArray([pd.Interval(arr_type[0], arr_type[0])])
 
+    # DatetimeArray
+    if isinstance(dtype, DatetimeArrayType):
+        return pd.array([pd.Timestamp("2024/1/1", tz=dtype.tz)])
+
     # TimestampTZ array
     if dtype == bodo.timestamptz_array_type:
         return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
