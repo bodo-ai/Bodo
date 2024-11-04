@@ -87,3 +87,16 @@ def test_distributed_0_len_output():
         only_spawn=True,
         check_pandas_types=False,
     )
+
+
+def test_scalar_tuple_return():
+    """Make sure returning tuple without distributed data works"""
+
+    def test(df):
+        return df.shape
+
+    check_func(
+        test,
+        (pd.DataFrame({"A": [1, 5, 8]}),),
+        only_spawn=True,
+    )
