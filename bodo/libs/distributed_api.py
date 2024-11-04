@@ -1767,18 +1767,6 @@ def _scatterv_np(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, c
 
 
 # skipping coverage since only called on multiple core case
-def _get_name_value_for_type(name_typ):  # pragma: no cover
-    """get a value for name of a Series/Index type"""
-    # assuming name is either None or a string
-    assert (
-        isinstance(name_typ, (types.UnicodeType, types.StringLiteral))
-        or name_typ == types.none
-    )
-    # make names unique with next_label to avoid MultiIndex unboxing issue #811
-    return None if name_typ == types.none else "_" + str(ir_utils.next_label())
-
-
-# skipping coverage since only called on multiple core case
 def get_value_for_type(dtype):  # pragma: no cover
     """returns a value of type 'dtype' to enable calling an njit function with the
     proper input type.
@@ -1836,7 +1824,7 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(dtype):
-        name = _get_name_value_for_type(dtype.name_typ)
+        name = get_value_for_type(dtype.name_typ)
         if isinstance(dtype, bodo.hiframes.pd_index_ext.RangeIndexType):
             return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
@@ -1847,8 +1835,8 @@ def get_value_for_type(dtype):  # pragma: no cover
     if isinstance(dtype, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
         import pyarrow as pa
 
-        name = _get_name_value_for_type(dtype.name_typ)
-        names = tuple(_get_name_value_for_type(t) for t in dtype.names_typ)
+        name = get_value_for_type(dtype.name_typ)
+        names = tuple(get_value_for_type(t) for t in dtype.names_typ)
         arrs = tuple(get_value_for_type(t) for t in dtype.array_types)
         # convert pyarrow arrays to numpy to avoid errors in pd.MultiIndex.from_arrays
         arrs = tuple(a.to_numpy(False) if isinstance(a, pa.Array) else a for a in arrs)
@@ -1858,7 +1846,7 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # Series
     if isinstance(dtype, bodo.hiframes.pd_series_ext.SeriesType):
-        name = _get_name_value_for_type(dtype.name_typ)
+        name = get_value_for_type(dtype.name_typ)
         arr = get_value_for_type(dtype.data)
         index = get_value_for_type(dtype.index)
         return pd.Series(arr, index, name=name)
@@ -1945,10 +1933,17 @@ def get_value_for_type(dtype):  # pragma: no cover
         }
 
     if dtype == bodo.string_type:
-        return "sample_str"
+        # make names unique with next_label to avoid MultiIndex unboxing issue #811
+        return "_" + str(ir_utils.next_label())
+
+    if isinstance(dtype, types.StringLiteral):
+        return dtype.literal_value
 
     if dtype == types.int64:
-        return 1
+        return ir_utils.next_label()
+
+    if dtype == types.none:
+        return None
 
     # TODO: Add missing data types
     raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
