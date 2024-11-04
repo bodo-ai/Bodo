@@ -20,6 +20,6 @@ SDKROOT:
   - /opt
 
 c_compiler_version:
-  - 18
+  - 19
 cxx_compiler_version:
-  - 18
+  - 19

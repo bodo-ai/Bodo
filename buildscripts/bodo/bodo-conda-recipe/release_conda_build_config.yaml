@@ -11,7 +11,7 @@ numpy:
   - 1.23
 
 c_compiler_version:    # [osx]
-  - 18                 # [osx]
+  - 19                 # [osx]
 cxx_compiler_version:  # [osx]
-  - 18                 # [osx]
+  - 19                 # [osx]
 

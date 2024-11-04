@@ -53,7 +53,7 @@ requirements:
     - libcurl ~= 8.0
     - hdf5 >=1.14.3,<1.14.4.0a0=mpi_mpich_* # [not win]
     - h5py
-    - mpich 4.1.2=h* # [not win]
+    - mpich 4.2.3=h* # [not win]
     - msmpi # [win]
     - vc # [win]
     - vs2015_runtime # [win]
