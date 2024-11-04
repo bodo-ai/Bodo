@@ -1743,10 +1743,6 @@ def _value_to_array(val):
     val_infer = val.copy()
     val_infer.append(None)
     arr = np.array(val_infer, np.object_)
-    # assume float lists can be regular np.float64 arrays
-    # TODO handle corener cases where None could be used as NA instead of np.nan
-    if len(val) and isinstance(val[0], float):
-        arr = np.array(val, np.float64)
     return arr
 
 
