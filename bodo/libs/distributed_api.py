@@ -1829,6 +1829,10 @@ def get_value_for_type(dtype):  # pragma: no cover
             return pd.RangeIndex(1, name=name)
         arr_type = bodo.utils.typing.get_index_data_arr_types(dtype)[0]
         arr = get_value_for_type(arr_type)
+        if isinstance(dtype, bodo.PeriodIndexType):
+            return pd.period_range(
+                start="2023-01-01", periods=1, freq=dtype.freq, name=name
+            )
         return pd.Index(arr, name=name)
 
     # MultiIndex index
