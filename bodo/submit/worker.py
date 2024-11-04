@@ -120,11 +120,9 @@ def _send_output(
         is_distributed: distribution info for output
         spawner_intercomm: MPI intercomm for spawner
     """
-    # Tuple elements can have different distributions
-    if isinstance(res, tuple):
-        assert isinstance(
-            is_distributed, (tuple, list)
-        ), "_send_output(): invalid output distributed flags type"
+    # Tuple elements can have different distributions (tuples without distrubuted data
+    # are treated like scalars)
+    if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         for val, dist in zip(res, is_distributed):
             _send_output(val, dist, spawner_intercomm, logger)
         return
@@ -151,10 +149,7 @@ def _gather_res(
     """
     If any output is marked as distributed and empty on rank 0, gather the results and return an updated is_distributed flag and result
     """
-    if isinstance(res, tuple):
-        assert isinstance(
-            is_distributed, (tuple, list)
-        ), "_gather_res(): invalid output distributed flags type"
+    if isinstance(res, tuple) and isinstance(is_distributed, (tuple, list)):
         all_updated_is_distributed = []
         all_updated_res = []
         for val, dist in zip(res, is_distributed):
