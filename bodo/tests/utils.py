@@ -3167,8 +3167,8 @@ pytest_mark_pandas = (
 
 # This is for marking an entire test file
 # (pytestmark = pytest_pandas)
-pytest_pandas = (
-    [pytest.mark.pandas] + [pytest.mark.slow] if compiler_files_were_changed else []
+pytest_pandas = [pytest.mark.pandas] + (
+    [pytest.mark.slow] if compiler_files_were_changed else []
 )
 
 # This is for marking an entire test file
