@@ -5,7 +5,6 @@ representations (Arrow and Bodo)
 
 import typing as pt
 from collections import namedtuple
-from typing import Dict, List, Optional, Tuple
 
 from py4j.protocol import Py4JError
 
@@ -122,14 +121,14 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
             table_loc = gen_table_loc(catalog_type, warehouse, schema, table)  # type: ignore
 
         else:
-            schema_id: Optional[int] = java_table_info.getSchemaID()
+            schema_id: int | None = java_table_info.getSchemaID()
             iceberg_schema_str = str(java_table_info.getIcebergSchemaEncoding())
             # XXX Do we need this anymore if the Arrow schema has all the
             # details including the Iceberg Field IDs?
             java_schema = java_table_info.getIcebergSchema()
             py_schema = iceberg_schema_java_to_py(java_schema)
 
-            pyarrow_schema: "pa.Schema" = arrow_schema_j2py(
+            pyarrow_schema: pa.Schema = arrow_schema_j2py(
                 java_table_info.getArrowSchema()
             )
             pyarrow_schema = convert_arrow_schema_to_large_types(pyarrow_schema)
@@ -156,7 +155,7 @@ def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True)
             )
             # Create a map from Iceberg column field id to
             # column name
-            field_id_to_col_name_map: Dict[int, str] = {
+            field_id_to_col_name_map: dict[int, str] = {
                 py_schema.field_ids[i]: py_schema.colnames[i]
                 for i in range(len(py_schema.colnames))
             }
@@ -226,8 +225,8 @@ def iceberg_schema_java_to_py(java_schema):
 
 
 def partition_spec_j2py(
-    partition_list, field_id_to_col_name_map: Dict[int, str]
-) -> List[Tuple[str, str, int, str]]:
+    partition_list, field_id_to_col_name_map: dict[int, str]
+) -> list[tuple[str, str, int, str]]:
     """
     Generate python representation of partition spec which is
     a tuple containing the column name, the name of the transform,
@@ -247,8 +246,8 @@ def partition_spec_j2py(
 
 
 def sort_order_j2py(
-    sort_list, field_id_to_col_name_map: Dict[int, str]
-) -> List[Tuple[str, str, int, bool, bool]]:
+    sort_list, field_id_to_col_name_map: dict[int, str]
+) -> list[tuple[str, str, int, bool, bool]]:
     """
     Generate python representation of sort order which is
     a tuple containing the column name, the name of the transform,
@@ -269,7 +268,7 @@ def sort_order_j2py(
     ]
 
 
-def get_transform_info(transform) -> Tuple[str, int]:
+def get_transform_info(transform) -> tuple[str, int]:
     name = transform.toString()
     if name.startswith("truncate["):
         return "truncate", int(name[(len("truncate") + 1) : -1])

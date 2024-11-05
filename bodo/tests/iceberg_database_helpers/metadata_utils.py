@@ -28,6 +28,6 @@ def get_metadata_field(metadata_path: str, field: str):
     Read the metadata file as a json and read the given
     top level field.
     """
-    with open(metadata_path, "r") as f:
+    with open(metadata_path) as f:
         metadata = json.load(f)
     return metadata[field]

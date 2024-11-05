@@ -33,7 +33,7 @@ class CSRMatrixType(types.ArrayCompatible):
         self.dtype = dtype
         # idx_dtype is data type of row/column index values, either int32 or int64
         self.idx_dtype = idx_dtype
-        super(CSRMatrixType, self).__init__(name=f"CSRMatrixType({dtype}, {idx_dtype})")
+        super().__init__(name=f"CSRMatrixType({dtype}, {idx_dtype})")
 
     @property
     def as_array(self):

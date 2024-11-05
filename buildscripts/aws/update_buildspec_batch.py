@@ -178,7 +178,7 @@ def generate_CI_buildspec(num_groups):
 # TODO: Add support for different buildspec types (nightly, etc).
 def create_new_buildspec(buildtype, num_groups):
     if buildtype == "CI":
-        with open(CI_BUILDSPEC_FILENAME, "r") as f:
+        with open(CI_BUILDSPEC_FILENAME) as f:
             existing_yaml = yaml.load(f, Loader=yaml.Loader)
         existing_yaml["batch"] = generate_CI_buildspec(num_groups)
         with open(CI_BUILDSPEC_FILENAME, "w") as f:

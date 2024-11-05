@@ -9,7 +9,7 @@ import operator
 import typing as pt
 import warnings
 from collections import defaultdict
-from typing import Any, Dict, List, Set
+from typing import Any
 
 import numba
 import numpy as np
@@ -175,7 +175,7 @@ class BodoTypeInference(PartialTypeInference):
                 typing_transform_required = False
                 # Call into Numba's PartialTypeInference but with chrome tracing enabled properly.
                 create_nested_run_pass_event(
-                    PartialTypeInference.name(), state, super(BodoTypeInference, self)
+                    PartialTypeInference.name(), state, super()
                 )
                 curr_typing_pass_required = typing_transform_required
             finally:
@@ -813,7 +813,7 @@ class TypingTransforms:
 
     def _follow_patterns_to_table_def(
         self, in_table_var: ir.Var, func_ir: ir.FunctionIR
-    ) -> pt.Tuple[ir.Inst, pt.Dict[str, ir.Inst], pt.Set[str]]:
+    ) -> tuple[ir.Inst, dict[str, ir.Inst], set[str]]:
         """
         Takes an ir.Assign that creates a DataFrame/Table used in filter pushdown and
         converts it to the "Expression" that defined the DataFrame/Table.
@@ -943,9 +943,7 @@ class TypingTransforms:
 
         return value_def, used_dfs, skipped_vars
 
-    def _get_filter_read_and_def_nodes(
-        self, value_def
-    ) -> pt.Tuple[ir.Expr, "Connector"]:
+    def _get_filter_read_and_def_nodes(self, value_def) -> tuple[ir.Expr, "Connector"]:
         """Find table definition node and read node for filter pushdown. value_def is
         the definition of the DataFrame/Table being filtered and could be
         init_dataframe, reader, or static_getitem node.
@@ -1020,8 +1018,8 @@ class TypingTransforms:
         func_ir,
         table_def_node,
         read_node: "Connector",
-        used_dfs: pt.Dict[str, ir.Inst],
-        skipped_vars: pt.Set[str],
+        used_dfs: dict[str, ir.Inst],
+        skipped_vars: set[str],
         index_def,
         label: int,
     ):
@@ -1206,15 +1204,15 @@ class TypingTransforms:
 
     def _find_target_node_location_for_filtering(
         self,
-        block_body: List[ir.Stmt],
+        block_body: list[ir.Stmt],
         target_node: ir.Stmt,
-        filter_nodes: Set[ir.Expr],
-        filter_vars: Set[ir.Var],
-        non_filter_vars: Set[ir.Var],
-        related_vars: Set[ir.Var],
-        skipped_vars: Set[ir.Var],
-        df_names: Set[str],
-        used_dfs: Dict[str, ir.Expr],
+        filter_nodes: set[ir.Expr],
+        filter_vars: set[ir.Var],
+        non_filter_vars: set[ir.Var],
+        related_vars: set[ir.Var],
+        skipped_vars: set[ir.Var],
+        df_names: set[str],
+        used_dfs: dict[str, ir.Expr],
     ) -> int:
         """For a given block_body, find the location within
         the IR at which the target_node is located for the
@@ -1290,7 +1288,7 @@ class TypingTransforms:
             # avoid nodes before the reader
             if stmt is target_node:
                 break
-            stmt_vars: Set[str] = {v.name for v in stmt.list_vars()}
+            stmt_vars: set[str] = {v.name for v in stmt.list_vars()}
 
             # make sure df is not used before filtering
             if not (stmt_vars & related_vars):
@@ -1324,7 +1322,7 @@ class TypingTransforms:
             # Otherwise, if the stmt uses a filter var and the filter_var is
             # not immutable, assume that all vars are involved and must be filter_var's
             # If filter_var is immutable, then don't need to assume that
-            used_filter_vars: Set[str] = stmt_vars & filter_vars
+            used_filter_vars: set[str] = stmt_vars & filter_vars
 
             # This is a defensive check, and isn't expected to be hit
             # so we need the pragma to let coverage pass
@@ -1345,11 +1343,11 @@ class TypingTransforms:
 
     @staticmethod
     def _move_filter_nodes(
-        block_body: pt.List[ir.Stmt],
+        block_body: list[ir.Stmt],
         reader_ind: int,
-        filter_nodes: pt.Set[ir.Expr],
-        filter_vars: pt.Set[ir.Var],
-    ) -> pt.Tuple[pt.List[ir.Stmt], pt.List[ir.Stmt]]:
+        filter_nodes: set[ir.Expr],
+        filter_vars: set[ir.Var],
+    ) -> tuple[list[ir.Stmt], list[ir.Stmt]]:
         """
         Given a block that should be reordered based on filter nodes, splits the block into
         two lists, one containing all the nodes before the reader and any reordered filters,
@@ -1403,7 +1401,7 @@ class TypingTransforms:
         used_dfs,
         skipped_vars,
         filters,
-        working_body: List[ir.Stmt],
+        working_body: list[ir.Stmt],
         func_ir: ir.FunctionIR,
         label: int,
     ):
@@ -1425,7 +1423,7 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
-        filter_vars: Set[str] = {
+        filter_vars: set[str] = {
             v.name for v in bodo.ir.connector.get_filter_vars(filters)
         }
 
@@ -1620,7 +1618,7 @@ class TypingTransforms:
         df_col_types,
         is_sql_op: bool,
         read_node: "Connector",
-        new_ir_assigns: pt.List[ir.Stmt],
+        new_ir_assigns: list[ir.Stmt],
     ) -> bif.Filter:
         """
         Function used by _get_partition_filters to extract filters
@@ -1948,7 +1946,7 @@ class TypingTransforms:
         df_col_types,
         is_sql_op: bool,
         read_node,
-        new_ir_assigns: pt.List[ir.Var],
+        new_ir_assigns: list[ir.Var],
     ) -> bif.Filter:  # pragma: no cover
         """Generate a filter for like. If the values in like are proper constants
         then this generates the correct operations
@@ -2211,7 +2209,7 @@ class TypingTransforms:
                 (left_colname and not right_colname)
                 or (right_colname and not left_colname)
             )
-            col: pt.Tuple[bif.Filter, types.ArrayCompatible] = (
+            col: tuple[bif.Filter, types.ArrayCompatible] = (
                 left_colname if left_colname else right_colname
             )  # type: ignore
             colname, coltype = col
@@ -2265,13 +2263,13 @@ class TypingTransforms:
         df_col_types,
         func_ir: ir.FunctionIR,
         read_node: "Connector",
-    ) -> pt.Tuple[bif.Filter, types.ArrayCompatible]:
+    ) -> tuple[bif.Filter, types.ArrayCompatible]:
         """
         Get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
 
-        def are_supported_kws(kws: pt.List[pt.Tuple[str, ir.Var]]) -> bool:
+        def are_supported_kws(kws: list[tuple[str, ir.Var]]) -> bool:
             """Verify that keyword args passed into a function are supported,
             which are only the special arguments for filter pushdown.
 
@@ -3316,26 +3314,22 @@ class TypingTransforms:
         for c in df_type.columns:
             if c in preserved_columns:
                 name_col_total.append(c)
-                data_col_total.append("df['{}'].values".format(c))
+                data_col_total.append(f"df['{c}'].values")
             elif c in additional_columns:
                 name_col_total.append(c)
-                e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
-                    kws_key_list.index(c)
-                )
+                e_col = f"bodo.utils.conversion.coerce_to_array(new_arg{kws_key_list.index(c)}, scalar_to_arr_len=len(df))"
                 data_col_total.append(e_col)
 
         # The new columns should be added in the order that they apear in kws_key_val_list
         for i, c in enumerate(kws_key_list):
             if c not in df_type.columns:
                 name_col_total.append(c)
-                e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
-                    i
-                )
+                e_col = f"bodo.utils.conversion.coerce_to_array(new_arg{i}, scalar_to_arr_len=len(df))"
                 data_col_total.append(e_col)
 
         data_args = ", ".join(data_col_total)
         header = "def impl(df, {}):\n".format(
-            ", ".join("new_arg{}".format(i) for i in range(len(kws_key_val_list)))
+            ", ".join(f"new_arg{i}" for i in range(len(kws_key_val_list)))
         )
         impl = bodo.hiframes.dataframe_impl._gen_init_df(
             header,
@@ -4110,7 +4104,7 @@ class TypingTransforms:
         if detect_dict_cols:
             # Estimate which string columns should be dict-encoded using existing Parquet
             # infrastructure.
-            str_columns: List[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
+            str_columns: list[str] = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
                 pyarrow_table_schema
             )
             # remove user provided dict-encoded columns
@@ -4555,8 +4549,8 @@ class TypingTransforms:
         self,
         func_text: str,
         func_name: str,
-        extra_globals: pt.Dict[str, Any],
-        args: pt.Tuple[pt.Any, ...],
+        extra_globals: dict[str, Any],
+        args: tuple[pt.Any, ...],
         retvar,
         def_to_replace,
         label_of_replacer: int,
@@ -6441,11 +6435,9 @@ class TypingTransforms:
             return [true_assign, assign, ir.Assign(lhs, new_df_var, lhs.loc)]
         else:
             raise BodoError(
-                (
-                    "DataFrame.{}(): non-deterministic inplace change of dataframe schema "
-                    "not supported.\nSee "
-                    "https://docs.bodo.ai/latest/bodo_parallelism/not_supported/"
-                ).format(func_name)
+                f"DataFrame.{func_name}(): non-deterministic inplace change of dataframe schema "
+                "not supported.\nSee "
+                "https://docs.bodo.ai/latest/bodo_parallelism/not_supported/"
             )
 
         return [assign]
@@ -6624,13 +6616,7 @@ class TypingTransforms:
                     # loop unrolling can potentially make updated lists constants
                     if self.ran_transform:
                         raise BodoError(
-                            "{}(): argument '{}' requires a constant value but variable '{}' is updated inplace using '{}'\n{}\n".format(
-                                func_name,
-                                arg_name,
-                                var.name,
-                                self._updated_containers[var.name],
-                                rhs.loc.strformat(),
-                            )
+                            f"{func_name}(): argument '{arg_name}' requires a constant value but variable '{var.name}' is updated inplace using '{self._updated_containers[var.name]}'\n{rhs.loc.strformat()}\n"
                         )
                     else:
                         # save for potential loop unrolling

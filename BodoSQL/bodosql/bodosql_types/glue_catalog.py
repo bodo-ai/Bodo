@@ -71,9 +71,7 @@ class GlueCatalogType(DatabaseCatalogType):
         """
         self.warehouse = warehouse
 
-        super(GlueCatalogType, self).__init__(
-            name=f"GlueCatalogType({self.warehouse=})",
-        )
+        super().__init__(name=f"GlueCatalogType({self.warehouse=})")
 
     def get_java_object(self):
         return _create_java_glue_catalog(self.warehouse)
@@ -136,9 +134,7 @@ class GlueConnectionType(IcebergConnectionType):
         self.warehouse = warehouse
         self.conn_str = get_conn_str(warehouse)
 
-        super(GlueConnectionType, self).__init__(
-            name=f"GlueConnectionType({warehouse=})"
-        )
+        super().__init__(name=f"GlueConnectionType({warehouse=})")
 
     def get_conn_str(self) -> str:
         return "iceberg+" + self.conn_str
@@ -187,7 +183,7 @@ class GlueConnectionTypeModel(models.StructModel):
         members = [
             ("conn_str", types.unicode_type),
         ]
-        super(GlueConnectionTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(GlueConnectionType, "conn_str", "conn_str")

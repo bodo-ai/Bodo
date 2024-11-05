@@ -109,14 +109,14 @@ def overload_rolling_fixed(
     func_name = get_overload_const_str(fname)
 
     if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
-        raise BodoError("invalid rolling (fixed window) function {}".format(func_name))
+        raise BodoError(f"invalid rolling (fixed window) function {func_name}")
 
     if func_name in ("median", "min", "max"):
         # just using 'apply' since we don't have streaming/linear support
         # TODO: implement linear support similar to others
         func_text = "def kernel_func(A):\n"
         func_text += "  if np.isnan(A).sum() != 0: return np.nan\n"
-        func_text += "  return np.{}(A)\n".format(func_name)
+        func_text += f"  return np.{func_name}(A)\n"
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         # We can't use numba.njit because it generates a CPUDispatcher which
@@ -188,9 +188,7 @@ def overload_rolling_variable(
     func_name = get_overload_const_str(fname)
 
     if func_name not in ("sum", "mean", "var", "std", "count", "median", "min", "max"):
-        raise BodoError(
-            "invalid rolling (variable window) function {}".format(func_name)
-        )
+        raise BodoError(f"invalid rolling (variable window) function {func_name}")
 
     if func_name in ("median", "min", "max"):
         # just using 'apply' since we don't have streaming/linear support
@@ -198,7 +196,7 @@ def overload_rolling_variable(
         func_text = "def kernel_func(A):\n"
         func_text += "  arr  = dropna(A)\n"
         func_text += "  if len(arr) == 0: return np.nan\n"
-        func_text += "  return np.{}(arr)\n".format(func_name)
+        func_text += f"  return np.{func_name}(arr)\n"
         loc_vars = {}
         exec(func_text, {"np": np, "dropna": _dropna}, loc_vars)
         # We can't use numba.njit because it generates a CPUDispatcher which

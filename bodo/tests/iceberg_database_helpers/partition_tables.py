@@ -1,5 +1,3 @@
-from typing import Dict, List, Tuple
-
 from bodo.tests.iceberg_database_helpers.simple_tables import TABLE_MAP
 from bodo.tests.iceberg_database_helpers.utils import (
     PartitionField,
@@ -7,7 +5,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     get_spark,
 )
 
-PARTITION_MAP: List[Tuple[str, List[PartitionField]]] = [
+PARTITION_MAP: list[tuple[str, list[PartitionField]]] = [
     # Identity for Bools
     ("BOOL_BINARY_TABLE", [PartitionField("A", "identity", -1)]),  # bool not null
     ("BOOL_BINARY_TABLE", [PartitionField("B", "identity", -1)]),  # bool null
@@ -113,7 +111,7 @@ def part_table_name(base_name, part_fields):
     return ans
 
 
-PARTITION_TABLE_NAME_MAP: Dict[str, Tuple[str, List[PartitionField]]] = {
+PARTITION_TABLE_NAME_MAP: dict[str, tuple[str, list[PartitionField]]] = {
     part_table_name(starter_table_name, part_fields): (starter_table_name, part_fields)
     for starter_table_name, part_fields in PARTITION_MAP
 }
@@ -137,7 +135,7 @@ def create_table(base_name, part_fields, spark=None, postfix=""):
     )
 
 
-def create_partition_tables(tables: List[str], spark=None, postfix=""):
+def create_partition_tables(tables: list[str], spark=None, postfix=""):
     if spark is None:
         spark = get_spark()
     created = []

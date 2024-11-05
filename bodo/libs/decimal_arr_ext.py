@@ -228,9 +228,7 @@ class Decimal128Type(types.Type):
     def __init__(self, precision, scale):
         assert isinstance(precision, int)
         assert isinstance(scale, int)
-        super(Decimal128Type, self).__init__(
-            name="Decimal128Type({}, {})".format(precision, scale)
-        )
+        super().__init__(name=f"Decimal128Type({precision}, {scale})")
         self.precision = precision
         self.scale = scale
         self.bitwidth = 128  # needed for using IntegerModel
@@ -3021,9 +3019,7 @@ class DecimalArrayType(types.ArrayCompatible):
     def __init__(self, precision, scale):
         self.precision = precision
         self.scale = scale
-        super(DecimalArrayType, self).__init__(
-            name="DecimalArrayType({}, {})".format(precision, scale)
-        )
+        super().__init__(name=f"DecimalArrayType({precision}, {scale})")
 
     @property
     def as_array(self):

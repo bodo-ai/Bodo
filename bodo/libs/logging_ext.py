@@ -34,9 +34,7 @@ class LoggingLoggerType(types.Type):
     def __init__(self, is_root=False):
         # TODO: flag is unused, remove?
         self.is_root = is_root
-        super(LoggingLoggerType, self).__init__(
-            name=f"LoggingLoggerType(is_root={is_root})"
-        )
+        super().__init__(name=f"LoggingLoggerType(is_root={is_root})")
 
 
 @typeof_impl.register(logging.RootLogger)
@@ -93,10 +91,10 @@ class LoggingLoggerAttribute(AttributeTemplate):
     def _resolve_helper(self, logger_typ, args, kws):
         kws = dict(kws)
         # add dummy default value for kws to avoid errors
-        arg_names = ", ".join("e{}".format(i) for i in range(len(args)))
+        arg_names = ", ".join(f"e{i}" for i in range(len(args)))
         if arg_names:
             arg_names += ", "
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}

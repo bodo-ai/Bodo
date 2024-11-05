@@ -63,7 +63,7 @@ from bodo.utils.typing import (
 class FloatingArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
-        super(FloatingArrayType, self).__init__(name=f"FloatingArrayType({dtype})")
+        super().__init__(name=f"FloatingArrayType({dtype})")
 
     @property
     def as_array(self):
@@ -131,7 +131,7 @@ class FloatDtype(types.Number):
         assert isinstance(dtype, types.Float)
         self.dtype = dtype
         name = f"Float{dtype.bitwidth}Dtype()"
-        super(FloatDtype, self).__init__(name)
+        super().__init__(name)
 
 
 register_model(FloatDtype)(models.OpaqueModel)

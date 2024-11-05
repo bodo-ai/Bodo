@@ -81,7 +81,7 @@ def test_beer_reviews():
         # remove __pycache__ (numba stores cache in there)
         shutil.rmtree("__pycache__", ignore_errors=True)
 
-        beers_fn = "s3://{}/beer_reviews/reviews_sample.csv".format(BUCKET_NAME)
+        beers_fn = f"s3://{BUCKET_NAME}/beer_reviews/reviews_sample.csv"
 
         # --------- run with pandas first ---------
         os.environ["NUMBA_DISABLE_JIT"] = "1"

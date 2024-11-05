@@ -1084,7 +1084,7 @@ def test_groupby_nested_array_key(df, expected_df, memory_leak_check):
     """
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     num_cols = len(df.columns)
-    keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
+    keys_inds = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
     fnames = bodo.utils.typing.MetaType(())
@@ -1164,7 +1164,7 @@ def test_groupby_timestamptz_key(memory_leak_check):
     )
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     num_cols = len(df.columns)
-    keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
+    keys_inds = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 3
     fnames = bodo.utils.typing.MetaType(())
@@ -1431,7 +1431,7 @@ def test_window_output_work_stealing(memory_leak_check, capfd, tmp_path):
 
     ## Verify that the profile is as expected
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
     # Ensure that the temp directory isn't deleted until all ranks have read their respective file
     bodo.barrier()
@@ -1523,7 +1523,7 @@ def test_groupby_decimal_types(memory_leak_check):
 
     col_meta = bodo.utils.typing.ColNamesMetaType(tuple(df.columns))
     num_cols = len(df.columns)
-    keys_inds = bodo.utils.typing.MetaType((tuple(range(num_cols))))
+    keys_inds = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     kept_cols = bodo.utils.typing.MetaType(tuple(range(num_cols)))
     batch_size = 5
     fnames = bodo.utils.typing.MetaType(())

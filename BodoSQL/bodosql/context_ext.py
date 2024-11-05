@@ -6,7 +6,7 @@ which allows typing and optimization.
 import datetime
 import re
 import time
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import numba
 import numpy as np
@@ -91,7 +91,7 @@ class BodoSQLContextType(types.Type):
         # Map None to types.none to use the type in the data model.
         self.default_tz = default_tz
         self.catalog_type = types.none if is_overload_none(catalog) else catalog
-        super(BodoSQLContextType, self).__init__(
+        super().__init__(
             name=f"BodoSQLContextType({names}, {dataframes}, {estimated_row_counts}, {catalog}, {default_tz})"
         )
 
@@ -118,7 +118,7 @@ class BodoSQLContextModel(models.StructModel):
             ("dataframes", types.BaseTuple.from_types(fe_type.dataframes)),
             ("catalog", fe_type.catalog_type),
         ]
-        super(BodoSQLContextModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(BodoSQLContextType, "dataframes", "dataframes")
@@ -250,7 +250,7 @@ def bodo_sql_context_overload(tables, catalog=None, default_tz=None):
     assert len(tables.types) % 2 == 1, "invalid const dict tuple structure"
     n_dfs = (len(tables.types) - 1) // 2
     names = [t.literal_value for t in tables.types[1 : n_dfs + 1]]
-    df_args = ", ".join("tables[{}]".format(i) for i in range(n_dfs + 1, 2 * n_dfs + 1))
+    df_args = ", ".join(f"tables[{i}]" for i in range(n_dfs + 1, 2 * n_dfs + 1))
 
     df_args = "({}{})".format(df_args, "," if len(names) == 1 else "")
     name_args = ", ".join(f"'{c}'" for c in names)
@@ -372,11 +372,11 @@ def overload_remove_catalog(bc):
 def _gen_sql_plan_pd_func_text_and_lowered_globals(
     bodo_sql_context_type: BodoSQLContextType,
     sql_str: str,
-    dynamic_param_values: Tuple[types.Type],
-    named_param_keys: Tuple[str],
-    named_param_values: Tuple[types.Type],
+    dynamic_param_values: tuple[types.Type],
+    named_param_keys: tuple[str],
+    named_param_values: tuple[types.Type],
     hide_credentials: bool,
-) -> Tuple[str, Dict[str, Any], str]:
+) -> tuple[str, dict[str, Any], str]:
     """
     Helper function called by _gen_pd_func_for_query and _gen_pd_func_str_for_query
     that generates the SQL plan and func_text by calling our calcite application on rank 0.

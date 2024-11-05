@@ -10,7 +10,7 @@ import traceback
 import warnings
 from enum import Enum
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
@@ -120,8 +120,8 @@ INT_BITSIZE_TO_ARROW_DATATYPE = {
 
 
 def type_code_to_arrow_type(
-    code: int, m: "ResultMetadata", tz: str, is_select_q: bool
-) -> Union[pa.DataType, UnknownSnowflakeType]:
+    code: int, m: ResultMetadata, tz: str, is_select_q: bool
+) -> pa.DataType | UnknownSnowflakeType:
     """
     Mapping of the Snowflake field types. Most are taken from the Snowflake Connector
     except for the following:
@@ -305,7 +305,7 @@ def gen_snowflake_schema(
             # TODO: differentiate unsigned, int8, int16, ...
             elif numpy_type.startswith(("int", "uint")):
                 sf_schema[col_name] = "NUMBER(38, 0)"
-            elif numpy_type.startswith(("float")):
+            elif numpy_type.startswith("float"):
                 sf_schema[col_name] = "REAL"
         elif is_str_arr_type(col_type):
             if column_precisions is None or column_precisions[col_idx] < 0:
@@ -454,10 +454,10 @@ SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION = os.path.join(
 
 
 def execute_query(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     query: str,
-    timeout: Optional[int],
-) -> Optional["SnowflakeCursor"]:  # pragma: no cover
+    timeout: int | None,
+) -> SnowflakeCursor | None:  # pragma: no cover
     """
     Execute a Snowflake Query with Special Timeout Handling
     This function executes independently of ranks
@@ -583,7 +583,7 @@ def parse_conn_str(conn_str: str, strict_parsing: bool = False) -> dict[str, Any
 
 def snowflake_connect(
     conn_str: str, is_parallel: bool = False
-) -> "SnowflakeConnection":  # pragma: no cover
+) -> SnowflakeConnection:  # pragma: no cover
     """
     From Snowflake connection URL, connect to Snowflake.
 
@@ -744,12 +744,12 @@ def precision_to_numpy_dtype(precision: int) -> int:
 
 
 def get_number_types_from_metadata(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
-    orig_table: Optional[str],
-    orig_table_indices: Optional[tuple[int, ...]],
+    orig_table: str | None,
+    orig_table_indices: tuple[int, ...] | None,
     downcast_decimal_to_double: bool,
-    cols_to_check: list[tuple[int, str, Union[pa.Decimal128Type, pa.Decimal256Type]]],
+    cols_to_check: list[tuple[int, str, pa.Decimal128Type | pa.Decimal256Type]],
 ):
     """
     Determine the smallest possible integer size for all NUMBER columns
@@ -791,7 +791,7 @@ def get_number_types_from_metadata(
         timeout=SF_READ_SCHEMA_PROBE_TIMEOUT,
     )
 
-    typing_table: Optional[pa.Table] = None
+    typing_table: pa.Table | None = None
 
     # Retry if first query failed and original table context is known
     if (
@@ -853,14 +853,14 @@ def get_number_types_from_metadata(
 
 def snowflake_type_str_to_pyarrow_datatype(
     types: set[str],
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
     colname: str,
     source_colname: str,
     cur_type: str,
     tz: str,
     can_system_sample: bool,
-) -> Optional[pa.DataType]:
+) -> pa.DataType | None:
     """
     Convert a Set of Snowflake Type Strings to a PyArrow type
 
@@ -955,7 +955,7 @@ def snowflake_type_str_to_pyarrow_datatype(
 
 
 def get_list_type_from_metadata(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
     cur_colname: str,
     source_colname: str,
@@ -1044,7 +1044,7 @@ def get_list_type_from_metadata(
     return pa.large_list(pa_type)
 
 
-def get_sample_rate_for_system_sample(cursor: "SnowflakeCursor", sql_query: str):
+def get_sample_rate_for_system_sample(cursor: SnowflakeCursor, sql_query: str):
     """
     If the table produced by a sql query which is valid for system sampling is
     large enough that system sample should be done at all, returns the sample rate.
@@ -1074,7 +1074,7 @@ def get_sample_rate_for_system_sample(cursor: "SnowflakeCursor", sql_query: str)
 
 
 def get_variant_type_from_metadata(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
     cur_colname: str,
     source_colname: str,
@@ -1189,7 +1189,7 @@ def get_variant_type_from_metadata(
 
 
 def get_struct_type_from_metadata(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
     cur_colname: str,
     source_colname: str,
@@ -1277,7 +1277,7 @@ def get_struct_type_from_metadata(
 
 
 def get_map_type_from_metadata(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
     cur_colname: str,
     source_colname: str,
@@ -1366,7 +1366,7 @@ def get_map_type_from_metadata(
     return pa.map_(pa.large_string(), pa_type)
 
 
-def can_table_be_system_sampled(cursor: "SnowflakeCursor", table_name: Optional[str]):
+def can_table_be_system_sampled(cursor: SnowflakeCursor, table_name: str | None):
     """
     Returns True if the table referenced by table_name is actually a table
     that can be sampled from using system sampling by sending off a system
@@ -1394,15 +1394,15 @@ def can_table_be_system_sampled(cursor: "SnowflakeCursor", table_name: Optional[
 
 
 def get_schema_from_metadata(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sql_query: str,
-    orig_table: Optional[str],
-    orig_table_indices: Optional[tuple[int, ...]],
+    orig_table: str | None,
+    orig_table_indices: tuple[int, ...] | None,
     is_select_query: bool,
     is_table_input: bool,
     downcast_decimal_to_double: bool,
 ) -> tuple[
-    list[pa.Field], list, list[bool], list[int], list[pa.DataType], Optional[list[str]]
+    list[pa.Field], list, list[bool], list[int], list[pa.DataType], list[str] | None
 ]:  # pragma: no cover
     """
     Determine the Arrow schema and Bodo types of the query output
@@ -1550,7 +1550,7 @@ def get_schema_from_metadata(
     )
 
 
-def _get_table_row_count(cursor: "SnowflakeCursor", table_name: str) -> Optional[int]:
+def _get_table_row_count(cursor: SnowflakeCursor, table_name: str) -> int | None:
     """get total number of rows for a Snowflake table. Returns None if input is not a
     table or probe query failed.
 
@@ -1581,7 +1581,7 @@ def _detect_column_dict_encoding(
     cursor,
     col_types,
     is_table_input,
-    schema_name: Optional[str],
+    schema_name: str | None,
 ):
     """Detects Snowflake columns that need to be dictionary-encoded using a query that
     gets approximate data cardinalities.
@@ -1608,7 +1608,7 @@ def _detect_column_dict_encoding(
         sql_query = f"{schema_name}.{sql_query}"
 
     # Determine if the string columns are dictionary encoded
-    dict_encode_timeout_info: Optional[tuple[int, list[str]]] = None
+    dict_encode_timeout_info: tuple[int, list[str]] | None = None
 
     # the limit on the number of rows total to read for the probe
     probe_limit = max(SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT // len(query_args), 1)
@@ -1727,14 +1727,14 @@ def _detect_column_dict_encoding(
 
 
 def get_schema(
-    conn: "SnowflakeConnection",
+    conn: SnowflakeConnection,
     sql_query: str,
     is_select_query: bool,
     is_table_input: bool,
-    _bodo_read_as_dict: Optional[list[str]],
+    _bodo_read_as_dict: list[str] | None,
     downcast_decimal_to_double: bool,
-    orig_table: Optional[str] = None,
-    orig_table_indices: Optional[tuple[int, ...]] = None,
+    orig_table: str | None = None,
+    orig_table_indices: tuple[int, ...] | None = None,
     convert_snowflake_column_names: bool = True,
 ):  # pragma: no cover
     """
@@ -1818,7 +1818,7 @@ def get_schema(
         string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
 
     # Determine if the string columns are dictionary encoded
-    dict_encode_timeout_info: Optional[tuple[int, list[str]]] = None
+    dict_encode_timeout_info: tuple[int, list[str]] | None = None
 
     if len(query_args) != 0 and SF_READ_AUTO_DICT_ENCODE_ENABLED:
         if orig_table != None:
@@ -1875,12 +1875,10 @@ def get_schema(
     )
 
 
-class SnowflakeDataset(object):
+class SnowflakeDataset:
     """Store dataset info in the way expected by Arrow reader in C++."""
 
-    def __init__(
-        self, batches: list["ResultBatch"], schema, conn: "SnowflakeConnection"
-    ):
+    def __init__(self, batches: list[ResultBatch], schema, conn: SnowflakeConnection):
         # pieces, _bodo_total_rows and _bodo_total_rows are the attributes
         # expected by ArrowDataFrameReader, schema is for SnowflakeReader.
         # NOTE: getting this information from the batches is very cheap and
@@ -1902,7 +1900,7 @@ class FakeArrowJSONResultBatch:
     conforming to the same APIS as ArrowResultBatch
     """
 
-    def __init__(self, json_batch: "JSONResultBatch", schema: pa.Schema) -> None:
+    def __init__(self, json_batch: JSONResultBatch, schema: pa.Schema) -> None:
         self._json_batch = json_batch
         self._schema = schema
 
@@ -1910,7 +1908,7 @@ class FakeArrowJSONResultBatch:
     def rowcount(self):
         return self._json_batch.rowcount
 
-    def to_arrow(self, _: Optional["SnowflakeConnection"] = None) -> pa.Table:
+    def to_arrow(self, _: SnowflakeConnection | None = None) -> pa.Table:
         """
         Return the data in arrow format.
 
@@ -1934,7 +1932,7 @@ class FakeArrowJSONResultBatch:
 
 
 def set_timestamptz_format_connection_parameter_if_required(
-    conn: "SnowflakeConnection", schema: pa.Schema
+    conn: SnowflakeConnection, schema: pa.Schema
 ):
     """
     Sets the connection parameter for timestamptz formatting if required.
@@ -1973,7 +1971,7 @@ def set_timestamptz_format_connection_parameter_if_required(
 
 
 def execute_length_query_helper(
-    conn: "SnowflakeConnection", query: str
+    conn: SnowflakeConnection, query: str
 ) -> tuple[int, int]:
     """
     Helper function for the 'get_dataset' function. This
@@ -2017,11 +2015,11 @@ def execute_length_query_helper(
 
 
 def execute_query_helper(
-    conn: "SnowflakeConnection",
+    conn: SnowflakeConnection,
     query: str,
     is_select_query: bool,
     schema: pa.Schema,
-) -> tuple[int, list["ArrowResultBatch" | FakeArrowJSONResultBatch], int]:
+) -> tuple[int, list[ArrowResultBatch | FakeArrowJSONResultBatch], int]:
     """
     Helper function for 'get_dataset' to execute a query in Snowflake
     and return the Arrow batches of the result set and number of rows
@@ -2060,7 +2058,7 @@ def execute_query_helper(
         )
 
     # Get the list of result batches (this doesn't load data).
-    batches: "list[ResultBatch]" = cur.get_result_batches()  # type: ignore
+    batches: list[ResultBatch] = cur.get_result_batches()  # type: ignore
     assert isinstance(
         batches, list
     ), f"Expected 'batches' to be a list, but got {type(batches)} instead."
@@ -2233,7 +2231,7 @@ def get_dataset(
 
 # --------------------------- snowflake_write helper functions ----------------------------
 def create_internal_stage(
-    cursor: "SnowflakeCursor", is_temporary: bool = False
+    cursor: SnowflakeCursor, is_temporary: bool = False
 ) -> str:  # pragma: no cover
     """Create an internal stage within Snowflake. If `is_temporary=False`,
     the named stage must be dropped manually in `drop_internal_stage()`
@@ -2296,7 +2294,7 @@ def create_internal_stage(
     return stage_name
 
 
-def drop_internal_stage(cursor: "SnowflakeCursor", stage_name: str):  # pragma: no cover
+def drop_internal_stage(cursor: SnowflakeCursor, stage_name: str):  # pragma: no cover
     """Drop an internal stage within Snowflake.
 
     Args
@@ -2315,7 +2313,7 @@ def drop_internal_stage(cursor: "SnowflakeCursor", stage_name: str):  # pragma: 
 
 
 def do_upload_and_cleanup(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     chunk_idx: int,
     chunk_path: str,
     stage_name: str,
@@ -2353,7 +2351,7 @@ def do_upload_and_cleanup(
 
 
 def create_table_handle_exists(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     location: str,
     sf_schema,
     if_exists: str,
@@ -2456,7 +2454,7 @@ def create_table_handle_exists(
 
 
 def gen_flatten_sql(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     sf_schema: dict,
     column_datatypes: dict,
     columns: str,
@@ -2567,7 +2565,7 @@ def gen_flatten_sql(
 
 
 def execute_copy_into(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     stage_name: str,
     location: str,
     sf_schema,
@@ -2687,7 +2685,7 @@ def execute_copy_into(
         return cursor.sfqid, flatten_sql, flatten_table
 
 
-def retrieve_async_query(cursor: "SnowflakeCursor", sfqid: str):  # pragma: no cover
+def retrieve_async_query(cursor: SnowflakeCursor, sfqid: str):  # pragma: no cover
     """Wait for a async query to finish, and return the results.
     If the query fails, this function raises a Snowflake ProgrammingError.
     This function blocks until the query completes / raises an error, and will
@@ -2839,7 +2837,7 @@ temporary_directory_type = types.temporary_directory_type  # noqa
 
 
 def get_snowflake_stage_info(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     stage_name: str,
     tmp_folder: TemporaryDirectory,
 ) -> dict:  # pragma: no cover
@@ -3155,7 +3153,7 @@ def connect_and_get_upload_info(conn_str: str):  # pragma: no cover
 
 
 def create_table_copy_into(
-    cursor: "SnowflakeCursor",
+    cursor: SnowflakeCursor,
     stage_name: str,
     location: str,
     sf_schema: dict,

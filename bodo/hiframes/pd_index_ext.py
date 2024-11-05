@@ -206,9 +206,7 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
-        super(DatetimeIndexType, self).__init__(
-            name=f"DatetimeIndex({name_typ}, {self.data})"
-        )
+        super().__init__(name=f"DatetimeIndex({name_typ}, {self.data})")
 
     ndim = 1
 
@@ -269,7 +267,7 @@ class DatetimeIndexModel(models.StructModel):
             ("name", fe_type.name_typ),
             ("dict", types.DictType(_dt_index_data_typ.dtype, types.int64)),
         ]
-        super(DatetimeIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DatetimeIndexType, "data", "_data")
@@ -739,16 +737,16 @@ def gen_dti_str_binop_impl(op, is_lhs_dti):
     func_text = "def impl(lhs, rhs):\n"
     if is_lhs_dti:
         func_text += "  dt_index, _str = lhs, rhs\n"
-        comp = "arr[i] {} other".format(op_str)
+        comp = f"arr[i] {op_str} other"
     else:
         func_text += "  dt_index, _str = rhs, lhs\n"
-        comp = "other {} arr[i]".format(op_str)
+        comp = f"other {op_str} arr[i]"
     func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(dt_index)\n"
     func_text += "  l = len(arr)\n"
     func_text += "  other = bodo.hiframes.pd_timestamp_ext.parse_datetime_str(_str)\n"
     func_text += "  S = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
-    func_text += "    S[i] = {}\n".format(comp)
+    func_text += f"    S[i] = {comp}\n"
     func_text += "  return S\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
@@ -1321,9 +1319,7 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
         # Add a .data field for consistency with other index types
         # NOTE: data array can have flags like readonly
         self.data = types.Array(bodo.timedelta64ns, 1, "C") if data is None else data
-        super(TimedeltaIndexType, self).__init__(
-            name=f"TimedeltaIndexType({name_typ}, {self.data})"
-        )
+        super().__init__(name=f"TimedeltaIndexType({name_typ}, {self.data})")
 
     ndim = 1
 
@@ -1371,7 +1367,7 @@ class TimedeltaIndexTypeModel(models.StructModel):
             ("name", fe_type.name_typ),
             ("dict", types.DictType(_timedelta_index_data_typ.dtype, types.int64)),
         ]
-        super(TimedeltaIndexTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @typeof_impl.register(pd.TimedeltaIndex)
@@ -1717,7 +1713,7 @@ class RangeIndexType(types.IterableType, types.ArrayCompatible):
         if name_typ is None:
             name_typ = types.none
         self.name_typ = name_typ
-        super(RangeIndexType, self).__init__(name=f"RangeIndexType({name_typ})")
+        super().__init__(name=f"RangeIndexType({name_typ})")
 
     ndim = 1
 
@@ -1769,7 +1765,7 @@ class RangeIndexModel(models.StructModel):
             ("step", types.int64),
             ("name", fe_type.name_typ),
         ]
-        super(RangeIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(RangeIndexType, "start", "_start")
@@ -1974,9 +1970,7 @@ def range_index_overload(
         _step = "1"
 
     func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None):\n"
-    func_text += "  return init_range_index({}, {}, {}, name)\n".format(
-        _start, _stop, _step
-    )
+    func_text += f"  return init_range_index({_start}, {_stop}, {_step}, name)\n"
     loc_vars = {}
     exec(func_text, {"init_range_index": init_range_index}, loc_vars)
     _pd_range_index_imp = loc_vars["_pd_range_index_imp"]
@@ -2061,9 +2055,7 @@ class PeriodIndexType(types.IterableType, types.ArrayCompatible):
         name_typ = types.none if name_typ is None else name_typ
         self.freq = freq
         self.name_typ = name_typ
-        super(PeriodIndexType, self).__init__(
-            name="PeriodIndexType({}, {})".format(freq, name_typ)
-        )
+        super().__init__(name=f"PeriodIndexType({freq}, {name_typ})")
 
     ndim = 1
 
@@ -2105,7 +2097,7 @@ class PeriodIndexModel(models.StructModel):
             ("name", fe_type.name_typ),
             ("dict", types.DictType(types.int64, types.int64)),
         ]
-        super(PeriodIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(PeriodIndexType, "data", "_data")
@@ -2261,7 +2253,7 @@ class CategoricalIndexType(types.IterableType, types.ArrayCompatible):
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         self.data = data
-        super(CategoricalIndexType, self).__init__(
+        super().__init__(
             name=f"CategoricalIndexType(data={self.data}, name={name_typ})"
         )
 
@@ -2323,7 +2315,7 @@ class CategoricalIndexTypeModel(models.StructModel):
                 types.DictType(code_int_type, types.int64),
             ),
         ]
-        super(CategoricalIndexTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @typeof_impl.register(pd.CategoricalIndex)
@@ -2485,9 +2477,7 @@ class IntervalIndexType(types.ArrayCompatible):
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         self.data = data
-        super(IntervalIndexType, self).__init__(
-            name=f"IntervalIndexType(data={self.data}, name={name_typ})"
-        )
+        super().__init__(name=f"IntervalIndexType(data={self.data}, name={name_typ})")
 
     ndim = 1
 
@@ -2537,7 +2527,7 @@ class IntervalIndexTypeModel(models.StructModel):
             ),
             # TODO(ehsan): support closed (assuming "right" for now)
         ]
-        super(IntervalIndexTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @typeof_impl.register(pd.IntervalIndex)
@@ -2663,9 +2653,7 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
         self.name_typ = name_typ
         data = dtype_to_array_type(dtype) if data is None else data
         self.data = data
-        super(NumericIndexType, self).__init__(
-            name=f"NumericIndexType({dtype}, {name_typ}, {data})"
-        )
+        super().__init__(name=f"NumericIndexType({dtype}, {name_typ}, {data})")
 
     ndim = 1
 
@@ -2701,7 +2689,7 @@ class NumericIndexModel(models.StructModel):
             ("name", fe_type.name_typ),
             ("dict", types.DictType(fe_type.dtype, types.int64)),
         ]
-        super(NumericIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(NumericIndexType, "data", "_data")
@@ -2838,7 +2826,7 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         self.data = string_array_type if data_typ is None else data_typ
-        super(StringIndexType, self).__init__(
+        super().__init__(
             name=f"StringIndexType({name_typ}, {self.data})",
         )
 
@@ -2880,7 +2868,7 @@ class StringIndexModel(models.StructModel):
             ("name", fe_type.name_typ),
             ("dict", types.DictType(string_type, types.int64)),
         ]
-        super(StringIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(StringIndexType, "data", "_data")
@@ -2906,9 +2894,7 @@ class BinaryIndexType(types.IterableType, types.ArrayCompatible):
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         self.data = binary_array_type
-        super(BinaryIndexType, self).__init__(
-            name="BinaryIndexType({})".format(name_typ)
-        )
+        super().__init__(name=f"BinaryIndexType({name_typ})")
 
     ndim = 1
 
@@ -2947,7 +2933,7 @@ class BinaryIndexModel(models.StructModel):
             ("name", fe_type.name_typ),
             ("dict", types.DictType(bytes_type, types.int64)),
         ]
-        super(BinaryIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(BinaryIndexType, "data", "_data")
@@ -4433,9 +4419,7 @@ class HeterogeneousIndexType(types.Type):
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
-        super(HeterogeneousIndexType, self).__init__(
-            name=f"heter_index({data}, {name_typ})"
-        )
+        super().__init__(name=f"heter_index({data}, {name_typ})")
 
     def copy(self):
         return HeterogeneousIndexType(self.data, self.name_typ)
@@ -4469,7 +4453,7 @@ class HeterogeneousIndexType(types.Type):
 class HeterogeneousIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("data", fe_type.data), ("name", fe_type.name_typ)]
-        super(HeterogeneousIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(HeterogeneousIndexType, "data", "_data")

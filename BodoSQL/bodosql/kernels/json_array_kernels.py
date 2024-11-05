@@ -3,8 +3,6 @@
 Implements BodoSQL array kernels related to JSON utilities
 """
 
-from typing import List, Tuple, Union
-
 import numba
 from numba.core import types
 from numba.extending import overload, register_jitable
@@ -348,7 +346,7 @@ def json_extract_path_text_util(data, path):
 
 
 @register_jitable
-def parse_quoted_string(path: str, i: int) -> Tuple[int, str, str]:  # pragma: no cover:
+def parse_quoted_string(path: str, i: int) -> tuple[int, str, str]:  # pragma: no cover:
     """Parse a string starting at position i
 
     Note that both single and double quoted strings are supported.
@@ -394,7 +392,7 @@ def parse_quoted_string(path: str, i: int) -> Tuple[int, str, str]:  # pragma: n
 
 
 @register_jitable
-def parse_int(path: str, i: int) -> Tuple[int, int, str]:  # pragma: no cover
+def parse_int(path: str, i: int) -> tuple[int, int, str]:  # pragma: no cover
     """Parse an integer starting at position i
     Args:
         path: the path being parsed
@@ -422,7 +420,7 @@ def parse_int(path: str, i: int) -> Tuple[int, int, str]:  # pragma: no cover
 @register_jitable
 def process_json_path(
     path: str,
-) -> Tuple[List[Tuple[int, str]], str]:  # pragma: no cover
+) -> tuple[list[tuple[int, str]], str]:  # pragma: no cover
     """Utility for json_extract_path_text_util to take in a path and break it
        up into each component index/field.
 
@@ -575,7 +573,7 @@ def consume_json_value(data: str, pos: int) -> int:  # pragma: no cover
 @register_jitable
 def parse_and_extract_json_string(
     data: str, path: str
-) -> Union[str, None]:  # pragma: no cover
+) -> str | None:  # pragma: no cover
     """Utility for json_extract_path_text_util to use on specific strings
 
     Args:

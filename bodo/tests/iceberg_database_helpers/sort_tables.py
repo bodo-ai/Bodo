@@ -1,5 +1,3 @@
-from typing import List, Tuple
-
 from bodo.tests.iceberg_database_helpers.simple_tables import TABLE_MAP
 from bodo.tests.iceberg_database_helpers.utils import (
     SortField,
@@ -14,7 +12,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 # java.lang.ClassCastException: class [B cannot be cast to class java.nio.ByteBuffer
 #   ([B and java.nio.ByteBuffer are in module java.base of loader 'bootstrap')
 # TODO: [BE-3596] Include void transformation test in Spark
-SORT_MAP: List[Tuple[str, List[SortField]]] = [
+SORT_MAP: list[tuple[str, list[SortField]]] = [
     # Bool Table
     ("BOOL_BINARY_TABLE", [SortField("A", "identity", -1, False, True)]),  # bool
     ("BOOL_BINARY_TABLE", [SortField("B", "identity", -1, False, True)]),  # bool
@@ -158,7 +156,7 @@ def create_table(base_name, sort_order, spark=None):
     )
 
 
-def create_sort_tables(tables: List[str], spark=None):
+def create_sort_tables(tables: list[str], spark=None):
     if spark is None:
         spark = get_spark()
     for table in tables:

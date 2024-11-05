@@ -401,7 +401,7 @@ def test_binary_op(op, memory_leak_check):
         return
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
-    func_text += "  return A {} other\n".format(op_str)
+    func_text += f"  return A {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -478,7 +478,7 @@ def test_inplace_binary_op(op, memory_leak_check):
         return
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
-    func_text += "  A {} other\n".format(op_str)
+    func_text += f"  A {op_str} other\n"
     func_text += "  return A\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -506,7 +506,7 @@ def test_unary_op(op, memory_leak_check):
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A):\n"
-    func_text += "  return {} A\n".format(op_str)
+    func_text += f"  return {op_str} A\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]

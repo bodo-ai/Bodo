@@ -316,7 +316,7 @@ class TimeType(types.Type):
             isinstance(precision, int) and precision >= 0 and precision <= 9
         ), "precision must be an integer between 0 and 9"
         self.precision = precision
-        super(TimeType, self).__init__(name=f"TimeType({precision})")
+        super().__init__(name=f"TimeType({precision})")
         self.bitwidth = 64  # needed for using IntegerModel
 
 
@@ -625,7 +625,7 @@ class TimeArrayType(types.ArrayCompatible):
             isinstance(precision, int) and precision >= 0 and precision <= 9
         ), "precision must be an integer between 0 and 9"
         self.precision = precision
-        super(TimeArrayType, self).__init__(name=f"TimeArrayType({precision})")
+        super().__init__(name=f"TimeArrayType({precision})")
 
     @property
     def as_array(self):

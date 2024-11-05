@@ -122,9 +122,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
 
                     if col_index_value not in df.columns:
                         raise_bodo_error(
-                            "dataframe {} does not include column {}".format(
-                                df, col_index_value
-                            )
+                            f"dataframe {df} does not include column {col_index_value}"
                         )
                     col_num = df.columns.index(col_index_value)
                     return (df.data[col_num].dtype)(*args)
@@ -259,7 +257,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             else:
                 if ind_val not in df.columns:
                     raise_bodo_error(
-                        "dataframe {} does not include column {}".format(df, ind_val)
+                        f"dataframe {df} does not include column {ind_val}"
                     )
                 col_num = df.columns.index(ind_val)
                 data_type = df.data[col_num]
@@ -339,9 +337,7 @@ def get_df_getitem_kept_cols_and_data(df, cols_to_keep_list):
     # Check that all columns named are in the dataframe
     for c in cols_to_keep_list:
         if c not in df.column_index:
-            raise_bodo_error(
-                "Column {} not found in dataframe columns {}".format(c, df.columns)
-            )
+            raise_bodo_error(f"Column {c} not found in dataframe columns {df.columns}")
     columns = tuple(cols_to_keep_list)
     data_type = tuple(df.data[df.column_index[name]] for name in columns)
     return (columns, data_type)
@@ -379,9 +375,7 @@ def df_getitem_overload(df, ind):
                 # TODO: test more than 2 levels
                 new_names.append(v[1] if len(v) == 2 else v[1:])
                 new_data.append(
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(
-                        i
-                    )
+                    f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
                 )
             func_text = "def impl(df, ind):\n"
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
@@ -390,9 +384,7 @@ def df_getitem_overload(df, ind):
             )
         # regular single level case
         if ind_val not in df.columns:
-            raise_bodo_error(
-                "dataframe {} does not include column {}".format(df, ind_val)
-            )
+            raise_bodo_error(f"dataframe {df} does not include column {ind_val}")
         col_no = df.columns.index(ind_val)
         return lambda df, ind: bodo.hiframes.pd_series_ext.init_series(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_no),
@@ -408,7 +400,7 @@ def df_getitem_overload(df, ind):
         for c in ind_columns:
             if c not in df.column_index:
                 raise_bodo_error(
-                    "Column {} not found in dataframe columns {}".format(c, df.columns)
+                    f"Column {c} not found in dataframe columns {df.columns}"
                 )
         extra_globals = None
         if (
@@ -460,9 +452,7 @@ def df_getitem_overload(df, ind):
         )
 
     # TODO: error-checking test
-    raise_bodo_error(
-        "df[] getitem using {} not supported".format(ind)
-    )  # pragma: no cover
+    raise_bodo_error(f"df[] getitem using {ind} not supported")  # pragma: no cover
 
 
 # DataFrame setitem
@@ -485,8 +475,8 @@ def df_setitem_overload(df, idx, val):
 class DataFrameILocType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type
-        name = "DataFrameILocType({})".format(df_type)
-        super(DataFrameILocType, self).__init__(name)
+        name = f"DataFrameILocType({df_type})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -505,7 +495,7 @@ class DataFrameILocType(types.Type):
 class DataFrameILocModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.df_type)]
-        super(DataFrameILocModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DataFrameILocType, "obj", "_obj")
@@ -710,8 +700,8 @@ def df_iloc_setitem_overload(df, idx, val):
 class DataFrameLocType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type
-        name = "DataFrameLocType({})".format(df_type)
-        super(DataFrameLocType, self).__init__(name)
+        name = f"DataFrameLocType({df_type})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -730,7 +720,7 @@ class DataFrameLocType(types.Type):
 class DataFrameLocModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.df_type)]
-        super(DataFrameLocModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DataFrameLocType, "obj", "_obj")
@@ -894,8 +884,8 @@ def df_loc_setitem_overload(df, idx, val):
 class DataFrameIatType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type
-        name = "DataFrameIatType({})".format(df_type)
-        super(DataFrameIatType, self).__init__(name)
+        name = f"DataFrameIatType({df_type})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -914,7 +904,7 @@ class DataFrameIatType(types.Type):
 class DataFrameIatModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.df_type)]
-        super(DataFrameIatModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DataFrameIatType, "obj", "_obj")
@@ -970,9 +960,7 @@ def overload_iat_getitem(I, idx):
 
         return impl_col_ind
 
-    raise BodoError(
-        "df.iat[] getitem using {} not supported".format(idx)
-    )  # pragma: no cover
+    raise BodoError(f"df.iat[] getitem using {idx} not supported")  # pragma: no cover
 
 
 # df.iat[] setitem
@@ -1007,9 +995,7 @@ def overload_iat_setitem(I, idx, val):
         return impl_col_ind
 
     # TODO: error-checking test
-    raise BodoError(
-        "df.iat[] setitem using {} not supported".format(idx)
-    )  # pragma: no cover
+    raise BodoError(f"df.iat[] setitem using {idx} not supported")  # pragma: no cover
 
 
 @lower_cast(DataFrameIatType, DataFrameIatType)

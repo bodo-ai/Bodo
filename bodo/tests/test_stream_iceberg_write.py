@@ -1,7 +1,6 @@
 import glob
 import os
 import traceback
-from typing import Optional
 
 import pandas as pd
 import pytest
@@ -89,7 +88,7 @@ def _write_iceberg_table(
 
 
 def init_create_table_meta(
-    table_comments: Optional[str] = None, column_comments=False, table_property=False
+    table_comments: str | None = None, column_comments=False, table_property=False
 ):
     """Helper function to initialize a CreateTableMetaType type.
 
@@ -152,9 +151,9 @@ def check_table_comment(
     db_schema,
     table_name,
     number_columns,
-    table_comments: Optional[str] = None,
+    table_comments: str | None = None,
     column_comments=False,
-    table_properties: Optional[dict] = None,
+    table_properties: dict | None = None,
 ):
     """Helper function to test table comments are correctly added
 

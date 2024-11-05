@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -20,7 +19,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
 #   whether or not Pandas treats it a nullable or not
 # - Decimal: Bodo / Python doesn't support custom precisions and scale. It works
 #   reads, but not for writes, which is why we have separate tables.
-BASE_MAP: Dict[str, Tuple[Dict, List]] = {
+BASE_MAP: dict[str, tuple[dict, list]] = {
     "BOOL_BINARY_TABLE": (
         {
             "A": np.array([True, False, True, True] * 25, dtype=np.bool_),
@@ -166,15 +165,13 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             "B": np.array(["lorem", "ipsum", "loden", "ion"] * 25),
             "C": np.array((["A"] * 10) + (["b"] * 90)),
             "D": np.array(
-                (
-                    ["four hundred"] * 10
-                    + ["five"] * 20
-                    + [None] * 10
-                    + ["forty-five"] * 10
-                    + ["four"] * 20
-                    + ["fifeteen"] * 20
-                    + ["f"] * 10
-                )
+                ["four hundred"] * 10
+                + ["five"] * 20
+                + [None] * 10
+                + ["forty-five"] * 10
+                + ["four"] * 20
+                + ["fifeteen"] * 20
+                + ["f"] * 10
             ),
         },
         [
@@ -379,7 +376,7 @@ def build_map(base_map):
     return table_map
 
 
-TABLE_MAP: Dict[str, Tuple[pd.DataFrame, List]] = build_map(BASE_MAP)
+TABLE_MAP: dict[str, tuple[pd.DataFrame, list]] = build_map(BASE_MAP)
 
 
 def create_table(base_name: str, spark=None):
@@ -391,7 +388,7 @@ def create_table(base_name: str, spark=None):
     create_iceberg_table(df, sql_schema, base_name, spark)
 
 
-def create_simple_tables(tables: List[str], spark=None):
+def create_simple_tables(tables: list[str], spark=None):
     if spark is None:
         spark = get_spark()
 

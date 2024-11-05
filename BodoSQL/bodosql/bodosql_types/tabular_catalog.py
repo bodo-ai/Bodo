@@ -127,7 +127,7 @@ class TabularCatalogType(DatabaseCatalogType):
         self.token = token
         self.credential = credential
 
-        super(TabularCatalogType, self).__init__(
+        super().__init__(
             name=f"TabularCatalogType({self.warehouse=},{self.rest_uri},{'token' if self.token is not None else 'credential'}=*****)",
         )
 
@@ -241,7 +241,7 @@ class TabularConnectionType(IcebergConnectionType):
 
         self.conn_str = get_conn_str(rest_uri, warehouse, token)
 
-        super(TabularConnectionType, self).__init__(
+        super().__init__(
             name=f"TabularConnectionType({warehouse=}, {rest_uri=}, conn_str=*********)",
         )
 
@@ -298,7 +298,7 @@ class TabularConnectionTypeModel(models.StructModel):
         members = [
             ("conn_str", types.unicode_type),
         ]
-        super(TabularConnectionTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(TabularConnectionType, "conn_str", "conn_str")

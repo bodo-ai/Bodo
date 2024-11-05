@@ -42,7 +42,7 @@ class RePatternType(types.Opaque):
         # keep pattern string if it is a constant value
         # useful for findall() to handle multi-group case
         self.pat_const = pat_const
-        super(RePatternType, self).__init__(name=f"RePatternType({pat_const})")
+        super().__init__(name=f"RePatternType({pat_const})")
 
     @property
     def mangling_args(self):
@@ -98,7 +98,7 @@ def pattern_constant(context, builder, ty, pyval):
 # or None (when there is no match)
 class ReMatchType(types.Type):
     def __init__(self):
-        super(ReMatchType, self).__init__(name="ReMatchType")
+        super().__init__(name="ReMatchType")
 
 
 re_match_type = ReMatchType()
@@ -501,13 +501,13 @@ def overload_match_group(m, *args):
 
     # multi-argument case returns a tuple of strings
     # TODO: avoid setting attributes to "types" when object mode can handle actual types
-    type_name = "tuple_str_{}".format(len(args))
+    type_name = f"tuple_str_{len(args)}"
     setattr(types, type_name, types.Tuple([optional_str] * len(args)))
-    arg_names = ", ".join("group{}".format(i + 1) for i in range(len(args)))
+    arg_names = ", ".join(f"group{i + 1}" for i in range(len(args)))
     func_text = "def _match_group_impl(m, *args):\n"
-    func_text += "  ({}) = args\n".format(arg_names)
-    func_text += "  with bodo.objmode(out='{}'):\n".format(type_name)
-    func_text += "    out = m.group({})\n".format(arg_names)
+    func_text += f"  ({arg_names}) = args\n"
+    func_text += f"  with bodo.objmode(out='{type_name}'):\n"
+    func_text += f"    out = m.group({arg_names})\n"
     func_text += "  return out\n"
 
     loc_vars = {}

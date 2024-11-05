@@ -2524,10 +2524,10 @@ def overload_struct_if_heter_dict(values, names):
     n_fields = len(values.types)
     func_text = "def f(values, names):\n"
     res = ",".join(
-        "'{}': values[{}]".format(get_overload_const_str(names.types[i]), i)
+        f"'{get_overload_const_str(names.types[i])}': values[{i}]"
         for i in range(n_fields)
     )
-    func_text += "  return {{{}}}\n".format(res)
+    func_text += f"  return {{{res}}}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["f"]

@@ -10,16 +10,12 @@ import shutil
 import subprocess
 import time
 import traceback
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
-    Callable,
-    Generator,
-    List,
     Optional,
     Protocol,
-    Tuple,
-    Union,
 )
 
 import pandas as pd
@@ -245,7 +241,7 @@ def pytest_collection_modifyitems(items):
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:
         num_groups = int(os.environ["NUMBER_GROUPS_SPLIT"])
-        with open("testtiming.json", "r") as f:
+        with open("testtiming.json") as f:
             marker_groups = json.load(f)
 
         for item in items:
@@ -293,14 +289,14 @@ def minio_server():
     host, port = "127.0.0.1", "9000"
     access_key = "bodotest1"
     secret_key = "bodosecret1"
-    address = "{}:{}".format(host, port)
+    address = f"{host}:{port}"
 
     os.environ["MINIO_ROOT_USER"] = access_key
     os.environ["MINIO_ROOT_PASSWORD"] = secret_key
     # For compatibility with older MinIO versions.
     os.environ["MINIO_ACCESS_KEY"] = access_key
     os.environ["MINIO_SECRET_KEY"] = secret_key
-    os.environ["AWS_S3_ENDPOINT"] = "http://{}/".format(address)
+    os.environ["AWS_S3_ENDPOINT"] = f"http://{address}/"
 
     args = [
         "minio",
@@ -316,7 +312,7 @@ def minio_server():
     try:
         if bodo.get_rank() == 0:
             proc = subprocess.Popen(args, env=os.environ)
-    except (OSError, IOError):
+    except OSError:
         pytest.skip("`minio` command cannot be located")
     else:
         yield access_key, secret_key, address
@@ -350,7 +346,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
     if bodo.get_rank() == 0:
         s3 = boto3.resource(
             "s3",
-            endpoint_url="http://{}/".format(address),
+            endpoint_url=f"http://{address}/",
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             config=botocore.client.Config(signature_version="s3v4"),
@@ -467,7 +463,7 @@ def hdfs_dir(hadoop_server, datapath):
             ("example.json", datapath("example.json")),
         ]
         for fname, path in test_hdfs_files:
-            formatted_fname = "/{}/{}".format(dir_name, fname)
+            formatted_fname = f"/{dir_name}/{fname}"
             copy_files(path, formatted_fname, local_fs, hdfs)
 
         hdfs.create_dir("/bodo-test/int_nulls_multi.pq")
@@ -476,7 +472,7 @@ def hdfs_dir(hadoop_server, datapath):
         int_nulls_multi_parts = list(glob.glob(pat))
         for path in int_nulls_multi_parts:
             fname = path[len(prefix) + 1 :]
-            fname = "/{}/int_nulls_multi.pq/{}".format(dir_name, fname)
+            fname = f"/{dir_name}/int_nulls_multi.pq/{fname}"
             copy_files(path, fname, local_fs, hdfs)
 
         hdfs.create_dir("/bodo-test/example_single.json")
@@ -485,7 +481,7 @@ def hdfs_dir(hadoop_server, datapath):
         example_single_parts = list(glob.glob(pat))
         for path in example_single_parts:
             fname = path[len(prefix) + 1 :]
-            fname = "/{}/example_single.json/{}".format(dir_name, fname)
+            fname = f"/{dir_name}/example_single.json/{fname}"
             copy_files(path, fname, local_fs, hdfs)
 
         hdfs.create_dir("/bodo-test/example_multi.json")
@@ -494,7 +490,7 @@ def hdfs_dir(hadoop_server, datapath):
         example_multi_parts = list(glob.glob(pat))
         for path in example_multi_parts:
             fname = path[len(prefix) + 1 :]
-            fname = "/{}/example_multi.json/{}".format(dir_name, fname)
+            fname = f"/{dir_name}/example_multi.json/{fname}"
             copy_files(path, fname, local_fs, hdfs)
 
     bodo.barrier()
@@ -508,7 +504,7 @@ def hdfs_datapath(hadoop_server, hdfs_dir):
     """
 
     host, port = hadoop_server
-    BASE_PATH = "hdfs://{}:{}/{}".format(host, port, hdfs_dir)
+    BASE_PATH = f"hdfs://{host}:{port}/{hdfs_dir}"
 
     def deco(*args):
         path = os.path.join(BASE_PATH, *args)
@@ -545,7 +541,7 @@ def is_cached(pytestconfig):
 
 @pytest.fixture(scope="session")
 def iceberg_database() -> (
-    Generator[Callable[Union[List[str], str], Tuple[str, str]], None, None]
+    Generator[Callable[[list[str] | str], tuple[str, str]], None, None]
 ):
     """
     Create and populate Iceberg test tables.
@@ -565,8 +561,8 @@ def iceberg_database() -> (
     # make this safer to use - calling this function will invalidate all old
     # spark referneces.
     def create_tables_on_rank_one(
-        tables: Union[List[str], str] = [], spark: Optional["SparkSession"] = None
-    ) -> Tuple[str, str]:
+        tables: list[str] | str = [], spark: Optional["SparkSession"] = None
+    ) -> tuple[str, str]:
         if not isinstance(tables, list):
             tables = [tables]
         database_schema_or_e = None

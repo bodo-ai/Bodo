@@ -1,7 +1,6 @@
 import os
 import subprocess
 from contextlib import contextmanager
-from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -132,7 +131,7 @@ def run_cmd(
     cmd,
     print_output=True,
     timeout=3600,
-    additional_envs: Optional[Dict[str, str]] = None,
+    additional_envs: dict[str, str] | None = None,
 ):
     # TODO: specify a timeout to check_output or will the CI handle this? (e.g.
     # situations where Bodo hangs for some reason)

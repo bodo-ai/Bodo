@@ -27,16 +27,14 @@ def read_license(license_fname):
 
     if license_type == REGULAR_LIC_TYPE:
         max_cores, year, month, day = array.array("i", msg)[1:5]
-        print(
-            "License for", max_cores, "cores. Expires {}-{}-{}".format(year, month, day)
-        )
+        print("License for", max_cores, f"cores. Expires {year}-{month}-{day}")
     elif license_type in {PLATFORM_LIC_TYPE_AWS, PLATFORM_LIC_TYPE_AZURE}:
         license_id = msg[
             header_arr.itemsize : header_arr.itemsize + instance_id_len[license_type]
         ]
         print(f"License for {cloud_type[license_type]} instance", license_id.decode())
     else:
-        print("License type {} not recognized".format(license_type))
+        print(f"License type {license_type} not recognized")
 
 
 read_license(sys.argv[1])

@@ -1,6 +1,6 @@
 import os
 import shutil
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple
 
 import pandas as pd
 from pyspark.sql import SparkSession
@@ -138,7 +138,7 @@ def parse_sql_schema_into_spark_schema(sql_schema: list[tuple[str, str, bool]]) 
 
 
 def append_to_iceberg_table(
-    df: pd.DataFrame, sql_schema, table_name: str, spark: Optional[SparkSession]
+    df: pd.DataFrame, sql_schema, table_name: str, spark: SparkSession | None
 ):
     """Append a pandas DataFrame to an existing Iceberg table"""
     spark_schema_str = parse_sql_schema_into_spark_schema(sql_schema)
@@ -159,9 +159,9 @@ def create_iceberg_table(
     df: pd.DataFrame,
     sql_schema: list[tuple[str, str, bool]],
     table_name: str,
-    spark: Optional[SparkSession] = None,
-    par_spec: Optional[List[PartitionField]] = None,
-    sort_order: Optional[List[SortField]] = None,
+    spark: SparkSession | None = None,
+    par_spec: list[PartitionField] | None = None,
+    sort_order: list[SortField] | None = None,
 ):
     if spark is None:
         spark = get_spark()

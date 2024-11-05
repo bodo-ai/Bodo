@@ -3,8 +3,6 @@
 Base class implementations for supporting streaming operators.
 """
 
-import typing as pt
-
 import numba
 import numpy as np
 from numba.core import types
@@ -22,10 +20,10 @@ class StreamingStateType(types.Type):
     """
 
     def __init__(self, name: str):
-        super(StreamingStateType, self).__init__(name=name)
+        super().__init__(name=name)
 
     @staticmethod
-    def _derive_c_types(arr_types: pt.List[types.ArrayCompatible]) -> np.ndarray:
+    def _derive_c_types(arr_types: list[types.ArrayCompatible]) -> np.ndarray:
         """Generate the CType Enum types for each array in the
         C++ build table via the indices.
 
@@ -38,7 +36,7 @@ class StreamingStateType(types.Type):
         return numba_to_c_types(arr_types)
 
     @staticmethod
-    def _derive_c_array_types(arr_types: pt.List[types.ArrayCompatible]) -> np.ndarray:
+    def _derive_c_array_types(arr_types: list[types.ArrayCompatible]) -> np.ndarray:
         """Generate the CArrayTypeEnum Enum types for each array in the
         C++ build table via the indices.
 
@@ -52,7 +50,7 @@ class StreamingStateType(types.Type):
 
     @staticmethod
     def ensure_known_inputs(
-        fn_name: str, table_types: pt.Tuple[pt.Union[TableType, types.unknown], ...]
+        fn_name: str, table_types: tuple[TableType | type[types.unknown], ...]
     ):
         """
         Ensure no input in table_types is

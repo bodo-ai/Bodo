@@ -81,7 +81,7 @@ def sf_write_chunk_size(request):
 
 @pytest.fixture(
     params=[
-        pytest.param(int(4096), id="read_chunk_4096"),
+        pytest.param(4096, id="read_chunk_4096"),
     ]
 )
 def sf_read_chunk_size(request):

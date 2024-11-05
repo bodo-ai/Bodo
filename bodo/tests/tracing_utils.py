@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, List
+from typing import Any
 
 import bodo
 from bodo.mpi4py import MPI
@@ -48,7 +48,7 @@ class TracingContextManager:
                 if bodo.get_rank() == 0:
                     try:
                         if self._decryption_path is None:
-                            raise EnvironmentError(
+                            raise OSError(
                                 "Current testing setup requires decrypting traces but no tracing file is found. Please set the absolute path for decompress_traces.py with the environment variable BODO_TRACING_DECRYPTION_FILE_PATH"
                             )
                         # Replace the file with the decrypted result.
@@ -63,7 +63,7 @@ class TracingContextManager:
                 if isinstance(decryption_error, Exception):
                     raise decryption_error
             if bodo.get_rank() == 0:
-                with open(f.name, "r") as g:
+                with open(f.name) as g:
                     # Reload the file and decode the data.
                     tracing_events = json.load(g)["traceEvents"]
             self._tracing_events = comm.bcast(tracing_events)
@@ -84,7 +84,7 @@ class TracingContextManager:
             os.environ["BODO_TRACE_DEV"] = self._old_trace_dev
 
     @property
-    def tracing_events(self) -> List[Dict[str, Any]]:
+    def tracing_events(self) -> list[dict[str, Any]]:
         """Return the fully list of tracing events.
 
         Returns:
@@ -92,7 +92,7 @@ class TracingContextManager:
         """
         return self._tracing_events
 
-    def get_event(self, event_name: str, event_idx: int) -> Dict[str, Any]:
+    def get_event(self, event_name: str, event_idx: int) -> dict[str, Any]:
         """Returns the last event with a given name.
 
         Args:

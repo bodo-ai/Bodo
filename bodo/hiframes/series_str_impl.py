@@ -77,15 +77,15 @@ class SeriesStrMethodType(types.Type):
     def __init__(self, stype):
         # keeping Series type since string data representation can be varied
         self.stype = stype
-        name = "SeriesStrMethodType({})".format(stype)
-        super(SeriesStrMethodType, self).__init__(name)
+        name = f"SeriesStrMethodType({stype})"
+        super().__init__(name)
 
 
 @register_model(SeriesStrMethodType)
 class SeriesStrModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesStrModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesStrMethodType, "obj", "_obj")
@@ -115,9 +115,7 @@ def str_arg_check(func_name, arg_name, arg):
     """
     if not isinstance(arg, types.UnicodeType) and not is_overload_constant_str(arg):
         raise_bodo_error(
-            "Series.str.{}(): parameter '{}' expected a string object, not {}".format(
-                func_name, arg_name, arg
-            )
+            f"Series.str.{func_name}(): parameter '{arg_name}' expected a string object, not {arg}"
         )
 
 
@@ -128,9 +126,7 @@ def int_arg_check(func_name, arg_name, arg):
     """
     if not isinstance(arg, types.Integer) and not is_overload_constant_int(arg):
         raise BodoError(
-            "Series.str.{}(): parameter '{}' expected an int object, not {}".format(
-                func_name, arg_name, arg
-            )
+            f"Series.str.{func_name}(): parameter '{arg_name}' expected an int object, not {arg}"
         )
 
 
@@ -144,16 +140,12 @@ def not_supported_arg_check(func_name, arg_name, arg, defval):
             not isinstance(arg, float) or not np.isnan(arg)
         ):
             raise BodoError(
-                "Series.str.{}(): parameter '{}' is not supported, default: np.nan".format(
-                    func_name, arg_name
-                )
+                f"Series.str.{func_name}(): parameter '{arg_name}' is not supported, default: np.nan"
             )
     else:
         if not isinstance(arg, types.Omitted) and arg != defval:
             raise BodoError(
-                "Series.str.{}(): parameter '{}' is not supported, default: {}".format(
-                    func_name, arg_name, defval
-                )
+                f"Series.str.{func_name}(): parameter '{arg_name}' is not supported, default: {defval}"
             )
 
 
@@ -165,15 +157,11 @@ def common_validate_padding(func_name, width, fillchar):
     if is_overload_constant_str(fillchar):
         if get_overload_const_str_len(fillchar) != 1:
             raise BodoError(
-                "Series.str.{}(): fillchar must be a character, not str".format(
-                    func_name
-                )
+                f"Series.str.{func_name}(): fillchar must be a character, not str"
             )
     elif not isinstance(fillchar, types.UnicodeType):
         raise BodoError(
-            "Series.str.{}(): fillchar must be a character, not {}".format(
-                func_name, fillchar
-            )
+            f"Series.str.{func_name}(): fillchar must be a character, not {fillchar}"
         )
 
     int_arg_check(func_name, "width", width)
@@ -1476,39 +1464,33 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(str_arr)\n"
         for i in range(n_cols):
-            func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n".format(
-                i
+            func_text += (
+                f"  out_arr_{i} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n"
             )
         func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
         for i in range(n_cols):
-            func_text += "          out_arr_{}[j] = ''\n".format(i)
-            func_text += (
-                "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
-            )
+            func_text += f"          out_arr_{i}[j] = ''\n"
+            func_text += f"          bodo.libs.array_kernels.setna(out_arr_{i}, j)\n"
         func_text += "      else:\n"
         func_text += "          m = regex.search(str_arr[j])\n"
         func_text += "          if m:\n"
         func_text += "            g = m.groups()\n"
         for i in range(n_cols):
-            func_text += "            out_arr_{0}[j] = g[{0}]\n".format(i)
+            func_text += f"            out_arr_{i}[j] = g[{i}]\n"
         func_text += "          else:\n"
         for i in range(n_cols):
-            func_text += "            out_arr_{}[j] = ''\n".format(i)
-            func_text += (
-                "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
-            )
+            func_text += f"            out_arr_{i}[j] = ''\n"
+            func_text += f"            bodo.libs.array_kernels.setna(out_arr_{i}, j)\n"
 
     # no expand case
     if is_overload_false(expand) and regex.groups == 1:
         name = (
-            "'{}'".format(list(regex.groupindex.keys()).pop())
+            f"'{list(regex.groupindex.keys()).pop()}'"
             if len(regex.groupindex.keys()) > 0
             else "name"
         )
-        func_text += "  return bodo.hiframes.pd_series_ext.init_series(out_arr_0, index, {})\n".format(
-            name
-        )
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr_0, index, {name})\n"
         loc_vars = {}
         exec(
             func_text,
@@ -1518,7 +1500,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
         impl = loc_vars["impl"]
         return impl
 
-    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+    data_args = ", ".join(f"out_arr_{i}" for i in range(n_cols))
     impl = bodo.hiframes.dataframe_impl._gen_init_df(
         func_text,
         columns,
@@ -1575,7 +1557,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         # using a list wrapper for integer to avoid reduction machinery (we need local size)
         func_text += "  out_n_l = [0]\n"
         for i in range(n_cols):
-            func_text += "  num_chars_{} = 0\n".format(i)
+            func_text += f"  num_chars_{i} = 0\n"
         if is_index_string:
             func_text += "  index_num_chars = 0\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -1586,22 +1568,20 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         func_text += "      m = regex.findall(str_arr[i])\n"
         func_text += "      out_n_l[0] += len(m)\n"
         for i in range(n_cols):
-            func_text += "      l_{} = 0\n".format(i)
+            func_text += f"      l_{i} = 0\n"
         func_text += "      for s in m:\n"
         for i in range(n_cols):
             func_text += "        l_{} += get_utf8_size(s{})\n".format(
-                i, "[{}]".format(i) if n_cols > 1 else ""
+                i, f"[{i}]" if n_cols > 1 else ""
             )
         for i in range(n_cols):
-            func_text += "      num_chars_{0} += l_{0}\n".format(i)
+            func_text += f"      num_chars_{i} += l_{i}\n"
         # TODO: refactor with arr_builder
         # using a sentinel function to specify that the arrays are local and no need for
         # distributed transformation
         func_text += "  out_n = bodo.libs.distributed_api.local_alloc_size(out_n_l[0], str_arr)\n"
         for i in range(n_cols):
-            func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{0})\n".format(
-                i
-            )
+            func_text += f"  out_arr_{i} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{i})\n"
         if is_index_string:
             func_text += "  out_ind_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, index_num_chars)\n"
         else:
@@ -1616,7 +1596,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         for i in range(n_cols):
             # using set_arr_local() to avoid distributed transformation of setitem
             func_text += "        bodo.libs.distributed_api.set_arr_local(out_arr_{}, out_ind, s{})\n".format(
-                i, "[{}]".format(i) if n_cols > 1 else ""
+                i, f"[{i}]" if n_cols > 1 else ""
             )
         func_text += "        bodo.libs.distributed_api.set_arr_local(out_ind_arr, out_ind, index_arr[j])\n"
         func_text += "        bodo.libs.distributed_api.set_arr_local(out_match_arr, out_ind, k)\n"
@@ -1627,7 +1607,7 @@ def overload_str_method_extractall(S_str, pat, flags=0):
         func_text += "    (out_ind_arr, out_match_arr), (index_name, 'match'))\n"
 
     # TODO: support dead code elimination with local distribution sentinels
-    data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+    data_args = ", ".join(f"out_arr_{i}" for i in range(n_cols))
     impl = bodo.hiframes.dataframe_impl._gen_init_df(
         func_text,
         columns,
@@ -1647,16 +1627,12 @@ def _get_column_names_from_regex(pat, flags, func_name):
     # compilation time is required for determining output type.
     if not is_overload_constant_str(pat):
         raise BodoError(
-            "Series.str.{}(): 'pat' argument should be a constant string".format(
-                func_name
-            )
+            f"Series.str.{func_name}(): 'pat' argument should be a constant string"
         )
 
     if not is_overload_constant_int(flags):
         raise BodoError(
-            "Series.str.{}(): 'flags' argument should be a constant int".format(
-                func_name
-            )
+            f"Series.str.{func_name}(): 'flags' argument should be a constant int"
         )
 
     # get column names similar to pd.core.strings._str_extract_frame()
@@ -1665,9 +1641,7 @@ def _get_column_names_from_regex(pat, flags, func_name):
     regex = re.compile(pat, flags=flags)
     if regex.groups == 0:
         raise BodoError(
-            "Series.str.{}(): pattern {} contains no capture groups".format(
-                func_name, pat
-            )
+            f"Series.str.{func_name}(): pattern {pat} contains no capture groups"
         )
     names = dict(zip(regex.groupindex.values(), regex.groupindex.keys()))
     columns = [names.get(1 + i, i) for i in range(regex.groups)]
@@ -1770,9 +1744,7 @@ def create_str2bool_methods_overload(func_name):
     func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
     func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "        else:\n"
-    func_text += "            out_arr[i] = np.bool_(str_arr[i].{}())\n".format(
-        func_name
-    )
+    func_text += f"            out_arr[i] = np.bool_(str_arr[i].{func_name}())\n"
     func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
     func_text += "      out_arr,index, name)\n"
     loc_vars = {}
@@ -1828,8 +1800,8 @@ def overload_series_cat(s):
 class SeriesCatMethodType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesCatMethodType({})".format(stype)
-        super(SeriesCatMethodType, self).__init__(name)
+        name = f"SeriesCatMethodType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -1846,7 +1818,7 @@ class SeriesCatMethodType(types.Type):
 class SeriesCatModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesCatModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesCatMethodType, "obj", "_obj")

@@ -54,7 +54,7 @@ from bodo.utils.typing import (
 
 class BooleanArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(BooleanArrayType, self).__init__(name="BooleanArrayType()")
+        super().__init__(name="BooleanArrayType()")
 
     @property
     def as_array(self):
@@ -119,7 +119,7 @@ class BooleanDtype(types.Number):
 
     def __init__(self):
         self.dtype = types.bool_
-        super(BooleanDtype, self).__init__("BooleanDtype")
+        super().__init__("BooleanDtype")
 
 
 boolean_dtype = BooleanDtype()

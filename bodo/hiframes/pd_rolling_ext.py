@@ -69,7 +69,7 @@ class RollingType(types.Type):
         self.explicit_select = explicit_select
         self.series_select = series_select
 
-        super(RollingType, self).__init__(
+        super().__init__(
             name=f"RollingType({obj_type}, {window_type}, {on}, {selection}, {explicit_select}, {series_select})"
         )
 
@@ -103,7 +103,7 @@ class RollingModel(models.StructModel):
             ("min_periods", types.int64),
             ("center", types.bool_),
         ]
-        super(RollingModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(RollingType, "obj", "obj")
@@ -612,15 +612,13 @@ class GetItemDataFrameRolling2(AbstractTemplate):
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(columns))) > 0:  # pragma: no cover
                     raise_bodo_error(
-                        "rolling: selected column {} not found in dataframe".format(
-                            set(idx).difference(set(columns))
-                        )
+                        f"rolling: selected column {set(idx).difference(set(columns))} not found in dataframe"
                     )
                 selection = list(idx)
             else:
                 if idx not in columns:  # pragma: no cover
                     raise_bodo_error(
-                        "rolling: selected column {} not found in dataframe".format(idx)
+                        f"rolling: selected column {idx} not found in dataframe"
                     )
                 selection = [idx]
                 series_select = True

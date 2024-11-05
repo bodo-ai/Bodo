@@ -45,7 +45,7 @@ class IntervalType(types.Type):
     def __init__(self, dtype):
         # Assuming the LHS and RHS have the same type
         self.dtype = dtype
-        super(IntervalType, self).__init__(name=f"IntervalType({dtype})")
+        super().__init__(name=f"IntervalType({dtype})")
 
 
 @register_model(IntervalType)
@@ -310,7 +310,7 @@ class IntervalArrayType(types.ArrayCompatible):
         # https://github.com/pandas-dev/pandas/blob/c65ed1c40fce55198fcd67c2bef15ab88645c1fa/pandas/core/arrays/interval.py#L277
         self.arr_type = arr_type
         self.dtype = IntervalType(arr_type.dtype)
-        super(IntervalArrayType, self).__init__(name=f"IntervalArrayType({arr_type})")
+        super().__init__(name=f"IntervalArrayType({arr_type})")
 
     @property
     def as_array(self):

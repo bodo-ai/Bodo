@@ -112,6 +112,7 @@ wheel.exclude = [
 unsafe-fixes = true
 lint.extend-select = [
     "I",   # isort
+    "UP",  # pyupgrade
     "C4",  # flake8-comprehensions
     "TID", # flake8-tidy-imports
 ]
@@ -119,9 +120,14 @@ lint.ignore = [
     # Permanently Disabled Rules
     "E501", # Line too long. Black should manage this only
     "E741", # Ambiguous variable name: {name}
+    # Use X | Y instead of (X, Y) in isinstance
+    # Disabled because:
+    # - X | Y is slower than (X, Y), could be problematic in hot code paths
+    # - (X, Y) is more readable and formattable
+    # - Numba doesn't support X | Y
+    "UP038",
 
     # TODO: Gradually Enable in Next PR
-
     # Flake8 Rules
     "F405", # {name} may be undefined, or defined from star imports
     "F811", # Redefinition of unused {name} from line
@@ -138,6 +144,7 @@ exclude = [
 
     "demo/",
     "examples/",
+    "obfuscation/examples/",
     "BodoSQL/calcite_sql/bodosql-calcite-application/src/test/resources/com/bodosql/calcite/application/_generated_files/",
     "bodo/numba_compat.py",
     "bodo/mpi4py/",

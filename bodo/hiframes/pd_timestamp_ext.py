@@ -4,7 +4,6 @@
 import calendar
 import datetime
 import operator
-from typing import Union
 
 import llvmlite.binding as ll
 import numba
@@ -132,7 +131,7 @@ class PandasTimestampType(types.Type):
             name = "PandasTimestampType()"
         else:
             name = f"PandasTimestampType({tz_val})"
-        super(PandasTimestampType, self).__init__(name=name)
+        super().__init__(name=name)
 
 
 pd_timestamp_tz_naive_type = PandasTimestampType()
@@ -402,7 +401,7 @@ def constant_timestamp(context, builder, ty, pyval):
 # -------------------------------------------------------------------------------
 
 
-def tz_has_transition_times(tz: Union[str, int, None]):
+def tz_has_transition_times(tz: str | int | None):
     """
     Return if a tz has different offsets from UTC at different times.
     This is useful for operations that moved by non-fixed amount (e.g. 1 Day)
@@ -2485,14 +2484,12 @@ def overload_freq_methods(method):
         func_text = "def impl(td, freq, ambiguous='raise', nonexistent='raise'):\n"
         for i, cond in enumerate(freq_conditions):
             cond_label = "if" if i == 0 else "elif"
-            func_text += "    {} {}:\n".format(cond_label, cond)
-            func_text += "        unit_value = {}\n".format(unit_values[i])
+            func_text += f"    {cond_label} {cond}:\n"
+            func_text += f"        unit_value = {unit_values[i]}\n"
         func_text += "    else:\n"
         func_text += "        raise ValueError('Incorrect Frequency specification')\n"
         if td == pd_timedelta_type:
-            func_text += "    return pd.Timedelta(unit_value * np.int64(np.{}(td.value / unit_value)))\n".format(
-                method
-            )
+            func_text += f"    return pd.Timedelta(unit_value * np.int64(np.{method}(td.value / unit_value)))\n"
         else:
             assert isinstance(td, PandasTimestampType), "Value must be a timestamp"
             func_text += "    value = td.value\n"

@@ -2,7 +2,7 @@
 """File containing utility functions for supporting DataFrame operations with Table Format."""
 
 from collections import defaultdict
-from typing import Any, Dict, Set
+from typing import Any
 
 import numba
 import numpy as np
@@ -248,7 +248,7 @@ def table_concat(table, col_nums_meta, arr_type):
     """
     arr_type = unwrap_typeref(arr_type)
     concat_blk = table.type_to_blk[arr_type]
-    glbls: Dict[str, Any] = {"bodo": bodo}
+    glbls: dict[str, Any] = {"bodo": bodo}
     glbls["col_indices"] = np.array(table.block_to_arr_ind[concat_blk], dtype=np.int64)
 
     # Get the actual Metatype from the TypeRef
@@ -436,19 +436,19 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
 
     # Define the globals for this kernel. These
     # will be updated throughout codegen.
-    glbls: Dict[str, Any] = {"bodo": bodo, "set_wrapper": set_wrapper}
+    glbls: dict[str, Any] = {"bodo": bodo, "set_wrapper": set_wrapper}
 
     # Compute the types that must be copied. Every column
     # should be updated in the same location.
     old_arr_typs = table.arr_types
     new_arr_typs = new_table_typ.arr_types
     # Track the DF column numbers that changed
-    changed_cols: Set[int] = set()
+    changed_cols: set[int] = set()
     # Track the type changes that occurs. We keep the output
     # types as the key to slightly simplify the code.
-    changed_types: Dict[types.Type, Set[types.Type]] = defaultdict(set)
+    changed_types: dict[types.Type, set[types.Type]] = defaultdict(set)
     # Which types contain columns that aren't converted
-    kept_types: Set[types.Type] = set()
+    kept_types: set[types.Type] = set()
     for i, old_typ in enumerate(old_arr_typs):
         new_typ = new_arr_typs[i]
         if old_typ == new_typ:

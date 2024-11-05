@@ -50,9 +50,7 @@ class JavaScriptFunctionType(types.Type):
 
     def __init__(self, return_type):  # pragma: no cover
         self.return_type = return_type
-        super(JavaScriptFunctionType, self).__init__(
-            name=f"JavaScriptFunctionType(return_type={return_type})"
-        )
+        super().__init__(name=f"JavaScriptFunctionType(return_type={return_type})")
 
 
 register_model(JavaScriptFunctionType)(models.OpaqueModel)

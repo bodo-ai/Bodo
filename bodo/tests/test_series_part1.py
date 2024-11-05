@@ -2243,7 +2243,7 @@ def test_series_explicit_binary_op(numeric_series_val, op, fill, memory_leak_che
         numeric_series_val = numeric_series_val.abs()
 
     func_text = "def test_impl(S, other, fill_val):\n"
-    func_text += "  return S.{}(other, fill_value=fill_val)\n".format(op)
+    func_text += f"  return S.{op}(other, fill_value=fill_val)\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -2287,7 +2287,7 @@ def test_series_explicit_binary_op_nullable_int_bool(memory_leak_check):
 def test_series_binary_op(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
-    func_text += "  return S {} other\n".format(op_str)
+    func_text += f"  return S {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -2303,7 +2303,7 @@ def test_series_binary_op(op, memory_leak_check):
 def test_series_inplace_binary_op(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
-    func_text += "  S {} other\n".format(op_str)
+    func_text += f"  S {op_str} other\n"
     func_text += "  return S\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -2330,7 +2330,7 @@ def test_series_unary_op(op, memory_leak_check):
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S):\n"
-    func_text += "  return {} S\n".format(op_str)
+    func_text += f"  return {op_str} S\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -2432,7 +2432,7 @@ def test_series_binary_ufunc(ufunc, memory_leak_check):
 def test_series_bool_cmp_op(S, op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
-    func_text += "  return S {} other\n".format(op_str)
+    func_text += f"  return S {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -2471,7 +2471,7 @@ def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
     """
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
-    func_text += "  return S.values {} other.values\n".format(op_str)
+    func_text += f"  return S.values {op_str} other.values\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]

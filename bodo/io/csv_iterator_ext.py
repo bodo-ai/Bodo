@@ -92,7 +92,7 @@ class CSVIteratorModel(models.StructModel):
             # - csv_reader keeps iterator state.
             ("index", types.EphemeralPointer(types.uintp)),
         ]
-        super(CSVIteratorModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @lower_builtin("getiter", CSVIteratorType)

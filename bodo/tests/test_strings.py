@@ -1,5 +1,4 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-# -*- coding: utf-8 -*-
 
 import gc
 import glob
@@ -186,7 +185,7 @@ def test_string_array_getitem_na(ind, memory_leak_check):
         return S.iloc[index]
 
     bodo_func = bodo.jit(impl)
-    S = pd.Series((["A", np.nan, "CC", "DD"] + gen_nonascii_list(2)))
+    S = pd.Series(["A", np.nan, "CC", "DD"] + gen_nonascii_list(2))
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
 
@@ -791,7 +790,7 @@ def test_binary_format_literal(memory_leak_check):
     """tests format string on binary strings"""
 
     def test_impl(val):
-        return "{0:b}".format(val)
+        return f"{val:b}"
 
     check_func(test_impl, (121311,))
     check_func(test_impl, (-1,))
@@ -820,7 +819,7 @@ def test_format_numbered_args(memory_leak_check):
     """tests format string with numbered args"""
 
     def test_impl():
-        return "I like {1} and {0}".format("Java", "Python")
+        return "I like {} and {}".format("Python", "Java")
 
     check_func(test_impl, ())
 
@@ -897,7 +896,7 @@ class TestString(unittest.TestCase):
         ]
         for method in str2str_methods:
             func_text = "def test_impl(_str):\n"
-            func_text += "  return _str.{}()\n".format(method)
+            func_text += f"  return _str.{method}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -917,13 +916,13 @@ class TestString(unittest.TestCase):
             loc_vars = {}
             globs = {}
             func_text1 = "def test_impl1(_str):\n"
-            func_text1 += "  return _str.{}(' ')\n".format(method)
+            func_text1 += f"  return _str.{method}(' ')\n"
             exec(func_text1, globs, loc_vars)
             test_impl1 = loc_vars["test_impl1"]
 
             loc_vars = {}
             func_text2 = "def test_impl2(_str):\n"
-            func_text2 += "  return _str.{}('\\n')\n".format(method)
+            func_text2 += f"  return _str.{method}('\\n')\n"
             exec(func_text2, globs, loc_vars)
             test_impl2 = loc_vars["test_impl2"]
 
@@ -946,7 +945,7 @@ class TestString(unittest.TestCase):
         ]
         for method in str2bool_methods:
             func_text = "def test_impl(_str):\n"
-            func_text += "  return _str.{}()\n".format(method)
+            func_text += f"  return _str.{method}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]

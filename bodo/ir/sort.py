@@ -2,7 +2,6 @@
 """IR node for the data sorting"""
 
 from collections import defaultdict
-from typing import List, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -43,14 +42,14 @@ class Sort(ir.Stmt):
         self,
         df_in: str,
         df_out: str,
-        in_vars: List[ir.Var],
-        out_vars: List[ir.Var],
-        key_inds: Tuple[int],
+        in_vars: list[ir.Var],
+        out_vars: list[ir.Var],
+        key_inds: tuple[int],
         inplace: bool,
         loc: ir.Loc,
-        ascending_list: Union[List[bool], bool] = True,
-        na_position: Union[List[str], str] = "last",
-        _bodo_chunk_bounds: Union[ir.Var, None] = None,
+        ascending_list: list[bool] | bool = True,
+        na_position: list[str] | str = "last",
+        _bodo_chunk_bounds: ir.Var | None = None,
         _bodo_interval_sort: bool = False,
         is_table_format: bool = False,
         num_table_arrays: int = 0,
@@ -108,9 +107,9 @@ class Sort(ir.Stmt):
         # DCE. The column may be in the table (in case of table format) or not.
         # Example: 3 columns table, 1 non-table, dead_var_inds={1, 3} means column 1 in
         # the table is dead and also the non-table column is dead.
-        self.dead_var_inds: Set[int] = set()
+        self.dead_var_inds: set[int] = set()
         # Logical indices of dead key columns in output, updated in DCE.
-        self.dead_key_var_inds: Set[int] = set()
+        self.dead_key_var_inds: set[int] = set()
 
         # normalize na_position to list of bools (per key)
         if isinstance(na_position, str):

@@ -2,17 +2,11 @@
 """IR node for the join and merge"""
 
 from collections import defaultdict
+from collections.abc import Sequence
 from itertools import chain
 from typing import (
     TYPE_CHECKING,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
 )
 
 import numba
@@ -161,13 +155,13 @@ HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof", "cross"]
 class Join(ir.Stmt):
     def __init__(
         self,
-        left_keys: Union[List[str], str],
-        right_keys: Union[List[str], str],
-        out_data_vars: List[ir.Var],
+        left_keys: list[str] | str,
+        right_keys: list[str] | str,
+        out_data_vars: list[ir.Var],
         out_df_type: "DataFrameType",
-        left_vars: List[ir.Var],
+        left_vars: list[ir.Var],
         left_df_type: "DataFrameType",
-        right_vars: List[ir.Var],
+        right_vars: list[ir.Var],
         right_df_type: "DataFrameType",
         how: HOW_OPTIONS,
         suffix_left: str,
@@ -329,10 +323,10 @@ class Join(ir.Stmt):
         # Map the output column numbers to the input
         # locations. We use this to avoid repeating
         # the conversion.
-        out_to_input_col_map: Dict[int, (Literal["left", "right"], int)] = {}
+        out_to_input_col_map: dict[int, (Literal["left", "right"], int)] = {}
         # Map each input to the output location.
-        left_to_output_map: Dict[int, int] = {}
-        right_to_output_map: Dict[int, int] = {}
+        left_to_output_map: dict[int, int] = {}
+        right_to_output_map: dict[int, int] = {}
         for i, c in enumerate(left_col_names):
             if c in add_suffix:
                 suffixed_left_name = str(c) + suffix_left
@@ -402,7 +396,7 @@ class Join(ir.Stmt):
         self.vect_same_key = vect_same_key
         # Store information if we select the optimized point interval
         # join implementation.
-        self.point_interval_join_info: Optional[Tuple[bool, str, str, str]] = None
+        self.point_interval_join_info: tuple[bool, str, str, str] | None = None
 
     @property
     def has_live_left_table_var(self):
@@ -585,8 +579,8 @@ class Join(ir.Stmt):
         df_left_str = f"left={{{in_col_names}}}"
         in_col_names = ", ".join([f"{c}" for c in self.right_col_names])
         df_right_str = f"right={{{in_col_names}}}"
-        return "join [{}={}]: {}, {}".format(
-            self.left_keys, self.right_keys, df_left_str, df_right_str
+        return (
+            f"join [{self.left_keys}={self.right_keys}]: {df_left_str}, {df_right_str}"
         )
 
 
@@ -738,7 +732,7 @@ ir_utils.visit_vars_extensions[Join] = visit_vars_join
 
 
 def check_cross_join_coltypes(
-    left_col_types: List[types.Type], right_col_types: List[types.Type]
+    left_col_types: list[types.Type], right_col_types: list[types.Type]
 ):
     """
     Check the Columns of Cross Join or Interval Join tables to
@@ -906,10 +900,10 @@ remove_dead_column_extensions[Join] = join_remove_dead_column
 
 def join_table_column_use(
     join_node: Join,
-    block_use_map: Dict[str, Tuple[Set[int], bool, bool]],
-    equiv_vars: Dict[str, Set[str]],
-    typemap: Dict[str, types.Type],
-    table_col_use_map: Dict[int, Dict[str, Tuple[Set[int], bool, bool]]],
+    block_use_map: dict[str, tuple[set[int], bool, bool]],
+    equiv_vars: dict[str, set[str]],
+    typemap: dict[str, types.Type],
+    table_col_use_map: dict[int, dict[str, tuple[set[int], bool, bool]]],
 ):
     """Compute column uses in input tables of Join based on output table's
     uses.
@@ -1904,7 +1898,7 @@ def join_distributed_run(
         compute_in_batch=not join_node.left_keys,
     )
     # Determine if we have a point in interval join
-    join_node.point_interval_join_info: Optional[Tuple[bool, str, str, str]] = guard(
+    join_node.point_interval_join_info: tuple[bool, str, str, str] | None = guard(
         _get_interval_join_info,
         join_node,
         left_col_nums,
@@ -1967,9 +1961,9 @@ def join_distributed_run(
     # Set the output variables.
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
-            func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
+            func_text += f"    left_{i} = out_data_left[{i}]\n"
         for i in range(len(right_other_names)):
-            func_text += "    right_{} = out_data_right[{}]\n".format(i, i)
+            func_text += f"    right_{i} = out_data_right[{i}]\n"
         for i in range(n_keys):
             func_text += f"    t1_keys_{i} = out_t1_keys[{i}]\n"
         for i in range(n_keys):
@@ -2476,11 +2470,11 @@ def _gen_join_cpp_call(
     else:
         eList_l = []
         for i in range(n_keys):
-            eList_l.append("t1_keys[{}]".format(i))
+            eList_l.append(f"t1_keys[{i}]")
         for i in range(len(left_other_names)):
-            eList_l.append("data_left[{}]".format(i))
+            eList_l.append(f"data_left[{i}]")
         func_text += "    info_list_total_l = [{}]\n".format(
-            ",".join("array_to_info({})".format(a) for a in eList_l)
+            ",".join(f"array_to_info({a})" for a in eList_l)
         )
         func_text += "    table_left = arr_info_list_to_table(info_list_total_l)\n"
     if join_node.is_right_table:
@@ -2498,11 +2492,11 @@ def _gen_join_cpp_call(
     else:
         eList_r = []
         for i in range(n_keys):
-            eList_r.append("t2_keys[{}]".format(i))
+            eList_r.append(f"t2_keys[{i}]")
         for i in range(len(right_other_names)):
-            eList_r.append("data_right[{}]".format(i))
+            eList_r.append(f"data_right[{i}]")
         func_text += "    info_list_total_r = [{}]\n".format(
-            ",".join("array_to_info({})".format(a) for a in eList_r)
+            ",".join(f"array_to_info({a})" for a in eList_r)
         )
         func_text += "    table_right = arr_info_list_to_table(info_list_total_r)\n"
     # Add globals that will be used in the function call.
@@ -2737,10 +2731,10 @@ def _gen_join_cpp_call(
 
 
 def determine_table_cast_map(
-    matched_key_types: List[types.Type],
-    key_types: List[types.Type],
-    used_key_nums: Optional[Set[int]],
-    output_map: Dict[int, int],
+    matched_key_types: list[types.Type],
+    key_types: list[types.Type],
+    used_key_nums: set[int] | None,
+    output_map: dict[int, int],
     convert_dict_col: bool,
 ):
     """Determine any columns in the output table keys that were
@@ -2770,7 +2764,7 @@ def determine_table_cast_map(
         Dict[int, types.Type]: Dictionary mapping the logical column number
         in the output table to the correct output type when loading the table.
     """
-    cast_map: Dict[int, types.Type] = {}
+    cast_map: dict[int, types.Type] = {}
 
     # Check the keys for casts.
     n_keys = len(matched_key_types)
@@ -2793,13 +2787,13 @@ def determine_table_cast_map(
 
 def _get_interval_join_info(
     join_node: Join,
-    left_col_nums: List[int],
-    right_col_nums: List[int],
+    left_col_nums: list[int],
+    right_col_nums: list[int],
     left_other_types,
     right_other_types,
-    left_physical_to_logical_list: List[int],
-    right_physical_to_logical_list: List[int],
-) -> Tuple[bool, str, str, str]:
+    left_physical_to_logical_list: list[int],
+    right_physical_to_logical_list: list[int],
+) -> tuple[bool, str, str, str]:
     """Detect and return relevant info for point in interval join
 
     Args:
@@ -2969,7 +2963,7 @@ def _check_point_cases(
     cond1: pandas.core.computation.ops.BinOp,
     cond2: pandas.core.computation.ops.BinOp,
     is_left: bool,
-) -> Tuple[Tuple[str, bool], Tuple[str, bool]]:
+) -> tuple[tuple[str, bool], tuple[str, bool]]:
     """Check for point interval join in conditions
 
     Args:

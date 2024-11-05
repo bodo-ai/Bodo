@@ -102,23 +102,7 @@ class CsvReader(Connector):
         self.out_used_cols = list(range(len(usecols)))
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, col_types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, out_used_colss={})".format(
-            self.df_out_varname,
-            self.file_name,
-            self.out_table_col_names,
-            self.out_table_col_types,
-            self.out_vars,
-            self.nrows,
-            self.skiprows,
-            self.chunksize,
-            self.is_skiprows_list,
-            self.pd_low_memory,
-            self.escapechar,
-            self.storage_options,
-            self.index_column_index,
-            self.index_column_typ,
-            self.out_used_cols,
-        )
+        return f"{self.df_out_varname} = ReadCsv(file={self.file_name}, col_names={self.out_table_col_names}, col_types={self.out_table_col_types}, vars={self.out_vars}, nrows={self.nrows}, skiprows={self.skiprows}, chunksize={self.chunksize}, is_skiprows_list={self.is_skiprows_list}, pd_low_memory={self.pd_low_memory}, escapechar={self.escapechar}, storage_options={self.storage_options}, index_column_index={self.index_column_index}, index_colum_typ = {self.index_column_typ}, out_used_colss={self.out_used_cols})"
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
         return (
@@ -617,13 +601,13 @@ def _get_dtype_str(t):
 
     if isinstance(t, IntegerArrayType):
         # HACK: same issue as above
-        t_name = "int_arr_{}".format(dtype)
+        t_name = f"int_arr_{dtype}"
         setattr(types, t_name, t)
         return t_name
 
     if isinstance(t, FloatingArrayType):
         # HACK: same issue as above
-        t_name = "float_arr_{}".format(dtype)
+        t_name = f"float_arr_{dtype}"
         setattr(types, t_name, t)
         return t_name
 
@@ -645,7 +629,7 @@ def _get_dtype_str(t):
         setattr(types, typ_name, t)
         return typ_name
 
-    return "{}[::1]".format(dtype)
+    return f"{dtype}[::1]"
 
 
 def _get_pd_dtype_str(t):
@@ -660,7 +644,7 @@ def _get_pd_dtype_str(t):
     dtype = t.dtype
 
     if isinstance(dtype, PDCategoricalDtype):
-        return "pd.CategoricalDtype({})".format(dtype.categories)
+        return f"pd.CategoricalDtype({dtype.categories})"
 
     if dtype == types.NPDatetime("ns"):
         return "str"
@@ -686,7 +670,7 @@ def _get_pd_dtype_str(t):
     ):
         return "object"
 
-    return "np.{}".format(dtype)
+    return f"np.{dtype}"
 
 
 # XXX: temporary fix pending Numba's #3378
@@ -797,14 +781,7 @@ def _gen_csv_file_reader_init(
     func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     # change skiprows to array
     # pass how many elements in the list as well or 0 if just an integer not a list
-    func_text += "    {}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py, {}, {}, skiprows_list_len, {})\n".format(
-        parallel,
-        has_header,
-        compression,
-        chunksize,
-        is_skiprows_list,
-        pd_low_memory,
-    )
+    func_text += f"    {parallel}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {has_header}, bodo.libs.str_ext.unicode_to_utf8('{compression}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py, {chunksize}, {is_skiprows_list}, skiprows_list_len, {pd_low_memory})\n"
     # TODO: unrelated to skiprows list PR
     # This line is printed even if failure is because of another check
     # Commenting it gives another compiler error.
@@ -967,7 +944,7 @@ def _gen_read_csv_objmode(
     # this pd.read_csv() happens at runtime and is passing a file reader(f_reader)
     # to pandas. f_reader skips the header, so we have to tell pandas header=None.
     func_text += "        header=None,\n"
-    func_text += "        parse_dates=[{}],\n".format(date_inds)
+    func_text += f"        parse_dates=[{date_inds}],\n"
     # Check explanation near top of the function for why we specify
     # only some types here directly
     # NOTE: this works for dict-encoded string arrays too since Bodo's unboxing calls

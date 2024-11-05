@@ -234,7 +234,7 @@ def get_hdfs_fs(path):  # pragma: no cover
     try:
         fs = HdFS(host=host, port=port, user=user)
     except Exception as e:
-        raise BodoError("Hadoop file system cannot be created: {}".format(e))
+        raise BodoError(f"Hadoop file system cannot be created: {e}")
 
     return fs
 
@@ -269,9 +269,7 @@ def s3_is_directory(fs, path):
         path_ = (options.netloc + options.path).rstrip("/")
         path_info = fs.get_file_info(path_)
         if path_info.type in (pa_fs.FileType.NotFound, pa_fs.FileType.Unknown):
-            raise FileNotFoundError(
-                "{} is a non-existing or unreachable file".format(path)
-            )
+            raise FileNotFoundError(f"{path} is a non-existing or unreachable file")
         if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
             return True
         return False
@@ -353,12 +351,12 @@ def hdfs_is_directory(path):
     try:
         hdfs = HadoopFileSystem.from_uri(path)
     except Exception as e:
-        raise BodoError(" Hadoop file system cannot be created: {}".format(e))
+        raise BodoError(f" Hadoop file system cannot be created: {e}")
     # target stat of the path: file or just the directory itself
     target_stat = hdfs.get_file_info([hdfs_path])
 
     if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
-        raise BodoError("{} is a " "non-existing or unreachable file".format(path))
+        raise BodoError(f"{path} is a " "non-existing or unreachable file")
 
     if (not target_stat[0].size) and target_stat[0].type == FileType.Directory:
         return hdfs, True
@@ -389,7 +387,7 @@ def hdfs_list_dir_fnames(path):  # pragma: no cover
             file_stats = hdfs.get_file_info(file_selector)
         except Exception as e:
             raise BodoError(
-                "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
+                "Exception on getting directory info " f"of {hdfs_path}: {e}"
             )
         file_names = [file_stat.base_name for file_stat in file_stats]
 
@@ -406,7 +404,7 @@ def abfs_is_directory(path):  # pragma: no cover
         # target stat of the path: file or just the directory itself
         target_stat = hdfs.info(path)
     except OSError:
-        raise BodoError("{} is a " "non-existing or unreachable file".format(path))
+        raise BodoError(f"{path} is a " "non-existing or unreachable file")
 
     if (target_stat["size"] == 0) and target_stat["kind"].lower() == "directory":
         return hdfs, True
@@ -434,7 +432,7 @@ def abfs_list_dir_fnames(path):  # pragma: no cover
             files = hdfs.ls(hdfs_path)
         except Exception as e:
             raise BodoError(
-                "Exception on getting directory info " "of {}: {}".format(hdfs_path, e)
+                "Exception on getting directory info " f"of {hdfs_path}: {e}"
             )
         file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
 
@@ -743,7 +741,7 @@ def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
 
 class StorageOptionsDictType(types.Opaque):
     def __init__(self):
-        super(StorageOptionsDictType, self).__init__(name="StorageOptionsDictType")
+        super().__init__(name="StorageOptionsDictType")
 
 
 storage_options_dict_type = StorageOptionsDictType()
@@ -777,7 +775,7 @@ def overload_get_storage_options_pyobject(storage_options):
 
 class ArrowFs(types.Type):
     def __init__(self, name=""):  # pragma: no cover
-        super(ArrowFs, self).__init__(name=f"ArrowFs({name})")
+        super().__init__(name=f"ArrowFs({name})")
 
 
 register_model(ArrowFs)(models.OpaqueModel)

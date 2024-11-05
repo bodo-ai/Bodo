@@ -3,7 +3,7 @@
 
 import datetime
 import operator
-from typing import Any, Union
+from typing import Any
 
 import numba
 import numpy as np
@@ -68,7 +68,7 @@ class PandasDatetimeTZDtype(types.Type):
                 "Timezone must be either a valid pytz type with a zone, a fixed offset, or None"
             )
         self.tz = tz
-        super(PandasDatetimeTZDtype, self).__init__(name=f"PandasDatetimeTZDtype[{tz}]")
+        super().__init__(name=f"PandasDatetimeTZDtype[{tz}]")
 
 
 pd_datetime_tz_naive_type = PandasDatetimeTZDtype(None)
@@ -154,7 +154,7 @@ def get_tz_type_info(tz_type):
     return tz_val
 
 
-def python_timezone_from_bodo_timezone_info(tz_value: Union[int, str, None]) -> Any:
+def python_timezone_from_bodo_timezone_info(tz_value: int | str | None) -> Any:
     """
     Convert the Bodo internal typing representation of a timezone which is either
     an int, string, or None to a python timezone object.
@@ -197,7 +197,7 @@ class DatetimeArrayType(types.IterableType, types.ArrayCompatible):
         self.tz = tz
         self._data_array_type = types.Array(types.NPDatetime("ns"), 1, "C")
         self._dtype = PandasDatetimeTZDtype(tz)
-        super(DatetimeArrayType, self).__init__(name=f"DatetimeArrayType('{tz}')")
+        super().__init__(name=f"DatetimeArrayType('{tz}')")
 
     @property
     def data_array_type(self):

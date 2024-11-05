@@ -41,7 +41,7 @@ if __name__ == "__main__":
     all_files = list(Path("bodo").glob("**/*.py"))
 
     for filename in all_files:
-        with open(filename, "r") as f:
+        with open(filename) as f:
             code = f.read()
         node = ast.parse(code)
         node = RemoveDocstring().visit(node)

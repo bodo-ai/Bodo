@@ -64,7 +64,7 @@ class PyArrowTableSchemaType(types.Opaque):
     """
 
     def __init__(self):
-        super(PyArrowTableSchemaType, self).__init__(name="PyArrowTableSchemaType")
+        super().__init__(name="PyArrowTableSchemaType")
 
 
 pyarrow_schema_type = PyArrowTableSchemaType()
@@ -283,7 +283,7 @@ def _get_numba_typ_from_pa_typ(
         dtype = _pyarrow_numba_type_map[pa_typ.type]
         supported = True
     else:
-        raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
+        raise BodoError(f"Arrow data type {pa_typ.type} not supported yet")
 
     if dtype == datetime_date_type:
         return datetime_date_array_type, supported
@@ -682,7 +682,7 @@ def update_file_contents(
         if os.path.exists(fname):
             # If the file does exist, get
             # its contents
-            with open(fname, "r") as f:
+            with open(fname) as f:
                 old_content = f.read()
     if is_parallel:
         old_content = comm.bcast(old_content)

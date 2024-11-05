@@ -81,7 +81,7 @@ def test_np_unique(memory_leak_check):
         return np.unique(arr)
 
     # Create an array here because np.unique fails on NA in pandas
-    arr = pd.array((["AB", "", "ABC", "abcd", "ab", "AB"] + gen_nonascii_list(2)))
+    arr = pd.array(["AB", "", "ABC", "abcd", "ab", "AB"] + gen_nonascii_list(2))
 
     check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
@@ -117,7 +117,7 @@ def test_constant_lowering_refcount(memory_leak_check):
     called leading to a segfault.
     """
     arr = np.array(
-        (["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"] + gen_nonascii_list(2))
+        ["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"] + gen_nonascii_list(2)
     )
 
     @bodo.jit(distributed=False)

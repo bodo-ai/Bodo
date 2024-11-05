@@ -62,7 +62,7 @@ class PDCategoricalDtype(types.Opaque):
         # we need to set explicitly
         self.int_type = int_type
         name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data}, {self.int_type})"
-        super(PDCategoricalDtype, self).__init__(name=name)
+        super().__init__(name=name)
 
     @property
     def mangling_args(self):
@@ -220,9 +220,7 @@ def pd_categorical_nbytes_overload(A):
 class CategoricalArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
-        super(CategoricalArrayType, self).__init__(
-            name=f"CategoricalArrayType({dtype})"
-        )
+        super().__init__(name=f"CategoricalArrayType({dtype})")
 
     @property
     def as_array(self):
@@ -253,7 +251,7 @@ class CategoricalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
         members = [("dtype", fe_type.dtype), ("codes", types.Array(int_dtype, 1, "C"))]
-        super(CategoricalArrayModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(CategoricalArrayType, "codes", "codes")

@@ -67,7 +67,7 @@ _no_input = NoInput()
 
 class NoInputType(types.Type):
     def __init__(self):
-        super(NoInputType, self).__init__(name="NoInput")
+        super().__init__(name="NoInput")
 
 
 register_model(NoInputType)(models.OpaqueModel)
@@ -87,7 +87,7 @@ def constant_no_input(context, builder, ty, pyval):
 #   Define a singleton Numba type instance for a non-parametric type
 class PDTimeDeltaType(types.Type):
     def __init__(self):
-        super(PDTimeDeltaType, self).__init__(name="PDTimeDeltaType()")
+        super().__init__(name="PDTimeDeltaType()")
 
 
 pd_timedelta_type = PDTimeDeltaType()
@@ -108,7 +108,7 @@ class PDTimeDeltaModel(models.StructModel):
         members = [
             ("value", types.int64),
         ]
-        super(PDTimeDeltaModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
@@ -798,7 +798,7 @@ def pd_timedelta_abs(lhs):
 #   Define a singleton Numba type instance for a non-parametric type
 class DatetimeTimeDeltaType(types.Type):
     def __init__(self):
-        super(DatetimeTimeDeltaType, self).__init__(name="DatetimeTimeDeltaType()")
+        super().__init__(name="DatetimeTimeDeltaType()")
 
 
 datetime_timedelta_type = DatetimeTimeDeltaType()
@@ -820,7 +820,7 @@ class DatetimeTimeDeltaModel(models.StructModel):
             ("seconds", types.int64),
             ("microseconds", types.int64),
         ]
-        super(DatetimeTimeDeltaModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
@@ -1142,9 +1142,7 @@ def timedelta_to_bool(timedelta):
 
 class DatetimeTimeDeltaArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(DatetimeTimeDeltaArrayType, self).__init__(
-            name="DatetimeTimeDeltaArrayType()"
-        )
+        super().__init__(name="DatetimeTimeDeltaArrayType()")
 
     @property
     def as_array(self):

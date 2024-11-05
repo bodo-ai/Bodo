@@ -73,7 +73,7 @@ def binary_dataframe_val(request):
 @pytest.mark.slow
 def test_bin(memory_leak_check):
     def test_impl(df):
-        return df.A.map(lambda x: "{0:b}".format(x))
+        return df.A.map(lambda x: f"{x:b}")
 
     df = pd.DataFrame(
         {

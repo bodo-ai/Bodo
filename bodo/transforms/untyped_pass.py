@@ -9,7 +9,7 @@ import itertools
 import sys
 import types as pytypes
 import warnings
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import TYPE_CHECKING
 
 import numba
 import numpy as np
@@ -166,9 +166,7 @@ class UntypedPass:
             warnings.warn(
                 BodoWarning(
                     "Only function arguments and return values can be specified as "
-                    "distributed. Ignoring the flag for variables: {}.".format(
-                        extra_vars
-                    )
+                    f"distributed. Ignoring the flag for variables: {extra_vars}."
                 )
             )
         # same for "replicated" flag
@@ -964,7 +962,7 @@ class UntypedPass:
         # If defined, perform batched reads on the table
         # Only supported for Snowflake tables
         # Note that we don't want to use Pandas chunksize, since it returns an iterator
-        chunksize: Optional[int] = get_const_arg(
+        chunksize: int | None = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
@@ -1037,7 +1035,7 @@ class UntypedPass:
             default=False,
         )
 
-        _bodo_orig_table_name_const: Optional[str] = get_const_arg(
+        _bodo_orig_table_name_const: str | None = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
@@ -1050,7 +1048,7 @@ class UntypedPass:
             use_default=True,
         )
 
-        _bodo_orig_table_indices_const: Optional[Tuple[int]] = get_const_arg(
+        _bodo_orig_table_indices_const: tuple[int] | None = get_const_arg(
             "read_sql",
             rhs.args,
             kws,
@@ -1141,7 +1139,7 @@ class UntypedPass:
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise BodoError(
-                "read_sql() arguments {} not supported yet".format(unsupported_args)
+                f"read_sql() arguments {unsupported_args} not supported yet"
             )
 
         # Generate the type info.
@@ -1377,7 +1375,7 @@ class UntypedPass:
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise BodoError(
-                "read_excel() arguments {} not supported yet".format(unsupported_args)
+                f"read_excel() arguments {unsupported_args} not supported yet"
             )
 
         if dtype_var != "" and col_names == 0 or dtype_var == "" and col_names != 0:
@@ -2166,9 +2164,7 @@ class UntypedPass:
             index_ind = None
             index_name = None
             index_arr_typ = types.none
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                data_args[0]
-            )
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
             index_typ = RangeIndexType(types.none)
 
         # I'm not certain if this is possible, but I'll add a check just in case
@@ -2388,36 +2384,32 @@ class UntypedPass:
         if len(passed_unsupported) > 0:
             if unsupported_args:
                 raise BodoError(
-                    "read_json() arguments {} not supported yet".format(
-                        passed_unsupported
-                    )
+                    f"read_json() arguments {passed_unsupported} not supported yet"
                 )
 
         supported_compression_options = {"infer", "gzip", "bz2", None}
         if compression not in supported_compression_options:
             raise BodoError(
-                "pd.read_json() compression = {} is not supported."
-                " Supported options are {}".format(
-                    compression, supported_compression_options
-                )
+                f"pd.read_json() compression = {compression} is not supported."
+                f" Supported options are {supported_compression_options}"
             )
 
         if frame_or_series != "frame":
             raise BodoError(
-                "pd.read_json() typ = {} is not supported."
-                "Currently only supports orient = 'frame'".format(frame_or_series)
+                f"pd.read_json() typ = {frame_or_series} is not supported."
+                "Currently only supports orient = 'frame'"
             )
 
         if orient != "records":
             raise BodoError(
-                "pd.read_json() orient = {} is not supported."
-                "Currently only supports orient = 'records'".format(orient)
+                f"pd.read_json() orient = {orient} is not supported."
+                "Currently only supports orient = 'records'"
             )
 
         if type(lines) is not bool:
             raise BodoError(
-                "pd.read_json() lines = {} is not supported."
-                "lines must be of type bool.".format(lines)
+                f"pd.read_json() lines = {lines} is not supported."
+                "lines must be of type bool."
             )
 
         col_names = []
@@ -2530,16 +2522,12 @@ class UntypedPass:
 
         columns = columns.copy()  # copy since modified below
         n_cols = len(columns)
-        args = ["data{}".format(i) for i in range(n_cols)]
+        args = [f"data{i}" for i in range(n_cols)]
         data_args = args.copy()
 
         # initialize range index
         assert len(data_args) > 0
-        index_arg = (
-            "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                data_args[0]
-            )
-        )
+        index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
 
         # Below we assume that the columns are strings
         func_text = "def _init_df({}):\n".format(", ".join(args))
@@ -2658,7 +2646,7 @@ class UntypedPass:
         read_as_dict_cols=None,
         use_hive=True,
         _bodo_read_as_table=False,
-        chunksize: Optional[int] = None,
+        chunksize: int | None = None,
         use_index: bool = True,
         sql_op_id: int = -1,
     ):
@@ -2837,7 +2825,7 @@ class UntypedPass:
 
         # If defined, perform batched reads on the dataset
         # Note that we don't want to use Pandas chunksize, since it returns an iterator
-        chunksize: Optional[int] = get_const_arg(
+        chunksize: int | None = get_const_arg(
             "read_parquet",
             rhs.args,
             kws,
@@ -2890,7 +2878,7 @@ class UntypedPass:
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
             raise BodoError(
-                "read_parquet() arguments {} not supported yet".format(unsupported_args)
+                f"read_parquet() arguments {unsupported_args} not supported yet"
             )
         _check_storage_options(storage_options, "read_parquet", rhs, check_fields=False)
 
@@ -3139,7 +3127,7 @@ class UntypedPass:
             )
 
         else:
-            raise BodoError("Invalid return flag {}".format(flag))
+            raise BodoError(f"Invalid return flag {flag}")
         loc_vars = {}
         exec(func_text, globals(), loc_vars)
         f_block = compile_to_numba_ir(loc_vars["f"], {"bodo": bodo}).blocks.popitem()[1]
@@ -3531,9 +3519,9 @@ def _get_sql_types_arr_colnames(
     is_table_input: bool,
     is_independent: bool,
     downcast_decimal_to_double: bool = False,
-    orig_table_const: Optional[str] = None,
-    orig_table_indices_const: Optional[Tuple[int]] = None,
-    snowflake_conn_cache: Optional[Dict[str, "SnowflakeConnection"]] = None,
+    orig_table_const: str | None = None,
+    orig_table_indices_const: tuple[int] | None = None,
+    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
     convert_snowflake_column_names: bool = True,
 ):
     """
@@ -3669,9 +3657,9 @@ def _get_sql_df_type_from_db(
     is_table_input: bool,
     is_independent: bool,
     downcast_decimal_to_double: bool,
-    orig_table_const: Optional[str] = None,
-    orig_table_indices_const: Optional[Tuple[int]] = None,
-    snowflake_conn_cache: Optional[Dict[str, "SnowflakeConnection"]] = None,
+    orig_table_const: str | None = None,
+    orig_table_indices_const: tuple[int] | None = None,
+    snowflake_conn_cache: dict[str, "SnowflakeConnection"] | None = None,
     convert_snowflake_column_names: bool = True,
 ):
     """access the database to find df type for read_sql() output.

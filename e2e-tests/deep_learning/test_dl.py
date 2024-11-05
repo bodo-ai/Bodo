@@ -46,10 +46,10 @@ def dl_test_run(test_file, data_path, accuracy_threshold):
 
 
 def test_pytorch_mnist():
-    path = "s3://{}/dl-mnist".format(BUCKET_NAME)
+    path = f"s3://{BUCKET_NAME}/dl-mnist"
     dl_test_run("pytorch_mnist.py", path, 0.9)
 
 
 def test_tf_mnist():
-    path = "s3://{}/dl-mnist".format(BUCKET_NAME)
+    path = f"s3://{BUCKET_NAME}/dl-mnist"
     dl_test_run("tensorflow_mnist.py", path, 0.9)

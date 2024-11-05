@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from functools import cached_property
-from typing import List, Optional
 from urllib.parse import ParseResult, urlparse
 
 from numba.core import cgutils, types
@@ -131,7 +130,7 @@ def convert_tablepath_constructor_args(
 
 def load_statistics(
     statistics_file: str,
-) -> tuple[Optional[int], dict[str, int]]:
+) -> tuple[int | None, dict[str, int]]:
     """
     Load table statistics from a file.
 
@@ -160,10 +159,10 @@ def load_statistics(
             f"Unsupported protocol '{protocol}' for the statistics file ('{statistics_file}')."
         )
 
-    with open(statistics_file, "r") as f:
+    with open(statistics_file) as f:
         stats: dict = json.load(f)
 
-    row_count: Optional[int] = stats.get("row_count", None)
+    row_count: int | None = stats.get("row_count", None)
     ndv: dict[str, int] = stats.get("ndv", {})
 
     if not all((isinstance(k, str) and isinstance(v, int)) for k, v in ndv.items()):
@@ -186,11 +185,11 @@ class TablePath:
         file_path: str,
         file_type: str,
         *,
-        conn_str: Optional[str] = None,
-        reorder_io: Optional[bool] = None,
-        db_schema: Optional[str] = None,
-        bodo_read_as_dict: Optional[List[str]] = None,
-        statistics_file: Optional[str] = None,
+        conn_str: str | None = None,
+        reorder_io: bool | None = None,
+        db_schema: str | None = None,
+        bodo_read_as_dict: list[str] | None = None,
+        statistics_file: str | None = None,
     ):
         # Update the arguments.
         (
@@ -312,7 +311,7 @@ class TablePathType(types.Type):
         # function or in Python.
         # TODO: Replace the file_path with the schema for better caching.
         # TODO: Remove conn_str from the caching requirement?
-        super(TablePathType, self).__init__(
+        super().__init__(
             name=f"TablePath({file_path}, {file_type}, {conn_str}, {reorder_io}, {db_schema}, {bodo_read_as_dict}, {json.dumps(statistics)})"
         )
         # TODO: Replace with using file_path at runtime if the schema
@@ -368,7 +367,7 @@ class TablePathModel(models.StructModel):
             ("file_path", fe_type.file_path_type),
             ("conn_str", fe_type.conn_str_type),
         ]
-        super(TablePathModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # 2nd arg is used in LLVM level, 3rd arg is used in python level

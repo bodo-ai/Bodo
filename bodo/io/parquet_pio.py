@@ -8,7 +8,7 @@ import typing as pt
 import warnings
 from collections import defaultdict
 from glob import has_magic
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import ParseResult, urlparse
 
 import llvmlite.binding as ll
@@ -71,7 +71,7 @@ class ParquetPredicateType(types.Type):
     """
 
     def __init__(self):
-        super(ParquetPredicateType, self).__init__(name="ParquetPredicateType()")
+        super().__init__(name="ParquetPredicateType()")
 
 
 parquet_predicate_type = ParquetPredicateType()
@@ -104,9 +104,7 @@ class ParquetFilterScalarsListType(types.Type):
     """
 
     def __init__(self):
-        super(ParquetFilterScalarsListType, self).__init__(
-            name="ParquetFilterScalarsListType()"
-        )
+        super().__init__(name="ParquetFilterScalarsListType()")
 
 
 parquet_filter_scalars_list_type = ParquetFilterScalarsListType()
@@ -349,7 +347,7 @@ class ParquetDataset:
             )
 
 
-class ParquetPiece(object):
+class ParquetPiece:
     """Parquet dataset piece (file) information and Arrow objects to query
     metadata"""
 
@@ -1038,11 +1036,11 @@ def populate_row_counts_in_pq_dataset_pieces(
 def get_parquet_dataset(
     fpath,
     get_row_counts: bool = True,
-    filters: Optional[pc.Expression] = None,
-    storage_options: Optional[dict] = None,
+    filters: pc.Expression | None = None,
+    storage_options: dict | None = None,
     read_categories: bool = False,
-    tot_rows_to_read: Optional[int] = None,
-    typing_pa_schema: Optional[pa.Schema] = None,
+    tot_rows_to_read: int | None = None,
+    typing_pa_schema: pa.Schema | None = None,
     partitioning: str | None = "hive",
 ) -> ParquetDataset:
     """
@@ -1290,7 +1288,7 @@ def get_scanner_batches(
     rows_to_read: int,  # total number of rows this process is going to read
     partitioning,
     schema: pa.Schema,
-    batch_size: Optional[int] = None,
+    batch_size: int | None = None,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match filters (or all rows if filters is None). Only project the
@@ -1474,7 +1472,7 @@ def _pa_schemas_match(pa_schema1: pa.Schema, pa_schema2: pa.Schema) -> bool:
 
 
 def _get_sample_pq_pieces(
-    pq_dataset: Optional[ParquetDataset],
+    pq_dataset: ParquetDataset | None,
 ):
     """get a sample of pieces in the Parquet dataset to avoid the overhead of opening
     every file in compile time.

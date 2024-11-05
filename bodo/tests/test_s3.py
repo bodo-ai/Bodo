@@ -1,5 +1,4 @@
 # Copyright (C) 2019 Bodo Inc.
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -535,7 +534,7 @@ def test_s3_csv_write_file_prefix(minio_server_with_s3_envs, s3_bucket, test_df)
     info = fs.get_file_info(
         pafs.FileSelector("bodo-test/test_df_bodo_file_prefix.csv/")
     )
-    file_names: List[str] = [f.base_name for f in info]
+    file_names: list[str] = [f.base_name for f in info]
     assert all(f.startswith("test-") for f in file_names)
 
 
@@ -556,7 +555,7 @@ def test_s3_json_write_file_prefix(minio_server_with_s3_envs, s3_bucket, test_df
     info = fs.get_file_info(
         pafs.FileSelector("bodo-test/test_df_bodo_file_prefix.json/")
     )
-    file_names: List[str] = [f.base_name for f in info]
+    file_names: list[str] = [f.base_name for f in info]
     assert all(f.startswith("test-") for f in file_names)
 
 

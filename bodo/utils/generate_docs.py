@@ -4,8 +4,6 @@ Declarative Templates.
     usage: python -m bodo.utils.generate_docs
 """
 
-import typing as pt
-
 import numba
 from numba.core.target_extension import dispatcher_registry
 
@@ -15,7 +13,7 @@ from bodo.utils.pandas_coverage_tracking import PANDAS_URLS, get_pandas_refs_fro
 from bodo.utils.search_templates import bodo_pd_types_dict, get_overload_template
 
 
-def generate_pandas_docs(module: str, types: pt.Set[str]):
+def generate_pandas_docs(module: str, types: set[str]):
     """Generate a subset of the pandas API's supported by bodo for methods and
     attributes.
 

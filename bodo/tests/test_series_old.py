@@ -792,7 +792,7 @@ class TestSeries(unittest.TestCase):
             np.testing.assert_almost_equal(
                 bodo_func(S1, S2),
                 test_impl(S1, S2),
-                err_msg="S1={}\nS2={}".format(S1, S2),
+                err_msg=f"S1={S1}\nS2={S2}",
             )
 
     def test_series_corr1(self):
@@ -805,7 +805,7 @@ class TestSeries(unittest.TestCase):
             np.testing.assert_almost_equal(
                 bodo_func(S1, S2),
                 test_impl(S1, S2),
-                err_msg="S1={}\nS2={}".format(S1, S2),
+                err_msg=f"S1={S1}\nS2={S2}",
             )
 
     def test_series_str_len1(self):
@@ -829,7 +829,7 @@ class TestSeries(unittest.TestCase):
         )
         for method in str2str_methods:
             func_text = "def test_impl(S):\n"
-            func_text += "  return S.str.{}()\n".format(method)
+            func_text += f"  return S.str.{method}()\n"
             loc_vars = {}
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -846,7 +846,7 @@ class TestSeries(unittest.TestCase):
         )
         for method in strip_methods:
             func_text = "def test_impl(S, to_strip):\n"
-            func_text += "  return S.str.{}(to_strip)\n".format(method)
+            func_text += f"  return S.str.{method}(to_strip)\n"
             loc_vars = {}
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -881,7 +881,7 @@ class TestSeries(unittest.TestCase):
         )
         for method in str2bool_methods:
             func_text = "def test_impl(S):\n"
-            func_text += "  return S.str.{}()\n".format(method)
+            func_text += f"  return S.str.{method}()\n"
             loc_vars = {}
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]

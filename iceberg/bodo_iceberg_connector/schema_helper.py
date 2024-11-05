@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pyarrow as pa
 import pyarrow.jvm
 
@@ -200,7 +198,7 @@ def convert_arrow_schema_to_large_types(schema: pa.Schema) -> pa.Schema:
 
 
 def arrow_to_iceberg_schema(
-    schema: pa.Schema, column_comments: Optional[list[Optional[str]]] = None
+    schema: pa.Schema, column_comments: list[str | None] | None = None
 ):
     """
     Construct an Iceberg Java Schema object from a PyArrow Schema instance.

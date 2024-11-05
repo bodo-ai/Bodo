@@ -21,9 +21,7 @@ class IcebergAwsCredentialsProviderType(types.Type):
     """Type for C++ Iceberg REST AWS Credentials Provider"""
 
     def __init__(self):  # pragma: no cover
-        super(IcebergAwsCredentialsProviderType, self).__init__(
-            name="IcebergAwsCredentialsProvider()"
-        )
+        super().__init__(name="IcebergAwsCredentialsProvider()")
 
 
 @intrinsic

@@ -2,7 +2,6 @@
 """Interface to C++ TableBuilderState/ChunkedTableBuilderState"""
 
 from functools import cached_property
-from typing import List
 
 import llvmlite.binding as ll
 import numba
@@ -100,7 +99,7 @@ class TableBuilderStateType(StreamingStateType):
         )
 
     @cached_property
-    def arr_dtypes(self) -> List[types.ArrayCompatible]:
+    def arr_dtypes(self) -> list[types.ArrayCompatible]:
         """Returns the list of types for each array in the build table."""
         return self.build_table_type.arr_types
 

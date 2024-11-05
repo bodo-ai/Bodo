@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
 from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
@@ -8,14 +8,14 @@ from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
 CatalogType = Literal["hadoop", "hive", "nessie", "glue", "snowflake", "rest"]
 
 
-def _get_first(elems: Dict[str, List[str]], param: str) -> Optional[str]:
+def _get_first(elems: dict[str, list[str]], param: str) -> str | None:
     elem = elems.get(param, None)
     return elem[0] if elem and len(elem) > 0 else None
 
 
 def parse_conn_str(
     conn_str: str,
-) -> Tuple[str, Optional[str]]:
+) -> tuple[str, str | None]:
     """
     Parse catalog / metastore connection string to determine catalog type
     and potentially the warehouse location

@@ -8,7 +8,6 @@ import argparse
 import os
 import re
 import subprocess
-from typing import List
 
 
 def main(
@@ -45,9 +44,9 @@ def main(
         ]
         ret = subprocess.run(cmd, capture_output=True, text=True)
         # Define relevant outputs
-        used_tables: List[str] = []
-        successful_files: List[str] = []
-        failed_files: List[str] = []
+        used_tables: list[str] = []
+        successful_files: list[str] = []
+        failed_files: list[str] = []
         # Define our matchers
         table_matcher = re.compile(".* Validating table: (.*)")
         success_matcher = re.compile("Successfully validated query file: (.*)")

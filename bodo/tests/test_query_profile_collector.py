@@ -594,7 +594,7 @@ def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -753,7 +753,7 @@ def test_nested_loop_join_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(_get_dist_arg(build_df), _get_dist_arg(probe_df))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -867,7 +867,7 @@ def test_groupby_agg_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(_get_dist_arg(df))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -995,7 +995,7 @@ def test_groupby_acc_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(_get_dist_arg(df))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -1135,7 +1135,7 @@ def test_mrnf_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(_get_dist_arg(df))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -1354,7 +1354,7 @@ def test_union_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(_get_dist_arg(df1), _get_dist_arg(df2), _get_dist_arg(df3))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     operator_report = profile_json["operator_reports"]["0"]
@@ -1462,7 +1462,7 @@ def test_snowflake_metrics_collection(memory_leak_check, tmp_path):
         _ = impl(conn)
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     assert "operator_reports" in profile_json
@@ -1545,7 +1545,7 @@ def test_iceberg_metrics_collection(
         _ = impl(conn)
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
 
     assert "operator_reports" in profile_json
@@ -1717,7 +1717,7 @@ def test_sort_metrics_collection(memory_leak_check, tmp_path, limit_offset):
         _ = bodo.jit(distributed=["df"])(impl)(_get_dist_arg(input_df))
 
     profile_path = get_query_profile_location(tmp_path_rank0, rank)
-    with open(profile_path, "r") as f:
+    with open(profile_path) as f:
         profile_json = json.load(f)
     comm.barrier()
 

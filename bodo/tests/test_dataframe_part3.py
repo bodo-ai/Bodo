@@ -1637,7 +1637,7 @@ def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
     if use_index:
         # Append the index num bytes, which should just be a range index,
         # so 3 integers per rank.
-        nbytes_list.append((8 * 3 * bodo.get_size()))
+        nbytes_list.append(8 * 3 * bodo.get_size())
     for i in range(33):
         # Int columns are nullable integers
         nbytes_list.append(total_int_data + null_bytes)
@@ -1648,7 +1648,7 @@ def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
         total_string_data = sum(
             [
                 len(f"value{k}")
-                for j, k in enumerate((np.arange(num_rows) * (i + 1)))
+                for j, k in enumerate(np.arange(num_rows) * (i + 1))
                 if j not in null_data_rows
             ]
         )
