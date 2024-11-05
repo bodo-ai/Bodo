@@ -70,7 +70,7 @@ jobs:
     with:
       batch: ${{ matrix.batch }}
       total-batches: 12
-      pytest-marker: "not slow and not weekly"
+      pytest-marker: "not slow and not weekly or smoke"
       collect-coverage: true
     secrets: inherit
 
