@@ -15,16 +15,17 @@ pytestmark = pytest_spawn_mode
 
 
 def test_propogate_same_exception_all_ranks():
-    """Test that a concise message is returned when all ranks fail"""
+    """Test that a single exact exception is raised when all ranks raise the same
+    exception"""
 
     @bodo.jit(spawn=True)
-    def fn():
-        # This will actually fail to compile since all paths end in an
-        # exception, but that's ok for this test
-        raise Exception("failed")
+    def fn(a):
+        if a:
+            raise ValueError("bad value")
+        return a
 
-    with pytest.raises(Exception, match="All ranks failed"):
-        fn()
+    with pytest.raises(ValueError, match="bad value"):
+        fn(3)
 
 
 @pytest.mark.skipif(

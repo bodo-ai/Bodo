@@ -213,7 +213,7 @@ class Spawner:
             all_ranks_failed = all(caught_exceptions)
             if all_ranks_failed and len(types) == 1 and len(msgs) == 1:
                 excep = caught_exceptions[0]
-                raise Exception("All ranks failed with the same exception") from excep
+                raise excep
             else:
                 # Annotate exceptions with their rank
                 exceptions = []
