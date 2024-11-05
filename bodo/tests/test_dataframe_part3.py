@@ -12,6 +12,8 @@ from numba import types
 from pandas.core.dtypes.common import is_list_like
 
 import bodo
+import bodo.tests
+import bodo.tests.utils
 from bodo.mpi4py import MPI
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
@@ -1373,6 +1375,10 @@ def test_empty_dataframe_creation(memory_leak_check):
 
 
 @pytest.mark.parquet
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="Spawn workers don't set _use_dict_str_type and READ_STR_AS_DICT_THRESHOLD",
+)
 def test_unify_dict_string_dataframes():
     """
     Tests unifying DataFrames when the inputs consist of
