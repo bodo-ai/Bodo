@@ -1,4 +1,5 @@
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -396,6 +397,22 @@ def test_merge_validate_none(memory_leak_check):
     with pytest.raises(
         BodoError, match="validate parameter only supports default value None"
     ):
+        bodo.jit(impl)(df1, df2)
+
+
+def test_merge_map_key_err(memory_leak_check):
+    """make sure map array as key throws an error in merge"""
+
+    def impl(df1, df2):
+        return df1.merge(df2, on="A")
+
+    key = pd.Series(
+        [{1: 1, 2: 2}, {2: 2}, {3: 3}],
+        dtype=pd.ArrowDtype(pa.map_(pa.int64(), pa.int64())),
+    )
+    df1 = pd.DataFrame({"A": key, "C": ["aa", "b", "c"]})
+    df2 = pd.DataFrame({"A": key, "B": ["aa", "b", "c"]})
+    with pytest.raises(BodoError, match=r".* MapArrayType unsupported(.|\n)*"):
         bodo.jit(impl)(df1, df2)
 
 
