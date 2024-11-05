@@ -287,6 +287,10 @@ def test_copy(array_item_arr_value, memory_leak_check):
     check_func(test_impl, (array_item_arr_value,))
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="Spawn workers don't set _use_dict_str_type",
+)
 def test_nested_arr_dict_getitem(memory_leak_check):
     """Make sure dictionary-encoded arrays inside nested arrays support allocation and
     setitem that are necessary for operations like array(item) bool getitem
