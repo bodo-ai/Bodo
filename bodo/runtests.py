@@ -54,9 +54,7 @@ if "CODEBUILD_BUILD_ID" in os.environ:
         indent = " " * 4
         for marker in set(marker_groups.values()):
             print(
-                "{0}{1}: Group {1} for running distributed tests\n".format(
-                    indent, marker
-                ),
+                f"{indent}{marker}: Group {marker} for running distributed tests\n",
             )
 
     with open("testtiming.json", "w") as f:

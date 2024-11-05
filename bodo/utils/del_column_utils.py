@@ -4,8 +4,6 @@ pass organized. This contains information about all
 table operations for optimizations.
 """
 
-from typing import Dict, Tuple
-
 from numba.core import ir, types
 
 from bodo.hiframes.table import TableType
@@ -34,7 +32,7 @@ table_usecol_funcs = {
 }
 
 
-def is_table_use_column_ops(fdef: Tuple[str, str], args, typemap):
+def is_table_use_column_ops(fdef: tuple[str, str], args, typemap):
     """Is the given callname a table operation
     that uses columns. Note: This must include
     all valid table operations that do not result
@@ -57,7 +55,7 @@ def is_table_use_column_ops(fdef: Tuple[str, str], args, typemap):
 
 
 def get_table_used_columns(
-    fdef: Tuple[str, str], call_expr: ir.Expr, typemap: Dict[str, types.Type]
+    fdef: tuple[str, str], call_expr: ir.Expr, typemap: dict[str, types.Type]
 ):
     """Get the columns used by a particular table operation
 

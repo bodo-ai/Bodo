@@ -130,7 +130,7 @@ class FileSystemCatalogType(DatabaseCatalogType):
         self.connection_string = connection_string
         self.default_write_format = default_write_format
         self.default_schema = default_schema
-        super(FileSystemCatalogType, self).__init__(
+        super().__init__(
             name=f"FileSystemCatalogType(connection_string={connection_string}, default_write_format={default_write_format}, default_schema={default_schema})"
         )
 

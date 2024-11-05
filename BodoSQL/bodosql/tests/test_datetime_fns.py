@@ -4800,14 +4800,14 @@ def test_time_slice(memory_leak_check):
 
     answer = pd.DataFrame(
         {
-            "t1": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
-            "t2": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
-            "t3": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
-            "t4": pd.Series(([pd.Timestamp(2011, 12, 26)] * 12)),
-            "t5": pd.Series(([pd.Timestamp(2012, 1, 1)] * 12)),
-            "t6": pd.Series(([pd.Timestamp(2012, 1, 1, 12)] * 12)),
-            "t7": pd.Series(([pd.Timestamp(2012, 1, 1, 12, 59)] * 12)),
-            "t8": pd.Series(([pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12)),
+            "t1": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
+            "t2": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
+            "t3": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
+            "t4": pd.Series([pd.Timestamp(2011, 12, 26)] * 12),
+            "t5": pd.Series([pd.Timestamp(2012, 1, 1)] * 12),
+            "t6": pd.Series([pd.Timestamp(2012, 1, 1, 12)] * 12),
+            "t7": pd.Series([pd.Timestamp(2012, 1, 1, 12, 59)] * 12),
+            "t8": pd.Series([pd.Timestamp(2012, 1, 1, 12, 59, 59)] * 12),
         }
     )
 
@@ -4816,7 +4816,7 @@ def test_time_slice(memory_leak_check):
     query = "SELECT "
     query += ", ".join(
         [
-            "TIME_SLICE(A, 1, '{}', 'START') as t{}".format(unit, i + 1)
+            f"TIME_SLICE(A, 1, '{unit}', 'START') as t{i + 1}"
             for i, unit in enumerate(time_units)
         ]
     )

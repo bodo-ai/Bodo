@@ -82,7 +82,7 @@ offset_ctypes_type = types.ArrayCTypes(offset_arr_type)
 # type for pd.arrays.StringArray and ndarray with string object values
 class StringArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
-        super(StringArrayType, self).__init__(name="StringArrayType()")
+        super().__init__(name="StringArrayType()")
 
     @property
     def as_array(self):
@@ -158,7 +158,7 @@ class StringDtype(types.Number):
     """
 
     def __init__(self):
-        super(StringDtype, self).__init__("StringDtype")
+        super().__init__("StringDtype")
 
 
 string_dtype = StringDtype()
@@ -948,10 +948,10 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
 
     if isinstance(data, types.BaseTuple):
         count = data.count
-        out = ["to_list_if_immutable_arr(data[{}])".format(i) for i in range(count)]
+        out = [f"to_list_if_immutable_arr(data[{i}])" for i in range(count)]
         if is_overload_true(str_null_bools):
             out += [
-                "get_str_null_bools(data[{}])".format(i)
+                f"get_str_null_bools(data[{i}])"
                 for i in range(count)
                 if is_str_arr_type(data.types[i]) or data.types[i] == binary_array_type
             ]
@@ -1025,14 +1025,10 @@ def cp_str_list_to_array_overload(str_arr, list_data, str_null_bools=None):
                 is_overload_true(str_null_bools)
                 and str_arr.types[i] == string_array_type
             ):
-                func_text += "  cp_str_list_to_array(str_arr[{}], list_data[{}], list_data[{}])\n".format(
-                    i, i, count + str_ind
-                )
+                func_text += f"  cp_str_list_to_array(str_arr[{i}], list_data[{i}], list_data[{count + str_ind}])\n"
                 str_ind += 1
             else:
-                func_text += (
-                    "  cp_str_list_to_array(str_arr[{}], list_data[{}])\n".format(i, i)
-                )
+                func_text += f"  cp_str_list_to_array(str_arr[{i}], list_data[{i}])\n"
         func_text += "  return\n"
 
         loc_vars = {}

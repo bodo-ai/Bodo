@@ -856,9 +856,7 @@ class SeriesPass:
             if_series_to_array_type(rhs_type), types.Array
         ):
             typ_str = str(rhs_type.dtype)
-            assign.value = ir.Global(
-                "np.dtype({})".format(typ_str), np.dtype(typ_str), rhs.loc
-            )
+            assign.value = ir.Global(f"np.dtype({typ_str})", np.dtype(typ_str), rhs.loc)
             return [assign]
 
         # Start of Index Operations
@@ -2003,39 +2001,37 @@ class SeriesPass:
                     func_text += "  start_0 = 0\n"
                     func_text += "  size_0 = len(read_indices)\n"
                 else:
-                    func_text += "  start_{0} = 0\n".format(i)
-                    func_text += "  size_{0} = bodo.io.h5_api.h5size(dset_id, np.int32({0}))\n".format(
-                        i
+                    func_text += f"  start_{i} = 0\n"
+                    func_text += (
+                        f"  size_{i} = bodo.io.h5_api.h5size(dset_id, np.int32({i}))\n"
                     )
                     if i < len(index_types):
                         if isinstance(index_types[i], types.SliceType):
                             func_text += "  slice_idx_{0} = numba.cpython.unicode._normalize_slice(index{1}, size_{0})\n".format(
                                 i,
-                                "[{}]".format(i)
+                                f"[{i}]"
                                 if isinstance(index_tp, types.BaseTuple)
                                 else "",
                             )
-                            func_text += "  start_{0} = slice_idx_{0}.start\n".format(i)
-                            func_text += "  size_{0} = numba.cpython.unicode._slice_span(slice_idx_{0})\n".format(
-                                i
-                            )
+                            func_text += f"  start_{i} = slice_idx_{i}.start\n"
+                            func_text += f"  size_{i} = numba.cpython.unicode._slice_span(slice_idx_{i})\n"
                         else:
                             assert isinstance(
                                 types.unliteral(index_types[i]), types.Integer
                             )
-                            func_text += "  start_{0} = index{1}\n".format(
+                            func_text += "  start_{} = index{}\n".format(
                                 i,
-                                "[{}]".format(i)
+                                f"[{i}]"
                                 if isinstance(index_tp, types.BaseTuple)
                                 else "",
                             )
-                            func_text += "  size_{0} = 1\n".format(i)
+                            func_text += f"  size_{i} = 1\n"
 
             # array dimensions can be less than dataset due to integer selection
             func_text += "  arr_shape = ({},)\n".format(
                 ", ".join(
                     [
-                        "size_{}".format(i)
+                        f"size_{i}"
                         for i in range(ndim)
                         if not (
                             i < len(index_types)
@@ -2046,23 +2042,19 @@ class SeriesPass:
                     ]
                 )
             )
-            func_text += "  A = np.empty(arr_shape, np.{})\n".format(dtype_str)
+            func_text += f"  A = np.empty(arr_shape, np.{dtype_str})\n"
 
             func_text += "  start_tup = ({},)\n".format(
-                ", ".join(["start_{}".format(i) for i in range(ndim)])
+                ", ".join([f"start_{i}" for i in range(ndim)])
             )
             func_text += "  count_tup = ({},)\n".format(
-                ", ".join(["size_{}".format(i) for i in range(ndim)])
+                ", ".join([f"size_{i}" for i in range(ndim)])
             )
 
             if filter_read:
-                func_text += "  err = bodo.io.h5_api.h5read_filter(dset_id, np.int32({}), start_tup, count_tup, 0, A, read_indices)\n".format(
-                    ndim
-                )
+                func_text += f"  err = bodo.io.h5_api.h5read_filter(dset_id, np.int32({ndim}), start_tup, count_tup, 0, A, read_indices)\n"
             else:
-                func_text += "  err = bodo.io.h5_api.h5read(dset_id, np.int32({}), start_tup, count_tup, 0, A)\n".format(
-                    ndim
-                )
+                func_text += f"  err = bodo.io.h5_api.h5read(dset_id, np.int32({ndim}), start_tup, count_tup, 0, A)\n"
             func_text += "  return A\n"
 
             loc_vars = {}
@@ -3197,7 +3189,7 @@ class SeriesPass:
                     self, loc_vars["impl"], args, extra_globals={"_ufunc": np_ufunc}
                 )
         else:
-            raise BodoError("Unsupported numpy ufunc {}".format(ufunc_name))
+            raise BodoError(f"Unsupported numpy ufunc {ufunc_name}")
 
     def _handle_ufuncs_int_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
@@ -3343,25 +3335,23 @@ class SeriesPass:
             kws = dict(rhs.kws)
             keys = list(kws.keys())
             header_args = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join("e{}".format(i + len(rhs.args)) for i in range(len(keys)))
+                + ", ".join(f"e{i + len(rhs.args)}" for i in range(len(keys)))
             )
             arg_names = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join(
-                    "{}=e{}".format(a, i + len(rhs.args)) for i, a in enumerate(keys)
-                )
+                + ", ".join(f"{a}=e{i + len(rhs.args)}" for i, a in enumerate(keys))
             )
-            func_text = "def f(string, {}):\n".format(header_args)
-            func_text += "    return format_func(string, {})\n".format(header_args)
+            func_text = f"def f(string, {header_args}):\n"
+            func_text += f"    return format_func(string, {header_args})\n"
 
-            format_func_text = "def format_func(string, {}):\n".format(header_args)
+            format_func_text = f"def format_func(string, {header_args}):\n"
             format_func_text += (
                 "    with bodo.no_warning_objmode(res='unicode_type'):\n"
             )
-            format_func_text += "        res = string.format({})\n".format(arg_names)
+            format_func_text += f"        res = string.format({arg_names})\n"
             format_func_text += "    return res\n"
 
             loc_vars = {}
@@ -3402,23 +3392,21 @@ class SeriesPass:
             kws = dict(rhs.kws)
             keys = list(kws.keys())
             header_args = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join("e{}".format(i + len(rhs.args)) for i in range(len(keys)))
+                + ", ".join(f"e{i + len(rhs.args)}" for i in range(len(keys)))
             )
             arg_names = (
-                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                ", ".join(f"e{i}" for i in range(len(rhs.args)))
                 + (", " if rhs.args else "")
-                + ", ".join(
-                    "{}=e{}".format(a, i + len(rhs.args)) for i, a in enumerate(keys)
-                )
+                + ", ".join(f"{a}=e{i + len(rhs.args)}" for i, a in enumerate(keys))
             )
-            func_text = "def f(logger, {}):\n".format(header_args)
-            func_text += "    return format_func(logger, {})\n".format(header_args)
+            func_text = f"def f(logger, {header_args}):\n"
+            func_text += f"    return format_func(logger, {header_args})\n"
 
-            format_func_text = "def format_func(logger, {}):\n".format(header_args)
+            format_func_text = f"def format_func(logger, {header_args}):\n"
             format_func_text += "    with bodo.no_warning_objmode():\n"
-            format_func_text += "        logger.{}({})\n".format(func_name, arg_names)
+            format_func_text += f"        logger.{func_name}({arg_names})\n"
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)
@@ -3674,19 +3662,16 @@ class SeriesPass:
         out_arr_types = out_arr_types if is_df_output else [out_arr_types]
         n_out_cols = len(out_arr_types)
         udf_arg_names = (
-            ", ".join("e{}".format(i) for i in range(len(extra_args)))
+            ", ".join(f"e{i}" for i in range(len(extra_args)))
             + (", " if extra_args else "")
-            + ", ".join(
-                "{}=e{}".format(a, i + len(extra_args))
-                for i, a in enumerate(kws.keys())
-            )
+            + ", ".join(f"{a}=e{i + len(extra_args)}" for i, a in enumerate(kws.keys()))
         )
         extra_args += list(kws.values())
         extra_arg_names = (", " if extra_args else "") + ", ".join(
-            "e{}".format(i) for i in range(len(extra_args))
+            f"e{i}" for i in range(len(extra_args))
         )
 
-        func_text = "def f(A, index, name{}):\n".format(extra_arg_names)
+        func_text = f"def f(A, index, name{extra_arg_names}):\n"
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(A)\n"
         for i in range(n_out_cols):
@@ -3695,7 +3680,7 @@ class SeriesPass:
             )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
-        func_text += "    v = map_func(t2, {})\n".format(udf_arg_names)
+        func_text += f"    v = map_func(t2, {udf_arg_names})\n"
         if is_df_output:
             func_text += "    v_vals = bodo.hiframes.pd_series_ext.get_series_data(v)\n"
             for i in range(n_out_cols):
@@ -4015,11 +4000,9 @@ class SeriesPass:
         func_text += "  zero_tup = ({},)\n".format(", ".join(["0"] * ndim))
         # TODO: remove after support arr.shape in parallel
         func_text += "  arr_shape = ({},)\n".format(
-            ", ".join(["arr.shape[{}]".format(i) for i in range(ndim)])
+            ", ".join([f"arr.shape[{i}]" for i in range(ndim)])
         )
-        func_text += "  err = bodo.io.h5_api.h5write(dset_id, np.int32({}), zero_tup, arr_shape, 0, arr)\n".format(
-            ndim
-        )
+        func_text += f"  err = bodo.io.h5_api.h5write(dset_id, np.int32({ndim}), zero_tup, arr_shape, 0, arr)\n"
 
         loc_vars = {}
         exec(func_text, {}, loc_vars)

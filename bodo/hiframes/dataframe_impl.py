@@ -7,7 +7,6 @@ import operator
 import re
 import warnings
 from collections import namedtuple
-from typing import Set, Tuple
 
 import numba
 import numpy as np
@@ -132,7 +131,7 @@ def overload_dataframe_index(df):
     )  # pragma: no cover
 
 
-def generate_col_to_index_func_text(col_names: Tuple):
+def generate_col_to_index_func_text(col_names: tuple):
     """
     Takes a tuple of column names and generates the necessary func_text
     to replace a constant version of the column names with the appropriate
@@ -193,7 +192,7 @@ def overload_dataframe_values(df):
         for i in range(n_cols)
     )
     func_text = "def f(df):\n".format()
-    func_text += "    return np.stack(({},), 1)\n".format(data_args)
+    func_text += f"    return np.stack(({data_args},), 1)\n"
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
@@ -1148,7 +1147,7 @@ def overload_dataframe_isin(df, values):
         df_case = True
         for i, c in enumerate(df.columns):
             if c in values.column_index:
-                v_name = "val{}".format(i)
+                v_name = f"val{i}"
                 func_text += f"  {v_name} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {values.column_index[c]})\n"
                 other_colmap[c] = v_name
     # Series contains (x in y) does not seem to be supported?
@@ -1161,15 +1160,13 @@ def overload_dataframe_isin(df, values):
 
     data = []
     for i in range(len(df.columns)):
-        v_name = "data{}".format(i)
+        v_name = f"data{i}"
         func_text += (
-            "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})\n".format(
-                v_name, i
-            )
+            f"  {v_name} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
         )
         data.append(v_name)
 
-    out_data = ["out{}".format(i) for i in range(len(df.columns))]
+    out_data = [f"out{i}" for i in range(len(df.columns))]
 
     isin_func = """
   numba.parfors.parfor.init_prange()
@@ -1249,13 +1246,13 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
         )
         for c in numeric_cols
     )
-    mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
+    mat = f"np.stack(({arr_args},), 1){typ_conv}"
 
-    data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
+    data_args = ", ".join(f"res[:,{i}]" for i in range(len(numeric_cols)))
     index = f"{generate_col_to_index_func_text(numeric_cols)}\n"
 
     header = "def impl(df, method='pearson', min_periods=1):\n"
-    header += "  mat = {}\n".format(mat)
+    header += f"  mat = {mat}\n"
     header += "  res = bodo.libs.array_kernels.nancorr(mat, 0, min_periods)\n"
     return _gen_init_df(header, numeric_cols, data_args, index)
 
@@ -1311,14 +1308,14 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
         )
         for c in numeric_cols
     )
-    mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
+    mat = f"np.stack(({arr_args},), 1){typ_conv}"
 
-    data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
+    data_args = ", ".join(f"res[:,{i}]" for i in range(len(numeric_cols)))
     index = f"pd.Index({numeric_cols})\n"
 
     header = "def impl(df, min_periods=None, ddof=1):\n"
-    header += "  mat = {}\n".format(mat)
-    header += "  res = bodo.libs.array_kernels.nancorr(mat, 1, {})\n".format(minpv)
+    header += f"  mat = {mat}\n"
+    header += f"  res = bodo.libs.array_kernels.nancorr(mat, 1, {minpv})\n"
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 
@@ -1341,7 +1338,7 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
         for i in range(len(df.columns))
     )
     func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
-    func_text += "  data = np.array([{}])\n".format(data_args)
+    func_text += f"  data = np.array([{data_args}])\n"
     col_index = bodo.hiframes.dataframe_impl.generate_col_to_index_func_text(df.columns)
     func_text += (
         f"  return bodo.hiframes.pd_series_ext.init_series(data, {col_index})\n"
@@ -1371,7 +1368,7 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
         for i in range(len(df.columns))
     )
     func_text = "def impl(df, axis=0, dropna=True):\n"
-    func_text += "  data = np.asarray(({},))\n".format(data_args)
+    func_text += f"  data = np.asarray(({data_args},))\n"
     col_index = bodo.hiframes.dataframe_impl.generate_col_to_index_func_text(df.columns)
     func_text += (
         f"  return bodo.hiframes.pd_series_ext.init_series(data, {col_index})\n"
@@ -1721,9 +1718,7 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
     if func_name in ("var", "std"):
         ddof = "ddof=1, "
 
-    func_text = "def impl(df, axis=None, skipna=None, level=None,{} numeric_only=None{}):\n".format(
-        ddof, minc
-    )
+    func_text = f"def impl(df, axis=None, skipna=None, level=None,{ddof} numeric_only=None{minc}):\n"
     if func_name == "quantile":
         func_text = (
             "def impl(df, q=0.5, axis=0, numeric_only=True, interpolation='linear'):\n"
@@ -1750,7 +1745,7 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
     # TODO: handle NaN for ints better
     typ_cast = ""
     if func_name in ("min", "max"):
-        typ_cast = ", dtype=np.{}".format(comm_dtype)
+        typ_cast = f", dtype=np.{comm_dtype}"
 
     # XXX pandas combines all column values so int8/float32 results in float32
     # not float64
@@ -1794,11 +1789,9 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
         func_text += (
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
         )
-        func_text += "  data = bodo.utils.conversion.coerce_to_array(({},))\n".format(
-            data_args
-        )
+        func_text += f"  data = bodo.utils.conversion.coerce_to_array(({data_args},))\n"
     else:
-        func_text += "  data = np.asarray(({},){})\n".format(data_args, typ_cast)
+        func_text += f"  data = np.asarray(({data_args},){typ_cast})\n"
     func_text += f"  return bodo.hiframes.pd_series_ext.init_series(data, pd.Index({out_colnames}))\n"
     return func_text
 
@@ -1808,7 +1801,7 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
     col_inds = [df_type.column_index[c] for c in out_colnames]
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
     data_args = "\n    ".join(
-        "arr_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(i)
+        f"arr_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
         for i in col_inds
     )
     data_accesses = "\n        ".join(
@@ -2012,7 +2005,7 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
     )
 
     data_args = ", ".join(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[indices_t]".format(i)
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[indices_t]"
         for i in range(len(df.columns))
     )
     header = "def impl(df, indices, axis=0, convert=None, is_copy=True):\n"
@@ -2188,7 +2181,7 @@ def overload_dataframe_set_index(
 
     header = "def impl(df, keys, drop=True, append=False, inplace=False, verify_integrity=False):\n"
     data_args = ", ".join(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
         for i in range(len(df.columns))
         if i != col_ind
     )
@@ -2262,8 +2255,8 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 
     func_text = "def impl(df, subset=None, keep='first'):\n"
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
+        func_text += (
+            f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
         )
     data_cols = ", ".join(f"data_{i}" for i in range(n_cols))
     data_cols += "," if n_cols == 1 else ""
@@ -2378,10 +2371,8 @@ def overload_dataframe_drop_duplicates(
             lambda df, subset=None, keep="first", inplace=False, ignore_index=False: df
         )  # pragma: no cover
 
-    subset_args = ["data_{}".format(i) for i in subset_idx]
-    non_subset_args = [
-        "data_{}".format(i) for i in range(n_cols) if i not in subset_idx
-    ]
+    subset_args = [f"data_{i}" for i in subset_idx]
+    non_subset_args = [f"data_{i}" for i in range(n_cols) if i not in subset_idx]
 
     if subset_args:
         num_drop_cols = len(subset_args)
@@ -2408,16 +2399,12 @@ def overload_dataframe_drop_duplicates(
     else:
         drop_duplicates_args = ", ".join(subset_args + non_subset_args)
 
-        data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+        data_args = ", ".join(f"data_{i}" for i in range(n_cols))
 
         for i in range(n_cols):
-            func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-                i
-            )
+            func_text += f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
 
-        func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2}, {3})\n".format(
-            drop_duplicates_args, index, num_drop_cols, keep_i
-        )
+        func_text += f"  ({drop_duplicates_args},), index_arr = bodo.libs.array_kernels.drop_duplicates(({drop_duplicates_args},), {index}, {num_drop_cols}, {keep_i})\n"
         out_len = "len(data_0)"
 
     if ignore_index:
@@ -2741,7 +2728,7 @@ def create_binary_op_overload(op):
                 )
                 header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
                 header += "".join(
-                    "    {0}[i] = {1}\n".format(arr_name, op == operator.ne)
+                    f"    {arr_name}[i] = {op == operator.ne}\n"
                     for arr_name in diff_types
                 )
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(lhs)"
@@ -2774,9 +2761,7 @@ def create_binary_op_overload(op):
                 data_args = ", ".join(data_impl)
             else:
                 data_args = ", ".join(
-                    "lhs {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(rhs, {0})".format(
-                        i, op_str
-                    )
+                    f"lhs {op_str} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(rhs, {i})"
                     for i in range(len(rhs.columns))
                 )
             header = "def impl(lhs, rhs):\n"
@@ -2784,14 +2769,12 @@ def create_binary_op_overload(op):
                 header += "  numba.parfors.parfor.init_prange()\n"
                 header += "  n = len(rhs)\n"
                 header += "".join(
-                    "  {0} = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n".format(
-                        arr_name
-                    )
+                    f"  {arr_name} = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
                     for arr_name in diff_types
                 )
                 header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
                 header += "".join(
-                    "    {0}[i] = {1}\n".format(arr_name, op == operator.ne)
+                    f"    {arr_name}[i] = {op == operator.ne}\n"
                     for arr_name in diff_types
                 )
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(rhs)"
@@ -2864,13 +2847,9 @@ def create_inplace_binary_op_overload(op):
             # scalar case
             func_text = "def impl(left, right):\n"
             for i in range(len(left.columns)):
-                func_text += "  df_arr{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0})\n".format(
-                    i
-                )
-                func_text += "  df_arr{0} {1} right\n".format(i, op_str)
-            data_args = ", ".join(
-                ("df_arr{}").format(i) for i in range(len(left.columns))
-            )
+                func_text += f"  df_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {i})\n"
+                func_text += f"  df_arr{i} {op_str} right\n"
+            data_args = ", ".join((f"df_arr{i}") for i in range(len(left.columns)))
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
             return _gen_init_df(func_text, left.columns, data_args, index)
 
@@ -2896,9 +2875,7 @@ def create_unary_op_overload(op):
             op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
             check_runtime_cols_unsupported(df, op_str)
             data_args = ", ".join(
-                "{1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(
-                    i, op_str
-                )
+                f"{op_str} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
                 for i in range(len(df.columns))
             )
             header = "def impl(df):\n"
@@ -3130,7 +3107,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
     env = pandas.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
     clean_func = pandas.core.computation.parsing.clean_column_name
 
-    def append_null_checks(expr_node, null_set: Set[str]):
+    def append_null_checks(expr_node, null_set: set[str]):
         """Create a new expr appending by append NOTNA & checks
         to the front of expr node for each element in null_set."""
 
@@ -3563,15 +3540,9 @@ def common_validate_merge_merge_asof_spec(
 
         if len(comm_cols) == 0 and not is_gen_cond:
             raise_bodo_error(
-                name_func
-                + "(): No common columns to perform merge on. "
-                "Merge options: left_on={lon}, right_on={ron}, "
-                "left_index={lidx}, right_index={ridx}".format(
-                    lon=is_overload_true(left_on),
-                    ron=is_overload_true(right_on),
-                    lidx=is_overload_true(left_index),
-                    ridx=is_overload_true(right_index),
-                )
+                name_func + "(): No common columns to perform merge on. "
+                f"Merge options: left_on={is_overload_true(left_on)}, right_on={is_overload_true(right_on)}, "
+                f"left_index={is_overload_true(left_index)}, right_index={is_overload_true(right_index)}"
             )
         # make sure "on" does not coexist with left_on or right_on
         if (not is_overload_none(left_on)) or (not is_overload_none(right_on)):
@@ -3744,9 +3715,9 @@ def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_
             typing_context.resolve_function_type(operator.eq, (lk_type, rk_type), {})
         except Exception:
             raise_bodo_error(
-                "merge: You are trying to merge on {lk_dtype} and "
-                "{rk_dtype} columns. If you wish to proceed "
-                "you should use pd.concat".format(lk_dtype=lk_type, rk_dtype=rk_type)
+                f"merge: You are trying to merge on {lk_type} and "
+                f"{rk_type} columns. If you wish to proceed "
+                "you should use pd.concat"
             )
     else:  # cases where only columns are used in merge
         for lk, rk in zip(left_keys, right_keys):
@@ -3759,10 +3730,10 @@ def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_
                 continue
 
             msg = (
-                "merge: You are trying to merge on column {lk} of {lk_dtype} and "
-                "column {rk} of {rk_dtype}. If you wish to proceed "
+                f"merge: You are trying to merge on column {lk} of {lk_type} and "
+                f"column {rk} of {rk_type}. If you wish to proceed "
                 "you should use pd.concat"
-            ).format(lk=lk, lk_dtype=lk_type, rk=rk, rk_dtype=rk_type)
+            )
 
             # Make sure non-string columns are not merged with string columns.
             # As of Numba 0.47, string comparison with non-string works and is always
@@ -3833,9 +3804,7 @@ def overload_dataframe_join(
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True, False, True, False, '')\n".format(
-        left_keys, right_keys, how, lsuffix, rsuffix
-    )
+    func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {left_keys}, {right_keys}, '{how}', '{lsuffix}', '{rsuffix}', True, False, True, False, '')\n"
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
@@ -3868,7 +3837,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
         # because we are not supporting lsuffix and rsuffix
         raise_bodo_error(
             "join(): not supporting joining on overlapping columns:"
-            "{cols} Use DataFrame.merge() instead.".format(cols=comm_cols)
+            f"{comm_cols} Use DataFrame.merge() instead."
         )
 
 
@@ -3893,7 +3862,7 @@ def validate_unicity_output_column_names(
     def insertOutColumn(col_name):
         if col_name in NatureLR:
             raise_bodo_error(
-                "join(): two columns happen to have the same name : {}".format(col_name)
+                f"join(): two columns happen to have the same name : {col_name}"
             )
         NatureLR[col_name] = 0
 
@@ -4014,9 +3983,7 @@ def overload_dataframe_merge_asof(
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
     func_text += "  suffix_x = suffixes[0]\n"
     func_text += "  suffix_y = suffixes[1]\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False, False, True, False, '')\n".format(
-        left_keys, right_keys, suffix_x, suffix_y
-    )
+    func_text += f"  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {left_keys}, {right_keys}, 'asof', '{suffix_x}', '{suffix_y}', False, False, True, False, '')\n"
 
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
@@ -4123,25 +4090,19 @@ def validate_groupby_spec(
     # make sure by has valid label(s)
     if len(set(get_overload_const_list(by)).difference(set(df.columns))) > 0:
         raise_bodo_error(
-            "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
-                get_overload_const_list(by), df.columns
-            )
+            f"groupby(): invalid key {get_overload_const_list(by)} for 'by' (not available in columns {df.columns})."
         )
 
     # make sure as_index is of type bool
     if not is_overload_constant_bool(as_index):
         raise_bodo_error(
-            "groupby(): 'as_index' parameter must be a constant bool, not {}.".format(
-                as_index
-            ),
+            f"groupby(): 'as_index' parameter must be a constant bool, not {as_index}.",
         )
 
     # make sure dropna is of type bool
     if not is_overload_constant_bool(dropna):
         raise_bodo_error(
-            "groupby(): 'dropna' parameter must be a constant bool, not {}.".format(
-                dropna
-            ),
+            f"groupby(): 'dropna' parameter must be a constant bool, not {dropna}.",
         )
 
     if not is_overload_constant_int(_num_shuffle_keys):  # pragma: no cover
@@ -4966,7 +4927,7 @@ def validate_sort_values_spec(
     ):
         raise_bodo_error(
             "sort_values(): 'by' parameter only supports "
-            "a constant column label or column labels. by={}".format(by)
+            f"a constant column label or column labels. by={by}"
         )
     # make sure by has valid label(s)
     valid_keys_set = set(df.columns)
@@ -5011,7 +4972,7 @@ def validate_sort_values_spec(
     if not is_overload_bool(ascending) and not is_overload_bool_list(ascending):
         raise_bodo_error(
             "sort_values(): 'ascending' parameter must be of type bool or list of bool, "
-            "not {}.".format(ascending)
+            f"not {ascending}."
         )
 
     if is_overload_true(_bodo_interval_sort):
@@ -5031,7 +4992,7 @@ def validate_sort_values_spec(
     if not is_overload_bool(inplace):
         raise_bodo_error(
             "sort_values(): 'inplace' parameter must be of type bool, "
-            "not {}.".format(inplace)
+            f"not {inplace}."
         )
 
     # make sure 'kind' is not specified
@@ -5169,14 +5130,12 @@ def overload_dataframe_rank(
     func_text = "def impl(df, axis=0, method='average', numeric_only=None, na_option='keep', ascending=True, pct=False):\n"
     n_cols = len(df.columns)
     data_args = ", ".join(
-        "bodo.libs.array_kernels.rank(data_{}, method=method, na_option=na_option, ascending=ascending, pct=pct)".format(
-            i
-        )
+        f"bodo.libs.array_kernels.rank(data_{i}, method=method, na_option=na_option, ascending=ascending, pct=pct)"
         for i in range(n_cols)
     )
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
+        func_text += (
+            f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
         )
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
     return _gen_init_df(func_text, df.columns, data_args, index)
@@ -5301,7 +5260,7 @@ def overload_dataframe_reset_index(
         if isinstance(df.index, MultiIndexType):
             # MultiIndex case takes multiple arrays from MultiIndex
             func_text += "  m_index = bodo.hiframes.pd_index_ext.get_index_data(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
-            ind_arrs = ["m_index[{}]".format(i) for i in range(df.index.nlevels)]
+            ind_arrs = [f"m_index[{i}]" for i in range(df.index.nlevels)]
             data_args = ind_arrs + data_args
         else:
             ind_arr = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
@@ -5363,14 +5322,14 @@ def overload_dataframe_dropna(
             subset_ints.append(df.column_index[s])
 
     n_cols = len(df.columns)
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+    data_args = ", ".join(f"data_{i}" for i in range(n_cols))
 
     func_text = (
         "def impl(df, axis=0, how='any', thresh=None, subset=None, inplace=False):\n"
     )
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
+        func_text += (
+            f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
         )
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
     func_text += "  ({0}, index_arr) = bodo.libs.array_kernels.dropna(({0}, {1}), how, thresh, ({2},))\n".format(
@@ -5449,9 +5408,7 @@ def overload_dataframe_drop(
     for c in drop_cols:
         if c not in df.columns:
             raise_bodo_error(
-                "DataFrame.drop(): column {} not in DataFrame columns {}".format(
-                    c, df.columns
-                )
+                f"DataFrame.drop(): column {c} not in DataFrame columns {df.columns}"
             )
     if len(set(drop_cols)) == len(df.columns):
         raise BodoError("DataFrame.drop(): Dropping all columns not supported.")
@@ -5514,14 +5471,12 @@ def overload_dataframe_sample(
     )
 
     n_cols = len(df.columns)
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
-    rhs_data_args = ", ".join("rhs_data_{}".format(i) for i in range(n_cols))
+    data_args = ", ".join(f"data_{i}" for i in range(n_cols))
+    rhs_data_args = ", ".join(f"rhs_data_{i}" for i in range(n_cols))
 
     func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False):\n"
     for i in range(n_cols):
-        func_text += "  rhs_data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
-        )
+        func_text += f"  rhs_data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
     func_text += "  frac_d = -1.0 if frac is None else frac\n"
     func_text += "  n_i = 0 if n is None else n\n"
     func_text += "  if random_state is None:\n"
@@ -5801,7 +5756,7 @@ def overload_read_excel(
     df_type = _bodo_df_type.instance_type
 
     # add output type to numba 'types' module with a unique name, needed for objmode
-    t_name = "read_excel_df{}".format(next_label())
+    t_name = f"read_excel_df{next_label()}"
     setattr(types, t_name, df_type)
 
     # objmode doesn't allow lists, embed 'parse_dates' as a constant inside objmode
@@ -5812,7 +5767,7 @@ def overload_read_excel(
     # embed dtype since objmode doesn't allow list/dict
     pd_dtype_strs = ", ".join(
         [
-            "'{}':{}".format(cname, _get_pd_dtype_str(t))
+            f"'{cname}':{_get_pd_dtype_str(t)}"
             for cname, t in zip(df_type.columns, df_type.data)
         ]
     )
@@ -6215,7 +6170,7 @@ def _parse_query_expr(
                 and name in ("floor", "ceil")
             ):
                 if name not in new_funcs:
-                    raise BodoError('"{0}" is not a supported function'.format(name))
+                    raise BodoError(f'"{name}" is not a supported function')
 
             self.name = name
             if name in new_funcs:
@@ -6249,9 +6204,7 @@ def _parse_query_expr(
             except pandas.errors.UndefinedVariableError as e:
                 col_name = e.args[0].split("'")[1]
                 raise BodoError(
-                    "df.query(): column {} is not found in dataframe columns {}".format(
-                        col_name, columns
-                    )
+                    f"df.query(): column {col_name} is not found in dataframe columns {columns}"
                 )
         else:
             value_str = str(self.visit(value))
@@ -6280,9 +6233,9 @@ def _parse_query_expr(
     # make sure string literals are printed correctly in expression
     def __str__(self):
         if isinstance(self.value, list):
-            return "{}".format(self.value)
+            return f"{self.value}"
         if isinstance(self.value, str):
-            return "'{}'".format(self.value)
+            return f"'{self.value}'"
         return pandas.io.formats.printing.pprint_thing(self.name)
 
     # handle math calls
@@ -6291,18 +6244,16 @@ def _parse_query_expr(
         # avoid change if it is a dummy attribute call
         if self.op in new_funcs:
             return pandas.io.formats.printing.pprint_thing(
-                "{0}({1})".format(self.op, ",".join(map(str, self.operands)))
+                "{}({})".format(self.op, ",".join(map(str, self.operands)))
             )
 
-        op = "np.{}".format(self.op)
-        ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-            str(self.operands[0])
-        )
+        op = f"np.{self.op}"
+        ind = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({str(self.operands[0])}), 1, None)"
         return pandas.io.formats.printing.pprint_thing(
-            "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
+            "bodo.hiframes.pd_series_ext.init_series({}({}), {})".format(
                 op,
                 ",".join(
-                    "bodo.hiframes.pd_series_ext.get_series_data({})".format(str(a))
+                    f"bodo.hiframes.pd_series_ext.get_series_data({str(a)})"
                     for a in self.operands
                 ),
                 ind,
@@ -6312,8 +6263,7 @@ def _parse_query_expr(
     # replace 'in' operator with dummy function to convert to prange later
     def op__str__(self):
         parened = (
-            "({0})".format(pandas.io.formats.printing.pprint_thing(opr))
-            for opr in self.operands
+            f"({pandas.io.formats.printing.pprint_thing(opr)})" for opr in self.operands
         )
         if self.op == "in":
             return pandas.io.formats.printing.pprint_thing(
@@ -6327,9 +6277,7 @@ def _parse_query_expr(
                     ", ".join(parened)
                 )
             )
-        return pandas.io.formats.printing.pprint_thing(
-            " {0} ".format(self.op).join(parened)
-        )
+        return pandas.io.formats.printing.pprint_thing(f" {self.op} ".join(parened))
 
     saved_rewrite_membership_op = (
         pandas.core.computation.expr.BaseExprVisitor._rewrite_membership_op  # type: ignore
@@ -6381,9 +6329,7 @@ def _parse_query_expr(
             # currently do not support named index appears in expr
             raise BodoError(
                 "df.query(): Refering to named"
-                " index ('{}') by name is not supported".format(
-                    get_overload_const_str(index_name)
-                )
+                f" index ('{get_overload_const_str(index_name)}') by name is not supported"
             )
         else:
             # throw other errors
@@ -6425,13 +6371,11 @@ class DataFrameTupleIterator(types.SimpleIteratorType):
     def __init__(self, col_names, arr_typs):
         self.array_types = arr_typs
         self.col_names = col_names
-        name_args = [
-            "{}={}".format(col_names[i], arr_typs[i]) for i in range(len(col_names))
-        ]
+        name_args = [f"{col_names[i]}={arr_typs[i]}" for i in range(len(col_names))]
         name = "itertuples({})".format(",".join(name_args))
         py_ntup = namedtuple("Pandas", col_names)
         yield_type = types.NamedTuple([_get_series_dtype(a) for a in arr_typs], py_ntup)
-        super(DataFrameTupleIterator, self).__init__(name, yield_type)
+        super().__init__(name, yield_type)
 
     @property
     def mangling_args(self):
@@ -6479,9 +6423,9 @@ class DataFrameTupleIteratorModel(models.StructModel):
         # We use an unsigned index to avoid the cost of negative index tests.
         # XXX array_types[0] is implicit index
         members = [("index", types.EphemeralPointer(types.uintp))] + [
-            ("array{}".format(i), arr) for i, arr in enumerate(fe_type.array_types[1:])
+            (f"array{i}", arr) for i, arr in enumerate(fe_type.array_types[1:])
         ]
-        super(DataFrameTupleIteratorModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
     def from_return(self, builder, value):
         # dummy to avoid lowering error for itertuples_overload
@@ -6503,7 +6447,7 @@ def get_itertuples_impl(context, builder, sig, args):
     iterobj.index = indexptr
 
     for i, arr in enumerate(arrays):
-        setattr(iterobj, "array{}".format(i), arr)
+        setattr(iterobj, f"array{i}", arr)
 
     # Incref arrays
     for arr, arr_typ in zip(arrays, array_types):
@@ -6547,7 +6491,7 @@ def iternext_itertuples(context, builder, sig, args, result):
     with builder.if_then(is_valid):
         values = [index]  # XXX implicit int index
         for i, arr_typ in enumerate(iterty.array_types[1:]):
-            arr_ptr = getattr(iterobj, "array{}".format(i))
+            arr_ptr = getattr(iterobj, f"array{i}")
 
             if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
                 getitem_sig = signature(pd_timestamp_tz_naive_type, arr_typ, types.intp)
@@ -6614,9 +6558,7 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr, lhs):
     ndims = typ.count
     for i in range(ndims):
         # get size: Asize0 = A_sh_attr[0]
-        size_var = ir.Var(
-            var.scope, mk_unique_var("{}_size{}".format(var.name, i)), var.loc
-        )
+        size_var = ir.Var(var.scope, mk_unique_var(f"{var.name}_size{i}"), var.loc)
         getitem = ir.Expr.static_getitem(lhs, i, None, var.loc)
         self.calltypes[getitem] = None
         out.append(ir.Assign(getitem, size_var, var.loc))

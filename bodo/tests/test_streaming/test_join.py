@@ -2,7 +2,6 @@ import random
 import string
 import sys
 from contextlib import contextmanager
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -492,7 +491,7 @@ nested_loop_join_test_params = [
 
 
 @contextmanager
-def set_cross_join_block_size(block_size_bytes: Optional[int] = None):
+def set_cross_join_block_size(block_size_bytes: int | None = None):
     """
     Set the block size for streaming nested loop join's block size.
     If set to None, we unset the env var and let it use the default

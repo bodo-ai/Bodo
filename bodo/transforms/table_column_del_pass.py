@@ -332,7 +332,7 @@ class TableColumnDelPass:
                 var_names = []
                 func_lines = []
                 # Track globals to pass for deleting columns
-                col_globals: pt.Dict[str, bodo.utils.typing.MetaType] = {}
+                col_globals: dict[str, bodo.utils.typing.MetaType] = {}
                 for table_key, columns in escaping_cols.items():
                     used_var_key = get_livevar_key(
                         table_key, alias_sets[table_key], block_livemap
@@ -409,9 +409,7 @@ class TableColumnDelPass:
                                 # Track globals to pass for deleting columns. This
                                 # is one element but we pass a dict for consistency with
                                 # the block start case.
-                                col_globals: pt.Dict[
-                                    str, bodo.utils.typing.MetaType
-                                ] = {
+                                col_globals: dict[str, bodo.utils.typing.MetaType] = {
                                     "cols_to_delete": bodo.utils.typing.MetaType(
                                         tuple(sorted(deleted_cols))
                                     )
@@ -1690,11 +1688,11 @@ def _generate_rhs_use_map(
 
 
 def _compute_table_column_uses(
-    table_key: pt.Tuple[str, pt.Optional[int]],
-    table_col_use_map: pt.Dict[
-        int, pt.Dict[pt.Tuple[str, pt.Optional[int]], pt.Tuple[pt.Set[int], bool, bool]]
+    table_key: tuple[str, int | None],
+    table_col_use_map: dict[
+        int, dict[tuple[str, int | None], tuple[set[int], bool, bool]]
     ],
-    equiv_vars: pt.Mapping[str, pt.Set[str]],
+    equiv_vars: pt.Mapping[str, set[str]],
 ):
     """Computes the used columns for a table name
     and all of its aliases. Returns a triple of

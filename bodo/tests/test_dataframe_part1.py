@@ -694,7 +694,7 @@ def test_create_df_force_const(memory_leak_check):
         return pd.DataFrame({"A": np.ones(n), c_name: np.arange(n)})
 
     def impl2(a, n):
-        return pd.DataFrame({"A": np.ones(n), "B{}".format(a): np.arange(n)})
+        return pd.DataFrame({"A": np.ones(n), f"B{a}": np.arange(n)})
 
     check_func(impl1, ("BB", 11))
     check_func(impl2, (3, 11))
@@ -2668,7 +2668,7 @@ def test_dataframe_binary_op(op, memory_leak_check):
     # TODO: test parallelism
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
-    func_text += "  return df {} other\n".format(op_str)
+    func_text += f"  return df {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -2719,7 +2719,7 @@ def test_dataframe_binary_comp_op_diff_types(op, memory_leak_check):
     # TODO: test parallelism
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
-    func_text += "  return df {} other\n".format(op_str)
+    func_text += f"  return df {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
@@ -2761,7 +2761,7 @@ def test_dataframe_binary_iadd(memory_leak_check):
 def test_dataframe_inplace_binary_op(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df, other):\n"
-    func_text += "  df {} other\n".format(op_str)
+    func_text += f"  df {op_str} other\n"
     func_text += "  return df\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -2782,7 +2782,7 @@ def test_dataframe_unary_op(op, memory_leak_check):
 
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(df):\n"
-    func_text += "  return {} df\n".format(op_str)
+    func_text += f"  return {op_str} df\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]

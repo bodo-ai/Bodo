@@ -10,7 +10,7 @@ for filename in glob.iglob(sourcedir + "**/**", recursive=True):
     if filename.endswith(".md"):
         i += 1
         print(i)
-        with open(filename, "r") as f:
+        with open(filename) as f:
             new_mk = ""
             text = f.readlines()
             for line in text:

@@ -123,7 +123,7 @@ if __name__ == "__main__":
         print("Generated license for Azure Instance ID", args.azure_instance_id)
     else:
         if args.expires is not None:
-            year, month, day = [int(val) for val in args.expires.split("-")]
+            year, month, day = (int(val) for val in args.expires.split("-"))
         elif args.trial_days is not None:
             today = datetime.date.today()
             expiration_date = today + datetime.timedelta(days=int(args.trial_days))
@@ -140,5 +140,5 @@ if __name__ == "__main__":
         print(
             "Generated license file for",
             args.max_cores,
-            "cores, expiring on {}-{}-{}".format(year, month, day),
+            f"cores, expiring on {year}-{month}-{day}",
         )

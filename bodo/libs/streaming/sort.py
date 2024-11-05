@@ -4,7 +4,6 @@ C++ implementations.
 """
 
 from functools import cached_property
-from typing import List
 
 import llvmlite.binding as ll
 import numba
@@ -64,14 +63,14 @@ class SortStateType(StreamingStateType):
         )
 
     @cached_property
-    def arr_dtypes(self) -> List[types.ArrayCompatible]:
+    def arr_dtypes(self) -> list[types.ArrayCompatible]:
         """Returns the list of types for each array in the build table."""
         if self.build_table_type == types.unknown:
             return []
         return self.build_table_type.arr_types
 
     @cached_property
-    def mapped_arr_dtypes(self) -> List[types.ArrayCompatible]:
+    def mapped_arr_dtypes(self) -> list[types.ArrayCompatible]:
         """Returns the list of C++ types for each array in the build table."""
         if self.build_table_type == types.unknown:
             return []

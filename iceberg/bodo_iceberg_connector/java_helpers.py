@@ -18,7 +18,7 @@ def set_system_property(key: str, value: str):
 def build_hadoop_conf(d: dict[str, str]):
     """Build a Hadoop Configuration Object on the Internal Java Process"""
     Configuration = get_hadoop_conf_class()
-    conf: "JavaObject" = Configuration()  # type: ignore
+    conf: JavaObject = Configuration()  # type: ignore
     for k, v in d.items():
         conf.set(k, v)  # type: ignore
 

@@ -67,7 +67,7 @@ from bodo.utils.typing import (
 class IntegerArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
-        super(IntegerArrayType, self).__init__(name=f"IntegerArrayType({dtype})")
+        super().__init__(name=f"IntegerArrayType({dtype})")
 
     @property
     def as_array(self):
@@ -129,7 +129,7 @@ lower_builtin("getiter", IntegerArrayType)(numba.np.arrayobj.getiter_array)
 def _typeof_pd_int_array(val, c):
     bitwidth = 8 * val.dtype.itemsize
     kind = "" if val.dtype.kind == "i" else "u"
-    dtype = getattr(types, "{}int{}".format(kind, bitwidth))
+    dtype = getattr(types, f"{kind}int{bitwidth}")
     return IntegerArrayType(dtype)
 
 
@@ -144,7 +144,7 @@ class IntDtype(types.Number):
         assert isinstance(dtype, types.Integer)
         self.dtype = dtype
         name = "{}Int{}Dtype()".format("" if dtype.signed else "U", dtype.bitwidth)
-        super(IntDtype, self).__init__(name)
+        super().__init__(name)
 
 
 register_model(IntDtype)(models.OpaqueModel)
@@ -167,7 +167,7 @@ def unbox_intdtype(typ, val, c):
 def typeof_pd_int_dtype(val, c):
     bitwidth = 8 * val.itemsize
     kind = "" if val.kind == "i" else "u"
-    dtype = getattr(types, "{}int{}".format(kind, bitwidth))
+    dtype = getattr(types, f"{kind}int{bitwidth}")
     return IntDtype(dtype)
 
 
@@ -1024,13 +1024,11 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     else:
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "    if ({}\n".format(na_str1)
-    func_text += "        or {}):\n".format(na_str2)
+    func_text += f"    if ({na_str1}\n"
+    func_text += f"        or {na_str2}):\n"
     func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "      continue\n"
-    func_text += "    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op({}, {}))\n".format(
-        access_str1, access_str2
-    )
+    func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op({access_str1}, {access_str2}))\n"
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(

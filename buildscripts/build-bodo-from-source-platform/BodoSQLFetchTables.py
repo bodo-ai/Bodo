@@ -62,7 +62,7 @@ def check_validation(bc, sql_text: str, filename: str):
 
 def main(args):
     # Fetch and create catalog
-    with open(args.catalog_creds, "r") as f:
+    with open(args.catalog_creds) as f:
         catalog = json.load(f)
 
     username = catalog["SF_USERNAME"]
@@ -94,7 +94,7 @@ def main(args):
     for query_filename in filenames_batch:
         # Read in the query text from the file
         full_path = f"{query_dir}/{query_filename}"
-        with open(full_path, "r") as f:
+        with open(full_path) as f:
             sql_text = f.read()
             check_validation(bc, sql_text, query_filename)
 

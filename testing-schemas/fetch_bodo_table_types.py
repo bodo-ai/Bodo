@@ -26,7 +26,7 @@ def make_conn_str(creds_filename: str) -> str:
     Returns:
         str: A valid Snowflake connection string.
     """
-    with open(creds_filename, "r") as f:
+    with open(creds_filename) as f:
         catalog = json.load(f)
 
     username = catalog["SF_USERNAME"]
@@ -51,7 +51,7 @@ def main(database_name: str, schema_name: str, table_name: str, creds_filename: 
             f.write(json.dumps({}))
     # Load the file as a json to check for an existing entry. If the
     # entry already exists we will skip the table.
-    with open(schema_file_path, "r") as f:
+    with open(schema_file_path) as f:
         existing_data = json.load(f)
 
     if table_name not in existing_data:

@@ -6,7 +6,6 @@ import struct
 import traceback
 from datetime import date, datetime
 from pathlib import Path
-from typing import List, Optional
 
 import bodo_iceberg_connector
 import mmh3
@@ -2675,7 +2674,7 @@ def truncate_scalar_impl(x, W: int):
         raise NotImplementedError(f"truncate_scalar_impl not implemented for {type(x)}")
 
 
-def bucket_scalar_impl(x, y: int) -> Optional[int]:
+def bucket_scalar_impl(x, y: int) -> int | None:
     if x is None:
         return None
     if x is pd.NA:
@@ -2794,7 +2793,7 @@ def test_write_partitioned(
     iceberg_database,
     iceberg_table_conn,
     base_name: str,
-    part_spec: List[PartitionField],
+    part_spec: list[PartitionField],
     memory_leak_check,
 ):
     """
@@ -3155,7 +3154,7 @@ def test_write_part_sort(
     assert passed == 1, "Bodo read output doesn't match expected output"
 
 
-def _test_file_part(file_name: str, part_spec: List[PartitionField]):
+def _test_file_part(file_name: str, part_spec: list[PartitionField]):
     # Construct Expected Partition Values
     before = True
     part_folders = [
@@ -3186,12 +3185,12 @@ def _test_file_part(file_name: str, part_spec: List[PartitionField]):
             ).all(), "Partition value does not equal the result after applying the transformation"
 
 
-def _test_file_sorted(file_name: str, sort_order: List[SortField]):
+def _test_file_sorted(file_name: str, sort_order: list[SortField]):
     df = pd.read_parquet(file_name, dtype_backend="numpy_nullable")
     df = cast_dt64_to_ns(df)
 
     # Compute Transformed Columns
-    new_cols: List[pd.Series] = [
+    new_cols: list[pd.Series] = [
         ARRAY_TRANSFORM_FUNC[trans](df[col], val)
         for (col, trans, val, _, _) in sort_order
     ]

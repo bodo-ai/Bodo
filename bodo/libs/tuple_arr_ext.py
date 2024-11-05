@@ -32,7 +32,7 @@ class TupleArrayType(types.ArrayCompatible):
     def __init__(self, data):
         # data is tuple of Array types
         self.data = data
-        super(TupleArrayType, self).__init__(name="TupleArrayType({})".format(data))
+        super().__init__(name=f"TupleArrayType({data})")
 
     @property
     def as_array(self):

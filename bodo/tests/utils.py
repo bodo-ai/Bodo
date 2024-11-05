@@ -14,10 +14,11 @@ import time
 import types as pytypes
 import typing as pt
 import warnings
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Callable, Generator, Optional, TypeVar, Union
+from typing import TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -155,14 +156,14 @@ def check_func(
     func,
     args,
     is_out_distributed=None,
-    distributed: Union[list[tuple[str, int]], bool, None] = None,
+    distributed: list[tuple[str, int]] | bool | None = None,
     sort_output=False,
     check_names=True,
     copy_input=False,
     check_dtype=True,
     reset_index=False,
     convert_columns_to_pandas=False,
-    py_output: pt.Union[pt.Any, NoDefault] = no_default,
+    py_output: pt.Any | NoDefault = no_default,
     dist_test=True,
     check_typing_issues=True,
     additional_compiler_arguments=None,
@@ -617,7 +618,7 @@ def check_func_seq(
     func,
     args,
     n_pes=None,
-    py_output: pt.Union[pt.Any, NoDefault] = no_default,
+    py_output: pt.Any | NoDefault = no_default,
     copy_input=False,
     sort_output=False,
     check_names=True,
@@ -698,7 +699,7 @@ def check_func_1D(
     args,
     py_output,
     is_out_distributed,
-    distributed: Union[list[tuple[str, int]], bool, None],
+    distributed: list[tuple[str, int]] | bool | None,
     copy_input,
     sort_output,
     check_names,
@@ -783,7 +784,7 @@ def check_func_1D_var(
     args,
     py_output,
     is_out_distributed,
-    distributed: Union[list[str], bool, None],
+    distributed: list[str] | bool | None,
     copy_input,
     sort_output,
     check_names,
@@ -861,7 +862,7 @@ def check_func_spawn(
     args,
     py_output,
     is_out_distributed,
-    distributed: Union[list[tuple[str, int]], bool, None],
+    distributed: list[tuple[str, int]] | bool | None,
     copy_input,
     sort_output,
     check_names,
@@ -2574,7 +2575,7 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 def get_snowflake_connection_string(
     db: str,
     schema: str,
-    conn_params: Optional[dict[str, str]] = None,
+    conn_params: dict[str, str] | None = None,
     user: int = 1,
 ) -> str:
     """
@@ -2778,7 +2779,7 @@ def drop_snowflake_table(
     table_name: str,
     db: str,
     schema: str,
-    iceberg_volume: Optional[str] = None,
+    iceberg_volume: str | None = None,
     user: int = 1,
 ) -> None:
     """Drops a table from snowflake with the given table_name.
@@ -3183,7 +3184,7 @@ pytest_perf_regression = [
 
 
 @contextmanager
-def temp_env_override(env_vars: dict[str, Optional[str]]):
+def temp_env_override(env_vars: dict[str, str | None]):
     """Update the current environment variables with key-value pairs provided
     in a dictionary and then restore it after.
 

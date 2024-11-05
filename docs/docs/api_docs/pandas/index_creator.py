@@ -3,7 +3,7 @@ import re
 
 
 def create_index(file_path):
-    with open(file_path, "r") as file:
+    with open(file_path) as file:
         file_content = file.read()
         headings = re.findall(r"## (.+)", file_content)
         index_str = "| function | description |\n| --- | --- |\n"

@@ -532,7 +532,7 @@ def test_format(args, memory_leak_check):
         if pd.isna(elem) or pd.isna(places):
             return None
         elif places <= 0:
-            return "{:,}".format(py_round(elem))
+            return f"{py_round(elem):,}"
         else:
             return (f"{{:,.{places}f}}").format(elem)
 

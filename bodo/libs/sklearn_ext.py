@@ -2381,7 +2381,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
     elif m.loss == "squared_error":
         loss_func = mean_squared_error
     else:
-        raise ValueError("loss {} not supported".format(m.loss))
+        raise ValueError(f"loss {m.loss} not supported")
 
     regC = False
     if isinstance(m, sklearn.linear_model.SGDRegressor):
@@ -5219,9 +5219,7 @@ def overload_train_test_split(
         func_text += "    stratify=None,\n"
         func_text += "    _is_data_distributed=False,\n"
         func_text += "):  # pragma: no cover\n"
-        func_text += "    with bodo.objmode(data_train='{}', data_test='{}', labels_train='{}', labels_test='{}'):\n".format(
-            data_type_name, data_type_name, labels_type_name, labels_type_name
-        )
+        func_text += f"    with bodo.objmode(data_train='{data_type_name}', data_test='{data_type_name}', labels_train='{labels_type_name}', labels_test='{labels_type_name}'):\n"
         func_text += "        data_train, data_test, labels_train, labels_test = sklearn.model_selection.train_test_split(\n"
         func_text += "            data,\n"
         func_text += "            labels,\n"

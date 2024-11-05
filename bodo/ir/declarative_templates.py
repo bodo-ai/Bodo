@@ -30,7 +30,7 @@ def get_feature_path(feature_name: str) -> str:  # pragma: no cover
     raise Exception(f"Unrecognized feature path {feature_name}")
 
 
-def replace_package_name(path: str) -> pt.Tuple[str, str]:  # pragma: no cover
+def replace_package_name(path: str) -> tuple[str, str]:  # pragma: no cover
     """Replace abbreviated package name in `path` with the full name"""
     abrev_package_names = {
         "pd": "pandas",
@@ -56,7 +56,7 @@ def get_example_from_docs(doc_path: str) -> str:  # pragma: no cover
     example_str = ""
     if Path(doc_path).is_file():
         begin_example = "### Example Usage"
-        with open(doc_path, "r") as f:
+        with open(doc_path) as f:
             doc = f.read()
             if begin_example in doc:
                 example_str = f"{doc[doc.index(begin_example) :].strip()}\n\n"
@@ -64,9 +64,9 @@ def get_example_from_docs(doc_path: str) -> str:  # pragma: no cover
 
 
 def format_argument_restrictions_str(
-    params: pt.List[Parameter],
-    arg_restrictions: pt.Dict[str, str],
-    unsupported_args: pt.Dict[str, pt.Any],
+    params: list[Parameter],
+    arg_restrictions: dict[str, str],
+    unsupported_args: dict[str, pt.Any],
 ) -> str:  # pragma: no cover
     """Creates a bulleted list of argument restrictions for documentation.
 
@@ -113,7 +113,7 @@ class DeclarativeTemplate(metaclass=ABCMeta):
 
 
 class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTemplate):
-    def document(self, write_out: pt.Optional[bool] = True) -> str:  # pragma: no cover
+    def document(self, write_out: bool | None = True) -> str:  # pragma: no cover
         """
         Generates a documentation string for the method and writes to
         corresponding file in the documentation if `write_out`.
@@ -193,7 +193,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         return utils.pysignature(self._overload_func)
 
     @classmethod
-    def _check_unsupported_args(cls, kws: pt.Dict[str, pt.Any]):
+    def _check_unsupported_args(cls, kws: dict[str, pt.Any]):
         """Checks that unsupported argument requirements are enforced on
         `kws`.
 
@@ -238,7 +238,7 @@ class _OverloadDeclarativeMethodTemplate(DeclarativeTemplate, _OverloadMethodTem
         )
 
     @classmethod
-    def _check_argument_types(cls, args: tuple, kws: pt.Dict[str, pt.Any]):
+    def _check_argument_types(cls, args: tuple, kws: dict[str, pt.Any]):
         """Checks that `args` and `kws` are valid arguments.
 
         Checks that `args` and `kws` are valid arguments to the method using
@@ -316,7 +316,7 @@ class _OverloadDeclarativeAttributeTemplate(
     def is_matching_template(self, attr: str) -> bool:
         return self._attr == attr
 
-    def document(self, write_out: pt.Optional[bool] = True) -> str:  # pragma: no cover
+    def document(self, write_out: bool | None = True) -> str:  # pragma: no cover
         """
         Generates a documentation string for the method, writes to
         corresponding file in documentation if `write_out` is True.
@@ -407,7 +407,7 @@ def make_overload_declarative_method_template(
     functionality.
     """
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
-    name = "OverloadDeclarativeAttributeTemplate_%s_%s" % (typ, attr)
+    name = f"OverloadDeclarativeAttributeTemplate_{typ}_{attr}"
     # Note the implementation cache is subclass-specific
     dct = {
         "key": typ,
@@ -434,11 +434,11 @@ def overload_method_declarative(
     typ,
     attr: str,
     path: str,
-    unsupported_args: pt.Set[str],
+    unsupported_args: set[str],
     description: str,
-    method_args_checker: pt.Optional[OverloadArgumentsChecker] = None,
-    changed_defaults: pt.Optional[pt.Set[str]] = frozenset(),
-    hyperlink: pt.Optional[str] = None,
+    method_args_checker: OverloadArgumentsChecker | None = None,
+    changed_defaults: set[str] | None = frozenset(),
+    hyperlink: str | None = None,
     **kwargs,
 ):
     """A decorator for creating an overload declarative template for a method.
@@ -512,7 +512,7 @@ def make_overload_declarative_attribute_template(
     functionality.
     """
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
-    name = "OverloadDeclarativeAttributeTemplate_%s_%s" % (typ, attr)
+    name = f"OverloadDeclarativeAttributeTemplate_{typ}_{attr}"
     # Note the implementation cache is subclass-specific
     dct = {
         "key": typ,
@@ -538,8 +538,8 @@ def overload_attribute_declarative(
     attr: str,
     path: str,
     description: str,
-    arg_checker: pt.Optional[OverloadAttributeChecker] = None,
-    hyperlink: pt.Optional[str] = None,
+    arg_checker: OverloadAttributeChecker | None = None,
+    hyperlink: str | None = None,
     **kwargs,
 ):
     """A decorator for creating an overload declarative template for an

@@ -4,7 +4,6 @@ and any SQL APIs requiring additional testing.
 """
 
 import textwrap
-from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -366,7 +365,7 @@ def test_coalesce(memory_leak_check):
 
 
 def _build_1_arg_streaming_function(
-    output_generation_text: str, additional_arg_names: Tuple[str] = ()
+    output_generation_text: str, additional_arg_names: tuple[str] = ()
 ):
     """Generate the implementation of a 1 argument streaming function for testing where
     the only difference is the "function call that generates the output.

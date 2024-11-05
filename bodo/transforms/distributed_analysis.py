@@ -11,7 +11,6 @@ import sys
 import warnings
 from collections import defaultdict, namedtuple
 from enum import Enum
-from typing import Dict, List
 
 import numba
 import numpy as np
@@ -153,7 +152,7 @@ class DistributedDiagnostics:
         print("\nParfor distributions:")
         if len(self.parfor_dists) > 0:
             for p, dist in self.parfor_dists.items():
-                print("   {0:<20} {1}".format(p, dist))
+                print(f"   {p:<20} {dist}")
         else:
             print("No parfors to distribute.")
         return
@@ -164,7 +163,7 @@ class DistributedDiagnostics:
         name = self.func_ir.func_id.func_qualname
         line = self.func_ir.loc
 
-        print("Distributed diagnostics for function {}, {}\n".format(name, line))
+        print(f"Distributed diagnostics for function {name}, {line}\n")
         self._print_dists(level, metadata)
 
         # similar to ParforDiagnostics.dump()
@@ -178,7 +177,7 @@ class DistributedDiagnostics:
             print("No source available")
             return
 
-        print("\nDistributed listing for function {}, {}".format(name, line))
+        print(f"\nDistributed listing for function {name}, {line}")
         self._print_src_dists(lines, level, metadata)
 
         # trace diag info
@@ -199,7 +198,7 @@ class DistributedDiagnostics:
             loc = self.parfor_locs[p_id]
             if loc.filename == filename:
                 l_no = max(0, loc.line - 1)
-                map_line_to_info[l_no].append("#{}: {}".format(p_id, p_dist))
+                map_line_to_info[l_no].append(f"#{p_id}: {p_dist}")
 
         printed_vars = set()
         for arr, a_dist in self.array_dists.items():
@@ -215,7 +214,7 @@ class DistributedDiagnostics:
                 if level < 2 and (arr in printed_vars or arr.startswith("$")):
                     continue
                 printed_vars.add(arr)
-                map_line_to_info[l_no].append("{}: {}".format(arr, a_dist))
+                map_line_to_info[l_no].append(f"{arr}: {a_dist}")
 
         width = src_width + 4
         newlines = []
@@ -697,9 +696,7 @@ class DistributedAnalysis:
             attr_dist = rhs_typ.class_type.dist_spec[attr]
             assert (
                 is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
-            ), "Variable {} is not distributable since it is of type {} (required for getting distributed class field)".format(
-                lhs, lhs_typ
-            )
+            ), f"Variable {lhs} is not distributable since it is of type {lhs_typ} (required for getting distributed class field)"
             if lhs not in array_dists:
                 array_dists[lhs] = attr_dist
             else:
@@ -866,9 +863,7 @@ class DistributedAnalysis:
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
                     self._add_diag_info(
-                        "Variable '{}' set to REP since it is a concat reduction variable for Parfor {} which is REP".format(
-                            self._get_user_varname(reduce_varname), parfor.id
-                        ),
+                        f"Variable '{self._get_user_varname(reduce_varname)}' set to REP since it is a concat reduction variable for Parfor {parfor.id} which is REP",
                         self.parfor_locs[parfor.id],
                     )
                     array_dists[reduce_varname] = Distribution.REP
@@ -3954,9 +3949,7 @@ class DistributedAnalysis:
             arr_typ = self.typemap[arr_name]
             assert is_distributable_typ(arr_typ) or is_distributable_tuple_typ(
                 arr_typ
-            ), "Variable {} is not distributable since it is of type {}".format(
-                arr_name, arr_typ
-            )
+            ), f"Variable {arr_name} is not distributable since it is of type {arr_typ}"
             assert arr_name in array_dists, "array distribution not found"
             if is_REP(array_dists[arr_name]):
                 raise BodoError(
@@ -4311,12 +4304,12 @@ class DistributedAnalysis:
         for v in args:
             typ = self.typemap[v.name]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
-                dprint("dist setting call arg REP {} in {}".format(v.name, fdef))
+                dprint(f"dist setting call arg REP {v.name} in {fdef}")
                 self._set_REP(v.name, array_dists)
                 arrs.append(v.name)
         typ = self.typemap[lhs]
         if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
-            dprint("dist setting call out REP {} in {}".format(lhs, fdef))
+            dprint(f"dist setting call out REP {lhs} in {fdef}")
             self._set_REP(lhs, array_dists)
             arrs.append(lhs)
         # save diagnostic info for faild analysis
@@ -4675,9 +4668,7 @@ class DistributedAnalysis:
             attr_dist = target_type.class_type.dist_spec[attr]
             assert (
                 is_distributable_typ(val_type) or is_distributable_tuple_typ(val_type)
-            ), "Variable {} is not distributable since it is of type {} (required for setting class field)".format(
-                value.name, val_type
-            )
+            ), f"Variable {value.name} is not distributable since it is of type {val_type} (required for setting class field)"
             assert value.name in array_dists, "array distribution not found"
             val_dist = array_dists[value.name]
             # value shouldn't have a more restrictive distribution than the dist spec
@@ -4732,9 +4723,9 @@ class DistributedAnalysis:
 
         info = (
             "Distributed analysis replicated return variable "
-            "'{}'. Set distributed flag for the original variable if distributed "
+            f"'{var.name}'. Set distributed flag for the original variable if distributed "
             "partitions should be returned."
-        ).format(var.name)
+        )
         self._set_REP([var], array_dists, info, loc)
 
     def _is_dist_return_var(self, var):
@@ -4805,9 +4796,7 @@ class DistributedAnalysis:
                     varname not in array_dists or not is_REP(array_dists[varname])
                 ) and info is not None:
                     info = (
-                        "Setting distribution of variable '{}' to REP: ".format(
-                            self._get_user_varname(varname)
-                        )
+                        f"Setting distribution of variable '{self._get_user_varname(varname)}' to REP: "
                         + info
                     )
                     self._add_diag_info(info, loc)
@@ -5236,7 +5225,7 @@ def dprint(*s):  # pragma: no cover
         print(*s)
 
 
-def propagate_assign(array_dists: Dict[str, Distribution], nodes: List[ir.Stmt]):
+def propagate_assign(array_dists: dict[str, Distribution], nodes: list[ir.Stmt]):
     """Function that updates any assignments in a list of nodes
     with matching array distributions for any existing variables.
     This is run when replacing functions after distributed analysis

@@ -22,7 +22,7 @@ def assert_dl_initialized():  # pragma: no cover
     ), "Horovod has not been initialized. Call bodo.dl.start() first"
 
 
-class DLStatus(object):  # pragma: no cover
+class DLStatus:  # pragma: no cover
     def __init__(self, framework, gpu_ranks):
         # will be one of "torch", "tensorflow" after initialization
         self.framework = framework
@@ -41,7 +41,7 @@ def get_num_gpus(framework):  # pragma: no cover
 
         return len(tf.config.experimental.list_physical_devices("GPU"))
     else:
-        raise RuntimeError("Framework {} not recognized".format(framework))
+        raise RuntimeError(f"Framework {framework} not recognized")
 
 
 def get_gpu_ranks(framework):  # pragma: no cover
@@ -124,7 +124,7 @@ def initialize_horovod(framework):  # pragma: no cover
         import horovod.tensorflow as hvd
         import tensorflow as tf
     else:
-        raise RuntimeError("Framework {} not recognized".format(framework))
+        raise RuntimeError(f"Framework {framework} not recognized")
 
     myrank = MPI.COMM_WORLD.rank
     if len(gpu_ranks) > 0:  # pragma: no cover

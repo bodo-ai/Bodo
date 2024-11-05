@@ -206,7 +206,7 @@ def get_agg_udf_addr(name):
     return addr
 
 
-class AggUDFStruct(object):
+class AggUDFStruct:
     """Holds the compiled functions and information of groupby UDFs,
     used to generate the cfuncs that are called from C++"""
 
@@ -536,9 +536,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                         skip_na_data = guard(find_const, func_ir, erec[1])
                         if not isinstance(skip_na_data, bool):  # pragma: no cover
                             raise BodoError(
-                                "For {} argument of skipna should be a boolean".format(
-                                    func_name
-                                )
+                                f"For {func_name} argument of skipna should be a boolean"
                             )
                 if func_name == "nunique":
                     if erec[0] == "dropna":
@@ -1641,7 +1639,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
     elif t == ArrayItemArrayType(string_array_type):
         return "pre_alloc_array_item_array(1, (1,), 1, string_array_type)"
     elif isinstance(t, DecimalArrayType):
-        return "alloc_decimal_array(1, {}, {})".format(t.precision, t.scale)
+        return f"alloc_decimal_array(1, {t.precision}, {t.scale})"
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
     elif isinstance(t, bodo.CategoricalArrayType):
@@ -1653,7 +1651,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         starter = "in" if is_input else "out"
         return f"bodo.utils.utils.alloc_type(1, {starter}_cat_dtype_{colnum})"
     else:
-        return "np.empty(1, {})".format(_get_np_dtype(t.dtype))
+        return f"np.empty(1, {_get_np_dtype(t.dtype)})"
 
 
 def _get_np_dtype(t):
@@ -1663,7 +1661,7 @@ def _get_np_dtype(t):
         return "dt64_dtype"
     if t == types.NPTimedelta("ns"):
         return "td64_dtype"
-    return "np.{}".format(t)
+    return f"np.{t}"
 
 
 def gen_update_cb(
@@ -1683,17 +1681,13 @@ def gen_update_cb(
     red_var_typs = udf_func_struct.var_typs
     n_red_vars = len(red_var_typs)
 
-    func_text = (
-        "def bodo_gb_udf_update_local{}(in_table, out_table, row_to_group):\n".format(
-            label_suffix
-        )
-    )
+    func_text = f"def bodo_gb_udf_update_local{label_suffix}(in_table, out_table, row_to_group):\n"
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
 
     # get redvars data types
     func_text += "    data_redvar_dummy = ({}{})\n".format(
-        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+        ",".join([f"np.empty(1, {_get_np_dtype(t)})" for t in red_var_typs]),
         "," if len(red_var_typs) == 1 else "",
     )
 
@@ -1747,9 +1741,9 @@ def gen_update_cb(
     func_text += "    init_vals = __init_func()\n"
     for i in range(n_red_vars):
         func_text += f"    redvar_arr_{i} = array_from_cpp_table(out_table, {redvar_offsets[i]}, data_redvar_dummy[{i}])\n"
-        func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
+        func_text += f"    redvar_arr_{i}.fill(init_vals[{i}])\n"
     func_text += "    redvars = ({}{})\n".format(
-        ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        ",".join([f"redvar_arr_{i}" for i in range(n_red_vars)]),
         "," if n_red_vars == 1 else "",
     )
 
@@ -1757,7 +1751,7 @@ def gen_update_cb(
     for i in range(n_data_cols):
         func_text += f"    data_in_{i} = array_from_cpp_table(in_table, {in_col_offsets[i]}, data_in_dummy[{i}])\n"
     func_text += "    data_in = ({}{})\n".format(
-        ",".join(["data_in_{}".format(i) for i in range(n_data_cols)]),
+        ",".join([f"data_in_{i}" for i in range(n_data_cols)]),
         "," if n_data_cols == 1 else "",
     )
 
@@ -1784,7 +1778,7 @@ def gen_update_cb(
         },
         loc_vars,
     )
-    return loc_vars["bodo_gb_udf_update_local{}".format(label_suffix)]
+    return loc_vars[f"bodo_gb_udf_update_local{label_suffix}"]
 
 
 def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
@@ -1798,16 +1792,14 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
     n_red_vars = len(red_var_typs)
 
     func_text = (
-        "def bodo_gb_udf_combine{}(in_table, out_table, row_to_group):\n".format(
-            label_suffix
-        )
+        f"def bodo_gb_udf_combine{label_suffix}(in_table, out_table, row_to_group):\n"
     )
     func_text += "    if is_null_pointer(in_table):\n"  # this is dummy call
     func_text += "        return\n"
 
     # get redvars data types
     func_text += "    data_redvar_dummy = ({}{})\n".format(
-        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+        ",".join([f"np.empty(1, {_get_np_dtype(t)})" for t in red_var_typs]),
         "," if len(red_var_typs) == 1 else "",
     )
 
@@ -1838,22 +1830,18 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
     func_text += "\n    # initialize redvar cols\n"
     func_text += "    init_vals = __init_func()\n"
     for i in range(n_red_vars):
-        func_text += "    redvar_arr_{} = array_from_cpp_table(out_table, {}, data_redvar_dummy[{}])\n".format(
-            i, redvar_offsets_out[i], i
-        )
-        func_text += "    redvar_arr_{}.fill(init_vals[{}])\n".format(i, i)
+        func_text += f"    redvar_arr_{i} = array_from_cpp_table(out_table, {redvar_offsets_out[i]}, data_redvar_dummy[{i}])\n"
+        func_text += f"    redvar_arr_{i}.fill(init_vals[{i}])\n"
     func_text += "    redvars = ({}{})\n".format(
-        ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        ",".join([f"redvar_arr_{i}" for i in range(n_red_vars)]),
         "," if n_red_vars == 1 else "",
     )
 
     func_text += "\n"
     for i in range(n_red_vars):
-        func_text += "    recv_redvar_arr_{} = array_from_cpp_table(in_table, {}, data_redvar_dummy[{}])\n".format(
-            i, redvar_offsets_in[i], i
-        )
+        func_text += f"    recv_redvar_arr_{i} = array_from_cpp_table(in_table, {redvar_offsets_in[i]}, data_redvar_dummy[{i}])\n"
     func_text += "    recv_redvars = ({}{})\n".format(
-        ",".join(["recv_redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        ",".join([f"recv_redvar_arr_{i}" for i in range(n_red_vars)]),
         "," if n_red_vars == 1 else "",
     )
 
@@ -1877,7 +1865,7 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
         },
         loc_vars,
     )
-    return loc_vars["bodo_gb_udf_combine{}".format(label_suffix)]
+    return loc_vars[f"bodo_gb_udf_combine{label_suffix}"]
 
 
 def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix):
@@ -1910,38 +1898,32 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
     assert len(redvar_offsets) == n_red_vars
     n_data_cols = len(out_data_typs)
 
-    func_text = "def bodo_gb_udf_eval{}(table):\n".format(label_suffix)
+    func_text = f"def bodo_gb_udf_eval{label_suffix}(table):\n"
     func_text += "    if is_null_pointer(table):\n"  # this is dummy call
     func_text += "        return\n"
 
     func_text += "    data_redvar_dummy = ({}{})\n".format(
-        ",".join(["np.empty(1, {})".format(_get_np_dtype(t)) for t in red_var_typs]),
+        ",".join([f"np.empty(1, {_get_np_dtype(t)})" for t in red_var_typs]),
         "," if len(red_var_typs) == 1 else "",
     )
 
     func_text += "    out_data_dummy = ({}{})\n".format(
-        ",".join(
-            ["np.empty(1, {})".format(_get_np_dtype(t.dtype)) for t in out_data_typs]
-        ),
+        ",".join([f"np.empty(1, {_get_np_dtype(t.dtype)})" for t in out_data_typs]),
         "," if len(out_data_typs) == 1 else "",
     )
 
     for i in range(n_red_vars):
-        func_text += "    redvar_arr_{} = array_from_cpp_table(table, {}, data_redvar_dummy[{}])\n".format(
-            i, redvar_offsets[i], i
-        )
+        func_text += f"    redvar_arr_{i} = array_from_cpp_table(table, {redvar_offsets[i]}, data_redvar_dummy[{i}])\n"
     func_text += "    redvars = ({}{})\n".format(
-        ",".join(["redvar_arr_{}".format(i) for i in range(n_red_vars)]),
+        ",".join([f"redvar_arr_{i}" for i in range(n_red_vars)]),
         "," if n_red_vars == 1 else "",
     )
 
     func_text += "\n"
     for i in range(n_data_cols):
-        func_text += "    data_out_{} = array_from_cpp_table(table, {}, out_data_dummy[{}])\n".format(
-            i, data_out_offsets[i], i
-        )
+        func_text += f"    data_out_{i} = array_from_cpp_table(table, {data_out_offsets[i]}, out_data_dummy[{i}])\n"
     func_text += "    data_out = ({}{})\n".format(
-        ",".join(["data_out_{}".format(i) for i in range(n_data_cols)]),
+        ",".join([f"data_out_{i}" for i in range(n_data_cols)]),
         "," if n_data_cols == 1 else "",
     )
 
@@ -1962,7 +1944,7 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
         },
         loc_vars,
     )
-    return loc_vars["bodo_gb_udf_eval{}".format(label_suffix)]
+    return loc_vars[f"bodo_gb_udf_eval{label_suffix}"]
 
 
 def gen_general_udf_cb(
@@ -1991,24 +1973,16 @@ def gen_general_udf_cb(
             # udfs in post_shuffle table have one column for output plus redvars
             col_offset += f.n_redvars + 1
 
-    func_text = (
-        "def bodo_gb_apply_general_udfs{}(num_groups, in_table, out_table):\n".format(
-            label_suffix
-        )
-    )
+    func_text = f"def bodo_gb_apply_general_udfs{label_suffix}(num_groups, in_table, out_table):\n"
     func_text += "    if num_groups == 0:\n"  # this is dummy call
     func_text += "        return\n"
     for i, func in enumerate(udf_func_struct.general_udf_funcs):
-        func_text += "    # col {}\n".format(i)
-        func_text += "    out_col = array_from_cpp_table(out_table, {}, out_col_{}_typ)\n".format(
-            out_col_offsets[i], i
-        )
+        func_text += f"    # col {i}\n"
+        func_text += f"    out_col = array_from_cpp_table(out_table, {out_col_offsets[i]}, out_col_{i}_typ)\n"
         func_text += "    for j in range(num_groups):\n"
-        func_text += "        in_col = array_from_cpp_table(in_table, {}*num_groups + j, in_col_{}_typ)\n".format(
-            i, i
-        )
-        func_text += "        out_col[j] = func_{}(pd.Series(in_col))  # func returns scalar\n".format(
-            i
+        func_text += f"        in_col = array_from_cpp_table(in_table, {i}*num_groups + j, in_col_{i}_typ)\n"
+        func_text += (
+            f"        out_col[j] = func_{i}(pd.Series(in_col))  # func returns scalar\n"
         )
 
     glbs = {
@@ -2020,15 +1994,13 @@ def gen_general_udf_cb(
         if func.ftype != "gen_udf":
             continue
         func = udf_func_struct.general_udf_funcs[gen_udf_offset]
-        glbs["func_{}".format(gen_udf_offset)] = func
-        glbs["in_col_{}_typ".format(gen_udf_offset)] = in_col_typs[
-            func_idx_to_in_col[i]
-        ]
-        glbs["out_col_{}_typ".format(gen_udf_offset)] = out_col_typs[i]
+        glbs[f"func_{gen_udf_offset}"] = func
+        glbs[f"in_col_{gen_udf_offset}_typ"] = in_col_typs[func_idx_to_in_col[i]]
+        glbs[f"out_col_{gen_udf_offset}_typ"] = out_col_typs[i]
         gen_udf_offset += 1
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
-    f = loc_vars["bodo_gb_apply_general_udfs{}".format(label_suffix)]
+    f = loc_vars[f"bodo_gb_apply_general_udfs{label_suffix}"]
     c_sig = types.void(types.int64, types.voidptr, types.voidptr)
     return numba.cfunc(c_sig, nopython=True)(f)
 
@@ -2371,13 +2343,9 @@ def gen_top_level_agg_func(
     # NOTE: scalar window args get converted to a cpp table
     func_text += "    window_args_list = []\n"
     for i, window_arg in enumerate(window_args):
-        func_text += "    window_arg_arr_{} = coerce_scalar_to_array({}, 1, unknown_type)\n".format(
-            i, window_arg
-        )
-        func_text += (
-            "    window_arg_info_{} = array_to_info(window_arg_arr_{})\n".format(i, i)
-        )
-        func_text += "    window_args_list.append(window_arg_info_{})\n".format(i)
+        func_text += f"    window_arg_arr_{i} = coerce_scalar_to_array({window_arg}, 1, unknown_type)\n"
+        func_text += f"    window_arg_info_{i} = array_to_info(window_arg_arr_{i})\n"
+        func_text += f"    window_args_list.append(window_arg_info_{i})\n"
     # add an extra 0 to avoid typing issues.
     func_text += "    window_arg_arr_n = coerce_scalar_to_array(0, 1, unknown_type)\n"
     func_text += "    window_arg_info_n = array_to_info(window_arg_arr_n)\n"
@@ -3054,7 +3022,7 @@ class RegularUDFGenerator:
         )
 
 
-class GeneralUDFGenerator(object):
+class GeneralUDFGenerator:
     def __init__(self):
         self.funcs = []
 
@@ -3245,19 +3213,17 @@ def gen_all_update_func(
     for j in range(out_num_cols):
         redvar_access = ", ".join(
             [
-                "redvar_arrs[{}][w_ind]".format(i)
+                f"redvar_arrs[{i}][w_ind]"
                 for i in range(redvar_offsets[j], redvar_offsets[j + 1])
             ]
         )
         if redvar_access:  # if there is a parfor
-            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(
-                redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j
-            )
+            func_text += f"  {redvar_access} = update_vars_{j}({redvar_access},  data_in[{0 if in_num_cols == 1 else j}][i])\n"
     func_text += "  return\n"
 
     glbs = {}
     for i, f in enumerate(update_funcs):
-        glbs["update_vars_{}".format(i)] = f
+        glbs[f"update_vars_{i}"] = f
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     update_all_f = loc_vars["update_all_f"]
@@ -3288,24 +3254,22 @@ def gen_all_combine_func(
     for j in range(num_cols):
         redvar_access = ", ".join(
             [
-                "redvar_arrs[{}][w_ind]".format(i)
+                f"redvar_arrs[{i}][w_ind]"
                 for i in range(redvar_offsets[j], redvar_offsets[j + 1])
             ]
         )
         recv_access = ", ".join(
             [
-                "recv_arrs[{}][i]".format(i)
+                f"recv_arrs[{i}][i]"
                 for i in range(redvar_offsets[j], redvar_offsets[j + 1])
             ]
         )
         if recv_access:  # if there is a parfor
-            func_text += "  {} = combine_vars_{}({}, {})\n".format(
-                redvar_access, j, redvar_access, recv_access
-            )
+            func_text += f"  {redvar_access} = combine_vars_{j}({redvar_access}, {recv_access})\n"
     func_text += "  return\n"
     glbs = {}
     for i, f in enumerate(combine_funcs):
-        glbs["combine_vars_{}".format(i)] = f
+        glbs[f"combine_vars_{i}"] = f
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     combine_all_f = loc_vars["combine_all_f"]
@@ -3335,17 +3299,15 @@ def gen_all_eval_func(
     for j in range(num_cols):
         redvar_access = ", ".join(
             [
-                "redvar_arrs[{}][j]".format(i)
+                f"redvar_arrs[{i}][j]"
                 for i in range(redvar_offsets[j], redvar_offsets[j + 1])
             ]
         )
-        func_text += "  out_arrs[{}][j] = eval_vars_{}({})\n".format(
-            j, j, redvar_access
-        )
+        func_text += f"  out_arrs[{j}][j] = eval_vars_{j}({redvar_access})\n"
     func_text += "  return\n"
     glbs = {}
     for i, f in enumerate(eval_funcs):
-        glbs["eval_vars_{}".format(i)] = f
+        glbs[f"eval_vars_{i}"] = f
     loc_vars = {}
     exec(func_text, glbs, loc_vars)
     eval_all_f = loc_vars["eval_all_f"]
@@ -3455,7 +3417,7 @@ def gen_combine_func(
                     func_text += _match_reduce_def(var_def, f_ir, ind)
 
     func_text += "    return {}".format(
-        ", ".join(["v{}".format(i) for i in range(num_red_vars)])
+        ", ".join([f"v{i}" for i in range(num_red_vars)])
     )
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -3501,13 +3463,13 @@ def _match_reduce_def(var_def, f_ir, ind):
         and var_def.op == "inplace_binop"
         and var_def.fn in ("+=", operator.iadd)
     ):
-        func_text = "    v{} += in{}\n".format(ind, ind)
+        func_text = f"    v{ind} += in{ind}\n"
     if isinstance(var_def, ir.Expr) and var_def.op == "call":
         fdef = guard(find_callname, f_ir, var_def)
         if fdef == ("min", "builtins"):
-            func_text = "    v{} = min(v{}, in{})\n".format(ind, ind, ind)
+            func_text = f"    v{ind} = min(v{ind}, in{ind})\n"
         if fdef == ("max", "builtins"):
-            func_text = "    v{} = max(v{}, in{})\n".format(ind, ind, ind)
+            func_text = f"    v{ind} = max(v{ind}, in{ind})\n"
     return func_text
 
 
@@ -3571,13 +3533,13 @@ def gen_update_func(
             new_body.append(stmt)
         bl.body = new_body
 
-    redvar_in_names = ["v{}".format(i) for i in range(num_red_vars)]
-    in_names = ["in{}".format(i) for i in range(num_in_vars)]
+    redvar_in_names = [f"v{i}" for i in range(num_red_vars)]
+    in_names = [f"in{i}" for i in range(num_in_vars)]
 
     func_text = "def agg_update({}):\n".format(", ".join(redvar_in_names + in_names))
     func_text += "    __update_redvars()\n"
     func_text += "    return {}".format(
-        ", ".join(["v{}".format(i) for i in range(num_red_vars)])
+        ", ".join([f"v{i}" for i in range(num_red_vars)])
     )
 
     loc_vars = {}

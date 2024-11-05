@@ -52,7 +52,7 @@ class MonthBeginType(types.Type):
     """Class for pd.tseries.offsets.MonthBegin"""
 
     def __init__(self):
-        super(MonthBeginType, self).__init__(name="MonthBeginType()")
+        super().__init__(name="MonthBeginType()")
 
 
 month_begin_type = MonthBeginType()
@@ -70,7 +70,7 @@ def typeof_month_begin(val, c):
 class MonthBeginModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("n", types.int64), ("normalize", types.boolean)]
-        super(MonthBeginModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # 4.Implementing a boxing function for a Numba type using the @box decorator
@@ -254,7 +254,7 @@ class MonthEndType(types.Type):
     """Class for pd.tseries.offsets.MonthEnd"""
 
     def __init__(self):
-        super(MonthEndType, self).__init__(name="MonthEndType()")
+        super().__init__(name="MonthEndType()")
 
 
 month_end_type = MonthEndType()
@@ -269,7 +269,7 @@ def typeof_month_end(val, c):
 class MonthEndModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("n", types.int64), ("normalize", types.boolean)]
-        super(MonthEndModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @box(MonthEndType)
@@ -537,7 +537,7 @@ class DateOffsetType(types.Type):
     """Class for pd.tseries.offsets.DateOffset"""
 
     def __init__(self):
-        super(DateOffsetType, self).__init__(name="DateOffsetType()")
+        super().__init__(name="DateOffsetType()")
 
 
 date_offset_type = DateOffsetType()
@@ -605,7 +605,7 @@ class DateOffsetModel(models.StructModel):
             # No kwds has different behavior
             ("has_kws", types.boolean),
         ]
-        super(DateOffsetModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @box(DateOffsetType)
@@ -1065,7 +1065,7 @@ class CombinedInterval:
 
 class CombinedIntervalType(types.Type):
     def __init__(self):
-        super(CombinedIntervalType, self).__init__(name="CombinedIntervalType()")
+        super().__init__(name="CombinedIntervalType()")
 
 
 combined_interval_type = CombinedIntervalType()
@@ -1080,7 +1080,7 @@ def typeof_combined_interval(val, c):
 class CombinedIntervalModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("intervals", numba.types.List(date_offset_type))]
-        super(CombinedIntervalModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @box(CombinedIntervalType)
@@ -1344,7 +1344,7 @@ class WeekType(types.Type):
     """Numba type for tseries.offset.Week."""
 
     def __init__(self):
-        super(WeekType, self).__init__(name="WeekType()")
+        super().__init__(name="WeekType()")
 
 
 week_type = WeekType()
@@ -1365,7 +1365,7 @@ class WeekModel(models.StructModel):
             ("normalize", types.boolean),
             ("weekday", types.int64),
         ]
-        super(WeekModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # Data Model: expose DM attributes to Numba functions

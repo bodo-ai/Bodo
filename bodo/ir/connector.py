@@ -56,7 +56,7 @@ class Connector(ir.Stmt, metaclass=ABCMeta):
     out_table_col_types: list[types.ArrayCompatible]
 
     # Is Streaming Enabled, and Whats the Output Table Size
-    chunksize: pt.Optional[int] = None
+    chunksize: int | None = None
 
     @property
     def is_streaming(self) -> bool:
@@ -188,7 +188,7 @@ class VarVisitor(FilterVisitor[bif.Filter]):
 
 def visit_vars_connector(node: Connector, callback, cbdata):
     if debug_prints():  # pragma: no cover
-        print("visiting {} vars for:".format(node.connector_typ), node)
+        print(f"visiting {node.connector_typ} vars for:", node)
         print("cbdata: ", sorted(cbdata.items()))
 
     # update output_vars
@@ -542,7 +542,7 @@ def is_chunked_connector_table_parallel(node, array_dists, node_name):
     return parallel
 
 
-VisitorOut = pt.Tuple[str, types.Type]
+VisitorOut = tuple[str, types.Type]
 
 
 class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
@@ -726,7 +726,7 @@ class ArrowFilterVisitor(FilterVisitor[VisitorOut]):
 
 
 def generate_arrow_filters(
-    filters: pt.Optional[Filter],
+    filters: Filter | None,
     filter_map,
     col_names,
     partition_names,

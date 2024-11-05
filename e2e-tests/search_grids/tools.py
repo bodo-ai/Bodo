@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 # original code is here https://github.com/Bodo-inc/search_grids
 
 import math

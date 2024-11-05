@@ -4,7 +4,6 @@
 import datetime
 import operator
 import warnings
-from typing import Union
 
 import llvmlite.binding as ll
 import numba
@@ -67,7 +66,7 @@ ll.add_symbol("get_days_from_date", hdatetime_ext.get_days_from_date)
 # We represent dates as the Arrow date32 type, which is the difference in days from the UNIX epoch.
 class DatetimeDateType(types.Type):
     def __init__(self):
-        super(DatetimeDateType, self).__init__(name="DatetimeDateType()")
+        super().__init__(name="DatetimeDateType()")
         self.bitwidth = 32  # needed for using IntegerModel
 
 
@@ -683,7 +682,7 @@ if PYVERSION >= (3, 9):
 
     class IsoCalendarDateType(types.Type):
         def __init__(self):
-            super(IsoCalendarDateType, self).__init__(name="IsoCalendarDateType()")
+            super().__init__(name="IsoCalendarDateType()")
 
     iso_calendar_date_type = DatetimeDateType()
 
@@ -697,7 +696,7 @@ if PYVERSION >= (3, 9):
 
 class DatetimeDateArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(DatetimeDateArrayType, self).__init__(name="DatetimeDateArrayType()")
+        super().__init__(name="DatetimeDateArrayType()")
 
     @property
     def as_array(self):
@@ -1239,7 +1238,7 @@ def create_cmp_op_overload_arr(op):
 UNIX_EPOCH_ORD = _ymd2ord(1970, 1, 1)
 
 
-def now_date_python(tz_value_or_none: Union[str, int, None]):
+def now_date_python(tz_value_or_none: str | int | None):
     """Pure python function run in object mode
     to return the equivalent of datetime.datetime.now(tzInfo).date().
 

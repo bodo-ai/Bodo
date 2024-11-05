@@ -455,13 +455,13 @@ def test_conv(args):
         else:
             old = int(elem, base=old_base)
             if new_base == 2:
-                return "{:b}".format(old)
+                return f"{old:b}"
             if new_base == 8:
-                return "{:o}".format(old)
+                return f"{old:o}"
             if new_base == 10:
-                return "{:d}".format(old)
+                return f"{old:d}"
             if new_base == 16:
-                return "{:x}".format(old)
+                return f"{old:x}"
             return None
 
     conv_answer = vectorized_sol(args, conv_scalar_fn, pd.StringDtype())

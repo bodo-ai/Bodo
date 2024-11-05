@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import pandas as pd
 
@@ -40,7 +39,7 @@ class DDLTestHarness(ABC):
 
     @abstractmethod
     def get_table_identifier(
-        self, table_name: str, db_schema: Optional[str] = None
+        self, table_name: str, db_schema: str | None = None
     ) -> str:
         """Converts a table name into a table identifier string.
            Exact format differs per catalog.

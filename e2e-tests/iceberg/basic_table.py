@@ -3,8 +3,8 @@ import functools
 import logging
 import os
 import sys
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Optional, Tuple
 
 import boto3
 import numba
@@ -138,9 +138,9 @@ def test_builder(
     conn: str,
     db_name: str,
     table_name: str,
-    write_impl: Optional[Callable[[pd.DataFrame], None]] = None,
-    read_back_impl: Optional[Callable[[], pd.DataFrame]] = None,
-) -> Tuple[Callable[[pd.DataFrame], None], Callable[[], pd.DataFrame]]:
+    write_impl: Callable[[pd.DataFrame], None] | None = None,
+    read_back_impl: Callable[[], pd.DataFrame] | None = None,
+) -> tuple[Callable[[pd.DataFrame], None], Callable[[], pd.DataFrame]]:
     if write_impl is None:
 
         def write_impl_def(df):

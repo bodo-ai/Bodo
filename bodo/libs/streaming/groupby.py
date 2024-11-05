@@ -4,7 +4,6 @@ This file is mostly wrappers for C++ implementations.
 """
 
 from functools import cached_property
-from typing import Dict, List, Set, Tuple
 
 import llvmlite.binding as ll
 import numba
@@ -167,7 +166,7 @@ class GroupbyStateType(StreamingStateType):
         return func_types
 
     @cached_property
-    def _col_reorder_map(self) -> Dict[int, int]:
+    def _col_reorder_map(self) -> dict[int, int]:
         """
         Generate a mapping to the input components from
         the Python types to the runtime C++ input type.
@@ -178,7 +177,7 @@ class GroupbyStateType(StreamingStateType):
         return {idx: i for i, idx in enumerate(self.build_indices)}
 
     @property
-    def reordered_f_in_cols(self) -> Tuple[int]:
+    def reordered_f_in_cols(self) -> tuple[int]:
         """
         Because we reorder the columns to put the keys in the front, we need to
         map the original column indices contained in f_in_cols to the new column
@@ -195,7 +194,7 @@ class GroupbyStateType(StreamingStateType):
         return tuple([self._col_reorder_map[i] for i in self.f_in_cols])
 
     @cached_property
-    def force_nullable_keys(self) -> Set[int]:
+    def force_nullable_keys(self) -> set[int]:
         """Determine the set of key indices that may be
         missing from a grouping set and therefore must be
         converted to a nullable type.
@@ -211,7 +210,7 @@ class GroupbyStateType(StreamingStateType):
         return nullable_keys
 
     @cached_property
-    def key_types(self) -> List[types.ArrayCompatible]:
+    def key_types(self) -> list[types.ArrayCompatible]:
         """Generate the list of array types that should be used for the
         keys to groupby.
 
@@ -294,7 +293,7 @@ class GroupbyStateType(StreamingStateType):
         mrnf_sort_col_types: list[types.ArrayCompatible],
         mrnf_sort_col_indices: tuple[int],
         table_type: bodo.hiframes.table.TableType,
-    ) -> List[types.ArrayCompatible]:
+    ) -> list[types.ArrayCompatible]:
         """Generate the input table type based on the given key types, key
         indices, and table type.
 
@@ -323,7 +322,7 @@ class GroupbyStateType(StreamingStateType):
         return types
 
     @cached_property
-    def build_reordered_arr_types(self) -> List[types.ArrayCompatible]:
+    def build_reordered_arr_types(self) -> list[types.ArrayCompatible]:
         """
         Get the list of array types for the actual input to the C++ build table.
         This is different from the build_table_type because the input to the C++
@@ -404,7 +403,7 @@ class GroupbyStateType(StreamingStateType):
         return tuple(total_idxs)
 
     @property
-    def mrnf_cols_to_keep_bitmask(self) -> List[bool]:
+    def mrnf_cols_to_keep_bitmask(self) -> list[bool]:
         """Creates a bitmask for MRNF key and sort columns.
 
         Returns:

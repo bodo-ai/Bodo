@@ -701,9 +701,7 @@ def dist_reduce_impl(value, reduce_op, comm):
         if target_typ not in supported_typs and not isinstance(
             target_typ, (bodo.Decimal128Type, bodo.PandasTimestampType)
         ):  # pragma: no cover
-            raise BodoError(
-                "argmin/argmax not supported for type {}".format(target_typ)
-            )
+            raise BodoError(f"argmin/argmax not supported for type {target_typ}")
 
     typ_enum = np.int32(numba_to_c_type(target_typ))
 
@@ -1535,7 +1533,7 @@ def rebalance_impl(data, dests=None, random=False, random_seed=None, parallel=Fa
         func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data))\n"
         data_args = ", ".join(f"data_{i}" for i in range(n_cols))
         func_text += "    info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-            ", ".join("array_to_info(data_{})".format(x) for x in range(n_cols))
+            ", ".join(f"array_to_info(data_{x})" for x in range(n_cols))
         )
         func_text += "    table_total = arr_info_list_to_table(info_list_total)\n"
         # NOTE: C++ will delete table pointer
@@ -1544,20 +1542,14 @@ def rebalance_impl(data, dests=None, random=False, random_seed=None, parallel=Fa
         func_text += "    else:\n"
         func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
         for i_col in range(n_cols):
-            func_text += "    out_arr_{0} = array_from_cpp_table(out_table, {0}, data_{0})\n".format(
-                i_col
-            )
+            func_text += f"    out_arr_{i_col} = array_from_cpp_table(out_table, {i_col}, data_{i_col})\n"
         func_text += (
-            "    out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(
-                n_cols
-            )
+            f"    out_arr_index = array_from_cpp_table(out_table, {n_cols}, ind_arr)\n"
         )
         func_text += "    delete_table(out_table)\n"
-        data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
+        data_args = ", ".join(f"out_arr_{i}" for i in range(n_cols))
         index = "bodo.utils.conversion.index_from_array(out_arr_index)"
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, __col_name_meta_value_rebalance)\n".format(
-            data_args, index
-        )
+        func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), {index}, __col_name_meta_value_rebalance)\n"
     # Series case, create a table and pass to C++
     elif isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
         func_text += "    data_0 = bodo.hiframes.pd_series_ext.get_series_data(data)\n"
@@ -1858,7 +1850,7 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # Float array
     if isinstance(dtype, FloatingArrayType):
-        pd_dtype = "Float{}".format(dtype.dtype.bitwidth)
+        pd_dtype = f"Float{dtype.dtype.bitwidth}"
         return pd.array([3.0], pd_dtype)
 
     # bool array
@@ -3865,9 +3857,7 @@ def alltoallv_tup_overload(
         "def f(send_data, out_data, send_counts, recv_counts, send_disp, recv_disp):\n"
     )
     for i in range(count):
-        func_text += "  alltoallv(send_data[{}], out_data[{}], send_counts, recv_counts, send_disp, recv_disp)\n".format(
-            i, i
-        )
+        func_text += f"  alltoallv(send_data[{i}], out_data[{i}], send_counts, recv_counts, send_disp, recv_disp)\n"
     func_text += "  return\n"
 
     loc_vars = {}

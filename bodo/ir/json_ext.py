@@ -61,13 +61,7 @@ class JsonReader(Connector):
         self.storage_options = storage_options
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadJson(file={}, col_names={}, types={}, vars={})".format(
-            self.df_out_varname,
-            self.file_name,
-            self.out_table_col_names,
-            self.out_table_col_types,
-            self.out_vars,
-        )
+        return f"{self.df_out_varname} = ReadJson(file={self.file_name}, col_names={self.out_table_col_names}, types={self.out_table_col_types}, vars={self.out_vars})"
 
     def out_vars_and_types(self) -> list[tuple[str, types.Type]]:
         return list(zip((x.name for x in self.out_vars), self.out_table_col_types))
@@ -218,7 +212,7 @@ def json_distributed_run(
     # get column variables
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
     func_text = "def json_impl(fname):\n"
-    func_text += "    ({},) = _json_reader_py(fname)\n".format(arg_names)
+    func_text += f"    ({arg_names},) = _json_reader_py(fname)\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -298,13 +292,13 @@ def _gen_json_reader_py(
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
     typ_strs = ", ".join(
         [
-            "{}='{}'".format(s_cname, bodo.ir.csv_ext._get_dtype_str(t))
+            f"{s_cname}='{bodo.ir.csv_ext._get_dtype_str(t)}'"
             for s_cname, t in zip(sanitized_cnames, col_typs)
         ]
     )
     pd_dtype_strs = ", ".join(
         [
-            "'{}':{}".format(cname, bodo.ir.csv_ext._get_pd_dtype_str(t))
+            f"'{cname}':{bodo.ir.csv_ext._get_pd_dtype_str(t)}"
             for cname, t in zip(col_names, col_typs)
         ]
     )
@@ -330,9 +324,7 @@ def _gen_json_reader_py(
         f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
     )
     func_text += "  f_reader = bodo.ir.json_ext.json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
-    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n".format(
-        lines, parallel, compression
-    )
+    func_text += f"    {lines}, {parallel}, -1, bodo.libs.str_ext.unicode_to_utf8('{compression}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n"
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader._pyobj):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += f"  with bodo.no_warning_objmode({typ_strs}):\n"
@@ -340,14 +332,14 @@ def _gen_json_reader_py(
     func_text += f"       convert_dates = {convert_dates}, \n"
     func_text += f"       precise_float={precise_float}, \n"
     func_text += f"       lines={lines}, \n"
-    func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
+    func_text += f"       dtype={{{pd_dtype_strs}}},\n"
     func_text += "       )\n"
     func_text += "    bodo.ir.connector.cast_float_to_nullable(df, df_typeref_2)\n"
     for s_cname, cname in zip(sanitized_cnames, col_names):
         func_text += "    if len(df) > 0:\n"
-        func_text += "        {} = df['{}'].values\n".format(s_cname, cname)
+        func_text += f"        {s_cname} = df['{cname}'].values\n"
         func_text += "    else:\n"
-        func_text += "        {} = np.array([])\n".format(s_cname)
+        func_text += f"        {s_cname} = np.array([])\n"
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(

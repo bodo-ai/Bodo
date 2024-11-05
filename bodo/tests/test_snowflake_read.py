@@ -166,7 +166,7 @@ def snowflake_conn():
     db = "TEST_DB"
     schema = "PUBLIC"
     conn_str = get_snowflake_connection_string(db, schema)
-    conn: "SnowflakeConnection" = snowflake_connect(conn_str)
+    conn: SnowflakeConnection = snowflake_connect(conn_str)
     yield conn
     conn.close()
 

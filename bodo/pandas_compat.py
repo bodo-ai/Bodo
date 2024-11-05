@@ -1,6 +1,5 @@
 import hashlib
 import inspect
-import typing as pt
 import warnings
 
 import numpy as np
@@ -175,7 +174,7 @@ if not hasattr(pd.arrays.DatetimeArray, "notna"):
 # is not accessible from Python. This is the python equivalent of the function.
 # When possible we attempt to call into exposed Pandas APIs directly so we can
 # benefit from native code.
-def precision_from_unit_to_nanoseconds(in_reso: pt.Optional[str]):
+def precision_from_unit_to_nanoseconds(in_reso: str | None):
     if in_reso is None:
         in_reso = "ns"
     if in_reso == "Y":

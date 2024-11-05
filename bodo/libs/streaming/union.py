@@ -4,7 +4,6 @@ Support for streaming union.
 """
 
 from functools import cached_property
-from typing import Tuple
 
 import numba
 import numpy as np
@@ -42,12 +41,12 @@ from bodo.utils.typing import (
 
 class UnionStateType(StreamingStateType):
     all: bool
-    in_table_types: Tuple[TableType, ...]
+    in_table_types: tuple[TableType, ...]
 
     def __init__(
         self,
         all: bool = False,
-        in_table_types: Tuple[TableType, ...] = (),
+        in_table_types: tuple[TableType, ...] = (),
     ):
         for in_table_type in in_table_types:
             error_on_unsupported_streaming_arrays(in_table_type)
@@ -453,7 +452,7 @@ def gen_union_produce_batch_impl(union_state, produce_output=True):
 
         def impl(
             union_state, produce_output=True
-        ) -> Tuple[TableType, bool]:  # pragma: no cover
+        ) -> tuple[TableType, bool]:  # pragma: no cover
             (
                 out_cpp_table,
                 is_last,
@@ -471,7 +470,7 @@ def gen_union_produce_batch_impl(union_state, produce_output=True):
         def impl(
             union_state,
             produce_output=True,
-        ) -> Tuple[TableType, bool]:  # pragma: no cover
+        ) -> tuple[TableType, bool]:  # pragma: no cover
             (
                 out_cpp_table,
                 out_is_last,

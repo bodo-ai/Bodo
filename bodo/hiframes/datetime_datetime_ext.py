@@ -30,7 +30,7 @@ https://github.com/python/cpython/blob/39a5c889d30d03a88102e56f03ee0c95db198fb3/
 
 class DatetimeDatetimeType(types.Type):
     def __init__(self):
-        super(DatetimeDatetimeType, self).__init__(name="DatetimeDatetimeType()")
+        super().__init__(name="DatetimeDatetimeType()")
 
 
 datetime_datetime_type = DatetimeDatetimeType()
@@ -54,7 +54,7 @@ class DatetimeDateTimeModel(models.StructModel):
             ("second", types.int64),
             ("microsecond", types.int64),
         ]
-        super(DatetimeDateTimeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @box(DatetimeDatetimeType)

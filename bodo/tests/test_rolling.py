@@ -474,9 +474,7 @@ class TestRolling(unittest.TestCase):
         centers = (False, True)
 
         for func_name in test_funcs:
-            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(
-                func_name
-            )
+            func_text = f"def test_impl(df, w, c):\n  return df.rolling(w, center=c).{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -501,9 +499,7 @@ class TestRolling(unittest.TestCase):
             wins = (2, 3, 5)
         centers = (False, True)
         for func_name in test_funcs:
-            func_text = "def test_impl(df, w, c):\n  return df.rolling(w, center=c).{}()\n".format(
-                func_name
-            )
+            func_text = f"def test_impl(df, w, c):\n  return df.rolling(w, center=c).{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -569,7 +565,7 @@ class TestRolling(unittest.TestCase):
             self.assertEqual(
                 bodo_func(*args),
                 test_impl(*args),
-                "rolling fixed window with {}".format(args),
+                f"rolling fixed window with {args}",
             )
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -591,7 +587,7 @@ class TestRolling(unittest.TestCase):
             self.assertEqual(
                 bodo_func(*args),
                 test_impl(*args),
-                "rolling fixed window with {}".format(args),
+                f"rolling fixed window with {args}",
             )
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
@@ -627,9 +623,7 @@ class TestRolling(unittest.TestCase):
             wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(
-                w, func_name
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -653,9 +647,7 @@ class TestRolling(unittest.TestCase):
             sizes = (1, 2, 10, 11, 121, 1000)
         # all functions except apply
         for w, func_name in itertools.product(wins, test_funcs):
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').{}()\n".format(
-                w, func_name
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').{func_name}()\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -698,9 +690,7 @@ class TestRolling(unittest.TestCase):
             wins = ("1s", "2s", "3s", "4s")
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum(), raw=True)\n".format(
-                w
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').apply(lambda a: a.sum(), raw=True)\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -722,9 +712,7 @@ class TestRolling(unittest.TestCase):
             sizes = (2, 10, 11, 121, 1000)
         # all functions except apply
         for w in wins:
-            func_text = "def test_impl(df):\n  return df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
-                w
-            )
+            func_text = f"def test_impl(df):\n  return df.rolling('{w}', on='time').apply(lambda a: a.sum())\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             test_impl = loc_vars["test_impl"]
@@ -748,9 +736,7 @@ class TestRolling(unittest.TestCase):
             func_text = "def test_impl(n):\n"
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
-            func_text += "  res = df.rolling('{}', on='time').{}()\n".format(
-                w, func_name
-            )
+            func_text += f"  res = df.rolling('{w}', on='time').{func_name}()\n"
             func_text += "  return res.B.sum()\n"
             loc_vars = {}
             exec(func_text, {"pd": pd, "np": np, "bodo": bodo}, loc_vars)
@@ -774,9 +760,7 @@ class TestRolling(unittest.TestCase):
             func_text += "  df = pd.DataFrame({'B': np.arange(n), 'time': "
             func_text += "    pd.DatetimeIndex(np.arange(n) * 1000000000)})\n"
             func_text += (
-                "  res = df.rolling('{}', on='time').apply(lambda a: a.sum())\n".format(
-                    w
-                )
+                f"  res = df.rolling('{w}', on='time').apply(lambda a: a.sum())\n"
             )
             func_text += "  return res.B.sum()\n"
             loc_vars = {}

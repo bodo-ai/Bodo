@@ -180,7 +180,7 @@ class LikeKernelCache(types.Opaque):
     """
 
     def __init__(self):
-        super(LikeKernelCache, self).__init__(name="LikeKernelCache")
+        super().__init__(name="LikeKernelCache")
 
 
 like_kernel_cache_type = LikeKernelCache()
@@ -206,7 +206,7 @@ _dealloc_like_kernel_cache = types.ExternalFunction(
 
 class ArrayInfoType(types.Type):
     def __init__(self):
-        super(ArrayInfoType, self).__init__(name="ArrayInfoType()")
+        super().__init__(name="ArrayInfoType()")
 
 
 array_info_type = ArrayInfoType()
@@ -215,7 +215,7 @@ register_model(ArrayInfoType)(models.OpaqueModel)
 
 class TableTypeCPP(types.Type):
     def __init__(self):
-        super(TableTypeCPP, self).__init__(name="TableTypeCPP()")
+        super().__init__(name="TableTypeCPP()")
 
 
 table_type = TableTypeCPP()
@@ -2674,7 +2674,7 @@ def shuffle_table(
 
 class ShuffleInfoType(types.Type):
     def __init__(self):
-        super(ShuffleInfoType, self).__init__(name="ShuffleInfoType()")
+        super().__init__(name="ShuffleInfoType()")
 
 
 shuffle_info_type = ShuffleInfoType()

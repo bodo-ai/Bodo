@@ -65,7 +65,7 @@ def make_overload_unsupported_template(typ, base, attr, path_name, extra_info):
     by Bodo.
     """
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
-    name = "OverloadUnsupportedAttributeTemplate_%s_%s" % (typ, attr)
+    name = f"OverloadUnsupportedAttributeTemplate_{typ}_{attr}"
     # Note the implementation cache is subclass-specific
     dct = {
         "key": typ,

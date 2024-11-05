@@ -34,9 +34,7 @@ class NullableTupleType(types.IterableType):
         self._tuple_typ = tuple_typ
         # Null values is included to avoid requiring casting.
         self._null_typ = null_typ
-        super(NullableTupleType, self).__init__(
-            name=f"NullableTupleType({tuple_typ}, {null_typ})"
-        )
+        super().__init__(name=f"NullableTupleType({tuple_typ}, {null_typ})")
 
     @property
     def tuple_typ(self):
@@ -85,7 +83,7 @@ class NullableTupleType(types.IterableType):
 class NullableTupleModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("data", fe_type.tuple_typ), ("null_values", fe_type.null_typ)]
-        super(NullableTupleModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(NullableTupleType, "data", "_data")

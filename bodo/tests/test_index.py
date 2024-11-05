@@ -1681,7 +1681,7 @@ def test_datetime_field(dti_val, field, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
-    func_text += "  return A.{}\n".format(field)
+    func_text += f"  return A.{field}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1891,7 +1891,7 @@ def test_datetime_getitem(dti_val, memory_leak_check):
 def test_datetime_str_comp(dti_val, comp, memory_leak_check):
     # string literal
     func_text = "def impl(A):\n"
-    func_text += '  return A {} "2015-01-23"\n'.format(comp)
+    func_text += f'  return A {comp} "2015-01-23"\n'
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1901,7 +1901,7 @@ def test_datetime_str_comp(dti_val, comp, memory_leak_check):
 
     # string passed in
     func_text = "def impl(A, s):\n"
-    func_text += "  return A {} s\n".format(comp)
+    func_text += f"  return A {comp} s\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -2083,7 +2083,7 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     """tests timedelta index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
-    func_text += "  return A.{}\n".format(field)
+    func_text += f"  return A.{field}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -3607,7 +3607,7 @@ def test_index_any_all(index):
 def test_index_cmp_ops(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(S, other):\n"
-    func_text += "  return S {} other\n".format(op_str)
+    func_text += f"  return S {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]

@@ -70,9 +70,7 @@ class DictionaryArrayType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, arr_data_type):
         self.data = arr_data_type
-        super(DictionaryArrayType, self).__init__(
-            name=f"DictionaryArrayType({arr_data_type})"
-        )
+        super().__init__(name=f"DictionaryArrayType({arr_data_type})")
 
     @property
     def as_array(self):

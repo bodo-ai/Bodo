@@ -899,7 +899,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
                 if pd.isna(x):
                     return pd.NA
                 elif isinstance(x, float):
-                    return "{:.6f}".format(x)
+                    return f"{x:.6f}"
                 else:
                     return str(x)
 
@@ -989,7 +989,7 @@ def test_heterogeneous_series_df_apply_astype_classes():
         if pd.isna(x):
             return pd.NA
         elif isinstance(x, float):
-            return "{:.6f}".format(x)
+            return f"{x:.6f}"
         else:
             return str(x)
 

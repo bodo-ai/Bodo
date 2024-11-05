@@ -322,8 +322,8 @@ def test_lateral_flatten_array(
                 [
                     pa.field(
                         "A",
-                        pa.list_(pa.list_((pa.int64()))),
-                        pa.field("cities", pa.list_(pa.list_((pa.int64())))),
+                        pa.list_(pa.list_(pa.int64())),
+                        pa.field("cities", pa.list_(pa.list_(pa.int64()))),
                     )
                 ]
             ),

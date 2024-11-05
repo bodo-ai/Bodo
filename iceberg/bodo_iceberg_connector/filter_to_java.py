@@ -80,9 +80,9 @@ class FilterExpr(Filter):
     """
 
     op: str
-    args: pt.List[Filter]
+    args: list[Filter]
 
-    def __init__(self, op: str, args: pt.List[Filter]):
+    def __init__(self, op: str, args: list[Filter]):
         self.op = op
         self.args = args
 

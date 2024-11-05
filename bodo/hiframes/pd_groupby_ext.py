@@ -3,7 +3,6 @@
 
 import operator
 from enum import Enum
-from typing import Dict, List, Tuple, Union
 
 import numba
 import numpy as np
@@ -122,7 +121,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         # Should we use SQL or Pandas rules
         self._use_sql_rules = _use_sql_rules
 
-        super(DataFrameGroupByType, self).__init__(
+        super().__init__(
             name=f"DataFrameGroupBy({df_type}, {keys}, {selection}, {as_index}, {dropna}, {explicit_select}, {series_select}, {_num_shuffle_keys})"
         )
 
@@ -157,7 +156,7 @@ class GroupbyModel(models.StructModel):
         members = [
             ("obj", fe_type.df_type),
         ]
-        super(GroupbyModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DataFrameGroupByType, "obj", "obj")
@@ -276,15 +275,13 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
                     raise_bodo_error(
-                        "groupby: selected column {} not found in dataframe".format(
-                            set(idx).difference(set(grpby.df_type.columns))
-                        )
+                        f"groupby: selected column {set(idx).difference(set(grpby.df_type.columns))} not found in dataframe"
                     )
                 selection = idx
             else:
                 if idx not in grpby.df_type.columns:
                     raise_bodo_error(
-                        "groupby: selected column {} not found in dataframe".format(idx)
+                        f"groupby: selected column {idx} not found in dataframe"
                     )
                 selection = (idx,)
                 series_select = True
@@ -702,10 +699,8 @@ def get_agg_typ(
                     err_msg = "ok"
                 except Exception:
                     raise_bodo_error(
-                        "Groupy.agg()/Groupy.aggregate(): column {col} of type {type} "
-                        "is unsupported/not a valid input type for user defined function".format(
-                            col=c, type=data.dtype
-                        )
+                        f"Groupy.agg()/Groupy.aggregate(): column {c} of type {data.dtype} "
+                        "is unsupported/not a valid input type for user defined function"
                     )
             else:
                 other_args = None
@@ -1051,7 +1046,7 @@ def handle_extended_named_agg_input_cols(
     )
 
 
-def resolve_listagg_func_inputs(data_col_name, additional_args) -> Tuple:
+def resolve_listagg_func_inputs(data_col_name, additional_args) -> tuple:
     sep = additional_args[0]
     order_by = additional_args[1]
     ascending = additional_args[2]
@@ -1094,7 +1089,7 @@ def resolve_listagg_func_inputs(data_col_name, additional_args) -> Tuple:
     return input_cols, additional_args
 
 
-def resolve_array_agg_func_inputs(data_col_name, additional_args) -> Tuple:
+def resolve_array_agg_func_inputs(data_col_name, additional_args) -> tuple:
     order_by = additional_args[0]
     ascending = additional_args[1]
     na_position = additional_args[2]
@@ -1526,8 +1521,8 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
 
 
 def extract_window_args(
-    func_name: str, func_args: Tuple[str]
-) -> Tuple[List[str], List[str]]:
+    func_name: str, func_args: tuple[str]
+) -> tuple[list[str], list[str]]:
     """
     Processes a function name and tuple of argument strings corresponding to a window function
     inside of a groupby.window term. Verifies that the number of arguments is correct for
@@ -1622,9 +1617,9 @@ def get_window_func_types():
 
 def resolve_window_funcs(
     grp: DataFrameGroupByType,
-    args: Tuple,
-    kws: Union[Tuple[Tuple[str, types.Type]], Dict[str, types.Type]],
-) -> Tuple[Signature, Dict]:
+    args: tuple,
+    kws: tuple[tuple[str, types.Type]] | dict[str, types.Type],
+) -> tuple[Signature, dict]:
     """
     Output the Numba function signature and groupby information for window functions.
     The groupby information maps the used columns and functions to the output columns.

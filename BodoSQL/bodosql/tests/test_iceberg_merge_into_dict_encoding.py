@@ -1,5 +1,4 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-from typing import List, Optional
 
 import pandas as pd
 import pyarrow as pa
@@ -16,7 +15,7 @@ pytestmark = pytest.mark.iceberg
 
 
 def verify_dict_encoding_in_columns(
-    func_name, args, impl, expected_columns: Optional[List[str]]
+    func_name, args, impl, expected_columns: list[str] | None
 ):
     """
     Verify that the given function has dict encoding in the given columns.

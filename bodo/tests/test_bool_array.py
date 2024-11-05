@@ -103,7 +103,7 @@ def test_cmp(op, memory_leak_check):
     """Test comparison of two boolean arrays"""
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A1, A2):\n"
-    func_text += "  return A1.values {} A2.values\n".format(op_str)
+    func_text += f"  return A1.values {op_str} A2.values\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]

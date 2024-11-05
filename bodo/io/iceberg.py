@@ -101,7 +101,7 @@ class IcebergConnectionType(types.Type):
     """
 
     def __init__(self, name):  # pragma: no cover
-        super(IcebergConnectionType, self).__init__(
+        super().__init__(
             name=name,
         )
 
@@ -280,7 +280,7 @@ def is_snowflake_managed_iceberg_wh(con: str) -> bool:
 
 def get_iceberg_file_list(
     table_name: str, conn: str, database_schema: str, filters: str | None
-) -> tuple[list["IcebergParquetInfo"], dict[int, pa.Schema], int]:
+) -> tuple[list[IcebergParquetInfo], dict[int, pa.Schema], int]:
     """
     Gets the list of parquet data files that need to be read from an Iceberg table.
 
@@ -420,9 +420,7 @@ class ThetaSketchCollectionType(types.Type):
     """Type for C++ pointer to a collection of theta sketches"""
 
     def __init__(self):  # pragma: no cover
-        super(ThetaSketchCollectionType, self).__init__(
-            name="ThetaSketchCollectionType(r)"
-        )
+        super().__init__(name="ThetaSketchCollectionType(r)")
 
 
 register_model(ThetaSketchCollectionType)(models.OpaqueModel)
@@ -465,8 +463,8 @@ class IcebergSchemaGroup:
         iceberg_field_ids: FieldIDs,
         parquet_field_names: FieldNames,
         final_schema: pa.Schema,
-        expr_filter_f_str: pt.Optional[str] = None,
-        filter_scalars: pt.Optional[list[tuple[str, pt.Any]]] = None,
+        expr_filter_f_str: str | None = None,
+        filter_scalars: list[tuple[str, pt.Any]] | None = None,
     ):
         """
         Construct a new Schema Group.
@@ -496,7 +494,7 @@ class IcebergSchemaGroup:
         self.read_schema: pa.Schema = self.gen_read_schema(
             self.iceberg_field_ids, self.parquet_field_names, self.final_schema
         )
-        self.expr_filter: pt.Optional[pc.Expression] = None
+        self.expr_filter: pc.Expression | None = None
         if (expr_filter_f_str is not None) and (len(expr_filter_f_str) > 0):
             filter_scalars = [] if filter_scalars is None else filter_scalars
             col_rename_map: dict[str, str] = {
@@ -897,7 +895,7 @@ class IcebergParquetDataset:
     # Snapshot id. This is used for operations like delete/merge.
     snapshot_id: int
     # Filesystem can be None when there are no files to read.
-    filesystem: "PyFileSystem" | pa.fs.FileSystem | None
+    filesystem: PyFileSystem | pa.fs.FileSystem | None
     # Parquet files to read ordered by the schema group
     # they belong to. We order them this way so that when
     # we split this list between ranks for the actual read,
@@ -1210,7 +1208,7 @@ def get_iceberg_file_list_parallel(
     database_schema: str,
     table_name: str,
     filters: str | None = None,
-) -> tuple[list["IcebergParquetInfo"], int, dict[int, pa.Schema], int]:
+) -> tuple[list[IcebergParquetInfo], int, dict[int, pa.Schema], int]:
     """
     Wrapper around 'get_iceberg_file_list' which calls it
     on rank 0 and handles all the required error
@@ -1457,10 +1455,10 @@ def get_schema_group_identifier_from_pa_schema(
 
 
 def group_file_frags_by_schema_group_identifier(
-    pq_infos: list["IcebergParquetInfo"],
+    pq_infos: list[IcebergParquetInfo],
     file_schemas: list[pa.Schema],
     metrics: IcebergPqDatasetMetrics,
-) -> dict[SchemaGroupIdentifier, list["IcebergParquetInfo"]]:
+) -> dict[SchemaGroupIdentifier, list[IcebergParquetInfo]]:
     """
     Group a list of Parquet file fragments by their Schema Group identifier,
     i.e. based on the Iceberg Field IDs and corresponding
@@ -1511,7 +1509,7 @@ def group_file_frags_by_schema_group_identifier(
     # Sort the files based on their schema group identifier
     start = time.monotonic()
     file_frags_schema_group_ids: list[
-        tuple["IcebergParquetInfo", FieldIDs, FieldNames]
+        tuple[IcebergParquetInfo, FieldIDs, FieldNames]
     ] = list(zip(pq_infos, iceberg_field_ids, pq_field_names))
     # Sort/Groupby the field-ids and field-names tuples.
     # We must flatten the tuples for sorting because you
@@ -1520,9 +1518,7 @@ def group_file_frags_by_schema_group_identifier(
     # can never become a primitive column (and vice-versa).
     sort_key_func = lambda item: (flatten_tuple(item[1]), flatten_tuple(item[2]))
     keyfunc = lambda item: (item[1], item[2])
-    schema_group_id_to_frags: dict[
-        SchemaGroupIdentifier, list["IcebergParquetInfo"]
-    ] = {
+    schema_group_id_to_frags: dict[SchemaGroupIdentifier, list[IcebergParquetInfo]] = {
         k: [x[0] for x in v]
         for k, v in itertools.groupby(
             sorted(file_frags_schema_group_ids, key=sort_key_func), keyfunc
@@ -1556,8 +1552,8 @@ def flatten_tuple(x: tuple[TVals, ...]) -> tuple[T]:
 def get_pieces_with_exact_row_counts(
     schema_group: IcebergSchemaGroup,
     schema_group_identifier: SchemaGroupIdentifier,
-    pq_infos: list["IcebergParquetInfo"],
-    fs: "PyFileSystem" | pa.fs.FileSystem,
+    pq_infos: list[IcebergParquetInfo],
+    fs: PyFileSystem | pa.fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
     metrics: IcebergPqDatasetMetrics,
@@ -1669,8 +1665,8 @@ def get_pieces_with_exact_row_counts(
 
 def get_row_counts_for_schema_group(
     schema_group_identifier: SchemaGroupIdentifier,
-    pq_infos: list["IcebergParquetInfo"],
-    fs: "PyFileSystem" | pa.fs.FileSystem,
+    pq_infos: list[IcebergParquetInfo],
+    fs: PyFileSystem | pa.fs.FileSystem,
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
     metrics: IcebergPqDatasetMetrics,
@@ -2028,7 +2024,7 @@ def get_iceberg_pq_dataset(
         x.standard_path = abs_path
 
     # Construct a filesystem.
-    fs: "PyFileSystem" | pa.fs.FileSystem
+    fs: PyFileSystem | pa.fs.FileSystem
     if protocol in {"gcs", "gs"}:
         validate_gcsfs_installed()
     rest_catalog_conf = get_rest_catalog_config(conn)
@@ -2308,10 +2304,10 @@ def get_dataset_for_schema_group(
     files_rows_to_read: list[int],
     final_schema: pa.Schema,
     str_as_dict_cols: list[str],
-    filesystem: "PyFileSystem" | pa.fs.FileSystem,
+    filesystem: PyFileSystem | pa.fs.FileSystem,
     start_offset: int,
     len_all_fpaths: int,
-) -> tuple["Dataset", pa.Schema, int]:
+) -> tuple[Dataset, pa.Schema, int]:
     """
     Create an Arrow Dataset for files belonging
     to the same Iceberg Schema Group.
@@ -2394,11 +2390,11 @@ def get_pyarrow_datasets(
     schema_groups: list[IcebergSchemaGroup],
     avg_num_pieces: float,
     is_parallel: bool,
-    filesystem: "PyFileSystem" | pa.fs.FileSystem,
+    filesystem: PyFileSystem | pa.fs.FileSystem,
     str_as_dict_cols: list[str],
     start_offset: int,
     final_schema: pa.Schema,
-) -> tuple[list["Dataset"], list[pa.Schema], list[pc.Expression], int]:
+) -> tuple[list[Dataset], list[pa.Schema], list[pc.Expression], int]:
     """
     Get the PyArrow Datasets for the given files.
     This will return one Dataset for every unique schema
@@ -2461,7 +2457,7 @@ def get_pyarrow_datasets(
     if len(fpaths) == 0:
         return [], [], start_offset
 
-    datasets: list["Dataset"] = []
+    datasets: list[Dataset] = []
     dataset_read_schemas: list[pa.Schema] = []
     dataset_expr_filters: list[pc.Expression] = []
 
@@ -2570,7 +2566,7 @@ def determine_str_as_dict_columns(
     if protocol in {"gcs", "gs"}:
         validate_gcsfs_installed()
 
-    fs: "PyFileSystem" | pa.fs.FileSystem
+    fs: PyFileSystem | pa.fs.FileSystem
     if protocol in {"gcs", "gs"}:
         validate_gcsfs_installed()
     rest_catalog_conf = get_rest_catalog_config(conn)
@@ -3008,7 +3004,7 @@ def with_iceberg_field_id_md_from_ref_field(
 
 
 def add_iceberg_field_id_md_to_pa_schema(
-    schema: pa.Schema, ref_schema: pt.Optional[pa.Schema] = None
+    schema: pa.Schema, ref_schema: pa.Schema | None = None
 ) -> pa.Schema:
     """
     Create a new Schema where all the fields (including nested fields)
@@ -3223,8 +3219,8 @@ def get_table_details_before_write(
 
 
 def generate_data_file_info(
-    iceberg_files_info: pt.List[pt.Tuple[pt.Any]],
-) -> pt.Tuple[pt.List[str], pt.List[int], pt.List[pt.Dict[str, pt.Any]]]:
+    iceberg_files_info: list[tuple[pt.Any]],
+) -> tuple[list[str], list[int], list[dict[str, pt.Any]]]:
     """
     Collect C++ Iceberg File Info to a single rank
     and process before handing off to the connector / committing functions
@@ -3244,7 +3240,7 @@ def generate_data_file_info(
     # 4. lowerBounds - Lower bounds per field id.
     # 5. upperBounds - Upper bounds per field id.
 
-    def extract_and_gather(i: int) -> pt.List[pt.Any]:
+    def extract_and_gather(i: int) -> list[pt.Any]:
         """Extract field i from iceberg_files_info
         and gather the results on rank 0.
 
@@ -3535,9 +3531,7 @@ class PythonListOfHeterogeneousTuples(types.Opaque):
     """
 
     def __init__(self):
-        super(PythonListOfHeterogeneousTuples, self).__init__(
-            name="PythonListOfHeterogeneousTuples"
-        )
+        super().__init__(name="PythonListOfHeterogeneousTuples")
 
 
 python_list_of_heterogeneous_tuples_type = PythonListOfHeterogeneousTuples()

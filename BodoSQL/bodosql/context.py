@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import os
 import re
@@ -5,7 +7,7 @@ import time
 import traceback
 import warnings
 from enum import Enum, IntEnum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numba
 import numpy as np
@@ -157,9 +159,7 @@ def construct_tz_aware_array_type(typ, nullable):
         return ColumnDataTypeClass(type_enum, nullable, precision)
 
 
-def construct_time_array_type(
-    typ: Union[bodo.TimeArrayType, bodo.TimeType], nullable: bool
-):
+def construct_time_array_type(typ: bodo.TimeArrayType | bodo.TimeType, nullable: bool):
     """Construct a BodoSQL data type for a time array.
 
     Args:
@@ -268,7 +268,7 @@ def get_sql_data_type(arr_type):
         return ColumnDataTypeClass(type_enum, nullable)
 
 
-def create_java_dynamic_parameter_type_list(dynamic_params_list: List[Any]):
+def create_java_dynamic_parameter_type_list(dynamic_params_list: list[Any]):
     """Convert a list of dynamic parameters or dynamic parameter types
     into a Java List of ColumnDataType values.
 
@@ -286,7 +286,7 @@ def create_java_dynamic_parameter_type_list(dynamic_params_list: List[Any]):
     return output_list
 
 
-def create_java_named_parameter_type_map(named_params: Dict[str, Any]):
+def create_java_named_parameter_type_map(named_params: dict[str, Any]):
     """Convert a list of keys and list of values into a Java
     Map from key to ColumnDataType values.
 
@@ -478,8 +478,8 @@ def add_table_type(
     table_name: str,
     schema: LocalSchemaClass,
     df_type: bodo.DataFrameType,
-    estimated_row_count: Optional[int],
-    estimated_ndvs: Optional[dict[str, int]],
+    estimated_row_count: int | None,
+    estimated_ndvs: dict[str, int] | None,
     bodo_type: types.Type,
     table_num: int,
     from_jit: bool,
@@ -938,11 +938,11 @@ class BodoSQLContext:
     def _convert_to_pandas(
         self,
         sql: str,
-        dynamic_params_list: List[Any],
-        named_params_dict: Dict[str, Any],
+        dynamic_params_list: list[Any],
+        named_params_dict: dict[str, Any],
         generator: RelationalAlgebraGeneratorClass,
         is_ddl: bool,
-    ) -> Tuple[str, Dict[str, Any]]:
+    ) -> tuple[str, dict[str, Any]]:
         """Generate the func_text for the Python code generated for the given SQL query.
         This is always computed entirely on rank 0 to avoid parallelism errors.
 
@@ -1146,9 +1146,9 @@ class BodoSQLContext:
         self,
         sql: str,
         generator: RelationalAlgebraGeneratorClass,
-        dynamic_params_list: List[Any],
-        named_params_dict: Dict[str, Any],
-    ) -> Tuple[str, Dict[str, Any]]:
+        dynamic_params_list: list[Any],
+        named_params_dict: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
         """Generate the Pandas code for the given SQL string.
 
         Args:
@@ -1239,7 +1239,7 @@ class BodoSQLContext:
         )
         return generator
 
-    def add_or_replace_view(self, name: str, table: Union[pd.DataFrame, TablePath]):
+    def add_or_replace_view(self, name: str, table: pd.DataFrame | TablePath):
         """Create a new BodoSQLContext that contains all of the old DataFrames and the
         new table being provided. If there is a DataFrame in the old BodoSQLContext with
         the same name, it is replaced by the new table in the new BodoSQLContext. Otherwise
@@ -1360,7 +1360,7 @@ class BodoSQLContext:
         return False  # pragma: no cover
 
     def execute_ddl(
-        self, sql: str, generator: Optional[RelationalAlgebraGeneratorClass] = None
+        self, sql: str, generator: RelationalAlgebraGeneratorClass | None = None
     ) -> pd.DataFrame:
         """API to directly execute DDL queries. This is used by the JIT
         path to execute DDL queries and can be used as a fast path when you
@@ -1454,11 +1454,11 @@ def initialize_schema():
 
 def update_schema(
     schema: LocalSchemaClass,
-    table_names: List[str],
-    df_types: List[bodo.DataFrameType],
-    estimated_row_counts: List[Optional[int]],
-    estimated_ndvs: List[Optional[dict[str, int]]],
-    bodo_types: List[types.Type],
+    table_names: list[str],
+    df_types: list[bodo.DataFrameType],
+    estimated_row_counts: list[int | None],
+    estimated_ndvs: list[dict[str, int] | None],
+    bodo_types: list[types.Type],
     from_jit: bool,
     write_type: str,
 ):
@@ -1494,7 +1494,7 @@ def update_schema(
             )
 
 
-def _ensure_dynamic_params_list(dynamic_params_list: Any) -> List:
+def _ensure_dynamic_params_list(dynamic_params_list: Any) -> list:
     """Verify the supplied Dynamic params list is a supported type
     and converts the result to a list.
 

@@ -62,7 +62,7 @@ class SparkSessionType(types.Opaque):
     """
 
     def __init__(self):
-        super(SparkSessionType, self).__init__(name="SparkSessionType")
+        super().__init__(name="SparkSessionType")
 
 
 spark_session_type = SparkSessionType()
@@ -75,7 +75,7 @@ class SparkSessionBuilderType(types.Opaque):
     """
 
     def __init__(self):
-        super(SparkSessionBuilderType, self).__init__(name="SparkSessionBuilderType")
+        super().__init__(name="SparkSessionBuilderType")
 
 
 spark_session_builder_type = SparkSessionBuilderType()
@@ -176,7 +176,7 @@ class RowType(types.BaseNamedTuple):
         name = "Row({})".format(
             ", ".join(f"{f}:{t}" for f, t in zip(self.fields, self.types))
         )
-        super(RowType, self).__init__(name)
+        super().__init__(name)
 
     @property
     def key(self):
@@ -196,7 +196,7 @@ class RowType(types.BaseNamedTuple):
 class RowModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = list(zip(fe_type.fields, fe_type.types))
-        super(RowModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @typeof_impl.register(pyspark.sql.types.Row)
@@ -293,7 +293,7 @@ class SparkDataFrameType(types.Type):
 
     def __init__(self, df):
         self.df = df
-        super(SparkDataFrameType, self).__init__(f"SparkDataFrame({df})")
+        super().__init__(f"SparkDataFrame({df})")
 
     @property
     def key(self):
@@ -317,7 +317,7 @@ class SparkDataFrameType(types.Type):
 class SparkDataFrameModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("df", fe_type.df)]
-        super(SparkDataFrameModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SparkDataFrameType, "df", "_df")
@@ -681,7 +681,7 @@ class ColumnType(types.Type):
 
     def __init__(self, expr):
         self.expr = expr
-        super(ColumnType, self).__init__(f"Column({expr})")
+        super().__init__(f"Column({expr})")
 
     @property
     def key(self):
@@ -707,7 +707,7 @@ class ExprType(types.Type):
     def __init__(self, op, children):
         self.op = op
         self.children = children
-        super(ExprType, self).__init__(f"{op}({children})")
+        super().__init__(f"{op}({children})")
 
     @property
     def key(self):

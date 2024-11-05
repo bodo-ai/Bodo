@@ -76,7 +76,7 @@ def bytes_getitem(byte_obj, ind):
 # type for ndarray with bytes object values
 class BinaryArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
-        super(BinaryArrayType, self).__init__(name="BinaryArrayType()")
+        super().__init__(name="BinaryArrayType()")
 
     @property
     def as_array(self):

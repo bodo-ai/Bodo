@@ -369,13 +369,13 @@ def test_string_metrics(
     expected_value_counts = {"A": 5, "B": 5}
     expected_null_counts = {"A": 2, "B": 1}
     expected_lower_bounds = {
-        "A": "AAC".encode("utf-8"),
-        "B": "b".encode("utf-8"),
+        "A": b"AAC",
+        "B": b"b",
     }
     expected_upper_bounds = {
         # Note: The standard just defines non-zero but we always write 1.
-        "A": "AALR".encode("utf-8"),
-        "B": "d".encode("utf-8"),
+        "A": b"AALR",
+        "B": b"d",
     }
     validate_metrics(
         warehouse_loc,
@@ -454,12 +454,12 @@ def test_struct_metrics(
     expected_null_counts = {"A": 0, "A.f1": 1, "A.f2": 2, "A.f3": 3}
     expected_lower_bounds = {
         "A.f1": b"\x01\x00\x00\x00",
-        "A.f2": "AAC".encode("utf-8"),
+        "A.f2": b"AAC",
         "A.f3": b"\xc4\x48\x00\x00",
     }
     expected_upper_bounds = {
         "A.f1": b"\x05\x00\x00\x00",
-        "A.f2": "AALR".encode("utf-8"),
+        "A.f2": b"AALR",
         "A.f3": b"\xc7\x48\x00\x00",
     }
     validate_metrics(

@@ -242,7 +242,7 @@ class BodoError(NumbaError):
         else:
             self.locs_in_msg = locs_in_msg
         highlight = numba.core.errors.termcolor().errmsg
-        super(BodoError, self).__init__(highlight(msg), loc)
+        super().__init__(highlight(msg), loc)
 
 
 class BodoException(numba.core.errors.TypingError):
@@ -347,7 +347,7 @@ class FilenameType(types.Literal):
     def __init__(self, fname, finfo: FileInfo):
         self.fname = fname
         self._schema = finfo.get_schema(fname)
-        super(FilenameType, self).__init__(self.fname)
+        super().__init__(self.fname)
 
     def __hash__(self):
         # fixed number to ensure every FilenameType hashes equally
@@ -925,7 +925,7 @@ def get_overload_const_str(val) -> str:
     if isinstance(val, types.StringLiteral):
         assert isinstance(val.literal_value, str)
         return val.literal_value
-    raise BodoError("{} not constant string".format(val))
+    raise BodoError(f"{val} not constant string")
 
 
 def get_overload_const_bytes(val) -> bytes:
@@ -938,7 +938,7 @@ def get_overload_const_bytes(val) -> bytes:
         assert isinstance(val.value, bytes)
         return val.value
     # Numba has no eqivalent literal type for bytes
-    raise BodoError("{} not constant binary".format(val))
+    raise BodoError(f"{val} not constant binary")
 
 
 def get_overload_const_int(val) -> int:
@@ -951,7 +951,7 @@ def get_overload_const_int(val) -> int:
     if isinstance(val, types.IntegerLiteral):
         assert isinstance(val.literal_value, int)
         return val.literal_value
-    raise BodoError("{} not constant integer".format(val))
+    raise BodoError(f"{val} not constant integer")
 
 
 def get_overload_const_float(val) -> float:
@@ -960,7 +960,7 @@ def get_overload_const_float(val) -> float:
     if isinstance(val, types.Omitted):
         assert isinstance(val.value, float)
         return val.value
-    raise BodoError("{} not constant float".format(val))
+    raise BodoError(f"{val} not constant float")
 
 
 def get_overload_const_bool(val, f_name=None, a_name=None) -> bool:
@@ -1011,7 +1011,7 @@ def get_overload_const_func(val, func_ir):
         return val.dispatcher.py_func
     if isinstance(val, CPUDispatcher):
         return val.py_func
-    raise BodoError("'{}' not a constant function type".format(val))
+    raise BodoError(f"'{val}' not a constant function type")
 
 
 def is_heterogeneous_tuple_type(t):
@@ -1144,14 +1144,14 @@ def get_index_names(t, func_name, default_name):
     """
     from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 
-    err_msg = "{}: index name should be a constant string".format(func_name)
+    err_msg = f"{func_name}: index name should be a constant string"
 
     # MultiIndex has multiple names
     if isinstance(t, MultiIndexType):
         names = []
         for i, n_typ in enumerate(t.names_typ):
             if n_typ == types.none:
-                names.append("level_{}".format(i))
+                names.append(f"level_{i}")
                 continue
             if not is_overload_constant_str(n_typ):
                 raise BodoError(err_msg)
@@ -1407,7 +1407,7 @@ class MetaType(types.Type):
         if not isinstance(meta, typing.Hashable):  # pragma: no cover
             raise RuntimeError("Internal error: MetaType should be hashable")
         self.meta = meta
-        super(MetaType, self).__init__("MetaType({})".format(meta))
+        super().__init__(f"MetaType({meta})")
 
     def can_convert_from(self, typingctx, other):
         return True
@@ -2412,7 +2412,7 @@ def create_unsupported_overload(fname):
     """Create an overload for unsupported function 'fname' that raises BodoError"""
 
     def overload_f(*a, **kws):
-        raise BodoError("{} not supported yet".format(fname))
+        raise BodoError(f"{fname} not supported yet")
 
     return overload_f
 
@@ -2574,7 +2574,7 @@ class BodoArrayIterator(types.SimpleIteratorType):
         name = f"iter({arr_type})"
         if yield_type == None:
             yield_type = arr_type.dtype
-        super(BodoArrayIterator, self).__init__(name, yield_type)
+        super().__init__(name, yield_type)
 
 
 @register_model(BodoArrayIterator)
@@ -2585,7 +2585,7 @@ class BodoArrayIteratorModel(models.StructModel):
             ("index", types.EphemeralPointer(types.uintp)),
             ("array", fe_type.arr_type),
         ]
-        super(BodoArrayIteratorModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @lower_builtin("iternext", BodoArrayIterator)

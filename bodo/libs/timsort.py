@@ -1047,9 +1047,9 @@ def swap_arrs_overload(arr_tup, lo, hi):
 
     func_text = "def f(arr_tup, lo, hi):\n"
     for i in range(count):
-        func_text += "  tmp_v_{} = arr_tup[{}][lo]\n".format(i, i)
-        func_text += "  arr_tup[{}][lo] = arr_tup[{}][hi]\n".format(i, i)
-        func_text += "  arr_tup[{}][hi] = tmp_v_{}\n".format(i, i)
+        func_text += f"  tmp_v_{i} = arr_tup[{i}][lo]\n"
+        func_text += f"  arr_tup[{i}][lo] = arr_tup[{i}][hi]\n"
+        func_text += f"  arr_tup[{i}][hi] = tmp_v_{i}\n"
     func_text += "  return\n"
 
     loc_vars = {}
@@ -1075,8 +1075,8 @@ def copyRange_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):
 
     func_text = "def f(src_arr_tup, src_pos, dst_arr_tup, dst_pos, n):\n"
     for i in range(count):
-        func_text += "  copyRange(src_arr_tup[{}], src_pos, dst_arr_tup[{}], dst_pos, n)\n".format(
-            i, i
+        func_text += (
+            f"  copyRange(src_arr_tup[{i}], src_pos, dst_arr_tup[{i}], dst_pos, n)\n"
         )
     func_text += "  return\n"
 
@@ -1103,8 +1103,8 @@ def copyElement_tup_overload(src_arr_tup, src_pos, dst_arr_tup, dst_pos):
 
     func_text = "def f(src_arr_tup, src_pos, dst_arr_tup, dst_pos):\n"
     for i in range(count):
-        func_text += "  copyElement(src_arr_tup[{}], src_pos, dst_arr_tup[{}], dst_pos)\n".format(
-            i, i
+        func_text += (
+            f"  copyElement(src_arr_tup[{i}], src_pos, dst_arr_tup[{i}], dst_pos)\n"
         )
     func_text += "  return\n"
 
@@ -1125,7 +1125,7 @@ def getitem_arr_tup_overload(arr_tup, ind):
 
     func_text = "def f(arr_tup, ind):\n"
     func_text += "  return ({}{})\n".format(
-        ",".join(["arr_tup[{}][ind]".format(i) for i in range(count)]),
+        ",".join([f"arr_tup[{i}][ind]" for i in range(count)]),
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
@@ -1147,10 +1147,10 @@ def setitem_arr_tup_overload(arr_tup, ind, val_tup):
     func_text = "def f(arr_tup, ind, val_tup):\n"
     for i in range(count):
         if isinstance(val_tup, numba.core.types.BaseTuple):
-            func_text += "  arr_tup[{}][ind] = val_tup[{}]\n".format(i, i)
+            func_text += f"  arr_tup[{i}][ind] = val_tup[{i}]\n"
         else:
             assert arr_tup.count == 1
-            func_text += "  arr_tup[{}][ind] = val_tup\n".format(i)
+            func_text += f"  arr_tup[{i}][ind] = val_tup\n"
     func_text += "  return\n"
 
     loc_vars = {}
