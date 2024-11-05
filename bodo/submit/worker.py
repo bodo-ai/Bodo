@@ -228,7 +228,7 @@ def exec_func_handler(
             debug_worker_msg(logger, "Compiling and executing func")
             res = func(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Exception while trying to execute code: {e}")
+            debug_worker_msg(logger, f"Exception while trying to execute code: {e}")
             caught_exception = e
 
     poll_for_barrier(spawner_intercomm)
