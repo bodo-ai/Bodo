@@ -14,7 +14,7 @@ import textwrap
 
 
 def main(input_file: str, catalog_creds: str):
-    with open(input_file, "r") as f:
+    with open(input_file) as f:
         for line in f.readlines():
             database_name, schema_name, table_name = line.strip().split(".")
             # Call request_schema.py

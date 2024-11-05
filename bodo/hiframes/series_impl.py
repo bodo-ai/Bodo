@@ -340,9 +340,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     # TODO: [BE-100] Support name argument with a constant string.
     series_name = get_name_literal(S.name_typ)
     if isinstance(S.index, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
-        ind_arrs = ", ".join(
-            ["index_arrs[{}]".format(i) for i in range(S.index.nlevels)]
-        )
+        ind_arrs = ", ".join([f"index_arrs[{i}]" for i in range(S.index.nlevels)])
     else:
         ind_arrs = "    bodo.utils.conversion.index_to_array(index)\n"
 
@@ -3814,9 +3812,7 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
         return lambda to_replace, value, key_dtype_conv: to_replace  # pragma: no cover
 
     raise BodoError(
-        "Series.replace(): Not supported for types to_replace={} and value={}".format(
-            to_replace, value
-        )
+        f"Series.replace(): Not supported for types to_replace={to_replace} and value={value}"
     )
     # List, List case
 
@@ -4376,7 +4372,7 @@ def create_explicit_binary_op_overload(op):
         unsupported_args = {"level": level, "axis": axis}
         arg_defaults = {"level": None, "axis": 0}
         check_unsupported_args(
-            "series.{}".format(op.__name__),
+            f"series.{op.__name__}",
             unsupported_args,
             arg_defaults,
             package_name="pandas",
@@ -4992,7 +4988,7 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
         in ("integer", "signed", "unsigned", "float")
     ):  # pragma: no cover
         raise BodoError(
-            "pd.to_numeric(): invalid downcasting method provided {}".format(downcast)
+            f"pd.to_numeric(): invalid downcasting method provided {downcast}"
         )
 
     # find output dtype

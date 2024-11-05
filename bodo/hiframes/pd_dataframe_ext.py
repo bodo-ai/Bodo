@@ -6,8 +6,8 @@ Implement pd.DataFrame typing and data model handling.
 import json
 import operator
 import time
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Optional, Sequence
 
 import llvmlite.binding as ll
 import numba
@@ -145,9 +145,9 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
     def __init__(
         self,
-        data: Optional[Sequence["types.ArrayCompatible"]] = None,
+        data: Sequence["types.ArrayCompatible"] | None = None,
         index=None,
-        columns: Optional[Sequence[str]] = None,
+        columns: Sequence[str] | None = None,
         dist=None,
         is_table_format=False,
     ):
@@ -183,7 +183,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             # save TableType to avoid recreating it in other places like column unbox & dtor
             self.table_type = TableType(data) if is_table_format else None
 
-        super(DataFrameType, self).__init__(
+        super().__init__(
             name=f"dataframe({data}, {index}, {columns}, {dist}, {is_table_format}, {self.has_runtime_cols})"
         )
 
@@ -416,9 +416,7 @@ def check_runtime_cols_unsupported(df, func_name):
 class DataFramePayloadType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type
-        super(DataFramePayloadType, self).__init__(
-            name=f"DataFramePayloadType({df_type})"
-        )
+        super().__init__(name=f"DataFramePayloadType({df_type})")
 
     @property
     def mangling_args(self):
@@ -452,7 +450,7 @@ class DataFramePayloadModel(models.StructModel):
         ]
         if fe_type.df_type.has_runtime_cols:
             members.append(("columns", fe_type.df_type.runtime_colname_typ))
-        super(DataFramePayloadModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @register_model(DataFrameType)
@@ -466,7 +464,7 @@ class DataFrameModel(models.StructModel):
             # for boxed DataFrames, enables updating original DataFrame object
             ("parent", types.pyobject),
         ]
-        super(DataFrameModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # Export meminfo for null checks
@@ -711,7 +709,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
             ret_type = f_return_type
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def apply_stub(func, axis=0, raw=False, result_type=None, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}
@@ -1007,7 +1005,7 @@ def define_df_dtor(context, builder, df_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     # TODO(ehsan): do we need to sanitize the name in any case?
-    fn = cgutils.get_or_insert_function(mod, fnty, name=".dtor.df.{}".format(df_type))
+    fn = cgutils.get_or_insert_function(mod, fnty, name=f".dtor.df.{df_type}")
 
     # End early if the dtor is already defined
     if not fn.is_declaration:
@@ -2279,9 +2277,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, __col_name_meta_value_pd_overload)\n".format(
-        data_args, index_arg
-    )
+    func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, {index_arg}, __col_name_meta_value_pd_overload)\n"
     loc_vars = {}
     exec(
         func_text,
@@ -2384,18 +2380,14 @@ def _get_df_args(data, index, columns, dtype, copy):
         n_cols = (len(data.types) - 1) // 2
         data_keys = [t.literal_value for t in data.types[1 : n_cols + 1]]
         data_val_types = dict(zip(data_keys, data.types[n_cols + 1 :]))
-        data_arrs = ["data[{}]".format(i) for i in range(n_cols + 1, 2 * n_cols + 1)]
+        data_arrs = [f"data[{i}]" for i in range(n_cols + 1, 2 * n_cols + 1)]
         data_dict = dict(zip(data_keys, data_arrs))
         # if no index provided and there are Series inputs, get index from them
         # XXX cannot handle alignment of multiple Series
         if is_overload_none(index):
             for i, t in enumerate(data.types[n_cols + 1 :]):
                 if isinstance(t, SeriesType):
-                    index_arg = (
-                        "bodo.hiframes.pd_series_ext.get_series_index(data[{}])".format(
-                            n_cols + 1 + i
-                        )
-                    )
+                    index_arg = f"bodo.hiframes.pd_series_ext.get_series_index(data[{n_cols + 1 + i}])"
                     index_is_none = False
                     break
     # empty dataframe
@@ -2421,7 +2413,7 @@ def _get_df_args(data, index, columns, dtype, copy):
             raise_bodo_error("pd.DataFrame(): constant column names required")
         n_cols = len(columns_consts)
         data_val_types = {c: data.copy(ndim=1) for c in columns_consts}
-        data_arrs = ["data[:,{}]{}".format(i, copy_str) for i in range(n_cols)]
+        data_arrs = [f"data[:,{i}]{copy_str}" for i in range(n_cols)]
         data_dict = dict(zip(columns_consts, data_arrs))
 
     if is_overload_none(columns):
@@ -2443,15 +2435,11 @@ def _get_df_args(data, index, columns, dtype, copy):
             index_arg = "bodo.hiframes.pd_index_ext.init_binary_str_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
         else:
             index_arg = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(
-                    df_len
-                )
+                f"bodo.hiframes.pd_index_ext.init_range_index(0, {df_len}, 1, None)"
             )
     data_args = "({},)".format(
         ", ".join(
-            "bodo.utils.conversion.coerce_to_array({}, True, scalar_to_arr_len={}){}".format(
-                data_dict[c], df_len, astype_str
-            )
+            f"bodo.utils.conversion.coerce_to_array({data_dict[c]}, True, scalar_to_arr_len={df_len}){astype_str}"
             for c in col_names
         )
     )
@@ -2470,7 +2458,7 @@ def _get_df_len_from_info(
     df_len = "0"
     for c in col_names:
         if c in data_dict and is_iterable_type(data_val_types[c]):
-            df_len = "len({})".format(data_dict[c])
+            df_len = f"len({data_dict[c]})"
             break
 
     # If we haven't found a length, rely on the index
@@ -2502,7 +2490,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
         dtype = "bodo.utils.conversion.array_type_from_dtype(dtype)"
 
     # array with NaNs
-    null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)
+    null_arr = f"bodo.libs.array_kernels.gen_na_array({df_len}, {dtype})"
     for c in col_names:
         if c not in data_dict:
             data_dict[c] = null_arr
@@ -2614,7 +2602,7 @@ def getitem_tuple_lower(context, builder, sig, args):
         items = cgutils.unpack_tuple(builder, tup)[idx]
         res = context.make_tuple(builder, sig.return_type, items)
     else:
-        raise NotImplementedError("unexpected index %r for %s" % (idx, sig.args[0]))
+        raise NotImplementedError(f"unexpected index {idx!r} for {sig.args[0]}")
     return impl_ret_borrowed(context, builder, sig.return_type, res)
 
 
@@ -2929,15 +2917,13 @@ def concat_overload(
                 names.append(str(col_no))
                 col_no += 1
                 data_args.append(
-                    "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                    f"bodo.hiframes.pd_series_ext.get_series_data(objs[{i}])"
                 )
             else:  # DataFrameType
                 names.extend(obj.columns)
                 for j in range(len(obj.data)):
                     data_args.append(
-                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
-                            i, j
-                        )
+                        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{i}], {j})"
                     )
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text, names, ", ".join(data_args), index
@@ -2975,15 +2961,11 @@ def concat_overload(
                 if c in df.column_index:
                     col_ind = df.column_index[c]
                     args.append(
-                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
-                            i, col_ind
-                        )
+                        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{i}], {col_ind})"
                     )
                 else:
                     args.append(
-                        "bodo.libs.array_kernels.gen_na_array(len(objs[{}]), arr_typ{})".format(
-                            i, col_no
-                        )
+                        f"bodo.libs.array_kernels.gen_na_array(len(objs[{i}]), arr_typ{col_no})"
                     )
             func_text += "  A{} = bodo.libs.array_kernels.concat(({},))\n".format(
                 col_no, ", ".join(args)
@@ -2993,9 +2975,7 @@ def concat_overload(
         else:
             index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
                 ", ".join(
-                    "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{}]))".format(
-                        i
-                    )
+                    f"bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(objs[{i}]))"
                     # ignore dummy string index of empty dataframes (test_append_empty_df)
                     for i in range(len(objs.types))
                     if len(objs[i].columns) > 0
@@ -3004,7 +2984,7 @@ def concat_overload(
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             all_colnames,
-            ", ".join("A{}".format(i) for i in range(len(all_colnames))),
+            ", ".join(f"A{i}" for i in range(len(all_colnames))),
             index,
             arr_types,
         )
@@ -3015,7 +2995,7 @@ def concat_overload(
         # TODO: index and name
         func_text += "  out_arr = bodo.libs.array_kernels.concat(({},))\n".format(
             ", ".join(
-                "bodo.hiframes.pd_series_ext.get_series_data(objs[{}])".format(i)
+                f"bodo.hiframes.pd_series_ext.get_series_data(objs[{i}])"
                 for i in range(len(objs.types))
             )
         )
@@ -3024,9 +3004,7 @@ def concat_overload(
         else:
             func_text += "  index = bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(({},)))\n".format(
                 ", ".join(
-                    "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{}]))".format(
-                        i
-                    )
+                    f"bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(objs[{i}]))"
                     for i in range(len(objs.types))
                 )
             )
@@ -3108,7 +3086,7 @@ def concat_overload(
         return loc_vars["impl"]
 
     # TODO: handle other iterables like arrays, lists, ...
-    raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
+    raise BodoError(f"pd.concat(): input type {objs} not supported yet")
 
 
 def sort_values_dummy(
@@ -3697,9 +3675,7 @@ def gen_pandas_parquet_metadata(
                     # If columns are determined at runtime we don't have names
                     col_name = "Runtime determined column of type"
                 raise BodoError(
-                    "to_parquet(): unknown dtype in nullable Integer column {} {}".format(
-                        col_name, col_type
-                    )
+                    f"to_parquet(): unknown dtype in nullable Integer column {col_name} {col_type}"
                 )
             pandas_type = col_type.dtype.name
         elif isinstance(col_type, bodo.FloatingArrayType):
@@ -3733,9 +3709,7 @@ def gen_pandas_parquet_metadata(
                 # If columns are determined at runtime we don't have names
                 col_name = "Runtime determined column of type"
             raise BodoError(
-                "to_parquet(): unsupported column type for metadata generation : {} {}".format(
-                    col_name, col_type
-                )
+                f"to_parquet(): unsupported column type for metadata generation : {col_name} {col_type}"
             )
 
         col_metadata = {
@@ -3986,7 +3960,7 @@ def to_parquet_overload(
             if df.data[i] == bodo.dict_str_arr_type:
                 func_text += f"    arr{i} = bodo.libs.array.drop_duplicates_local_dictionary(arr{i}, False)\n"
         data_args = ", ".join(f"array_to_info(arr{i})" for i in range(len(df.columns)))
-        func_text += "    info_list = [{}]\n".format(data_args)
+        func_text += f"    info_list = [{data_args}]\n"
         func_text += "    table = arr_info_list_to_table(info_list)\n"
     if df.has_runtime_cols:
         func_text += "    columns_index = get_dataframe_column_names(df)\n"
@@ -4054,7 +4028,7 @@ def to_parquet_overload(
             if isinstance(df.data[i], CategoricalArrayType) and (i in part_col_idxs)
         )
         if categories_args:
-            func_text += "    cat_info_list = [{}]\n".format(categories_args)
+            func_text += f"    cat_info_list = [{categories_args}]\n"
             func_text += "    cat_table = arr_info_list_to_table(cat_info_list)\n"
         else:
             func_text += "    cat_table = 0\n"
@@ -5149,14 +5123,14 @@ def get_dummies(
     func_text += "  numba.parfors.parfor.init_prange()\n"
     func_text += "  n = len(data_values)\n"
     for i in range(n_cols):
-        func_text += "  data_arr_{} = np.empty(n, np.uint8)\n".format(i)
+        func_text += f"  data_arr_{i} = np.empty(n, np.uint8)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "      if bodo.libs.array_kernels.isna(data_values, i):\n"
     for j in range(n_cols):
-        func_text += "          data_arr_{}[i] = 0\n".format(j)
+        func_text += f"          data_arr_{j}[i] = 0\n"
     func_text += "      else:\n"
     for k in range(n_cols):
-        func_text += "          data_arr_{0}[i] = codes[i] == {0}\n".format(k)
+        func_text += f"          data_arr_{k}[i] = codes[i] == {k}\n"
     data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
     index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
 

@@ -4046,9 +4046,7 @@ class DistributedPass:
                     v.name for v in stmt.list_vars()
                 }:
                     ind_used = True
-                    dprint(
-                        "index of 1D_Var pafor {} used in {}".format(parfor.id, stmt)
-                    )
+                    dprint(f"index of 1D_Var pafor {parfor.id} used in {stmt}")
                     break
 
         # fix parfor start and stop bounds using ex_scan on ranges
@@ -4544,9 +4542,9 @@ class DistributedPass:
 
     def _get_ind_sub_slice(self, slice_var, offset_var):
         if isinstance(slice_var, slice):
-            f_text = """def f(offset):
-                return slice({} - offset, {} - offset)
-            """.format(slice_var.start, slice_var.stop)
+            f_text = f"""def f(offset):
+                return slice({slice_var.start} - offset, {slice_var.stop} - offset)
+            """
             loc = {}
             exec(f_text, {}, loc)
             f = loc["f"]
@@ -4934,7 +4932,7 @@ class DistributedPass:
         ndims = self.typemap[tup_var.name].count
         f_text = "def f(tup_var):\n"
         for i in range(ndims):
-            f_text += "  val{} = tup_var[{}]\n".format(i, i)
+            f_text += f"  val{i} = tup_var[{i}]\n"
         loc_vars = {}
         exec(f_text, {}, loc_vars)
         f = loc_vars["f"]

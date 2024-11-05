@@ -8,7 +8,7 @@ import re
 import warnings
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import numba
 import numpy as np
@@ -57,45 +57,45 @@ class InputDist(Enum):
 
 def check_query(
     query: str,
-    dataframe_dict: Dict[str, pd.DataFrame],
+    dataframe_dict: dict[str, pd.DataFrame],
     spark: Optional["SparkSession"],
-    named_params: Optional[Dict[str, Any]] = None,
-    bind_variables: Optional[Tuple[Any]] = None,
+    named_params: dict[str, Any] | None = None,
+    bind_variables: tuple[Any] | None = None,
     check_names: bool = True,
     check_dtype: bool = True,
     sort_output: bool = True,
-    expected_output: Optional[pd.DataFrame] = None,
-    convert_columns_bytearray: Optional[List[str]] = None,
-    convert_columns_string: Optional[List[str]] = None,
-    convert_columns_timedelta: Optional[List[str]] = None,
-    convert_columns_decimal: Optional[List[str]] = None,
+    expected_output: pd.DataFrame | None = None,
+    convert_columns_bytearray: list[str] | None = None,
+    convert_columns_string: list[str] | None = None,
+    convert_columns_timedelta: list[str] | None = None,
+    convert_columns_decimal: list[str] | None = None,
     convert_input_to_nullable_float: bool = True,
     convert_expected_output_to_nullable_float: bool = True,
     convert_float_nan: bool = False,
-    convert_columns_bool: Optional[List[str]] = None,
-    convert_columns_tz_naive: Optional[List[str]] = None,
+    convert_columns_bool: list[str] | None = None,
+    convert_columns_tz_naive: list[str] | None = None,
     return_codegen: bool = False,
     return_seq_dataframe: bool = False,
     run_dist_tests: bool = True,
     only_python: bool = False,
     only_jit_seq: bool = False,
     only_jit_1D: bool = False,
-    only_jit_1DVar: Optional[bool] = None,
-    spark_dataframe_dict: Optional[Dict[str, pd.DataFrame]] = None,
-    equivalent_spark_query: Optional[str] = None,
-    spark_input_cols_to_cast: Optional[Dict[str, Dict[str, str]]] = None,
-    pyspark_schemas: Optional[Dict[str, pyspark.sql.types.StructType]] = None,
+    only_jit_1DVar: bool | None = None,
+    spark_dataframe_dict: dict[str, pd.DataFrame] | None = None,
+    equivalent_spark_query: str | None = None,
+    spark_input_cols_to_cast: dict[str, dict[str, str]] | None = None,
+    pyspark_schemas: dict[str, pyspark.sql.types.StructType] | None = None,
     named_params_timedelta_interval: bool = False,
     convert_nullable_bodosql: bool = True,
-    use_table_format: Optional[bool] = True,
-    use_dict_encoded_strings: Optional[bool] = None,
+    use_table_format: bool | None = True,
+    use_dict_encoded_strings: bool | None = None,
     is_out_distributed: bool = True,
     check_typing_issues: bool = True,
     use_map_arrays: bool = False,
     atol: float = 1e-08,
     rtol: float = 1e-05,
     convert_columns_to_pandas: bool = False,
-    session_tz: Optional[str] = None,
+    session_tz: str | None = None,
     enable_timestamp_tz: bool = False,
 ):
     """
@@ -1388,7 +1388,7 @@ def convert_nullable_object(df):
     return df
 
 
-def remove_tz_columns_spark(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+def remove_tz_columns_spark(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     """Takes any DataFrame columns in df that
     are also found in cols and converts them from
     tz-aware to tz-naive. This is necessary for passing data to

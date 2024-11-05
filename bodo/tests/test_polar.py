@@ -95,7 +95,7 @@ def test_polar_format_e2e(datapath, memory_leak_check):
 
         # Compute x and y unit vectors. x defined to lie along R_c.
         # z = cross(vec[0], vec[-1]); z =z/norm(z)
-        u_hat = (R_c - dot(R_c, n_hat) * n_hat) / norm((R_c - dot(R_c, n_hat) * n_hat))
+        u_hat = (R_c - dot(R_c, n_hat) * n_hat) / norm(R_c - dot(R_c, n_hat) * n_hat)
         v_hat = np.cross(u_hat, n_hat)
 
         # Compute r_hat, the diretion of k_r, for each pulse

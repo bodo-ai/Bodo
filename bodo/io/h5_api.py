@@ -51,7 +51,7 @@ if bodo.utils.utils.has_supported_h5py():
 
 class H5FileType(types.Opaque):
     def __init__(self):
-        super(H5FileType, self).__init__(name="H5FileType")
+        super().__init__(name="H5FileType")
 
 
 h5file_type = H5FileType()
@@ -59,7 +59,7 @@ h5file_type = H5FileType()
 
 class H5DatasetType(types.Opaque):
     def __init__(self):
-        super(H5DatasetType, self).__init__(name="H5DatasetType")
+        super().__init__(name="H5DatasetType")
 
 
 h5dataset_type = H5DatasetType()
@@ -67,7 +67,7 @@ h5dataset_type = H5DatasetType()
 
 class H5GroupType(types.Opaque):
     def __init__(self):
-        super(H5GroupType, self).__init__(name="H5GroupType")
+        super().__init__(name="H5GroupType")
 
 
 h5group_type = H5GroupType()
@@ -75,7 +75,7 @@ h5group_type = H5GroupType()
 
 class H5DatasetOrGroupType(types.Opaque):
     def __init__(self):
-        super(H5DatasetOrGroupType, self).__init__(name="H5DatasetOrGroupType")
+        super().__init__(name="H5DatasetOrGroupType")
 
 
 h5dataset_or_group_type = H5DatasetOrGroupType()
@@ -89,7 +89,7 @@ h5file_data_type = types.int64
 @register_model(H5DatasetOrGroupType)
 class H5FileModel(models.IntegerModel):
     def __init__(self, dmm, fe_type):
-        super(H5FileModel, self).__init__(dmm, h5file_data_type)
+        super().__init__(dmm, h5file_data_type)
 
 
 # type for list of names

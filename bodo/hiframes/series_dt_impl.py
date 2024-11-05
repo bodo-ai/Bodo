@@ -56,15 +56,15 @@ class SeriesDatetimePropertiesType(types.Type):
     # TODO: Timedelta and Period accessors
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesDatetimePropertiesType({})".format(stype)
-        super(SeriesDatetimePropertiesType, self).__init__(name)
+        name = f"SeriesDatetimePropertiesType({stype})"
+        super().__init__(name)
 
 
 @register_model(SeriesDatetimePropertiesType)
 class SeriesDtModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesDtModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesDatetimePropertiesType, "obj", "_obj")
@@ -139,7 +139,7 @@ def create_date_field_overload(field):
             else:
                 func_text += "        out_arr[i] = ts." + field + "\n"
         else:
-            func_text += "        out_arr[i] = arr[i].{}\n".format(field)
+            func_text += f"        out_arr[i] = arr[i].{field}\n"
 
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
@@ -333,13 +333,11 @@ def create_series_dt_df_output_overload(attr):
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
         for field in fields:
-            func_text += "    {} = {}\n".format(field, int_type)
+            func_text += f"    {field} = {int_type}\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         for field in fields:
-            func_text += "            bodo.libs.array_kernels.setna({}, i)\n".format(
-                field
-            )
+            func_text += f"            bodo.libs.array_kernels.setna({field}, i)\n"
         func_text += "            continue\n"
         tuple_vals = "(" + "[i], ".join(fields) + "[i])"
         if convert:
@@ -348,9 +346,7 @@ def create_series_dt_df_output_overload(attr):
             getitem_val = "arr[i]"
         func_text += f"        {tuple_vals} = {getitem_val}.{attr_call}\n"
         arr_args = "(" + ", ".join(fields) + ")"
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, __col_name_meta_value_series_dt_df_output)\n".format(
-            arr_args
-        )
+        func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe({arr_args}, index, __col_name_meta_value_series_dt_df_output)\n"
         loc_vars = {}
         exec(
             func_text,
@@ -596,9 +592,7 @@ def create_timedelta_freq_overload(method):
         if is_tz_aware:
             func_text += f"        B[i] = A[i].{method}(freq)\n"
         else:
-            func_text += "        B[i] = {}({}(A[i]).{}(freq).value)\n".format(
-                back_convert, front_convert, method
-            )
+            func_text += f"        B[i] = {back_convert}({front_convert}(A[i]).{method}(freq).value)\n"
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
         )

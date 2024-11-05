@@ -10,7 +10,7 @@ import pandas as pd
 
 import bodo
 
-with open("nltk-stopwords.txt", "r") as fh:
+with open("nltk-stopwords.txt") as fh:
     STOPWORDS = list(map(str.strip, fh.readlines()))
 
 

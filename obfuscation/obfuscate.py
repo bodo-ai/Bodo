@@ -574,7 +574,7 @@ def process_input(argv):
     nb_file = len(argv) - 2
     for ifile in range(nb_file):
         efile = argv[ifile + 2]
-        sys.stderr.write("ifile={}/{} file={}".format(ifile, nb_file, efile))
+        sys.stderr.write(f"ifile={ifile}/{nb_file} file={efile}")
         process_file(efile, stdoutput)
 
 

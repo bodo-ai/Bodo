@@ -16,7 +16,6 @@ import string
 import traceback
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List
 
 import numba
 import numpy as np
@@ -1770,7 +1769,7 @@ def test_sort_values_input_boundaries(memory_leak_check):
     ],
 )
 def test_sort_table_for_interval_join(
-    dfs: List[pd.DataFrame], bounds_list, min_val, max_val, memory_leak_check
+    dfs: list[pd.DataFrame], bounds_list, min_val, max_val, memory_leak_check
 ):
     """
     Test the sort_table_for_interval_join for multiple data types.

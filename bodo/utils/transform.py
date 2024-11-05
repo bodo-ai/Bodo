@@ -482,7 +482,7 @@ def compile_func_single_block(
     args,
     ret_var: ir.Var,
     typing_info=None,
-    extra_globals: pt.Optional[dict[str, pt.Any]] = None,
+    extra_globals: dict[str, pt.Any] | None = None,
     infer_types: bool = True,
     run_untyped_pass: bool = False,
     flags=None,
@@ -818,9 +818,7 @@ def get_const_value_inner(
         dict_varname = call_name[1].name
         if updated_containers and dict_varname in updated_containers:
             raise BodoConstUpdatedError(
-                "variable '{}' is updated inplace using '{}'".format(
-                    dict_varname, updated_containers[dict_varname]
-                )
+                f"variable '{dict_varname}' is updated inplace using '{updated_containers[dict_varname]}'"
             )
         require(is_expr(var_def, "build_map"))
         vals = [v[0] for v in var_def.items]
@@ -1523,15 +1521,15 @@ def gen_const_val_str(c):
     # elements are from the nested tuple. Supports only one level nesting
     # TODO: fix nested const tuple handling in Numba
     if isinstance(c, tuple):
-        return "'{}{}', ".format(NESTED_TUP_SENTINEL, len(c)) + ", ".join(
+        return f"'{NESTED_TUP_SENTINEL}{len(c)}', " + ", ".join(
             gen_const_val_str(v) for v in c
         )
     if isinstance(c, str):
-        return "'{}'".format(c)
+        return f"'{c}'"
     # TODO: Support actual timestamp, timedelta, float values
     if isinstance(c, (pd.Timestamp, pd.Timedelta, float)):
         # Timestamp has a space
-        return "'{}'".format(c)
+        return f"'{c}'"
     return str(c)
 
 
@@ -1591,8 +1589,8 @@ def get_const_arg(
     arg_name,
     loc,
     default=None,
-    err_msg: pt.Optional[str] = None,
-    typ: pt.Optional[str] = None,
+    err_msg: str | None = None,
+    typ: str | None = None,
     use_default: bool = False,
 ):
     """Get constant value for a function call argument. Raise error if the value is
@@ -1601,9 +1599,7 @@ def get_const_arg(
     typ = "str" if typ is None else typ
     arg = CONST_NOT_FOUND
     if err_msg is None:
-        err_msg = ("{} requires '{}' argument as a constant {}").format(
-            f_name, arg_name, typ
-        )
+        err_msg = f"{f_name} requires '{arg_name}' argument as a constant {typ}"
 
     arg_var = get_call_expr_arg(f_name, args, kws, arg_no, arg_name, "")
 
@@ -1644,7 +1640,7 @@ def get_call_expr_arg(
         if use_default or default is not None:
             return default
         if err_msg is None:
-            err_msg = "{} requires '{}' argument".format(f_name, arg_name)
+            err_msg = f"{f_name} requires '{arg_name}' argument"
         raise BodoError(err_msg)
     return arg
 
@@ -1832,11 +1828,11 @@ def gen_init_varsize_alloc_sizes(t):
     """
     # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
-        vname = "num_chars_{}".format(ir_utils.next_label())
+        vname = f"num_chars_{ir_utils.next_label()}"
         return f"  {vname} = 0\n", (vname,)
     if isinstance(t, ArrayItemArrayType):
         inner_code, inner_vars = gen_init_varsize_alloc_sizes(t.dtype)
-        vname = "num_items_{}".format(ir_utils.next_label())
+        vname = f"num_items_{ir_utils.next_label()}"
         return f"  {vname} = 0\n" + inner_code, (vname,) + inner_vars
     return "", ()
 
@@ -1847,13 +1843,11 @@ def gen_varsize_item_sizes(t, item, var_names):
     """
     # TODO: handle all possible array types and nested cases, e.g. struct
     if t == string_array_type:
-        return "    {} += bodo.libs.str_arr_ext.get_utf8_size({})\n".format(
-            var_names[0], item
-        )
+        return f"    {var_names[0]} += bodo.libs.str_arr_ext.get_utf8_size({item})\n"
     if isinstance(t, ArrayItemArrayType):
-        return "    {} += len({})\n".format(
-            var_names[0], item
-        ) + gen_varsize_array_counts(t.dtype, item, var_names[1:])
+        return f"    {var_names[0]} += len({item})\n" + gen_varsize_array_counts(
+            t.dtype, item, var_names[1:]
+        )
     return ""
 
 
@@ -1863,8 +1857,8 @@ def gen_varsize_array_counts(t, item, var_names):
     """
     # TODO: other arrays
     if t == string_array_type:
-        return "    {} += bodo.libs.str_arr_ext.get_num_total_chars({})\n".format(
-            var_names[0], item
+        return (
+            f"    {var_names[0]} += bodo.libs.str_arr_ext.get_num_total_chars({item})\n"
         )
     return ""
 
@@ -2144,8 +2138,8 @@ def _convert_const_key_dict(
 
 
 def get_runtime_join_filter_terms(
-    func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: pt.Optional[ir.Expr]
-) -> pt.Optional[list[tuple[ir.Var, tuple[int], tuple[int, int, str]]]]:
+    func_ir: ir.FunctionIR, _bodo_runtime_join_filters_arg: ir.Expr | None
+) -> list[tuple[ir.Var, tuple[int], tuple[int, int, str]]] | None:
     """
     Takes a function IR and an expression for the runtime join filters argument to the function.
     Extracts the join state variables and column indices from the runtime join filters argument so

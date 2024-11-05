@@ -1,7 +1,6 @@
 import os
 import tempfile
 from io import StringIO
-from typing import Optional
 
 import numba
 import pandas as pd
@@ -202,9 +201,9 @@ def check_table_comment(
     schema,
     table_name,
     number_columns,
-    table_comments: Optional[str] = None,
+    table_comments: str | None = None,
     column_comments=False,
-    table_properties: Optional[dict] = None,
+    table_properties: dict | None = None,
 ):
     """Helper function to test table comments are correctly added
 

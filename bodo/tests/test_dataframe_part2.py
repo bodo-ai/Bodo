@@ -2651,7 +2651,7 @@ def test_dataframe_columns_list():
 
     def impl1(nrows, nvars):
         X = np.zeros((nrows, nvars + 1))
-        cols = ["y"] + ["x{}".format(i) for i in range(nvars)]
+        cols = ["y"] + [f"x{i}" for i in range(nvars)]
         df = pd.DataFrame(X, columns=cols)
         return df
 
@@ -2715,7 +2715,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
         df = pd.DataFrame({"A1": np.arange(n), "A2": np.arange(n) ** 2})
         for i in [3, 5, 9]:
             new_df = (df[["A1", "A2"]] + i).rename(
-                columns={"A1": "A1_{}".format(i), "A2": "A2_{}".format(i)}
+                columns={"A1": f"A1_{i}", "A2": f"A2_{i}"}
             )
             df = pd.concat((df, new_df), axis=1)
         return df

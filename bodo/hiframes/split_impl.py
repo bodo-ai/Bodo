@@ -48,9 +48,7 @@ offset_ctypes_type = types.ArrayCTypes(types.Array(offset_type, 1, "C"))
 # index_offsets array includes offsets to data_offsets array to identify lists
 class StringArraySplitViewType(types.ArrayCompatible):
     def __init__(self):
-        super(StringArraySplitViewType, self).__init__(
-            name="StringArraySplitViewType()"
-        )
+        super().__init__(name="StringArraySplitViewType()")
 
     @property
     def as_array(self):
@@ -69,9 +67,7 @@ string_array_split_view_type = StringArraySplitViewType()
 
 class StringArraySplitViewPayloadType(types.Type):
     def __init__(self):
-        super(StringArraySplitViewPayloadType, self).__init__(
-            name="StringArraySplitViewPayloadType()"
-        )
+        super().__init__(name="StringArraySplitViewPayloadType()")
 
 
 str_arr_split_view_payload_type = StringArraySplitViewPayloadType()

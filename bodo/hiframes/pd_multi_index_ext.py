@@ -46,9 +46,7 @@ class MultiIndexType(types.ArrayCompatible):
         self.array_types = array_types
         self.names_typ = names_typ
         self.name_typ = name_typ
-        super(MultiIndexType, self).__init__(
-            name="MultiIndexType({}, {}, {})".format(array_types, names_typ, name_typ)
-        )
+        super().__init__(name=f"MultiIndexType({array_types}, {names_typ}, {name_typ})")
 
     ndim = 1
 
@@ -86,7 +84,7 @@ class MultiIndexModel(models.StructModel):
             ("names", types.Tuple(fe_type.names_typ)),
             ("name", fe_type.name_typ),
         ]
-        super(MultiIndexModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(MultiIndexType, "data", "_data")

@@ -417,7 +417,7 @@ def test_parquet_statistics_file(datapath, memory_leak_check):
     table = bodosql.TablePath(f1, "parquet", statistics_file=stats_file)
     bc = bodosql.BodoSQLContext({"ORDERS": table})
 
-    with open(stats_file, "r") as f:
+    with open(stats_file) as f:
         expected_stats = json.load(f)
 
     assert "row_count" in expected_stats
@@ -477,7 +477,7 @@ def test_parquet_statistics_file_jit(datapath, memory_leak_check, tmp_path):
             expected_cache_loc
         ), f"Plan not found at expected cache location ({expected_cache_loc})"
 
-        with open(expected_cache_loc, "r") as f:
+        with open(expected_cache_loc) as f:
             plan_str = f.read()
         bodo.barrier()
 

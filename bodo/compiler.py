@@ -147,7 +147,7 @@ def add_pass_before(pm, pass_cls, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes.insert(idx, (pass_cls, str(pass_cls)))
     # if a pass has been added, it's not finalized
     pm._finalized = False
@@ -165,7 +165,7 @@ def replace_pass(pm, pass_cls, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes[idx] = (pass_cls, str(pass_cls))
     # if a pass has been added, it's not finalized
     pm._finalized = False
@@ -181,7 +181,7 @@ def remove_pass(pm, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes.pop(idx)
     # if a pass has been added, it's not finalized
     pm._finalized = False
@@ -980,7 +980,7 @@ def remove_passes_after(pm, location):
         if x == location:
             break
     else:  # pragma: no cover
-        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+        raise bodo.utils.typing.BodoError(f"Could not find pass {location}")
     pm.passes = pm.passes[: idx + 1]
     # if a pass has been added, it's not finalized
     pm._finalized = False

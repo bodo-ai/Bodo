@@ -8,7 +8,7 @@ import sys
 
 
 def get_func_text(e_file):
-    f = open(e_file, "r")
+    f = open(e_file)
     list_lines = f.readlines()
     f.close()
     func_text = ""

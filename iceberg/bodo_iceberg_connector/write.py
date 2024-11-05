@@ -2,7 +2,7 @@ import base64
 import json
 import typing as pt
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from py4j.protocol import Py4JError
 
@@ -40,7 +40,7 @@ class DataFileInfo:
 
     path: str
     file_size_in_bytes: int
-    metrics: Dict[str, Any]
+    metrics: dict[str, Any]
 
 
 class BytesEncoder(json.JSONEncoder):
@@ -56,9 +56,9 @@ class BytesEncoder(json.JSONEncoder):
 
 
 def process_file_infos(
-    fnames: List[str],
-    file_size_bytes: List[int],
-    metrics: List[Dict[str, Any]],
+    fnames: list[str],
+    file_size_bytes: list[int],
+    metrics: list[dict[str, Any]],
     table_loc: str,
     db_name: str,
     table_name: str,
@@ -121,8 +121,8 @@ def start_write(
     iceberg_schema_id: int,
     create_table_info,
     pa_schema: "pa.Schema",
-    partition_spec: Optional[str],
-    sort_order: Optional[str],
+    partition_spec: str | None,
+    sort_order: str | None,
     mode: str,
 ):
     """
@@ -220,10 +220,10 @@ def commit_write(
     db_name: str,
     table_name: str,
     table_loc: str,
-    fnames: List[str],
-    file_size_bytes: List[int],
-    metrics: List[Dict[str, Any]],
-    iceberg_schema_id: Optional[int],
+    fnames: list[str],
+    file_size_bytes: list[int],
+    metrics: list[dict[str, Any]],
+    iceberg_schema_id: int | None,
     mode: str,
 ):
     """
@@ -345,10 +345,10 @@ def commit_merge_cow(
     db_name: str,
     table_name: str,
     table_loc: str,
-    old_fnames: List[str],
-    new_fnames: List[str],
-    file_size_bytes: List[int],
-    metrics: List[Dict[str, Any]],
+    old_fnames: list[str],
+    new_fnames: list[str],
+    file_size_bytes: list[int],
+    metrics: list[dict[str, Any]],
     snapshot_id: int,
 ):
     """

@@ -25,7 +25,7 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from tempfile import TemporaryDirectory
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import pandas as pd
 
@@ -49,7 +49,7 @@ class TestConfig(NamedTuple):
     schema: str
     streaming: bool
     local: bool = False
-    batch_size: Optional[int] = None
+    batch_size: int | None = None
 
     @property
     def name(self) -> str:
@@ -187,7 +187,7 @@ def dstat(args, qname: str):
         yield
 
 
-with open(args.output, "wt") as output:
+with open(args.output, "w") as output:
     writer = csv.writer(output)
     writer.writerow(TestConfig._make_csv_header() + ["N", "Query", "Time"])
     for qname in glob.glob(pattern):
@@ -215,7 +215,7 @@ with open(args.output, "wt") as output:
                                 tmp.write(
                                     f"CREATE OR REPLACE TABLE TEST_DB.PUBLIC.test_benchmark_tpch_{query_id} AS ("
                                 )
-                            with open(qname, "rt") as sql:
+                            with open(qname) as sql:
                                 tmp.write(sql.read())
                             if not test.local:
                                 tmp.write(")")

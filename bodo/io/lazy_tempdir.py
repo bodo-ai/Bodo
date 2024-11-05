@@ -108,7 +108,7 @@ class LazyTemporaryDirectory:
                     self,
                     self._cleanup,
                     self.name,
-                    warn_message="Implicitly cleaning up {!r}".format(self),
+                    warn_message=f"Implicitly cleaning up {self!r}",
                     ignore_errors=self._ignore_cleanup_errors,
                 )
             else:
@@ -160,7 +160,7 @@ class LazyTemporaryDirectory:
     # Same as tempfile.TemporaryDirectory
     # (https://github.com/python/cpython/blob/9c7b4bd1646f2170247f88cf59936740d9c4c004/Lib/tempfile.py#L862)
     def __repr__(self):
-        return "<{} {!r}>".format(self.__class__.__name__, self.name)
+        return f"<{self.__class__.__name__} {self.name!r}>"
 
     # Same as tempfile.TemporaryDirectory
     # (https://github.com/python/cpython/blob/9c7b4bd1646f2170247f88cf59936740d9c4c004/Lib/tempfile.py#L865)

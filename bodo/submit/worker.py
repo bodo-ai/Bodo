@@ -31,7 +31,7 @@ from bodo.submit.worker_state import set_is_worker
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
 
-def _recv_arg(arg: pt.Union[pt.Any, ArgMetadata], spawner_intercomm: MPI.Intercomm):
+def _recv_arg(arg: pt.Any | ArgMetadata, spawner_intercomm: MPI.Intercomm):
     """Receive argument if it is a DataFrame/Series/Index/array value.
 
     Args:
@@ -68,16 +68,17 @@ def _recv_arg(arg: pt.Union[pt.Any, ArgMetadata], spawner_intercomm: MPI.Interco
 RESULT_REGISTRY: dict[str, pt.Any] = {}
 
 # Once >3.12 is our minimum version we can use the below instead
-# type is_distributed_t = pt.Union[bool, pt.Union[list[is_distributed_t], tuple[is_distributed_t]]]
-is_distributed_t = pt.Union[
-    bool, pt.Union[list["is_distributed_t"], tuple["is_distributed_t"]]
-]
+# type is_distributed_t = bool + list[is_distributed_t] | tuple[is_distributed_t]
+is_distributed_t: pt.TypeAlias = (
+    bool | list["is_distributed_t"] | tuple["is_distributed_t"]
+)
 
-distributed_return_metadata_t = pt.Union[
-    DistributedReturnMetadata,
-    list["distributed_return_metadata_t"],
-    dict[pt.Any, "distributed_return_metadata_t"],
-]
+
+distributed_return_metadata_t: pt.TypeAlias = (
+    DistributedReturnMetadata
+    | list["distributed_return_metadata_t"]
+    | dict[pt.Any, "distributed_return_metadata_t"]
+)
 
 
 def _build_distributed_return_metadata(

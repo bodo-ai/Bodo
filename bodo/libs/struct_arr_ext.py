@@ -75,9 +75,7 @@ class StructArrayType(types.ArrayCompatible):
 
         self.data = data
         self.names = names
-        super(StructArrayType, self).__init__(
-            name="StructArrayType({}, {})".format(data, names)
-        )
+        super().__init__(name=f"StructArrayType({data}, {names})")
 
     @property
     def as_array(self):
@@ -124,9 +122,7 @@ class StructArrayPayloadType(types.Type):
             bodo.utils.utils.is_array_typ(a, False) for a in data
         )
         self.data = data
-        super(StructArrayPayloadType, self).__init__(
-            name="StructArrayPayloadType({})".format(data)
-        )
+        super().__init__(name=f"StructArrayPayloadType({data})")
 
     @property
     def mangling_args(self):
@@ -171,9 +167,7 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
     fn = cgutils.get_or_insert_function(
         mod,
         fnty,
-        name=".dtor.struct_arr.{}.{}.".format(
-            struct_arr_type.data, struct_arr_type.names
-        ),
+        name=f".dtor.struct_arr.{struct_arr_type.data}.{struct_arr_type.names}.",
     )
 
     # End early if the dtor is already defined
@@ -403,7 +397,7 @@ class StructType(types.Type):
 
         self.data = data
         self.names = names
-        super(StructType, self).__init__(name="StructType({}, {})".format(data, names))
+        super().__init__(name=f"StructType({data}, {names})")
 
     def unify(self, typingctx, other):
         """Unify struct types with same field names but different data types
@@ -433,9 +427,7 @@ class StructPayloadType(types.Type):
     def __init__(self, data):
         assert isinstance(data, tuple)
         self.data = data
-        super(StructPayloadType, self).__init__(
-            name="StructPayloadType({})".format(data)
-        )
+        super().__init__(name=f"StructPayloadType({data})")
 
     @property
     def mangling_args(self):
@@ -478,7 +470,7 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     fn = cgutils.get_or_insert_function(
         mod,
         fnty,
-        name=".dtor.struct.{}.{}.".format(struct_type.data, struct_type.names),
+        name=f".dtor.struct.{struct_type.data}.{struct_type.names}.",
     )
 
     # End early if the dtor is already defined
@@ -813,14 +805,12 @@ def _get_struct_field_ind(struct, ind, op):
     """
     if not is_overload_constant_str(ind):  # pragma: no cover
         raise BodoError(
-            "structs (from struct array) only support constant strings for {}, not {}".format(
-                op, ind
-            )
+            f"structs (from struct array) only support constant strings for {op}, not {ind}"
         )
 
     ind_str = get_overload_const_str(ind)
     if ind_str not in struct.names:  # pragma: no cover
-        raise BodoError("Field {} does not exist in struct {}".format(ind_str, struct))
+        raise BodoError(f"Field {ind_str} does not exist in struct {struct}")
 
     return struct.names.index(ind_str)
 
@@ -1119,15 +1109,14 @@ def struct_arr_getitem(arr, ind):
             )
             func_text += "  n_out = numba.cpython.unicode._slice_span(slice_idx)\n"
         else:  # pragma: no cover
-            raise BodoError("invalid index {} in struct array indexing".format(ind))
+            raise BodoError(f"invalid index {ind} in struct array indexing")
         func_text += (
             "  return init_struct_arr(n_out, ({}{}), out_null_bitmap, ({}{}))\n".format(
                 ", ".join(
-                    "ensure_contig_if_np(data[{}][ind])".format(i)
-                    for i in range(n_fields)
+                    f"ensure_contig_if_np(data[{i}][ind])" for i in range(n_fields)
                 ),
                 "," if n_fields else "",
-                ", ".join("'{}'".format(name) for name in arr.names),
+                ", ".join(f"'{name}'" for name in arr.names),
                 "," if n_fields else "",
             )
         )
@@ -1172,16 +1161,12 @@ def struct_arr_setitem(arr, ind, val):
         func_text += "  set_bit_to_arr(null_bitmap, ind, 1)\n"
         for i in range(n_fields):
             if isinstance(val, StructType):
-                func_text += "  if is_field_value_null(val, '{}'):\n".format(
-                    arr.names[i]
-                )
-                func_text += (
-                    "    bodo.libs.array_kernels.setna(data[{}], ind)\n".format(i)
-                )
+                func_text += f"  if is_field_value_null(val, '{arr.names[i]}'):\n"
+                func_text += f"    bodo.libs.array_kernels.setna(data[{i}], ind)\n"
                 func_text += "  else:\n"
-                func_text += "    data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+                func_text += f"    data[{i}][ind] = val['{arr.names[i]}']\n"
             else:
-                func_text += "  data[{}][ind] = val['{}']\n".format(i, arr.names[i])
+                func_text += f"  data[{i}][ind] = val['{arr.names[i]}']\n"
 
         loc_vars = {}
         exec(
@@ -1209,7 +1194,7 @@ def struct_arr_setitem(arr, ind, val):
         func_text += "  val_null_bitmap = get_null_bitmap(val)\n"
         func_text += "  setitem_slice_index_null_bits(null_bitmap, val_null_bitmap, ind, len(arr))\n"
         for i in range(n_fields):
-            func_text += "  data[{0}][ind] = val_data[{0}]\n".format(i)
+            func_text += f"  data[{i}][ind] = val_data[{i}]\n"
 
         loc_vars = {}
         exec(
@@ -1306,7 +1291,7 @@ def copy_arr_tup_overload(arrs):
     count = arrs.count
     func_text = "def f(arrs):\n"
     func_text += "  return ({}{})\n".format(
-        ",".join("arrs[{}].copy()".format(i) for i in range(count)),
+        ",".join(f"arrs[{i}].copy()" for i in range(count)),
         "," if count else "",
     )
 

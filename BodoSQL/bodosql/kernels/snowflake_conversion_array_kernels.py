@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 import numba
 import numpy as np
@@ -679,7 +678,7 @@ def to_timestamptz_string_parser(str_val):
     """Parses timestamps with the timezone fully specified. Returns None if the
     timezone couldn't be parsed, and a TimestampTZ otherwise."""
 
-    def impl(str_val: str) -> Optional[TimestampTZ]:
+    def impl(str_val: str) -> TimestampTZ | None:
         if not len(str_val):
             return None
 

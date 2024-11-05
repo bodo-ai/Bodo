@@ -500,7 +500,7 @@ def test_cast_char_other(args, memory_leak_check):
             return None
         elif isinstance(elem, (bodo.Time, bodo.TimeType)):
             # Using Snowflake's default TIME format: HH:MM:SS
-            return "{:02}:{:02}:{:02}".format(elem.hour, elem.minute, elem.second)
+            return f"{elem.hour:02}:{elem.minute:02}:{elem.second:02}"
         elif isinstance(elem, bytes):
             return elem.hex()
         else:
@@ -529,7 +529,7 @@ def test_cast_char_nums(numeric_arrays, memory_leak_check):
         if pd.isna(x):
             return None
         elif isinstance(x, float):
-            return "{:f}".format(x)
+            return f"{x:f}"
         elif isinstance(x, (bool, np.bool_)):
             return str(x).lower()
         else:

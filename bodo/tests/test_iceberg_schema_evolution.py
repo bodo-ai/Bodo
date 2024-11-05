@@ -270,7 +270,7 @@ def test_filter_pushdown_adversarial_renamed_and_swapped_cols(
             ("B", "bigint", True),
         ]
         create_iceberg_table(
-            pd.DataFrame({"A": list(range(5)) * 5, "B": list((range(20, 25))) * 5}),
+            pd.DataFrame({"A": list(range(5)) * 5, "B": list(range(20, 25)) * 5}),
             sql_schema,
             table_name,
             spark,

@@ -161,7 +161,7 @@ class Spawner:
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
 
-    def _recv_output(self, output_is_distributed: pt.Union[bool, list[bool]]):
+    def _recv_output(self, output_is_distributed: bool | list[bool]):
         """Receive output of function execution from workers
 
         Args:

@@ -3,7 +3,6 @@
 Support for streaming window functions.
 """
 
-import typing as pt
 from functools import cached_property
 
 import llvmlite.binding as ll
@@ -72,16 +71,16 @@ class WindowStateType(StreamingStateType):
     this is a wrapper around the aggregate state with
     some additional configuration."""
 
-    partition_indices: pt.Tuple[int, ...]
-    order_by_indices: pt.Tuple[int, ...]
-    is_ascending: pt.Tuple[bool, ...]
-    nulls_last: pt.Tuple[bool, ...]
-    func_names: pt.Tuple[str, ...]
-    kept_input_indices: pt.Tuple[int, ...]
-    kept_input_indices_set: pt.Set[int]
-    func_input_indices: pt.Tuple[pt.Tuple[int, ...], ...]
-    window_args: pt.Tuple[pt.Tuple[int, ...], ...]
-    build_table_type: pt.Union[bodo.hiframes.table.TableType, types.unknown]
+    partition_indices: tuple[int, ...]
+    order_by_indices: tuple[int, ...]
+    is_ascending: tuple[bool, ...]
+    nulls_last: tuple[bool, ...]
+    func_names: tuple[str, ...]
+    kept_input_indices: tuple[int, ...]
+    kept_input_indices_set: set[int]
+    func_input_indices: tuple[tuple[int, ...], ...]
+    window_args: tuple[tuple[int, ...], ...]
+    build_table_type: bodo.hiframes.table.TableType | type[types.unknown]
 
     def __init__(
         self,
@@ -209,7 +208,7 @@ class WindowStateType(StreamingStateType):
             tuple(args_arr_types)
         )
 
-    def translate_indices(self, indices: pt.List[int]) -> pt.List[int]:
+    def translate_indices(self, indices: list[int]) -> list[int]:
         """
         Maps the integers in indices to the new column that they
         correspond to when the table is passed in to C++.
@@ -295,7 +294,7 @@ class WindowStateType(StreamingStateType):
         order_by_types: list[types.ArrayCompatible],
         order_by_indices: tuple[int],
         table_type: bodo.hiframes.table.TableType,
-    ) -> pt.List[types.ArrayCompatible]:
+    ) -> list[types.ArrayCompatible]:
         """Generate the input table type based on the type and indices information.
 
         Args:
@@ -319,7 +318,7 @@ class WindowStateType(StreamingStateType):
         return types
 
     @cached_property
-    def cols_to_keep(self) -> pt.List[bool]:
+    def cols_to_keep(self) -> list[bool]:
         """Converts kept_input_indices to a bitmask of length num_input_cols
 
         Returns:
@@ -334,7 +333,7 @@ class WindowStateType(StreamingStateType):
         return result
 
     @cached_property
-    def partition_by_types(self) -> pt.List[types.ArrayCompatible]:
+    def partition_by_types(self) -> list[types.ArrayCompatible]:
         """Generate the list of array types that should be used for the
         partition by keys.
 
@@ -381,7 +380,7 @@ class WindowStateType(StreamingStateType):
         return arr_types
 
     @cached_property
-    def build_reordered_arr_types(self) -> pt.List[types.ArrayCompatible]:
+    def build_reordered_arr_types(self) -> list[types.ArrayCompatible]:
         """
         Get the list of array types for the actual input to the C++ build table.
         This is different from the build_table_type because the input to the C++
@@ -437,7 +436,7 @@ class WindowStateType(StreamingStateType):
         return self._derive_c_array_types(self.build_reordered_arr_types)
 
     @property
-    def f_in_cols(self) -> pt.List[int]:
+    def f_in_cols(self) -> list[int]:
         """
         Get the indices that are treated as function inputs. Since we don't support
         arguments yet and achieve shuffle by treating all columns as function inputs,
@@ -447,7 +446,7 @@ class WindowStateType(StreamingStateType):
             range(len(self.partition_indices), len(self.build_reordered_arr_types))
         )
 
-    def inputs_to_function(self, func_idx) -> pt.List[int]:
+    def inputs_to_function(self, func_idx) -> list[int]:
         """
         Get the indices of the input columns to the func_idx-th function call.
         """
@@ -575,7 +574,7 @@ class WindowStateType(StreamingStateType):
         )
 
     @cached_property
-    def cpp_output_table_to_py_table_indices(self) -> pt.List[int]:
+    def cpp_output_table_to_py_table_indices(self) -> list[int]:
         """
         Generate the remapping to convert the C++ output table to its corresponding Python table.
         The C++ input is of the form (partition by, order by, rest of the columns, window columns).
@@ -964,18 +963,14 @@ def impl(
         func_text += "    window_args_arrs = ({},)\n".format(
             ",".join(
                 [
-                    "bodo.utils.conversion.coerce_scalar_to_array(window_args_tuple[{}], 1, types.unknown)\n".format(
-                        i
-                    )
+                    f"bodo.utils.conversion.coerce_scalar_to_array(window_args_tuple[{i}], 1, types.unknown)\n"
                     for i in range(len(window_args_tuple))
                 ]
             )
         )
         func_text += "    window_args_table = bodo.hiframes.table.logical_table_to_table((), tuple(window_args_arrs), in_col_inds, 0)\n"
         func_text += "    casted_args_table = bodo.utils.table_utils.table_astype(window_args_table, scalar_args_table, False, False)\n"
-        func_text += "    window_args_cpp_table = bodo.libs.array.py_data_to_cpp_table(casted_args_table, (), in_col_inds, {})\n".format(
-            len(window_args_tuple)
-        )
+        func_text += f"    window_args_cpp_table = bodo.libs.array.py_data_to_cpp_table(casted_args_table, (), in_col_inds, {len(window_args_tuple)})\n"
         func_text += """
     output_val = bodo.libs.streaming.groupby._init_groupby_state(
         operator_id,

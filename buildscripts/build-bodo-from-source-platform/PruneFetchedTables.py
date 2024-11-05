@@ -10,7 +10,7 @@ import argparse
 def main(input_file: str, output_file: str):
     unique_tables = set()
     # Read the input and remove any inputs
-    with open(input_file, "r") as f:
+    with open(input_file) as f:
         for line in f.readlines():
             unique_tables.add(line.strip())
     # Sort the output

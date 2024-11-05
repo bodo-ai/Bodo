@@ -19,7 +19,7 @@ def _open_for_write(filepath: str):
     uuid4 is used to try and avoid name collisions on a shared filesystem.
     """
     uid = uuid.uuid4().hex[:16]  # avoid long paths
-    tmpname = "%s.tmp.%s" % (filepath, uid)
+    tmpname = f"{filepath}.tmp.{uid}"
     try:
         with open(tmpname, "w") as f:
             yield f

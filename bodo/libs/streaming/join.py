@@ -5,7 +5,7 @@ This file is mostly wrappers for C++ implementations.
 
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING
 
 import llvmlite.binding as ll
 import numba
@@ -118,15 +118,13 @@ class JoinStateType(StreamingStateType):
         self.build_table_type = build_table_type
         self.probe_table_type = probe_table_type
         super().__init__(
-            (
-                f"JoinStateType("
-                f"build_keys={build_key_inds}, "
-                f"probe_keys={probe_key_inds}, "
-                f"build_outer={build_outer}, "
-                f"probe_outer={probe_outer}, "
-                f"build_table={build_table_type}, "
-                f"probe_table={probe_table_type})"
-            )
+            f"JoinStateType("
+            f"build_keys={build_key_inds}, "
+            f"probe_keys={probe_key_inds}, "
+            f"build_outer={build_outer}, "
+            f"probe_outer={probe_outer}, "
+            f"build_table={build_table_type}, "
+            f"probe_table={probe_table_type})"
         )
 
     @property
@@ -187,7 +185,7 @@ class JoinStateType(StreamingStateType):
             )
 
     @staticmethod
-    def _input_table_logical_to_physical_map(key_indices, table_type) -> Dict[int, int]:
+    def _input_table_logical_to_physical_map(key_indices, table_type) -> dict[int, int]:
         """Return a dictionary mapping a logical Python index to a
         physical C++ index for the given input table.
 
@@ -212,7 +210,7 @@ class JoinStateType(StreamingStateType):
             index_map[i] = physical_index
         return index_map
 
-    def build_logical_to_physical_map(self) -> Dict[int, int]:
+    def build_logical_to_physical_map(self) -> dict[int, int]:
         """Return a dictionary mapping a logical Python index to a
         physical C++ index for the build table. This assumes all
         columns are live and is used for non-equality joins.
@@ -224,7 +222,7 @@ class JoinStateType(StreamingStateType):
             self.build_key_inds, self.build_table_type
         )
 
-    def probe_logical_to_physical_map(self) -> Dict[int, int]:
+    def probe_logical_to_physical_map(self) -> dict[int, int]:
         """Return a dictionary mapping a logical Python index to a
         physical C++ index for the probe table. This assumes all
         columns are live and is used for non-equality joins.
@@ -239,7 +237,7 @@ class JoinStateType(StreamingStateType):
     @staticmethod
     def _derive_input_type(
         key_types, key_indices, table_type
-    ) -> List[types.ArrayCompatible]:
+    ) -> list[types.ArrayCompatible]:
         """Generate the input table type based on the given key types, key
         indices, and table type.
 
@@ -353,7 +351,7 @@ class JoinStateType(StreamingStateType):
         return common_type
 
     @cached_property
-    def key_types(self) -> List[types.ArrayCompatible]:
+    def key_types(self) -> list[types.ArrayCompatible]:
         """Generate the list of array types that should be used for the
         keys to hash join. For build/probe the keys must match exactly.
 
@@ -486,7 +484,7 @@ class JoinStateType(StreamingStateType):
         )
 
     @cached_property
-    def build_reordered_arr_types(self) -> List[types.ArrayCompatible]:
+    def build_reordered_arr_types(self) -> list[types.ArrayCompatible]:
         """
         Get the list of array types for the actual input to the C++ build table.
         This is different from the build_table_type because the input to the C++
@@ -503,7 +501,7 @@ class JoinStateType(StreamingStateType):
         return self._derive_input_type(key_types, key_indices, table)
 
     @cached_property
-    def probe_reordered_arr_types(self) -> List[types.ArrayCompatible]:
+    def probe_reordered_arr_types(self) -> list[types.ArrayCompatible]:
         """
         Get the list of array types for the actual input to the C++ probe table.
         This is different from the probe_table_type because the input to the C++
@@ -634,7 +632,7 @@ class JoinStateType(StreamingStateType):
         return arr_types
 
     @property
-    def build_output_arrays(self) -> List[types.ArrayCompatible]:
+    def build_output_arrays(self) -> list[types.ArrayCompatible]:
         """Determine the output array types in the correct order for
         the build side. This is used to generate the output type.
 
@@ -646,7 +644,7 @@ class JoinStateType(StreamingStateType):
         )
 
     @property
-    def probe_output_arrays(self) -> List[types.ArrayCompatible]:
+    def probe_output_arrays(self) -> list[types.ArrayCompatible]:
         """Determine the output array types in the correct order for
         the probe side. This is used to generate the output type.
 
@@ -675,10 +673,10 @@ class JoinStateType(StreamingStateType):
         self,
         key_indices,
         table_type,
-        kept_cols: Set[int],
+        kept_cols: set[int],
         live_col_offset: int,
         kept_check_offset: int,
-    ) -> Tuple[List[int], List[int], int]:
+    ) -> tuple[list[int], list[int], int]:
         """Compute the column indices for telling C++ which columns to keep live in
         the output and where to find each column for each input table. This returns
         3 values, two of which are lists. The first list will be passed to RetrieveTable
@@ -739,7 +737,7 @@ class JoinStateType(StreamingStateType):
 
     def get_output_live_col_arrs(
         self, used_cols
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Generate Numpy arrays of indices to lower to the runtime indicating
         which columns should be live from the output of build, probe, and the overall
         output type. The build and probe arrays are passed to RetrieveTable to

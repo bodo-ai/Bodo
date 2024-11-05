@@ -55,7 +55,7 @@ class ArrayItemArrayType(types.ArrayCompatible):
             dtype, False
         ), "ArrayItemArrayType dtype should be an array type"
         self.dtype = dtype
-        super(ArrayItemArrayType, self).__init__(name=f"ArrayItemArrayType({dtype})")
+        super().__init__(name=f"ArrayItemArrayType({dtype})")
 
     @property
     def as_array(self):
@@ -78,9 +78,7 @@ class ArrayItemArrayType(types.ArrayCompatible):
 class ArrayItemArrayPayloadType(types.Type):
     def __init__(self, array_type):
         self.array_type = array_type
-        super(ArrayItemArrayPayloadType, self).__init__(
-            name=f"ArrayItemArrayPayloadType({array_type})"
-        )
+        super().__init__(name=f"ArrayItemArrayPayloadType({array_type})")
 
     @property
     def mangling_args(self):

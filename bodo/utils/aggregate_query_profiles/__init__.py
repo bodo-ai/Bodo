@@ -2,7 +2,7 @@
 """Utilities for aggregating query profiles from multiple ranks into a single
 profile"""
 
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
@@ -20,7 +20,7 @@ def five_number_summary(data: list[float]) -> dict[str, float]:
     }
 
 
-def generate_summary(data: list[float]) -> Union[float, dict[str, Any]]:
+def generate_summary(data: list[float]) -> float | dict[str, Any]:
     if all(d == 0 for d in data):
         return 0
     return {

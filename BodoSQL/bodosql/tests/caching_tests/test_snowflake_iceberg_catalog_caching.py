@@ -84,7 +84,7 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
                 'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
             )
             if check_cache:
-                with open(connector_output, "r") as f:
+                with open(connector_output) as f:
                     contents = f.read()
                     assert (
                         'BODO VERBOSE: PrefetchSnowflakeCatalog::loadTable: Loading `"TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"` from prefetch'

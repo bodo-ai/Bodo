@@ -2409,7 +2409,7 @@ def test_decimal_array_division(arg1, arg2, expected, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("-2.12"), pa.decimal128(4, 2)),
-            float(0.00),
+            0.00,
             0,
             id="decimal_float",
         ),
@@ -4024,18 +4024,18 @@ def test_trunc_decimal(arg, round_scale, answer, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(1.0),
-            float(16.50),
+            1.0,
+            16.50,
             id="scalar-decimal_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(16.50),
+            16.50,
             id="scalar-float_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     2.5,
@@ -4060,7 +4060,7 @@ def test_trunc_decimal(arg, round_scale, answer, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     3.5,
@@ -4214,18 +4214,18 @@ def test_decimal_array_float_addition(arg1, arg2, expected, memory_leak_check):
         ),
         pytest.param(
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(1.0),
-            float(14.50),
+            1.0,
+            14.50,
             id="scalar-decimal_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(-14.50),
+            -14.50,
             id="scalar-float_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     2.5,
@@ -4250,7 +4250,7 @@ def test_decimal_array_float_addition(arg1, arg2, expected, memory_leak_check):
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     1.5,
@@ -4404,18 +4404,18 @@ def test_decimal_array_float_subtraction(arg1, arg2, expected, memory_leak_check
         ),
         pytest.param(
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(1.0),
-            float(15.50),
+            1.0,
+            15.50,
             id="scalar-decimal_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(15.50),
+            15.50,
             id="scalar-float_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     2.5,
@@ -4440,7 +4440,7 @@ def test_decimal_array_float_subtraction(arg1, arg2, expected, memory_leak_check
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     2.5,
@@ -4594,18 +4594,18 @@ def test_decimal_array_float_multiplication(arg1, arg2, expected, memory_leak_ch
         ),
         pytest.param(
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
-            float(1.0),
-            float(15.50),
+            1.0,
+            15.50,
             id="scalar-decimal_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pa.scalar(Decimal("15.50"), pa.decimal128(4, 2)),
             float(1 / 15.50),
             id="scalar-float_first",
         ),
         pytest.param(
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     2.5,
@@ -4630,7 +4630,7 @@ def test_decimal_array_float_multiplication(arg1, arg2, expected, memory_leak_ch
                 ],
                 dtype=pd.ArrowDtype(pa.decimal128(22, 2)),
             ),
-            float(1.0),
+            1.0,
             pd.array(
                 [
                     2.5,

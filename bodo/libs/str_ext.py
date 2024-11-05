@@ -347,7 +347,7 @@ def overload_int_to_str_len(n):
 
 class StdStringType(types.Opaque):
     def __init__(self):
-        super(StdStringType, self).__init__(name="StdStringType")
+        super().__init__(name="StdStringType")
 
 
 std_str_type = StdStringType()
@@ -496,9 +496,7 @@ def std_str_to_unicode(typingctx, unicode_t):
 # string array type that is optimized for random access read/write
 class RandomAccessStringArrayType(types.ArrayCompatible):
     def __init__(self):
-        super(RandomAccessStringArrayType, self).__init__(
-            name="RandomAccessStringArrayType()"
-        )
+        super().__init__(name="RandomAccessStringArrayType()")
 
     @property
     def as_array(self):
@@ -749,10 +747,10 @@ class StringAttribute(AttributeTemplate):
     def resolve_format(self, string_typ, args, kws):
         kws = dict(kws)
         # add dummy default value for kws to avoid errors
-        arg_names = ", ".join("e{}".format(i) for i in range(len(args)))
+        arg_names = ", ".join(f"e{i}" for i in range(len(args)))
         if arg_names:
             arg_names += ", "
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def format_stub(string, {arg_names} {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}

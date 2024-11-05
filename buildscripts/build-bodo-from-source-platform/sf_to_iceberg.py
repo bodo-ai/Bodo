@@ -11,7 +11,6 @@ python sf_to_iceberg.py -d E3_PROD -s CLIENT -do E3_PROD -so BODO -t TIER_FOUR -
 
 import argparse
 import json
-import typing as pt
 import warnings
 from dataclasses import dataclass
 
@@ -108,7 +107,7 @@ def get_table_column_information(
     database: str,
     schema: str,
     table_name: str,
-    columns: pt.Optional[list[str]],
+    columns: list[str] | None,
 ) -> list[ColumnInfo]:
     """
     Fetch the describe information for a table and format it into a list of
@@ -130,7 +129,7 @@ def get_table_column_information(
 
 def determine_iceberg_type(
     snowflake_type: str, error_on_unsupported_type: bool = True
-) -> pt.Optional[str]:
+) -> str | None:
     """
     Convert a snowflake column type to an iceberg column type.
     If we encounter a type that we can't convert then we will either error or
@@ -251,7 +250,7 @@ def main(
     database: str,
     schema: str,
     table_name: str,
-    columns: pt.Optional[list[str]],
+    columns: list[str] | None,
     output_database: str,
     output_schema: str,
     iceberg_table_name: str,
@@ -394,7 +393,7 @@ if __name__ == "__main__":
         help="The columns to write in Iceberg table (default: all columns in input)",
     )
     args = parser.parse_args()
-    with open(args.credentials_file, "r") as f:
+    with open(args.credentials_file) as f:
         creds = json.load(f)
     username = creds["USERNAME"]
     password = creds["PASSWORD"]

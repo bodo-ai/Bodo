@@ -15,12 +15,12 @@ if pt.TYPE_CHECKING:
 
 
 # The gateway object used to communicate with the JVM.
-gateway: pt.Optional[JavaGateway] = None
+gateway: JavaGateway | None = None
 # Output path for redirecting Java output
 global_redirect_path: str | None = None
 
 # Java Classes used by the Python Portion
-CLASSES: pt.Dict[str, "JavaClass"] = {}
+CLASSES: dict[str, "JavaClass"] = {}
 
 # Dictionary mapping table info -> Reader obj
 catalog_dict = {}
@@ -164,7 +164,7 @@ def convert_dict_to_java(python_dict: dict):
     return MapConverter().convert(python_dict, gateway._gateway_client)
 
 
-def convert_list_to_java(vals: pt.List[pt.Any]):
+def convert_list_to_java(vals: list[pt.Any]):
     """
     Converts a Python list to a Java ArrayList
     """

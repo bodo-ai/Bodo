@@ -150,9 +150,7 @@ def is_attr_supported(typing_ctx: Context, typ: pt.Any, attr: str) -> bool | Non
     return is_supported
 
 
-def lookup_template(
-    typing_ctx: Context, typ: pt.Any, path: pt.List[str]
-) -> bool | None:
+def lookup_template(typing_ctx: Context, typ: pt.Any, path: list[str]) -> bool | None:
     """Search for a method or attribute starting from typ and following path
 
     Example:
@@ -183,7 +181,7 @@ def lookup_template(
 
 
 def get_overload_template(
-    typing_ctx: Context, types: list, attrs: pt.List[str]
+    typing_ctx: Context, types: list, attrs: list[str]
 ) -> _OverloadAttributeTemplate | _OverloadMissingOrIncorrect | None:
     """Get a template of `attrs` from one of the types in `types`.
 
@@ -311,7 +309,7 @@ def lookup_all(paths, typing_ctx, types_dict, keys=None, print_out=False):
 
 def main(args):
     path_to_apis = args[1]
-    with open(path_to_apis, "r") as f:
+    with open(path_to_apis) as f:
         pandas_apis = f.readlines()
         pandas_apis = [x.strip() for x in pandas_apis]
 

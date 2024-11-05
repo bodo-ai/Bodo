@@ -11,9 +11,10 @@ import re
 import traceback
 import typing as pt
 import warnings
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Iterable, TypeGuard
+from typing import TypeGuard
 
 import numba
 import numpy as np
@@ -449,7 +450,7 @@ def cprint_lower(context, builder, sig, args):  # pragma: no cover
             cgutils.printf(builder, "%p ", val)
             continue
         format_str = typ_to_format[typ]
-        cgutils.printf(builder, "%{} ".format(format_str), val)
+        cgutils.printf(builder, f"%{format_str} ", val)
     cgutils.printf(builder, "\n")
     return context.get_dummy_value()
 
@@ -786,7 +787,7 @@ def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
         strides = tuple(strides)
     else:
         raise NotImplementedError(
-            "Don't know how to allocate array with layout '{0}'.".format(arrtype.layout)
+            f"Don't know how to allocate array with layout '{arrtype.layout}'."
         )
 
     # Check overflow, numpy also does this after checking order
@@ -845,15 +846,12 @@ def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
 def alloc_arr_tup_overload(n, data, init_vals=()):
     count = data.count
 
-    allocs = ",".join(["empty_like_type(n, data[{}])".format(i) for i in range(count)])
+    allocs = ",".join([f"empty_like_type(n, data[{i}])" for i in range(count)])
 
     if init_vals != ():
         # TODO check for numeric value
         allocs = ",".join(
-            [
-                "np.full(n, init_vals[{}], data[{}].dtype)".format(i, i)
-                for i in range(count)
-            ]
+            [f"np.full(n, init_vals[{i}], data[{i}].dtype)" for i in range(count)]
         )
 
     func_text = "def f(n, data, init_vals=()):\n"

@@ -148,18 +148,18 @@ def test_percentile_cont_groupby(
 ):
     """Full E2E test for listagg with groupby and with different sorting options"""
     col, answer = percentile_cont_args
-    query = """
+    query = f"""
 SELECT
     keys,
-    PERCENTILE_CONT(0.0) WITHIN GROUP (ORDER BY {0}) AS q0,
-    PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY {0}) AS q10,
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY {0}) AS q25,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {0}) AS q50,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY {0}) AS q75,
-    PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY {0}) AS q90,
-    PERCENTILE_CONT(1.0) WITHIN GROUP (ORDER BY {0}) AS q100
+    PERCENTILE_CONT(0.0) WITHIN GROUP (ORDER BY {col}) AS q0,
+    PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY {col}) AS q10,
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY {col}) AS q25,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {col}) AS q50,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY {col}) AS q75,
+    PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY {col}) AS q90,
+    PERCENTILE_CONT(1.0) WITHIN GROUP (ORDER BY {col}) AS q100
 FROM table1
-GROUP BY keys""".format(col)
+GROUP BY keys"""
 
     check_query(
         query,
@@ -176,18 +176,18 @@ def test_percentile_disc_groupby(
 ):
     """Full E2E test for listagg with groupby and with different sorting options"""
     col, answer = percentile_disc_args
-    query = """
+    query = f"""
 SELECT
     keys,
-    PERCENTILE_DISC(0.0) WITHIN GROUP (ORDER BY {0}) AS q0,
-    PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY {0}) AS q10,
-    PERCENTILE_DISC(0.25) WITHIN GROUP (ORDER BY {0}) AS q25,
-    PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY {0}) AS q50,
-    PERCENTILE_DISC(0.75) WITHIN GROUP (ORDER BY {0}) AS q75,
-    PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY {0}) AS q90,
-    PERCENTILE_DISC(1.0) WITHIN GROUP (ORDER BY {0}) AS q100
+    PERCENTILE_DISC(0.0) WITHIN GROUP (ORDER BY {col}) AS q0,
+    PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY {col}) AS q10,
+    PERCENTILE_DISC(0.25) WITHIN GROUP (ORDER BY {col}) AS q25,
+    PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY {col}) AS q50,
+    PERCENTILE_DISC(0.75) WITHIN GROUP (ORDER BY {col}) AS q75,
+    PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY {col}) AS q90,
+    PERCENTILE_DISC(1.0) WITHIN GROUP (ORDER BY {col}) AS q100
 FROM table1
-GROUP BY keys""".format(col)
+GROUP BY keys"""
 
     check_query(
         query,

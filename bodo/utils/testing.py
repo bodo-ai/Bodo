@@ -35,7 +35,7 @@ def ensure_clean(filename):
             ):
                 os.remove(filename)
         except Exception as e:
-            print("Exception on removing file: {error}".format(error=e))
+            print(f"Exception on removing file: {e}")
 
 
 @contextmanager
@@ -51,7 +51,7 @@ def ensure_clean_dir(dirname):
             if get_rank() == 0 and os.path.exists(dirname) and os.path.isdir(dirname):
                 shutil.rmtree(dirname)
         except Exception as e:
-            print("Exception on removing directory: {error}".format(error=e))
+            print(f"Exception on removing directory: {e}")
 
 
 @contextmanager
@@ -66,12 +66,12 @@ def ensure_clean2(pathname):  # pragma: no cover
                 if os.path.exists(pathname) and os.path.isfile(pathname):
                     os.remove(pathname)
             except Exception as e:
-                print("Exception on removing file: {error}".format(error=e))
+                print(f"Exception on removing file: {e}")
             try:
                 if os.path.exists(pathname) and os.path.isdir(pathname):
                     shutil.rmtree(pathname)
             except Exception as e:
-                print("Exception on removing directory: {error}".format(error=e))
+                print(f"Exception on removing directory: {e}")
 
 
 @contextmanager

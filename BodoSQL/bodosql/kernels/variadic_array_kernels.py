@@ -89,9 +89,9 @@ def overload_object_construct_keep_null(values, names, scalars):
             are_arrays.append(False)
         else:
             if bodo.hiframes.pd_series_ext.is_series_type(arr_typ):
-                scalar_dtypes.append((arr_typ.data.dtype))
+                scalar_dtypes.append(arr_typ.data.dtype)
             else:
-                scalar_dtypes.append((arr_typ.dtype))
+                scalar_dtypes.append(arr_typ.dtype)
             are_arrays.append(True)
         optionals.append(is_optional)
     out_dtype = bodo.utils.typing.dtype_to_array_type(
@@ -179,9 +179,9 @@ def overload_object_construct(values, names, scalars):
             are_arrays.append(False)
         else:
             if bodo.hiframes.pd_series_ext.is_series_type(arr_typ):
-                arr_types.append((arr_typ.data))
+                arr_types.append(arr_typ.data)
             else:
-                arr_types.append((arr_typ))
+                arr_types.append(arr_typ)
             are_arrays.append(True)
         optionals.append(is_optional)
 

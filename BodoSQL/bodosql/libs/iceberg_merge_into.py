@@ -3,8 +3,6 @@ Selection of helper functions used in our MERGE_INTO implementation
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-from typing import List
-
 import numba
 import pandas as pd
 from numba.core import types
@@ -86,7 +84,7 @@ def do_delta_merge_with_target(target_df, delta_df):  # pragma: no cover
 
 
 def delta_table_setitem_common_code(
-    n_out_cols: int, out_arr_types: List[types.Type], from_target_table=True
+    n_out_cols: int, out_arr_types: list[types.Type], from_target_table=True
 ):
     """
     Helper fn for merge_sorted_dataframes's func text generation. Generates code that sets the

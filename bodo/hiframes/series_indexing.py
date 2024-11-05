@@ -53,8 +53,8 @@ from bodo.utils.typing import (
 class SeriesIatType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesIatType({})".format(stype)
-        super(SeriesIatType, self).__init__(name)
+        name = f"SeriesIatType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -73,7 +73,7 @@ class SeriesIatType(types.Type):
 class SeriesIatModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesIatModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesIatType, "obj", "_obj")
@@ -196,8 +196,8 @@ def overload_series_iat_setitem(I, idx, val):
 class SeriesIlocType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesIlocType({})".format(stype)
-        super(SeriesIlocType, self).__init__(name)
+        name = f"SeriesIlocType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -216,7 +216,7 @@ class SeriesIlocType(types.Type):
 class SeriesIlocModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesIlocModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesIlocType, "obj", "_obj")
@@ -299,7 +299,7 @@ def overload_series_iloc_getitem(I, idx):
 
         # TODO: error-checking test
         raise BodoError(
-            "Series.iloc[] getitem using {} not supported".format(idx)
+            f"Series.iloc[] getitem using {idx} not supported"
         )  # pragma: no cover
 
 
@@ -466,7 +466,7 @@ def overload_series_iloc_setitem(I, idx, val):
 
         # TODO: error-checking test
         raise BodoError(
-            "Series.iloc[] setitem using {} not supported".format(idx)
+            f"Series.iloc[] setitem using {idx} not supported"
         )  # pragma: no cover
 
 
@@ -476,8 +476,8 @@ def overload_series_iloc_setitem(I, idx, val):
 class SeriesLocType(types.Type):
     def __init__(self, stype):
         self.stype = stype
-        name = "SeriesLocType({})".format(stype)
-        super(SeriesLocType, self).__init__(name)
+        name = f"SeriesLocType({stype})"
+        super().__init__(name)
 
     @property
     def mangling_args(self):
@@ -496,7 +496,7 @@ class SeriesLocType(types.Type):
 class SeriesLocModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("obj", fe_type.stype)]
-        super(SeriesLocModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(SeriesLocType, "obj", "_obj")

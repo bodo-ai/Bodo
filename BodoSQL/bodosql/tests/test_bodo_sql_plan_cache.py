@@ -49,7 +49,7 @@ def test_plan_caching_basic(memory_leak_check, tmp_path):
             expected_cache_loc
         ), f"Plan not found at expected cache location ({expected_cache_loc})"
 
-        with open(expected_cache_loc, "r") as f:
+        with open(expected_cache_loc) as f:
             plan_str = f.read()
 
         bodo.barrier()

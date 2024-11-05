@@ -285,10 +285,10 @@ def test_reduce(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-        func_text = """def f(n):
-            A = np.arange(0, n, 1, np.{})
-            return A.{}()
-        """.format(dtype, func)
+        func_text = f"""def f(n):
+            A = np.arange(0, n, 1, np.{dtype})
+            return A.{func}()
+        """
         loc_vars = {}
         exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
         test_impl = loc_vars["f"]
@@ -309,9 +309,9 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-        func_text = """def f(A):
-            return A.{}()
-        """.format(func)
+        func_text = f"""def f(A):
+            return A.{func}()
+        """
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         test_impl = loc_vars["f"]
@@ -349,10 +349,10 @@ def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
         and dtype == "int64"
         and func in ["argmin", "argmax"]
     ):
-        func_text = """def f(A):
+        func_text = f"""def f(A):
             A = A[A>5]
-            return A.{}()
-        """.format(func)
+            return A.{func}()
+        """
         loc_vars = {}
         exec(func_text, {"np": np}, loc_vars)
         test_impl = loc_vars["f"]
@@ -373,13 +373,13 @@ def test_array_reduce(memory_leak_check):
         "np.int64",
     ]
     for op, typ in zip(binops, dtypes):
-        func_text = """def f(n):
-                A = np.arange(0, 10, 1, {})
-                B = np.arange(0 +  3, 10 + 3, 1, {})
+        func_text = f"""def f(n):
+                A = np.arange(0, 10, 1, {typ})
+                B = np.arange(0 +  3, 10 + 3, 1, {typ})
                 for i in numba.prange(n):
-                    A {} B
+                    A {op} B
                 return A
-        """.format(typ, typ, op)
+        """
         loc_vars = {}
         exec(func_text, {"np": np, "numba": numba, "bodo": bodo}, loc_vars)
         test_impl = loc_vars["f"]
@@ -942,7 +942,7 @@ def test_pure_func(datapath):
 
     # yield
     def impl2():
-        for a in [1, 2, 3]:
+        for a in [1, 2, 3]:  # noqa
             yield a
 
     # objmode

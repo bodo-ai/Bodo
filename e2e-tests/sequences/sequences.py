@@ -38,16 +38,12 @@ def input01input02ToDescriptorId(input01, input02, z):
     x = np.int32((input02 + 180.0) / 360.0 * n)
     y = np.int32(
         (
-            (
-                1.0
-                - math.log(
-                    math.tan(input01_radians) + (1.0 / math.cos(input01_radians))
-                )
-                / math.pi
-            )
-            / 2.0
-            * n
+            1.0
+            - math.log(math.tan(input01_radians) + (1.0 / math.cos(input01_radians)))
+            / math.pi
         )
+        / 2.0
+        * n
     )
     return descriptorToLong(x, y, z)
 

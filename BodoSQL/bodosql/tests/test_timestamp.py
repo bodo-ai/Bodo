@@ -709,7 +709,7 @@ def test_current_date_timestamp_tz_to_char_fmt(representative_tz, memory_leak_ch
     query = "SELECT I, TO_CHAR(CURRENT_DATE::TIMESTAMP WITH TIME ZONE, 'YYYYMMDD'::text) as S from table1"
     ctx = {"TABLE1": table}
     ts = pd.Timestamp.now(tz=representative_tz)
-    as_str = "{:04}{:02}{:02}".format(ts.year, ts.month, ts.day)
+    as_str = f"{ts.year:04}{ts.month:02}{ts.day:02}"
     answer = pd.DataFrame({"I": list(range(5)), "S": [as_str] * 5})
     check_query(
         query,

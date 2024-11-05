@@ -5,7 +5,6 @@ in Java and load relevant schema information.
 
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 from copy import deepcopy
-from typing import Dict, Optional
 
 from numba.core import types
 from numba.core.imputils import lower_constant
@@ -42,8 +41,8 @@ def _validate_constructor_args(
     account: str,
     warehouse: str,
     database: str,
-    connection_params: Optional[Dict[str, str]],
-    iceberg_volume: Optional[str],
+    connection_params: dict[str, str] | None,
+    iceberg_volume: str | None,
 ):
     """Validate
 
@@ -95,8 +94,8 @@ def _create_java_snowflake_catalog(
     account: str,
     warehouse: str,
     database: str,
-    connection_params: Dict[str, str],
-    iceberg_volume: Optional[str],
+    connection_params: dict[str, str],
+    iceberg_volume: str | None,
 ):
     """Create a SnowflakeCatalog Java object
     from the given parameters.
@@ -136,8 +135,8 @@ class SnowflakeCatalog(DatabaseCatalog):
         account: str,
         warehouse: str,
         database: str,
-        connection_params: Optional[Dict[str, str]] = None,
-        iceberg_volume: Optional[str] = None,
+        connection_params: dict[str, str] | None = None,
+        iceberg_volume: str | None = None,
     ):
         """Constructor for the Snowflake catalog. The required arguments
         are based on the information that should be made available when
@@ -274,7 +273,7 @@ class SnowflakeCatalogType(DatabaseCatalogType):
         self.database = database
         self.connection_params = connection_params
         self.iceberg_volume = iceberg_volume
-        super(SnowflakeCatalogType, self).__init__(
+        super().__init__(
             # We omit the password in case the type is printed.
             name=f"SnowflakeCatalogType(username={username}, password=*******, account={account}, warehouse={warehouse}, database={database}, connection_params={connection_params}, iceberg_volume={iceberg_volume})"
         )

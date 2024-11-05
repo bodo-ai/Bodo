@@ -1516,7 +1516,7 @@ def series_value(request):
 def test_dt_extract(series_value, date_fields, memory_leak_check):
     """Test Series.dt extraction"""
     func_text = "def impl(S, date_fields):\n"
-    func_text += "  return S.dt.{}\n".format(date_fields)
+    func_text += f"  return S.dt.{date_fields}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1527,7 +1527,7 @@ def test_dt_extract(series_value, date_fields, memory_leak_check):
 def test_dt_date_methods(series_value, date_methods, memory_leak_check):
     """Test Series.dt datetime methods"""
     func_text = "def impl(S, date_methods):\n"
-    func_text += "  return S.dt.{}()\n".format(date_methods)
+    func_text += f"  return S.dt.{date_methods}()\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1677,7 +1677,7 @@ def test_dt_round_timestamp_others(series_value_no_bad_dates, memory_leak_check)
 def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
     """Test Series.dt for timedelta64 fields"""
     func_text = "def impl(S, date_fields):\n"
-    func_text += "  return S.dt.{}\n".format(timedelta_fields)
+    func_text += f"  return S.dt.{timedelta_fields}\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
@@ -1692,7 +1692,7 @@ def test_dt_timedelta_fields(timedelta_fields, memory_leak_check):
 def test_dt_timedelta_methods(timedelta_methods, memory_leak_check):
     """Test Series.dt for timedelta64 methods"""
     func_text = "def impl(S, timedelta_methods):\n"
-    func_text += "  return S.dt.{}()\n".format(timedelta_methods)
+    func_text += f"  return S.dt.{timedelta_methods}()\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]

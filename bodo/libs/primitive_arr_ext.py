@@ -36,7 +36,7 @@ class PrimitiveArrayType(types.IterableType, types.ArrayCompatible):
 
     def __init__(self, dtype):
         self.dtype = dtype
-        super(PrimitiveArrayType, self).__init__(name=f"PrimitiveArrayType({dtype})")
+        super().__init__(name=f"PrimitiveArrayType({dtype})")
 
     @property
     def as_array(self):

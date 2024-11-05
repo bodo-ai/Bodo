@@ -280,7 +280,7 @@ def iceberg_pq_reader_init_py_entry(
         and isinstance(arrow_reader_t.instance_type, ArrowReaderType)
     ), "iceberg_pq_reader_init_py_entry(): The last argument arrow_reader must by a TypeRef to an ArrowReader"
 
-    def codegen(context: "BaseContext", builder: "IRBuilder", signature, args):
+    def codegen(context: BaseContext, builder: IRBuilder, signature, args):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
@@ -942,7 +942,7 @@ class IcebergFilterVisitor(FilterVisitor[str]):
         return f"bic.FilterExpr('{op_name}', [{', '.join(self.visit(x) for x in op.args)}])"
 
 
-def filters_to_iceberg_expr(filters: pt.Optional[Filter], filter_map) -> str:
+def filters_to_iceberg_expr(filters: Filter | None, filter_map) -> str:
     """
     Convert a compiler Filter object to a string representation
     of the bodo_iceberg_connector's FilterExpr class.
@@ -1386,14 +1386,14 @@ def _gen_iceberg_reader_chunked_py(
 def _gen_iceberg_reader_py(
     col_names: list[str],
     col_typs: list[pt.Any],
-    index_column_name: pt.Optional[str],
+    index_column_name: str | None,
     index_column_type,
     out_used_cols: list[int],
-    limit: pt.Optional[int],
+    limit: int | None,
     parallel: bool,
     typemap,
-    filters: pt.Optional[pt.Any],
-    pyarrow_schema: pt.Optional[pa.Schema],
+    filters: pt.Any | None,
+    pyarrow_schema: pa.Schema | None,
     is_dead_table: bool,
     is_merge_into: bool,
     dict_encode_in_bodo: bool,

@@ -25,7 +25,7 @@ from bodo.utils.typing import (
     is_str_arr_type,
 )
 
-_types_to_str: pt.Dict[type, str] = {
+_types_to_str: dict[type, str] = {
     int: "Integer",
     str: "String",
     bool: "Boolean",
@@ -69,8 +69,8 @@ def format_requirements_list(
 class ArgumentTypeChecker(metaclass=ABCMeta):
     @abstractmethod
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         """Checks that `arg_type` is a valid argument given `context`.
 
         Checks that `arg_type` is a valid argument given `context` and
@@ -99,7 +99,7 @@ class ArgumentTypeChecker(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:
         """Generate documentation for type restrictions on arg.
 
         Generates a docstring fragment for the argument. Similar to the error
@@ -129,8 +129,8 @@ class NDistinctValueArgumentChecker(ArgumentTypeChecker):
         return f'"{val}"' if isinstance(val, str) else str(val)
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if is_literal_type(arg_type):
             val = get_literal_value(arg_type)
             if val in self.values:
@@ -145,7 +145,7 @@ class NDistinctValueArgumentChecker(ArgumentTypeChecker):
             f"must be a compile time constant and must be {values_str}",
         )
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         values_str = format_requirements_list(self._get_values_str, self.values, True)
         return f"must be a compile time constant and must be {values_str}"
 
@@ -164,8 +164,8 @@ class ConstantArgumentChecker(ArgumentTypeChecker):
         return _types_to_str[typ] if typ in _types_to_str else str(typ)
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if is_literal_type(arg_type):
             val = get_literal_value(arg_type)
             if isinstance(val, self.types):
@@ -179,7 +179,7 @@ class ConstantArgumentChecker(ArgumentTypeChecker):
         )
         return arg_type, f"must be a constant {types_str}"
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         types_str = format_requirements_list(
             self._get_types_str, self.types, usetick=True
         )
@@ -211,42 +211,34 @@ class PrimitiveTypeArgumentChecker(ArgumentTypeChecker):
         self.is_overload_typ = is_overload_typ
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if self.is_overload_typ(arg_type):
             return arg_type, None
         return arg_type, f"must be a {self.type_name}"
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         return f"must be type `{self.type_name}`"
 
 
 class IntegerScalarArgumentChecker(PrimitiveTypeArgumentChecker):
     def __init__(self, arg_name: str):
-        super(IntegerScalarArgumentChecker, self).__init__(
-            arg_name, "Integer", is_overload_int
-        )
+        super().__init__(arg_name, "Integer", is_overload_int)
 
 
 class BooleanScalarArgumentChecker(PrimitiveTypeArgumentChecker):
     def __init__(self, arg_name: str):
-        super(BooleanScalarArgumentChecker, self).__init__(
-            arg_name, "Boolean", is_overload_bool
-        )
+        super().__init__(arg_name, "Boolean", is_overload_bool)
 
 
 class FloatScalarArgumentChecker(PrimitiveTypeArgumentChecker):
     def __init__(self, arg_name: str):
-        super(FloatScalarArgumentChecker, self).__init__(
-            arg_name, "Float", is_overload_float
-        )
+        super().__init__(arg_name, "Float", is_overload_float)
 
 
 class StringScalarArgumentChecker(PrimitiveTypeArgumentChecker):
     def __init__(self, arg_name: str):
-        super(StringScalarArgumentChecker, self).__init__(
-            arg_name, "String", is_overload_str
-        )
+        super().__init__(arg_name, "String", is_overload_str)
 
 
 class CharScalarArgumentChecker(PrimitiveTypeArgumentChecker):
@@ -263,9 +255,7 @@ class CharScalarArgumentChecker(PrimitiveTypeArgumentChecker):
                 is_overload_constant_str(t) and get_overload_const_str_len(t) == 1
             )
 
-        super(CharScalarArgumentChecker, self).__init__(
-            arg_name, "Character", is_overload_const_char_or_str
-        )
+        super().__init__(arg_name, "Character", is_overload_const_char_or_str)
 
 
 class NumericScalarArgumentChecker(ArgumentTypeChecker):
@@ -277,14 +267,14 @@ class NumericScalarArgumentChecker(ArgumentTypeChecker):
         self.arg_name = arg_name
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if is_overload_numeric_scalar(arg_type):
             return arg_type, None
 
         return arg_type, "must be a Float, Integer or Boolean"
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         return "must be `Integer`, `Float` or `Boolean`"
 
 
@@ -301,8 +291,8 @@ class NumericSeriesBinOpChecker(ArgumentTypeChecker):
         self.arg_name = arg_name
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         """
         Can either be numeric Scalar, or iterable with numeric data.
         """
@@ -317,7 +307,7 @@ class NumericSeriesBinOpChecker(ArgumentTypeChecker):
             "must be a numeric scalar or Series, Index, Array, List or Tuple with numeric data",
         )
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         return "must be a numeric scalar or Series, Index, Array, List, or Tuple with numeric data"
 
 
@@ -327,7 +317,7 @@ class AnySeriesArgumentChecker(ArgumentTypeChecker):
     are supported.
     """
 
-    def __init__(self, arg_name: str, is_self: pt.Optional[bool] = False):
+    def __init__(self, arg_name: str, is_self: bool | None = False):
         """Initialize checker and set argument name.
 
         Args:
@@ -339,13 +329,13 @@ class AnySeriesArgumentChecker(ArgumentTypeChecker):
         self.arg_name = "self" if self.is_self else arg_name
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if not isinstance(arg_type, SeriesType):
             return arg_type, "must be a Series"
         return arg_type, None
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         return "all Series types supported"
 
 
@@ -357,8 +347,8 @@ class DatetimeLikeSeriesArgumentChecker(AnySeriesArgumentChecker):
     def __init__(
         self,
         arg_name: str,
-        is_self: pt.Optional[bool] = False,
-        type: pt.Optional[str] = "any",
+        is_self: bool | None = False,
+        type: str | None = "any",
     ):
         """Initialize DatetimeLikeSeriesArgumentChecker with the subset of
         dt64/td64 types to check.
@@ -371,15 +361,15 @@ class DatetimeLikeSeriesArgumentChecker(AnySeriesArgumentChecker):
                 "datetime", "timedelta" or "any" for both datetime and
                 timedelta. Defaults to "any".
         """
-        super(DatetimeLikeSeriesArgumentChecker, self).__init__(arg_name, is_self)
+        super().__init__(arg_name, is_self)
         self.type = type
 
         # any: datetime or timedelta types accepted
         assert self.type in ["any", "datetime", "timedelta"]
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         """
         Check that arg_type is a Series of valid datetimelike data.
         """
@@ -398,7 +388,7 @@ class DatetimeLikeSeriesArgumentChecker(AnySeriesArgumentChecker):
 
         return series_type, f"must be a Series of {supported_types} data"
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         supported_types = (
             "`datetime64` or `timedelta64`"
             if self.type == "any"
@@ -413,15 +403,15 @@ class NumericSeriesArgumentChecker(AnySeriesArgumentChecker):
     """
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if not isinstance(arg_type, SeriesType) or not isinstance(
             arg_type.dtype, types.Number
         ):
             return arg_type, "must be a Series of Float or Integer data"
         return arg_type, None
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         return "must be a Series of `Integer` or `Float` data"
 
 
@@ -431,8 +421,8 @@ class StringSeriesArgumentChecker(AnySeriesArgumentChecker):
     """
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         """
         Check that the underlying data of Seires is a valid string type.
         """
@@ -444,7 +434,7 @@ class StringSeriesArgumentChecker(AnySeriesArgumentChecker):
             return series_type, "must be a Series of String data"
         return series_type, None
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:
         return "must be a Series of `String` data"
 
 
@@ -453,16 +443,16 @@ class AnyArgumentChecker(ArgumentTypeChecker):
     Dummy class for overload attribute that allows all types.
     """
 
-    def __init__(self, arg_name: str, is_self: pt.Optional[bool] = False):
+    def __init__(self, arg_name: str, is_self: bool | None = False):
         self.is_self = is_self
         self.arg_name = "self" if self.is_self else arg_name
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         return arg_type, None
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:
         return "supported on all datatypes"
 
 
@@ -480,8 +470,8 @@ class OptionalArgumentChecker(ArgumentTypeChecker):
         return self.arg_checker.arg_name
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         if is_overload_none(arg_type):
             return None, None
 
@@ -491,7 +481,7 @@ class OptionalArgumentChecker(ArgumentTypeChecker):
 
         return arg_type, f"{err_str}, or it can be None"
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:
         arg_description = self.arg_checker.explain_arg(context)
         return f"(optional, defaults to `None`) {arg_description}"
 
@@ -505,11 +495,9 @@ class GenericArgumentChecker(ArgumentTypeChecker):
     def __init__(
         self,
         arg_name: str,
-        check_fn: pt.Callable[
-            [pt.Dict[str, pt.Any], pt.Any], pt.Tuple[pt.Any, str | None]
-        ],
-        explain_fn: pt.Callable[[pt.Dict[str, pt.Any]], str],
-        is_self: pt.Optional[bool] = False,
+        check_fn: pt.Callable[[dict[str, pt.Any], pt.Any], tuple[pt.Any, str | None]],
+        explain_fn: pt.Callable[[dict[str, pt.Any]], str],
+        is_self: bool | None = False,
     ):
         """Initialize a GenericArgumentChecker with custom check and explain
         logic.
@@ -534,12 +522,12 @@ class GenericArgumentChecker(ArgumentTypeChecker):
         self.explain_fn = explain_fn
 
     def check_arg(
-        self, context: pt.Dict[str, pt.Any], arg_type: pt.Any
-    ) -> pt.Tuple[pt.Any, str | None]:
+        self, context: dict[str, pt.Any], arg_type: pt.Any
+    ) -> tuple[pt.Any, str | None]:
         arg_type, err_str = self.check_fn(context, arg_type)
         return arg_type, err_str
 
-    def explain_arg(self, context: pt.Dict[str, pt.Any]) -> str:  # pragma: no cover
+    def explain_arg(self, context: dict[str, pt.Any]) -> str:  # pragma: no cover
         return self.explain_fn(context)
 
 
@@ -549,7 +537,7 @@ class OverloadArgumentsChecker:
     methods/functions.
     """
 
-    def __init__(self, argument_checkers: pt.List[ArgumentTypeChecker]):
+    def __init__(self, argument_checkers: list[ArgumentTypeChecker]):
         self.argument_checkers = {
             arg_checker.arg_name: arg_checker for arg_checker in argument_checkers
         }
@@ -562,7 +550,7 @@ class OverloadArgumentsChecker:
         """
         self.context.update({key: value})
 
-    def check_args(self, path: str, arg_types: pt.Dict[str, pt.Any]):
+    def check_args(self, path: str, arg_types: dict[str, pt.Any]):
         """Checks that an object satisfies the requirements to get an.
 
         Args:
@@ -584,7 +572,7 @@ class OverloadArgumentsChecker:
                     )
                 self.set_context(arg_name, new_arg_type)
 
-    def explain_args(self) -> pt.Dict[str, str]:
+    def explain_args(self) -> dict[str, str]:
         """
         Creates a dictionary mapping argument names to their description.
         """

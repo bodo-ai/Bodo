@@ -14,7 +14,7 @@ The keys are the name of the BodoSQL kernel.
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Generic, Tuple, TypeVar
+from typing import Any, Generic, TypeVar
 
 from numba.core import cgutils, ir, types
 from numba.core.ir_utils import find_callname, get_definition, guard
@@ -407,7 +407,7 @@ def convert_sql_pattern_to_python_compile_time(
     pattern: str,
     escape: str,
     make_output_lowercase: bool,
-) -> Tuple[str, bool, bool, bool, bool]:
+) -> tuple[str, bool, bool, bool, bool]:
     """
     Converts a SQL pattern to its Python equivalent. This is used for like/ilike
     paths where the pattern is a constant string literal. One challenge that arises

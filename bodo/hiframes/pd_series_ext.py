@@ -85,9 +85,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         # see comment on 'dist' in DataFrameType
         dist = Distribution.OneD_Var if dist is None else dist
         self.dist = dist
-        super(SeriesType, self).__init__(
-            name=f"series({dtype}, {data}, {index}, {name_typ}, {dist})"
-        )
+        super().__init__(name=f"series({dtype}, {data}, {index}, {name_typ}, {dist})")
 
     @property
     def as_array(self):
@@ -138,7 +136,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
                 )
 
         # XXX: unify Series/Array as Array
-        return super(SeriesType, self).unify(typingctx, other)
+        return super().unify(typingctx, other)
 
     def can_convert_to(self, typingctx, other):
         from numba.core.typeconv import Conversion
@@ -202,9 +200,7 @@ class HeterogeneousSeriesType(types.Type):
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
         self.dist = Distribution.REP  # cannot be distributed
-        super(HeterogeneousSeriesType, self).__init__(
-            name=f"heter_series({data}, {index}, {name_typ})"
-        )
+        super().__init__(name=f"heter_series({data}, {index}, {name_typ})")
 
     def copy(self, index=None, dist=None):
         # 'dist' argument is necessary since distributed analysis calls copy() for
@@ -288,9 +284,7 @@ def is_datetime_date_series_typ(t):
 class SeriesPayloadType(types.Type):
     def __init__(self, series_type):
         self.series_type = series_type
-        super(SeriesPayloadType, self).__init__(
-            name=f"SeriesPayloadType({series_type})"
-        )
+        super().__init__(name=f"SeriesPayloadType({series_type})")
 
     @property
     def mangling_args(self):
@@ -311,7 +305,7 @@ class SeriesPayloadModel(models.StructModel):
             ("index", fe_type.series_type.index),
             ("name", fe_type.series_type.name_typ),
         ]
-        super(SeriesPayloadModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 @register_model(HeterogeneousSeriesType)
@@ -326,7 +320,7 @@ class SeriesModel(models.StructModel):
             # for boxed Series, enables updating original Series object
             ("parent", types.pyobject),
         ]
-        super(SeriesModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 def define_series_dtor(context, builder, series_type, payload_type):
@@ -337,9 +331,7 @@ def define_series_dtor(context, builder, series_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     # TODO(ehsan): do we need to sanitize the name in any case?
-    fn = cgutils.get_or_insert_function(
-        mod, fnty, name=".dtor.series.{}".format(series_type)
-    )
+    fn = cgutils.get_or_insert_function(mod, fnty, name=f".dtor.series.{series_type}")
 
     # End early if the dtor is already defined
     if not fn.is_declaration:
@@ -816,7 +808,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         )
 
         # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
+        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
         func_text = f"def apply_stub(func, convert_dtype=True, args=(), {kw_names}):\n"
         func_text += "    pass\n"
         loc_vars = {}

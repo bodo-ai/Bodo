@@ -26,7 +26,7 @@ time_regex = re.compile(r"^\s*((\d+\.\d+)|(\d+))s\s*$")
 
 
 def filter_log_file(logfile):
-    with open(logfile, "r") as f:
+    with open(logfile) as f:
         found_timing = False
         lines = []
         for line in f:

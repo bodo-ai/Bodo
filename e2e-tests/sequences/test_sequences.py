@@ -58,6 +58,6 @@ def validate_sequences_output(require_cache=False):
     # Precomputed checksum to verify that the Bodo output doesn't change.
     expected_checksum = 17458202297301487
     run_cmd(cmd)
-    with open(checksum_loc, "r") as f:
+    with open(checksum_loc) as f:
         out_checksum = json.load(f)["checksum"]
     assert out_checksum == expected_checksum, "Checksum doesn't match"

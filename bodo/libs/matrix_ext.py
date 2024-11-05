@@ -28,9 +28,7 @@ class MatrixType(types.ArrayCompatible):
     def __init__(self, dtype, layout):
         self.dtype = dtype
         self.layout = layout
-        super(MatrixType, self).__init__(
-            name=f"MatrixType({dtype}, {repr(self.layout)})"
-        )
+        super().__init__(name=f"MatrixType({dtype}, {repr(self.layout)})")
 
     @property
     def as_array(self):

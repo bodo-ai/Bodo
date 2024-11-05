@@ -41,7 +41,7 @@ class NullDType(types.Type):
     """
 
     def __init__(self):
-        super(NullDType, self).__init__(name="NullType()")
+        super().__init__(name="NullType()")
 
 
 null_dtype = NullDType()
@@ -52,7 +52,7 @@ register_model(NullDType)(models.OpaqueModel)
 
 class NullArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
-        super(NullArrayType, self).__init__(name="NullArrayType()")
+        super().__init__(name="NullArrayType()")
 
     @property
     def as_array(self):

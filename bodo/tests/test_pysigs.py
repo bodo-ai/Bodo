@@ -1,4 +1,3 @@
-import typing as pt
 from inspect import Signature
 
 import numba
@@ -18,15 +17,13 @@ from bodo.utils.search_templates import (
 )
 
 
-def _get_series_apis() -> pt.List[str]:
+def _get_series_apis() -> list[str]:
     """Get paths of all Series and attributes"""
     url = PANDAS_URLS["SERIES"]
     return get_pandas_apis_from_url(url)
 
 
-def _get_pysig_from_path(
-    path: pt.List[str], package_name: pt.Optional[str] = "pd"
-) -> Signature:
+def _get_pysig_from_path(path: list[str], package_name: str | None = "pd") -> Signature:
     """Gets the python signature from `path`"""
     attr = globals()[package_name]
 
@@ -38,7 +35,7 @@ def _get_pysig_from_path(
 
 
 def signatures_equal(
-    pysig: Signature, overload_sig: Signature, changed_defaults: pt.Set[str]
+    pysig: Signature, overload_sig: Signature, changed_defaults: set[str]
 ) -> bool:
     """Compares overload signature to the signature from the
     corresponding python API.

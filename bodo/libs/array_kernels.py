@@ -506,7 +506,7 @@ def overload_setna_tup(arr_tup, ind, int_nan_const=0):
 
     func_text = "def f(arr_tup, ind, int_nan_const=0):\n"
     for i in range(count):
-        func_text += "  setna(arr_tup[{}], ind, int_nan_const)\n".format(i)
+        func_text += f"  setna(arr_tup[{i}], ind, int_nan_const)\n"
     func_text += "  return\n"
 
     loc_vars = {}
@@ -1368,23 +1368,19 @@ def overload_sample_table_operation(
         "def impl(data, ind_arr, n, frac, replace, random_state, parallel=False):\n"
     )
     func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
-        ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
+        ", ".join(f"array_to_info(data[{x}])" for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # NOTE: C++ will delete table_total pointer
     func_text += "  out_table = sample_table(table_total, n, frac, replace, random_state, parallel)\n"
     for i_col in range(count):
-        func_text += (
-            "  out_arr_{} = array_from_cpp_table(out_table, {}, data[{}])\n".format(
-                i_col, i_col, i_col
-            )
-        )
+        func_text += f"  out_arr_{i_col} = array_from_cpp_table(out_table, {i_col}, data[{i_col}])\n"
     func_text += (
-        "  out_arr_index = array_from_cpp_table(out_table, {}, ind_arr)\n".format(count)
+        f"  out_arr_index = array_from_cpp_table(out_table, {count}, ind_arr)\n"
     )
     func_text += "  delete_table(out_table)\n"
     func_text += "  return ({},), out_arr_index\n".format(
-        ", ".join("out_arr_{}".format(i) for i in range(count))
+        ", ".join(f"out_arr_{i}" for i in range(count))
     )
     loc_vars = {}
     exec(
@@ -1428,17 +1424,13 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
 
     func_text = "def impl(data, ind_arr, ncols, keep_i, parallel=False):\n"
     func_text += "  info_list_total = [{}, {}]\n".format(
-        ", ".join("array_to_info(data[{}])".format(x) for x in range(count)), ind_info
+        ", ".join(f"array_to_info(data[{x}])" for x in range(count)), ind_info
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # NOTE: C++ will delete table pointer
     func_text += "  out_table = drop_duplicates_cpp_table(table_total, parallel, ncols, keep_i, False, True)\n"
     for i_col in range(count):
-        func_text += (
-            "  out_arr_{} = array_from_cpp_table(out_table, {}, data[{}])\n".format(
-                i_col, i_col, i_col
-            )
-        )
+        func_text += f"  out_arr_{i_col} = array_from_cpp_table(out_table, {i_col}, data[{i_col}])\n"
     if ignore_index:
         func_text += "  out_arr_index = None\n"
     else:
@@ -1447,7 +1439,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, keep_i, parallel=False):
         )
     func_text += "  delete_table(out_table)\n"
     func_text += "  return ({},), out_arr_index\n".format(
-        ", ".join("out_arr_{}".format(i) for i in range(count))
+        ", ".join(f"out_arr_{i}" for i in range(count))
     )
     loc_vars = {}
     exec(
@@ -1508,7 +1500,7 @@ def overload_dropna(data, how, thresh, subset):
     how = get_overload_const_str(how)
 
     # gen NA check code
-    isna_calls = ["isna(data[{}], i)".format(i) for i in subset_inds]
+    isna_calls = [f"isna(data[{i}], i)" for i in subset_inds]
     isna_check = "not ({})".format(" or ".join(isna_calls))
     if not is_overload_none(thresh):
         isna_check = "(({}) <= ({}) - thresh)".format(
@@ -1522,34 +1514,32 @@ def overload_dropna(data, how, thresh, subset):
     func_text += "  old_len = len(data[0])\n"
     func_text += "  new_len = 0\n"
     func_text += "  for i in range(old_len):\n"
-    func_text += "    if {}:\n".format(isna_check)
+    func_text += f"    if {isna_check}:\n"
     func_text += "      new_len += 1\n"
     # allocate new arrays
     for i, out in enumerate(out_names):
         # Add a check for categorical, if so use data[{i}].dtype
         if isinstance(data[i], bodo.CategoricalArrayType):
-            func_text += "  {0} = bodo.utils.utils.alloc_type(new_len, data[{1}], (-1,))\n".format(
-                out, i
+            func_text += (
+                f"  {out} = bodo.utils.utils.alloc_type(new_len, data[{i}], (-1,))\n"
             )
         else:
             func_text += (
-                "  {0} = bodo.utils.utils.alloc_type(new_len, t{1}, (-1,))\n".format(
-                    out, i
-                )
+                f"  {out} = bodo.utils.utils.alloc_type(new_len, t{i}, (-1,))\n"
             )
     func_text += "  curr_ind = 0\n"
     func_text += "  for i in range(old_len):\n"
-    func_text += "    if {}:\n".format(isna_check)
+    func_text += f"    if {isna_check}:\n"
     for i in range(n_data_arrs):
-        func_text += "      if isna(data[{}], i):\n".format(i)
-        func_text += "        setna({}, curr_ind)\n".format(out_names[i])
+        func_text += f"      if isna(data[{i}], i):\n"
+        func_text += f"        setna({out_names[i]}, curr_ind)\n"
         func_text += "      else:\n"
-        func_text += "        {}[curr_ind] = data[{}][i]\n".format(out_names[i], i)
+        func_text += f"        {out_names[i]}[curr_ind] = data[{i}][i]\n"
     func_text += "      curr_ind += 1\n"
     func_text += "  return {}\n".format(", ".join(out_names))
     loc_vars = {}
     # pass data types to generated code
-    _globals = {"t{}".format(i): t for i, t in enumerate(data.types)}
+    _globals = {f"t{i}": t for i, t in enumerate(data.types)}
     _globals.update(
         {
             "isna": isna,
@@ -2313,7 +2303,7 @@ def overload_astype_float_tup(arr_tup):
 
     func_text = "def f(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
-        ",".join("arr_tup[{}].astype(np.float64)".format(i) for i in range(count)),
+        ",".join(f"arr_tup[{i}].astype(np.float64)" for i in range(count)),
         "," if count == 1 else "",
     )  # single value needs comma to become tuple
 
@@ -2944,7 +2934,7 @@ def arange_parallel_impl(return_type, *args, dtype=None):
     elif len(args) == 4:
         return arange_4
     else:
-        raise BodoError("parallel arange with types {}".format(args))
+        raise BodoError(f"parallel arange with types {args}")
 
 
 # Check if numba.parfors.parfor.arange_parallel_impl source code has changed

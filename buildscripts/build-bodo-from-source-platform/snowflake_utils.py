@@ -25,7 +25,7 @@ def get_snowflake_connection(
         Snowflake connector connection object
     """
     # Read Snowflake Credentials from a file
-    with open(creds_filename, "r") as f:
+    with open(creds_filename) as f:
         sf_creds = json.load(f)
 
     username = sf_creds["SF_USERNAME"]

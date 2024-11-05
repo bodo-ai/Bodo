@@ -7,7 +7,6 @@ import random
 import string
 import unittest
 from decimal import Decimal
-from typing import List, Tuple, Union
 
 import numba
 import numpy as np
@@ -1305,10 +1304,10 @@ def interval_join_test_tables(request):
 @pytest.mark.parametrize("how", ["inner", "left"])
 @pytest.mark.parametrize("broadcast", [True, False])
 def test_point_in_interval_join(
-    interval_join_test_tables: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    interval_join_test_tables: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
     lcond: str,
     rcond: str,
-    distributed: Union[List[Tuple[str, int]], bool, None],
+    distributed: list[tuple[str, int]] | bool | None,
     how: str,
     broadcast: bool,
     memory_leak_check,
@@ -1446,10 +1445,10 @@ def test_point_in_interval_join_empty(point_df, range_df, how, memory_leak_check
     "distributed", [None, [("left_df", 0)], [("right_df", 1)], False]
 )
 def test_interval_overlap_join(
-    interval_join_test_tables: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
+    interval_join_test_tables: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
     lcond: str,
     rcond: str,
-    distributed: Union[List[Tuple[str, int]], bool, None],
+    distributed: list[tuple[str, int]] | bool | None,
     memory_leak_check: None,
 ):
     """

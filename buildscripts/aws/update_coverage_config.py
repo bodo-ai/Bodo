@@ -18,5 +18,5 @@ with open("setup.cfg", "a") as f:
     print("", file=f)
     print("[coverage:paths]", file=f)
     print("source = ", file=f)
-    print("    {}".format(os.getcwd()), file=f)
+    print(f"    {os.getcwd()}", file=f)
     print("    /codebuild/output/*/src/github.com/Bodo-inc/Bodo", file=f)

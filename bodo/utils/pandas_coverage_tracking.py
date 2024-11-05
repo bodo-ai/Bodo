@@ -4,8 +4,6 @@ methods/attributes we are currently not supporting that lack proper error messag
 This script will be run during the import bodo step if specified by _check_pandas_docs
 """
 
-import typing as pt
-
 import numba
 import requests
 from numba.core.target_extension import dispatcher_registry
@@ -14,7 +12,7 @@ from bodo.pandas_compat import _check_pandas_change
 from bodo.utils import search_templates
 
 # URL of the Pandas API reference pages
-PANDAS_URLS: pt.Dict[str, str] = {
+PANDAS_URLS: dict[str, str] = {
     "IO": "https://pandas.pydata.org/docs/reference/io.html",
     "GENERAL_FUNCTIONS": "https://pandas.pydata.org/docs/reference/general_functions.html",
     "SERIES": "https://pandas.pydata.org/docs/reference/series.html",
@@ -57,13 +55,13 @@ def get_pandas_refs_from_url(url: str) -> list:
     return result
 
 
-def get_pandas_apis_from_url(url: str) -> pt.List[str]:
+def get_pandas_apis_from_url(url: str) -> list[str]:
     """Get the names of all pandas apis from an index page."""
     refs = get_pandas_refs_from_url(url)
     return [ref.text.strip() for ref in refs]
 
 
-def get_all_pandas_apis() -> pt.List[str]:
+def get_all_pandas_apis() -> list[str]:
     """Get all pandas api's as a list of paths (excluding the pd. part)."""
     result = []
     for url in PANDAS_URLS.values():

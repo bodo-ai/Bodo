@@ -49,9 +49,7 @@ class MapScalarType(types.Type):
     def __init__(self, key_arr_type, value_arr_type):
         self.key_arr_type = key_arr_type
         self.value_arr_type = value_arr_type
-        super(MapScalarType, self).__init__(
-            name=f"MapScalarType({key_arr_type}, {value_arr_type})"
-        )
+        super().__init__(name=f"MapScalarType({key_arr_type}, {value_arr_type})")
 
     @property
     def mangling_args(self):
@@ -70,9 +68,7 @@ class MapArrayType(types.ArrayCompatible):
     def __init__(self, key_arr_type, value_arr_type):
         self.key_arr_type = key_arr_type
         self.value_arr_type = value_arr_type
-        super(MapArrayType, self).__init__(
-            name="MapArrayType({}, {})".format(key_arr_type, value_arr_type)
-        )
+        super().__init__(name=f"MapArrayType({key_arr_type}, {value_arr_type})")
 
     @property
     def as_array(self):

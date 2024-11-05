@@ -37,9 +37,7 @@ def training_step(mnist_model, loss, opt, images, labels, first_batch):
 
 def deep_learning(X_train, y_train, X_test, y_test):
     print(
-        "[{}] X_train size is {}, y_train size is {}".format(
-            bodo.get_rank(), len(X_train), len(y_train)
-        )
+        f"[{bodo.get_rank()}] X_train size is {len(X_train)}, y_train size is {len(y_train)}"
     )
     if hvd.is_initialized():  # ranks not using horovod (e.g. non-gpu ranks) skip
         dataset = tf.data.Dataset.from_tensor_slices(

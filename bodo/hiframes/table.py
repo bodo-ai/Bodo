@@ -6,7 +6,6 @@
 import operator
 from collections import defaultdict
 from functools import cached_property
-from typing import List, Tuple
 
 import numba
 import numpy as np
@@ -146,7 +145,7 @@ class Table:
         )
 
     @property
-    def shape(self) -> Tuple[int, int]:
+    def shape(self) -> tuple[int, int]:
         return (len(self.arrays[0] if len(self.arrays) > 0 else 0), len(self.arrays))
 
     def to_pandas(self, index=None):
@@ -166,7 +165,7 @@ class TableType(types.ArrayCompatible):
 
     def __init__(
         self,
-        arr_types: Tuple[types.ArrayCompatible, ...],
+        arr_types: tuple[types.ArrayCompatible, ...],
         has_runtime_cols: bool = False,
         dist=None,
     ):
@@ -211,9 +210,7 @@ class TableType(types.ArrayCompatible):
 
         dist = Distribution.OneD_Var if dist is None else dist
         self.dist = dist
-        super(TableType, self).__init__(
-            name=f"TableType({arr_types}, {has_runtime_cols}, {dist})"
-        )
+        super().__init__(name=f"TableType({arr_types}, {has_runtime_cols}, {dist})")
 
     @property
     def as_array(self):
@@ -240,11 +237,11 @@ class TableType(types.ArrayCompatible):
         return TableType(self.arr_types, self.has_runtime_cols, dist)
 
     @cached_property
-    def c_array_types(self) -> List[int]:
+    def c_array_types(self) -> list[int]:
         return numba_to_c_array_types(self.arr_types)
 
     @cached_property
-    def c_dtypes(self) -> List[int]:
+    def c_dtypes(self) -> list[int]:
         return numba_to_c_types(self.arr_types)
 
 
@@ -277,7 +274,7 @@ class TableTypeModel(models.StructModel):
         members.append(("parent", types.pyobject))
         # Keep track of the length in the struct directly.
         members.append(("len", types.int64))
-        super(TableTypeModel, self).__init__(dmm, fe_type, members)
+        super().__init__(dmm, fe_type, members)
 
 
 # for debugging purposes (a table may not have a block)
