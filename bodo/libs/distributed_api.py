@@ -1273,6 +1273,65 @@ def gatherv_impl_jit(
 
         return impl_cat
 
+    # DatetimeTimeDeltaArrayType (not supported by C++ below yet)
+    if data == datetime_timedelta_array_type:
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_timedelta(
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            days = bodo.gatherv(data._days_data, allgather, warn_if_rep, root, comm)
+            seconds = bodo.gatherv(
+                data._seconds_data, allgather, warn_if_rep, root, comm
+            )
+            microseconds = bodo.gatherv(
+                data._microseconds_data, allgather, warn_if_rep, root, comm
+            )
+
+            rank = bodo.get_rank()
+            is_receiver = rank == root
+            if comm != 0:
+                is_receiver = root == MPI.ROOT
+            n_loc = len(data)
+            n_bytes = (n_loc + 7) >> 3
+            recv_counts = gather_scalar(
+                np.int32(n_loc), allgather, warn_if_rep, root, comm
+            )
+
+            recv_counts_nulls = np.empty(1, np.int32)
+            displs_nulls = np.empty(1, np.int32)
+            tmp_null_bytes = np.empty(1, np.uint8)
+            if is_receiver or allgather:
+                recv_counts_nulls = np.empty(len(recv_counts), np.int32)
+                for i in range(len(recv_counts)):
+                    recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
+                displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
+                tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
+
+            c_gatherv(
+                data._null_bitmap.ctypes,
+                np.int32(n_bytes),
+                tmp_null_bytes.ctypes,
+                recv_counts_nulls.ctypes,
+                displs_nulls.ctypes,
+                char_typ_enum,
+                allgather,
+                np.int32(root),
+                comm,
+            )
+            out_null_bitmap = np.empty(recv_counts.sum() >> 3, np.uint8)
+            copy_gathered_null_bytes(
+                out_null_bitmap.ctypes,
+                tmp_null_bytes,
+                recv_counts_nulls,
+                recv_counts,
+            )
+            return bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
+                days, seconds, microseconds, out_null_bitmap
+            )
+
+        return impl_timedelta
+
     if is_array_typ(data, False):
         dtype = data
 
@@ -2420,6 +2479,30 @@ def scatterv_impl_jit(
             )
 
         return impl_interval_arr
+
+    # DatetimeTimeDeltaArrayType
+    if data == datetime_timedelta_array_type:
+
+        def impl_timedelta_arr(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            days = bodo.libs.distributed_api.scatterv_impl(
+                data._days_data, send_counts, warn_if_dist, root, comm
+            )
+            seconds = bodo.libs.distributed_api.scatterv_impl(
+                data._seconds_data, send_counts, warn_if_dist, root, comm
+            )
+            microseconds = bodo.libs.distributed_api.scatterv_impl(
+                data._microseconds_data, send_counts, warn_if_dist, root, comm
+            )
+            out_null_bitmap = _scatterv_null_bitmap(
+                data._null_bitmap, send_counts, len(data), root, comm
+            )
+            return bodo.hiframes.datetime_timedelta_ext.init_datetime_timedelta_array(
+                days, seconds, microseconds, out_null_bitmap
+            )
+
+        return impl_timedelta_arr
 
     # TimestampTZ array
     if data == bodo.timestamptz_array_type:
