@@ -234,6 +234,10 @@ def test_explicit_dict_encoding(
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="Spawn workers don't set READ_STR_AS_DICT_THRESHOLD",
+)
 def test_implicit_dict_encoding(
     iceberg_database, iceberg_table_conn, memory_leak_check
 ):

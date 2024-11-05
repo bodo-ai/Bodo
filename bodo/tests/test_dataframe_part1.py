@@ -459,6 +459,10 @@ def test_assign_lambda(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="pytest cannot catch spawn workers warnings",
+)
 def test_df_insert(memory_leak_check, is_slow_run):
     """Test df.insert()"""
 
