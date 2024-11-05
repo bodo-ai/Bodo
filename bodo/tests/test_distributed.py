@@ -2471,6 +2471,25 @@ def get_random_int64index(n):
             id="tuple",
         ),
         pytest.param(
+            pd.Series(
+                [
+                    bodo.Time(17, 33, 26, 91, 8, 79),
+                    bodo.Time(0, 24, 43, 365, 18, 74),
+                    bodo.Time(3, 59, 6, 25, 757, 3),
+                    bodo.Time(),
+                    bodo.Time(4),
+                    bodo.Time(6, 41),
+                    bodo.Time(22, 13, 57),
+                    bodo.Time(17, 34, 29, 90),
+                    bodo.Time(7, 3, 45, 876, 234),
+                    None,
+                ],
+                dtype=object,
+            ),
+            marks=pytest.mark.slow,
+            id="time",
+        ),
+        pytest.param(
             pd.DataFrame(
                 {"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}
             ).rename({"A": "a", "B": "a"}, axis=1),

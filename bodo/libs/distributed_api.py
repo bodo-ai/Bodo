@@ -1891,6 +1891,11 @@ def get_value_for_type(dtype):  # pragma: no cover
     if dtype == bodo.timestamptz_array_type:
         return np.array([bodo.TimestampTZ(pd.Timestamp(0), 0)])
 
+    # TimeArray
+    if isinstance(dtype, TimeArrayType):
+        precision = dtype.precision
+        return np.array([bodo.Time(3, precision=precision)], object)
+
     # NullArray
     if dtype == bodo.null_array_type:
         import pyarrow as pa
@@ -2341,7 +2346,13 @@ def scatterv_impl_jit(
     if (
         isinstance(
             data,
-            (IntegerArrayType, FloatingArrayType, DecimalArrayType, DatetimeArrayType),
+            (
+                IntegerArrayType,
+                FloatingArrayType,
+                DecimalArrayType,
+                DatetimeArrayType,
+                TimeArrayType,
+            ),
         )
         or data == datetime_date_array_type
     ):
@@ -2368,6 +2379,13 @@ def scatterv_impl_jit(
             )  # pragma: no cover
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
+        if isinstance(data, TimeArrayType):
+            precision = data.precision
+            init_func = numba.njit(no_cpython_wrapper=True)(
+                lambda d, b: bodo.hiframes.time_ext.init_time_array(
+                    d, b, precision
+                )  # pragma: no cover
+            )
 
         def scatterv_impl_int_arr(
             data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
