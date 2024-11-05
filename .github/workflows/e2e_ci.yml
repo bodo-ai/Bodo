@@ -56,6 +56,11 @@ jobs:
           role-session-name: BodoEngineNightlySession
           role-skip-session-tagging: true
 
+      - name: Load and Save Hadoop to Cache
+        uses: actions/cache@v4
+        with:
+          path: hadoop.tar.gz
+          key: hadoop-3.3.2-${{ runner.os }}
       # TODO: Once stable, inline all the scripts
       - name: Install Bodo Packages
         env:
@@ -63,7 +68,6 @@ jobs:
           BUILD_WITH_V8: 1
           # Use sccache over ccache
           DISABLE_CCACHE: 1
-
         run: |
           # Main Packages Install
           ./buildscripts/build.sh

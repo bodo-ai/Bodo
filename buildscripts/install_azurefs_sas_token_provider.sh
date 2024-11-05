@@ -18,7 +18,6 @@ if [[ ! -f hadoop.tar.gz ]]; then
 fi
 
 tar -xzf hadoop.tar.gz -C /tmp
-rm -rf hadoop.tar.gz
 
 export HADOOP_HOME=/tmp/hadoop-3.3.2
 export HADOOP_INSTALL=$HADOOP_HOME
