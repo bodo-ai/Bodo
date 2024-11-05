@@ -2490,6 +2490,14 @@ def get_random_int64index(n):
             id="time",
         ),
         pytest.param(
+            np.append(
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
+            ),
+            marks=pytest.mark.slow,
+            id="timedelta",
+        ),
+        pytest.param(
             pd.DataFrame(
                 {"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}
             ).rename({"A": "a", "B": "a"}, axis=1),
