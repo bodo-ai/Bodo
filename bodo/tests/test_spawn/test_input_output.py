@@ -40,6 +40,8 @@ def test_distributed_input_output_df(df_value):
     if (
         not isinstance(df_value.index, RangeIndex)
         and type(df_value.index) is not pd.Index
+        and type(df_value.index) is not pd.IntervalIndex
+        and type(df_value.index) is not pd.MultiIndex
     ):
         pytest.skip("BSE-4099: Support all pandas index types in lazy wrappers")
 
@@ -53,6 +55,8 @@ def test_distributed_input_output_series(series_val):
     if (
         not isinstance(series_val.index, RangeIndex)
         and type(series_val.index) is not pd.Index
+        and type(series_val.index) is not pd.IntervalIndex
+        and type(series_val.index) is not pd.MultiIndex
     ):
         pytest.skip("BSE-4099: Support all pandas index types in lazy wrappers")
 

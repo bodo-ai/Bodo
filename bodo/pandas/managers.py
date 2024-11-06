@@ -41,21 +41,43 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
             row_indexes = []
             for ss_axis in head.axes[1:]:
                 # BSE-4099: Support other types of indexes
-                if isinstance(ss_axis, pd.RangeIndex):
-                    row_indexes.append(
-                        pd.RangeIndex(
-                            ss_axis.start,
-                            ss_axis.start + (ss_axis.step * nrows),
-                            ss_axis.step,
+                match type(ss_axis):
+                    case pd.RangeIndex:
+                        row_indexes.append(
+                            pd.RangeIndex(
+                                ss_axis.start,
+                                ss_axis.start + (ss_axis.step * nrows),
+                                ss_axis.step,
+                            )
                         )
-                    )
-                elif type(ss_axis) is pd.Index:
-                    assert index_data is not None
-                    row_indexes.append(pd.Index(index_data, name=ss_axis.name))
-                else:
-                    raise ValueError(
-                        f"Index type {type(ss_axis)} not supported in LazyBlockManager"
-                    )
+                    case pd.Index:
+                        assert index_data is not None
+                        row_indexes.append(pd.Index(index_data, name=ss_axis.name))
+                    case pd.MultiIndex:
+                        assert index_data is not None
+                        row_indexes.append(
+                            pd.MultiIndex.from_frame(
+                                index_data,
+                                sortorder=ss_axis.sortorder,
+                                names=ss_axis.names,
+                            )
+                        )
+                    case pd.IntervalIndex:
+                        assert index_data is not None
+                        row_indexes.append(
+                            pd.IntervalIndex.from_arrays(
+                                index_data[0],
+                                index_data[1],
+                                ss_axis.closed,
+                                ss_axis.name,
+                                dtype=ss_axis.dtype,
+                            )
+                        )
+                        pass
+                    case _:
+                        raise ValueError(
+                            f"Index type {type(ss_axis)} not supported in LazyBlockManager"
+                        )
 
             obj = super().__new__(
                 cls,
@@ -91,7 +113,9 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         # Can be used for lazy index data
-        index_data=ArrowExtensionArray | None,
+        index_data: ArrowExtensionArray
+        | tuple[ArrowExtensionArray, ArrowExtensionArray]
+        | None = None,
     ):
         super().__init__(
             blocks,
@@ -215,7 +239,9 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         # Can be used for lazy index data
-        index_data=ArrowExtensionArray | None,
+        index_data: ArrowExtensionArray
+        | tuple[ArrowExtensionArray, ArrowExtensionArray]
+        | None = None,
     ):
         block_ = block
         axis_ = axis
@@ -236,19 +262,33 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             # Create axis based on head
             head_axis = head.axes[0]
             # BSE-4099: Support other types of indexes
-            if isinstance(head_axis, pd.RangeIndex):
-                axis_ = pd.RangeIndex(
-                    head_axis.start,
-                    head_axis.start + (head_axis.step * nrows),
-                    head_axis.step,
-                )
-            elif type(head_axis) is pd.Index:
-                assert index_data is not None
-                axis_ = pd.Index(index_data, name=head_axis.name)
-            else:
-                raise ValueError(
-                    "Index type {type(head_axis)} not supported in LazySingleBlockManager"
-                )
+            match type(head_axis):
+                case pd.RangeIndex:
+                    axis_ = pd.RangeIndex(
+                        head_axis.start,
+                        head_axis.start + (head_axis.step * nrows),
+                        head_axis.step,
+                    )
+                case pd.Index:
+                    assert index_data is not None
+                    axis_ = pd.Index(index_data, name=head_axis.name)
+                case pd.MultiIndex:
+                    axis_ = pd.MultiIndex.from_frame(
+                        index_data, sortorder=head_axis.sortorder, names=head_axis.names
+                    )
+                case pd.IntervalIndex:
+                    assert index_data is not None
+                    axis_ = pd.IntervalIndex.from_arrays(
+                        index_data[0],
+                        index_data[1],
+                        head_axis.closed,
+                        head_axis.name,
+                        dtype=head_axis.dtype,
+                    )
+                case _:
+                    raise ValueError(
+                        "Index type {type(head_axis)} not supported in LazySingleBlockManager"
+                    )
 
         super().__init__(
             block_,

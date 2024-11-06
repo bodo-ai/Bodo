@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import gen_nonascii_list
+from bodo.tests.utils import gen_nonascii_list, spawn_mode_markers
 
 
 # TODO: other possible df types like dt64, td64, ...
@@ -127,6 +127,19 @@ from bodo.tests.utils import gen_nonascii_list
             ),
             id="binary_df",
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.DataFrame({"A": list(range(100))}, pd.interval_range(0, 100)),
+            id="interval_index",
+            marks=[pytest.mark.slow] + list(spawn_mode_markers),
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": list(range(100))},
+                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50),
+            ),
+            id="multi_index",
+            marks=[pytest.mark.slow] + list(spawn_mode_markers),
         ),
         # TODO: timedelta
     ]

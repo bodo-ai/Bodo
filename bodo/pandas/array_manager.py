@@ -44,7 +44,10 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         # Can be used for lazy index data
-        index_data: ArrowExtensionArray | None = None,
+        index_data: ArrowExtensionArray
+        | tuple[ArrowExtensionArray, ArrowExtensionArray]
+        | pd.DataFrame
+        | None = None,
     ):
         self._axes = axes
         self.arrays = arrays
@@ -68,18 +71,35 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
 
             new_axis0 = None
             # BSE-4099: Support other types of indexes
-            if isinstance(head_axis0, pd.RangeIndex):
-                new_axis0 = pd.RangeIndex(
-                    head_axis0.start,
-                    head_axis0.start + (head_axis0.step * nrows),
-                    head_axis0.step,
-                )
-            elif type(head_axis0) is pd.Index:
-                new_axis0 = pd.Index(index_data, name=head_axis0.name)
-            else:
-                raise ValueError(
-                    "{type(head_axis0)} is not supported in LazyArrayManager"
-                )
+            match type(head_axis0):
+                case pd.RangeIndex:
+                    new_axis0 = pd.RangeIndex(
+                        head_axis0.start,
+                        head_axis0.start + (head_axis0.step * nrows),
+                        head_axis0.step,
+                    )
+                case pd.Index:
+                    new_axis0 = pd.Index(index_data, name=head_axis0.name)
+                case pd.MultiIndex:
+                    new_axis0 = pd.MultiIndex.from_frame(
+                        index_data,
+                        sortorder=head_axis0.sortorder,
+                        names=head_axis0.names,
+                    )
+                case pd.IntervalIndex:
+                    assert index_data is not None
+                    new_axis0 = pd.IntervalIndex.from_arrays(
+                        index_data[0],
+                        index_data[1],
+                        head_axis0.closed,
+                        head_axis0.name,
+                        dtype=head_axis0.dtype,
+                    )
+                    pass
+                case _:
+                    raise ValueError(
+                        "{type(head_axis0)} is not supported in LazyArrayManager"
+                    )
 
             self._axes = [
                 new_axis0,
@@ -254,7 +274,10 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         collect_func: Callable[[str], pt.Any] | None = None,
         del_func: Callable[[str], None] | None = None,
         # Can be used for lazy index data
-        index_data: ArrowExtensionArray | None = None,
+        index_data: ArrowExtensionArray
+        | tuple[ArrowExtensionArray, ArrowExtensionArray]
+        | pd.DataFrame
+        | None = None,
     ):
         self._axes = axes
         self.arrays = arrays
@@ -277,18 +300,33 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             head_axis = head._axes[0]
             new_axis = None
             # BSE-4099: Support other types of indexes
-            if isinstance(head_axis, pd.RangeIndex):
-                new_axis = pd.RangeIndex(
-                    head_axis.start,
-                    head_axis.start + (head_axis.step * nrows),
-                    head_axis.step,
-                )
-            elif type(head_axis) is pd.Index:
-                new_axis = pd.Index(index_data, name=head_axis.name)
-            else:
-                raise ValueError(
-                    "{type(head_axis)} is not supported in LazySingleArrayManager"
-                )
+            match type(head_axis):
+                case pd.RangeIndex:
+                    new_axis = pd.RangeIndex(
+                        head_axis.start,
+                        head_axis.start + (head_axis.step * nrows),
+                        head_axis.step,
+                    )
+                case pd.Index:
+                    new_axis = pd.Index(index_data, name=head_axis.name)
+                case pd.MultiIndex:
+                    new_axis = pd.MultiIndex.from_frame(
+                        index_data, sortorder=head_axis.sortorder, names=head_axis.names
+                    )
+                case pd.IntervalIndex:
+                    assert index_data is not None
+                    new_axis = pd.IntervalIndex.from_arrays(
+                        index_data[0],
+                        index_data[1],
+                        head_axis.closed,
+                        head_axis.name,
+                        dtype=head_axis.dtype,
+                    )
+                    pass
+                case _:
+                    raise ValueError(
+                        "{type(head_axis)} is not supported in LazySingleArrayManager"
+                    )
             self._axes = [new_axis]
             self.arrays = None  # type: ignore This is can't be None when accessed because we overload __getattribute__
             _arrays = None
