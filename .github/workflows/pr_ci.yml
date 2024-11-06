@@ -81,7 +81,7 @@ jobs:
     with:
       batch: 1
       total-batches: 1
-      pytest-marker: "spawn"
+      pytest-marker: "spawn_mode"
       collect-coverage: false
     secrets: inherit
 

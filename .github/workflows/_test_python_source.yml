@@ -91,6 +91,7 @@ jobs:
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
+            BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
