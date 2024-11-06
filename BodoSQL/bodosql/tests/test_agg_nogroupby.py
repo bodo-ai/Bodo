@@ -356,6 +356,7 @@ def test_max_datetime_types(bodosql_datetime_types, spark_info, memory_leak_chec
         spark_info,
         check_names=False,
         is_out_distributed=False,
+        use_duckdb=True,
     )
 
 

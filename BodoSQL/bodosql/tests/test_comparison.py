@@ -225,6 +225,7 @@ def test_comparison_operators_within_table(
         check_dtype=False,
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 

@@ -49,14 +49,13 @@ def test_agg_numeric(
             return
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
-
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -94,14 +93,13 @@ def test_aliasing_agg_numeric(
             return
 
     query = f"select {numeric_agg_builtin_funcs}(B) as testCol from table1 group by A"
-
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -280,8 +278,8 @@ def test_having_repeat_datetime(bodosql_datetime_types, spark_info, memory_leak_
         "select count(B) from table1 group by a having count(b) > 2",
         bodosql_datetime_types,
         spark_info,
-        check_dtype=False,
         check_names=False,
+        use_duckdb=True,
     )
 
 
@@ -386,6 +384,7 @@ def test_groupby_datetime_types(bodosql_datetime_types, spark_info, memory_leak_
         bodosql_datetime_types,
         spark_info,
         check_names=False,
+        use_duckdb=True,
     )
 
 

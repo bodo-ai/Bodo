@@ -31,7 +31,10 @@ def test_datetime_condition(spark_info, memory_leak_check):
         )
     }
     check_query(
-        "select A from table1 where A > '2016-02-12'", dataframe_dict, spark_info
+        "select A from table1 where A > '2016-02-12'",
+        dataframe_dict,
+        spark_info,
+        use_duckdb=True,
     )
 
 

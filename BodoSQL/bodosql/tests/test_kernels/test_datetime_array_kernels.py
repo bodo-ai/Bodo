@@ -2266,7 +2266,7 @@ def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
         pd.Series(
             [None] * 4
             + list(
-                pd.date_range("1/1/2022", periods=30, freq="7D6H7s", tz="US/Pacific")
+                pd.date_range("1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific")
             )
             + [None] * 2
         ),
@@ -2315,7 +2315,7 @@ def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
         pd.Series(
             [None] * 4
             + list(
-                pd.date_range("1/1/2022", periods=30, freq="7D6H7s", tz="US/Pacific")
+                pd.date_range("1/1/2022", periods=30, freq="7D6h7s", tz="US/Pacific")
             )
             + [None] * 2
         ),
@@ -2403,7 +2403,7 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                 [None] * 4
                 + list(
                     pd.date_range(
-                        "2022-11-6 04:12:41.432433", periods=20, freq="11D3H5us"
+                        "2022-11-6 04:12:41.432433", periods=20, freq="11D3h5us"
                     )
                 )
                 + [None] * 2
@@ -2417,7 +2417,7 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
                     pd.date_range(
                         "2022-11-6 04:12:41.432433",
                         periods=20,
-                        freq="11D3H5us",
+                        freq="11D3h5us",
                         tz="US/Pacific",
                     )
                 )

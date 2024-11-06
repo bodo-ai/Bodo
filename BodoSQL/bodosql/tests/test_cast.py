@@ -535,15 +535,14 @@ def test_numeric_nullable_scalar_to_datetime(
         query = "SELECT CASE WHEN B > 5 THEN A::TIMESTAMP ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
     else:
         query = "SELECT CASE WHEN B > 5 THEN CAST(A AS TIMESTAMP) ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
-
-    spark_query = "SELECT CASE WHEN B > 5 THEN CAST(A AS TIMESTAMP) ELSE TIMESTAMP '2010-01-01' END FROM TABLE1"
     check_query(
         query,
         bodosql_nullable_numeric_types,
         spark_info,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=query.replace("TIMESTAMP", "TIMESTAMP_NS"),
+        use_duckdb=True,
     )
 
 
@@ -560,14 +559,14 @@ def test_datetime_scalar_to_datetime(
         query = f"SELECT CASE WHEN A > TIMESTAMP '1970-01-01' THEN B::{sql_datetime_typestrings} ELSE (TIMESTAMP '2010-01-01')::{sql_datetime_typestrings} END FROM TABLE1"
     else:
         query = f"SELECT CASE WHEN A > TIMESTAMP '1970-01-01' THEN CAST(B AS {sql_datetime_typestrings}) ELSE CAST (TIMESTAMP '2010-01-01' AS {sql_datetime_typestrings}) END FROM TABLE1"
-    spark_query = f"SELECT CASE WHEN A > TIMESTAMP '1970-01-01' THEN CAST(B AS {sql_datetime_typestrings}) ELSE CAST (TIMESTAMP '2010-01-01' AS {sql_datetime_typestrings}) END FROM TABLE1"
     check_query(
         query,
         bodosql_datetime_types,
         spark_info,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=query.replace("TIMESTAMP", "TIMESTAMP_NS"),
+        use_duckdb=True,
     )
 
 
