@@ -12,6 +12,7 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.ir_utils import GuardException, guard
@@ -1692,6 +1693,7 @@ def _infer_ndarray_obj_dtype(val):
             list,
             np.ndarray,
             pd.core.arrays.numpy_.NumpyExtensionArray,
+            pd.core.arrays.arrow.array.ArrowExtensionArray,
             pd.arrays.BooleanArray,
             pd.arrays.IntegerArray,
             pd.arrays.FloatingArray,
@@ -1800,6 +1802,16 @@ def _infer_array_item_array_type_and_depth(val, nesting_depth):
                     nullable = False
                 else:
                     nullable = True
+
+                # Create bodo DecimalType from pyarrow's decimal128 type.
+                # val[i] is a python decimal scalar so numba.typeof(val[i])
+                # will not preserve the original scale/precision
+                if isinstance(val, pd.core.arrays.arrow.array.ArrowExtensionArray):
+                    pa_dtype = val.dtype.pyarrow_dtype
+                    if isinstance(pa_dtype, pa.lib.Decimal128Type):
+                        dtype = Decimal128Type(pa_dtype.precision, pa_dtype.scale)
+                        return dtype, nesting_depth, nullable
+
                 return numba.typeof(val[i]), nesting_depth, nullable
         elif isinstance(val[i], (dict, Dict)):
             # convert array of dicts to StructArrayType

@@ -2,6 +2,7 @@
 """Tests for array of list of fixed size items."""
 
 import datetime
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, pytest_mark_one_rank
 
 
 @pytest.fixture(
@@ -330,3 +331,22 @@ def test_nested_arr_dict_getitem(memory_leak_check):
         check_func(test_impl, (A2, B), only_seq=True)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
+
+
+@pytest_mark_one_rank
+def test_nested_arr_pyarrow_typeof():
+    """
+    Test that we are properly typing nested arrays containing pyarrow types
+    """
+
+    precision, scale = 38, 2
+
+    A = pd.array([Decimal("0.3")], dtype=pd.ArrowDtype(pa.decimal128(precision, scale)))
+    S = pd.Series([A])
+    typ = bodo.typeof(S)
+
+    assert (
+        isinstance(typ.dtype, bodo.DecimalArrayType)
+        and typ.dtype.precision == precision
+        and typ.dtype.scale == scale
+    )
