@@ -2653,6 +2653,7 @@ class SeriesPass:
             "flatten_array",
             "make_replicated_array",
             "list_to_array",
+            "np_to_nullable_array",
         ):
             # TODO: use overload IR inlining when available
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
