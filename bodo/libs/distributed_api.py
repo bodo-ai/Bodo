@@ -1917,8 +1917,9 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # CategoricalArray
     if isinstance(dtype, CategoricalArrayType):
+        # Using -1 for code since categories can be empty
         return pd.Categorical.from_codes(
-            [0], dtype.dtype.categories, dtype.dtype.ordered
+            [-1], dtype.dtype.categories, dtype.dtype.ordered
         )
 
     # TupleArray
