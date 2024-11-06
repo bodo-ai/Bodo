@@ -193,6 +193,54 @@ class CoerceToNdarrayInfer(AbstractTemplate):
 CoerceToNdarrayInfer._no_unliteral = True  # type: ignore
 
 
+def np_to_nullable_array(data):
+    pass
+
+
+@overload(np_to_nullable_array)
+def overload_np_to_nullable_array(data):
+    """Converts a Numpy array (bool, float, int) to an equivalent nullable array. This
+    function should not be inlined since the bitmap length calculations can cause issues
+    in distributed transformation.
+    """
+    assert isinstance(data, types.Array), "np_to_nullable_array: Numpy array expected"
+
+    if data.dtype == types.bool_:
+
+        def impl(data):  # pragma: no cover
+            n = len(data)
+            out_array = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+            for i in range(n):
+                out_array[i] = data[i]
+            return out_array
+
+        return impl
+    elif isinstance(data.dtype, types.Float):
+        if data.layout != "C":
+            return lambda data: bodo.libs.float_arr_ext.init_float_array(
+                np.ascontiguousarray(data),
+                np.full((len(data) + 7) >> 3, 255, np.uint8),
+            )  # pragma: no cover
+        else:
+            return lambda data: bodo.libs.float_arr_ext.init_float_array(
+                data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+            )  # pragma: no cover
+    elif isinstance(data.dtype, types.Integer):
+        if data.layout != "C":
+            return lambda data: bodo.libs.int_arr_ext.init_integer_array(
+                np.ascontiguousarray(data),
+                np.full((len(data) + 7) >> 3, 255, np.uint8),
+            )  # pragma: no cover
+        else:
+            return lambda data: bodo.libs.int_arr_ext.init_integer_array(
+                data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+            )  # pragma: no cover
+
+    raise BodoError(
+        f"np_to_nullable_array: invalid dtype {data.dtype}, integer, bool or float dtype expected"
+    )
+
+
 def overload_coerce_to_ndarray(
     data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None
 ):
@@ -255,61 +303,13 @@ def overload_coerce_to_ndarray(
             isinstance(data.dtype, (types.Boolean, types.Integer))
             or isinstance(data.dtype, types.Float)
         ):
-            if data.dtype == types.bool_:
+            return (
+                lambda data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None: bodo.utils.conversion.np_to_nullable_array(data)
+            )  # pragma: no cover
 
-                def impl(
-                    data,
-                    error_on_nonarray=True,
-                    use_nullable_array=None,
-                    scalar_to_arr_len=None,
-                ):  # pragma: no cover
-                    n = len(data)
-                    out_array = bodo.libs.bool_arr_ext.alloc_bool_array(n)
-                    for i in range(n):
-                        out_array[i] = data[i]
-                    return out_array
-
-                return impl
-            elif isinstance(data.dtype, types.Float):
-                if data.layout != "C":
-                    return (
-                        lambda data,
-                        error_on_nonarray=True,
-                        use_nullable_array=None,
-                        scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
-                            np.ascontiguousarray(data),
-                            np.full((len(data) + 7) >> 3, 255, np.uint8),
-                        )
-                    )  # pragma: no cover
-                else:
-                    return (
-                        lambda data,
-                        error_on_nonarray=True,
-                        use_nullable_array=None,
-                        scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
-                            data, np.full((len(data) + 7) >> 3, 255, np.uint8)
-                        )
-                    )  # pragma: no cover
-            else:  # Integer case
-                if data.layout != "C":
-                    return (
-                        lambda data,
-                        error_on_nonarray=True,
-                        use_nullable_array=None,
-                        scalar_to_arr_len=None: bodo.libs.int_arr_ext.init_integer_array(
-                            np.ascontiguousarray(data),
-                            np.full((len(data) + 7) >> 3, 255, np.uint8),
-                        )
-                    )  # pragma: no cover
-                else:
-                    return (
-                        lambda data,
-                        error_on_nonarray=True,
-                        use_nullable_array=None,
-                        scalar_to_arr_len=None: bodo.libs.int_arr_ext.init_integer_array(
-                            data, np.full((len(data) + 7) >> 3, 255, np.uint8)
-                        )
-                    )  # pragma: no cover
         if data.layout != "C":
             return (
                 lambda data,
