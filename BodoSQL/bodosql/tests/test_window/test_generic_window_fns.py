@@ -156,13 +156,11 @@ def test_non_numeric_window_functions(
             if col == "BI" and funcs[i] in ("MIN", "MAX"):
                 convert_columns_bytearray.append(f"C_{i}_{j}")
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
-    spark_query = get_equivalent_spark_agg_query(query)
     # TODO: Generate an expected output instead so we properly support TZ-Aware
     pandas_code = check_query(
         query,
         all_window_df,
         spark_info,
-        equivalent_spark_query=spark_query,
         sort_output=True,
         check_dtype=False,
         check_names=False,
@@ -170,6 +168,7 @@ def test_non_numeric_window_functions(
         only_jit_1DVar=True,
         convert_columns_tz_naive=convert_columns_tz_naive,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers

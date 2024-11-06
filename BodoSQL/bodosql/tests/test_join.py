@@ -71,6 +71,7 @@ def test_join(
         check_names=False,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
@@ -173,6 +174,7 @@ def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check)
         check_names=False,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
@@ -448,21 +450,13 @@ def test_multi_key_join_types(
     # Note: We don't check the generated code because column ordering isn't deterministic
     # Join code doesn't properly trim the filter yet, so outer joins will drop any NA columns
     # when applying the filter.
-    # TODO: Trim filter to just column not used in the key
-    if any(
-        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-        for colname in join_dataframes["TABLE1"].columns
-    ):
-        convert_columns_bytearray = ["C", "D"]
-    else:
-        convert_columns_bytearray = None
     query = f"select C, D from table1 {join_type} join table2 on table1.A = table2.A and table1.B = table2.B"
     check_query(
         query,
         join_dataframes,
         spark_info,
         check_names=False,
-        convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
@@ -471,13 +465,6 @@ def test_trimmed_multi_key_cond_inner_join(
     join_dataframes, spark_info, memory_leak_check
 ):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""
-    if any(
-        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-        for colname in join_dataframes["TABLE1"].columns
-    ):
-        convert_columns_bytearray = ["C", "D"]
-    else:
-        convert_columns_bytearray = None
     query = "select C, D from table1 inner join table2 on table1.A = table2.A and table1.B < table2.B"
     # Note: We don't check the generated code because column ordering isn't deterministic
     check_query(
@@ -485,7 +472,7 @@ def test_trimmed_multi_key_cond_inner_join(
         join_dataframes,
         spark_info,
         check_names=False,
-        convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
@@ -651,7 +638,7 @@ def test_join_div(spark_info, join_type, memory_leak_check):
         "T1": df1,
         "T2": df2,
     }
-    check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)
+    check_query(query1, ctx, spark_info, check_names=False)
 
 
 @pytest_mark_one_rank

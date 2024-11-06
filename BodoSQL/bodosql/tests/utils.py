@@ -10,11 +10,13 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
+import duckdb
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyspark
+import sqlglot
 from pyspark.sql.types import (
     ByteType,
     DayTimeIntervalType,
@@ -97,6 +99,7 @@ def check_query(
     convert_columns_to_pandas: bool = False,
     session_tz: str | None = None,
     enable_timestamp_tz: bool = False,
+    use_duckdb: bool = False,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -249,6 +252,9 @@ def check_query(
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
 
         enable_timestamp_tz: True if TIMESTAMP_TZ support should be enabled.
+
+        use_duckdb: True if DuckDB should be used to generate the expected output. If so, we will either
+            use the equivalent_spark_query as is or use SQLGlot to transpile the base query to DuckDB.
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -328,7 +334,7 @@ def check_query(
         )
 
     # Determine the Spark output.
-    if expected_output is None:
+    if expected_output is None and use_duckdb is False:
         spark.catalog.clearCache()
         # If Spark specific inputs aren't provided, use the same
         # as BodoSQL
@@ -408,6 +414,39 @@ def check_query(
             expected_output = convert_spark_nan_none(expected_output)
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
+
+    elif expected_output is None:
+        if bodo.get_rank() == 0:
+            # Use SQLGlot to transpile the query to DuckDB syntax
+            # TODO: We can use this for Spark as well
+            q = (
+                sqlglot.transpile(query, read="snowflake", write="duckdb")[0]
+                if equivalent_spark_query is None
+                else equivalent_spark_query
+            )
+
+            # Start a temporary DuckDB connection and register the tables from the dataframe_dict
+            conn = duckdb.connect(":memory:")
+            for name, df in dataframe_dict.items():
+                if convert_columns_tz_naive:
+                    df = remove_tz_columns_spark(df, convert_columns_tz_naive)
+                conn.register(name, df)
+
+            # Compute the expected output
+            # We need to convert to arrow and then Pandas to maintain some types (decimal, timestamp)
+            expected_output = conn.sql(q).arrow().to_pandas()
+
+        # Distribute the expected output and handle errors
+        comm = MPI.COMM_WORLD
+        try:
+            expected_output = comm.bcast(expected_output, root=0)
+            errors = comm.allgather(None)
+        except Exception as e:
+            # If we can an exception, raise it on all processes.
+            errors = comm.allgather(e)
+        for e in errors:
+            if isinstance(e, Exception):
+                raise e
 
     if convert_columns_decimal:
         expected_output = convert_spark_decimal(
@@ -1601,7 +1640,6 @@ def remap_spark_agg_fn_name(query):
     variable names or literals in SQL queries.
     """
     spark_dict = {
-        "ANY_VALUE": "FIRST",
         "VARIANCE_POP": "VAR_POP",
         "VARIANCE_SAMP": "VAR_SAMP",
     }

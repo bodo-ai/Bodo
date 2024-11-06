@@ -111,6 +111,7 @@ def test_rank_fns(all_types_window_df, spark_info, order_clause, memory_leak_che
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
         convert_columns_tz_naive=convert_columns_tz_naive,
+        use_duckdb=True,
     )
 
 

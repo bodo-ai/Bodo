@@ -350,7 +350,7 @@ def test_set_ops_datetime_cols(
     Test that set ops work for datetime columns
     """
     query = f"SELECT A FROM table1 {set_ops_cmds} SELECT B FROM table1"
-    check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
+    check_query(query, bodosql_datetime_types, spark_info, use_duckdb=True)
 
 
 @pytest.mark.slow

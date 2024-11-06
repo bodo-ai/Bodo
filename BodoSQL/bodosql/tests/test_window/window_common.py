@@ -196,10 +196,7 @@ def all_numeric_window_col_names(request):
 @pytest.fixture(
     params=[
         pytest.param(uint8_col, id="uint8", marks=pytest.mark.slow),
-        pytest.param(
-            int64_col,
-            id="int64",
-        ),
+        pytest.param(int64_col, id="int64"),
         pytest.param(float64_col, id="float64", marks=pytest.mark.slow),
         pytest.param(boolean_col, id="boolean", marks=pytest.mark.slow),
         pytest.param(string_col, id="string", marks=pytest.mark.slow),

@@ -83,7 +83,7 @@ def test_distinct_datetime(bodosql_datetime_types, spark_info, memory_leak_check
         FROM
             table1
         """
-    check_query(query, bodosql_datetime_types, spark_info)
+    check_query(query, bodosql_datetime_types, spark_info, use_duckdb=True)
 
 
 def test_distinct_interval(bodosql_interval_types, memory_leak_check):

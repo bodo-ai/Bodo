@@ -38,9 +38,15 @@ dependencies:
   - boost-cpp =1.85
 
   # BodoSQL or Iceberg
+  - maven         # For building
+  # PySpark for most BodoSQL and Iceberg tests
   # PySpark 3.5 is necessary for Python 3.12
-  - maven
-  - pyspark=3.5
+  - pyspark=3.5   # For most testing
+  # DuckDB & SQLGlot for some BodoSQL tests
+  # TODO: Migrate more to DuckDB
+  # For better compatibility than Spark
+  - sqlglot
+  - duckdb
   # Iceberg Testing
   - mmh3
   - avro

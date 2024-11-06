@@ -115,36 +115,22 @@ def test_project_null(memory_leak_check):
 
 def test_select_multi_table(join_dataframes, spark_info, memory_leak_check):
     """test selecting columns from multiple tables"""
-    if any(
-        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-        for colname in join_dataframes["TABLE1"].columns
-    ):
-        convert_columns_bytearray = ["C", "D"]
-    else:
-        convert_columns_bytearray = None
     check_query(
         "select C, D from table1, table2",
         join_dataframes,
         spark_info,
-        convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
 @pytest.mark.slow
 def test_select_multi_table_order_by(join_dataframes, spark_info, memory_leak_check):
     """test selecting and sorting columns from multiple tables"""
-    if any(
-        isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
-        for colname in join_dataframes["TABLE1"].columns
-    ):
-        convert_columns_bytearray = ["C", "D"]
-    else:
-        convert_columns_bytearray = None
     check_query(
         "select C, D from table1, table2 order by D, C",
         join_dataframes,
         spark_info,
-        convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
@@ -173,7 +159,7 @@ def test_select_all_datetime(bodosql_datetime_types, spark_info, memory_leak_che
     Simplest query possible on datetime/timedelta types.
     """
     query = "SELECT * FROM table1"
-    check_query(query, bodosql_datetime_types, spark_info, check_dtype=False)
+    check_query(query, bodosql_datetime_types, spark_info, use_duckdb=True)
 
 
 @pytest.mark.slow
