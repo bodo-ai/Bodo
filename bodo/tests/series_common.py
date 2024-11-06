@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from bodo.tests.utils import spawn_mode_markers
+
 
 @dataclass
 class SeriesReplace:
@@ -178,6 +180,18 @@ GLOBAL_VAL = 2
                 [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2
             ),
             id="binary",
+        ),
+        pytest.param(
+            pd.Series(list(range(100)), pd.interval_range(0, 100)),
+            id="interval_index",
+            marks=[pytest.mark.slow] + list(spawn_mode_markers),
+        ),
+        pytest.param(
+            pd.Series(
+                list(range(100)), pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50)
+            ),
+            id="multi_index",
+            marks=[pytest.mark.slow] + list(spawn_mode_markers),
         ),
     ]
 )

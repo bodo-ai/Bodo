@@ -81,6 +81,35 @@ distributed_return_metadata_t: pt.TypeAlias = (
 )
 
 
+def _build_index_data(
+    res: pt.Any, logger: logging.Logger
+) -> distributed_return_metadata_t | None:
+    """
+    Construct distributed return metadata for the index of res if it has an index
+    """
+    if isinstance(res, (pd.DataFrame, pd.Series)):
+        match type(res.index):
+            case pd.Index:
+                # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
+                return _build_distributed_return_metadata(
+                    ArrowExtensionArray(pa.array(res.index._data)), logger
+                )
+            case pd.MultiIndex:
+                return _build_distributed_return_metadata(
+                    res.index.to_frame(index=False, allow_duplicates=True), logger
+                )
+            case pd.IntervalIndex:
+                return (
+                    _build_distributed_return_metadata(
+                        ArrowExtensionArray(pa.array(res.index.left)), logger
+                    ),
+                    _build_distributed_return_metadata(
+                        ArrowExtensionArray(pa.array(res.index.right)), logger
+                    ),
+                )
+    return None
+
+
 def _build_distributed_return_metadata(
     res: pt.Any, logger: logging.Logger
 ) -> distributed_return_metadata_t:
@@ -102,13 +131,7 @@ def _build_distributed_return_metadata(
     RESULT_REGISTRY[res_id] = res
     debug_worker_msg(logger, f"Calculating total result length for {type(res)}")
     total_res_len = comm_world.reduce(len(res), op=MPI.SUM, root=0)
-    index_data = None
-    if isinstance(res, (pd.DataFrame, pd.Series)) and type(res.index) is pd.Index:
-        # Convert index data to ArrowExtensionArray because we have a lazy ArrowExtensionArray
-        index_data = _build_distributed_return_metadata(
-            ArrowExtensionArray(pa.array(res.index._data)), logger
-        )
-        assert isinstance(index_data, DistributedReturnMetadata)
+    index_data = _build_index_data(res, logger)
     return DistributedReturnMetadata(
         result_id=res_id,
         head=res.head(DISTRIBUTED_RETURN_HEAD_SIZE)

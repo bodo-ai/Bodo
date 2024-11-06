@@ -240,8 +240,9 @@ class Spawner:
         return res
 
     def wrap_distributed_result(
-        self, distributed_return_metadata: DistributedReturnMetadata | list | dict
-    ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict:
+        self,
+        distributed_return_metadata: DistributedReturnMetadata | list | dict | tuple,
+    ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict | tuple:
         """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
 
@@ -265,6 +266,10 @@ class Spawner:
                 key: self.wrap_distributed_result(val)
                 for key, val in distributed_return_metadata.items()
             }
+        if isinstance(distributed_return_metadata, tuple):
+            return tuple(
+                [self.wrap_distributed_result(d) for d in distributed_return_metadata]
+            )
         res_id = distributed_return_metadata.result_id
         nrows = distributed_return_metadata.nrows
         head = distributed_return_metadata.head
