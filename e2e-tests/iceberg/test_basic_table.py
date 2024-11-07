@@ -11,10 +11,6 @@ def test_iceberg_basic_df():
 
     table_name = f"types_table_{str(uuid4())[:8]}"
     cmd = [
-        "mpiexec",
-        "-n",
-        str(num_processes),
-        "-prepend-rank",
         "python",
         "-u",
         "-W",
@@ -33,7 +29,11 @@ def test_iceberg_basic_df():
 
         # Run again on cached code
         cmd.append("--require_cache")
-        run_cmd(cmd, timeout=timeout)
+        run_cmd(
+            cmd,
+            timeout=timeout,
+            additional_envs={"BODO_NUM_WORKERS": str(num_processes)},
+        )
 
     finally:
         # make sure all state is restored even in the case of exceptions

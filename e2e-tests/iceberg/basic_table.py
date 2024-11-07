@@ -15,8 +15,6 @@ import snowflake
 from pyspark.sql import SparkSession
 
 import bodo
-from bodo.mpi4py import MPI
-from bodo.tests.utils import _get_dist_arg
 
 BUCKET_NAME = "engine-e2e-tests-iceberg"
 # The AWS Java SDK 2.0 library (used by Iceberg-AWS) gets the default region
@@ -24,7 +22,6 @@ BUCKET_NAME = "engine-e2e-tests-iceberg"
 # which is used by other libraries.
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["AWS_REGION"] = "us-east-1"
-comm = MPI.COMM_WORLD
 
 logger = logging.getLogger(__name__)
 
@@ -112,25 +109,23 @@ def snowflake_write_impl(df, table_name):
             f"{table_name}_non_iceberg",
             f"snowflake://{SF_USERNAME}:{SF_PASSWORD}@{SF_ACCOUNT}/TEST_DB/PUBLIC?warehouse=DEMO_WH",
         ),
-        distributed=["df"],
         cache=True,
+        spawn=True,
     )(df, SF_USERNAME, SF_PASSWORD, SF_ACCOUNT)
-    if bodo.get_rank() == 0:
-        conn = snowflake.connector.connect(
-            user=SF_USERNAME,
-            password=SF_PASSWORD,
-            account=SF_ACCOUNT,
-            warehouse="DEMO_WH",
-            database="TEST_DB",
-            schema="PUBLIC",
-        )
-        cur = conn.cursor()
-        cur.execute(
-            f'CREATE OR REPLACE ICEBERG TABLE {table_name} ("bools" boolean, "bytes" BINARY, "ints" bigint, "floats" float, "strings" string, "lists" array(number(2, 0)), "timestamps" timestamp_ntz) CATALOG=\'SNOWFLAKE\' EXTERNAL_VOLUME=EXVOL BASE_LOCATION={table_name} AS SELECT bools, bytes, ints, floats, strings, lists::ARRAY(NUMBER(2,0)) as lists, timestamps FROM {table_name}_non_iceberg'
-        ).fetchall()
-        cur.execute(f"DROP TABLE {table_name}_non_iceberg").fetchall()
-        cur.close()
-    bodo.barrier()
+    conn = snowflake.connector.connect(
+        user=SF_USERNAME,
+        password=SF_PASSWORD,
+        account=SF_ACCOUNT,
+        warehouse="DEMO_WH",
+        database="TEST_DB",
+        schema="PUBLIC",
+    )
+    cur = conn.cursor()
+    cur.execute(
+        f'CREATE OR REPLACE ICEBERG TABLE {table_name} ("bools" boolean, "bytes" BINARY, "ints" bigint, "floats" float, "strings" string, "lists" array(number(2, 0)), "timestamps" timestamp_ntz) CATALOG=\'SNOWFLAKE\' EXTERNAL_VOLUME=EXVOL BASE_LOCATION={table_name} AS SELECT bools, bytes, ints, floats, strings, lists::ARRAY(NUMBER(2,0)) as lists, timestamps FROM {table_name}_non_iceberg'
+    ).fetchall()
+    cur.execute(f"DROP TABLE {table_name}_non_iceberg").fetchall()
+    cur.close()
 
 
 # ------------------------ Test Code ------------------------
@@ -147,7 +142,7 @@ def test_builder(
             print("starting write...")
             df.to_sql(table_name, conn, schema=db_name, if_exists="fail")
 
-        write_impl = bodo.jit(write_impl_def, distributed=["df"], cache=True)
+        write_impl = bodo.jit(write_impl_def, cache=True, spawn=True)
 
     if read_back_impl is None:
 
@@ -156,7 +151,7 @@ def test_builder(
             out_df = pd.read_sql_table(table_name, conn, schema=db_name)
             return out_df
 
-        read_back_impl = bodo.jit(read_back_impl_def, cache=True)
+        read_back_impl = bodo.jit(read_back_impl_def, cache=True, spawn=True)
 
     return write_impl, read_back_impl
 
@@ -238,9 +233,8 @@ if __name__ == "__main__":
     for key, (write_test_func, read_test_func) in tests.items():
         print(f"Running {key}")
         try:
-            write_test_func(_get_dist_arg(df))
+            write_test_func(df)
             out_df = read_test_func()
-            out_df = bodo.allgatherv(out_df)
             out_df_to_cmp = out_df.sort_values("ints", ignore_index=True)
             df_to_cmp = df.sort_values("ints", ignore_index=True)
 
@@ -261,27 +255,24 @@ if __name__ == "__main__":
             print(f"Error During {key} Test")
             logging.exception(e)
     # Cleanup of Test Cases
-    bodo.barrier()
     cleanup_failed = False
-    if bodo.get_rank() == 0:
-        try:
-            print("Starting Cleanup...")
-            print("Cleaning up Hadoop...")
-            cleanup_hadoop()
-            print("Cleaning up Glue...")
-            cleanup_glue(table_name)
-            print("Cleaning up Snowflake...")
-            cleanup_snowflake(table_name)
-            # TODO[BSE-1408]: enable Nessie tests after fixing issues
-            # print("Cleaning up Nessie...")
-            # cleanup_nessie(nessie_token, table_name)
-        except Exception as e:
-            cleanup_failed = True
-            print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
-        else:
-            print("Successfully Finished Cleanup...")
+    try:
+        print("Starting Cleanup...")
+        print("Cleaning up Hadoop...")
+        cleanup_hadoop()
+        print("Cleaning up Glue...")
+        cleanup_glue(table_name)
+        print("Cleaning up Snowflake...")
+        cleanup_snowflake(table_name)
+        # TODO[BSE-1408]: enable Nessie tests after fixing issues
+        # print("Cleaning up Nessie...")
+        # cleanup_nessie(nessie_token, table_name)
+    except Exception as e:
+        cleanup_failed = True
+        print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
+    else:
+        print("Successfully Finished Cleanup...")
 
-    cleanup_failed = comm.bcast(cleanup_failed)
     if cleanup_failed:
         raise Exception("Iceberg E2E Cleanup Failed. See Rank 0.")
 
