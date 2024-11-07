@@ -4062,6 +4062,10 @@ def test_index_rename_heter():
                 ],
             ),
             id="PeriodIndexType",
+            marks=pytest.mark.skipif(
+                bodo.tests.utils.test_spawn_mode_enabled,
+                reason="[BSE-4148] need boxing support for PeriodIndex with nulls",
+            ),
         ),
         pytest.param(
             pd.DatetimeIndex(
