@@ -68,6 +68,9 @@ def check_logger_msg(stream, msg, check_case=True):
     We only check the logger on rank 0 because we only
     write on rank 0.
     """
+    # TODO[BSE-4152]: support checking logs in spawn testing
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        return
     if bodo.get_rank() == 0:
         if check_case:
             assert (
@@ -88,6 +91,9 @@ def check_logger_no_msg(stream, msg):
     We only check the logger on rank 0 because we only
     write on rank 0.
     """
+    # TODO[BSE-4152]: support checking logs in spawn testing
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        return
     if bodo.get_rank() == 0:
         assert (
             msg not in stream.getvalue()
