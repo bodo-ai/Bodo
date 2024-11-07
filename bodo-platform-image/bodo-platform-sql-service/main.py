@@ -99,6 +99,7 @@ def sql_endpoint(data: SQLQueryModel):
             mpi_query_execution(data)
         except BodoError as e:
             msg = str(e)
+            logger.error(f"Query failed with error {msg} for input data: {data.model_dump()}")
             comm.bcast(msg, root=rank)
             raise HTTPException(status_code=400, detail={"error": str(e)})
         return {}
