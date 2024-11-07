@@ -230,7 +230,7 @@ def get_bodosql_context(catalog_name: str) -> bodosql.BodoSQLContext:
     # more catalog types are supported
     # Note that BodoSQL Catalogs and Contexts need to be created outside JIT
     # functions.
-    if "icebergRestUrl" in credentials:
+    if "icebergRestUrl" in credentials and "credential" in credentials and credentials['icebergRestUrl'] and credentials['credential']:
         bsql_catalog = bodosql.TabularCatalog(
             warehouse=credentials["warehouse"],
             rest_uri=credentials["icebergRestUrl"],
