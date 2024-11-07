@@ -1,3 +1,1 @@
-include README.md
-include bodosql/pytest.ini
 include bodosql/opensource/calcite.NOTICE

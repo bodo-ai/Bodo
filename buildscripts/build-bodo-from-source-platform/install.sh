@@ -9,37 +9,20 @@ if [ -z "$GITHUB_TOKEN" ]; then
   read GITHUB_TOKEN
 fi
 
-# Check if BRANCH_NAME is in the environment
-if [ -z "$BRANCH_NAME" ]; then
-  echo -n "Enter a branch name: "
-  read BRANCH_NAME
-fi
-
 # Clone the repo and checkout the desired branch
-psh git clone -b $BRANCH_NAME https://$GITHUB_TOKEN@github.com/Bodo-inc/Bodo.git
+psh git clone -b slade/pixi https://$GITHUB_TOKEN@github.com/Bodo-inc/Bodo.git
 
-# Update conda and install conda-lock
-psh sudo /opt/conda/bin/conda update conda --force --yes
-psh sudo /opt/conda/bin/mamba install conda-lock -c conda-forge -n base --yes
+# Install Pixi
+psh curl -fsSL https://pixi.sh/install.sh | bash
+source ~/.bash_profile
 
-# Install conda deps
-psh conda-lock install --dev --mamba -n DEV ~/Bodo/buildscripts/envs/conda-lock.yml
-# Remove conda install mpi to prefer intel MPI on the platform
-psh conda run -n DEV conda remove mpi mpich --force --yes
-
-conda activate DEV
-
+# Install development deps
 cd ~/Bodo
-psh env BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 pip install --no-deps --no-build-isolation -ve .
+psh pixi install -e platform-dev
+# Remove conda install mpi to prefer intel MPI on the platform
+psh env BODO_SKIP_CPP_TESTS=1 USE_BODO_ARROW_FORK=1 pixi run build
 
-cd BodoSQL
-psh python -m pip install --no-deps --no-build-isolation -ve .
-cd ..
-
-cd iceberg
-psh python -m pip install --no-deps --no-build-isolation -ve .
-cd ..
-
+psh pixi shell
 cd bodo-platform-image/bodo-platform-utils/
 psh pip install -ve .
 # Ensure that modify time for bodosql wrapper is the same on all nodes. If it is

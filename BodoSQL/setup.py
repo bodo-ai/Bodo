@@ -55,8 +55,6 @@ class CustomBuildPyCommand(build_py):
         super().finalize_options()
 
 
-# TODO: Include a clean command that cleans Maven + deletes the generated lib
-
 # Replace any subclass. Update always takes the value from
 # the new dictionary.
 cmdclass = {"build_py": CustomBuildPyCommand}
