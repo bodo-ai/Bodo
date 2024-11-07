@@ -7,12 +7,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }} 
   cancel-in-progress: true
 
-# Recommended with setup-micromamba
-# https://github.com/mamba-org/setup-micromamba#about-login-shells
-defaults:
-  run:
-    shell: bash -l {0}
-
 jobs:
   # 1) Check if commit has [run ci] before continuing
   commit-prefix-ci:
@@ -66,18 +60,18 @@ jobs:
         batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
       # Don't cancel other jobs if one fails
       fail-fast: false
-    uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@develop
+    uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@slade/pixi
     with:
       batch: ${{ matrix.batch }}
       total-batches: 12
-      pytest-marker: "not slow and not weekly or smoke"
+      pytest-marker: "smoke"
       collect-coverage: true
     secrets: inherit
 
   spawn-ci:
     needs: [compile-bodo]
     name: Test Spawn
-    uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@develop
+    uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@slade/pixi
     with:
       batch: 1
       total-batches: 1

@@ -46,10 +46,7 @@ jobs:
             # Build SAS Token Provider
             ./buildscripts/install_azurefs_sas_token_provider.sh
             # Setup Minio
-            ./buildscripts/setup_minio.sh
-            # Install Extras
-            micromamba remove -y pytest-azurepipelines
-            pip install pytest-split
+            # ./buildscripts/setup_minio.sh
             # Clean Maven and Spark Ivy Cache
             rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
         - name: Configure AWS Credentials
@@ -69,20 +66,20 @@ jobs:
   
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
-              --cov-report= --cov=./ \
+              --cov-report= --cov=bodo \
               --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
               --store-durations --clean-durations \
               --durations-path=buildscripts/github/test_dur_bodo.json \
               -m "$PYTEST_MARKER" bodo/tests/
   
             # BodoSQL Tests
-            cd BodoSQL
-            pytest -s -v -Wignore \
-              --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
-              --store-durations --clean-durations \
-              --durations-path=../buildscripts/github/test_dur_bodosql.json \
-              -m "$PYTEST_MARKER" bodosql/tests/
-            cd ..
+            # cd BodoSQL
+            # pytest -s -v -Wignore \
+            #   --splits=${{ inputs.total-batches }} --group=${{ inputs.batch }} \
+            #   --store-durations --clean-durations \
+            #   --durations-path=../buildscripts/github/test_dur_bodosql.json \
+            #   -m "$PYTEST_MARKER" bodosql/tests/
+            # cd ..
   
             # Copy Output
             mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json

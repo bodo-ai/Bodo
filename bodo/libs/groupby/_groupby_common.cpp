@@ -1,6 +1,5 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_groupby_common.h"
-
 #include <numeric>
 
 #include "../_array_operations.h"
