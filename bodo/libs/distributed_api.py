@@ -957,15 +957,18 @@ def gatherv_impl_jit(
             # steps. using min/max reductions to get start/stop of global range
             start = data._start
             stop = data._stop
+            step = data._step
             # ignore empty ranges coming from slicing, see test_getitem_slice
             if len(data) == 0:
                 start = INT64_MAX
                 stop = INT64_MIN
+            min_op = np.int32(Reduce_Type.Min.value)
+            max_op = np.int32(Reduce_Type.Max.value)
             start = bodo.libs.distributed_api.dist_reduce(
-                start, np.int32(Reduce_Type.Min.value), comm
+                start, min_op if step > 0 else max_op, comm
             )
             stop = bodo.libs.distributed_api.dist_reduce(
-                stop, np.int32(Reduce_Type.Max.value), comm
+                stop, max_op if step > 0 else min_op, comm
             )
             total_len = bodo.libs.distributed_api.dist_reduce(
                 len(data), np.int32(Reduce_Type.Sum.value), comm
@@ -977,9 +980,9 @@ def gatherv_impl_jit(
 
             # make sure global length is consistent in case the user passes in incorrect
             # RangeIndex chunks (e.g. trivial index in each chunk), see test_rebalance
-            l = max(0, -(-(stop - start) // data._step))
+            l = max(0, -(-(stop - start) // step))
             if l < total_len:
-                stop = start + data._step * total_len
+                stop = start + step * total_len
 
             # gatherv() of dataframe returns 0-length arrays so index should
             # be 0-length to match
@@ -988,7 +991,6 @@ def gatherv_impl_jit(
                 stop = 0
 
             name = data._name
-            step = data._step
 
             # Send name and step from workers to receiver in case of intercomm since not
             # available on receiver
@@ -2576,7 +2578,7 @@ def scatterv_impl_jit(
             )
             new_start = start + step * chunk_start
             new_stop = start + step * (chunk_start + chunk_count)
-            new_stop = min(new_stop, stop)
+            new_stop = min(new_stop, stop) if step > 0 else max(new_stop, stop)
 
             if is_intercomm and is_sender:
                 new_start = new_stop = 0
