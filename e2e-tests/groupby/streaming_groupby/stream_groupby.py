@@ -62,7 +62,7 @@ def run_query_agg(bc, input_schema, output_table_name):
     bc.sql(query)
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def run_query_acc(bc, input_schema, output_table_name):
     """
     Run a simple groupby that would go through the
@@ -84,7 +84,7 @@ def run_query_acc(bc, input_schema, output_table_name):
     bc.sql(query)
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def run_query_drop_duplicates(bc, input_schema, output_table_name):
     """
     Run a simple drop-duplicates (select distinct) query.
