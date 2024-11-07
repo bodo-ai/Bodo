@@ -107,10 +107,6 @@ def stream_groupby(
     num_processes=4,
 ):
     cmd = [
-        "mpiexec",
-        "-n",
-        str(num_processes),
-        "-prepend-rank",
         "python",
         "-u",
         "stream_groupby.py",
@@ -127,4 +123,4 @@ def stream_groupby(
     ]
     if require_cache:
         cmd.append("--require_cache")
-    run_cmd(cmd)
+    run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})
