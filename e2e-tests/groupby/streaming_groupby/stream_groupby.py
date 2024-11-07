@@ -9,17 +9,13 @@ from utils.utils import checksum_str_df, drop_sf_table, get_sf_table
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
-
-comm = MPI.COMM_WORLD
 
 
 def checksum(df):
     """
     Calculate checksum for the output dataframe.
-    The checksum is global, i.e. we compute checksum
-    locally on each rank and then we do an allreduce
-    sum.
+    We first collect the dataframe on the user's process
+    and then sum.
 
     Args:
         df (pd.DataFrame): Output Dataframe to get checksum of.
@@ -36,7 +32,6 @@ def checksum(df):
 
     # multiplying by 100 so cent values don't get truncated from the checksum
     df_no_str_sum = np.int64(np.floor(df_no_str.sum().sum() * 100))
-    df_no_str_sum = comm.allreduce(df_no_str_sum, op=MPI.SUM)
 
     df_str = df[str_cols]
     df_str_sum = checksum_str_df(df_str)
@@ -44,7 +39,7 @@ def checksum(df):
     return df_checksum
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def run_query_agg(bc, input_schema, output_table_name):
     """
     Run a simple groupby that would go through the
@@ -137,6 +132,8 @@ if __name__ == "__main__":
         "drop_duplicates": run_query_drop_duplicates,
     }[ftype]
 
+    print("running function: ", ftype)
+
     username = os.environ["SF_USERNAME"]
     password = os.environ["SF_PASSWORD"]
     account = os.environ["SF_ACCOUNT"]
@@ -155,41 +152,35 @@ if __name__ == "__main__":
         catalog=catalog,
     )
 
-    comm = MPI.COMM_WORLD
     # Create a random table name to write to and broadcast to all ranks
     output_table_name = None
     output_schema = "public"
-    if comm.Get_rank() == 0:
-        # We use uppercase due to an issue reading tables
-        # with lowercase letters.
-        # https://bodo.atlassian.net/browse/BE-3534
-        output_table_name = (
-            f"{output_schema}.groupby_streaming_e2e_out_{str(uuid4())[:8]}".upper()
-        )
-        print("output_table_name: ", output_table_name)
-    output_table_name = comm.bcast(output_table_name)
+
+    # We use uppercase due to an issue reading tables
+    # with lowercase letters.
+    # https://bodo.atlassian.net/browse/BE-3534
+    output_table_name = (
+        f"{output_schema}.groupby_streaming_e2e_out_{str(uuid4())[:8]}".upper()
+    )
+    print("output_table_name: ", output_table_name)
 
     ## Write output to Snowflake table
     start_time = time.time()
     out = run_query_func(bc, input_schema, output_table_name)
     end_time = time.time()
 
-    # Add a barrier for synchronization purposes so that
-    # the get length and drop commands are done after all the writes.
-    bodo.barrier()
-    if bodo.get_rank() == 0:
-        print("Total time: ", end_time - start_time, " s")
+    print("Total time: ", end_time - start_time, " s")
 
     ## Read table from Snowflake and compute checksum
     conn = f"snowflake://{username}:{password}@{account}/{db}/{output_schema}?warehouse={warehouse}"
     # Compute checksum and length and make sure they're correct
-    df = get_sf_table(output_table_name, conn)
-    sf_df_checksum = checksum(df)
-    len_sf_df = comm.allreduce(len(df), op=MPI.SUM)
+    df = bodo.jit(spawn=True)(lambda: get_sf_table(output_table_name, conn))()
 
-    if bodo.get_rank() == 0:
-        print("Output table checksum: ", sf_df_checksum)
-        print("Output table length: ", len_sf_df)
+    sf_df_checksum = checksum(df)
+    len_sf_df = len(df)
+
+    print("Output table checksum: ", sf_df_checksum)
+    print("Output table length: ", len_sf_df)
 
     assert (
         expected_out_len == len_sf_df
@@ -211,21 +202,20 @@ if __name__ == "__main__":
     # broadcasted and raised on all ranks to avoid any hangs.
 
     drop_err = None
-    if bodo.get_rank() == 0:
-        try:
-            drop_result = drop_sf_table(
-                output_table_name,
-                conn,
-            )
-            print("drop_result: ", drop_result)
-            assert (
-                isinstance(drop_result, list)
-                and (len(drop_result) == 1)
-                and (len(drop_result[0]) == 1)
-                and "successfully dropped" in drop_result[0][0]
-            ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
-        except Exception as e:
-            drop_err = e
-    drop_err = comm.bcast(drop_err)
+
+    try:
+        drop_result = drop_sf_table(
+            output_table_name,
+            conn,
+        )
+        print("drop_result: ", drop_result)
+        assert (
+            isinstance(drop_result, list)
+            and (len(drop_result) == 1)
+            and (len(drop_result[0]) == 1)
+            and "successfully dropped" in drop_result[0][0]
+        ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
+    except Exception as e:
+        drop_err = e
     if isinstance(drop_err, Exception):
         raise drop_err
