@@ -162,7 +162,12 @@ def parse_output_types(output: "pd.DataFrame") -> pt.List[pt.Dict]:
         # Special handling for object type
         # TODO: Remove this after removing all Bodo object boxing
         if col_dtype == np.dtype("O"):
-            first_val = output[col_name][output[col_name].notna()].iloc[0]
+            not_na_vals = output[col_name][output[col_name].notna()]
+            if len(not_na_vals):
+                first_val = not_na_vals.iloc[0]
+            else:
+                # if value is unknown cast it to string
+                return ResultMetadata(col_name, JDBCType.STRING, True)
             if isinstance(first_val, str):
                 return ResultMetadata(col_name, JDBCType.STRING, True)
             if isinstance(first_val, bytes):
