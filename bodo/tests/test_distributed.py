@@ -2302,12 +2302,15 @@ def get_random_int64index(n):
         pytest.param(
             pd.date_range("2017-01-13", periods=n).date, marks=pytest.mark.slow
         ),  # date array
-        pytest.param(
-            pd.RangeIndex(n), marks=pytest.mark.slow
-        ),  # RangeIndex, TODO: test non-trivial start/step when gatherv() supports them
+        pytest.param(pd.RangeIndex(n), marks=pytest.mark.slow),  # RangeIndex
         pytest.param(
             pd.RangeIndex(n, name="A"), marks=pytest.mark.slow
         ),  # RangeIndex with name
+        pytest.param(
+            pd.RangeIndex(100, -100, -5),
+            marks=pytest.mark.slow,
+            id="range_index_negative",
+        ),
         pytest.param(get_random_int64index(n), marks=pytest.mark.slow),
         pytest.param(
             pd.Index(gen_random_string_binary_array(n), name="A"),
