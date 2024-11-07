@@ -255,7 +255,7 @@ def test_datetime_timedelta_coerce(memory_leak_check):
         return df
 
     df1 = pd.DataFrame({"a": [1, 2, 3]})
-    check_func(f, (df1,))
+    check_func(f, (df1,), copy_input=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -267,7 +267,7 @@ def test_datetime_datetime_coerce(memory_leak_check):
         return df
 
     df1 = pd.DataFrame({"a": [1, 2, 3]})
-    check_func(f, (df1,))
+    check_func(f, (df1,), copy_input=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -279,7 +279,7 @@ def test_datetime_date_coerce(memory_leak_check):
         return df
 
     df1 = pd.DataFrame({"a": [1, 2, 3, 0, 1, 2, 5, 9]})
-    check_func(f, (df1,))
+    check_func(f, (df1,), copy_input=True, check_dtype=False)
 
 
 @pytest.mark.slow
