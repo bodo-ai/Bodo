@@ -31,7 +31,7 @@ def preprocess(reviews):
     return reviews
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def find_top_words(review_filename):
     # Load in the data
     t_start = time.time()
