@@ -11,22 +11,13 @@ runs:
   using: "composite"
   steps:
     # -------------------------- Environment Setup -------------------------- #
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          micromamba-version: 1.5.10-0
-          environment-name: ci-env
-          environment-file: buildscripts/envs/conda-lock.yml
-          # Include Dev Dependencies
-          create-args: --category main --category dev
-          cache-environment: true
-          generate-run-shell: true
-          init-shell: bash
-          condarc: |
-            channels:
-              - conda-forge
-            remote_max_retries: 5
-            remote_backoff_factor: 60
-            aggressive_update_packages: []
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
+          environments: 'default'
+          activate-environment: true
 
       # -------------------------- Build Packages --------------------------- #
       - name: Configure AWS Credentials
@@ -42,7 +33,7 @@ runs:
           ONLY_BODO: ${{ inputs.build-all == 'true' && '0' || '1' }}
         # TODO: Once stable, inline all the scripts
         run: ./buildscripts/build.sh
-        shell: micromamba-shell {0}
+        shell: bash
 
       - name: Disable AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4

@@ -168,22 +168,21 @@ jobs:
           # we need to fetch the entire history
           fetch-depth: 0
 
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-            environment-name: build-env
-            environment-file: buildscripts/envs/conda-lock.yml
-            cache-environment: true
-            create-args: --category main --category dev
-            init-shell: >-
-                bash
-                zsh
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
+          environments: 'default'
+          activate-environment: true
+
       - uses: actions/download-artifact@v4
         id: download-artifact
         with:
           pattern: cibw-wheels-ubuntu-*
           path: .
 
-      - name: Build BodoSQL wheels
+      - name: Build BodoSQL Wheels
         run: |
           ./buildscripts/bodosql/pip/build_wheels.sh
       - uses: actions/upload-artifact@v4

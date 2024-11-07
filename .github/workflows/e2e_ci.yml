@@ -12,41 +12,19 @@ on:
         type: string
         default: ''
 
-# Recommended with setup-micromamba
-# https://github.com/mamba-org/setup-micromamba#about-login-shells
-defaults:
-  run:
-    shell: bash -lexo pipefail {0}
-
 jobs:
   run-e2e:
     name: Run E2E Tests
     runs-on: [self-hosted, xlarge]
     steps:
       - uses: actions/checkout@v4
-      - uses: mamba-org/setup-micromamba@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          micromamba-version: '1.5.10-0'
-          environment-name: ci-env
-          environment-file: buildscripts/envs/conda-lock.yml
-          # Include Dev Dependencies
-          create-args: --category main --category dev
-          cache-environment: true
-          cache-downloads: false
-          generate-run-shell: true
-          init-shell: bash
-          condarc: |
-            channels:
-              - conda-forge
-            remote_max_retries: 5
-            remote_backoff_factor: 60
-            aggressive_update_packages: []
-
-      - name: Print Environment Specs
-        run: |
-          micromamba list
-          micromamba env export
-          pip list
+          pixi-version: v0.34.0
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
+          environments: 'default'
+          activate-environment: true
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -82,7 +60,30 @@ jobs:
 
       - name: Run Tests
         run: |
-          ./buildscripts/aws/run_nightly_tests.sh
+          set -eo pipefail
+
+          # ------ Setup Hadoop (and Arrow) environment variables ------
+          export HADOOP_HOME=/tmp/hadoop-3.3.2
+          export HADOOP_INSTALL=$HADOOP_HOME
+          export HADOOP_MAPRED_HOME=$HADOOP_HOME
+          export HADOOP_COMMON_HOME=$HADOOP_HOME
+          export HADOOP_HDFS_HOME=$HADOOP_HOME
+          export YARN_HOME=$HADOOP_HOME
+          export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+          export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+          export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+          export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+          export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+
+          # ------ Clean Maven and Spark Ivy Cache ------
+          rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+
+          # --------- Run Tests -----------
+          cd e2e-tests
+          pytest -s -v --durations=0 --ignore=deep_learning
+          cd ..
+          pytest -s -v --durations=0 bodo/tests/test_javascript*
+
         env:
           PYTEST_ADDOPTS: ${{ github.event.inputs.pytest_addopts }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
