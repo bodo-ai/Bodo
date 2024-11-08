@@ -7,8 +7,8 @@
 #include "../_bodo_common.h"
 #include "../_decimal_ext.h"
 #include "../_distributed.h"
-#include "../_gandiva_decimal_copy.h"
 #include "../_shuffle.h"
+#include "../vendored/_gandiva_decimal_copy.h"
 #include "_groupby_common.h"
 #include "_groupby_hashing.h"
 

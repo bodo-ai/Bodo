@@ -4968,7 +4968,7 @@ def overload_argsort(A):
         n = len(A)
         l_key_arrs = bodo.libs.str_arr_ext.to_list_if_immutable_arr((A.copy(),))
         data = (np.arange(n),)
-        bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
+        bodo.libs.vendored.timsort.sort(l_key_arrs, 0, n, data)
         return data[0]
 
     return impl

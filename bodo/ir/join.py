@@ -42,7 +42,7 @@ from bodo.libs.array import (
     nested_loop_join_table,
     py_data_to_cpp_table,
 )
-from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
+from bodo.libs.vendored.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import (

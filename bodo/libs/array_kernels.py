@@ -2966,9 +2966,9 @@ def overload_sort(arr, ascending, inplace):
 
         l_key_arrs = bodo.libs.str_arr_ext.to_list_if_immutable_arr(key_arrs)
         l_data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data, True)
-        bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
+        bodo.libs.vendored.timsort.sort(l_key_arrs, 0, n, l_data)
         if not ascending:
-            bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
+            bodo.libs.vendored.timsort.reverseRange(l_key_arrs, 0, n, l_data)
         bodo.libs.str_arr_ext.cp_str_list_to_array(key_arrs, l_key_arrs)
         return key_arrs[0]
 

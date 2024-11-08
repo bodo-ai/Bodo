@@ -15,10 +15,10 @@
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 #include "_distributed.h"
-#include "_gandiva_decimal_copy.h"
 #include "groupby/_groupby_common.h"
 #include "groupby/_groupby_do_apply_to_column.h"
 #include "groupby/_groupby_ftypes.h"
+#include "vendored/_gandiva_decimal_copy.h"
 
 #pragma pack(1)
 struct decimal_value {

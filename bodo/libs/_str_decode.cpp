@@ -74,23 +74,23 @@ void _C_UnicodeWriter_Init(_C_UnicodeWriter *writer) {
          : (kind == _PyUnicode_2BYTE_KIND ? (0xffffU) : (0x10ffffU)))
 
 // clang-format off
-#include "stringlib/bytesobject.cpp"
+#include "vendored/stringlib/bytesobject.cpp"
 
-#include "stringlib/asciilib.h"
-#include "stringlib/codecs.h"
-#include "stringlib/undef.h"
+#include "vendored/stringlib/asciilib.h"
+#include "vendored/stringlib/codecs.h"
+#include "vendored/stringlib/undef.h"
 
-#include "stringlib/ucs1lib.h"
-#include "stringlib/codecs.h"
-#include "stringlib/undef.h"
+#include "vendored/stringlib/ucs1lib.h"
+#include "vendored/stringlib/codecs.h"
+#include "vendored/stringlib/undef.h"
 
-#include "stringlib/ucs2lib.h"
-#include "stringlib/codecs.h"
-#include "stringlib/undef.h"
+#include "vendored/stringlib/ucs2lib.h"
+#include "vendored/stringlib/codecs.h"
+#include "vendored/stringlib/undef.h"
 
-#include "stringlib/ucs4lib.h"
-#include "stringlib/codecs.h"
-#include "stringlib/undef.h"
+#include "vendored/stringlib/ucs4lib.h"
+#include "vendored/stringlib/codecs.h"
+#include "vendored/stringlib/undef.h"
 
 // clang-format on
 int64_t unicode_to_utf8(char *out_data, char *data, int64_t size, int kind) {
