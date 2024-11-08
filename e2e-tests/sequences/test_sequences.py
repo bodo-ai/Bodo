@@ -34,9 +34,6 @@ def validate_sequences_output(require_cache=False):
     random_str = "".join(random.choice(string.ascii_lowercase) for _ in range(5))
     checksum_loc = f"checksum_out_{random_str}.json"
     cmd = [
-        "mpiexec",
-        "-n",
-        str(num_processes),
         "python",
         "-u",
         "-W",
@@ -56,8 +53,8 @@ def validate_sequences_output(require_cache=False):
     if require_cache:
         cmd.append("--require_cache")
     # Precomputed checksum to verify that the Bodo output doesn't change.
-    expected_checksum = 17458202297301487
-    run_cmd(cmd)
+    expected_checksum = 17049882134460261
+    run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})
     with open(checksum_loc) as f:
         out_checksum = json.load(f)["checksum"]
     assert out_checksum == expected_checksum, "Checksum doesn't match"
