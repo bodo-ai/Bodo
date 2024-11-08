@@ -1142,7 +1142,7 @@ def info_to_array_codegen(context, builder, sig, args, raise_py_err=True):
             new_cats_arr = bodo.utils.utils.create_categorical_type(
                 arr_type.dtype.categories, arr_type.dtype.data.data, is_ordered
             )
-            new_cats_tup = MetaType(tuple(new_cats_arr))
+            new_cats_tup = MetaType(arr_type.dtype.categories)
             int_type = arr_type.dtype.int_type
             cats_arr_type = arr_type.dtype.data.data
             cats_arr = context.get_constant_generic(
