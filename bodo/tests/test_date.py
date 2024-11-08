@@ -2027,7 +2027,7 @@ def test_pd_to_timedelta_string_arr(memory_leak_check):
     def impl(a):
         return pd.to_timedelta(a)
 
-    arr1 = np.array(
+    arr1 = pd.array(
         [
             "1 days 06:05:01.00003",
             "-2 days 23:15:31.4",
