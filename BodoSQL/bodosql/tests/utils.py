@@ -313,6 +313,10 @@ def check_query(
         run_jit_1D = False
         run_jit_1DVar = False
 
+    # Only run Python mode when spawn testing is enabled since others aren't applicable
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
+
     if not (run_jit_seq or run_jit_1D or run_jit_1DVar or run_python):
         warnings.warn("check_query: No tests are being run.")
 
@@ -786,7 +790,10 @@ def check_query_python(
         session_tz: the string representation of the timezone to use for TIMESTAMP_LTZ.
     """
     bc = bodosql.BodoSQLContext(dataframe_dict, default_tz=session_tz)
-    bodosql_output = bc.sql(query, named_params, bind_variables)
+    jit_options = {}
+    if bodo.tests.utils.test_spawn_mode_enabled:
+        jit_options["spawn"] = True
+    bodosql_output = bc.sql(query, named_params, bind_variables, **jit_options)
     _check_query_equal(
         bodosql_output,
         expected_output,
