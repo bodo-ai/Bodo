@@ -227,7 +227,7 @@ class Spawner:
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
-            dispatcher, args, kwargs, self.bcast_root
+            dispatcher, args, kwargs
         )
 
         # Send dispatcher
