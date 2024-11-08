@@ -2,12 +2,8 @@
 """Utilities for Spawn Mode"""
 
 import logging
-from dataclasses import dataclass
 from enum import Enum
 from time import sleep
-
-import pandas as pd
-from pandas.core.arrays import ArrowExtensionArray
 
 import bodo.user_logging
 from bodo.mpi4py import MPI
@@ -46,15 +42,18 @@ def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
             sleep(poll_freq)
 
 
-@dataclass
-class DistributedReturnMetadata:
-    result_id: str
-    head: pd.DataFrame | pd.Series | ArrowExtensionArray
-    nrows: int
-    index_data: "DistributedReturnMetadata | None"
-
-
 def debug_msg(logger: logging.Logger, msg: str):
     """Send debug message to logger if Bodo verbose level 2 is enabled"""
     if bodo.user_logging.get_verbose_level() >= 2:
         logger.debug(msg)
+
+
+class ArgMetadata(str, Enum):
+    """Argument metadata to inform workers about other arguments to receive separately.
+    E.g. broadcast or scatter a dataframe from spawner to workers.
+    Used for DataFrame/Series/Index/array arguments.
+    """
+
+    BROADCAST = "broadcast"
+    SCATTER = "scatter"
+    LAZY = "lazy"
