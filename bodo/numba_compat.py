@@ -6756,3 +6756,21 @@ numba.core.typeconv.typeconv.TypeManager.set_compatible = set_compatible
 numba.core.typeconv.rules._init_casting_rules(
     numba.core.typeconv.rules.default_type_manager
 )
+
+def _dict_rebuild(vals: dict, key_type: types.Type, value_type: types.Type):
+    """Rebuild typed Dict using regular dictionary values and key/value types"""
+    d = numba.typed.Dict.empty(
+        key_type=key_type, value_type=value_type
+    )
+    d.update(vals)
+    return d
+    
+
+def Dict__reduce__(self):
+    """pickle Dict by converting data to regular dict"""
+    vals = dict(self)
+    return _dict_rebuild, (vals, self._numba_type_.key_type, self._numba_type_.value_type)
+
+
+# Add pickling support to typed Dict
+numba.typed.Dict.__reduce__ = Dict__reduce__
