@@ -18,14 +18,9 @@ from bodo import prange
 from tools import search
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True, replicated=["df_prod", "grids"])
 def search_all(categories, strategies, df_prod, grids, results_file):
     t1 = time.time()
-    # Since it's a simulation-type application we do a scatterv
-    # here manually. This is ok since it's not a particularly
-    # data intensive application.
-    categories = bodo.scatterv(categories)
-    strategies = bodo.scatterv(strategies)
     # The program does have communication though since
     # the parallel loop has a concatenation reduction
     # (dataframe append for each iteration).
@@ -69,6 +64,9 @@ if __name__ == "__main__":
     categories = np.array([v[0] for v in list_index], object)
     strategies = np.array([v[1] for v in list_index], np.float64)
 
+    # Since it's a simulation-type application we do a scatterv
+    # here manually. This is ok since it's not a particularly
+    # data intensive application.
     search_all(categories, strategies, df_prod, grids, results_file)
 
     if require_cache and isinstance(search_all, numba.core.dispatcher.Dispatcher):
