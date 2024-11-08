@@ -6,6 +6,8 @@ import contextlib
 import itertools
 import logging
 import os
+import signal
+import socket
 import sys
 import time
 import typing as pt
@@ -146,10 +148,18 @@ class Spawner:
                 0,
                 errcodes,
             )
+            # Send PID of spawner to worker
+            self.worker_intercomm.bcast(os.getpid(), self.bcast_root)
+            self.worker_intercomm.send(socket.gethostname(), dest=0)
         debug_msg(
             self.logger, f"Spawned {n_pes} workers in {(time.monotonic()-t0):0.4f}s"
         )
         self.exec_intercomm_addr = MPI._addressof(self.worker_intercomm)
+
+    @property
+    def bcast_root(self):
+        """MPI bcast root rank"""
+        return MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
 
     def _recv_output(self, output_is_distributed: bool | list[bool]):
         """Receive output of function execution from workers
@@ -198,21 +208,50 @@ class Spawner:
 
     def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
-        bcast_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
-        self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, bcast_root)
+
+        if sys.platform != "win32":
+            # Install a signal handler for SIGUSR1 as a notification mechanism
+            # to determine when the worker has finished execution. We use
+            # signals instead of MPI barriers to avoid consuming CPU resources
+            # on the spawner.
+            signaled = False
+
+            def handler(*args, **kwargs):
+                nonlocal signaled
+                signaled = True
+
+            signal.signal(signal.SIGUSR1, handler)
+
+        debug_msg(self.logger, "submit_func_to_workers")
+        self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, self.bcast_root)
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
-            dispatcher, args, kwargs, bcast_root
+            dispatcher, args, kwargs, self.bcast_root
         )
 
         # Send dispatcher
         pickled_func = cloudpickle.dumps(dispatcher)
-        self.worker_intercomm.bcast(pickled_func, root=bcast_root)
+        self.worker_intercomm.bcast(pickled_func, root=self.bcast_root)
+        debug_msg(self.logger, "submit_func_to_workers - wait for results")
 
-        # Wait for execution to finish
+        if sys.platform == "win32":
+            # Signals work differently on Windows, so use an async MPI barrier
+            # instead
+            poll_for_barrier(self.worker_intercomm)
+        else:
+            # Wait for execution to finish
+            while not signaled:
+                # wait for any signal. SIGUSR1's handler will set signaled to
+                # True, any other signals can be ignored here (the
+                # appropriate/default handler for any signal will still be
+                # invoked)
+                signal.pause()
+            # TODO(aneesh) create a context manager for restoring signal
+            # disposition Restore SIGUSR1's default handler
+            signal.signal(signal.SIGUSR1, signal.SIG_DFL)
+
         gather_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
-        poll_for_barrier(self.worker_intercomm)
         caught_exceptions = self.worker_intercomm.gather(None, root=gather_root)
 
         assert caught_exceptions is not None
@@ -357,29 +396,26 @@ class Spawner:
 
         return None
 
-    def _send_arg_meta(
-        self, arg: pt.Any, arg_meta: ArgMetadata | None, bcast_root: int
-    ):
+    def _send_arg_meta(self, arg: pt.Any, arg_meta: ArgMetadata | None):
         """Send arguments that are replaced with metadata (bcast or scatter)
 
         Args:
             arg: input argument
             out_arg: input argument metadata
-            bcast_root: MPI bcast root rank
         """
         if isinstance(arg_meta, ArgMetadata):
             match arg_meta:
                 case ArgMetadata.BROADCAST:
                     bodo.libs.distributed_api.bcast(
-                        arg, root=bcast_root, comm=spawner.worker_intercomm
+                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
                     )
                 case ArgMetadata.SCATTER:
                     bodo.libs.distributed_api.scatterv(
-                        arg, root=bcast_root, comm=spawner.worker_intercomm
+                        arg, root=self.bcast_root, comm=spawner.worker_intercomm
                     )
                 case ArgMetadata.LAZY:
                     spawner.worker_intercomm.bcast(
-                        arg._get_result_id(), root=bcast_root
+                        arg._get_result_id(), root=self.bcast_root
                     )
 
         # Send table DataFrames for BodoSQLContext
@@ -388,23 +424,23 @@ class Spawner:
                 if tmeta is ArgMetadata.BROADCAST:
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],
-                        root=bcast_root,
+                        root=self.bcast_root,
                         comm=spawner.worker_intercomm,
                     )
                 else:
                     bodo.libs.distributed_api.scatterv(
                         arg.tables[tname],
-                        root=bcast_root,
+                        root=self.bcast_root,
                         comm=spawner.worker_intercomm,
                     )
 
         # Send distributed data nested inside tuples
         if isinstance(arg_meta, tuple):
             for val, out_val in zip(arg, arg_meta):
-                self._send_arg_meta(val, out_val, bcast_root)
+                self._send_arg_meta(val, out_val, self.bcast_root)
 
     def _send_args_update_dist_flags(
-        self, dispatcher: "SubmitDispatcher", args, kwargs, bcast_root
+        self, dispatcher: "SubmitDispatcher", args, kwargs
     ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
@@ -416,7 +452,6 @@ class Spawner:
             dispatcher (SubmitDispatcher): dispatcher to run on workers
             args (tuple[Any]): positional arguments
             kwargs (dict[str, Any]): keyword arguments
-            bcast_root (int): root value for broadcast (MPI.ROOT on spawner)
         """
         param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
         replicated = set(dispatcher.decorator_args.get("replicated", ()))
@@ -455,7 +490,7 @@ class Spawner:
             )
         }
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
-        self.worker_intercomm.bcast(pickled_args, root=bcast_root)
+        self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
         dispatcher.decorator_args["distributed_block"] = (
             dispatcher.decorator_args.get("distributed_block", []) + dist_flags
         )
@@ -463,7 +498,7 @@ class Spawner:
         for arg, arg_meta in itertools.chain(
             zip(args, args_meta), zip(kwargs.values(), kwargs_meta.values())
         ):
-            self._send_arg_meta(arg, arg_meta, bcast_root)
+            self._send_arg_meta(arg, arg_meta)
         return args_meta, kwargs_meta
 
     def reset(self):
@@ -473,8 +508,7 @@ class Spawner:
         except Exception:
             # We might not be able to log during process teardown
             pass
-        bcast_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
-        self.worker_intercomm.bcast(CommandType.EXIT.value, root=bcast_root)
+        self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
 
 
 spawner: Spawner | None = None

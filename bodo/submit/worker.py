@@ -5,6 +5,8 @@ directly"""
 
 import logging
 import os
+import signal
+import socket
 import sys
 import typing as pt
 import uuid
@@ -30,6 +32,9 @@ from bodo.submit.utils import (
 from bodo.submit.worker_state import set_is_worker
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
+
+# PID of spawning process - used to signal the spawner of function completion
+spawnerpid = None
 
 
 _recv_arg_return_t = (
@@ -276,6 +281,7 @@ def exec_func_handler(
     """Callback to compile and execute the function being sent over
     driver_intercomm by the spawner"""
     global RESULT_REGISTRY
+    debug_worker_msg(logger, "Begin listening for function.")
 
     # Receive function arguments
     pickled_args = spawner_intercomm.bcast(None, 0)
@@ -323,9 +329,27 @@ def exec_func_handler(
             debug_worker_msg(logger, f"Exception while trying to execute code: {e}")
             caught_exception = e
 
-    poll_for_barrier(spawner_intercomm)
+    debug_worker_msg(logger, "signaling spawner of completion")
+
     has_exception = caught_exception is not None
     any_has_exception = comm_world.allreduce(has_exception, op=MPI.LOR)
+
+    if sys.platform == "win32":
+        # If windows, use poll_for_barrier since kill isn't very portable.
+        # We set the frequency to None here because it's okay to busy wait on
+        # the workers - on the spawner, we will sleep more often to avoid taking
+        # up the CPU.
+        # TODO(aneesh): We could instead use blocking IO on a socket to put the
+        # spawner to sleep (and send on the socket from worker 0 to wake). This
+        # would also allow us to not enforce that worker 0 and the spawner
+        # reside on the same physical machine.
+        poll_for_barrier(spawner_intercomm, poll_freq=None)
+    else:
+        # Wake up spawner so recieve results/errors. We use a signal instead of
+        # a barrier to avoid busy waiting on the spawner
+        if bodo.get_rank() == 0:
+            os.kill(spawnerpid, signal.SIGUSR1)
+
     debug_worker_msg(logger, f"Propagating exception {has_exception=}")
     # Propagate any exceptions
     spawner_intercomm.gather(caught_exception, root=0)
@@ -363,7 +387,15 @@ def worker_loop(
 ):
     """Main loop for the worker to listen and receive commands from driver_intercomm"""
     global RESULT_REGISTRY
+    global spawnerpid
     # Stored last data value received from scatterv/bcast for testing gatherv purposes
+
+    spawnerpid = spawner_intercomm.bcast(None, 0)
+    if bodo.get_rank() == 0:
+        spawner_hostname = spawner_intercomm.recv(source=0)
+        assert (
+            spawner_hostname == socket.gethostname()
+        ), "Spawner and worker 0 must be on the same machine"
 
     while True:
         debug_worker_msg(logger, "Waiting for command")
