@@ -3,6 +3,7 @@ import fractions
 import random
 import warnings
 
+import cloudpickle
 import numba
 import numpy as np
 import pandas as pd
@@ -84,6 +85,20 @@ def test_dict_constant_lowering():
 
     check_func(impl1, (), only_seq=True)
     check_func(impl2, (), only_seq=True)
+
+
+def test_dict_pickle(memory_leak_check):
+    """Make sure pickling works for Numba typed dict"""
+    d = numba.typed.Dict.empty(
+        key_type=numba.core.types.unicode_type, value_type=numba.core.types.int64
+    )
+    d["A"] = 1
+    d["B"] = 3
+
+    pickled = cloudpickle.dumps(d)
+    unpickled = cloudpickle.loads(pickled)
+    assert d == unpickled
+    assert d._numba_type_ == unpickled._numba_type_
 
 
 l1 = ["A", "ABC", "D2", "E4", "F53"]
