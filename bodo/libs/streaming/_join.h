@@ -14,7 +14,7 @@
 #include "../_query_profile_collector.h"
 #include "../_shuffle.h"
 #include "../_table_builder.h"
-#include "../simd-block-fixed-fpp.h"
+#include "../vendored/simd-block-fixed-fpp.h"
 #include "_shuffle.h"
 
 using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;

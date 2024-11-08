@@ -455,7 +455,7 @@ set(sources_list
   "bodo/libs/_memory.cpp"
   "bodo/libs/_memory_budget.cpp"
   "bodo/libs/_memory_budget_pymod.cpp"
-  "bodo/libs/_murmurhash3.cpp"
+  "bodo/libs/vendored/_murmurhash3.cpp"
   "bodo/libs/_quantile_alg.cpp"
   "bodo/libs/_lateral.cpp"
   "bodo/libs/_shuffle.cpp"
@@ -482,7 +482,7 @@ set(sources_list
   "bodo/libs/_fft.cpp"
   "bodo/libs/_uuid.cpp"
   "bodo/libs/_query_profile_collector.cpp"
-  "bodo/libs/gason/gason.cpp"
+  "bodo/libs/vendored/gason/gason.cpp"
   "bodo/libs/_pymemory.cpp"
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
@@ -509,10 +509,10 @@ set(allow_implicit_fallthrough_list
   "bodo/io/parquet_write.cpp"
   "bodo/io/snowflake_reader.cpp"
   "bodo/io/timestamptz_parser.cpp"
-  "bodo/libs/_murmurhash3.cpp"
+  "bodo/libs/vendored/_murmurhash3.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_theta_sketches.cpp"
-  "bodo/libs/gason/gason.cpp"
+  "bodo/libs/vendored/gason/gason.cpp"
 
 )
 
@@ -659,7 +659,7 @@ if (IS_PLATFORM)
 
   target_link_libraries(ext PRIVATE curl)
   target_compile_definitions(ext PRIVATE "CHECK_LICENSE_PLATFORM=1")
-  target_include_directories(ext PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/gason")
+  target_include_directories(ext PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/bodo/libs/vendored/gason")
 endif()
 
 # Build with our fork of Arrow

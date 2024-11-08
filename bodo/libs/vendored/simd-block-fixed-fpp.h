@@ -34,9 +34,9 @@
 #include <cstdlib>
 #include <memory>
 
-#include "_mpi.h"
+#include "../_mpi.h"
+#include "../tracing.h"
 #include "hashutil.h"
-#include "tracing.h"
 
 using uint32_t = ::std::uint32_t;
 using uint64_t = ::std::uint64_t;

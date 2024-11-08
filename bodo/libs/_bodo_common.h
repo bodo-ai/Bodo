@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "_meminfo.h"
-#include "simd-block-fixed-fpp.h"
+#include "vendored/simd-block-fixed-fpp.h"
 
 // Macros for temporarily disabling compiler errors. Example usage:
 //   [[deprecated]] int f() {

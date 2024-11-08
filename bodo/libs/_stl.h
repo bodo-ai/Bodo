@@ -54,7 +54,7 @@
 
 #ifdef USE_ANKERL
 #define UNORDERED_MAP_MAX_LOAD_FACTOR 0.8
-#include "ankerl/unordered_dense.h"
+#include "vendored/ankerl/unordered_dense.h"
 #define UNORD_MAP_CONTAINER ankerl::unordered_dense::map
 #define UNORD_SET_CONTAINER ankerl::unordered_dense::set
 #define UNORD_HASH ankerl::unordered_dense::hash
@@ -62,7 +62,7 @@
 
 #ifdef USE_ROBIN_HOOD_FLAT
 #define UNORDERED_MAP_MAX_LOAD_FACTOR 0.8
-#include "robin_hood.h"
+#include "vendored/robin_hood.h"
 #define UNORD_MAP_CONTAINER robin_hood::unordered_flat_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_flat_set
 #define UNORD_HASH robin_hood::hash
@@ -70,7 +70,7 @@
 
 #ifdef USE_ROBIN_HOOD_NODE
 #define UNORDERED_MAP_MAX_LOAD_FACTOR 0.8
-#include "robin_hood.h"
+#include "vendored/robin_hood.h"
 #define UNORD_MAP_CONTAINER robin_hood::unordered_node_map
 #define UNORD_SET_CONTAINER robin_hood::unordered_node_set
 #define UNORD_HASH robin_hood::hash

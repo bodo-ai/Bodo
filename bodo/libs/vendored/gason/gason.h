@@ -103,7 +103,7 @@ class JsonAllocator {
     } *head;
 
    public:
-    JsonAllocator() : head(nullptr){};
+    JsonAllocator() : head(nullptr) {};
     JsonAllocator(const JsonAllocator &) = delete;
     JsonAllocator &operator=(const JsonAllocator &) = delete;
     JsonAllocator(JsonAllocator &&x) : head(x.head) { x.head = nullptr; }
