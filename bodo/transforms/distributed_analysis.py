@@ -2266,6 +2266,13 @@ class DistributedAnalysis:
             return
 
         if fdef == (
+            "str_arr_encode",
+            "bodo.libs.str_arr_ext",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == (
             "pandas_string_array_to_datetime",
             "bodo.hiframes.pd_timestamp_ext",
         ):

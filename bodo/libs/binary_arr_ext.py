@@ -384,6 +384,19 @@ def overload_bytes_fromhex(hex_str):
     raise BodoError(f"bytes.fromhex not supported with argument type {hex_str}")
 
 
+@overload(sum)
+def overload_bytes_sum(b):
+    if b == bytes_type:
+
+        def impl(b):
+            s = 0
+            for i in range(len(b)):
+                s += b[i]
+            return s
+
+        return impl
+
+
 def binary_list_to_array(binary_list):
     return binary_list
 
