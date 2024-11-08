@@ -9,7 +9,7 @@
 #include <arrow/util/basic_decimal.h>
 #include <arrow/util/decimal.h>
 #include <boost/multiprecision/cpp_int.hpp>
-#include "_basic_decimal_scalar.h"
+#include "../_basic_decimal_scalar.h"
 
 namespace decimalops {
 

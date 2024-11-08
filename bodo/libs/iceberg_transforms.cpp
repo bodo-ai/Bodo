@@ -15,7 +15,7 @@
 #include "_datetime_utils.h"
 #include "_distributed.h"
 #include "_shuffle.h"
-#include "gfx/timsort.hpp"
+#include "vendored/gfx/timsort.hpp"
 
 //
 // Utilities for Iceberg Transforms

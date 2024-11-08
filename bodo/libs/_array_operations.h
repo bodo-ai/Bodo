@@ -2,7 +2,7 @@
 
 #include "_array_comparison.h"
 #include "_bodo_common.h"
-#include "gfx/timsort.hpp"
+#include "vendored/gfx/timsort.hpp"
 
 // Forward Declaration from _stream_dict_encoding
 class DictEncodingState;

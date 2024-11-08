@@ -19,7 +19,7 @@
 
 #include "_decimal_ext.h"
 #include "_mpi.h"
-#include "hyperloglog.hpp"
+#include "vendored/hyperloglog.hpp"
 
 /**
  * Append values from a byte buffer to a primitive array builder.
@@ -2439,7 +2439,7 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
                              MPI_Datatype* dptr) {
     uint8_t* M_in = reinterpret_cast<uint8_t*>(in);
     uint8_t* M_inout = reinterpret_cast<uint8_t*>(inout);
-    // The loop below comes from libs/hyperloglog.hpp:merge()
+    // The loop below comes from libs/vendored/hyperloglog.hpp:merge()
     // (currently like 161)
     for (int r = 0; r < *len; ++r) {
         if (M_inout[r] < M_in[r]) {

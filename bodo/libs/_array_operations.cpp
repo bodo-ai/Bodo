@@ -10,8 +10,8 @@
 #include "_distributed.h"
 #include "_shuffle.h"
 #include "_table_builder.h"
-#include "gfx/timsort.hpp"
 #include "streaming/_dict_encoding.h"
+#include "vendored/gfx/timsort.hpp"
 
 //
 //   ARRAY ISIN

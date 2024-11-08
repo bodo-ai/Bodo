@@ -11,7 +11,7 @@
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
 #include "_dict_builder.h"
-#include "hyperloglog.hpp"
+#include "vendored/hyperloglog.hpp"
 
 // Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
 // time). 30 is extremely slow. 20 seems to be about as fast as 10 and

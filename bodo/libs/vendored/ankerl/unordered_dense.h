@@ -290,9 +290,9 @@ static inline void mum(uint64_t* a, uint64_t* b) {
 
 template <typename T, typename Enable = void>
 struct hash {
-    auto operator()(T const& obj) const noexcept(noexcept(
-        std::declval<std::hash<T> >().operator()(std::declval<T const&>())))
-        -> uint64_t {
+    auto operator()(T const& obj) const
+        noexcept(noexcept(std::declval<std::hash<T> >().operator()(
+            std::declval<T const&>()))) -> uint64_t {
         return std::hash<T>{}(obj);
     }
 };
@@ -797,8 +797,8 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
 
     template <typename K, typename... Args>
     auto do_place_element(dist_and_fingerprint_type dist_and_fingerprint,
-                          value_idx_type bucket_idx, K&& key, Args&&... args)
-        -> std::pair<iterator, bool> {
+                          value_idx_type bucket_idx, K&& key,
+                          Args&&... args) -> std::pair<iterator, bool> {
         // emplace the new value. If that throws an exception, no harm done;
         // index is still in a valid state
         m_values.emplace_back(
@@ -1007,10 +1007,10 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
         return *this;
     }
 
-    auto operator=(table&& other) noexcept(noexcept(
-        std::is_nothrow_move_assignable_v<value_container_type>&&
-            std::is_nothrow_move_assignable_v<Hash>&&
-                std::is_nothrow_move_assignable_v<KeyEqual>)) -> table& {
+    auto operator=(table&& other) noexcept(
+        noexcept(std::is_nothrow_move_assignable_v<value_container_type> &&
+                 std::is_nothrow_move_assignable_v<Hash> &&
+                 std::is_nothrow_move_assignable_v<KeyEqual>)) -> table& {
         if (&other != this) {
             deallocate_buckets();  // deallocate before m_values is set (might
                                    // have another allocator)
@@ -1188,8 +1188,8 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
 
     template <class M, typename Q = T,
               std::enable_if_t<is_map_v<Q>, bool> = true>
-    auto insert_or_assign(Key const& key, M&& mapped)
-        -> std::pair<iterator, bool> {
+    auto insert_or_assign(Key const& key,
+                          M&& mapped) -> std::pair<iterator, bool> {
         return do_insert_or_assign(key, std::forward<M>(mapped));
     }
 
@@ -1210,15 +1210,15 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
 
     template <class M, typename Q = T,
               std::enable_if_t<is_map_v<Q>, bool> = true>
-    auto insert_or_assign(const_iterator /*hint*/, Key const& key, M&& mapped)
-        -> iterator {
+    auto insert_or_assign(const_iterator /*hint*/, Key const& key,
+                          M&& mapped) -> iterator {
         return do_insert_or_assign(key, std::forward<M>(mapped)).first;
     }
 
     template <class M, typename Q = T,
               std::enable_if_t<is_map_v<Q>, bool> = true>
-    auto insert_or_assign(const_iterator /*hint*/, Key&& key, M&& mapped)
-        -> iterator {
+    auto insert_or_assign(const_iterator /*hint*/, Key&& key,
+                          M&& mapped) -> iterator {
         return do_insert_or_assign(std::move(key), std::forward<M>(mapped))
             .first;
     }
@@ -1227,8 +1227,8 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
         typename K, typename M, typename Q = T, typename H = Hash,
         typename KE = KeyEqual,
         std::enable_if_t<is_map_v<Q> && is_transparent_v<H, KE>, bool> = true>
-    auto insert_or_assign(const_iterator /*hint*/, K&& key, M&& mapped)
-        -> iterator {
+    auto insert_or_assign(const_iterator /*hint*/, K&& key,
+                          M&& mapped) -> iterator {
         return do_insert_or_assign(std::forward<K>(key),
                                    std::forward<M>(mapped))
             .first;
@@ -1317,8 +1317,8 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
 
     template <class... Args, typename Q = T,
               std::enable_if_t<is_map_v<Q>, bool> = true>
-    auto try_emplace(Key const& key, Args&&... args)
-        -> std::pair<iterator, bool> {
+    auto try_emplace(Key const& key,
+                     Args&&... args) -> std::pair<iterator, bool> {
         return do_try_emplace(key, std::forward<Args>(args)...);
     }
 
@@ -1330,15 +1330,15 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
 
     template <class... Args, typename Q = T,
               std::enable_if_t<is_map_v<Q>, bool> = true>
-    auto try_emplace(const_iterator /*hint*/, Key const& key, Args&&... args)
-        -> iterator {
+    auto try_emplace(const_iterator /*hint*/, Key const& key,
+                     Args&&... args) -> iterator {
         return do_try_emplace(key, std::forward<Args>(args)...).first;
     }
 
     template <class... Args, typename Q = T,
               std::enable_if_t<is_map_v<Q>, bool> = true>
-    auto try_emplace(const_iterator /*hint*/, Key&& key, Args&&... args)
-        -> iterator {
+    auto try_emplace(const_iterator /*hint*/, Key&& key,
+                     Args&&... args) -> iterator {
         return do_try_emplace(std::move(key), std::forward<Args>(args)...)
             .first;
     }
@@ -1360,8 +1360,8 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
                   is_map_v<Q> && is_transparent_v<H, KE> &&
                       is_neither_convertible_v<K&&, iterator, const_iterator>,
                   bool> = true>
-    auto try_emplace(const_iterator /*hint*/, K&& key, Args&&... args)
-        -> iterator {
+    auto try_emplace(const_iterator /*hint*/, K&& key,
+                     Args&&... args) -> iterator {
         return do_try_emplace(std::forward<K>(key), std::forward<Args>(args)...)
             .first;
     }
@@ -1420,9 +1420,9 @@ class table : public std::conditional_t<is_map_v<T>, base_table_type_map<T>,
     }
 
     void swap(table& other) noexcept(
-        noexcept(std::is_nothrow_swappable_v<value_container_type>&&
-                     std::is_nothrow_swappable_v<Hash>&&
-                         std::is_nothrow_swappable_v<KeyEqual>)) {
+        noexcept(std::is_nothrow_swappable_v<value_container_type> &&
+                 std::is_nothrow_swappable_v<Hash> &&
+                 std::is_nothrow_swappable_v<KeyEqual>)) {
         using std::swap;
         swap(other, *this);
     }

@@ -9,7 +9,6 @@
 #include "../_bodo_common.h"
 #include "../_decimal_ext.h"
 #include "../_dict_builder.h"
-#include "../_gandiva_decimal_copy.h"
 #include "../_shuffle.h"
 #include "../_table_builder.h"
 #include "../_table_builder_utils.h"
@@ -17,6 +16,7 @@
 #include "../groupby/_groupby_do_apply_to_column.h"
 #include "../groupby/_groupby_ftypes.h"
 #include "../streaming/_shuffle.h"
+#include "../vendored/_gandiva_decimal_copy.h"
 #include "_window_aggfuncs.h"
 #include "mpi.h"
 

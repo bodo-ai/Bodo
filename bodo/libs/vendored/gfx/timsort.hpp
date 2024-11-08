@@ -759,8 +759,8 @@ template <std::ranges::random_access_range Range,
           typename Projection = std::identity>
     requires std::sortable<std::ranges::iterator_t<Range>, Compare, Projection>
 auto timmerge(Range&& range, std::ranges::iterator_t<Range> middle,
-              Compare comp = {}, Projection proj = {})
-    -> std::ranges::borrowed_iterator_t<Range> {
+              Compare comp = {},
+              Projection proj = {}) -> std::ranges::borrowed_iterator_t<Range> {
     return gfx::timmerge(std::begin(range), middle, std::end(range), comp,
                          proj);
 }
@@ -789,8 +789,8 @@ template <std::ranges::random_access_range Range,
           typename Compare = std::ranges::less,
           typename Projection = std::identity>
     requires std::sortable<std::ranges::iterator_t<Range>, Compare, Projection>
-auto timsort(Range&& range, Compare comp = {}, Projection proj = {})
-    -> std::ranges::borrowed_iterator_t<Range> {
+auto timsort(Range&& range, Compare comp = {},
+             Projection proj = {}) -> std::ranges::borrowed_iterator_t<Range> {
     return gfx::timsort(std::begin(range), std::end(range), comp, proj);
 }
 

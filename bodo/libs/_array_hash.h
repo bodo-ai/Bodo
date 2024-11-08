@@ -3,8 +3,8 @@
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_murmurhash3.h"
 #include "_stl.h"
+#include "vendored/_murmurhash3.h"
 
 #define SEED_HASH_PARTITION 0xb0d01289
 #define SEED_HASH_MULTIKEY 0xb0d01288
