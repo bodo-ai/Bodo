@@ -349,3 +349,14 @@ def test_setitem_optional_int(memory_leak_check):
 
     py_output = np.array([b"A", None] + [b"A"] * 6, object)
     check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_bytes_sum(memory_leak_check):
+    """test sum() on bytes value"""
+
+    def test_impl(b):
+        return sum(b)
+
+    a = b"abc13"
+    check_func(test_impl, (a,), only_seq=True)
