@@ -177,7 +177,7 @@ def convertToOutputString(columns):
     return "".join(output_arr)
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def sequences(in_file, chosen_type, out_file, maxseqlength):
     df = pd.read_csv(in_file, sep="$", header=None, names=["A"])
     S1 = df.A.apply(transformationFunction01, args=(maxseqlength,))
@@ -218,17 +218,7 @@ def sequences(in_file, chosen_type, out_file, maxseqlength):
     # Compute a reduction to compute correctness. The strings should always be the same, only the order changes.
     # So any operation that commutes should work
 
-    # TODO: Replace with Bodo code when binary arrays are supported.
-    def f(series):
-        with bodo.objmode(res="uint32"):
-            res = g(series["A"])
-        return res
-
-    return df6.apply(lambda x: f(x), axis=1).sum()
-
-
-def g(string):
-    return zlib.crc32(bytes(string[0], encoding="utf-8"))
+    return df6.A.str.encode("utf-8").map(lambda x: zlib.crc32(x)).sum()
 
 
 if __name__ == "__main__":
@@ -256,11 +246,10 @@ if __name__ == "__main__":
     )
 
     # Only print on rank 0
-    if bodo.get_rank() == 0:
-        print("Final checksum: ", final_checksum)
-        print("Writing checksum to ", checksum_out_path)
-        with open(checksum_out_path, "w") as f:
-            json.dump({"checksum": final_checksum}, f)
+    print("Final checksum: ", final_checksum)
+    print("Writing checksum to ", checksum_out_path)
+    with open(checksum_out_path, "w") as f:
+        json.dump({"checksum": final_checksum}, f)
 
     if args.require_cache and isinstance(sequences, numba.core.dispatcher.Dispatcher):
         assert (
