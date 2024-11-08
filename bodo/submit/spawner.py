@@ -23,12 +23,12 @@ from bodo.pandas import (
     BodoDataFrame,
     BodoSeries,
     LazyArrowExtensionArray,
-    get_lazy_manager_class,
-    get_lazy_single_manager_class,
+    LazyMetadata,
 )
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.submit.utils import (
+    ArgMetadata,
     CommandType,
-    DistributedReturnMetadata,
     debug_msg,
     poll_for_barrier,
 )
@@ -66,16 +66,6 @@ def get_num_workers():
     elif cpu_count := psutil.cpu_count(logical=False):
         n_pes = cpu_count
     return n_pes
-
-
-class ArgMetadata:
-    """Argument metadata to inform workers about other arguments to receive separately.
-    E.g. broadcast or scatter a dataframe from spawner to workers.
-    Used for DataFrame/Series/Index/array arguments.
-    """
-
-    def __init__(self, is_broadcast):
-        self.is_broadcast = is_broadcast
 
 
 class BodoSQLContextMetadata:
@@ -186,14 +176,35 @@ class Spawner:
 
         return res
 
+    def _recv_updated_args(
+        self,
+        args: tuple[pt.Any],
+        args_meta: tuple[ArgMetadata | None, ...],
+        kwargs: dict[str, pt.Any],
+        kwargs_meta: dict[str, ArgMetadata | None],
+    ):
+        """Receive updated arguments from workers and update the original arguments to match.
+        Only does anything for lazy arguments."""
+
+        def _recv_updated_arg(arg, arg_meta):
+            if isinstance(arg_meta, ArgMetadata) and arg_meta is ArgMetadata.LAZY:
+                return_meta = self.worker_intercomm.recv(source=0)
+                arg.update_from_lazy_metadata(return_meta)
+
+        for i in range(len(args)):
+            _recv_updated_arg(args[i], args_meta[i])
+        for name in kwargs.keys():
+            _recv_updated_arg(kwargs[name], kwargs_meta[name])
+
     def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
         """Send func to be compiled and executed on spawned process"""
-
         bcast_root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, bcast_root)
 
         # Send arguments and update dispatcher distributed flags for arguments
-        self._send_args_update_dist_flags(dispatcher, args, kwargs, bcast_root)
+        args_meta, kwargs_meta = self._send_args_update_dist_flags(
+            dispatcher, args, kwargs, bcast_root
+        )
 
         # Send dispatcher
         pickled_func = cloudpickle.dumps(dispatcher)
@@ -237,11 +248,13 @@ class Spawner:
         output_is_distributed = self.worker_intercomm.recv(source=0)
         res = self._recv_output(output_is_distributed)
 
+        self._recv_updated_args(args, args_meta, kwargs, kwargs_meta)
+
         return res
 
     def wrap_distributed_result(
         self,
-        distributed_return_metadata: DistributedReturnMetadata | list | dict | tuple,
+        lazy_metadata: LazyMetadata | list | dict | tuple,
     ) -> BodoDataFrame | BodoSeries | LazyArrowExtensionArray | list | dict | tuple:
         """Wrap the distributed return of a function into a BodoDataFrame, BodoSeries, or LazyArrowExtensionArray."""
         root = MPI.ROOT if self.comm_world.Get_rank() == 0 else MPI.PROC_NULL
@@ -257,60 +270,30 @@ class Spawner:
             self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
             self.worker_intercomm.bcast(res_id, root=root)
 
-        if isinstance(distributed_return_metadata, list):
-            return [
-                self.wrap_distributed_result(d) for d in distributed_return_metadata
-            ]
-        if isinstance(distributed_return_metadata, dict):
+        if isinstance(lazy_metadata, list):
+            return [self.wrap_distributed_result(d) for d in lazy_metadata]
+        if isinstance(lazy_metadata, dict):
             return {
                 key: self.wrap_distributed_result(val)
-                for key, val in distributed_return_metadata.items()
+                for key, val in lazy_metadata.items()
             }
-        if isinstance(distributed_return_metadata, tuple):
-            return tuple(
-                [self.wrap_distributed_result(d) for d in distributed_return_metadata]
-            )
-        res_id = distributed_return_metadata.result_id
-        nrows = distributed_return_metadata.nrows
-        head = distributed_return_metadata.head
-        index_data = None
-        if distributed_return_metadata.index_data is not None:
-            index_data = self.wrap_distributed_result(
-                distributed_return_metadata.index_data
+        if isinstance(lazy_metadata, tuple):
+            return tuple([self.wrap_distributed_result(d) for d in lazy_metadata])
+        head = lazy_metadata.head
+        if lazy_metadata.index_data is not None:
+            lazy_metadata.index_data = self.wrap_distributed_result(
+                lazy_metadata.index_data
             )
 
         if isinstance(head, pd.DataFrame):
-            lazy_manager = get_lazy_manager_class()(
-                [],
-                [],
-                result_id=res_id,
-                nrows=nrows,
-                head=head._mgr,
-                collect_func=collect_func,
-                del_func=del_func,
-                index_data=index_data,
+            return BodoDataFrame.from_lazy_metadata(
+                lazy_metadata, collect_func, del_func
             )
-            return BodoDataFrame.from_lazy_mgr(lazy_manager, head)
         elif isinstance(head, pd.Series):
-            lazy_manager = get_lazy_single_manager_class()(
-                None,
-                None,
-                result_id=res_id,
-                nrows=nrows,
-                head=head._mgr,
-                collect_func=collect_func,
-                del_func=del_func,
-                index_data=index_data,
-            )
-            return BodoSeries.from_lazy_mgr(lazy_manager, head)
+            return BodoSeries.from_lazy_metadata(lazy_metadata, collect_func, del_func)
         elif isinstance(head, ArrowExtensionArray):
-            return LazyArrowExtensionArray(
-                None,
-                nrows=nrows,
-                result_id=res_id,
-                head=head,
-                collect_func=collect_func,
-                del_func=del_func,
+            return LazyArrowExtensionArray.from_lazy_metadata(
+                lazy_metadata, collect_func, del_func
             )
         else:
             raise Exception(f"Got unexpected distributed result type: {type(head)}")
@@ -327,8 +310,14 @@ class Spawner:
             dist_flags (list[str]): list of distributed arguments to update
 
         Returns:
-            ArgMetadata or Any: argument potentially replaced with ArgMetadata
+            ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
+        if isinstance(arg, BodoLazyWrapper):
+            if arg._lazy:
+                return ArgMetadata.LAZY
+            dist_flags.append(arg_name)
+            return ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
+
         # Arguments could be functions which fail in typeof.
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         # Similar to dispatcher argument handling:
@@ -336,14 +325,14 @@ class Spawner:
         try:
             data_type = bodo.typeof(arg)
         except ValueError:
-            return arg
+            return None
 
         if data_type is None:
-            return arg
+            return None
 
         if is_distributable_typ(data_type):
             dist_flags.append(arg_name)
-            return ArgMetadata(is_replicated)
+            return ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
         # properly.
@@ -353,7 +342,8 @@ class Spawner:
 
             assert isinstance(arg, BodoSQLContext), "invalid BodoSQLContext"
             table_metas = {
-                tname: ArgMetadata(is_replicated) for tname in arg.tables.keys()
+                tname: ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
+                for tname in arg.tables.keys()
             }
             dist_flags.append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
@@ -365,30 +355,37 @@ class Spawner:
                 for val in arg
             )
 
-        return arg
+        return None
 
-    def _send_arg_meta(self, arg: pt.Any, out_arg: pt.Any, bcast_root: int):
+    def _send_arg_meta(
+        self, arg: pt.Any, arg_meta: ArgMetadata | None, bcast_root: int
+    ):
         """Send arguments that are replaced with metadata (bcast or scatter)
 
         Args:
             arg: input argument
-            out_arg: input argument potentially replaced with metadata
+            out_arg: input argument metadata
             bcast_root: MPI bcast root rank
         """
-        if isinstance(out_arg, ArgMetadata):
-            if out_arg.is_broadcast:
-                bodo.libs.distributed_api.bcast(
-                    arg, root=bcast_root, comm=spawner.worker_intercomm
-                )
-            else:
-                bodo.libs.distributed_api.scatterv(
-                    arg, root=bcast_root, comm=spawner.worker_intercomm
-                )
+        if isinstance(arg_meta, ArgMetadata):
+            match arg_meta:
+                case ArgMetadata.BROADCAST:
+                    bodo.libs.distributed_api.bcast(
+                        arg, root=bcast_root, comm=spawner.worker_intercomm
+                    )
+                case ArgMetadata.SCATTER:
+                    bodo.libs.distributed_api.scatterv(
+                        arg, root=bcast_root, comm=spawner.worker_intercomm
+                    )
+                case ArgMetadata.LAZY:
+                    spawner.worker_intercomm.bcast(
+                        arg._get_result_id(), root=bcast_root
+                    )
 
         # Send table DataFrames for BodoSQLContext
-        if isinstance(out_arg, BodoSQLContextMetadata):
-            for tname, tmeta in out_arg.tables.items():
-                if tmeta.is_broadcast:
+        if isinstance(arg_meta, BodoSQLContextMetadata):
+            for tname, tmeta in arg_meta.tables.items():
+                if tmeta is ArgMetadata.BROADCAST:
                     bodo.libs.distributed_api.bcast(
                         arg.tables[tname],
                         root=bcast_root,
@@ -402,13 +399,13 @@ class Spawner:
                     )
 
         # Send distributed data nested inside tuples
-        if isinstance(out_arg, tuple):
-            for val, out_val in zip(arg, out_arg):
+        if isinstance(arg_meta, tuple):
+            for val, out_val in zip(arg, arg_meta):
                 self._send_arg_meta(val, out_val, bcast_root)
 
     def _send_args_update_dist_flags(
         self, dispatcher: "SubmitDispatcher", args, kwargs, bcast_root
-    ):
+    ) -> tuple[tuple[ArgMetadata | None, ...], dict[str, ArgMetadata | None]]:
         """Send function arguments from spawner to workers. DataFrame/Series/Index/array
         arguments are sent separately using broadcast or scatter (depending on flags).
 
@@ -424,29 +421,50 @@ class Spawner:
         param_names = list(numba.core.utils.pysignature(dispatcher.py_func).parameters)
         replicated = set(dispatcher.decorator_args.get("replicated", ()))
         dist_flags = []
-        out_args = tuple(
+        args_meta = tuple(
             self._get_arg_metadata(
                 arg, param_names[i], param_names[i] in replicated, dist_flags
             )
             for i, arg in enumerate(args)
         )
-        out_kwargs = {
+        kwargs_meta = {
             name: self._get_arg_metadata(arg, name, name in replicated, dist_flags)
             for name, arg in kwargs.items()
         }
+
         # Using cloudpickle for arguments since there could be functions.
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
-        pickled_args = cloudpickle.dumps((out_args, out_kwargs))
+        def compute_args_to_send(arg, arg_meta):
+            if isinstance(arg, tuple):
+                return tuple(
+                    compute_args_to_send(unwrapped_arg, unwrapped_arg_meta)
+                    for unwrapped_arg, unwrapped_arg_meta in zip(arg, arg_meta)
+                )
+            if arg_meta is None:
+                return arg
+            return arg_meta
+
+        args_to_send = [
+            compute_args_to_send(arg, arg_meta)
+            for arg, arg_meta in zip(args, args_meta)
+        ]
+        kwargs_to_send = {
+            name: compute_args_to_send(arg, arg_meta)
+            for name, (arg, arg_meta) in zip(
+                kwargs.keys(), zip(kwargs.values(), kwargs_meta.values())
+            )
+        }
+        pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=bcast_root)
         dispatcher.decorator_args["distributed_block"] = (
             dispatcher.decorator_args.get("distributed_block", []) + dist_flags
         )
-
         # Send DataFrame/Series/Index/array arguments (others are already sent)
-        for arg, out_arg in itertools.chain(
-            zip(args, out_args), zip(kwargs.values(), out_kwargs.values())
+        for arg, arg_meta in itertools.chain(
+            zip(args, args_meta), zip(kwargs.values(), kwargs_meta.values())
         ):
-            self._send_arg_meta(arg, out_arg, bcast_root)
+            self._send_arg_meta(arg, arg_meta, bcast_root)
+        return args_meta, kwargs_meta
 
     def reset(self):
         """Destroy spawned processes"""

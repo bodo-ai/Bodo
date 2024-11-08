@@ -1,5 +1,9 @@
 import typing as pt
 from collections.abc import Callable
+from dataclasses import dataclass
+
+import pandas as pd
+from pandas.core.arrays import ArrowExtensionArray
 
 if pt.TYPE_CHECKING:
     from bodo.pandas.array_manager import LazyArrayManager, LazySingleArrayManager
@@ -40,3 +44,11 @@ class LazyMetadataMixin(pt.Generic[T]):
     # Should only be called if _collect_func hasn't been called
     # Only callable once, will be set to None after called
     _del_func: Callable[[str], None] | None
+
+
+@dataclass
+class LazyMetadata:
+    result_id: str
+    head: pd.DataFrame | pd.Series | ArrowExtensionArray
+    nrows: int
+    index_data: "LazyMetadata | None"

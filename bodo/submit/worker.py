@@ -19,10 +19,11 @@ from pandas.core.arrays.arrow import ArrowExtensionArray
 
 import bodo
 from bodo.mpi4py import MPI
-from bodo.submit.spawner import ArgMetadata, BodoSQLContextMetadata
+from bodo.pandas import LazyMetadata
+from bodo.submit.spawner import BodoSQLContextMetadata
 from bodo.submit.utils import (
+    ArgMetadata,
     CommandType,
-    DistributedReturnMetadata,
     debug_msg,
     poll_for_barrier,
 )
@@ -31,7 +32,14 @@ from bodo.submit.worker_state import set_is_worker
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
 
-def _recv_arg(arg: pt.Any | ArgMetadata, spawner_intercomm: MPI.Intercomm):
+_recv_arg_return_t = (
+    tuple[pt.Any, ArgMetadata | None] | tuple["_recv_arg_return_t", ...]
+)
+
+
+def _recv_arg(
+    arg: pt.Any | ArgMetadata, spawner_intercomm: MPI.Intercomm
+) -> _recv_arg_return_t:
     """Receive argument if it is a DataFrame/Series/Index/array value.
 
     Args:
@@ -42,27 +50,41 @@ def _recv_arg(arg: pt.Any | ArgMetadata, spawner_intercomm: MPI.Intercomm):
         Any: received function argument
     """
     if isinstance(arg, ArgMetadata):
-        if arg.is_broadcast:
-            return bodo.libs.distributed_api.bcast(None, root=0, comm=spawner_intercomm)
-        else:
-            return bodo.libs.distributed_api.scatterv(
-                None, root=0, comm=spawner_intercomm
-            )
+        match arg:
+            case ArgMetadata.BROADCAST:
+                return (
+                    bodo.libs.distributed_api.bcast(
+                        None, root=0, comm=spawner_intercomm
+                    ),
+                    arg,
+                )
+            case ArgMetadata.SCATTER:
+                return (
+                    bodo.libs.distributed_api.scatterv(
+                        None, root=0, comm=spawner_intercomm
+                    ),
+                    arg,
+                )
+            case ArgMetadata.LAZY:
+                res_id = spawner_intercomm.bcast(None, root=0)
+                return (RESULT_REGISTRY[res_id], arg)
 
     if isinstance(arg, BodoSQLContextMetadata):
         from bodosql import BodoSQLContext
 
         tables = {
-            tname: _recv_arg(tmeta, spawner_intercomm)
+            tname: _recv_arg(tmeta, spawner_intercomm)[0]
             for tname, tmeta in arg.tables.items()
         }
-        return BodoSQLContext(tables, arg.catalog, arg.default_tz)
+        # BSE-4154: Support lazy data structures in bodosql context arguments
+        return BodoSQLContext(tables, arg.catalog, arg.default_tz), None
 
     # Handle distributed data nested inside tuples
     if isinstance(arg, tuple):
-        return tuple(_recv_arg(v, spawner_intercomm) for v in arg)
+        args, args_meta = zip(*[_recv_arg(v, spawner_intercomm) for v in arg])
+        return args, args_meta
 
-    return arg
+    return arg, None
 
 
 RESULT_REGISTRY: dict[str, pt.Any] = {}
@@ -75,7 +97,7 @@ is_distributed_t: pt.TypeAlias = (
 
 
 distributed_return_metadata_t: pt.TypeAlias = (
-    DistributedReturnMetadata
+    LazyMetadata
     | list["distributed_return_metadata_t"]
     | dict[pt.Any, "distributed_return_metadata_t"]
 )
@@ -132,7 +154,7 @@ def _build_distributed_return_metadata(
     debug_worker_msg(logger, f"Calculating total result length for {type(res)}")
     total_res_len = comm_world.reduce(len(res), op=MPI.SUM, root=0)
     index_data = _build_index_data(res, logger)
-    return DistributedReturnMetadata(
+    return LazyMetadata(
         result_id=res_id,
         head=res.head(DISTRIBUTED_RETURN_HEAD_SIZE)
         if isinstance(res, pd.DataFrame)
@@ -205,12 +227,47 @@ def _gather_res(
     ):
         # If the result is empty on rank 0, we can't send a head to the spawner
         # so just gather the results and send it all to to the spawner
+        #
         # We could probably optimize this by sending from all worker ranks to the spawner
         # but this shouldn't happen often
 
         return False, bodo.gatherv(res, root=0)
 
     return is_distributed, res
+
+
+def _send_updated_arg(
+    arg: pt.Any,
+    arg_meta: ArgMetadata | None,
+    spawner_intercomm: MPI.Comm,
+    logger: logging.Logger,
+):
+    """Send updated arguments to spawner if needed"""
+    if not isinstance(arg_meta, ArgMetadata):
+        return
+    if arg_meta is ArgMetadata.LAZY:
+        debug_worker_msg(logger, "Sending updated lazy arg to spawner")
+        distributed_return_meta = _build_distributed_return_metadata(arg, logger)
+
+        if bodo.get_rank() == 0:
+            spawner_intercomm.send(distributed_return_meta, dest=0)
+
+
+def _send_updated_args(
+    args: tuple[pt.Any, ...],
+    args_meta: tuple[ArgMetadata | None, ...],
+    kwargs: dict[str, pt.Any],
+    kwargs_meta: dict[str, ArgMetadata | None],
+    spawner_intercomm: MPI.Comm,
+    logger: logging.Logger,
+):
+    """Send updated args and kwargs to spawner if needed, this can happen
+    when a lazy object is passed as an argument and modified in the function.
+    We don't check if it's been modified, we just always update the head for lazy objects"""
+    for arg, arg_meta in zip(args, args_meta):
+        _send_updated_arg(arg, arg_meta, spawner_intercomm, logger)
+    for arg, arg_meta in zip(kwargs.values(), kwargs_meta.values()):
+        _send_updated_arg(arg, arg_meta, spawner_intercomm, logger)
 
 
 def exec_func_handler(
@@ -222,9 +279,20 @@ def exec_func_handler(
 
     # Receive function arguments
     pickled_args = spawner_intercomm.bcast(None, 0)
-    (args, kwargs) = cloudpickle.loads(pickled_args)
-    args = tuple(_recv_arg(arg, spawner_intercomm) for arg in args)
-    kwargs = {name: _recv_arg(arg, spawner_intercomm) for name, arg in kwargs.items()}
+    args_and_meta, kwargs_and_meta = cloudpickle.loads(pickled_args)
+    debug_worker_msg(
+        logger, "Received replicated and meta args and kwargs from spawner"
+    )
+    args, args_meta = [], []
+    for arg in args_and_meta:
+        arg, meta = _recv_arg(arg, spawner_intercomm)
+        args.append(arg)
+        args_meta.append(meta)
+    args, args_meta = tuple(args), tuple(args_meta)
+    kwargs, kwargs_meta = {}, {}
+    for name, arg in kwargs_and_meta.items():
+        kwargs[name], kwargs_meta[name] = _recv_arg(arg, spawner_intercomm)
+    debug_worker_msg(logger, "Received args and kwargs from spawner.")
 
     # Receive function dispatcher
     pickled_func = spawner_intercomm.bcast(None, 0)
@@ -274,7 +342,6 @@ def exec_func_handler(
         # Extract return value distribution from metadata
         is_distributed = func.overloads[sig].metadata["is_return_distributed"]
     debug_worker_msg(logger, f"Function result {is_distributed=}")
-    debug_worker_msg(logger, f"Result {res=}")
 
     is_distributed, res = _gather_res(is_distributed, res)
     debug_worker_msg(logger, f"Is_distributed after gathering empty {is_distributed=}")
@@ -282,7 +349,13 @@ def exec_func_handler(
     if bodo.get_rank() == 0:
         spawner_intercomm.send(is_distributed, dest=0)
 
+    debug_worker_msg(logger, "Sending output to spawner")
     _send_output(res, is_distributed, spawner_intercomm, logger)
+
+    debug_worker_msg(
+        logger, "Sending updated args and kwargs to spawner after function execution"
+    )
+    _send_updated_args(args, args_meta, kwargs, kwargs_meta, spawner_intercomm, logger)
 
 
 def worker_loop(

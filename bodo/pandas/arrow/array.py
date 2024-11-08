@@ -5,12 +5,13 @@ import pyarrow as pa
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 
 import bodo.user_logging
-from bodo.pandas.lazy_metadata import LazyMetadataMixin
+from bodo.pandas.lazy_metadata import LazyMetadata, LazyMetadataMixin
+from bodo.pandas.lazy_wrapper import BodoLazyWrapper
 from bodo.submit.utils import debug_msg
 
 
 class LazyArrowExtensionArray(
-    ArrowExtensionArray, LazyMetadataMixin[ArrowExtensionArray]
+    ArrowExtensionArray, LazyMetadataMixin[ArrowExtensionArray], BodoLazyWrapper
 ):
     """
     A lazy ArrowExtensionArray that will collect data from workers when needed. Also functions as a normal ArrowExtensionArray.
@@ -41,6 +42,39 @@ class LazyArrowExtensionArray(
             self._dtype = head._dtype
         else:
             super().__init__(values)
+
+    @classmethod
+    def from_lazy_metadata(
+        cls,
+        lazy_metadata: LazyMetadata,
+        collect_func: Callable[[str], pt.Any] | None = None,
+        del_func: Callable[[str], None] | None = None,
+    ) -> "LazyArrowExtensionArray":
+        """
+        Create a LazyArrowExtensionArray from a lazy metadata object.
+        """
+        assert isinstance(lazy_metadata.head, ArrowExtensionArray)
+        return cls(
+            None,
+            nrows=lazy_metadata.nrows,
+            result_id=lazy_metadata.result_id,
+            head=lazy_metadata.head,
+            collect_func=collect_func,
+            del_func=del_func,
+        )
+
+    def update_from_lazy_metadata(self, lazy_metadata: LazyMetadata):
+        """
+        Update this array from a lazy metadata object.
+        """
+        assert self._lazy
+        assert isinstance(lazy_metadata.head, ArrowExtensionArray)
+        # Call del since we are updating the array and the old result won't have a reference anymore
+        self._del_func(self._md_result_id)
+        assert isinstance(lazy_metadata.head, ArrowExtensionArray)
+        self._md_nrows = lazy_metadata.nrows
+        self._md_result_id = lazy_metadata.result_id
+        self._md_head = lazy_metadata.head
 
     def __len__(self) -> int:
         """
@@ -98,3 +132,6 @@ class LazyArrowExtensionArray(
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
+
+    def _get_result_id(self) -> str | None:
+        return self._md_result_id
