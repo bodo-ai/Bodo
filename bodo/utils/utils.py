@@ -1040,7 +1040,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             new_cats_arr = create_categorical_type(
                 typ.dtype.categories, typ.dtype.data.data, is_ordered
             )
-            new_cats_tup = MetaType(tuple(new_cats_arr))
+            new_cats_tup = MetaType(typ.dtype.categories)
             return (
                 lambda n,
                 t,
