@@ -16,6 +16,12 @@ azure = { features = ["py312", "dev", "local-mpi", "azure"], solve-group = "312"
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-debug]
+cmd = "pip install --no-deps --no-build-isolation --config-settings=cmake.build-type='Debug' --config-settings=install.strip=false -ve . "
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo-san]
+cmd = "pip install --no-deps --no-build-isolation --config-settings=cmake.build-type='DebugSanitize' --config-settings=install.strip=false -ve . "
+inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodosql]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 cwd = "BodoSQL"
@@ -36,6 +42,8 @@ outputs = ["iceberg/bodo_iceberg_connector.egg-info/"]
 [tasks]
 # Building
 bb = { depends-on = ["build-bodo"] }        # Alias for build-bodo
+bbd = { depends-on = ["build-bodo-debug"] } # Alias for build-bodo-debug
+bbs = { depends-on = ["build-bodo-san"] }   # Alias for build-bodo-san
 bsql = { depends-on = ["build-bodosql"] }   # Alias for build-bodosql
 bi = { depends-on = ["build-iceberg"] }     # Alias for build-iceberg
 build = { depends-on = ["build-bodo", "build-bodosql", "build-iceberg"] }
