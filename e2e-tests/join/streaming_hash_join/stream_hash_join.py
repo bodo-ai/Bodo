@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import numba
 import numpy as np
-from utils.utils import checksum_str_df, drop_sf_table, get_sf_table
+from utils.utils import checksum_str_df_jit, drop_sf_table, get_sf_table
 
 import bodo
 import bodosql
@@ -38,8 +38,7 @@ def checksum(df):
     df_str = df[
         ["l_shipinstruct", "l_shipmode", "l_comment", "o_orderpriority", "o_comment"]
     ]
-    with bodo.objmode(df_str_sum="int64"):
-        df_str_sum = checksum_str_df(df_str)
+    df_str_sum = checksum_str_df_jit(df_str)
 
     return df_no_str_sum + df_str_sum
 

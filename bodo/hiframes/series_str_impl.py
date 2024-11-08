@@ -1416,6 +1416,22 @@ def overload_str_method_endswith(S_str, pat, na=np.nan):
     return impl
 
 
+@overload_method(SeriesStrMethodType, "encode", inline="always", no_unliteral=True)
+def overload_str_method_find(S_str, encoding, errors: str = "strict"):
+    str_arg_check("encode", "encoding", encoding)
+    str_arg_check("encode", "errors", errors)
+
+    def _str_encode_impl(S_str, encoding, errors: str = "strict"):  # pragma: no cover
+        S = S_str._obj
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        out_arr = bodo.libs.str_arr_ext.str_arr_encode(arr, encoding, errors)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return _str_encode_impl
+
+
 @overload(operator.getitem, no_unliteral=True)
 def overload_str_method_getitem(S_str, ind):
     if not isinstance(S_str, SeriesStrMethodType):
@@ -1891,7 +1907,6 @@ _install_catseries_unsupported()
 
 unsupported_str_methods = {
     "decode",
-    "encode",
     "findall",
     "normalize",
     "rpartition",

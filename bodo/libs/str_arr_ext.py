@@ -2579,6 +2579,20 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
     return types.int32(out_ptr_t, string_array_type, types.int64, out_dtype_t), codegen
 
 
+def pd_arr_encode(arr, encoding, errors):
+    """Encode string array using Pandas Series.str.encode"""
+    S = pd.Series(arr)
+    return S.str.encode(encoding, errors).array.to_numpy()
+
+
+@numba.njit(no_cpython_wrapper=True)
+def str_arr_encode(arr, encoding, errors):  # pragma: no cover
+    """Encode string array using Pandas Series.str.encode in object mode"""
+    with bodo.no_warning_objmode(out_arr=binary_array_type):
+        out_arr = pd_arr_encode(arr, encoding, errors)
+    return out_arr
+
+
 class MinOrMax(Enum):
     Min = 1
     Max = 2

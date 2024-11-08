@@ -29,6 +29,15 @@ def checksum_str_df(df):
 
 
 @bodo.jit
+def checksum_str_df_jit(df):
+    """JIT version of above"""
+    str_sum = 0
+    for c in df.columns:
+        str_sum += df[c].str.encode("ascii").map(lambda x: sum(x) % 256).sum()
+    return str_sum
+
+
+@bodo.jit
 def get_sf_table(table_name, sf_conn):
     """
     Get length of Snowflake table.

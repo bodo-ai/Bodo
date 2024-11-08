@@ -855,6 +855,28 @@ def test_rfind(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.slow
+def test_encode(memory_leak_check):
+    def test_impl(S):
+        return S.str.encode("ascii")
+
+    S = pd.Series(
+        [
+            "ABCDD,OSAJD",
+            "a1b2d314f,sdf234",
+            "22!@#,$@#$",
+            np.nan,
+            "A,C,V,B,B",
+            "AA",
+            "",
+        ]
+        * 2,
+        [4, 3, 5, 1, 0, -3, 2, -5, 6, 10, -2, 7, -1, -4],
+        name="A",
+    )
+    check_func(test_impl, (S,), check_dtype=False)
+
+
 @pytest.mark.parametrize(
     "S, sub, start, end",
     [
