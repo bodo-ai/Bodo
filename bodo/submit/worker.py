@@ -221,6 +221,11 @@ def _gather_res(
             all_updated_res.append(updated_res)
         return tuple(all_updated_is_distributed), tuple(all_updated_res)
 
+    from bodosql import BodoSQLContext
+
+    if isinstance(res, BodoSQLContext):
+        return False, res
+
     # BSE-4101: Support lazy numpy arrays
     if is_distributed and (
         (
