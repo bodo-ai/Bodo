@@ -42,16 +42,13 @@ def test_search(tmp_path):
         num_processes = 36
         results_file = os.path.join(tmp_path, f"df_rec{str(num_processes)}.csv")
         cmd = [
-            "mpiexec",
-            "-n",
-            str(num_processes),
             "python",
             "-u",
             "search.py",
             BUCKET_NAME,
             results_file,
         ]
-        run_cmd(cmd)
+        run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})
         validate_results(results_file, oracle_sorted)
     finally:
         # make sure all state is restored even in the case of exceptions
