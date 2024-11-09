@@ -9,9 +9,6 @@ jobs:
     runs-on: [self-hosted, small]
     timeout-minutes: 240
 
-    env:
-      BODO_CHANNEL_NAME: 'bodo.ai'
-
     steps:
       - uses: actions/checkout@v4
         with:

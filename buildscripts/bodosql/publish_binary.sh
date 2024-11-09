@@ -1,8 +1,9 @@
 #!/bin/bash
 set -exo pipefail
 
-export PATH=$HOME/miniforge3/bin:$PATH
-source activate $CONDA_ENV
+# Package Setup
+eval "$(micromamba shell hook -s posix)"
+micromamba activate bodosql_build
 
 BODOSQL_CHANNEL_NAME=${1:-bodo-binary}
 
@@ -31,16 +32,25 @@ if [[ -n "$IS_RELEASE" ]] && [[ "$BODOSQL_CHANNEL_NAME" == "bodo.ai" ]]; then
     label="main"
 fi
 
-for package in `ls $CONDA_PREFIX/conda-bld/noarch/bodosql*.tar.bz2`; do
-    package_name=`basename $package`
-    curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${BODOSQL_CHANNEL_NAME}/noarch/$package_name"
-    if [[ ! -z "$label" ]]; then
-        # `--skip-existing` skips the upload in case the package already exists.
-        # Since the pipeline runs every night, we don't want to replace
-        # the package on anaconda and accidentally break something.
-        anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label --skip-existing
-    fi
-done
+
+PACKAGE_DIR=$HOME/conda-bld
+
+# Upload to Anaconda
+package=`ls $PACKAGE_DIR/noarch/bodosql*.tar.bz2`
+if [[ -z "$package" ]]; then
+  echo "Unable to Find Package. Exiting ..."
+  exit 1
+fi
+
+package_name=`basename $package`
+echo "Package Name: $package_name"
+curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${BODOSQL_CHANNEL_NAME}/noarch/$package_name"
+if [[ ! -z "$label" ]]; then
+    # `--skip-existing` skips the upload in case the package already exists.
+    # Since the pipeline runs every night, we don't want to replace
+    # the package on anaconda and accidentally break something.
+    anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label --skip-existing
+fi
 
 # Reindex Conda
 curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$BODOSQL_CHANNEL_NAME/reindex
