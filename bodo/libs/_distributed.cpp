@@ -423,7 +423,8 @@ static int verify_license_platform() {
                 success = verify_license_azure(instance_id);
         }
     }
-    MPI_Bcast(&success, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    CHECK_MPI(MPI_Bcast(&success, 1, MPI_INT, 0, MPI_COMM_WORLD),
+              "verify_license_platform: MPI error on MPI_Bcast:");
     return success;
 }
 
