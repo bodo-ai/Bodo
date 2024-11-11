@@ -25,20 +25,19 @@ def tpcx_bb_helper(test_file_name, good_result):
 
         # First run with 1 process and generate the cache
         cmd = ["python", "-u", test_file_name]
-        result = process_output(run_cmd(cmd))
+        result = process_output(run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": "1"}))
         assert result == good_result
 
         for num_processes in (2, 3, 4):
             cmd = [
-                "mpiexec",
-                "-n",
-                str(num_processes),
                 "python",
                 "-u",
                 test_file_name,
                 "True",  # tell script to make sure we load from cache, or fail
             ]
-            result = process_output(run_cmd(cmd))
+            result = process_output(
+                run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})
+            )
             assert result == good_result
     finally:
         os.chdir(pytest_working_dir)
