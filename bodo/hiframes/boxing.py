@@ -1708,6 +1708,8 @@ def _infer_ndarray_obj_dtype(val):
         for i in range(nesting_depth):
             arr_type = ArrayItemArrayType(arr_type)
         return arr_type
+    if isinstance(first_val, pd.Timestamp):
+        return bodo.DatetimeArrayType(first_val.tz)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
     if isinstance(first_val, datetime.timedelta):
