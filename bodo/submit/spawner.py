@@ -324,7 +324,9 @@ class Spawner:
         if isinstance(lazy_metadata, tuple):
             return tuple([self.wrap_distributed_result(d) for d in lazy_metadata])
         head = lazy_metadata.head
-        if lazy_metadata.index_data is not None:
+        if lazy_metadata.index_data is not None and isinstance(
+            lazy_metadata.index_data, (LazyMetadata, list, dict, tuple)
+        ):
             lazy_metadata.index_data = self.wrap_distributed_result(
                 lazy_metadata.index_data
             )

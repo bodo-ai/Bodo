@@ -18,6 +18,7 @@ import pandas as pd
 import pyarrow as pa
 from numba import typed
 from pandas.core.arrays.arrow import ArrowExtensionArray
+from pandas.core.base import ExtensionArray
 
 import bodo
 from bodo.mpi4py import MPI
@@ -105,6 +106,7 @@ distributed_return_metadata_t: pt.TypeAlias = (
     LazyMetadata
     | list["distributed_return_metadata_t"]
     | dict[pt.Any, "distributed_return_metadata_t"]
+    | ExtensionArray
 )
 
 
@@ -134,6 +136,14 @@ def _build_index_data(
                         ArrowExtensionArray(pa.array(res.index.right)), logger
                     ),
                 )
+            case pd.CategoricalIndex | pd.DatetimeIndex | pd.TimedeltaIndex:
+                return bodo.gatherv(np.array(res.index._data))
+            case pd.PeriodIndex:
+                # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
+                # since we're missing a proper PeriodArray but it's fine since we'll replace this
+                # with lazy numpy soon
+                return bodo.gatherv(res.index)
+
     return None
 
 
