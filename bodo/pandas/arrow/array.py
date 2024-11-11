@@ -71,7 +71,6 @@ class LazyArrowExtensionArray(
         assert isinstance(lazy_metadata.head, ArrowExtensionArray)
         # Call del since we are updating the array and the old result won't have a reference anymore
         self._del_func(self._md_result_id)
-        assert isinstance(lazy_metadata.head, ArrowExtensionArray)
         self._md_nrows = lazy_metadata.nrows
         self._md_result_id = lazy_metadata.result_id
         self._md_head = lazy_metadata.head

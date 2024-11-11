@@ -173,6 +173,38 @@ def test_bodo_dataframe_arg_updates():
     _test_equal_guard(kwarg_bodo_df, df + 3, check_pandas_types=False)
 
 
+def test_tuple_bodo_dataframe_arg_updates():
+    """
+    Test that passing a BodoDataFrame in a tuple as an argument to a function updates the data returned when collected
+    """
+
+    @bodo.jit(spawn=True)
+    def _get_bodo_df(df):
+        return df
+
+    @bodo.jit(spawn=True)
+    def impl(arg, kwarg=None):
+        arg[0]["A"] += 3
+        if kwarg is not None:
+            kwarg[0]["A"] += 3
+        return arg[1]
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 100})
+    arg_bodo_df = _get_bodo_df(df)
+    kwarg_bodo_df = _get_bodo_df(df)
+    assert isinstance(arg_bodo_df, BodoDataFrame)
+    assert isinstance(kwarg_bodo_df, BodoDataFrame)
+    assert impl((arg_bodo_df, 2), kwarg=(kwarg_bodo_df,)) == 2
+    _test_equal_guard(arg_bodo_df.head(), df.head() + 3, check_pandas_types=False)
+    _test_equal_guard(kwarg_bodo_df.head(), df.head() + 3, check_pandas_types=False)
+
+    assert arg_bodo_df._lazy
+    assert kwarg_bodo_df._lazy
+
+    _test_equal_guard(arg_bodo_df, df + 3, check_pandas_types=False)
+    _test_equal_guard(kwarg_bodo_df, df + 3, check_pandas_types=False)
+
+
 def test_bodo_dataframe_arg_collected():
     """
     Test that passing a BodoDataFrame that's been collected as an argument to a function works
@@ -225,6 +257,25 @@ def test_bodo_series_arg_doesnt_collect():
     new_bodo_series = impl(bodo_series)
     # Test that using it as an arg doesn't collect the result
     assert bodo_series._mgr._md_result_id is not None
+    _test_equal_guard(bodo_series, series, check_pandas_types=False)
+    _test_equal_guard(new_bodo_series, series, check_pandas_types=False)
+
+
+def test_tuple_bodo_series_arg_doesnt_collect():
+    """
+    Test that passing a BodoSeries as an argument to a function doesn't collect the data
+    """
+
+    @bodo.jit(spawn=True)
+    def impl(x):
+        return x
+
+    series = pd.Series([1, 2, 3] * 100)
+    bodo_series = impl(series)
+    assert isinstance(bodo_series, BodoSeries)
+    new_bodo_series, _ = impl((bodo_series, 1))
+    # Test that using it as an arg doesn't collect the result
+    assert bodo_series._lazy
     _test_equal_guard(bodo_series, series, check_pandas_types=False)
     _test_equal_guard(new_bodo_series, series, check_pandas_types=False)
 

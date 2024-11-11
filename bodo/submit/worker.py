@@ -242,12 +242,18 @@ def _gather_res(
 
 
 def _send_updated_arg(
-    arg: pt.Any,
-    arg_meta: ArgMetadata | None,
+    arg: pt.Any | tuple[pt.Any, ...],
+    arg_meta: ArgMetadata | None | tuple[ArgMetadata, ...],
     spawner_intercomm: MPI.Comm,
     logger: logging.Logger,
 ):
     """Send updated arguments to spawner if needed"""
+    if isinstance(arg, tuple):
+        assert isinstance(arg_meta, tuple)
+        for a, m in zip(arg, arg_meta):
+            _send_updated_arg(a, m, spawner_intercomm, logger)
+        return
+
     if not isinstance(arg_meta, ArgMetadata):
         return
     if arg_meta is ArgMetadata.LAZY:

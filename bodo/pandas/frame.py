@@ -89,8 +89,6 @@ class BodoDataFrame(pd.DataFrame, BodoLazyWrapper):
         #     df.to_parquet(path)
 
         # to_parquet_wrapper(self, args[0])
-        #
-        #
 
     def _get_result_id(self) -> str | None:
         if isinstance(self._mgr, LazyMetadataMixin):
