@@ -6,6 +6,10 @@ on:
         description: 'Python Version to Build For'
         type: string
         required: true
+      os:
+        description: 'Operating System to Build On/For'
+        type: string
+        required: true
       platform-build:
         description: 'Build Platform Version of Bodo'
         required: false
@@ -19,46 +23,49 @@ on:
 
 jobs:
   build-bodo:
-    runs-on: [self-hosted, medium]
-    container: condaforge/linux-anvil-alma-x86_64:8
+    defaults:
+      run:
+        shell: bash -l {0}
 
+    runs-on: ${{ fromJson(inputs.os) }}
     steps:
-      - name: Install Git
-        run: sudo dnf update -y && sudo dnf install -y git
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-      - name: Install Build Deps and Get Version
-        # Note: mamba is available on the base image
-        # Copied from arrow-cpp-feedstock: https://github.com/conda-forge/arrow-cpp-feedstock/blob/dfa19a5ffb2675667d618b1b19d7adb437d6fd50/.scripts/run_osx_build.sh#L24
-        run: |
-          source /opt/conda/etc/profile.d/conda.sh
-          mamba create -y -n bodo_build conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
-          conda activate bodo_build
-          conda list
 
+      # Mac-Specific Setup
+      - name: Install MacOS SDK
+        if: ${{ contains(inputs.os, 'macos') }}
+        run: ./buildscripts/setup_osx_sdk.sh
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == '"macos-13"' && '10.15' || '11.0' }}
+
+      # Regular Setup
+      - name: Create Micromamba Environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: bodo_build
+          create-args: conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
+          cache-environment: true
+          generate-run-shell: true
+          init-shell: bash
+      - name: Get Version
+        run: |
           set -exo pipefail
-          # Location is fixed inside Docker container
-          git config --global --add safe.directory /__w/Bodo/Bodo 
           echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
           echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
-
       - name: Obfuscate
         run: |
-          source /opt/conda/etc/profile.d/conda.sh
-          mamba create -y -n bodo_obfuscate python=3.11
-          conda activate bodo_obfuscate
-          set -exo pipefail
-          
+          micromamba create -y -n bodo_obfuscate python=3.11
+          micromamba activate bodo_obfuscate
+          set -exo pipefail         
           cd obfuscation
           ./do_obfuscation.py
 
       - name: Build Bodo Conda Package
         run: |
           set -exo pipefail
-          source /opt/conda/etc/profile.d/conda.sh
-          conda activate bodo_build
           cd buildscripts/bodo/bodo-conda-recipe
 
           # --no-verify because it doesn't work for Conda v2 packages
@@ -86,15 +93,13 @@ jobs:
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
         with:
-          name: bodo-conda-linux-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || 'community' }}
-          path: /github/home/conda-bld/
+          name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
+          path: ${{ github.env.home }}/conda-bld/
 
       - name: Publish to Artifactory / Anaconda
         if: ${{ inputs.is-release }}
         run: |
           set -exo pipefail
-          source /opt/conda/etc/profile.d/conda.sh
-          conda activate bodo_build
 
           # Secrets File
           echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
