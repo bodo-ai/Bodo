@@ -3,13 +3,12 @@
 import numpy as np
 import pandas as pd
 import pytest
-from pandas.core.indexes.range import RangeIndex
 
 import bodo
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
-from bodo.tests.dataframe_common import df_value  # noqa
-from bodo.tests.series_common import series_val  # noqa
+from bodo.tests.dataframe_common import df_value_params
+from bodo.tests.series_common import series_val_params
 from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal_guard,
@@ -18,6 +17,121 @@ from bodo.tests.utils import (
 )
 
 pytestmark = pytest_spawn_mode
+
+
+@pytest.fixture(
+    params=df_value_params
+    + [
+        pytest.param(
+            pd.DataFrame({"A": list(range(100))}, pd.interval_range(0, 100)),
+            id="interval_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": list(range(100))},
+                pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50),
+            ),
+            id="multi_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": ["A"] * 100},
+                index=pd.CategoricalIndex(["A", "B", "C", "D", "E"] * 20),
+            ),
+            id="categorical_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": ["A"] * 100},
+                index=pd.PeriodIndex.from_fields(
+                    year=[2020, 2021] * 50,
+                    month=[1, 6] * 50,
+                    day=[1, 30] * 50,
+                    freq="D",
+                ),
+            ),
+            id="period_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": ["A"] * 100},
+                index=pd.DatetimeIndex(pd.date_range("2020-01-01", periods=100)),
+            ),
+            id="datetime_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {"A": ["A"] * 100},
+                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+            ),
+            id="timedelta_index",
+            marks=[pytest.mark.slow],
+        ),
+    ]
+)
+def df_value(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=series_val_params
+    + [
+        pytest.param(
+            pd.Series(list(range(100)), pd.interval_range(0, 100)),
+            id="interval_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.Series(
+                list(range(100)), pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50)
+            ),
+            id="multi_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.Series(
+                ["A"] * 100,
+                index=pd.CategoricalIndex(["A", "B", "C", "D", "E"] * 20),
+            ),
+            id="categorical_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.Series(
+                [1, 2, 3, -1, 4] * 20,
+                index=pd.PeriodIndex(
+                    ["2018-01", "2018-02", "2018-03", "2018-04", "2018-05"] * 20,
+                    freq="M",
+                ),
+            ),
+            id="period_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.Series(
+                [1, 2, 3, -1, 4] * 20,
+                index=pd.DatetimeIndex(pd.date_range("2018-01-01", periods=100)),
+            ),
+            id="datetime_index",
+            marks=[pytest.mark.slow],
+        ),
+        pytest.param(
+            pd.Series(
+                [1, 2, 3, -1, 4] * 20,
+                index=pd.TimedeltaIndex(pd.timedelta_range("1 days", periods=100)),
+            ),
+            id="timedelta_index",
+            marks=[pytest.mark.slow],
+        ),
+    ]
+)
+def series_val(request):
+    return request.param
 
 
 def test_distributed_input_scalar():
@@ -44,14 +158,6 @@ def test_distributed_scalar_output():
 
 
 def test_distributed_input_output_df(df_value):
-    if (
-        not isinstance(df_value.index, RangeIndex)
-        and type(df_value.index) is not pd.Index
-        and type(df_value.index) is not pd.IntervalIndex
-        and type(df_value.index) is not pd.MultiIndex
-    ):
-        pytest.skip("BSE-4099: Support all pandas index types in lazy wrappers")
-
     def test(df):
         return df
 
@@ -59,14 +165,6 @@ def test_distributed_input_output_df(df_value):
 
 
 def test_distributed_input_output_series(series_val):
-    if (
-        not isinstance(series_val.index, RangeIndex)
-        and type(series_val.index) is not pd.Index
-        and type(series_val.index) is not pd.IntervalIndex
-        and type(series_val.index) is not pd.MultiIndex
-    ):
-        pytest.skip("BSE-4099: Support all pandas index types in lazy wrappers")
-
     def test(A):
         return A
 

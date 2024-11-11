@@ -11,8 +11,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import spawn_mode_markers
-
 
 @dataclass
 class SeriesReplace:
@@ -40,161 +38,144 @@ GLOBAL_VAL = 2
 # using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
 # zero length chunks on any rank can cause issues, TODO: fix
 # TODO: other possible Series types like Categorical, dt64, td64, ...
-@pytest.fixture(
-    params=[
-        pytest.param(
-            pd.Series(
-                [
-                    Decimal("1.6"),
-                    Decimal("-0.2"),
-                    Decimal("44.2"),
-                    None,
-                    Decimal("0"),
-                ]
-                * 2
-            ),
-            id="decimal",
+series_val_params = [
+    pytest.param(
+        pd.Series(
+            [
+                Decimal("1.6"),
+                Decimal("-0.2"),
+                Decimal("44.2"),
+                None,
+                Decimal("0"),
+            ]
+            * 2
         ),
-        pytest.param(
-            pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow, id="integer"
+        id="decimal",
+    ),
+    pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow, id="integer"),
+    pytest.param(
+        pd.Series([True, False, False, True, True]),
+        marks=pytest.mark.slow,
+        id="boolean_nona",
+    ),  # bool array without NA
+    pytest.param(
+        pd.Series([True, False, False, np.nan, True] * 2, dtype="boolean"),
+        id="boolean_withna",
+    ),  # bool array with NA
+    pytest.param(
+        pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+        marks=pytest.mark.slow,
+        id="uint8",
+    ),
+    pytest.param(pd.Series([1, 8, 4, 10, 3], dtype="Int32"), id="series_val5"),
+    pytest.param(
+        pd.Series([1, 8, 4, -1, 2], name="ACD"),
+        marks=pytest.mark.slow,
+        id="int32",
+    ),
+    pytest.param(
+        pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
+        marks=pytest.mark.slow,
+        id="integer_with_index",
+    ),
+    pytest.param(
+        pd.Series(
+            [1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="float_with_index"
         ),
-        pytest.param(
-            pd.Series([True, False, False, True, True]),
-            marks=pytest.mark.slow,
-            id="boolean_nona",
-        ),  # bool array without NA
-        pytest.param(
-            pd.Series([True, False, False, np.nan, True] * 2, dtype="boolean"),
-            id="boolean_withna",
-        ),  # bool array with NA
-        pytest.param(
-            pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
-            marks=pytest.mark.slow,
-            id="uint8",
+    ),
+    pytest.param(
+        pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]),
+        id="integer_with_string_index",
+    ),
+    pytest.param(
+        pd.Series(["A", "B", "CDD", "AA", "GGG"]),
+        marks=pytest.mark.slow,
+        id="string",
+    ),  # TODO: string with Null (np.testing fails)
+    pytest.param(
+        pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
+        id="string_with_integer_index",
+    ),
+    pytest.param(
+        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
+        id="timestamp",
+    ),
+    pytest.param(
+        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date),
+        id="date",
+    ),
+    pytest.param(
+        pd.Series(
+            [
+                datetime.timedelta(3, 3, 3),
+                datetime.timedelta(2, 2, 2),
+                datetime.timedelta(1, 1, 1),
+                None,
+                datetime.timedelta(5, 5, 5),
+            ]
         ),
-        pytest.param(pd.Series([1, 8, 4, 10, 3], dtype="Int32"), id="series_val5"),
-        pytest.param(
-            pd.Series([1, 8, 4, -1, 2], name="ACD"),
-            marks=pytest.mark.slow,
-            id="int32",
+        id="timedelta",
+    ),
+    pytest.param(
+        pd.Series(
+            [3, 5, 1, -1, 2],
+            pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
         ),
-        pytest.param(
-            pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
-            marks=pytest.mark.slow,
-            id="integer_with_index",
+        marks=pytest.mark.slow,
+        id="integer_with_timestamp_index",
+    ),
+    pytest.param(
+        pd.Series(
+            [
+                ["a", "bc", "éè", "日本人"],
+                ["a", ";∞¥₤€"],
+                ["aaa", "b", "cc", "~=[]()%+{}@;’"],
+                None,
+                ["xx", "yy", "#!$_&-"],
+            ]
         ),
-        pytest.param(
-            pd.Series(
-                [1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="float_with_index"
-            ),
+        id="string_non_unicode",
+    ),
+    pytest.param(
+        pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
+        id="integer_array",
+    ),
+    pytest.param(
+        pd.Series(["AA", "BB", "", "AA", None, "AA"] * 2, dtype="category"),
+        id="categorical_string",
+    ),
+    pytest.param(
+        pd.Series(pd.Categorical([1, 2, 5, None, 2] * 2, ordered=True)),
+        id="categorical_integer_ordered",
+    ),
+    pytest.param(
+        pd.concat(
+            [
+                pd.Series(pd.date_range(start="1/1/2018", end="1/10/2018", periods=9)),
+                pd.Series([None]),
+            ]
+        ).astype("category"),
+        id="categorical_timestamp",
+    ),
+    pytest.param(
+        pd.concat(
+            [
+                pd.Series(pd.timedelta_range(start="1 day", periods=9)),
+                pd.Series([None]),
+            ]
+        ).astype(pd.CategoricalDtype(ordered=True)),
+        id="categorical_timestamp_ordered",
+    ),
+    pytest.param(
+        pd.Series(
+            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2
         ),
-        pytest.param(
-            pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]),
-            id="integer_with_string_index",
-        ),
-        pytest.param(
-            pd.Series(["A", "B", "CDD", "AA", "GGG"]),
-            marks=pytest.mark.slow,
-            id="string",
-        ),  # TODO: string with Null (np.testing fails)
-        pytest.param(
-            pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
-            id="string_with_integer_index",
-        ),
-        pytest.param(
-            pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
-            id="timestamp",
-        ),
-        pytest.param(
-            pd.Series(
-                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date
-            ),
-            id="date",
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    datetime.timedelta(3, 3, 3),
-                    datetime.timedelta(2, 2, 2),
-                    datetime.timedelta(1, 1, 1),
-                    None,
-                    datetime.timedelta(5, 5, 5),
-                ]
-            ),
-            id="timedelta",
-        ),
-        pytest.param(
-            pd.Series(
-                [3, 5, 1, -1, 2],
-                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
-            ),
-            marks=pytest.mark.slow,
-            id="integer_with_timestamp_index",
-        ),
-        pytest.param(
-            pd.Series(
-                [
-                    ["a", "bc", "éè", "日本人"],
-                    ["a", ";∞¥₤€"],
-                    ["aaa", "b", "cc", "~=[]()%+{}@;’"],
-                    None,
-                    ["xx", "yy", "#!$_&-"],
-                ]
-            ),
-            id="string_non_unicode",
-        ),
-        pytest.param(
-            pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
-            id="integer_array",
-        ),
-        pytest.param(
-            pd.Series(["AA", "BB", "", "AA", None, "AA"] * 2, dtype="category"),
-            id="categorical_string",
-        ),
-        pytest.param(
-            pd.Series(pd.Categorical([1, 2, 5, None, 2] * 2, ordered=True)),
-            id="categorical_integer_ordered",
-        ),
-        pytest.param(
-            pd.concat(
-                [
-                    pd.Series(
-                        pd.date_range(start="1/1/2018", end="1/10/2018", periods=9)
-                    ),
-                    pd.Series([None]),
-                ]
-            ).astype("category"),
-            id="categorical_timestamp",
-        ),
-        pytest.param(
-            pd.concat(
-                [
-                    pd.Series(pd.timedelta_range(start="1 day", periods=9)),
-                    pd.Series([None]),
-                ]
-            ).astype(pd.CategoricalDtype(ordered=True)),
-            id="categorical_timestamp_ordered",
-        ),
-        pytest.param(
-            pd.Series(
-                [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2
-            ),
-            id="binary",
-        ),
-        pytest.param(
-            pd.Series(list(range(100)), pd.interval_range(0, 100)),
-            id="interval_index",
-            marks=[pytest.mark.slow] + list(spawn_mode_markers),
-        ),
-        pytest.param(
-            pd.Series(
-                list(range(100)), pd.MultiIndex.from_tuples([(1, 2), (3, 4)] * 50)
-            ),
-            id="multi_index",
-            marks=[pytest.mark.slow] + list(spawn_mode_markers),
-        ),
-    ]
-)
+        id="binary",
+    ),
+]
+
+
+@pytest.fixture(params=series_val_params)
 def series_val(request):
     return request.param
 
