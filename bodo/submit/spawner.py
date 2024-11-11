@@ -197,6 +197,11 @@ class Spawner:
         Only does anything for lazy arguments."""
 
         def _recv_updated_arg(arg, arg_meta):
+            if isinstance(arg, tuple):
+                assert isinstance(arg_meta, tuple)
+                for i in range(len(arg)):
+                    _recv_updated_arg(arg[i], arg_meta[i])
+
             if isinstance(arg_meta, ArgMetadata) and arg_meta is ArgMetadata.LAZY:
                 return_meta = self.worker_intercomm.recv(source=0)
                 arg.update_from_lazy_metadata(return_meta)
@@ -357,6 +362,13 @@ class Spawner:
             dist_flags.append(arg_name)
             return ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
 
+        # Handle distributed data inside tuples
+        if isinstance(arg, tuple):
+            return tuple(
+                self._get_arg_metadata(val, arg_name, is_replicated, dist_flags)
+                for val in arg
+            )
+
         # Arguments could be functions which fail in typeof.
         # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         # Similar to dispatcher argument handling:
@@ -386,13 +398,6 @@ class Spawner:
             }
             dist_flags.append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
-
-        # Handle distributed data inside tuples
-        if isinstance(arg, tuple):
-            return tuple(
-                self._get_arg_metadata(val, arg_name, is_replicated, dist_flags)
-                for val in arg
-            )
 
         return None
 
@@ -437,7 +442,7 @@ class Spawner:
         # Send distributed data nested inside tuples
         if isinstance(arg_meta, tuple):
             for val, out_val in zip(arg, arg_meta):
-                self._send_arg_meta(val, out_val, self.bcast_root)
+                self._send_arg_meta(val, out_val)
 
     def _send_args_update_dist_flags(
         self, dispatcher: "SubmitDispatcher", args, kwargs
