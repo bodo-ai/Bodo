@@ -21,6 +21,7 @@ class CommandType(str, Enum):
     SCATTER = "scatter"
     GATHER = "gather"
     DELETE_RESULT = "delete_result"
+    REGISTER_TYPE = "register_type"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
