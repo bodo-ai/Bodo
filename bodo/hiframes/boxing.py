@@ -1618,8 +1618,8 @@ def _infer_ndarray_obj_dtype(val):
     # skip NAs and empty lists/arrays (for array(item) array cases)
     # is_scalar call necessary since pd.isna() treats list of string as array
     while i < len(val) and (
-        (pd.api.types.is_scalar(val[i]) and pd.isna(val[i]))
-        or (not pd.api.types.is_scalar(val[i]) and len(val[i]) == 0)
+        (_is_scalar_value(val[i]) and pd.isna(val[i]))
+        or (not _is_scalar_value(val[i]) and len(val[i]) == 0)
     ):
         i += 1
     if i == len(val):
@@ -1717,6 +1717,8 @@ def _infer_ndarray_obj_dtype(val):
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return DecimalArrayType(38, 18)
+    if isinstance(first_val, pa.Decimal128Scalar):
+        return DecimalArrayType(first_val.type.precision, first_val.type.scale)
     if isinstance(first_val, pd._libs.interval.Interval):
         left_dtype = numba.typeof(first_val.left)
         right_dtype = numba.typeof(first_val.right)
@@ -1756,7 +1758,7 @@ def _get_struct_value_arr_type(v):
     if isinstance(v, list):
         return dtype_to_array_type(numba.typeof(_value_to_array(v)))
 
-    if pd.api.types.is_scalar(v) and pd.isna(v):
+    if _is_scalar_value(v) and pd.isna(v):
         # assume string array if first field value is NA
         # TODO: use other rows until non-NA is found
         warnings.warn(
@@ -1796,7 +1798,7 @@ def _infer_array_item_array_type_and_depth(val, nesting_depth):
         return None, nesting_depth, True
 
     for i in range(len(val)):
-        if pd.api.types.is_scalar(val[i]):
+        if _is_scalar_value(val[i]):
             if not pd.isna(val[i]):
                 if isinstance(val, np.ndarray):
                     nullable = False
@@ -1830,3 +1832,10 @@ def _infer_array_item_array_type_and_depth(val, nesting_depth):
             if typ != None:
                 return typ, max_depth, nullable
     return None, max_depth, True
+
+
+def _is_scalar_value(val):
+    """Return True if value is a Pandas scalar value or PyArrow decimal scalar.
+    We use PyArrow scalars since Pandas uses decimal.Decimal which lose precision/scale.
+    """
+    return pd.api.types.is_scalar(val) or isinstance(val, pa.Decimal128Scalar)
