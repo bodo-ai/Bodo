@@ -8,7 +8,6 @@ from utils.utils import checksum_str_df_jit, drop_sf_table, get_sf_table
 
 import bodo
 import bodosql
-from bodo.mpi4py import MPI
 
 
 @bodo.jit
@@ -43,14 +42,14 @@ def checksum(df):
     return df_no_str_sum + df_str_sum
 
 
-@bodo.jit
+@bodo.jit(spawn=True)
 def read_and_compute_checksum_and_len(table_name, conn):
     df = get_sf_table(table_name, conn)
     df_checksum = checksum(df)
     return df_checksum, len(df)
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def run_query(bc, input_schema, output_table_name):
     query = f"""
         create or replace table {output_table_name} as
@@ -105,19 +104,17 @@ if __name__ == "__main__":
         catalog=catalog,
     )
 
-    comm = MPI.COMM_WORLD
     # Create a random table name to write to and broadcast to all ranks
     output_table_name = None
     output_schema = "public"
-    if comm.Get_rank() == 0:
-        # We use uppercase due to an issue reading tables
-        # with lowercase letters.
-        # https://bodo.atlassian.net/browse/BE-3534
-        output_table_name = (
-            f"{output_schema}.hash_join_streaming_e2e_out_{str(uuid4())[:8]}".upper()
-        )
-        print("output_table_name: ", output_table_name)
-    output_table_name = comm.bcast(output_table_name)
+
+    # We use uppercase due to an issue reading tables
+    # with lowercase letters.
+    # https://bodo.atlassian.net/browse/BE-3534
+    output_table_name = (
+        f"{output_schema}.hash_join_streaming_e2e_out_{str(uuid4())[:8]}".upper()
+    )
+    print("output_table_name: ", output_table_name)
 
     ## Write output to Snowflake table
     start_time = time.time()
@@ -126,9 +123,7 @@ if __name__ == "__main__":
 
     # Add a barrier for synchronization purposes so that
     # the get length and drop commands are done after all the writes.
-    bodo.barrier()
-    if bodo.get_rank() == 0:
-        print("Total time: ", end_time - start_time, " s")
+    print("Total time: ", end_time - start_time, " s")
 
     ## Read table from Snowflake and compute checksum
     conn = f"snowflake://{username}:{password}@{account}/{db}/{output_schema}?warehouse={warehouse}"
@@ -136,9 +131,9 @@ if __name__ == "__main__":
     sf_df_checksum, len_sf_df = read_and_compute_checksum_and_len(
         output_table_name, conn
     )
-    if bodo.get_rank() == 0:
-        print("Output table checksum: ", sf_df_checksum)
-        print("Output table length: ", len_sf_df)
+
+    print("Output table checksum: ", sf_df_checksum)
+    print("Output table length: ", len_sf_df)
 
     assert (
         expected_out_len == len_sf_df
@@ -154,25 +149,14 @@ if __name__ == "__main__":
         ), "ERROR: Bodo did not load from cache"
 
     # Drop the table, to avoid dangling tables on our account.
-    # This is done on a single rank, and any errors are then
-    # broadcasted and raised on all ranks to avoid any hangs.
-
-    drop_err = None
-    if bodo.get_rank() == 0:
-        try:
-            drop_result = drop_sf_table(
-                output_table_name,
-                conn,
-            )
-            print("drop_result: ", drop_result)
-            assert (
-                isinstance(drop_result, list)
-                and (len(drop_result) == 1)
-                and (len(drop_result[0]) == 1)
-                and "successfully dropped" in drop_result[0][0]
-            ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
-        except Exception as e:
-            drop_err = e
-    drop_err = comm.bcast(drop_err)
-    if isinstance(drop_err, Exception):
-        raise drop_err
+    drop_result = drop_sf_table(
+        output_table_name,
+        conn,
+    )
+    print("drop_result: ", drop_result)
+    assert (
+        isinstance(drop_result, list)
+        and (len(drop_result) == 1)
+        and (len(drop_result[0]) == 1)
+        and "successfully dropped" in drop_result[0][0]
+    ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
