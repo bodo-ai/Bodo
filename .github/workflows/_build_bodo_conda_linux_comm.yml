@@ -1,0 +1,102 @@
+name: Bodo Conda Build (Linux)
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'Python Version to Build For'
+        type: string
+        required: true
+      is-release:
+        description: 'Is this a release build'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-bodo:
+    runs-on: [self-hosted, medium]
+    container: condaforge/linux-anvil-alma-x86_64:8
+
+    steps:
+      - name: Install Git
+        run: sudo dnf update -y && sudo dnf install -y git
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Install Build Deps and Get Version
+        # Note: mamba is available on the base image
+        # Copied from arrow-cpp-feedstock: https://github.com/conda-forge/arrow-cpp-feedstock/blob/dfa19a5ffb2675667d618b1b19d7adb437d6fd50/.scripts/run_osx_build.sh#L24
+        run: |
+          source /opt/conda/etc/profile.d/conda.sh
+          mamba create -y -n bodo_build conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
+          conda activate bodo_build
+          conda list
+
+          set -exo pipefail
+          # Location is fixed inside Docker container
+          git config --global --add safe.directory /__w/Bodo/Bodo 
+          echo "BODO_VERSION=`python -m setuptools_scm`" >> $GITHUB_ENV
+          echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
+
+      - name: Obfuscate
+        run: |
+          source /opt/conda/etc/profile.d/conda.sh
+          mamba create -y -n bodo_obfuscate python=3.11
+          conda activate bodo_obfuscate
+          set -exo pipefail
+          
+          cd obfuscation
+          ./do_obfuscation.py
+
+      - name: Build Bodo Conda Package
+        run: |
+          set -exo pipefail
+          source /opt/conda/etc/profile.d/conda.sh
+          conda activate bodo_build
+          cd buildscripts/bodo/bodo-conda-recipe
+
+          # --no-verify because it doesn't work for Conda v2 packages
+          # --no-anaconda-upload because we'll upload ourselves
+          # Sccache works when the files are located in the same path.
+          # Conda-Build normally uses a random path. Setting these args disables that.
+          # --croot for consistent base directory path for sccache
+          # --build-id-pat for consistent build directory path for sccache
+          conda build . $PLATFORM_CHANNEL -c conda-forge \
+            --no-verify --no-anaconda-upload \
+            --croot $HOME/conda-bld --build-id-pat 'bb' \
+            -e nightly_conda_build_config.yaml --python '${{ inputs.python-version }}'
+        env:
+          CONDA_SOLVER: libmamba
+          # Sccache Creds
+          AWS_ACCESS_KEY_ID: ${{ vars.SCCACHE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SCCACHE_AWS_SECRET_ACCESS_KEY }}
+          # Community Specific
+          CHECK_LICENSE_EXPIRED: 1
+          CHECK_LICENSE_CORE_COUNT: 1
+          CHECK_LICENSE_PLATFORM: 0
+          BUILD_WITH_V8: 0
+
+      - name: Upload Conda Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: bodo-conda-linux-${{ inputs.python-version }}-community
+          path: /github/home/conda-bld/
+
+      - name: Publish to Artifactory / Anaconda
+        if: ${{ inputs.is-release }}
+        run: |
+          set -exo pipefail
+          source /opt/conda/etc/profile.d/conda.sh
+          conda activate bodo_build
+
+          # Secrets File
+          echo "${{ secrets.PUBLISH_BINARY_SECRETS }}" > $HOME/secret_file
+          sudo chmod a+r $HOME/secret_file
+
+          echo "BODO_VERSION: $BODO_VERSION"
+          echo $ARTIFACTORY_CHANNEL
+          ./buildscripts/bodo/azure/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
+        env:
+          IS_RELEASE: ${{ inputs.is-release }}
+          ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}', (inputs.is-release) && '-dev' || '') }}
