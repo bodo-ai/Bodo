@@ -95,7 +95,30 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
                         head_axis0.name,
                         dtype=head_axis0.dtype,
                     )
-                    pass
+                case pd.CategoricalIndex:
+                    assert index_data is not None
+                    new_axis0 = pd.CategoricalIndex(
+                        index_data,
+                        categories=head_axis0.categories,
+                        ordered=head_axis0.ordered,
+                        name=head_axis0.name,
+                    )
+                case pd.DatetimeIndex:
+                    assert index_data is not None
+                    new_axis0 = pd.DatetimeIndex(
+                        index_data,
+                        name=head_axis0.name,
+                        tz=head_axis0.tz,
+                        freq=head_axis0.freq,
+                    )
+                case pd.PeriodIndex:
+                    assert index_data is not None
+                    new_axis0 = index_data
+                case pd.TimedeltaIndex:
+                    assert index_data is not None
+                    new_axis0 = pd.TimedeltaIndex(
+                        index_data, name=head_axis0.name, unit=head_axis0.unit
+                    )
                 case _:
                     raise ValueError(
                         "{type(head_axis0)} is not supported in LazyArrayManager"
@@ -322,7 +345,31 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
                         head_axis.name,
                         dtype=head_axis.dtype,
                     )
-                    pass
+                case pd.CategoricalIndex:
+                    assert index_data is not None
+                    new_axis = pd.CategoricalIndex(
+                        index_data,
+                        categories=head_axis.categories,
+                        ordered=head_axis.ordered,
+                        name=head_axis.name,
+                    )
+                case pd.DatetimeIndex:
+                    assert index_data is not None
+                    new_axis = pd.DatetimeIndex(
+                        index_data,
+                        name=head_axis.name,
+                        tz=head_axis.tz,
+                        freq=head_axis.freq,
+                    )
+                case pd.PeriodIndex:
+                    assert index_data is not None
+                    new_axis = index_data
+                case pd.TimedeltaIndex:
+                    assert index_data is not None
+                    new_axis = pd.TimedeltaIndex(
+                        index_data, name=head_axis.name, unit=head_axis.unit
+                    )
+
                 case _:
                     raise ValueError(
                         "{type(head_axis)} is not supported in LazySingleArrayManager"

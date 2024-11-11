@@ -73,7 +73,37 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                                 dtype=ss_axis.dtype,
                             )
                         )
-                        pass
+                    case pd.CategoricalIndex:
+                        assert index_data is not None
+                        row_indexes.append(
+                            pd.CategoricalIndex(
+                                index_data,
+                                categories=ss_axis.categories,
+                                ordered=ss_axis.ordered,
+                                name=ss_axis.name,
+                            )
+                        )
+                    case pd.DatetimeIndex:
+                        assert index_data is not None
+                        row_indexes.append(
+                            pd.DatetimeIndex(
+                                index_data,
+                                name=ss_axis.name,
+                                tz=ss_axis.tz,
+                                freq=ss_axis.freq,
+                            )
+                        )
+                    case pd.PeriodIndex:
+                        assert index_data is not None
+                        row_indexes.append(index_data)
+                    case pd.TimedeltaIndex:
+                        assert index_data is not None
+                        row_indexes.append(
+                            pd.TimedeltaIndex(
+                                index_data, name=ss_axis.name, unit=ss_axis.unit
+                            )
+                        )
+
                     case _:
                         raise ValueError(
                             f"Index type {type(ss_axis)} not supported in LazyBlockManager"
@@ -284,6 +314,30 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                         head_axis.closed,
                         head_axis.name,
                         dtype=head_axis.dtype,
+                    )
+                case pd.CategoricalIndex:
+                    assert index_data is not None
+                    axis_ = pd.CategoricalIndex(
+                        index_data,
+                        categories=head_axis.categories,
+                        ordered=head_axis.ordered,
+                        name=head_axis.name,
+                    )
+                case pd.DatetimeIndex:
+                    assert index_data is not None
+                    axis_ = pd.DatetimeIndex(
+                        index_data,
+                        name=head_axis.name,
+                        tz=head_axis.tz,
+                        freq=head_axis.freq,
+                    )
+                case pd.PeriodIndex:
+                    assert index_data is not None
+                    axis_ = index_data
+                case pd.TimedeltaIndex:
+                    assert index_data is not None
+                    axis_ = pd.TimedeltaIndex(
+                        index_data, name=head_axis.name, unit=head_axis.unit
                     )
                 case _:
                     raise ValueError(
