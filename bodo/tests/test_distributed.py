@@ -2501,6 +2501,19 @@ def get_random_int64index(n):
             id="timedelta",
         ),
         pytest.param(
+            np.matrix(
+                [
+                    [0.2, 1.5, 0.2, 0.1],
+                    [0.4, 0.4, 0.1, 0.1],
+                    [0.0, 3.0, 0.5, 0.5],
+                    [1.2, 0.0, 0.25, 0.75],
+                ],
+                dtype=np.float64,
+            ),
+            marks=pytest.mark.slow,
+            id="matrix",
+        ),
+        pytest.param(
             pd.DataFrame(
                 {"A": [1, 8, 4, 11, -3], "B": [1.1, np.nan, 4.2, 3.1, -1.1]}
             ).rename({"A": "a", "B": "a"}, axis=1),

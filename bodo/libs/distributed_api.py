@@ -1273,6 +1273,16 @@ def gatherv_impl_jit(
 
         return impl_cat
 
+    if isinstance(data, bodo.MatrixType):
+
+        def impl_matrix(
+            data, allgather=False, warn_if_rep=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            new_data = bodo.gatherv(data.data, allgather, warn_if_rep, root, comm)
+            return bodo.libs.matrix_ext.init_np_matrix(new_data)
+
+        return impl_matrix
+
     # DatetimeTimeDeltaArrayType (not supported by C++ below yet)
     if data == datetime_timedelta_array_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -1780,7 +1790,7 @@ def _scatterv_np(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, c
         rank, is_intercomm, is_sender, n_pes = get_scatter_comm_info(root, comm)
 
         data_in = np.ascontiguousarray(data)
-        data_ptr = data.ctypes
+        data_ptr = data_in.ctypes
 
         # broadcast shape to all processors
         shape = zero_shape
@@ -1986,6 +1996,12 @@ def get_value_for_type(dtype):  # pragma: no cover
             }
         )
         return np.array([dict_val], object)
+
+    # Numpy Matrix
+    if isinstance(dtype, bodo.MatrixType):
+        return np.asmatrix(
+            get_value_for_type(types.Array(dtype.dtype, 2, dtype.layout))
+        )
 
     if isinstance(dtype, types.List):
         return [get_value_for_type(dtype.dtype)]
@@ -2901,6 +2917,18 @@ def scatterv_impl_jit(
             root=DEFAULT_ROOT,
             comm=0: None
         )
+
+    if isinstance(data, bodo.MatrixType):
+
+        def impl_matrix(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            new_underlying_data = bodo.libs.distributed_api.scatterv_impl(
+                data.data, send_counts, warn_if_dist, root, comm
+            )
+            return bodo.libs.matrix_ext.init_np_matrix(new_underlying_data)
+
+        return impl_matrix
 
     raise BodoError(f"scatterv() not available for {data}")  # pragma: no cover
 
