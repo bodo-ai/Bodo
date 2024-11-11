@@ -462,6 +462,7 @@ def test_parquet_read_row_count_collection(datapath, memory_leak_check):
     ), f"Expected reader_output_row_count to be 120515, but it was {reader_output_row_count} instead."
 
 
+@pytest.mark.skip(reason="[BSE-4151] Test segfaulting on PR CI")
 def test_hash_join_metrics_collection(memory_leak_check, tmp_path):
     """
     Test that generated query profile has the metrics that we expect

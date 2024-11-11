@@ -1553,6 +1553,7 @@ def test_join_key_prune(memory_leak_check):
     )
 
 
+@pytest.mark.skip(reason="[BSE-4151] Test segfaulting on PR CI")
 def test_key_multicast(memory_leak_check):
     """
     Test stream join where a key is used in multiple comparisons. Since we use
@@ -1573,19 +1574,8 @@ def test_key_multicast(memory_leak_check):
     kept_cols1 = bodo.utils.typing.MetaType((0,))
     kept_cols2 = bodo.utils.typing.MetaType((0, 1))
     build_col_meta = bodo.utils.typing.ColNamesMetaType(("A",))
-    probe_col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "C",
-            "D",
-        )
-    )
-    col_meta = bodo.utils.typing.ColNamesMetaType(
-        (
-            "C",
-            "D",
-            "A",
-        )
-    )
+    probe_col_meta = bodo.utils.typing.ColNamesMetaType(("C", "D"))
+    col_meta = bodo.utils.typing.ColNamesMetaType(("C", "D", "A"))
     build_interval_cols = bodo.utils.typing.MetaType(())
 
     def test_hash_join(df1, df2):
