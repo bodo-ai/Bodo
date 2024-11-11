@@ -25,7 +25,12 @@ def test_type_register():
             df = pd.DataFrame({"A": [1, 2, 5]})
         return df
 
-    check_func(impl, (), is_out_distributed=False)
+    check_func(
+        impl,
+        (),
+        is_out_distributed=False,
+        additional_compiler_arguments={"replicated": ["df"]},
+    )
 
     # error checking
     with pytest.raises(BodoError, match="type name 'my_type1' already exists"):

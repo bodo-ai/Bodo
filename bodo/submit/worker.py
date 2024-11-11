@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from numba import typed
+from numba.core import types
 from pandas.core.arrays.arrow import ArrowExtensionArray
 from pandas.core.base import ExtensionArray
 
@@ -449,6 +450,10 @@ def worker_loop(
             res_id = spawner_intercomm.bcast(None, 0)
             del RESULT_REGISTRY[res_id]
             debug_worker_msg(logger, f"Deleted result {res_id}")
+        elif command == CommandType.REGISTER_TYPE.value:
+            (type_name, type_value) = spawner_intercomm.bcast(None, 0)
+            setattr(types, type_name, type_value)
+            debug_worker_msg(logger, f"Added type {type_name}")
         else:
             raise ValueError(f"Unsupported command '{command}!")
 
