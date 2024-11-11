@@ -138,6 +138,8 @@ pyspark = "3.5"
 mmh3 = "*"
 avro = "*"  # Reading avro
 
+# Documentation Testing
+beautifulsoup4 = "*"
 # Snowflake Testing
 snowflake-sqlalchemy = "*"
 
