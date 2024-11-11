@@ -8,7 +8,7 @@ import pandas as pd
 import bodo
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def q26(ss_file, i_file, category, item_count):
     t1 = time.time()
     store_sales = pd.read_parquet(ss_file)
