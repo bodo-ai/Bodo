@@ -30,7 +30,7 @@ jobs:
       matrix:
         python-version: ['3.12', '3.11', '3.10']
         os: ['"macos-13"']  # Add macos-14 when in next PR
-    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_native.yml@slade/macos-ga
+    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_native.yml@develop
     with:
       python-version: ${{ matrix.python-version }}
       platform-build: false
@@ -38,7 +38,7 @@ jobs:
       os: ${{ matrix.os }}
     secrets: inherit
   bodo-conda-platform:
-    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_native.yml@slade/macos-ga
+    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_native.yml@develop
     with:
       python-version: '3.12'
       platform-build: true
@@ -55,7 +55,7 @@ jobs:
     secrets: inherit
 
   bodosql-conda:
-    needs: bodo-conda-community
+    needs: bodo-conda-linux
     uses: Bodo-inc/Bodo/.github/workflows/_build_bodosql_conda.yml@develop
     with:
       is-release: ${{ github.event_name == 'release' }}

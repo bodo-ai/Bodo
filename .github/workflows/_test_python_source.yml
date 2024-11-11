@@ -62,7 +62,6 @@ jobs:
           run: |
             # TODO: Remove once fully moved to GA
             rm -rf setup.cfg
-            mkdir outputs
   
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
@@ -71,7 +70,10 @@ jobs:
               --store-durations --clean-durations \
               --durations-path=buildscripts/github/test_dur_bodo.json \
               -m "$PYTEST_MARKER" bodo/tests/
-  
+            
+            # Save Exit Code for Later
+            test_exit_code=$?
+
             # BodoSQL Tests
             cd BodoSQL
             pytest -s -v -Wignore \
@@ -79,12 +81,12 @@ jobs:
               --store-durations --clean-durations \
               --durations-path=../buildscripts/github/test_dur_bodosql.json \
               -m "$PYTEST_MARKER" bodosql/tests/
-            cd ..
-  
-            # Copy Output
-            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json
-            mv .coverage outputs/.coverage_${{ inputs.batch }}
-            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}.json
+
+            # Merge Exit Codes.
+            # If neither Bodo nor BodoSQL fails, the exit code will be 0
+            # If one fails, the exit code will be 1
+            # If both fail, the exit code will be 2
+            exit $(($test_exit_code + $?))
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
@@ -101,6 +103,13 @@ jobs:
             AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
   
         # Upload
+        - name: Prepare Outputs
+          if: inputs.collect-coverage && (success() || failure())
+          run: |
+            mkdir -p outputs
+            mv buildscripts/github/test_dur_bodo.json outputs/test_dur_bodo_${{ inputs.batch }}.json
+            mv .coverage outputs/.coverage_${{ inputs.batch }}
+            mv buildscripts/github/test_dur_bodosql.json outputs/test_dur_bodosql_${{ inputs.batch }}.json
         - name: Upload Timings and Coverage
           uses: actions/upload-artifact@v4
           if: inputs.collect-coverage && (success() || failure())

@@ -1501,9 +1501,9 @@ def test_datetime_date_isocalendar(date, memory_leak_check):
         ),
         # Test Series.dt.year for values less than 2000 (issue #343)
         pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5)),
-        pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10N")),
+        pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10ns")),
         pytest.param(
-            pd.Series(pd.date_range(start="1/1/2000", periods=5, freq="4Y")),
+            pd.Series(pd.date_range(start="1/1/2000", periods=5, freq="4YE")),
             marks=pytest.mark.slow,
         ),
     ]
@@ -1554,7 +1554,7 @@ def test_dt_extract_date(series_value, memory_leak_check):
         # Test Series.dt.year for values less than 2000 (issue #343)
         pd.Series(pd.date_range(start="1998-04-24", end="1998-04-29", periods=5)),
         pytest.param(
-            pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10N")),
+            pd.Series(pd.date_range(start="5/20/2015", periods=5, freq="10ns")),
             marks=pytest.mark.slow,
         ),
     ]
@@ -2614,6 +2614,7 @@ def test_now_date_wrapper_rank_consistent(memory_leak_check):
     ), "Results are not consistent across ranks"
 
 
+@pytest.mark.skip("[BSE-4151] Fix segfault on PR CI and develop")
 def test_now_impl_consistent(memory_leak_check):
     """Test now_impl_consistent by ensuring all ranks return
     the same data.

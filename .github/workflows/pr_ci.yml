@@ -69,7 +69,7 @@ jobs:
     secrets: inherit
 
   spawn-ci:
-    needs: [compile-bodo]
+    # needs: [compile-bodo]
     name: Test Spawn
     uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@develop
     with:
@@ -156,3 +156,10 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+      # Notify GitHub Checks
+      # If any test runs failed, this step should fail
+      # This step failing will block the PR from being merged
+      - name: Check Test Runs
+        if: ${{ needs.pr-ci.result != 'success' }}
+        run: exit 1
