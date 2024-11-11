@@ -1829,6 +1829,22 @@ def _scatterv_np(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, c
     return scatterv_arr_impl
 
 
+def _get_array_first_val_fix_decimal(arr):
+    """Get first value of array but make sure decimal array returns PyArrow scalar
+    which preserves precision/scale (Pandas by default returns decimal.Decimal).
+    """
+    import pyarrow as pa
+
+    assert len(arr) > 0, "_get_array_first_val_fix_decimal: empty array"
+
+    if isinstance(arr, pd.arrays.ArrowExtensionArray) and pa.types.is_decimal128(
+        arr.dtype.pyarrow_dtype
+    ):
+        return arr._pa_array[0]
+
+    return arr[0]
+
+
 # skipping coverage since only called on multiple core case
 def get_value_for_type(dtype):  # pragma: no cover
     """returns a value of type 'dtype' to enable calling an njit function with the
@@ -1971,7 +1987,7 @@ def get_value_for_type(dtype):  # pragma: no cover
         return np.array(
             [
                 {
-                    field_name: get_value_for_type(t)[0]
+                    field_name: _get_array_first_val_fix_decimal(get_value_for_type(t))
                     for field_name, t in zip(dtype.names, dtype.data)
                 }
             ],
@@ -1981,7 +1997,13 @@ def get_value_for_type(dtype):  # pragma: no cover
     # TupleArray
     if isinstance(dtype, bodo.TupleArrayType):
         return pd.array(
-            [tuple(get_value_for_type(t)[0] for t in dtype.data)], object
+            [
+                tuple(
+                    _get_array_first_val_fix_decimal(get_value_for_type(t))
+                    for t in dtype.data
+                )
+            ],
+            object,
         )._ndarray
 
     # MapArrayType
@@ -1990,9 +2012,11 @@ def get_value_for_type(dtype):  # pragma: no cover
 
         dict_val = BodoMapWrapper(
             {
-                get_value_for_type(dtype.key_arr_type)[0]: get_value_for_type(
-                    dtype.value_arr_type
-                )[0]
+                _get_array_first_val_fix_decimal(
+                    get_value_for_type(dtype.key_arr_type)
+                ): _get_array_first_val_fix_decimal(
+                    get_value_for_type(dtype.value_arr_type)
+                )
             }
         )
         return np.array([dict_val], object)
