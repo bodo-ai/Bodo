@@ -1699,15 +1699,15 @@ def _infer_ndarray_obj_dtype(val):
             pd.arrays.FloatingArray,
             pd.arrays.StringArray,
             pd.arrays.ArrowStringArray,
+            pd.arrays.DatetimeArray,
         ),
     ):
-        dtype, nesting_depth, nullable = _infer_array_item_array_type_and_depth(val, 0)
-        arr_type = dtype_to_array_type(dtype, nullable)
-        if _use_dict_str_type and arr_type == string_array_type:
-            arr_type = bodo.dict_str_arr_type
-        for i in range(nesting_depth):
-            arr_type = ArrayItemArrayType(arr_type)
-        return arr_type
+        if isinstance(first_val, list):
+            first_val = pd.Series(first_val).array
+        dtype = numba.typeof(first_val)
+        if _use_dict_str_type and dtype == string_array_type:
+            dtype = bodo.dict_str_arr_type
+        return ArrayItemArrayType(dtype)
     if isinstance(first_val, pd.Timestamp):
         return bodo.DatetimeArrayType(first_val.tz)
     if isinstance(first_val, datetime.date):
@@ -1779,61 +1779,6 @@ def _get_struct_value_arr_type(v):
         arr_typ = bodo.dict_str_arr_type
 
     return arr_typ
-
-
-def _infer_array_item_array_type_and_depth(val, nesting_depth):
-    """
-    Get the data type and the nesting depth of an ArrayItemArray
-    Our current type system requires that every element in an array
-    be of the same type. So for all non-null scalars in this ArrayItemArray,
-    they should have the same nesting depth. But for the null objects they may
-    have different depths, e.g:
-    [
-        [[1, 2, 3], None, [4, 5, 6]],
-        None,
-        [[7, 8, 9], [10, None]],
-    ]
-    In this case the data type is integer and the nesting depth is 3
-    """
-    max_depth = nesting_depth
-    if len(val) == 0:
-        return None, nesting_depth, True
-
-    for i in range(len(val)):
-        if _is_scalar_value(val[i]):
-            if not pd.isna(val[i]):
-                if isinstance(val, np.ndarray):
-                    nullable = False
-                else:
-                    nullable = True
-
-                # Create bodo DecimalType from pyarrow's decimal128 type.
-                # val[i] is a python decimal scalar so numba.typeof(val[i])
-                # will not preserve the original scale/precision
-                if isinstance(val, pd.core.arrays.arrow.array.ArrowExtensionArray):
-                    pa_dtype = val.dtype.pyarrow_dtype
-                    if isinstance(pa_dtype, pa.lib.Decimal128Type):
-                        dtype = Decimal128Type(pa_dtype.precision, pa_dtype.scale)
-                        return dtype, nesting_depth, nullable
-
-                return numba.typeof(val[i]), nesting_depth, nullable
-        elif isinstance(val[i], (dict, Dict)):
-            # convert array of dicts to StructArrayType
-            struct_arr_typ = numba.typeof(np.array(val, np.object_))
-            # returning nesting_depth-1 because struct_arr_typ is based on val not val[i]
-            return struct_arr_typ, nesting_depth - 1, True
-        elif isinstance(val[i], tuple):
-            data_types = tuple(_get_struct_value_arr_type(v) for v in val[i])
-            # returning nesting_depth-1 because TupleArrayType is based on val not val[i]
-            return TupleArrayType(data_types), nesting_depth - 1, True
-        else:
-            typ, depth, nullable = _infer_array_item_array_type_and_depth(
-                val[i], nesting_depth + 1
-            )
-            max_depth = max(max_depth, depth)
-            if typ != None:
-                return typ, max_depth, nullable
-    return None, max_depth, True
 
 
 def _is_scalar_value(val):
