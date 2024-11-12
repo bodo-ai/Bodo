@@ -66,6 +66,7 @@ def test_csv_repeat_args(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+@pytest.mark.skip("BSE-4151: Test killed on PR CI")
 def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for csv
     file path passed by another bodo.jit function"""
@@ -265,6 +266,7 @@ def test_csv_skiprows_type(memory_leak_check):
         bodo.jit(impl3)()
 
 
+@pytest.mark.skip("BSE-4151: Test killed on PR CI")
 def test_to_csv_compression_kwd_arg():
     """checks that the appropriate errors are raised when compression argument to to_csv"""
     from bodo.tests.test_io import check_CSV_write

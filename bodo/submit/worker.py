@@ -10,6 +10,7 @@ import socket
 import sys
 import typing as pt
 import uuid
+from copy import deepcopy
 
 import cloudpickle
 import numba
@@ -24,7 +25,7 @@ from pandas.core.base import ExtensionArray
 import bodo
 from bodo.mpi4py import MPI
 from bodo.pandas import LazyMetadata
-from bodo.submit.spawner import BodoSQLContextMetadata
+from bodo.submit.spawner import BodoSQLContextMetadata, env_var_prefix
 from bodo.submit.utils import (
     ArgMetadata,
     CommandType,
@@ -292,6 +293,22 @@ def _send_updated_args(
         _send_updated_arg(arg, arg_meta, spawner_intercomm, logger)
 
 
+def _update_env_var(new_env_var, propagate_env):
+    """Updates environment variables received from spawner.
+
+    Args:
+        new_env_var (dict[str, str]): env vars to set
+        propagate_env: additional env vars to track"""
+    for env_var in new_env_var:
+        os.environ[env_var] = new_env_var[env_var]
+    for env_var in os.environ:
+        if env_var not in new_env_var:
+            if env_var.startswith(env_var_prefix) or env_var in propagate_env + [
+                "DYLD_INSERT_LIBRARIES"
+            ]:
+                del os.environ[env_var]
+
+
 def exec_func_handler(
     comm_world: MPI.Intracomm, spawner_intercomm: MPI.Intercomm, logger: logging.Logger
 ):
@@ -299,6 +316,12 @@ def exec_func_handler(
     driver_intercomm by the spawner"""
     global RESULT_REGISTRY
     debug_worker_msg(logger, "Begin listening for function.")
+
+    # Update environment variables
+    new_env_var = spawner_intercomm.bcast(None, 0)
+    propagate_env = spawner_intercomm.bcast(None, 0)
+    original_env_var = deepcopy(os.environ)
+    _update_env_var(new_env_var, propagate_env)
 
     # Receive function arguments
     pickled_args = spawner_intercomm.bcast(None, 0)
@@ -397,6 +420,9 @@ def exec_func_handler(
         logger, "Sending updated args and kwargs to spawner after function execution"
     )
     _send_updated_args(args, args_meta, kwargs, kwargs_meta, spawner_intercomm, logger)
+
+    # restore env var
+    os.environ = original_env_var
 
 
 def worker_loop(

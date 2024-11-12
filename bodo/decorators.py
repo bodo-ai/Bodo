@@ -39,6 +39,7 @@ numba.core.cpu.CPUTargetOptions.threaded = _mapping("threaded")
 numba.core.cpu.CPUTargetOptions.pivots = _mapping("pivots")
 numba.core.cpu.CPUTargetOptions.h5_types = _mapping("h5_types")
 numba.core.cpu.CPUTargetOptions.spawn = _mapping("spawn")
+numba.core.cpu.CPUTargetOptions.propagate_env = _mapping("propagate_env")
 
 
 class Flags(TargetConfig):
@@ -331,6 +332,11 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
             return return_wrapped_fn(py_func)
 
         return return_wrapped_fn
+
+    elif "propagate_env" in options:
+        raise bodo.utils.typing.BodoError(
+            "spawn=False while propagate_env is set. No worker to propagate env vars."
+        )
 
     return _jit(signature_or_function, pipeline_class, **options)
 
