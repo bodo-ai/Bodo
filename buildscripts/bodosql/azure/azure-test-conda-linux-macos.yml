@@ -73,9 +73,9 @@ jobs:
       pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
       cd $(System.DefaultWorkingDirectory)/BodoSQL
-      pip install -v --no-deps --no-build-isolation .
+      pip install --no-deps --no-build-isolation -ve .
       cd $(System.DefaultWorkingDirectory)/iceberg
-      pip install -v .
+      pip install --no-deps --no-build-isolation -ve .
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)

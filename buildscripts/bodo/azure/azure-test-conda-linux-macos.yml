@@ -77,7 +77,7 @@ jobs:
       pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
 
       cd iceberg
-      pip install -v .
+      pip install --no-deps --no-build-isolation -ve .
     env:
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
