@@ -25,14 +25,10 @@ def snowflake_read(require_cache=False):
     # Run on all 36 cores
     num_processes = 36
     cmd = [
-        "mpiexec",
-        "-n",
-        str(num_processes),
-        "-prepend-rank",
         "python",
         "-u",
         "snowflake_read.py",
     ]
     if require_cache:
         cmd.append("--require_cache")
-    run_cmd(cmd)
+    run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})

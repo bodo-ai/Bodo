@@ -489,7 +489,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
         if (r_id := self._md_result_id) is not None:
             debug_msg(
                 self.logger,
-                f"[LazySingleArrayManag] Asking workers to delete result '{r_id}'",
+                f"[LazySingleArrayManager] Asking workers to delete result '{r_id}'",
             )
             assert self._del_func is not None
             self._del_func(r_id)
