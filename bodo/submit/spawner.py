@@ -92,9 +92,11 @@ class Spawner:
     comm_world: MPI.Intracomm
     worker_intercomm: MPI.Intercomm
     exec_intercomm_addr: int
+    destroyed: bool
 
     def __init__(self):
         self.logger = bodo.user_logging.get_current_bodo_verbose_logger()
+        self.destroyed = False
 
         self.comm_world = MPI.COMM_WORLD
 
@@ -311,8 +313,9 @@ class Spawner:
             )
 
         def del_func(res_id: str):
-            self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
-            self.worker_intercomm.bcast(res_id, root=root)
+            if not self.destroyed:
+                self.worker_intercomm.bcast(CommandType.DELETE_RESULT.value, root=root)
+                self.worker_intercomm.bcast(res_id, root=root)
 
         if isinstance(lazy_metadata, list):
             return [self.wrap_distributed_result(d) for d in lazy_metadata]
@@ -516,6 +519,7 @@ class Spawner:
             # We might not be able to log during process teardown
             pass
         self.worker_intercomm.bcast(CommandType.EXIT.value, root=self.bcast_root)
+        self.destroyed = True
 
 
 spawner: Spawner | None = None
