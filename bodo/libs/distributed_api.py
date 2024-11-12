@@ -953,11 +953,24 @@ def gatherv_impl_jit(
             is_receiver = bodo.get_rank() == root
             if comm != 0:
                 is_receiver = root == MPI.ROOT
+
             # NOTE: assuming processes have chunks of a global RangeIndex with equal
             # steps. using min/max reductions to get start/stop of global range
             start = data._start
             stop = data._stop
             step = data._step
+            name = data._name
+            # Send name and step from workers to receiver in case of intercomm since not
+            # available on receiver
+            if comm != 0:
+                bcast_root = MPI.PROC_NULL
+                if is_receiver:
+                    bcast_root = 0
+                elif bodo.get_rank() == 0:
+                    bcast_root = MPI.ROOT
+                name = bcast_scalar(name, bcast_root, comm)
+                step = bcast_scalar(step, bcast_root, comm)
+
             # ignore empty ranges coming from slicing, see test_getitem_slice
             if len(data) == 0:
                 start = INT64_MAX
@@ -989,19 +1002,6 @@ def gatherv_impl_jit(
             if not is_receiver and not allgather:
                 start = 0
                 stop = 0
-
-            name = data._name
-
-            # Send name and step from workers to receiver in case of intercomm since not
-            # available on receiver
-            if comm != 0:
-                bcast_root = MPI.PROC_NULL
-                if is_receiver:
-                    bcast_root = 0
-                elif bodo.get_rank() == 0:
-                    bcast_root = MPI.ROOT
-                name = bcast_scalar(name, bcast_root, comm)
-                step = bcast_scalar(step, bcast_root, comm)
 
             return bodo.hiframes.pd_index_ext.init_range_index(start, stop, step, name)
 
