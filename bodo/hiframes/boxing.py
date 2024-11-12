@@ -1692,8 +1692,8 @@ def _infer_ndarray_obj_dtype(val):
         (
             list,
             np.ndarray,
-            pd.core.arrays.numpy_.NumpyExtensionArray,
-            pd.core.arrays.arrow.array.ArrowExtensionArray,
+            pd.arrays.NumpyExtensionArray,
+            pd.arrays.ArrowExtensionArray,
             pd.arrays.BooleanArray,
             pd.arrays.IntegerArray,
             pd.arrays.FloatingArray,
@@ -1703,7 +1703,7 @@ def _infer_ndarray_obj_dtype(val):
         ),
     ):
         if isinstance(first_val, list):
-            first_val = pd.Series(first_val).array
+            first_val = np.array(first_val, object)
         dtype = numba.typeof(first_val)
         if _use_dict_str_type and dtype == string_array_type:
             dtype = bodo.dict_str_arr_type
