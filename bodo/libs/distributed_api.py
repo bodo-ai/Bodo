@@ -1943,6 +1943,11 @@ def get_value_for_type(dtype):  # pragma: no cover
         df.columns = dtype.columns
         return df
 
+    # Table
+    if isinstance(dtype, bodo.TableType):
+        arrs = tuple(get_value_for_type(t) for t in dtype.arr_types)
+        return bodo.hiframes.table.Table(arrs)
+
     # CategoricalArray
     if isinstance(dtype, CategoricalArrayType):
         # Using -1 for code since categories can be empty
