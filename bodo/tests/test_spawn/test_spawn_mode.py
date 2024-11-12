@@ -11,7 +11,12 @@ from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
 from bodo.submit.spawner import destroy_spawner, get_num_workers
-from bodo.tests.utils import _test_equal, check_func, pytest_spawn_mode
+from bodo.tests.utils import (
+    _test_equal,
+    check_func,
+    pytest_spawn_mode,
+    temp_env_override,
+)
 
 pytestmark = pytest_spawn_mode
 
@@ -169,21 +174,71 @@ def test_compute_return_scalar(datapath):
     check_func(impl, (), is_out_distributed=False, only_spawn=True)
 
 
-@pytest.mark.skip("BSE-3987: Support syncing environment variables")
 def test_environment():
-    os.environ["BODO_TESTS_VARIABLE"] = "42"
-    try:
+    @bodo.jit(spawn=True)
+    def get_from_env(env_var):
+        with bodo.no_warning_objmode(ret_val="int64"):
+            ret_val = int(os.environ[env_var])
+        return ret_val
 
-        @bodo.jit(spawn=True)
-        def get_from_env():
-            with bodo.no_warning_objmode(ret_val="int64"):
-                ret_val = int(os.environ["BODO_TESTS_VARIABLE"])
-            return ret_val
+    with temp_env_override(
+        {
+            "BODO_TESTS_VARIABLE": "42",
+            "AWS_TESTS_VARIABLE": "43",
+            "AZURE_TESTS_VARIABLE": "44",
+        }
+    ):
+        assert get_from_env("BODO_TESTS_VARIABLE") == 42
+        assert get_from_env("AWS_TESTS_VARIABLE") == 43
+        assert get_from_env("AZURE_TESTS_VARIABLE") == 44
 
-        assert get_from_env() == 42
-    finally:
-        # Remove environment variable
-        del os.environ["BODO_TESTS_VARIABLE"]
+    # track variables specified in decorator
+    @bodo.jit(
+        spawn=True,
+        propagate_env=["EXTRA_ENV"],
+    )
+    def get_from_env_decorator(env_var):
+        with bodo.no_warning_objmode(ret_val="unicode_type"):
+            ret_val = os.environ.get(env_var, "DOES_NOT_EXIST")
+        return ret_val
+
+    with temp_env_override(
+        {
+            "BODO_TESTS_VARIABLE": "42",
+            "EXTRA_ENV": "45",
+            "BODO_DYLD_INSERT_LIBRARIES": "xx",
+        }
+    ):
+        assert get_from_env_decorator("BODO_TESTS_VARIABLE") == "42"
+        assert get_from_env_decorator("EXTRA_ENV") == "45"
+        assert get_from_env_decorator("DYLD_INSERT_LIBRARIES") == "xx"
+
+    assert get_from_env_decorator("BODO_TESTS_VARIABLE") == "DOES_NOT_EXIST"
+    assert get_from_env_decorator("EXTRA_ENV") == "DOES_NOT_EXIST"
+    assert get_from_env_decorator("DYLD_INSERT_LIBRARIES") == "DOES_NOT_EXIST"
+
+    # tests decorator error raising
+    with temp_env_override(
+        {
+            "EXTRA_ENV": "45",
+        }
+    ):
+        err_msg = (
+            "spawn=False while propagate_env is set. No worker to propagate env vars."
+        )
+        with pytest.raises(
+            bodo.utils.typing.BodoError,
+            match=err_msg,
+        ):
+
+            @bodo.jit(
+                spawn=False,
+                propagate_env=["EXTRA_ENV"],
+            )
+            def env_decorator_error():
+                return 1
+
+            env_decorator_error()
 
 
 def test_args():
