@@ -5,7 +5,10 @@ import pytest
 from utils.utils import run_cmd
 
 
-@pytest.mark.parametrize("sf_username", [1, 2])
+@pytest.mark.parametrize(
+    "sf_username",
+    [1, 2],
+)
 @pytest.mark.parametrize("use_put_method", [False, True])
 def test_snowflake_write(sf_username, use_put_method):
     pytest_working_dir = os.getcwd()
@@ -28,10 +31,6 @@ def snowflake_write(sf_username, use_put_method, require_cache=False):
     # Run on all 36 cores.
     num_processes = 36
     cmd = [
-        "mpiexec",
-        "-n",
-        str(num_processes),
-        "-prepend-rank",
         "python",
         "-u",
         "-W",
@@ -43,4 +42,4 @@ def snowflake_write(sf_username, use_put_method, require_cache=False):
         cmd.append("--use_put_method")
     if require_cache:
         cmd.append("--require_cache")
-    run_cmd(cmd)
+    run_cmd(cmd, additional_envs={"BODO_NUM_WORKERS": str(num_processes)})

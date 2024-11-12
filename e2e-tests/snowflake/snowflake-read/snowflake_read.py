@@ -7,7 +7,7 @@ import numba
 import numpy as np
 import pandas as pd
 from utils.utils import (
-    checksum_str_df,
+    checksum_str_df_jit,
     drop_sf_table,
     get_sf_read_conn,
     get_sf_table,
@@ -17,7 +17,6 @@ from utils.utils import (
 import bodo
 from bodo.mpi4py import MPI
 from bodo.tests.user_logging_utils import (
-    check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -46,13 +45,13 @@ def checksum(df):
     df_no_str_sum = np.int64(np.floor(df_no_str.sum().sum() * 100))
 
     df_str = df[["l_shipinstruct", "l_shipmode", "l_comment", "paded_mode"]]
-    with bodo.objmode(df_str_sum="int64"):
-        df_str_sum = checksum_str_df(df_str)
+
+    df_str_sum = checksum_str_df_jit(df_str)
 
     return df_no_str_sum + df_str_sum
 
 
-@bodo.jit
+@bodo.jit(spawn=True)
 def read_and_compute_checksum_and_len(table_name, conn):
     df = get_sf_table(table_name, conn)
     df_checksum = checksum(df)
@@ -62,7 +61,7 @@ def read_and_compute_checksum_and_len(table_name, conn):
 bodo.set_verbose_level(1)
 
 
-@bodo.jit(cache=True)
+@bodo.jit(cache=True, spawn=True)
 def main(sf_read_conn, sf_write_conn, table_name):
     """
     Snowflake E2E read test. We read in three string columns from TPCH-SF1 on Snowflake,
@@ -129,13 +128,11 @@ if __name__ == "__main__":
 
     # Create a random table name to write to and broadcast to all ranks
     table_name = None
-    if comm.Get_rank() == 0:
-        # We use uppercase due to an issue reading tables
-        # with lowercase letters.
-        # https://bodo.atlassian.net/browse/BE-3534
-        table_name = f"lineitem_out_{str(uuid4())[:8]}".upper()
-        print("table_name: ", table_name)
-    table_name = comm.bcast(table_name)
+    # We use uppercase due to an issue reading tables
+    # with lowercase letters.
+    # https://bodo.atlassian.net/browse/BE-3534
+    table_name = f"lineitem_out_{str(uuid4())[:8]}".upper()
+    print("table_name: ", table_name)
 
     # Get Snowflake connection strings
     sf_read_conn = get_sf_read_conn()
@@ -150,22 +147,20 @@ if __name__ == "__main__":
         # Print the stream for debugging purposes
         print(stream.getvalue())
         # The logging messages are not shown when loading from cache
-        if not args.require_cache:
-            # Validate that the columns are loaded with dictionary encoding
-            check_logger_msg(
-                stream,
-                "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
-            )
-    agg_counts = bodo.allgatherv(agg_counts)
+        # TODO BSE-4167: Send logger to the workers
+        # if not args.require_cache:
+        #     # Validate that the columns are loaded with dictionary encoding
+        #     check_logger_msg(
+        #         stream,
+        #         "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+        #     )
     sorted_a_count = sorted(agg_counts.tolist())
 
     # Add a barrier for synchronization purposes so that
     # the get length and drop commands are done after all the writes. This is
     # technically not required since the main function
     # has barriers, but still good to have.
-    bodo.barrier()
-    if bodo.get_rank() == 0:
-        print("Total time: ", time.time() - t0, " s")
+    print("Total time: ", time.time() - t0, " s")
 
     # Compare our output to the desired output
     assert (
@@ -192,25 +187,14 @@ if __name__ == "__main__":
     ), f"Expected checksum (between 3716926710 and 3716926730) != checksum of table in Snowflake ({sf_df_checksum})"
 
     # Drop the table, to avoid dangling tables on our account.
-    # This is done on a single rank, and any errors are then
-    # broadcasted and raised on all ranks to avoid any hangs.
-
-    drop_err = None
-    if bodo.get_rank() == 0:
-        try:
-            drop_result = drop_sf_table(
-                table_name,
-                sf_write_conn,
-            )
-            print("drop_result: ", drop_result)
-            assert (
-                isinstance(drop_result, list)
-                and (len(drop_result) == 1)
-                and (len(drop_result[0]) == 1)
-                and "successfully dropped" in drop_result[0][0]
-            ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
-        except Exception as e:
-            drop_err = e
-    drop_err = comm.bcast(drop_err)
-    if isinstance(drop_err, Exception):
-        raise drop_err
+    drop_result = drop_sf_table(
+        table_name,
+        sf_write_conn,
+    )
+    print("drop_result: ", drop_result)
+    assert (
+        isinstance(drop_result, list)
+        and (len(drop_result) == 1)
+        and (len(drop_result[0]) == 1)
+        and "successfully dropped" in drop_result[0][0]
+    ), "Snowflake DROP table failed, see result above. Might require manual cleanup."
