@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 
 import numpy as np
 import pandas as pd
@@ -8,7 +10,7 @@ import bodo
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
-from bodo.submit.spawner import get_num_workers
+from bodo.submit.spawner import destroy_spawner, get_num_workers
 from bodo.tests.utils import _test_equal, check_func, pytest_spawn_mode
 
 pytestmark = pytest_spawn_mode
@@ -276,3 +278,49 @@ def test_spawn_type_register():
         is_out_distributed=False,
         additional_compiler_arguments={"replicated": ["df"]},
     )
+
+
+def test_spawn_atexit_delete_result():
+    """Tests that results in the user program are deleted properly upon exit,
+    even after spawner has been destroyed"""
+
+    additional_envs = {"BODO_NUM_WORKERS": str(1)}
+
+    cmd = [sys.executable, "-u", "-m", "spawn_exit"]
+    # get directory of test python executable
+    cwd = os.path.dirname(os.path.realpath(__file__))
+
+    try:
+        subprocess.check_output(
+            cmd,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            env=dict(os.environ, **additional_envs),
+            cwd=cwd,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        print(e.output)
+        raise
+
+
+def test_destroy_spawn_delete():
+    """Tests that it is safe to get a distributed result, destroy spawner,
+    create a new global spawner and delete the result.
+    """
+
+    @bodo.jit(spawn=True)
+    def get_bodo_df(df):
+        return df
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5] * 100})
+
+    # create a distributed result
+    bodo_df = get_bodo_df(df)
+
+    destroy_spawner()
+
+    # create a new global spawner
+    _ = get_bodo_df(df)
+
+    del bodo_df
