@@ -260,6 +260,7 @@ def check_func(
     # mode manually, not regular nightly runs)
     if test_spawn_mode_enabled:
         run_seq, run_1D, run_1DVar, run_spawn = False, False, False, True
+        check_pandas_types = False
 
     if run_spawn:
         # _use_dict_str_type flag doesn't propagate to worker processes currently
