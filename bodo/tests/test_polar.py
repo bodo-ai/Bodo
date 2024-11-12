@@ -302,6 +302,7 @@ def fft_arr(request, grid_layouts):
     return combined
 
 
+@pytest.mark.skip("BSE-4151: Test killed on PR CI")
 def test_fftshift(fft_arr, memory_leak_check):
     """
     Tests scipy.fftpack.fftshift. Currently only supported

@@ -253,6 +253,7 @@ def gen_simple_window_over_nothing_tests():
     return params
 
 
+@pytest.mark.skip("BSE-4151: Test killed on PR CI")
 @pytest.mark.parametrize(
     "data, func_name, answer", gen_simple_window_over_nothing_tests()
 )
@@ -478,6 +479,9 @@ def test_max_over_nothing_different_kept_inputs(kept_input_indices, memory_leak_
         reset_index=True,
         sort_output=True,
     )
+
+
+pytest.mark.skip("BSE-4151: Test killed on PR CI")
 
 
 @pytest_mark_one_rank

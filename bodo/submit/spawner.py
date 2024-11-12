@@ -40,6 +40,8 @@ from bodo.utils.utils import is_distributable_typ
 # is detected
 BodoSQLContextCls = None
 
+env_var_prefix = ("BODO_", "AWS_", "AZURE_", "LD_")
+
 
 @contextlib.contextmanager
 def no_stdin():
@@ -114,31 +116,14 @@ class Spawner:
         # and then restore STDIN afterwards. This is necessary for environments where
         # interactivity is needed, e.g. ipython/python REPL.
         with no_stdin():
-            # Copy over all BODO* environment variables - note that this isn't
-            # needed if the parent process is spawned with MPI and the env vars
-            # are set via `mpiexec -env`.
-            environ_args = []
-            for k in os.environ:
-                # DYLD_INSERT_LIBRARIES can be difficult to propogate to child
-                # process. e.g.:
-                # https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash
-                # So for now, we use BODO_DYLD_INSERT_LIBRARIES as a way to
-                # inform the spawner to set the variable for the child processes
-                if k == "BODO_DYLD_INSERT_LIBRARIES":
-                    environ_args.append(f"DYLD_INSERT_LIBRARIES={os.environ[k]}")
-                elif k.startswith("BODO"):
-                    environ_args.append(f"{k}={os.environ[k]}")
-            # linux uses LD_PRELOAD instead of DYLD_INSERT_LIBRARIES, which
-            # needs no special handling beyond ensuring that the child picks up
-            # the variable.
-            if "LD_PRELOAD" in os.environ:
-                preload = os.environ["LD_PRELOAD"]
-                environ_args.append(f"LD_PRELOAD={preload}")
-
             # Send spawner log level to workers
-            environ_args.append(
+            environ_args = [
                 f"BODO_WORKER_VERBOSE_LEVEL={bodo.user_logging.get_verbose_level()}"
-            )
+            ]
+            if "BODO_DYLD_INSERT_LIBRARIES" in os.environ:
+                environ_args.append(
+                    f"DYLD_INSERT_LIBRARIES={os.environ["BODO_DYLD_INSERT_LIBRARIES"]}"
+                )
 
             # run python with -u to prevent STDOUT from buffering
             self.worker_intercomm = self.comm_world.Spawn(
@@ -213,7 +198,29 @@ class Spawner:
         for name in kwargs.keys():
             _recv_updated_arg(kwargs[name], kwargs_meta[name])
 
-    def submit_func_to_workers(self, dispatcher: "SubmitDispatcher", *args, **kwargs):
+    def _send_env_var(self, bcast_root, propagate_env):
+        """Send environment variables from spawner to workers.
+
+        Args:
+            bcast_root (int): root value for broadcast (MPI.ROOT on spawner)
+            propagate_env (list[str]): additional env vars to propagate"""
+        new_env_var = {}
+        for var in os.environ:
+            # DYLD_INSERT_LIBRARIES can be difficult to propogate to child
+            # process. e.g.:
+            # https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash
+            # So for now, we use BODO_DYLD_INSERT_LIBRARIES as a way to
+            # inform the spawner to set the variable for the child processes
+            if var == "BODO_DYLD_INSERT_LIBRARIES":
+                new_env_var["DYLD_INSERT_LIBRARIES"] = os.environ[var]
+            elif var.startswith(env_var_prefix) or var in propagate_env:
+                new_env_var[var] = os.environ[var]
+        self.worker_intercomm.bcast(new_env_var, bcast_root)
+        self.worker_intercomm.bcast(propagate_env, bcast_root)
+
+    def submit_func_to_workers(
+        self, dispatcher: "SubmitDispatcher", propagate_env, *args, **kwargs
+    ):
         """Send func to be compiled and executed on spawned process"""
 
         if sys.platform != "win32":
@@ -231,6 +238,9 @@ class Spawner:
 
         debug_msg(self.logger, "submit_func_to_workers")
         self.worker_intercomm.bcast(CommandType.EXEC_FUNCTION.value, self.bcast_root)
+
+        # Send environment variables
+        self._send_env_var(self.bcast_root, propagate_env)
 
         # Send arguments and update dispatcher distributed flags for arguments
         args_meta, kwargs_meta = self._send_args_update_dist_flags(
@@ -546,10 +556,12 @@ def destroy_spawner():
 atexit.register(destroy_spawner)
 
 
-def submit_func_to_workers(dispatcher: "SubmitDispatcher", *args, **kwargs):
+def submit_func_to_workers(
+    dispatcher: "SubmitDispatcher", propagate_env, *args, **kwargs
+):
     """Get the global spawner and submit `func` for execution"""
     spawner = get_spawner()
-    return spawner.submit_func_to_workers(dispatcher, *args, **kwargs)
+    return spawner.submit_func_to_workers(dispatcher, propagate_env, *args, **kwargs)
 
 
 class SubmitDispatcher:
@@ -561,7 +573,9 @@ class SubmitDispatcher:
         self.decorator_args = decorator_args
 
     def __call__(self, *args, **kwargs):
-        return submit_func_to_workers(self, *args, **kwargs)
+        return submit_func_to_workers(
+            self, self.decorator_args.get("propagate_env", []), *args, **kwargs
+        )
 
     @classmethod
     def get_dispatcher(cls, py_func, decorator_args):
