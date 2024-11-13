@@ -29,11 +29,20 @@ runs:
           role-skip-session-tagging: true
 
       - name: Build Bodo
-        env:
-          ONLY_BODO: ${{ inputs.build-all == 'true' && '0' || '1' }}
-        # TODO: Once stable, inline all the scripts
-        run: ./buildscripts/build.sh
+        run: pixi run build-bodo -Cbuild.verbose=true
         shell: bash
+        env:
+          # We should just use sccache directly on CI
+          DISABLE_CCACHE: 1
+          # Build Bodo with our fork of Arrow
+          USE_BODO_ARROW_FORK: 1
+
+      - name: Build Remaining
+        if: inputs.build-all == 'true'
+        shell: bash
+        run: |
+          pixi run build-bodosql
+          pixi run build-iceberg
 
       - name: Disable AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4

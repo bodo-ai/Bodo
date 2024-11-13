@@ -1,9 +1,6 @@
 trigger: none
 pr: none
 
-# TODO: Schedule a cron job to regularly generate a new license
-# for CI (used by BodoSQL) and upload it to credstash
-
 jobs:
 - job: Generate_License
   timeoutInMinutes: 10

@@ -45,8 +45,6 @@ jobs:
           run: |
             # Build SAS Token Provider
             ./buildscripts/install_azurefs_sas_token_provider.sh
-            # Setup Minio
-            ./buildscripts/setup_minio.sh
             # Clean Maven and Spark Ivy Cache
             rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
         - name: Configure AWS Credentials

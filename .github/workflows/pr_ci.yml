@@ -69,7 +69,7 @@ jobs:
     secrets: inherit
 
   spawn-ci:
-    # needs: [compile-bodo]
+    needs: [compile-bodo]
     name: Test Spawn
     uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@develop
     with:

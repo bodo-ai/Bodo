@@ -1,6 +1,6 @@
 # Make sure to build the docker image from the top folder:
 # docker build -t bodo_dev_hdfs -f docker/bodo_dev_hdfs/Dockerfile .
-FROM --platform=linux/amd64 ubuntu:latest AS env_setup
+FROM --platform=linux/amd64 ghcr.io/prefix-dev/pixi:latest AS env_setup
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /root
@@ -9,17 +9,9 @@ WORKDIR /root
 # https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#run
 RUN apt-get update && apt-get install -y wget bzip2 git vim && rm -rf /var/lib/apt/lists/*
 
-# Setup Miniforge
-RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O miniforge.sh \
-	&& chmod +x miniforge.sh \
-	&& ./miniforge.sh -b
-ENV PATH /root/miniforge3/bin:${PATH}
-
-# Creation of the BODODEV environment
-ADD buildscripts/envs/conda-lock.yml conda-lock.yml
-RUN mamba install -y -c conda-forge conda-lock
-RUN conda-lock install --dev --mamba -n BODODEV conda-lock.yml
-RUN mamba install -y -n BODODEV -c conda-forge flaky ipython
+# Setup Dev Environment
+RUN pixi install
+RUN pixi run build
 
 # Installing hadoop and libhdfs (JNI)
 ARG hdfs=3.3.2
@@ -40,18 +32,17 @@ RUN chmod 0600 ~/.ssh/authorized_keys
 
 # Set up initial .bashrc for ssh
 RUN apt-get update && apt-get install -y openssh-server
-RUN echo "export PATH=$HOME/miniforge3/bin:$PATH" >> ~/.bashrc
-RUN echo "source activate BODODEV" >> ~/.bashrc
+RUN echo "pixi shell" >> ~/.bashrc
 
 # hadoop related enviroment variables
 RUN echo "export HDFS_NAMENODE_USER=root" >> ~/.bashrc
 RUN echo "export HDFS_DATANODE_USER=root" >> ~/.bashrc
 RUN echo "export HDFS_SECONDARYNAMENODE_USER=root" >> ~/.bashrc
-RUN echo "export JAVA_HOME=/root/miniforge3/envs/BODODEV" >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+RUN echo "export JAVA_HOME=$JAVA_HOME" >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
 
 # build bodo
 RUN echo "cd /Bodo" >> ~/.bashrc
-RUN echo "pip install --no-deps --no-build-isolation -ve ." >> ~/.bashrc
+RUN echo "pixi run build-bodo" >> ~/.bashrc
 
 # environment variables for arrow
 RUN echo "export hdfs=3.3.2" >> ~/.bashrc

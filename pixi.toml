@@ -16,12 +16,19 @@ azure = { features = ["py312", "dev", "local-mpi", "azure"], solve-group = "312"
 [tasks.build-bodo]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+[tasks.build-bodo.env]  # SCcache Envs
+SCCACHE_BUCKET = "engine-codebuild-cache"
+SCCACHE_REGION = "us-east-2"
+SCCACHE_S3_USE_SSL = "true"
+SCCACHE_S3_SERVER_SIDE_ENCRYPTION = "true"
+
 [tasks.build-bodo-debug]
-cmd = "pip install --no-deps --no-build-isolation --config-settings=cmake.build-type='Debug' --config-settings=install.strip=false -ve . "
+cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='Debug' -Cinstall.strip=false -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
 [tasks.build-bodo-san]
-cmd = "pip install --no-deps --no-build-isolation --config-settings=cmake.build-type='DebugSanitize' --config-settings=install.strip=false -ve . "
+cmd = "pip install --no-deps --no-build-isolation -Ccmake.build-type='DebugSanitize' -Cinstall.strip=false -ve ."
 inputs = ["bodo/**/*.cpp", "bodo/**/*.h", "bodo/**/*.pyx", "bodo/**/*.pxd"]
+
 [tasks.build-bodosql]
 cmd = "pip install --no-deps --no-build-isolation -ve ."
 cwd = "BodoSQL"
@@ -47,7 +54,7 @@ bbs = { depends-on = ["build-bodo-san"] }   # Alias for build-bodo-san
 bsql = { depends-on = ["build-bodosql"] }   # Alias for build-bodosql
 bi = { depends-on = ["build-iceberg"] }     # Alias for build-iceberg
 build = { depends-on = ["build-bodo", "build-bodosql", "build-iceberg"] }
-b = { depends-on = ["build"] }  # Alias for build
+b = { depends-on = ["build"] }              # Alias for build
 # Additional
 clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash buildscripts/clean.sh" }
 
@@ -99,7 +106,6 @@ xlsxwriter = "*"
 openpyxl = "*"
 
 [target.linux-64.dependencies]
-libaio = "*"  # Is this still necessary?
 cx_oracle = "*"
 [target.osx-64.dependencies]
 cx_oracle = "*"
@@ -142,6 +148,8 @@ avro = "*"  # Reading avro
 beautifulsoup4 = "*"
 # Snowflake Testing
 snowflake-sqlalchemy = "*"
+# S3 Testing
+minio-server = "*"
 
 # Testing and CI Tools
 pytest = "*"
@@ -150,7 +158,6 @@ pytest-xdist = "*"
 pytest-timeout = "*"
 pytest-split = "*"
 flaky = "*"
-credstash = "*"
 
 # Other Deps
 pyyaml = "*"

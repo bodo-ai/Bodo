@@ -60,8 +60,7 @@ strict-config = true
 experimental = false
 ninja.make-fallback = false
 cmake.build-type = "Release"
-
-cmake.verbose = false
+build.verbose = false
 logging.level = "INFO"
 
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"

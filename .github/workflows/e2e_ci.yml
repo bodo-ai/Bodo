@@ -47,8 +47,7 @@ jobs:
           # Use sccache over ccache
           DISABLE_CCACHE: 1
         run: |
-          # Main Packages Install
-          ./buildscripts/build.sh
+          pixi run build
           # Azure SAS Provider Install
           ./buildscripts/install_azurefs_sas_token_provider.sh
 
