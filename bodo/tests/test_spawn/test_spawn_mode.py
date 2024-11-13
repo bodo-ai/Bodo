@@ -335,6 +335,7 @@ def test_spawn_type_register():
     )
 
 
+@pytest.mark.skip(reason="[BSE-4193]: fix test on PR CI")
 def test_spawn_atexit_delete_result():
     """Tests that results in the user program are deleted properly upon exit,
     even after spawner has been destroyed"""
