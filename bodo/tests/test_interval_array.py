@@ -54,8 +54,8 @@ def test_nbytes(interval_array_value, memory_leak_check):
         ),
         pytest.param(
             (
-                pd.Interval(pd.Timedelta("1H"), pd.Timedelta("1D")),
-                pd.Interval(pd.Timedelta("1H"), pd.Timedelta("2D")),
+                pd.Interval(pd.Timedelta("1h"), pd.Timedelta("1D")),
+                pd.Interval(pd.Timedelta("1h"), pd.Timedelta("2D")),
             ),
             id="timedeltas",
         ),
