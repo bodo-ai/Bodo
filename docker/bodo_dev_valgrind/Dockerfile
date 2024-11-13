@@ -38,18 +38,13 @@ RUN set -e \
     && ln -s $(which pip3) /usr/local/bin/pip
 
 WORKDIR /root
-RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O miniforge.sh \
-	&& chmod +x miniforge.sh \
-	&& ./miniforge.sh -b
-ENV PATH /root/miniforge3/bin:${PATH}
-
-# Creation of the BODODEV environment
-ADD buildscripts/envs/conda-lock.yml conda-lock.yml
-RUN mamba install -y -c conda-forge conda-lock
-RUN conda-lock install --dev --mamba -n BODODEV conda-lock.yml
-RUN mamba install -y -n BODODEV nomkl -c conda-forge
+# Setup Dev Environment
+RUN curl -fsSL https://pixi.sh/install.sh | bash
+RUN pixi install
+RUN pixi run build
+RUN pixi add nomkl
 
 # Creation of the .bashrc file
-RUN echo "source activate BODODEV" > ~/.bashrc
+RUN echo "pixi shell" > ~/.bashrc
 
 ENTRYPOINT ["bash"]

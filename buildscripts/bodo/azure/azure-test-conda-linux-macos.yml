@@ -69,7 +69,6 @@ jobs:
       export SCCACHE_REGION=us-east-2
       export SCCACHE_S3_USE_SSL=true
       export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-      export SCCACHE_LOG=debug
       # We should just use sccache directly on CI
       export DISABLE_CCACHE=1
       # Build from Source with Arrow Fork

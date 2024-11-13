@@ -1,0 +1,12 @@
+{
+    "recommendations": [
+        // Python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "tcwalther.cython",
+        // C++
+        "llvm-vs-code-extensions.vscode-clangd",
+        // Kotlin
+        "mathiasfrohlich.kotlin",
+    ]
+}
