@@ -12,6 +12,7 @@ if [[ "$CI_SOURCE" == "AWS" ]]; then
     set -x
 
     # Set testing environment variables
+    pip install credstash
     export AZURE_STORAGE_ACCOUNT_NAME=`credstash -r us-east-2 get azure_iceberg_storage_account`
     export AZURE_STORAGE_ACCOUNT_KEY=`credstash -r us-east-2 get azure_iceberg_access_key`
 fi

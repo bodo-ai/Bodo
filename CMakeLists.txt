@@ -3,10 +3,8 @@ project(${SKBUILD_PROJECT_NAME} LANGUAGES C CXX)
 
 # External Packages
 include(FetchContent)
-
 # Debug Helpers
 include(CMakePrintHelpers)
-
 # LTO Support
 include(CheckIPOSupported)
 check_ipo_supported()
@@ -18,9 +16,6 @@ check_ipo_supported()
 # rebuild it will only recompile the cpp files that have been modified.
 # SCCache is similar, but supports remote S3 caches
 # We use CCache for local development and SCCache for CI
-# With newer compiler versions on Linux, we have to set both CC
-# and CXX variables for (s)ccache to work, and have to set CC to
-# the C++ compiler to avoid compile-time and dynamic linking errors
 # Note that SCCache doesn't handle linking, so we skip for both
 
 find_program(CCACHE_EXECUTABLE "ccache")
@@ -178,6 +173,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDeb
   )
 endif()
 
+
 # ------------------------ Find Libraries + Compilers ------------------------
 # Build Package + Program Dependencies
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
@@ -201,8 +197,7 @@ cmake_print_variables(CONDA_LIB_DIR)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${CONDA_INCLUDE_DIR}")
 
-
-# Vendor mpi4py
+# Vendor MPI4Py
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py")
   message(STATUS "Copying mpi4py to source directory")
   file(COPY "$ENV{CONDA_PREFIX}/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages/mpi4py" DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/bodo/")
@@ -210,7 +205,7 @@ endif()
 message(STATUS "Copying mpi4py to wheel")
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/bodo/mpi4py" DESTINATION "${SKBUILD_PLATLIB_DIR}/bodo/")
 
-# Vendor mpich
+# Vendor MPICH
 if(DEFINED ENV{BODO_VENDOR_MPICH})
   message(STATUS "Downloading mpich")
   execute_process(COMMAND ${Python_EXECUTABLE} -m pip download mpich==${MPICH_VERSION} -i  https://pypi.anaconda.org/mpi4py/simple)

@@ -21,7 +21,6 @@ export CONDA_PREFIX=$PREFIX
 export CMAKE_GENERATOR='Ninja'
 
 
-
 # Build the wheel. We can use this for only-Pip wheel builds
 # TODO: Are all of these necessary?
 MACOSX_DEPLOYMENT_TARGET=10.15 \
