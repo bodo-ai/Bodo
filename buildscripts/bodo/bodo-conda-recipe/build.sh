@@ -24,15 +24,11 @@ export CMAKE_GENERATOR='Ninja'
 # Build the wheel. We can use this for only-Pip wheel builds
 # TODO: Are all of these necessary?
 MACOSX_DEPLOYMENT_TARGET=10.15 \
-$PYTHON -m pip wheel \
-    --wheel-dir=/tmp/wheelhouse \
+$PYTHON -m pip install \
     --no-deps --no-build-isolation -vv \
-    -Ccmake.verbose=true \
-    -Clogging.level="DEBUG" \
-    -Ccmake.args="-DCMAKE_C_COMPILER=$CC;-DCMAKE_CXX_COMPILER=$CXX;-DCMAKE_INSTALL_PREFIX=$PREFIX;-DCMAKE_INSTALL_LIBDIR=lib;-DCMAKE_FIND_ROOT_PATH='$PREFIX;$CONDA_PREFIX_OLD/x86_64-conda-linux-gnu/sysroot';-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY" \
+    --config-settings=build.verbose=true \
+    --config-settings=logging.level="DEBUG" \
+    --config-settings=cmake.args="-DCMAKE_C_COMPILER=$CC;-DCMAKE_CXX_COMPILER=$CXX;-DCMAKE_INSTALL_PREFIX=$PREFIX;-DCMAKE_INSTALL_LIBDIR=lib;-DCMAKE_FIND_ROOT_PATH='$PREFIX;$CONDA_PREFIX_OLD/x86_64-conda-linux-gnu/sysroot';-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY" \
     .
 
 sccache --show-stats
-
-# Install the wheel
-$PYTHON -m pip install --no-index --find-links=/tmp/wheelhouse bodo

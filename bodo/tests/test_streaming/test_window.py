@@ -227,7 +227,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_nullable_arr,
             "mean",
-            pd.array([49858.6676] * len(int32_nullable_arr), pd.Float64Dtype),
+            pd.array([49858.6676] * len(int32_nullable_arr), pd.Float64Dtype()),
             id="avg-int32_nullable",
         )
     )
@@ -237,7 +237,7 @@ def gen_simple_window_over_nothing_tests():
             "mean",
             pd.array(
                 [None] * len(int32_arr_all_null),
-                pd.Float64Dtype,
+                pd.Float64Dtype(),
             ),
             id="avg-int32_all_null",
         )
@@ -246,7 +246,7 @@ def gen_simple_window_over_nothing_tests():
         pytest.param(
             int32_numpy_arr,
             "mean",
-            pd.array([49458.1416] * len(int32_numpy_arr), pd.Float64Dtype),
+            pd.array([49458.1416] * len(int32_numpy_arr), pd.Float64Dtype()),
             id="avg-int32_numpy",
         )
     )
@@ -1788,7 +1788,7 @@ def test_ntile(memory_leak_check):
         pytest.param(
             None,
             np.array([40, 50, 60, 70, 80, 90], dtype=np.int32),
-            pd.array([70, 90, None, 60, 50, None], dtype=pd.Int32Dtype),
+            pd.array([70, 90, None, 60, 50, None], dtype=pd.Int32Dtype()),
             id="null_default",
         ),
         pytest.param(

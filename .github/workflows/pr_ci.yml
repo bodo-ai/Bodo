@@ -60,7 +60,7 @@ jobs:
         batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
       # Don't cancel other jobs if one fails
       fail-fast: false
-    uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@develop
+    uses: ./.github/workflows/_test_python_source.yml
     with:
       batch: ${{ matrix.batch }}
       total-batches: 12
@@ -71,7 +71,7 @@ jobs:
   spawn-ci:
     needs: [compile-bodo]
     name: Test Spawn
-    uses: Bodo-inc/Bodo/.github/workflows/_test_python_source.yml@develop
+    uses: ./.github/workflows/_test_python_source.yml
     with:
       batch: 1
       total-batches: 1

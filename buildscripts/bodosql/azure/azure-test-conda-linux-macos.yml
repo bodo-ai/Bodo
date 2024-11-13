@@ -70,7 +70,7 @@ jobs:
       export SCCACHE_LOG=debug
       # We should just use sccache directly on CI
       export DISABLE_CCACHE=1
-      pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
+      pip install --no-deps --no-build-isolation -Cbuild.verbose=true -ve .
 
       cd $(System.DefaultWorkingDirectory)/BodoSQL
       pip install --no-deps --no-build-isolation -ve .

@@ -20,7 +20,7 @@ export CMAKE_GENERATOR='Ninja'
 MACOSX_DEPLOYMENT_TARGET=11.0 \
 $PYTHON -m pip install \
     --no-deps --no-build-isolation -vv \
-    --config-settings=cmake.verbose=true \
+    --config-settings=build.verbose=true \
     --config-settings=logging.level="DEBUG" \
     --config-settings=cmake.args="-DCMAKE_C_COMPILER=$CC;-DCMAKE_CXX_COMPILER=$CXX;-DCMAKE_INSTALL_PREFIX=$PREFIX;-DCMAKE_INSTALL_LIBDIR=lib;-DCMAKE_FIND_ROOT_PATH='$PREFIX;$CONDA_PREFIX_OLD/x86_64-conda-linux-gnu/sysroot';-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY" \
     . 

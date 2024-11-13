@@ -1678,7 +1678,10 @@ def test_series_fillna_method(fillna_series, method, memory_leak_check):
     "name,test_impl",
     [
         ("bfill", lambda S: S.bfill()),
-        ("backfill", lambda S: S.backfill()),
+        (
+            "backfill",
+            lambda S: S.bfill(),
+        ),  # S.backfill() is a deprecated alias for S.bfill()
         ("ffill", lambda S: S.ffill()),
         ("pad", lambda S: S.pad()),
     ],

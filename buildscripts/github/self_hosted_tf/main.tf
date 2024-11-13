@@ -29,7 +29,7 @@ module "runners" {
   multi_runner_config = {
     "small" = {
       matcherConfig : {
-        labelMatchers = [["self-hosted", "small"]]
+        labelMatchers = [["self-hosted", "small"], ["self-hosted-small"]]
         exactMatch    = true
       }
 
@@ -48,7 +48,7 @@ module "runners" {
 
     "medium" = {
       matcherConfig : {
-        labelMatchers = [["self-hosted", "medium"]]
+        labelMatchers = [["self-hosted", "medium"], ["self-hosted-medium"]]
         exactMatch    = true
       }
 
@@ -75,7 +75,7 @@ module "runners" {
 
     "large" = {
       matcherConfig : {
-        labelMatchers = [["self-hosted", "large"]]
+        labelMatchers = [["self-hosted", "large"], ["self-hosted-large"]]
         exactMatch    = true
       }
 
@@ -94,7 +94,7 @@ module "runners" {
 
     "xlarge" = {
       matcherConfig : {
-        labelMatchers = [["self-hosted", "xlarge"]]
+        labelMatchers = [["self-hosted", "xlarge"], ["self-hosted-xlarge"]]
         exactMatch    = true
       }
 
