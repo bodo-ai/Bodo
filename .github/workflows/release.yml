@@ -7,6 +7,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'pixi.lock'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/_build_*.yml'
 
 jobs:
   # This is separate because we need to build Linux community in a container
@@ -16,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.12', '3.11', '3.10']
-    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_linux_comm.yml@develop
+    uses: ./.github/workflows/_build_bodo_conda_linux_comm.yml
     with:
       python-version: ${{ matrix.python-version }}
       is-release: ${{ github.event_name == 'release' }}
@@ -29,8 +34,8 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.12', '3.11', '3.10']
-        os: ['"macos-13"']  # Add macos-14 when in next PR
-    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_native.yml@develop
+        os: ['macos-13', 'macos-14']
+    uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
       python-version: ${{ matrix.python-version }}
       platform-build: false
@@ -38,25 +43,25 @@ jobs:
       os: ${{ matrix.os }}
     secrets: inherit
   bodo-conda-platform:
-    uses: Bodo-inc/Bodo/.github/workflows/_build_bodo_conda_native.yml@develop
+    uses: ./.github/workflows/_build_bodo_conda_native.yml
     with:
       python-version: '3.12'
       platform-build: true
       is-release: ${{ github.event_name == 'release' }}
-      os: '["self-hosted", "medium"]'  # JSON Format
+      os: self-hosted-medium
     secrets: inherit
 
   iceberg-conda:
-    uses: Bodo-inc/Bodo/.github/workflows/_build_iceberg_conda.yml@develop
+    uses: ./.github/workflows/_build_iceberg_conda.yml
     secrets: inherit
   azurefs-sas-conda:
     if: github.event_name == 'release'
-    uses: Bodo-inc/Bodo/.github/workflows/_build_azurefs_sas_token_provider_conda.yml@develop
+    uses: ./.github/workflows/_build_azurefs_sas_token_provider_conda.yml
     secrets: inherit
 
   bodosql-conda:
     needs: bodo-conda-linux
-    uses: Bodo-inc/Bodo/.github/workflows/_build_bodosql_conda.yml@develop
+    uses: ./.github/workflows/_build_bodosql_conda.yml
     with:
       is-release: ${{ github.event_name == 'release' }}
     secrets: inherit

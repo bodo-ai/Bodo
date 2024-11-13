@@ -8,16 +8,19 @@ source:
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
   script_env:
-  - CHECK_LICENSE_EXPIRED
-  - CHECK_LICENSE_CORE_COUNT
-  - CHECK_LICENSE_PLATFORM
-  - BUILD_WITH_V8
-  # Necessary for sccache to find AWS
-  - AWS_ACCESS_KEY_ID
-  - AWS_SECRET_ACCESS_KEY
-  # Flag for disabling sccache in the build environment
-  - DISABLE_SCCACHE_IN_BUILD
-
+    - CHECK_LICENSE_EXPIRED
+    - CHECK_LICENSE_CORE_COUNT
+    - CHECK_LICENSE_PLATFORM
+    - BUILD_WITH_V8
+    # Necessary for sccache to find AWS
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    # Flag for disabling sccache in the build environment
+    - DISABLE_SCCACHE_IN_BUILD
+  rpaths:
+    - lib
+    - {{ PREFIX }}/lib
+    - {{ SP_DIR }}/pyarrow
 
 requirements:
   build:
@@ -48,6 +51,7 @@ requirements:
     - numpy >=1.24,<1.27
     - pandas >=2.2,<2.3
     - fsspec >=2021.09
+    - libarrow =17.0.0
     - pyarrow =17.0.0
     - boost-cpp =1.85
     - libcurl ~= 8.0
@@ -100,7 +104,6 @@ test:
     - bodo
   source_files:
     - examples/pi.py
-
 
 about:
   home: https://bodo.ai

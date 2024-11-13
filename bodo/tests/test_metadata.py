@@ -25,7 +25,7 @@ from bodo.tests.utils import reduce_sum
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
         pd.Index([True, False, True, False]),
     ]
@@ -81,7 +81,7 @@ def test_metadata_typemaps():
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
-        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pd.PeriodIndex.from_fields(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
         pd.Index([True, False, True, False]),
         np.array(

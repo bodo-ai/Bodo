@@ -550,7 +550,7 @@ def test_tz_convert_none(memory_leak_check):
             pd.Timestamp(year=2024, month=1, day=11, tz="Poland"), id="scalar"
         ),
         pytest.param(
-            pd.date_range(start="1/1/2025", freq="4H", periods=6, tz="Poland").array,
+            pd.date_range(start="1/1/2025", freq="4h", periods=6, tz="Poland").array,
             id="arr",
             marks=pytest.mark.slow,
         ),

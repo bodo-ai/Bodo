@@ -1121,7 +1121,7 @@ def test_unique(memory_leak_check):
     "S",
     [
         pd.Series(np.arange(100)),
-        pd.Series(pd.date_range("02-20-2022", freq="3D1H", periods=30)),
+        pd.Series(pd.date_range("02-20-2022", freq="3D1h", periods=30)),
     ],
 )
 def test_dist_iat(S, memory_leak_check):

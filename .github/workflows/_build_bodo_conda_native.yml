@@ -27,7 +27,7 @@ jobs:
       run:
         shell: bash -l {0}
 
-    runs-on: ${{ fromJson(inputs.os) }}
+    runs-on: ${{ inputs.os }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +39,7 @@ jobs:
         if: ${{ contains(inputs.os, 'macos') }}
         run: ./buildscripts/setup_osx_sdk.sh
         env:
-          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == '"macos-13"' && '10.15' || '11.0' }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ inputs.os == 'macos-13' && '10.15' || '11.0' }}
 
       # Regular Setup
       - name: Create Micromamba Environment
@@ -78,6 +78,9 @@ jobs:
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             -e nightly_conda_build_config.yaml --python '${{ inputs.python-version }}'
+          
+          # Export Location for Artifacting
+          echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds
@@ -94,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bodo-conda-${{ inputs.python-version }}-${{ inputs.platform-build == true && 'platform' || inputs.os }}
-          path: ${{ github.env.home }}/conda-bld/
+          path: ${{ env.CONDA_BLD_PATH }}
 
       - name: Publish to Artifactory / Anaconda
         if: ${{ inputs.is-release }}

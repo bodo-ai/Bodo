@@ -97,7 +97,9 @@ def test_object_dtype(memory_leak_check):
         ),
         pytest.param(
             (
-                pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+                pd.PeriodIndex.from_fields(
+                    year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"
+                ),
                 "pandas.PeriodIndex.{}",
             ),
             id="PeriodIndexType",
@@ -1125,7 +1127,7 @@ def test_idx_map_tup_return():
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.PeriodIndex(
+            pd.PeriodIndex.from_fields(
                 year=[2015, 2015, 2016, 1026, 2018, 2018, 2019],
                 month=[1, 2, 3, 1, 2, 3, 4],
                 freq="M",

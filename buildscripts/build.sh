@@ -33,7 +33,7 @@ export DISABLE_CCACHE=1
 export USE_BODO_ARROW_FORK=1
 
 # Bodo Install
-pip install --no-deps --no-build-isolation -Ccmake.verbose=true -ve .
+pip install --no-deps --no-build-isolation -Cbuild.verbose=true -ve .
 
 # Report sscache stats for debugging
 sccache --show-stats
