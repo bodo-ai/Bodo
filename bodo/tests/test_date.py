@@ -2614,7 +2614,6 @@ def test_now_date_wrapper_rank_consistent(memory_leak_check):
     ), "Results are not consistent across ranks"
 
 
-@pytest.mark.skip("[BSE-4151] Fix segfault on PR CI and develop")
 def test_now_impl_consistent(memory_leak_check):
     """Test now_impl_consistent by ensuring all ranks return
     the same data.
@@ -2624,7 +2623,7 @@ def test_now_impl_consistent(memory_leak_check):
     def impl():
         return bodo.hiframes.pd_timestamp_ext.now_impl_consistent("US/Eastern")
 
-    res = impl()
+    res = impl().date()
     results = bodo.allgatherv(np.array([res]))
     assert all(
         r == results[0] for r in results
