@@ -101,8 +101,12 @@ class LazyArrowExtensionArray(
                 self.logger, "[LazyArrowExtensionArray] Collecting data from workers..."
             )
             collected = self._collect_func(self._md_result_id)
-            # Collected could be bodo array types too so we need to convert to pyarrow array
-            self._pa_array = pa.array(collected, type=self._md_head._pa_array.type)
+            # Collected could be bodo array types too so we need to convert to pyarrow
+            # array. The _pa_array attribute should be a ChunkedArray object. See:
+            # https://github.com/pandas-dev/pandas/blob/d9cdd2ee5a58015ef6f4d15c7226110c9aab8140/pandas/core/arrays/arrow/array.py#L294
+            self._pa_array = pa.chunked_array(
+                [pa.array(collected, type=self._md_head._pa_array.type)]
+            )
             self._md_result_id = None
             self._md_nrows = None
             self._md_head = None
