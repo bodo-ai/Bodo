@@ -3360,7 +3360,7 @@ def test_series_np_select(series_val):
     def na_impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     from numba.core import types
 
@@ -3429,7 +3429,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     def na_impl(A1, A2, cond1, cond2):
         choicelist = (A1, A2)
         condlist = (cond1, cond2)
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     from numba.core import types
 
@@ -3504,7 +3504,7 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
     def na_impl(A1, A2, cond1, cond2):
         choicelist = (A1, A2)
         condlist = (cond1, cond2)
-        return np.select(condlist, choicelist, default=pd.NA)
+        return np.select(condlist, choicelist, default=None)
 
     if series_val.dtype.name.startswith("float"):
         py_out = impl(A1, A2, cond1, cond2)
