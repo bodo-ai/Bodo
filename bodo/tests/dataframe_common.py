@@ -109,7 +109,7 @@ df_value_params = [
                         b"",
                         b"abc",
                         b"c",
-                        np.nan,
+                        None,
                         b"ccdefg",
                         b"abcde",
                         b"poiu",

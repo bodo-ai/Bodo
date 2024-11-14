@@ -20,22 +20,9 @@
 
 extern "C" {
 
-// taken from Arrow bin-util.h
-// the bitwise complement version of kBitmask
-static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247,
-                                              239, 223, 191, 127};
-
 // Map of integers to hex values. Note we use an array because the keys are 0-15
 static constexpr char hex_values[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                                       '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-
-static inline void ClearBit(uint8_t* bits, int64_t i) {
-    bits[i / 8] &= kFlippedBitmask[i % 8];
-}
-
-static inline void SetBit(uint8_t* bits, int64_t i) {
-    bits[i / 8] |= kBitmask[i % 8];
-}
 
 // Copied _PyLong_DigitValue from CPython internals (seems not exported in
 // Python 3.11, causing compilation errors).
@@ -558,16 +545,12 @@ void* np_array_from_string_array(int64_t no_strings,
     PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
     CHECK(ret, "allocating numpy array failed");
     int err;
-    PyObject* np_mod = PyImport_ImportModule("numpy");
-    CHECK(np_mod, "importing numpy module failed");
-    PyObject* nan_obj = PyObject_GetAttrString(np_mod, "nan");
-    CHECK(nan_obj, "getting np.nan failed");
 
     for (int64_t i = 0; i < no_strings; ++i) {
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
         if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, Py_None);
         } else {
             PyObject* s;
             if (is_bytes) {
@@ -586,8 +569,6 @@ void* np_array_from_string_array(int64_t no_strings,
         CHECK(err == 0, "setting item in numpy array failed");
     }
 
-    Py_DECREF(np_mod);
-    Py_DECREF(nan_obj);
     PyGILState_Release(gilstate);
     return ret;
 #undef CHECK
