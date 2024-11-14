@@ -23,6 +23,8 @@ from pandas.core.arrays.arrow import ArrowExtensionArray
 from pandas.core.base import ExtensionArray
 
 import bodo
+import bodo.hiframes
+import bodo.hiframes.table
 from bodo.mpi4py import MPI
 from bodo.pandas import LazyMetadata
 from bodo.submit.spawner import BodoSQLContextMetadata, env_var_prefix
@@ -244,6 +246,11 @@ def _gather_res(
             )
         )
         or isinstance(res, np.ndarray)
+        # TODO[BSE-4198]: support lazy Index wrappers
+        or isinstance(res, pd.Index)
+        or isinstance(res, bodo.hiframes.table.Table)
+        or isinstance(res, pd.Categorical)
+        or isinstance(res, pd.arrays.IntervalArray)
     ):
         # If the result is empty on rank 0, we can't send a head to the spawner
         # so just gather the results and send it all to to the spawner
