@@ -130,6 +130,9 @@ class Table:
             and all((a == b).all() for a, b in zip(self.arrays, other.arrays))
         )
 
+    def __len__(self):
+        return len(self.arrays[0]) if len(self.arrays) > 0 else 0
+
     def __str__(self) -> str:
         return f"Table({str(self.arrays)})"
 
