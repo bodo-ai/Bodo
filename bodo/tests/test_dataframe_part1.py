@@ -513,7 +513,6 @@ def test_df_insert(memory_leak_check, is_slow_run):
         bodo.jit(impl6)(df)
 
 
-@pytest.mark.skip(reason="[BSE-4151] Failing spawn test on PR CI")
 @pytest.mark.slow
 def test_unbox_df1(df_value, memory_leak_check):
     # just unbox
@@ -2404,7 +2403,6 @@ def test_empty_df_len(memory_leak_check):
     check_func(test_impl, ())
 
 
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 def test_df_reset_index1(df_value, memory_leak_check):
     """Test DataFrame.reset_index(drop=False) on various dataframe/index combinations"""
 
@@ -2600,7 +2598,6 @@ def test_drop_all_types(df_value, memory_leak_check):
     )
 
 
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 def test_drop_duplicates_all_types(df_value, memory_leak_check):
     """
     Function that tests that drop_duplicates works on our df types.

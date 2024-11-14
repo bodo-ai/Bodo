@@ -2323,7 +2323,6 @@ def test_iat_getitem(df_value, memory_leak_check):
 @pytest.mark.skipif(
     bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
 )
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 def test_iat_setitem_all_types(df_value, memory_leak_check):
     """test df.iat[] setitem (single value)"""
 
