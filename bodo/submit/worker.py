@@ -177,7 +177,7 @@ def _build_distributed_return_metadata(
     return LazyMetadata(
         result_id=res_id,
         head=res.head(DISTRIBUTED_RETURN_HEAD_SIZE)
-        if isinstance(res, pd.DataFrame)
+        if isinstance(res, (pd.DataFrame, pd.Series))
         else res[:DISTRIBUTED_RETURN_HEAD_SIZE],
         nrows=total_res_len,
         index_data=index_data,
