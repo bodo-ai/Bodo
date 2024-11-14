@@ -28,9 +28,7 @@ open class ProjectBase(
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): Project {
-        return ProjectBase(cluster, traitSet, hints, input, projects, rowType)
-    }
+    ): Project = ProjectBase(cluster, traitSet, hints, input, projects, rowType)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -38,7 +36,8 @@ open class ProjectBase(
     ): RelOptCost {
         val rows = mq.getRowCount(this)
         val cost =
-            projects.map { project -> project.accept(RexCostEstimator) }
+            projects
+                .map { project -> project.accept(RexCostEstimator) }
                 .reduce { l, r -> l.plus(r) as Cost }
         return planner.makeCost(from = cost).multiplyBy(rows)
     }

@@ -10,7 +10,11 @@ import org.apache.calcite.sql.SqlSpecialOperator
 import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
 
-class SqlTruncateTable(pos: SqlParserPos, val ifExists: Boolean, val name: SqlIdentifier) : SqlDdl(OPERATOR, pos) {
+class SqlTruncateTable(
+    pos: SqlParserPos,
+    val ifExists: Boolean,
+    val name: SqlIdentifier,
+) : SqlDdl(OPERATOR, pos) {
     companion object {
         @JvmStatic
         val OPERATOR: SqlOperator =

@@ -17,12 +17,12 @@ jobs:
         uses: actions/checkout@v1
     
       - name: Configure Azure Credentials
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{secrets.AZURE_CREDENTIALS}}
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.8
       
@@ -50,8 +50,7 @@ jobs:
           python vmi_cleanup.py --output vmis_to_remove.json $DELETE_FLAG
 
       - name: Upload Image Details
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: removed-vmis
           path: bodo-platform-image/vmis_to_remove.json
-

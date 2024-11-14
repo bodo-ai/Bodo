@@ -22,9 +22,7 @@ interface IcebergRel : RelNode {
         val CONVENTION = Convention.Impl("ICEBERG", IcebergRel::class.java)
     }
 
-    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
-        return getCatalogTable().generatePythonConnStr(schemaPath)
-    }
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr = getCatalogTable().generatePythonConnStr(schemaPath)
 
     fun getCatalogTable(): CatalogTable
 

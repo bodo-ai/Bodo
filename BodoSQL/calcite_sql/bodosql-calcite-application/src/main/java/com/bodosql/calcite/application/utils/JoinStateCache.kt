@@ -14,10 +14,9 @@ class JoinStateCache {
      * @param joinFilterID The key mapping between join and its filter.
      * @return the state variable for the join or null if we are not streaming.
      */
-    fun getStreamingJoinInfo(joinFilterID: Int): JoinCacheInfo {
-        return joinMap[joinFilterID]
+    fun getStreamingJoinInfo(joinFilterID: Int): JoinCacheInfo =
+        joinMap[joinFilterID]
             ?: throw IllegalStateException("Join state variable not found for key $joinFilterID")
-    }
 
     /**
      * Set the code generation information for a streaming join.

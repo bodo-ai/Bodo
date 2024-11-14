@@ -47,9 +47,7 @@ interface PandasRel : TimerSupportedRel {
      */
     fun isStreaming() = batchingProperty() == BatchingProperty.STREAMING
 
-    override fun nodeString(): String {
-        return RelOptUtil.toString(this)
-    }
+    override fun nodeString(): String = RelOptUtil.toString(this)
 
     companion object {
         @JvmField

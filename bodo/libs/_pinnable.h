@@ -265,7 +265,7 @@ struct pinnable_ptr {
 /// Shared state to support copying of PinnableAllocator
 struct PinnableAllocatorState {
     inline PinnableAllocatorState(IBufferPool *pool)
-        : pool_(pool), ptrs_(nullptr){};
+        : pool_(pool), ptrs_(nullptr) {};
 
     /// @brief The pool we will allocate from
     IBufferPool *const pool_;

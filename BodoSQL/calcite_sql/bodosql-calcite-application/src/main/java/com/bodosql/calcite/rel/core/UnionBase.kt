@@ -19,9 +19,7 @@ open class UnionBase(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
         all: Boolean,
-    ): UnionBase {
-        return UnionBase(cluster, traitSet, inputs, all)
-    }
+    ): UnionBase = UnionBase(cluster, traitSet, inputs, all)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

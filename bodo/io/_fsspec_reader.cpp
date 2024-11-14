@@ -178,8 +178,7 @@ static PyObject *finalize_fsspec_py_wrapper(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef ext_methods[] = {
-#define declmethod(func) \
-    { #func, (PyCFunction)func, METH_VARARGS, NULL }
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(finalize_fsspec_py_wrapper),
     {NULL},
 #undef declmethod

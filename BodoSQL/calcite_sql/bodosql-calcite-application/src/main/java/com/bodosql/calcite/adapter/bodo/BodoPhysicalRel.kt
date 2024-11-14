@@ -73,9 +73,7 @@ interface BodoPhysicalRel : TimerSupportedRel {
     fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
         expectedOutputBatchingProperty(inputBatchingProperty)
 
-    override fun nodeString(): String {
-        return RelOptUtil.toString(this)
-    }
+    override fun nodeString(): String = RelOptUtil.toString(this)
 
     interface Implementor {
         fun build(

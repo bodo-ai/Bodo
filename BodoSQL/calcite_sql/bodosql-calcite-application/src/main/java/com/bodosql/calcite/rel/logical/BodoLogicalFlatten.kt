@@ -33,9 +33,7 @@ class BodoLogicalFlatten(
         callType: RelDataType,
         usedColOutputs: ImmutableBitSet,
         repeatColumns: ImmutableBitSet,
-    ): BodoLogicalFlatten {
-        return BodoLogicalFlatten(cluster, traitSet, input, call, callType, usedColOutputs, repeatColumns)
-    }
+    ): BodoLogicalFlatten = BodoLogicalFlatten(cluster, traitSet, input, call, callType, usedColOutputs, repeatColumns)
 
     companion object {
         @JvmStatic
@@ -43,9 +41,7 @@ class BodoLogicalFlatten(
             input: RelNode,
             call: RexCall,
             callType: RelDataType,
-        ): BodoLogicalFlatten {
-            return create(input, call, callType, ImmutableBitSet.range(callType.fieldCount), ImmutableBitSet.of())
-        }
+        ): BodoLogicalFlatten = create(input, call, callType, ImmutableBitSet.range(callType.fieldCount), ImmutableBitSet.of())
 
         @JvmStatic
         fun create(
@@ -53,9 +49,7 @@ class BodoLogicalFlatten(
             call: RexCall,
             callType: RelDataType,
             usedColOutputs: ImmutableBitSet,
-        ): BodoLogicalFlatten {
-            return create(input, call, callType, usedColOutputs, ImmutableBitSet.of())
-        }
+        ): BodoLogicalFlatten = create(input, call, callType, usedColOutputs, ImmutableBitSet.of())
 
         @JvmStatic
         fun create(

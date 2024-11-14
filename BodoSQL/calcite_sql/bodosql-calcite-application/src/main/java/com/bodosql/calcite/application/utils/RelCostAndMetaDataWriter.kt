@@ -142,11 +142,13 @@ class RelCostAndMetaDataWriter(
         spacer.spaces(s)
         s.append(rel.relTypeName)
         val attrs =
-            values.asSequence()
+            values
+                .asSequence()
                 .filter { it.right !is RelNode }
                 .joinToString(separator = ", ") { "${it.left}=[${normalize(it.right)}]" }
         if (attrs.isNotBlank()) {
-            s.append("(")
+            s
+                .append("(")
                 .append(attrs)
                 .append(")")
         }
@@ -211,7 +213,8 @@ class RelCostAndMetaDataWriter(
          * of remappings for nodes with duplicate entries.
          */
         private fun normalizeDuplicates(ids: Map<Int, Int>): Map<Int, Int> =
-            ids.asSequence()
+            ids
+                .asSequence()
                 // Include only pairs where there were duplicates.
                 .filter { (_, value) -> value >= 2 }
                 // Only want the key.

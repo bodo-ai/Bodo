@@ -20,11 +20,14 @@ interface TimerSupportedRel : RelNode {
     fun loggingTitle() = "RELNODE_TIMING"
 
     fun nodeDetails() =
-        Arrays.stream(
-            nodeString()
-                .split("\n".toRegex()).dropLastWhile { it.isEmpty() }
-                .toTypedArray(),
-        ).findFirst().get()
+        Arrays
+            .stream(
+                nodeString()
+                    .split("\n".toRegex())
+                    .dropLastWhile { it.isEmpty() }
+                    .toTypedArray(),
+            ).findFirst()
+            .get()
 
     /**
      * Generates a string representation of the node.

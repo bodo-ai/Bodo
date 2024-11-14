@@ -9,8 +9,8 @@ class LimitUtils private constructor() {
          * Extract the nodes for standard Sort conversion rules.
          */
         @JvmStatic
-        fun <E> extractSortNodes(call: RelOptRuleCall): Pair<Sort, E> {
-            return when (call.rels.size) {
+        fun <E> extractSortNodes(call: RelOptRuleCall): Pair<Sort, E> =
+            when (call.rels.size) {
                 // Inputs are:
                 // Sort ->
                 //     XXXToPandasConverter ->
@@ -21,7 +21,6 @@ class LimitUtils private constructor() {
                 //     XXXRel
                 else -> Pair(call.rel(0), call.rel(1))
             }
-        }
 
         /**
          * Determine if a sort is only a limit and doesn't require any actual sorting.
@@ -36,8 +35,7 @@ class LimitUtils private constructor() {
          * Determine if we have a limit with a sort.
          */
         @JvmStatic
-        fun isOrderedLimit(sort: Sort): Boolean {
-            return sort.getCollation().fieldCollations.isNotEmpty() && (sort.offset != null || sort.fetch != null)
-        }
+        fun isOrderedLimit(sort: Sort): Boolean =
+            sort.getCollation().fieldCollations.isNotEmpty() && (sort.offset != null || sort.fetch != null)
     }
 }

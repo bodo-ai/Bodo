@@ -30,9 +30,7 @@ interface ColumnDistinctCount : Metadata {
             column: Int,
         ): Double?
 
-        override fun getDef(): MetadataDef<ColumnDistinctCount?> {
-            return DEF
-        }
+        override fun getDef(): MetadataDef<ColumnDistinctCount?> = DEF
     }
 
     companion object {

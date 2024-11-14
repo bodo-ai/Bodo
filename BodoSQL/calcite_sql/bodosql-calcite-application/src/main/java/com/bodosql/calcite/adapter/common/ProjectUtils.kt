@@ -195,12 +195,11 @@ class ProjectUtils {
             localRefs: MutableList<Variable>,
             origProjects: List<RexNode>,
             input: RelNode,
-        ): BodoEngineTable {
-            return if (canUseLoc(origProjects)) {
+        ): BodoEngineTable =
+            if (canUseLoc(origProjects)) {
                 generateLocCode(ctx, inputVar, origProjects)
             } else {
                 generateProject(ctx, inputVar, translator, projectExprs, localRefs, input)
             }
-        }
     }
 }

@@ -30,14 +30,20 @@ class BodoPhysicalTableCreate private constructor(
         traitSet.replace(
             BodoPhysicalRel.CONVENTION,
         ),
-        input, schema, tableName, isReplace, createTableType, path, meta,
+        input,
+        schema,
+        tableName,
+        isReplace,
+        createTableType,
+        path,
+        meta,
     ),
     BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoPhysicalTableCreate {
-        return BodoPhysicalTableCreate(
+    ): BodoPhysicalTableCreate =
+        BodoPhysicalTableCreate(
             cluster,
             traitSet,
             sole(inputs),
@@ -48,12 +54,9 @@ class BodoPhysicalTableCreate private constructor(
             path,
             meta,
         )
-    }
 
     // Update getSchema() to always indicate we have a CatalogSchema
-    override fun getSchema(): CatalogSchema {
-        return schema
-    }
+    override fun getSchema(): CatalogSchema = schema
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")

@@ -3,7 +3,10 @@ package com.bodosql.calcite.adapter.bodo.window
 import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import com.bodosql.calcite.ir.Variable
 
-class WindowAggregate internal constructor(private val groups: List<Group>, private val index: List<GroupIndex>) {
+class WindowAggregate internal constructor(
+    private val groups: List<Group>,
+    private val index: List<GroupIndex>,
+) {
     fun emit(ctx: BodoPhysicalRel.BuildContext): List<Variable> {
         // Emit the groups to the build context which should
         // create the variables we will access.

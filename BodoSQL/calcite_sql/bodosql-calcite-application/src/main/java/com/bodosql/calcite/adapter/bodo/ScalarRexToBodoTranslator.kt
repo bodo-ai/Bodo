@@ -19,7 +19,5 @@ class ScalarRexToBodoTranslator(
     dynamicParamTypes: List<RelDataType>,
     namedParamTypeMap: Map<String, RelDataType>,
 ) : RexToBodoTranslator(visitor, builder, typeSystem, null, dynamicParamTypes, namedParamTypeMap) {
-    override fun isOperandScalar(operand: RexNode): Boolean {
-        return true
-    }
+    override fun isOperandScalar(operand: RexNode): Boolean = true
 }

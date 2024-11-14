@@ -31,7 +31,9 @@ import org.apache.calcite.sql2rel.StandardConvertletTableConfig
  * along with overriding the standard behavior for certain functions that can
  * be handled natively.
  */
-class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConvertletTable(config) {
+class BodoConvertletTable(
+    config: StandardConvertletTableConfig,
+) : StandardConvertletTable(config) {
     init {
         /**
          * The default Item implementation has this convertlet, so we also use this convertlet for our
@@ -231,8 +233,8 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
         }
     }
 
-    override fun get(call: SqlCall): SqlRexConvertlet? {
-        return when (call.kind) {
+    override fun get(call: SqlCall): SqlRexConvertlet? =
+        when (call.kind) {
             // LEAST and GREATEST default to expanding into case statements
             // in the standard convertlet table. We natively support these
             // operations so avoid converting them to another pattern.
@@ -257,7 +259,6 @@ class BodoConvertletTable(config: StandardConvertletTableConfig) : StandardConve
             }
             else -> super.get(call)
         }
-    }
 
     private object DateTruncConverter : SqlRexConvertlet {
         override fun convertCall(

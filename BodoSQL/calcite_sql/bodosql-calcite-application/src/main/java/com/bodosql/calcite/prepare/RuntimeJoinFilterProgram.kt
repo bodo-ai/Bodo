@@ -53,8 +53,8 @@ object RuntimeJoinFilterProgram : Program {
         requiredOutputTraits: RelTraitSet,
         materializations: MutableList<RelOptMaterialization>,
         lattices: MutableList<RelOptLattice>,
-    ): RelNode {
-        return if (RelationalAlgebraGenerator.enableRuntimeJoinFilters) {
+    ): RelNode =
+        if (RelationalAlgebraGenerator.enableRuntimeJoinFilters) {
             val cluster = rel.cluster
             if (cluster !is BodoRelOptCluster) {
                 throw InternalError("Cluster must be a BodoRelOptCluster")
@@ -71,7 +71,6 @@ object RuntimeJoinFilterProgram : Program {
         } else {
             rel
         }
-    }
 
     /**
      * Visitor for generating runtime join filters. This code is reused by caching first pass without generating filters,
@@ -367,8 +366,8 @@ object RuntimeJoinFilterProgram : Program {
             return processSingleRel(filter, pushLiveJoinInfo, outputLiveJoinInfo)
         }
 
-        private fun visit(converter: SnowflakeToBodoPhysicalConverter): RelNode {
-            return if (liveJoins.isEmpty() || !emitFilters) {
+        private fun visit(converter: SnowflakeToBodoPhysicalConverter): RelNode =
+            if (liveJoins.isEmpty() || !emitFilters) {
                 converter
             } else {
                 val filterInfo = liveJoins.flattenToLists()
@@ -384,10 +383,9 @@ object RuntimeJoinFilterProgram : Program {
                 liveJoins = JoinFilterProgramState()
                 converter.copy(converter.traitSet, listOf(snowflakeRtjf))
             }
-        }
 
-        private fun visit(converter: IcebergToBodoPhysicalConverter): RelNode {
-            return if (liveJoins.isEmpty() || !emitFilters) {
+        private fun visit(converter: IcebergToBodoPhysicalConverter): RelNode =
+            if (liveJoins.isEmpty() || !emitFilters) {
                 converter
             } else {
                 val filterInfo = liveJoins.flattenToLists()
@@ -403,7 +401,6 @@ object RuntimeJoinFilterProgram : Program {
                 liveJoins = JoinFilterProgramState()
                 converter.copy(converter.traitSet, listOf(icebergRtjf))
             }
-        }
 
         private fun visit(node: BodoPhysicalMinRowNumberFilter): RelNode {
             val (pushLiveJoinInfo, outputLiveJoinInfo) = processMinRowNumberFilter(node, liveJoins, true)
@@ -895,8 +892,8 @@ object RuntimeJoinFilterProgram : Program {
         private fun applyFilters(
             rel: RelNode,
             liveJoins: JoinFilterProgramState,
-        ): RelNode {
-            return if (liveJoins.isEmpty()) {
+        ): RelNode =
+            if (liveJoins.isEmpty()) {
                 rel
             } else {
                 val filterInfo = liveJoins.flattenToLists()
@@ -908,7 +905,6 @@ object RuntimeJoinFilterProgram : Program {
                     filterInfo.nonEqualityFilterColumns,
                 )
             }
-        }
 
         /**
          * Derive the filters that can be pushed past the current node. This is used for determining
@@ -924,8 +920,8 @@ object RuntimeJoinFilterProgram : Program {
         internal fun getPushableJoinFilters(
             rel: RelNode,
             liveJoins: JoinFilterProgramState,
-        ): JoinFilterProgramState {
-            return when (rel) {
+        ): JoinFilterProgramState =
+            when (rel) {
                 is BodoPhysicalProject -> {
                     val (pushed, _) = processProject(rel, liveJoins, false)
                     pushed
@@ -971,7 +967,6 @@ object RuntimeJoinFilterProgram : Program {
                     JoinFilterProgramState()
                 }
             }
-        }
     }
 
     internal class JoinFilterCacheReplace(
@@ -980,14 +975,13 @@ object RuntimeJoinFilterProgram : Program {
     ) : RelShuttleImpl() {
         // Visitor for updating the body of cache nodes.
         private val cacheInlineApply =
-            CachedResultVisitor<Unit, CachedSubPlanBase> {
-                    plan ->
+            CachedResultVisitor<Unit, CachedSubPlanBase> { plan ->
                 val result = visit(plan.cachedPlan.plan)
                 plan.cachedPlan.plan = result
             }
 
-        override fun visit(rel: RelNode): RelNode {
-            return when (rel) {
+        override fun visit(rel: RelNode): RelNode =
+            when (rel) {
                 is BodoPhysicalCachedSubPlan -> {
                     val id = rel.id
                     if (keptCacheUpdates.containsKey(id)) {
@@ -1006,7 +1000,6 @@ object RuntimeJoinFilterProgram : Program {
                 }
                 else -> super.visit(rel)
             }
-        }
     }
 
     /**
@@ -1044,8 +1037,6 @@ object RuntimeJoinFilterProgram : Program {
             return node
         }
 
-        fun getNewCacheNodes(): Set<Int> {
-            return cachedNodes
-        }
+        fun getNewCacheNodes(): Set<Int> = cachedNodes
     }
 }

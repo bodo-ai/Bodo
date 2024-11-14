@@ -4,7 +4,9 @@ import com.bodosql.calcite.adapter.bodo.BodoPhysicalRel
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 
-class IcebergToBodoPhysicalConverterRule private constructor(config: Config) : ConverterRule(config) {
+class IcebergToBodoPhysicalConverterRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -14,8 +16,7 @@ class IcebergToBodoPhysicalConverterRule private constructor(config: Config) : C
                     IcebergRel.CONVENTION,
                     BodoPhysicalRel.CONVENTION,
                     "IcebergToBodoPhysicalConverterRule",
-                )
-                .withRuleFactory { config -> IcebergToBodoPhysicalConverterRule(config) }
+                ).withRuleFactory { config -> IcebergToBodoPhysicalConverterRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

@@ -79,9 +79,9 @@ cdef class HadoopFileSystem(FileSystem):
             shared_ptr[CHadoopFileSystem] wrapped
 
         # bodo change: add abfs and abfss
-        if not host.startswith(('hdfs://', 'viewfs://', 'abfs://', 'abfss://')) and host != "default":
+        if not host.startswith(("hdfs://", "viewfs://", "abfs://", "abfss://")) and host != "default":
             # TODO(kszucs): do more sanitization
-            host = 'hdfs://{}'.format(host)
+            host = "hdfs://{}".format(host)
 
         options.ConfigureEndPoint(tobytes(host), int(port))
         options.ConfigureReplication(replication)

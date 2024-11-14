@@ -20,9 +20,8 @@ open class IcebergWriteTarget(
 ) : WriteTarget(tableName, schema, ifExistsBehavior, columnNamesGlobal) {
     protected val icebergConnectionString = pathToIcebergConnectionString(icebergPath)
 
-    private fun pathToIcebergConnectionString(path: Expr): Expr {
-        return if (path is Expr.StringLiteral) Expr.StringLiteral("iceberg+" + path.arg) else path
-    }
+    private fun pathToIcebergConnectionString(path: Expr): Expr =
+        if (path is Expr.StringLiteral) Expr.StringLiteral("iceberg+" + path.arg) else path
 
     open fun allowsThetaSketches(): Boolean = true
 
@@ -72,9 +71,7 @@ open class IcebergWriteTarget(
     override fun streamingInsertIntoInit(
         visitor: BodoCodeGenVisitor,
         operatorID: OperatorID,
-    ): Expr {
-        return streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
-    }
+    ): Expr = streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
 
     /**
      * Implement append to an Iceberg table.

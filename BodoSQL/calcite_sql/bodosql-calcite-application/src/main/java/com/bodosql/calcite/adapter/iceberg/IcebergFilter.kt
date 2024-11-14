@@ -17,14 +17,13 @@ class IcebergFilter private constructor(
     input: RelNode,
     condition: RexNode,
     private val catalogTable: CatalogTable,
-) : Filter(cluster, traitSet.replace(IcebergRel.CONVENTION), input, condition), IcebergRel {
+) : Filter(cluster, traitSet.replace(IcebergRel.CONVENTION), input, condition),
+    IcebergRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): Filter {
-        return IcebergFilter(cluster, traitSet, input, condition, catalogTable)
-    }
+    ): Filter = IcebergFilter(cluster, traitSet, input, condition, catalogTable)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -42,9 +41,7 @@ class IcebergFilter private constructor(
             input: RelNode,
             condition: RexNode,
             catalogTable: CatalogTable,
-        ): IcebergFilter {
-            return IcebergFilter(cluster, traitSet, input, condition, catalogTable)
-        }
+        ): IcebergFilter = IcebergFilter(cluster, traitSet, input, condition, catalogTable)
     }
 
     override fun getCatalogTable(): CatalogTable = catalogTable

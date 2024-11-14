@@ -13,15 +13,14 @@ class SnowflakeUtils {
          * is incorrectly formatted.
          */
         @JvmStatic
-        fun snowflakeYesNoToBoolean(s: String): Boolean {
-            return when (val loweredStr = s.uppercase()) {
+        fun snowflakeYesNoToBoolean(s: String): Boolean =
+            when (val loweredStr = s.uppercase()) {
                 "Y" -> true
                 "N" -> false
                 else -> throw RuntimeException(
                     "Internal Processing Error: Snowflake column expected to hold Y/N but a different value '$loweredStr' was encountered",
                 )
             }
-        }
 
         /**
          * Helper function to parse the arguments value of show functions

@@ -49,7 +49,9 @@ public abstract class BodoSqlSchema implements Schema {
     fullPath = builder.build();
   }
 
-  /** @return The schema's name. */
+  /**
+   * @return The schema's name.
+   */
   public String getName() {
     return this.name;
   }
@@ -155,7 +157,9 @@ public abstract class BodoSqlSchema implements Schema {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 
-  /** @return Can tables be added/removed from this schema. */
+  /**
+   * @return Can tables be added/removed from this schema.
+   */
   @Override
   public boolean isMutable() {
     return true;

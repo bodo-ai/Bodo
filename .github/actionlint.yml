@@ -1,0 +1,6 @@
+self-hosted-runner:
+  labels:
+    - small
+    - medium
+    - large
+    - xlarge

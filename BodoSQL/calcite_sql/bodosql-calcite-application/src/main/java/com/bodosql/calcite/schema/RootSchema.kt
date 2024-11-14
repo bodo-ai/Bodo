@@ -27,30 +27,25 @@ class RootSchema {
     /**
      * Implementation of a root schema with a catalog.
      */
-    private class CatalogRootSchema(catalog: BodoSQLCatalog) : CatalogSchema(rootName, rootDepth, ImmutableList.of(), catalog) {
+    private class CatalogRootSchema(
+        catalog: BodoSQLCatalog,
+    ) : CatalogSchema(rootName, rootDepth, ImmutableList.of(), catalog) {
         // The root schema should not support loading tables.
         // In a followup PR we will refactor getTableNames()
         // and getTable() for the CatalogSchema to enable multiple
         // databases and at that time we can delete this code.
-        override fun getTableNames(): Set<String> {
-            return HashSet()
-        }
+        override fun getTableNames(): Set<String> = HashSet()
 
-        override fun getTable(name: String): CatalogTable? {
-            return null
-        }
+        override fun getTable(name: String): CatalogTable? = null
 
         // The path for the root schema should be empty, not "".
         // This is useful in case we need to build a schema from its
         // parents.
-        override fun getFullPath(): ImmutableList<String> {
-            return ImmutableList.of()
-        }
+        override fun getFullPath(): ImmutableList<String> = ImmutableList.of()
 
         // These are operations that are disabled.
-        override fun createTablePath(tableName: String?): ImmutableList<String?>? {
+        override fun createTablePath(tableName: String?): ImmutableList<String?>? =
             throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
-        }
 
         override fun generateWriteCode(
             visitor: BodoCodeGenVisitor,
@@ -59,9 +54,7 @@ class RootSchema {
             ifExists: IfExistsBehavior,
             createTableType: CreateTableType,
             meta: CreateTableMetadata,
-        ): Expr? {
-            throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
-        }
+        ): Expr? = throw UnsupportedOperationException("Creating a table path is not supported from the root schema")
     }
 
     /**
@@ -69,29 +62,24 @@ class RootSchema {
      */
     private class LocalRootSchema : LocalSchema(rootName, rootDepth) {
         // These are operations that are disabled
-        override fun getTable(name: String): Table? {
-            return null
-        }
+        override fun getTable(name: String): Table? = null
 
         override fun addTable(table: BodoSqlTable) {}
 
         override fun removeTable(tableName: String) {}
 
-        override fun getTableNames(): Set<String> {
-            return HashSet()
-        }
+        override fun getTableNames(): Set<String> = HashSet()
 
         // Copied from Calcite root schema implementation.
         // This is just used for testing.
         override fun getExpression(
             parentSchema: SchemaPlus?,
             name: String,
-        ): Expression? {
-            return Expressions.call(
+        ): Expression? =
+            Expressions.call(
                 DataContext.ROOT,
                 BuiltInMethod.DATA_CONTEXT_GET_ROOT_SCHEMA.method,
             )
-        }
     }
 
     companion object {

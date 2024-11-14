@@ -754,7 +754,7 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
           }
           offset += 2;
           builder.push(e.rel);
-          // fall through
+        // fall through
         default:
           builder.aggregate(builder.groupKey(fields), builder.literalAgg(true).as("i"));
       }
@@ -785,7 +785,7 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
     switch (logic) {
       case TRUE_FALSE_UNKNOWN:
         b = unknownLiteral;
-        // fall through
+      // fall through
       case UNKNOWN_AS_TRUE:
         if (allLiterals) {
           // Considers case when right side of IN is empty
@@ -1120,6 +1120,7 @@ public class SubQueryRemoveRule extends RelRule<SubQueryRemoveRule.Config>
       return subQuery.equals(this.subQuery) ? replacement : subQuery;
     }
   }
+
   /** Rule configuration. */
   @Value.Immutable(singleton = false)
   public interface Config extends RelRule.Config {

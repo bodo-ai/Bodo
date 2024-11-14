@@ -50,6 +50,7 @@ public class LimitProjectTransposeRule extends RelRule<LimitProjectTransposeRule
     RelNode newProject = project.copy(sort.getTraitSet(), ImmutableList.of(newSort));
     call.transformTo(newProject);
   }
+
   /** Rule configuration. */
   @Value.Immutable
   public interface Config extends RelRule.Config {

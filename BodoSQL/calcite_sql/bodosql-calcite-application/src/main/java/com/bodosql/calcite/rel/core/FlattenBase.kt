@@ -30,9 +30,7 @@ open class FlattenBase(
         callType: RelDataType,
         usedColOutputs: ImmutableBitSet,
         repeatColumns: ImmutableBitSet,
-    ): FlattenBase {
-        return FlattenBase(cluster, traitSet, input, call, callType, usedColOutputs, repeatColumns)
-    }
+    ): FlattenBase = FlattenBase(cluster, traitSet, input, call, callType, usedColOutputs, repeatColumns)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

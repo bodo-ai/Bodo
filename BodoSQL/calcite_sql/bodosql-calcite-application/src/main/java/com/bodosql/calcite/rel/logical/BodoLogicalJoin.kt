@@ -26,13 +26,10 @@ class BodoLogicalJoin(
         right: RelNode,
         joinType: JoinRelType,
         semiJoinDone: Boolean,
-    ): Join {
-        return BodoLogicalJoin(cluster, traitSet, hints, left, right, conditionExpr, joinType)
-    }
+    ): Join = BodoLogicalJoin(cluster, traitSet, hints, left, right, conditionExpr, joinType)
 
-    override fun withHints(hintList: MutableList<RelHint>): BodoLogicalJoin {
-        return BodoLogicalJoin(cluster, traitSet, hintList, left, right, condition, joinType)
-    }
+    override fun withHints(hintList: MutableList<RelHint>): BodoLogicalJoin =
+        BodoLogicalJoin(cluster, traitSet, hintList, left, right, condition, joinType)
 
     companion object {
         @JvmStatic

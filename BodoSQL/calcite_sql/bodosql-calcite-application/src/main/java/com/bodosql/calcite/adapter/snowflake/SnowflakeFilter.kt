@@ -17,14 +17,13 @@ class SnowflakeFilter private constructor(
     input: RelNode,
     condition: RexNode,
     private val catalogTable: SnowflakeCatalogTable,
-) : Filter(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, condition), SnowflakeRel {
+) : Filter(cluster, traitSet.replace(SnowflakeRel.CONVENTION), input, condition),
+    SnowflakeRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): Filter {
-        return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
-    }
+    ): Filter = SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -42,9 +41,7 @@ class SnowflakeFilter private constructor(
             input: RelNode,
             condition: RexNode,
             catalogTable: SnowflakeCatalogTable,
-        ): SnowflakeFilter {
-            return SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
-        }
+        ): SnowflakeFilter = SnowflakeFilter(cluster, traitSet, input, condition, catalogTable)
     }
 
     override fun getCatalogTable(): SnowflakeCatalogTable = catalogTable

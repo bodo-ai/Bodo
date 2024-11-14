@@ -33,9 +33,7 @@ class IcebergCatalogTable<T>(
     private val statistic: Statistic = StatisticImpl()
 
     /** Interface to get the Iceberg Catalog.  */
-    override fun getCatalog(): IcebergCatalog<T> {
-        return catalog
-    }
+    override fun getCatalog(): IcebergCatalog<T> = catalog
 
     override fun toRel(
         toRelContext: RelOptTable.ToRelContext,
@@ -77,9 +75,7 @@ class IcebergCatalogTable<T>(
         return baseRelNode
     }
 
-    override fun getStatistic(): Statistic {
-        return statistic
-    }
+    override fun getStatistic(): Statistic = statistic
 
     /**
      * Get the insert into write target for a particular table.
@@ -88,19 +84,16 @@ class IcebergCatalogTable<T>(
      *                          be possible to remove in the future since we append to a table.
      * @return The IcebergWriteTarget.
      */
-    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget {
-        return IcebergWriteTarget(
+    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget =
+        IcebergWriteTarget(
             name,
             parentFullPath,
             WriteTarget.IfExistsBehavior.APPEND,
             columnNamesGlobal,
             generatePythonConnStr(parentFullPath),
         )
-    }
 
-    override fun getDDLExecutor(): DDLExecutor {
-        return IcebergDDLExecutor(catalog.getIcebergConnection())
-    }
+    override fun getDDLExecutor(): DDLExecutor = IcebergDDLExecutor(catalog.getIcebergConnection())
 
     private val columnDistinctCount =
         com.bodosql.calcite.application.utils.Memoizer.memoize<Int, Double?> { column: Int ->
@@ -124,9 +117,7 @@ class IcebergCatalogTable<T>(
      *
      * @return Estimated distinct count for this table.
      */
-    override fun getColumnDistinctCount(column: Int): Double? {
-        return columnDistinctCount.apply(column)
-    }
+    override fun getColumnDistinctCount(column: Int): Double? = columnDistinctCount.apply(column)
 
     private inner class StatisticImpl : Statistic {
         private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
@@ -136,9 +127,7 @@ class IcebergCatalogTable<T>(
          *
          * @return estimated row count for this table.
          */
-        override fun getRowCount(): Double? {
-            return rowCount.get()
-        }
+        override fun getRowCount(): Double? = rowCount.get()
 
         /**
          * Retrieves the estimated row count for this table. It performs a query every time this is
@@ -146,8 +135,6 @@ class IcebergCatalogTable<T>(
          *
          * @return estimated row count for this table.
          */
-        private fun estimateRowCount(): Double? {
-            return catalog.estimateIcebergTableRowCount(parentFullPath, name)
-        }
+        private fun estimateRowCount(): Double? = catalog.estimateIcebergTableRowCount(parentFullPath, name)
     }
 }

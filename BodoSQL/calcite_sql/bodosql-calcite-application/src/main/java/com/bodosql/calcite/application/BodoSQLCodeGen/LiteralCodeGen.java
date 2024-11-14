@@ -68,6 +68,7 @@ public class LiteralCodeGen {
     }
     return total_nanoseconds;
   }
+
   /**
    * Function that return the necessary generated code for Literals.
    *
@@ -132,7 +133,7 @@ public class LiteralCodeGen {
             } else {
               return new Expr.Raw("np.int64(" + node.getValue().toString() + ")");
             }
-            // TODO: Determine why this case exists
+          // TODO: Determine why this case exists
           case SYMBOL:
             return new Expr.Raw(node.getValue().toString());
           case DATE:
@@ -212,9 +213,9 @@ public class LiteralCodeGen {
           case BOOLEAN:
             String boolName = node.toString();
             return new Expr.Raw(boolName.substring(0, 1).toUpperCase() + boolName.substring(1));
-            /* according to https://calcite.apache.org/javadocAggregate/org/apache/calcite/rex/RexLiteral.html,
-            INTERVAL_YEAR/YEAR_MONTH/MONTH are measured in months, and everything else is measured in miliseconds
-             */
+          /* according to https://calcite.apache.org/javadocAggregate/org/apache/calcite/rex/RexLiteral.html,
+          INTERVAL_YEAR/YEAR_MONTH/MONTH are measured in months, and everything else is measured in miliseconds
+           */
           case INTERVAL_DAY_HOUR:
           case INTERVAL_DAY_MINUTE:
           case INTERVAL_DAY_SECOND:

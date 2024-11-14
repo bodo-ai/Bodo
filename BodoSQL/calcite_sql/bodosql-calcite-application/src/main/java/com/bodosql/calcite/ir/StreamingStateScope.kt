@@ -6,16 +6,17 @@ class StreamingStateScope {
     /**
      * Helper Class to Store Operator Info and Ranges
      */
-    private class OperatorPipelineRange(val opID: OperatorID, val startPipelineID: Int) {
+    private class OperatorPipelineRange(
+        val opID: OperatorID,
+        val startPipelineID: Int,
+    ) {
         var endPipelineID: Int? = null
         var memEstimate: Int = -1
     }
 
     private var operators: HashMap<OperatorID, Pair<OperatorPipelineRange, OperatorType>> = HashMap()
 
-    fun hasOperators(): Boolean {
-        return operators.isNotEmpty()
-    }
+    fun hasOperators(): Boolean = operators.isNotEmpty()
 
     fun startOperator(
         opID: OperatorID,
@@ -79,13 +80,9 @@ class StreamingStateScope {
         return inits
     }
 
-    private fun genQueryProfileCollectorInit(): List<Op> {
-        return listOf(Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.init")))
-    }
+    private fun genQueryProfileCollectorInit(): List<Op> = listOf(Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.init")))
 
-    private fun genQueryProfileCollectorFinalize(): Op {
-        return Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.finalize"))
-    }
+    private fun genQueryProfileCollectorFinalize(): Op = Op.Stmt(Expr.Call("bodo.libs.query_profile_collector.finalize"))
 
     fun addToFrame(frame: Frame) {
         if (operators.size > 0) {

@@ -573,7 +573,7 @@ public class AggCodeGen {
         additionalArgsList.add(
             new Expr.StringLiteral(inputColumnNames.get(curCollation.getFieldIndex())));
         return new Expr.Tuple(additionalArgsList);
-        // TODO: try to fuse logic with LISTAGG
+      // TODO: try to fuse logic with LISTAGG
       case ARRAY_AGG:
         assert argsList.size() == 1;
         if (agg.collation != null) {

@@ -8,32 +8,20 @@ class CostFactory : RelOptCostFactory {
         rowCount: Double,
         cpu: Double,
         io: Double,
-    ): RelOptCost {
-        return Cost(rowCount, cpu, io, 0.0)
-    }
+    ): RelOptCost = Cost(rowCount, cpu, io, 0.0)
 
     fun makeCost(
         rowCount: Double,
         cpu: Double,
         io: Double,
         mem: Double,
-    ): RelOptCost {
-        return Cost(rowCount, cpu, io, mem)
-    }
+    ): RelOptCost = Cost(rowCount, cpu, io, mem)
 
-    override fun makeHugeCost(): RelOptCost {
-        return Cost(100.0, 100.0, 100.0, 100.0)
-    }
+    override fun makeHugeCost(): RelOptCost = Cost(100.0, 100.0, 100.0, 100.0)
 
-    override fun makeInfiniteCost(): RelOptCost {
-        return Cost.INFINITY
-    }
+    override fun makeInfiniteCost(): RelOptCost = Cost.INFINITY
 
-    override fun makeTinyCost(): RelOptCost {
-        return Cost(1.0, 1.0, 1.0, 1.0)
-    }
+    override fun makeTinyCost(): RelOptCost = Cost(1.0, 1.0, 1.0, 1.0)
 
-    override fun makeZeroCost(): RelOptCost {
-        return Cost(0.0, 0.0, 0.0, 0.0)
-    }
+    override fun makeZeroCost(): RelOptCost = Cost(0.0, 0.0, 0.0, 0.0)
 }

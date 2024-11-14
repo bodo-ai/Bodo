@@ -29,9 +29,9 @@ internal class Group(
     aggregates: List<RexOver>,
     val window: RexWindow,
 ) {
-    private val _aggregates = rewriteOperands(aggregates)
-    private val aggregates: List<OverFunc> get() = _aggregates.first
-    private val localRefs: List<RexNode> get() = _aggregates.second
+    private val aggregatesInner = rewriteOperands(aggregates)
+    private val aggregates: List<OverFunc> get() = aggregatesInner.first
+    private val localRefs: List<RexNode> get() = aggregatesInner.second
 
     /**
      * Constructs the aggregate function that will be passed to apply.
@@ -257,7 +257,10 @@ internal class Group(
         return Pair(applyCall, windowFnOutputs)
     }
 
-    private data class WindowApplyFunc(val name: Variable, val outputFields: List<Int>)
+    private data class WindowApplyFunc(
+        val name: Variable,
+        val outputFields: List<Int>,
+    )
 
     /**
      * Generates the window function to be invoked with apply for [emitWindowApply].
@@ -330,8 +333,8 @@ internal class Group(
         ctxTemplate: WindowAggregateContext,
         aggregates: List<OverFunc>,
         rexTranslator: RexToBodoTranslator,
-    ): List<Variable> {
-        return aggregates.mapIndexed { i, agg ->
+    ): List<Variable> =
+        aggregates.mapIndexed { i, agg ->
             val out = Variable("arr$i")
             val aggFunc =
                 WindowAggregateApplyFuncTable.get(agg.op)
@@ -343,7 +346,6 @@ internal class Group(
             ctx.builder.add(Op.Assign(out, aggFunc.emit(ctx, agg.over, operands)))
             out
         }
-    }
 
     /**
      * Uses the [RexToBodoTranslator] to calculate the window bounds if they are present.
@@ -384,9 +386,7 @@ internal class Group(
     private fun evaluateOperands(
         operands: List<RexNode>,
         rexTranslator: RexToBodoTranslator,
-    ): List<Expr> {
-        return rexTranslator.visitList(operands)
-    }
+    ): List<Expr> = rexTranslator.visitList(operands)
 
     /**
      * Emit the initialization code for the generated window apply function.

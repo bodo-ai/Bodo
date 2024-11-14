@@ -6,7 +6,7 @@ import org.apache.calcite.sql.SqlNode
 import org.apache.calcite.sql.SqlNodeList
 import org.apache.calcite.sql.type.SqlTypeName
 
-class CreateTableMetadata() {
+class CreateTableMetadata {
     var tableComment: String? = null
     var columnComments: List<String?>? = null
     var tableProperties: List<Pair<String, String>>? = null
@@ -43,8 +43,7 @@ class CreateTableMetadata() {
         valueList: SqlNodeList,
     ) {
         tableProperties =
-            keyList.list.zip(valueList.list).map {
-                    (key, value) ->
+            keyList.list.zip(valueList.list).map { (key, value) ->
                 if (key is SqlLiteral && key.typeName == SqlTypeName.CHAR && value is SqlLiteral && value.typeName == SqlTypeName.CHAR) {
                     Pair(key.getValueAs(String::class.java), value.getValueAs(String::class.java))
                 } else {
@@ -73,8 +72,7 @@ class CreateTableMetadata() {
         }
         if (tableProperties != null) {
             val tablePropertiesKwargs =
-                tableProperties!!.map {
-                        (key, value) ->
+                tableProperties!!.map { (key, value) ->
                     Expr.Tuple(listOf(Expr.StringLiteral(key), Expr.StringLiteral(value)))
                 }
             ctasMetaKwargs.add(Pair("table_properties", Expr.Tuple(tablePropertiesKwargs)))

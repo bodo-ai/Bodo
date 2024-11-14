@@ -59,12 +59,16 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     fullPath = builder.build();
   }
 
-  /** @return This table's name. */
+  /**
+   * @return This table's name.
+   */
   public String getName() {
     return this.name;
   }
 
-  /** @return The full path for this table. * */
+  /**
+   * @return The full path for this table. *
+   */
   public ImmutableList<String> getFullPath() {
     return fullPath;
   }
@@ -84,7 +88,9 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     return colNames;
   }
 
-  /** @return A list of names to use for columns when writing this table. */
+  /**
+   * @return A list of names to use for columns when writing this table.
+   */
   public List<String> getWriteColumnNames() {
     List<String> colNames = new ArrayList<>();
     for (BodoSQLColumn col : this.columns) {
@@ -128,7 +134,9 @@ public abstract class BodoSqlTable implements ExtensibleTable {
     return Statistics.UNKNOWN;
   }
 
-  /** @return A JDBC type for this table. This should be unused by BodoSQL. */
+  /**
+   * @return A JDBC type for this table. This should be unused by BodoSQL.
+   */
   @Override
   public Schema.TableType getJdbcTableType() {
     return Schema.TableType.TABLE;
@@ -160,6 +168,7 @@ public abstract class BodoSqlTable implements ExtensibleTable {
       String colName, SqlCall sc, SqlNode sn, CalciteConnectionConfig ccc) {
     throw new UnsupportedOperationException("rolledUpColumnValidInsideAgg Not supported yet.");
   }
+
   /**
    * Generates the code needed to cast a read table into types that can be supported by BodoSQL.
    * This is done using the cast information in the columns and generates appropriate Python to
@@ -203,7 +212,9 @@ public abstract class BodoSqlTable implements ExtensibleTable {
 
   // BodoSQL Table abstract classes
 
-  /** @return Can BodoSQL write to this table, updating it in a remote DB/location. */
+  /**
+   * @return Can BodoSQL write to this table, updating it in a remote DB/location.
+   */
   public abstract boolean isWriteable();
 
   /**

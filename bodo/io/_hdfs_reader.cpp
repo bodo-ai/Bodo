@@ -267,8 +267,7 @@ static PyObject *disconnect_hdfs_py_wrapper(PyObject *self, PyObject *args) {
 }
 
 static PyMethodDef ext_methods[] = {
-#define declmethod(func) \
-    { #func, (PyCFunction)func, METH_VARARGS, NULL }
+#define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(disconnect_hdfs_py_wrapper),
     {NULL},
 #undef declmethod

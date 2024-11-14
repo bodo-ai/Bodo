@@ -27,8 +27,8 @@ class ParquetWriteTarget(
         operatorID: OperatorID,
         createTableType: CreateTableType,
         meta: CreateTableMetadata,
-    ): Expr {
-        return Expr.Call(
+    ): Expr =
+        Expr.Call(
             "bodo.io.stream_parquet_write.parquet_writer_init",
             operatorID.toExpr(),
             Expr.StringLiteral(parquetPath),
@@ -40,7 +40,6 @@ class ParquetWriteTarget(
             // We don't pass timezone information yet.
             Expr.StringLiteral(""),
         )
-    }
 
     /**
      * Initialize the streaming insert into state information for a given write target.
@@ -50,9 +49,7 @@ class ParquetWriteTarget(
     override fun streamingInsertIntoInit(
         visitor: BodoCodeGenVisitor,
         operatorID: OperatorID,
-    ): Expr {
-        return streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
-    }
+    ): Expr = streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
 
     /**
      * Implement append to a ParquetTable.

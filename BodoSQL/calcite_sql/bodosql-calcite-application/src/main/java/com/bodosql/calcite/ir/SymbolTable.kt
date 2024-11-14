@@ -34,122 +34,72 @@ class SymbolTable {
         private const val DUMMY_COL_NAME_BASE = "__bodo_dummy__"
     }
 
-    fun genDfVar(): Variable {
-        return Variable("df${dfVarId++}")
-    }
+    fun genDfVar(): Variable = Variable("df${dfVarId++}")
 
-    fun genTableVar(): Variable {
-        return Variable("T${tableVarId++}")
-    }
+    fun genTableVar(): Variable = Variable("T${tableVarId++}")
 
-    fun genSeriesVar(): Variable {
-        return Variable("S${seriesVarId++}")
-    }
+    fun genSeriesVar(): Variable = Variable("S${seriesVarId++}")
 
-    fun genArrayVar(): Variable {
-        return Variable("A${arrVarId++}")
-    }
+    fun genArrayVar(): Variable = Variable("A${arrVarId++}")
 
-    fun genIndexVar(): Variable {
-        return Variable("index_${idxVarId++}")
-    }
+    fun genIndexVar(): Variable = Variable("index_${idxVarId++}")
 
-    fun genIterVar(): Variable {
-        return Variable("_iter_${iterVarId++}")
-    }
+    fun genIterVar(): Variable = Variable("_iter_${iterVarId++}")
 
-    fun genOutputControlVar(): Variable {
-        return Variable("_produce_output_${outputControlId++}")
-    }
+    fun genOutputControlVar(): Variable = Variable("_produce_output_${outputControlId++}")
 
-    fun genInputRequestVar(): Variable {
-        return Variable("_input_request_${inputRequestId++}")
-    }
+    fun genInputRequestVar(): Variable = Variable("_input_request_${inputRequestId++}")
 
-    fun genWriterVar(): Variable {
-        return Variable("__bodo_streaming_writer_${streamingWriterId++}")
-    }
+    fun genWriterVar(): Variable = Variable("__bodo_streaming_writer_${streamingWriterId++}")
 
-    fun genGenericTempVar(): Variable {
-        return Variable("_temp${tempVarId++}")
-    }
+    fun genGenericTempVar(): Variable = Variable("_temp${tempVarId++}")
 
     // Variable for an accumulator for elapsed time of a stage of an operator
     fun genOperatorStageTimerVar(
         opID: OperatorID,
         stageID: Int,
-    ): Variable {
-        return Variable("_op_stage_timer_${opID}_$stageID")
-    }
+    ): Variable = Variable("_op_stage_timer_${opID}_$stageID")
 
     // Variable for start timestamp for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerStartVar(
         opID: OperatorID,
         stageID: Int,
-    ): Variable {
-        return Variable("_start_op_stage_${opID}_$stageID")
-    }
+    ): Variable = Variable("_start_op_stage_${opID}_$stageID")
 
     fun genOperatorStageRowCountVar(
         opID: OperatorID,
         stageID: Int,
-    ): Variable {
-        return Variable("_op_stage_${opID}_${stageID}_output_len")
-    }
+    ): Variable = Variable("_op_stage_${opID}_${stageID}_output_len")
 
     // Variable for end timestamp for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerEndVar(
         opID: OperatorID,
         stageID: Int,
-    ): Variable {
-        return Variable("_end_op_stage_${opID}_$stageID")
-    }
+    ): Variable = Variable("_end_op_stage_${opID}_$stageID")
 
     // Variable for time elapsed for an instance of an operator stage in a pipeline
     fun genOperatorStageTimerElapsedVar(
         opID: OperatorID,
         stageID: Int,
-    ): Variable {
-        return Variable("_elapsed_op_stage_${opID}_$stageID")
-    }
+    ): Variable = Variable("_elapsed_op_stage_${opID}_$stageID")
 
-    fun genTempColumnVar(): Variable {
-        return Variable("__bodo_generated_column__${colVarId++}")
-    }
+    fun genTempColumnVar(): Variable = Variable("__bodo_generated_column__${colVarId++}")
 
-    fun genBatchAccumulatorVar(): Variable {
-        return Variable("__bodo_streaming_batches_table_builder_${accVarId++}")
-    }
+    fun genBatchAccumulatorVar(): Variable = Variable("__bodo_streaming_batches_table_builder_${accVarId++}")
 
-    fun genFinishedStreamingFlag(): Variable {
-        return Variable("__bodo_is_last_streaming_output_${streamingFlagId++}")
-    }
+    fun genFinishedStreamingFlag(): Variable = Variable("__bodo_is_last_streaming_output_${streamingFlagId++}")
 
-    fun genWindowedAggDf(): Variable {
-        return Variable("__bodo_windowfn_generated_df_${dfVarId++}")
-    }
+    fun genWindowedAggDf(): Variable = Variable("__bodo_windowfn_generated_df_${dfVarId++}")
 
-    fun genWindowedAggFnName(): Variable {
-        return Variable("${DUMMY_COL_NAME_BASE}_sql_windowed_apply_fn_${groupByApplyFnId++}")
-    }
+    fun genWindowedAggFnName(): Variable = Variable("${DUMMY_COL_NAME_BASE}_sql_windowed_apply_fn_${groupByApplyFnId++}")
 
-    fun genGroupbyApplyAggFnName(): Variable {
-        return Variable("${DUMMY_COL_NAME_BASE}_sql_groupby_apply_fn_${groupByApplyFnId++}")
-    }
+    fun genGroupbyApplyAggFnName(): Variable = Variable("${DUMMY_COL_NAME_BASE}_sql_groupby_apply_fn_${groupByApplyFnId++}")
 
-    fun genGlobalVar(): Variable {
-        return Variable("global_${globalVarId++}")
-    }
+    fun genGlobalVar(): Variable = Variable("global_${globalVarId++}")
 
-    fun genStateVar(): StateVariable {
-        return StateVariable("state_${stateVarId++}")
-    }
+    fun genStateVar(): StateVariable = StateVariable("state_${stateVarId++}")
 
-    fun genFuncID(): Expr.IntegerLiteral {
-        return Expr.IntegerLiteral(funcIdCounter++)
-    }
+    fun genFuncID(): Expr.IntegerLiteral = Expr.IntegerLiteral(funcIdCounter++)
 
-    fun genClosureVar(): Variable {
-        return Variable("func_${closureVarId++}")
-    }
+    fun genClosureVar(): Variable = Variable("func_${closureVarId++}")
 }

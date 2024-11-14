@@ -30,9 +30,7 @@ interface SnowflakeRel : RelNode {
         val CONVENTION = Convention.Impl("SNOWFLAKE", SnowflakeRel::class.java)
     }
 
-    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
-        return getCatalogTable().generatePythonConnStr(schemaPath)
-    }
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr = getCatalogTable().generatePythonConnStr(schemaPath)
 
     /**
      * If the node is simple enough to push down to snowflake, then this function will push the query to snowflake,
@@ -72,7 +70,8 @@ interface SnowflakeRel : RelNode {
 
         val metadataSelectQueryString: SqlString =
             metadataSelectQuery.toSqlString { c: SqlWriterConfig ->
-                c.withClauseStartsLine(false)
+                c
+                    .withClauseStartsLine(false)
                     .withDialect(BodoSnowflakeSqlDialect.DEFAULT)
             }
 

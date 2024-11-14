@@ -19,18 +19,14 @@ class BodoLogicalWindow(
     rowType: RelDataType,
     groups: List<Group>,
     inputsToKeep: ImmutableBitSet,
-) :
-    WindowBase(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep) {
+) : WindowBase(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep) {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoLogicalWindow {
-        return BodoLogicalWindow(cluster, traitSet, hints, inputs[0], constants, rowType, groups, inputsToKeep)
-    }
+    ): BodoLogicalWindow = BodoLogicalWindow(cluster, traitSet, hints, inputs[0], constants, rowType, groups, inputsToKeep)
 
-    override fun copy(constants: MutableList<RexLiteral>): BodoLogicalWindow {
-        return BodoLogicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
-    }
+    override fun copy(constants: MutableList<RexLiteral>): BodoLogicalWindow =
+        BodoLogicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
 
     companion object {
         @JvmStatic
@@ -43,9 +39,7 @@ class BodoLogicalWindow(
             rowType: RelDataType,
             groups: List<Group>,
             inputsToKeep: ImmutableBitSet,
-        ): BodoLogicalWindow {
-            return BodoLogicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
-        }
+        ): BodoLogicalWindow = BodoLogicalWindow(cluster, traitSet, hints, input, constants, rowType, groups, inputsToKeep)
 
         @JvmStatic
         fun create(
@@ -56,8 +50,8 @@ class BodoLogicalWindow(
             constants: List<RexLiteral>,
             rowType: RelDataType,
             groups: List<Group>,
-        ): BodoLogicalWindow {
-            return BodoLogicalWindow(
+        ): BodoLogicalWindow =
+            BodoLogicalWindow(
                 cluster,
                 traitSet,
                 hints,
@@ -67,7 +61,6 @@ class BodoLogicalWindow(
                 groups,
                 ImmutableBitSet.range(input.rowType.fieldCount),
             )
-        }
 
         @JvmStatic
         fun create(
@@ -78,9 +71,7 @@ class BodoLogicalWindow(
             rowType: RelDataType,
             groups: List<Group>,
             inputsToKeep: ImmutableBitSet,
-        ): BodoLogicalWindow {
-            return create(cluster, input.traitSet, hints, input, constants, rowType, groups, inputsToKeep)
-        }
+        ): BodoLogicalWindow = create(cluster, input.traitSet, hints, input, constants, rowType, groups, inputsToKeep)
 
         @JvmStatic
         fun create(
@@ -90,13 +81,10 @@ class BodoLogicalWindow(
             constants: List<RexLiteral>,
             rowType: RelDataType,
             groups: List<Group>,
-        ): BodoLogicalWindow {
-            return create(cluster, hints, input, constants, rowType, groups, ImmutableBitSet.range(input.rowType.fieldCount))
-        }
+        ): BodoLogicalWindow = create(cluster, hints, input, constants, rowType, groups, ImmutableBitSet.range(input.rowType.fieldCount))
 
         @JvmStatic
-        fun fromLogicalWindow(win: LogicalWindow): BodoLogicalWindow {
-            return create(win.cluster, win.traitSet, win.hints, win.input, win.constants, win.rowType, win.groups)
-        }
+        fun fromLogicalWindow(win: LogicalWindow): BodoLogicalWindow =
+            create(win.cluster, win.traitSet, win.hints, win.input, win.constants, win.rowType, win.groups)
     }
 }

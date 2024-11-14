@@ -8,7 +8,9 @@ import com.bodosql.calcite.rel.core.CachedSubPlanBase
  * that the CachedSubPlanBase is only modified by the first function but all consumers can
  * access the result.
  */
-class CachedResultVisitor<E, T : CachedSubPlanBase>(private val resultFunction: (T) -> E) {
+class CachedResultVisitor<E, T : CachedSubPlanBase>(
+    private val resultFunction: (T) -> E,
+) {
     private val cacheMap: MutableMap<Int, E> = mutableMapOf()
 
     /**

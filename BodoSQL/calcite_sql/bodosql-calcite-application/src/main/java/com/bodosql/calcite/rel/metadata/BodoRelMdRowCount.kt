@@ -40,8 +40,8 @@ class BodoRelMdRowCount : RelMdRowCount() {
     override fun getRowCount(
         rel: RelNode,
         mq: RelMetadataQuery?,
-    ): Double? {
-        return if (rel is SnowflakeRel) {
+    ): Double? =
+        if (rel is SnowflakeRel) {
             // If the rel is a Snowflake Rel, get the row count directly from snowflake,
             // if appropriate.
             // Note that the way that this is currently set up,
@@ -57,7 +57,6 @@ class BodoRelMdRowCount : RelMdRowCount() {
             // Otherwise, just use the default
             super.getRowCount(rel, mq)
         }
-    }
 
     fun getRowCount(
         rel: RowSample,
@@ -70,9 +69,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
     fun getRowCount(
         rel: SnowflakeFilter,
         mq: RelMetadataQuery?,
-    ): Double? {
-        return rel.tryGetExpectedRowCountFromSFQuery() ?: super.getRowCount(rel, mq)
-    }
+    ): Double? = rel.tryGetExpectedRowCountFromSFQuery() ?: super.getRowCount(rel, mq)
 
     fun getRowCount(
         rel: Flatten,
@@ -88,9 +85,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
     fun getRowCount(
         rel: TableFunctionScan,
         mq: RelMetadataQuery,
-    ): Double? {
-        return (rel as TableFunctionScanBase).estimateRowCount(mq)
-    }
+    ): Double? = (rel as TableFunctionScanBase).estimateRowCount(mq)
 
     /**
      * This is a copy of RelMdRowCount, but it also handles named parameters.
@@ -180,8 +175,8 @@ class BodoRelMdRowCount : RelMdRowCount() {
     private fun isValidDistinctCountJoinPredicate(
         comparison: RexNode,
         leftCount: Int,
-    ): Boolean {
-        return if (comparison.kind == SqlKind.EQUALS) {
+    ): Boolean =
+        if (comparison.kind == SqlKind.EQUALS) {
             val equalsCall = comparison as RexCall
             val firstOperand = equalsCall.operands[0]
             val secondOperand = equalsCall.operands[1]
@@ -198,7 +193,6 @@ class BodoRelMdRowCount : RelMdRowCount() {
         } else {
             false
         }
-    }
 
     /**
      * Determine the distinct count estimates for the keys used in the comparison. If the comparison is
@@ -432,9 +426,7 @@ class BodoRelMdRowCount : RelMdRowCount() {
     fun getRowCount(
         rel: CachedSubPlanBase,
         mq: RelMetadataQuery,
-    ): Double? {
-        return mq.getRowCount(rel.cachedPlan.plan)
-    }
+    ): Double? = mq.getRowCount(rel.cachedPlan.plan)
 
     override fun getRowCount(
         rel: Aggregate,

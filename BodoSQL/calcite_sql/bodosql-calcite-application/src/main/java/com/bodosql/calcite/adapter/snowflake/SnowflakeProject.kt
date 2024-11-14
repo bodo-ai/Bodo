@@ -25,15 +25,14 @@ class SnowflakeProject(
     projects: List<RexNode>,
     rowType: RelDataType,
     private val catalogTable: SnowflakeCatalogTable,
-) : ProjectBase(cluster, traitSet.replace(SnowflakeRel.CONVENTION), ImmutableList.of(), input, projects, rowType), SnowflakeRel {
+) : ProjectBase(cluster, traitSet.replace(SnowflakeRel.CONVENTION), ImmutableList.of(), input, projects, rowType),
+    SnowflakeRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): SnowflakeProject {
-        return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
-    }
+    ): SnowflakeProject = SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -54,9 +53,7 @@ class SnowflakeProject(
             projects: List<RexNode>,
             rowType: RelDataType,
             catalogTable: SnowflakeCatalogTable,
-        ): SnowflakeProject {
-            return SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
-        }
+        ): SnowflakeProject = SnowflakeProject(cluster, traitSet, input, projects, rowType, catalogTable)
 
         @JvmStatic
         fun create(

@@ -40,9 +40,7 @@ import org.apache.calcite.util.ImmutableBitSet
 import java.math.BigDecimal
 
 class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
-    override fun getDef(): MetadataDef<ColumnDistinctCount> {
-        return ColumnDistinctCount.DEF
-    }
+    override fun getDef(): MetadataDef<ColumnDistinctCount> = ColumnDistinctCount.DEF
 
     /** Catch-all implementation for
      * [ColumnDistinctCount.getColumnDistinctCount],
@@ -128,7 +126,8 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
                         SqlKind.FIRST_VALUE,
                         SqlKind.ANY_VALUE,
                         SqlKind.NTH_VALUE,
-                    ).contains(over.operator.kind) || over.window.upperBound.isUnbounded
+                    ).contains(over.operator.kind) ||
+                        over.window.upperBound.isUnbounded
                 if (inputColumn is RexInputRef && lowerCheck && upperCheck) {
                     val partitionKeys =
                         over.window.partitionKeys.map {
@@ -190,9 +189,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         subset: RelSubset,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? {
-        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.getBestOrOriginal(), column)
-    }
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(subset.getBestOrOriginal(), column)
 
     fun getColumnDistinctCount(
         rel: Union,
@@ -407,10 +404,10 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         // Get the operands from the correct locations corresponding to output arguments, and convert to a set
         // to remove all duplicates
         val outputArgs =
-            operands.filterIndexed {
-                    idx, _ ->
-                (idx % 2 == 1) || (idx == nOperands - 1)
-            }.toSet()
+            operands
+                .filterIndexed { idx, _ ->
+                    (idx % 2 == 1) || (idx == nOperands - 1)
+                }.toSet()
         // Get the distinct values of each of the possible outputs
         val outputDistinct = outputArgs.map { inferRexDistinctness(rel, it, mq) }
         // If any of the distinct values were null, it means that one of hte outputs has unknown approximate NDV,
@@ -505,9 +502,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         rel: SingleRel,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? {
-        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
-    }
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
 
     fun getColumnDistinctCount(
         rel: Join,
@@ -591,17 +586,13 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         rel: SnowflakeToBodoPhysicalConverter,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? {
-        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
-    }
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
 
     fun getColumnDistinctCount(
         rel: IcebergToBodoPhysicalConverter,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? {
-        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
-    }
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.input, column)
 
     fun getColumnDistinctCount(
         rel: SnowflakeTableScan,
@@ -625,9 +616,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         rel: PandasTableScan,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? {
-        return ((rel.table as RelOptTableImpl).table() as BodoSqlTable).getColumnDistinctCount(column)
-    }
+    ): Double? = ((rel.table as RelOptTableImpl).table() as BodoSqlTable).getColumnDistinctCount(column)
 
     fun getColumnDistinctCount(
         rel: Flatten,
@@ -635,7 +624,9 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         column: Int,
     ): Double? {
         val nonNullEstimate =
-            if (rel.rowType.fieldList[column].type.isNullable) {
+            if (rel.rowType.fieldList[column]
+                    .type.isNullable
+            ) {
                 0.9
             } else {
                 1.0
@@ -652,9 +643,7 @@ class BodoRelMdColumnDistinctCount : MetadataHandler<ColumnDistinctCount> {
         rel: CachedSubPlanBase,
         mq: RelMetadataQuery,
         column: Int,
-    ): Double? {
-        return (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.cachedPlan.plan, column)
-    }
+    ): Double? = (mq as BodoRelMetadataQuery).getColumnDistinctCount(rel.cachedPlan.plan, column)
 
     companion object {
         val SOURCE =

@@ -16,7 +16,10 @@ interface Op {
      * @param target Target variable.
      * @param expr Expression to evaluate.
      */
-    data class Assign(val target: Variable, val expr: Expr) : Op {
+    data class Assign(
+        val target: Variable,
+        val expr: Expr,
+    ) : Op {
         override fun emit(doc: Doc) {
             // Assertion to check that we're not shadowing variables
             // by assigning to them multiple times
@@ -31,7 +34,10 @@ interface Op {
      * @param targets Target variables.
      * @param expr Expression to evaluate.
      */
-    data class TupleAssign(val targets: List<Variable>, val expr: Expr) : Op {
+    data class TupleAssign(
+        val targets: List<Variable>,
+        val expr: Expr,
+    ) : Op {
         override fun emit(doc: Doc) {
             // If we have no variables to assign to, this is a no-op
             if (targets.isEmpty()) {
@@ -50,14 +56,20 @@ interface Op {
      * Represents an expression without a return value.
      * @param expr Expression to evaluate.
      */
-    data class Stmt(val expr: Expr) : Op {
+    data class Stmt(
+        val expr: Expr,
+    ) : Op {
         override fun emit(doc: Doc) = doc.write(expr.emit())
     }
 
     /**
      * Represents an if operation with an optional else case.
      */
-    data class If(val cond: Expr, val ifFrame: Frame, val elseFrame: Frame? = null) : Op {
+    data class If(
+        val cond: Expr,
+        val ifFrame: Frame,
+        val elseFrame: Frame? = null,
+    ) : Op {
         override fun emit(doc: Doc) {
             doc.write("if ${cond.emit()}:")
             ifFrame.emit(doc.indent())
@@ -71,7 +83,9 @@ interface Op {
     /**
      * Represents a return statement
      */
-    data class ReturnStatement(val retVal: Variable?) : Op {
+    data class ReturnStatement(
+        val retVal: Variable?,
+    ) : Op {
         override fun emit(doc: Doc) {
             if (retVal != null) {
                 doc.write("return ${this.retVal.emit()}")
@@ -84,7 +98,10 @@ interface Op {
     /**
      * Represents a while loop in python.
      */
-    data class While(val cond: Expr, val body: Frame) : Op {
+    data class While(
+        val cond: Expr,
+        val body: Frame,
+    ) : Op {
         override fun emit(doc: Doc) {
             doc.write("while ${cond.emit()}:")
             body.emit(doc.indent())
@@ -94,7 +111,11 @@ interface Op {
     /**
      * Represents a for loop in python.
      */
-    data class For(val identifier: String, val collection: Expr, val body: List<Op>) : Op {
+    data class For(
+        val identifier: String,
+        val collection: Expr,
+        val body: List<Op>,
+    ) : Op {
         constructor(identifier: String, collection: Expr, body: (Variable, MutableList<Op>) -> Unit) :
             this(identifier, collection, buildList<Op> { body(Variable(identifier), this) })
 
@@ -110,7 +131,9 @@ interface Op {
      * Represents a streaming pipeline. Used to provide a layer of
      * abstraction with the actual pipeline details.
      */
-    data class StreamingPipeline(val frame: StreamingPipelineFrame) : Op {
+    data class StreamingPipeline(
+        val frame: StreamingPipelineFrame,
+    ) : Op {
         override fun emit(doc: Doc) {
             frame.emit(doc)
         }
@@ -120,7 +143,9 @@ interface Op {
      * A fallthrough to insert text directly into the document.
      * @param line Raw text to insert into the document.
      */
-    class Code private constructor(private val code: StringBuilder) : Op {
+    class Code private constructor(
+        private val code: StringBuilder,
+    ) : Op {
         constructor(code: String) : this(code = StringBuilder(code))
 
         fun append(code: String): Code {
@@ -128,9 +153,7 @@ interface Op {
             return this
         }
 
-        fun append(code: StringBuilder): Code {
-            return append(code.toString())
-        }
+        fun append(code: StringBuilder): Code = append(code.toString())
 
         override fun emit(doc: Doc) {
             // Trim indentation and then write non-blank lines.
@@ -143,7 +166,11 @@ interface Op {
         }
     }
 
-    class Function(val name: String, val args: List<Variable>, val body: Frame) : Op {
+    class Function(
+        val name: String,
+        val args: List<Variable>,
+        val body: Frame,
+    ) : Op {
         override fun emit(doc: Doc) {
             val argList = args.joinToString(separator = ", ") { it.name }
             doc.write("def $name($argList):")
@@ -159,7 +186,11 @@ interface Op {
      * @param index: The index into the array.
      * @param value: The Expr being Set
      */
-    class SetItem(private val inputExpr: Expr, private val index: Expr, private val value: Expr) : Op {
+    class SetItem(
+        private val inputExpr: Expr,
+        private val index: Expr,
+        private val value: Expr,
+    ) : Op {
         override fun emit(doc: Doc) {
             val line = "${inputExpr.emit()}[${index.emit()}] = ${value.emit()}"
             doc.write(line)
@@ -171,7 +202,9 @@ interface Op {
      * inserting it as a statement in another frame. This allows
      * dumping a frame without indentation.
      */
-    class InsertFrame(private val frame: Frame) : Op {
+    class InsertFrame(
+        private val frame: Frame,
+    ) : Op {
         /**
          * Emits the code for this by dumping the whole
          * frame without indentation.

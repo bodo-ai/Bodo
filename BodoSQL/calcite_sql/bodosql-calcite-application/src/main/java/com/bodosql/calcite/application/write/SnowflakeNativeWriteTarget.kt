@@ -32,8 +32,8 @@ class SnowflakeNativeWriteTarget(
         operatorID: OperatorID,
         createTableType: CreateTableType,
         meta: CreateTableMetadata,
-    ): Expr {
-        return Expr.Call(
+    ): Expr =
+        Expr.Call(
             "bodo.io.snowflake_write.snowflake_writer_init",
             operatorID.toExpr(),
             connectionString,
@@ -43,7 +43,6 @@ class SnowflakeNativeWriteTarget(
             Expr.StringLiteral(ifExistsBehavior.asToSqlKwArgument()),
             Expr.StringLiteral(createTableType.asStringKeyword()),
         )
-    }
 
     /**
      * Initialize the streaming insert into state information for a given write target.
@@ -54,9 +53,7 @@ class SnowflakeNativeWriteTarget(
     override fun streamingInsertIntoInit(
         visitor: BodoCodeGenVisitor,
         operatorID: OperatorID,
-    ): Expr {
-        return streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
-    }
+    ): Expr = streamingCreateTableInit(visitor, operatorID, CreateTableType.DEFAULT, CreateTableMetadata())
 
     /**
      * Implement append for a Snowflake native table.

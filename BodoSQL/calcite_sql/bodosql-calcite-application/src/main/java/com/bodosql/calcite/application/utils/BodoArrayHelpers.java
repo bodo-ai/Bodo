@@ -209,8 +209,8 @@ public class BodoArrayHelpers {
       case INTERVAL_YEAR:
       case INTERVAL_MONTH:
       case INTERVAL_YEAR_MONTH:
-        // May later refactor this code to create DateOffsets, for now
-        // causes an error
+      // May later refactor this code to create DateOffsets, for now
+      // causes an error
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Calcite Plan Produced an Unsupported Type: "

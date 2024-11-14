@@ -81,9 +81,7 @@ class BodoRelMdSelectivity : RelMdSelectivity() {
         rel: RelNode?,
         mq: RelMetadataQuery,
         predicate: RexNode?,
-    ): Double {
-        return guessSelectivity(predicate)
-    }
+    ): Double = guessSelectivity(predicate)
 
     companion object {
         /**

@@ -27,9 +27,7 @@ class BodoLogicalProject(
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): Project {
-        return BodoLogicalProject(cluster, traitSet, hints, input, projects, rowType)
-    }
+    ): Project = BodoLogicalProject(cluster, traitSet, hints, input, projects, rowType)
 
     companion object {
         @JvmStatic
@@ -42,7 +40,9 @@ class BodoLogicalProject(
             val cluster = input.cluster
             val mq = cluster.metadataQuery
             val traitSet =
-                cluster.traitSet().replace(Convention.NONE)
+                cluster
+                    .traitSet()
+                    .replace(Convention.NONE)
                     .replaceIfs(RelCollationTraitDef.INSTANCE) {
                         RelMdCollation.project(mq, input, projects)
                     }

@@ -51,9 +51,7 @@ abstract class Flatten(
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): Flatten {
-        return copy(traitSet, sole(inputs), call, callType, usedColOutputs, repeatColumns)
-    }
+    ): Flatten = copy(traitSet, sole(inputs), call, callType, usedColOutputs, repeatColumns)
 
     fun copy(
         traitSet: RelTraitSet,
@@ -71,9 +69,7 @@ abstract class Flatten(
         newCall: RexCall,
         callType: RelDataType,
         usedColOutputs: ImmutableBitSet,
-    ): Flatten {
-        return copy(traitSet, newInput, newCall, callType, usedColOutputs, repeatColumns)
-    }
+    ): Flatten = copy(traitSet, newInput, newCall, callType, usedColOutputs, repeatColumns)
 
     abstract fun copy(
         traitSet: RelTraitSet,
@@ -84,9 +80,7 @@ abstract class Flatten(
         repeatColumns: ImmutableBitSet,
     ): Flatten
 
-    override fun getInputs(): List<RelNode> {
-        return listOf(input)
-    }
+    override fun getInputs(): List<RelNode> = listOf(input)
 
     override fun replaceInput(
         ordinalInParent: Int,

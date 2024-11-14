@@ -10,7 +10,11 @@ package com.bodosql.calcite.ir
  * @param indent The indent string to use for each indentation level.
  * @param indent Indentation level for this section of the document.
  */
-class Doc private constructor(private val code: StringBuilder, private val indent: String, private val level: Int) {
+class Doc private constructor(
+    private val code: StringBuilder,
+    private val indent: String,
+    private val level: Int,
+) {
     /**
      * Constructs a new document for code writing.
      * @param indent Indentation string.
@@ -34,7 +38,8 @@ class Doc private constructor(private val code: StringBuilder, private val inden
         // them back together.
         val block =
             if (line.contains("\n")) {
-                line.split("\n")
+                line
+                    .split("\n")
                     .joinToString { "${prefix}${it.trim()}" }
             } else {
                 "${prefix}$line"
@@ -54,7 +59,5 @@ class Doc private constructor(private val code: StringBuilder, private val inden
      * Returns the code that was written to this document.
      * @return Code written to the document.
      */
-    override fun toString(): String {
-        return code.toString()
-    }
+    override fun toString(): String = code.toString()
 }

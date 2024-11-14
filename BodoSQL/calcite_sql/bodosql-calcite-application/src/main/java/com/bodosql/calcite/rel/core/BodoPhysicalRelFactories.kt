@@ -244,8 +244,7 @@ object BodoPhysicalRelFactories {
         val cluster = firstInput.cluster
         assert(inputConvention != null) { "Internal Error in Bodo Physical Builder: Input does not have any convention" }
         assert(
-            inputs.all {
-                    input ->
+            inputs.all { input ->
                 input.convention == inputConvention
             },
         ) { "Internal Error in Bodo Physical Builder: inputs to SetOp have differing convention" }
@@ -280,8 +279,8 @@ object BodoPhysicalRelFactories {
         kind: SqlKind,
         inputs: List<RelNode>,
         all: Boolean,
-    ): BodoPhysicalRel {
-        return when (kind) {
+    ): BodoPhysicalRel =
+        when (kind) {
             SqlKind.UNION -> BodoPhysicalUnion.create(cluster, inputs, all)
             SqlKind.INTERSECT -> BodoPhysicalIntersect.create(cluster, inputs, all)
             SqlKind.MINUS -> BodoPhysicalMinus.create(cluster, inputs, all)
@@ -289,7 +288,6 @@ object BodoPhysicalRelFactories {
                 "Internal Error in Bodo Physical Builder's createBodoPhysicalSetOp: unhandled Bodo Physical set operation: " + kind.name,
             )
         }
-    }
 
     private fun createAggregate(
         input: RelNode,

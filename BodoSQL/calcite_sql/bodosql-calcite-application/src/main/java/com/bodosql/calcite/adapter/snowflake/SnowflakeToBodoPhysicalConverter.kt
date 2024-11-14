@@ -39,8 +39,12 @@ import org.apache.calcite.sql.type.SqlTypeFamily
 import org.apache.calcite.sql.type.SqlTypeName
 import org.apache.calcite.util.Util
 
-class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
-    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(BodoPhysicalRel.CONVENTION), input), BodoPhysicalRel {
+class SnowflakeToBodoPhysicalConverter(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    input: RelNode,
+) : ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(BodoPhysicalRel.CONVENTION), input),
+    BodoPhysicalRel {
     init {
         // Initialize the type to avoid errors with Kotlin suggesting to access
         // the protected field directly.
@@ -50,9 +54,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): SnowflakeToBodoPhysicalConverter {
-        return SnowflakeToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
-    }
+    ): SnowflakeToBodoPhysicalConverter = SnowflakeToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
 
     /**
      * Even if SnowflakeToBodoPhysicalConverter is a BodoPhysicalRel, it is still
@@ -76,9 +78,8 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
             }
         )!!
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         val builder = ctx.builder()
@@ -196,7 +197,7 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
 
     private class TTZStringRelVisitor : RelVisitor() {
         // Visitor that scans for TimestampTZ -> String casts/conversions
-        private inner class TTZStringDetector() : RexVisitorImpl<Void?>(true) {
+        private inner class TTZStringDetector : RexVisitorImpl<Void?>(true) {
             override fun visitCall(call: RexCall): Void? {
                 val op = call.operator
                 if (op === CastingOperatorTable.TO_CHAR || op === CastingOperatorTable.TO_VARCHAR) {
@@ -307,13 +308,14 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
 
         // Use the snowflake dialect for generating the sql string.
         val rel2sql = BodoRelToSqlConverter(BodoSnowflakeSqlDialect.DEFAULT)
-        return rel2sql.visitRoot(skipRuntimeJoinFilters())
+        return rel2sql
+            .visitRoot(skipRuntimeJoinFilters())
             .asSelect()
             .toSqlString { c ->
-                c.withClauseStartsLine(false)
+                c
+                    .withClauseStartsLine(false)
                     .withDialect(BodoSnowflakeSqlDialect.DEFAULT)
-            }
-            .toString()
+            }.toString()
     }
 
     /**
@@ -476,8 +478,8 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
         isTable: Boolean,
         origTableExpr: Expr,
         origTableIndices: Expr,
-    ): List<Pair<String, Expr>> {
-        return listOf(
+    ): List<Pair<String, Expr>> =
+        listOf(
             "_bodo_is_table_input" to Expr.BooleanLiteral(isTable),
             "_bodo_orig_table_name" to origTableExpr,
             "_bodo_orig_table_indices" to origTableIndices,
@@ -486,7 +488,6 @@ class SnowflakeToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitS
             "_bodo_sql_op_id" to ctx.operatorID().toExpr(),
             "_bodo_runtime_join_filters" to RuntimeJoinFilterBase.getRuntimeJoinFilterTuple(ctx, extractRuntimeJoinFilters()),
         )
-    }
 
     /**
      * Generate the argument that will be passed for '_bodo_chunksize' in a read_sql call. If

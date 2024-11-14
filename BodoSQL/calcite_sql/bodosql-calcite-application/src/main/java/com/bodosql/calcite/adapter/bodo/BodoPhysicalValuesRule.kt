@@ -6,7 +6,9 @@ import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Values
 import org.apache.calcite.rel.logical.LogicalValues
 
-class BodoPhysicalValuesRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalValuesRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -16,8 +18,7 @@ class BodoPhysicalValuesRule private constructor(config: Config) : ConverterRule
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalValuesRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalValuesRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalValuesRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

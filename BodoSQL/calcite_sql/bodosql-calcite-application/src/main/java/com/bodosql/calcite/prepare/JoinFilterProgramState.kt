@@ -27,12 +27,12 @@ internal class JoinFilterProgramState : Iterable<Pair<Int, JoinFilterProgramStat
         val nonEqualityFilterColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
     )
 
-    class JoinFilterProgramStateIterator(joinStateMap: Map<Int, JoinColumnInfo>) : Iterator<Pair<Int, JoinColumnInfo>> {
+    class JoinFilterProgramStateIterator(
+        joinStateMap: Map<Int, JoinColumnInfo>,
+    ) : Iterator<Pair<Int, JoinColumnInfo>> {
         private val joinStateMapIterator = joinStateMap.iterator()
 
-        override fun hasNext(): Boolean {
-            return joinStateMapIterator.hasNext()
-        }
+        override fun hasNext(): Boolean = joinStateMapIterator.hasNext()
 
         override fun next(): Pair<Int, JoinColumnInfo> {
             val (joinID, joinInfo) = joinStateMapIterator.next()
@@ -75,20 +75,14 @@ internal class JoinFilterProgramState : Iterable<Pair<Int, JoinFilterProgramStat
         return JoinOutputLists(joinIDs, equalityFilterColumns, equalityFilterIsFirstLocations, nonEqualityFilterColumns)
     }
 
-    fun isEmpty(): Boolean {
-        return joinStateMap.isEmpty()
-    }
+    fun isEmpty(): Boolean = joinStateMap.isEmpty()
 
-    fun isNotEmpty(): Boolean {
-        return joinStateMap.isNotEmpty()
-    }
+    fun isNotEmpty(): Boolean = joinStateMap.isNotEmpty()
 
     /**
      * Returns an iterator over the elements of this object.
      */
-    override fun iterator(): Iterator<Pair<Int, JoinColumnInfo>> {
-        return JoinFilterProgramStateIterator(joinStateMap)
-    }
+    override fun iterator(): Iterator<Pair<Int, JoinColumnInfo>> = JoinFilterProgramStateIterator(joinStateMap)
 
     /**
      * Compute the if a particular column matches based on our definition of equality.

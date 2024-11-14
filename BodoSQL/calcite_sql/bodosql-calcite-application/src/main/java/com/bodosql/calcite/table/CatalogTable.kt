@@ -35,7 +35,8 @@ open class CatalogTable(
     columns: List<BodoSQLColumn>,
     // The catalog that holds this table's origin.
     private val catalog: BodoSQLCatalog,
-) : BodoSqlTable(name, schemaPath, columns), TranslatableTable {
+) : BodoSqlTable(name, schemaPath, columns),
+    TranslatableTable {
     /*
      * See the design described on Confluence:
      * https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1130299393/Java+Table+and+Schema+Typing#Table
@@ -57,9 +58,7 @@ open class CatalogTable(
     }
 
     /** Interface to get the catalog for creating RelNodes. */
-    open fun getCatalog(): BodoSQLCatalog {
-        return catalog
-    }
+    open fun getCatalog(): BodoSQLCatalog = catalog
 
     /**
      * Can BodoSQL write to this table. By default, this is true but in the future this may be extended
@@ -82,9 +81,7 @@ open class CatalogTable(
     override fun generateWriteCode(
         visitor: BodoCodeGenVisitor,
         varName: Variable,
-    ): Expr {
-        return catalog.generateAppendWriteCode(visitor, varName, fullPath)
-    }
+    ): Expr = catalog.generateAppendWriteCode(visitor, varName, fullPath)
 
     /**
      * Generate the code needed to write the given variable to storage.
@@ -98,9 +95,7 @@ open class CatalogTable(
         visitor: BodoCodeGenVisitor,
         varName: Variable,
         extraArgs: String,
-    ): Variable {
-        throw UnsupportedOperationException("Catalog APIs do not support additional arguments")
-    }
+    ): Variable = throw UnsupportedOperationException("Catalog APIs do not support additional arguments")
 
     /**
      * Return the location from which the table is generated. The return value is always entirely
@@ -108,9 +103,7 @@ open class CatalogTable(
      *
      * @return The source DB location.
      */
-    override fun getDBType(): String {
-        return catalog.dbType.uppercase(Locale.getDefault())
-    }
+    override fun getDBType(): String = catalog.dbType.uppercase(Locale.getDefault())
 
     /**
      * Generate the code needed to read the table. This table type generates code common to all tables
@@ -124,9 +117,7 @@ open class CatalogTable(
     override fun generateReadCode(
         useStreaming: Boolean,
         streamingOptions: StreamingOptions,
-    ): Expr {
-        return catalog.generateReadCode(fullPath, useStreaming, streamingOptions)
-    }
+    ): Expr = catalog.generateReadCode(fullPath, useStreaming, streamingOptions)
 
     /**
      * Generate the code needed to read the table. This function is called by specialized IO
@@ -136,9 +127,8 @@ open class CatalogTable(
      *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
      * @return The generated code to read the table.
      */
-    override fun generateReadCode(extraArgs: String): Expr {
+    override fun generateReadCode(extraArgs: String): Expr =
         throw UnsupportedOperationException("Catalog APIs do not support additional arguments")
-    }
 
     override fun generateReadCastCode(varName: Variable): Expr {
         // Snowflake catalog uses _bodo_read_date_as_dt64=True to convert date columns to datetime64
@@ -154,9 +144,7 @@ open class CatalogTable(
      * @param query Query to submit.
      * @return The generated code.
      */
-    override fun generateRemoteQuery(query: String): Expr {
-        return catalog.generateRemoteQuery(query)
-    }
+    override fun generateRemoteQuery(query: String): Expr = catalog.generateRemoteQuery(query)
 
     override fun extend(extensionFields: List<RelDataTypeField>): Table {
         val name = this.name
@@ -179,18 +167,15 @@ open class CatalogTable(
      *
      * @return Does the table require IO?
      */
-    override fun readRequiresIO(): Boolean {
-        return true
-    }
+    override fun readRequiresIO(): Boolean = true
 
     override fun toRel(
         toRelContext: RelOptTable.ToRelContext,
         relOptTable: RelOptTable,
-    ): RelNode? {
+    ): RelNode? =
         throw UnsupportedOperationException(
             "toRel() must be implemented by specific catalog table implementations",
         )
-    }
 
     /**
      * Generate a Python connection string to read from the given catalog at the provided path.
@@ -198,9 +183,7 @@ open class CatalogTable(
      * @param schemaPath The path to the table not including the table name.
      * @return A string that can be passed to Python to read from the table.
      */
-    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
-        return catalog.generatePythonConnStr(schemaPath)
-    }
+    fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr = catalog.generatePythonConnStr(schemaPath)
 
     /**
      * Get the insert into write target for a particular table. Most tables must maintain the same
@@ -213,14 +196,11 @@ open class CatalogTable(
      *     possible to remove in the future since we append to a table.
      * @return The WriteTarget for the table.
      */
-    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget {
+    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget =
         throw UnsupportedOperationException("Insert into is not supported for this table")
-    }
 
     /** Get the DDL Executor for the table. This is used to execute DDL commands on the table. */
-    open fun getDDLExecutor(): DDLExecutor {
-        throw UnsupportedOperationException("DDL operations are not supported for this table")
-    }
+    open fun getDDLExecutor(): DDLExecutor = throw UnsupportedOperationException("DDL operations are not supported for this table")
 
     /**
      * Load the view metadata information from the catalog. If the table is not a view or no
@@ -232,9 +212,7 @@ open class CatalogTable(
      *
      * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
      */
-    private fun tryGetViewMetadata(): InlineViewMetadata? {
-        return catalog.tryGetViewMetadata(fullPath)
-    }
+    private fun tryGetViewMetadata(): InlineViewMetadata? = catalog.tryGetViewMetadata(fullPath)
 
     /**
      * Is this table definitely a view (meaning we can access its definition). If this returns False
@@ -242,9 +220,7 @@ open class CatalogTable(
      *
      * @return True if this is a view for which we can load metadata information.
      */
-    fun isAccessibleView(): Boolean {
-        return tryGetViewMetadata() != null
-    }
+    fun isAccessibleView(): Boolean = tryGetViewMetadata() != null
 
     /**
      * Is this table actually a materialized view.
@@ -278,9 +254,7 @@ open class CatalogTable(
      * @return Returns true if table is a view and the metadata indicates inlining is legal. If this
      * table is not a view this return false.
      */
-    fun canSafelyInlineView(): Boolean {
-        return isAccessibleView() && !(isSecureView() || isMaterializedView())
-    }
+    fun canSafelyInlineView(): Boolean = isAccessibleView() && !(isSecureView() || isMaterializedView())
 
     /**
      * Get the SQL query definition used to define this table if it is a view.
@@ -288,13 +262,12 @@ open class CatalogTable(
      * @return The string definition that was used to create the view. Returns null if the table is
      * not a view.
      */
-    fun getViewDefinitionString(): String? {
-        return if (isAccessibleView()) {
+    fun getViewDefinitionString(): String? =
+        if (isAccessibleView()) {
             tryGetViewMetadata()!!.viewDefinition
         } else {
             null
         }
-    }
 
     // Cache used for inlining views. We cannot use the Memoizer here because the
     // ToRelContext doesn't have .equals() properly defined. Here we know that

@@ -14,8 +14,11 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterImpl
 
-class PandasToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
-    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(BodoPhysicalRel.CONVENTION), input),
+class PandasToBodoPhysicalConverter(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    input: RelNode,
+) : ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(BodoPhysicalRel.CONVENTION), input),
     BodoPhysicalRel {
     init {
         // Initialize the type to avoid errors with Kotlin suggesting to access
@@ -26,13 +29,9 @@ class PandasToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet,
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): PandasToBodoPhysicalConverter {
-        return PandasToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
-    }
+    ): PandasToBodoPhysicalConverter = PandasToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return inputBatchingProperty
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = inputBatchingProperty
 
     /**
      * Emits the code necessary for implementing this relational operator.
@@ -41,8 +40,8 @@ class PandasToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet,
      * @param implementor implementation handler.
      * @return the variable that represents this relational expression.
      */
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             // This node is just pass through.
             val stage =
                 OutputtingStageEmission(
@@ -67,7 +66,6 @@ class PandasToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet,
         } else {
             (implementor::build)(listOf()) { ctx, _ -> ctx.visitChild(input, 0) }
         }
-    }
 
     /**
      * Function to create the initial state for a streaming pipeline.
