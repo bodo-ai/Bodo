@@ -4,6 +4,7 @@ import operator
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -27,10 +28,7 @@ def get_random_integerarray(tot_size):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.arrays.IntegerArray(
-                np.array([1, -3, 2, 3, 10], np.int32),
-                np.array([False, True, True, False, False]),
-            ),
+            np.array([1, None, None, 3, 10], object),
         ),
         pytest.param(
             pd.arrays.IntegerArray(
@@ -40,9 +38,13 @@ def get_random_integerarray(tot_size):
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.arrays.IntegerArray(
-                np.array([1, 4, 2, 3, 10], np.uint8),
-                np.array([False, True, True, False, False]),
+            pd.arrays.ArrowExtensionArray(
+                pa.array(
+                    pd.arrays.IntegerArray(
+                        np.array([1, 4, 2, 3, 10], np.uint8),
+                        np.array([False, True, True, False, False]),
+                    )
+                )
             ),
             marks=pytest.mark.slow,
         ),
@@ -225,12 +227,8 @@ def test_setitem_int(int_arr_value, memory_leak_check):
         return A
 
     # get a non-null value
-    int_arr_value._mask[0] = False
     val = int_arr_value[0]
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, val), test_impl(int_arr_value, val)
-    )
+    check_func(test_impl, (int_arr_value, val), copy_input=True, only_seq=True)
 
 
 @pytest.mark.smoke
@@ -239,9 +237,11 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
         A[idx] = val
         return A
 
+    dtype = pd.array(int_arr_value).dtype.numpy_dtype
     np.random.seed(0)
-    idx = np.random.randint(0, len(int_arr_value), 11)
-    val = np.random.randint(0, 50, 11, int_arr_value._data.dtype)
+    n = len(int_arr_value)
+    idx = np.random.choice(n, n, replace=False)
+    val = np.random.randint(0, 50, n, dtype)
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     # IntegerArray as value, reuses the same idx
@@ -253,7 +253,7 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     idx = np.random.ranf(len(int_arr_value)) < 0.2
-    val = np.random.randint(0, 50, idx.sum(), int_arr_value._data.dtype)
+    val = np.random.randint(0, 50, idx.sum(), dtype)
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     # IntegerArray as value, reuses the same idx
@@ -265,7 +265,7 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     idx = slice(1, 4)
-    val = np.random.randint(0, 50, 3, int_arr_value._data.dtype)
+    val = np.random.randint(0, 50, 3, dtype)
     check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     # IntegerArray as value, reuses the same idx
@@ -523,7 +523,16 @@ def test_dtype(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.dtype
 
-    check_func(test_impl, (int_arr_value,))
+    # Bodo returns Pandas dtype so convert others
+    dtype = int_arr_value.dtype
+    if dtype == np.object_:
+        dtype = pd.Int64Dtype()
+    if isinstance(dtype, pd.ArrowDtype):
+        dtype = pd.core.arrays.integer.IntegerDtype._get_dtype_mapping()[
+            dtype.numpy_dtype
+        ]
+
+    check_func(test_impl, (int_arr_value,), py_output=dtype)
 
 
 @pytest.mark.slow
@@ -563,6 +572,9 @@ def test_astype(int_arr_value, dtype, memory_leak_check):
     def test_impl(A, dtype):
         return A.astype(dtype)
 
+    if isinstance(int_arr_value, np.ndarray):
+        pytest.skip("Numpy arrays don't support Pandas dtypes")
+
     check_func(test_impl, (int_arr_value, dtype))
 
 
@@ -577,11 +589,13 @@ def test_unique(int_arr_value, memory_leak_check):
     def test_impl(A):
         return A.unique()
 
+    if isinstance(int_arr_value, np.ndarray):
+        pytest.skip("Numpy arrays don't have unique()")
+
     # only sequential check since not directly parallelized
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value),
-        test_impl(int_arr_value),
+        bodo_func(int_arr_value), test_impl(int_arr_value), check_dtype=False
     )
 
 
@@ -590,6 +604,9 @@ def test_sum_method(int_arr_value, memory_leak_check):
 
     def test_impl(A):
         return A.sum()
+
+    if not isinstance(int_arr_value, pd.arrays.IntegerArray):
+        pytest.skip("Only actual IntegerArray has sum()")
 
     check_func(test_impl, (int_arr_value,))
 

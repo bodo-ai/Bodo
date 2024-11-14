@@ -114,7 +114,7 @@ def test_iceberg_write_theta_estimates(
         )
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
-        pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+        pd.testing.assert_extension_array_equal(ndvs, ndvs_array, check_dtype=False)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
         bodo.io.stream_iceberg_write.ICEBERG_WRITE_PARQUET_CHUNK_SIZE = orig_chunk_size
@@ -291,7 +291,7 @@ def test_full_iceberg_theta_write(
         )
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
-        pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+        pd.testing.assert_extension_array_equal(ndvs, ndvs_array, check_dtype=False)
     finally:
         bodo.enable_theta_sketches = orig_enable_theta
 
@@ -338,7 +338,7 @@ def test_theta_sketch_detection(
             [True, False, True, False, True], dtype=pd.BooleanDtype()
         )
         pd.testing.assert_extension_array_equal(
-            theta_sketch_columns, expected_theta_sketch_columns
+            theta_sketch_columns, expected_theta_sketch_columns, check_dtype=False
         )
     finally:
         bodo.enable_theta_sketches = orig_enable_theta
@@ -437,7 +437,7 @@ def test_theta_insert_into(iceberg_database, iceberg_table_conn, memory_leak_che
         )
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         ndvs = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
-        pd.testing.assert_extension_array_equal(ndvs, ndvs_array)
+        pd.testing.assert_extension_array_equal(ndvs, ndvs_array, check_dtype=False)
     finally:
         bodo.enable_theta_sketches = orig_enable_theta
 
@@ -509,6 +509,8 @@ def test_enable_sketches_per_column(
         )
         pyarrow_schema = get_iceberg_pyarrow_schema(conn, db_schema, table_name)
         actual_ndvs_array = get_statistics_ndvs(puffin_file_name, pyarrow_schema)
-        pd.testing.assert_extension_array_equal(actual_ndvs_array, expected_ndvs_array)
+        pd.testing.assert_extension_array_equal(
+            actual_ndvs_array, expected_ndvs_array, check_dtype=False
+        )
     finally:
         bodo.enable_theta_sketches = orig_enable_theta

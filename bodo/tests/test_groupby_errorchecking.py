@@ -674,7 +674,7 @@ def test_first_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -699,7 +699,7 @@ def test_last_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -822,7 +822,7 @@ def test_sum_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -855,7 +855,7 @@ def test_prod_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -919,7 +919,7 @@ def test_prod_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "B": [True, None, False, True, None, False, False, True],
                 "C": [True, True, False, True, True, False, False, True],
             }
         ),
@@ -1072,7 +1072,7 @@ def test_min_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -1106,7 +1106,7 @@ def test_max_args(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -1338,7 +1338,7 @@ def test_idxmax_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "B": [True, None, False, True, None, False, False, True],
                 "C": [True, True, False, True, True, False, False, True],
             }
         ),

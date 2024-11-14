@@ -3378,7 +3378,13 @@ def test_series_np_select(series_val):
                 pd.Series(py_out).replace(pd.NA, np.nan).astype("timedelta64[ns]")
             )
     else:
-        py_out = no_default
+        default = 0
+        if infered_typ == bodo.bool_:
+            default = False
+        py_out = np.select([cond1, cond2], [A1, A2], default=default)
+
+    if isinstance(A1.values, (pd.arrays.IntegerArray, pd.arrays.BooleanArray)):
+        py_out = pd.array(py_out, A1.dtype)
 
     for impl in [impl1, impl2, impl3, impl4]:
         check_func(
@@ -3451,7 +3457,10 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
             else:
                 py_out = pd.array(pd.Series(py_out).astype(series_val.dtype))
     else:
-        py_out = no_default
+        default = 0
+        if infered_typ == bodo.bool_:
+            default = False
+        py_out = np.select([cond1, cond2], [A1, A2], default=default)
 
     check_func(
         impl,

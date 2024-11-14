@@ -2876,7 +2876,7 @@ def test_count(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [True, np.nan, False, True, np.nan, False, False],
+            "B": [True, None, False, True, None, False, False],
             "C": [True, True, False, True, True, False, False],
         }
     )
@@ -2934,7 +2934,7 @@ def test_count_select_col(memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [True, np.nan, False, True, np.nan, False, False],
+            "B": [True, None, False, True, None, False, False],
             "C": [True, True, False, True, True, False, False],
         }
     )
@@ -4193,7 +4193,7 @@ def test_max(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -4229,7 +4229,7 @@ def test_max_one_col(test_df, memory_leak_check):
     df_bool = pd.DataFrame(  # noqa: F841
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -4465,7 +4465,7 @@ def test_min(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -4587,7 +4587,7 @@ def test_min_one_col(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -4729,7 +4729,7 @@ def test_prod(test_df, memory_leak_check):
             # This column is disabled because pandas removes it
             # from output. This could be a bug in pandas. TODO: enable when it
             # is fixed
-            # "B": [True, np.nan, False, True, np.nan, False, False, True],
+            # "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -4764,7 +4764,7 @@ def test_prod_one_col(test_df, memory_leak_check):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "C": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, None, False, True, None, False, False, True],
             "B": [True, True, False, True, True, False, False, False],
         }
     )
@@ -4881,7 +4881,7 @@ def test_first_last(test_df):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )
@@ -5047,7 +5047,7 @@ def test_first_last_one_col(test_df):
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "B": [True, None, False, True, None, False, False, True],
             "C": [True, True, False, True, True, False, False, False],
         }
     )

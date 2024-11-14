@@ -156,7 +156,7 @@ sdf.write.mode("overwrite").json("int_nulls_single.json")
 
 # copy data file from int_nulls_single.pq directory to make single file
 
-df = pd.DataFrame({"A": [True, False, False, np.nan, True]})
+df = pd.DataFrame({"A": [True, False, False, None, True]})
 df.to_parquet("bool_nulls.pq")
 
 

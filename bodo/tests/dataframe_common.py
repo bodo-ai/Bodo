@@ -45,7 +45,7 @@ df_value_params = [
         {
             "A": pd.array([1, 8, 4, 10, 3] * 2, dtype="Int32"),
             2: [1.1, np.nan, 4.2, 3.1, -1.3] * 2,
-            "C": pd.array([True, False, False, np.nan, True] * 2, dtype="boolean"),
+            "C": pd.array([True, False, False, None, True] * 2, dtype="boolean"),
         },
         ["A", "BA", "", "DD", "C", "e2", "#4", "32", "ec", "#43"],
     ),

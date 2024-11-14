@@ -1678,9 +1678,9 @@ def to_pa_arr(A, arrow_type, arrow_type_no_dict):
     return arr
 
 
-def unbox_nested_array(typ, val, c):
-    """Unboxing method for nested arrays using Arrow arrays (used by all nested array
-    types)
+def unbox_array_using_arrow(typ, val, c):
+    """Unboxing method for arrays using Arrow arrays (used by all nested array
+    types and nullable array types)
 
     Args:
         typ (types.Type): Numba array type to unbox
@@ -1853,9 +1853,9 @@ def fix_boxed_nested_array(arr, arrow_type):
     return pd.arrays.ArrowExtensionArray(new_arr)
 
 
-def box_nested_array(typ, val, c):
-    """Boxing method for nested arrays using Arrow arrays (used by all nested array
-    types)
+def box_array_using_arrow(typ, val, c):
+    """Boxing method for arrays using Arrow arrays (used by all nested array
+    types and nullable arrays)
 
     Args:
         typ (types.Type): Numba array type to box

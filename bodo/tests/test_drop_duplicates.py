@@ -382,7 +382,7 @@ def test_drop_duplicates_2col_int_numpynan_bool(memory_leak_check):
     def get_array(n):
         e_list_a = np.array([0] * n)
         e_list_b = []
-        choice = [True, False, np.nan]
+        choice = [True, False, None]
         for i in range(n):
             e_list_a[i] = i % 40
             e_list_b.append(choice[i % 3])
