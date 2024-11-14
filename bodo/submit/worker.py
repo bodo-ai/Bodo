@@ -138,8 +138,11 @@ def _build_index_data(
                         ArrowExtensionArray(pa.array(res.index.right)), logger
                     ),
                 )
-            case pd.CategoricalIndex | pd.DatetimeIndex | pd.TimedeltaIndex:
-                return bodo.gatherv(np.array(res.index._data))
+            case pd.CategoricalIndex | pd.DatetimeIndex:
+                return bodo.gatherv(res.index._data)
+            # TODO[BSE-4196]: support TimedeltaArray directly
+            case pd.TimedeltaIndex:
+                return bodo.gatherv(res.index._data.to_numpy())
             case pd.PeriodIndex:
                 # This is a hack since we can't unbox a numpy array created from res.index._data for PeriodIndex
                 # since we're missing a proper PeriodArray but it's fine since we'll replace this
