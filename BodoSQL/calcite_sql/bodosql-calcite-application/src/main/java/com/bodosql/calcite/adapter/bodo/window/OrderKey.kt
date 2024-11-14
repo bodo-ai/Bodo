@@ -2,7 +2,12 @@ package com.bodosql.calcite.adapter.bodo.window
 
 import com.bodosql.calcite.ir.Expr
 
-internal data class OrderKey(val field: String, val asc: Boolean, val nullsFirst: Boolean, val expr: Expr)
+internal data class OrderKey(
+    val field: String,
+    val asc: Boolean,
+    val nullsFirst: Boolean,
+    val expr: Expr,
+)
 
 internal fun List<OrderKey>.fieldList(fn: (List<Expr>) -> Expr = Expr::List): Expr = fn(this.map { Expr.StringLiteral(it.field) })
 

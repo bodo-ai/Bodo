@@ -194,17 +194,13 @@ class StreamingPipelineFrame(
      * Get the loop's exit condition
      * @return the loop's exit condition
      */
-    fun getExitCond(): Variable {
-        return exitCond
-    }
+    fun getExitCond(): Variable = exitCond
 
     /**
      * Get the loop's variable tracking iterations
      * @return the loop's variable tracking iterations
      */
-    fun getIterVar(): Variable {
-        return iterVar
-    }
+    fun getIterVar(): Variable = iterVar
 
     /**
      * Initialize the exit condition for the generated code.

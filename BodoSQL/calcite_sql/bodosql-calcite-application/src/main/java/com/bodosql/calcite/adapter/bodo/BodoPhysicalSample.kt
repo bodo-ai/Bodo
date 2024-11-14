@@ -15,23 +15,22 @@ class BodoPhysicalSample(
     traitSet: RelTraitSet,
     child: RelNode,
     val params: RelOptSamplingParameters,
-) : SingleRel(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), child), BodoPhysicalRel {
-    override fun explainTerms(pw: RelWriter): RelWriter {
-        return super.explainTerms(pw)
+) : SingleRel(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), child),
+    BodoPhysicalRel {
+    override fun explainTerms(pw: RelWriter): RelWriter =
+        super
+            .explainTerms(pw)
             .item("mode", if (params.isBernoulli) "bernoulli" else "system")
             .item("rate", params.sampleRate)
             .item(
                 "repeatableSeed",
                 if (params.isRepeatable) params.repeatableSeed else "-",
             )
-    }
 
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoPhysicalSample {
-        return BodoPhysicalSample(cluster, traitSet, sole(inputs), params)
-    }
+    ): BodoPhysicalSample = BodoPhysicalSample(cluster, traitSet, sole(inputs), params)
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -56,7 +55,8 @@ class BodoPhysicalSample(
         ): BodoPhysicalSample {
             val mq = cluster.metadataQuery
             val traitSet =
-                cluster.traitSet()
+                cluster
+                    .traitSet()
                     .replaceIfs(RelCollationTraitDef.INSTANCE) {
                         mq.collations(input)
                     }

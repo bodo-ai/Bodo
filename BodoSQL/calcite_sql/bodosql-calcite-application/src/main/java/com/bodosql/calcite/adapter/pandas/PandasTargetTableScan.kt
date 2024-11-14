@@ -13,13 +13,12 @@ class PandasTargetTableScan(
     cluster: RelOptCluster,
     traitSet: RelTraitSet,
     table: RelOptTable,
-) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table), PandasRel {
+) : TableScan(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), table),
+    PandasRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: MutableList<RelNode>?,
-    ): RelNode {
-        return PandasTargetTableScan(cluster, traitSet, table)
-    }
+    ): RelNode = PandasTargetTableScan(cluster, traitSet, table)
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -31,16 +30,12 @@ class PandasTargetTableScan(
             cluster: RelOptCluster,
             traitSet: RelTraitSet,
             relOptTable: RelOptTable,
-        ): PandasTargetTableScan {
-            return PandasTargetTableScan(cluster, traitSet, relOptTable)
-        }
+        ): PandasTargetTableScan = PandasTargetTableScan(cluster, traitSet, relOptTable)
 
         @JvmStatic
         fun create(
             cluster: RelOptCluster,
             relOptTable: RelOptTable,
-        ): PandasTargetTableScan {
-            return create(cluster, cluster.traitSet(), relOptTable)
-        }
+        ): PandasTargetTableScan = create(cluster, cluster.traitSet(), relOptTable)
     }
 }

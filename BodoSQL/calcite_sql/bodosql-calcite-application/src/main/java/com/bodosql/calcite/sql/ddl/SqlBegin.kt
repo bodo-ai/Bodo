@@ -14,7 +14,9 @@ import org.apache.calcite.sql.parser.SqlParserPos
  * transaction statement. BodoSQL does not support transactions right now,
  * so it is considered a no-op
  */
-class SqlBegin(pos: SqlParserPos) : SqlDdl(OPERATOR, pos) {
+class SqlBegin(
+    pos: SqlParserPos,
+) : SqlDdl(OPERATOR, pos) {
     companion object {
         @JvmStatic
         private val OPERATOR: SqlOperator =

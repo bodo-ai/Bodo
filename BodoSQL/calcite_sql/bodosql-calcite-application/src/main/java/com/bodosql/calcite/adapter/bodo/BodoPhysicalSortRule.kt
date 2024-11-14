@@ -6,7 +6,9 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Sort
 
-class BodoPhysicalSortRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalSortRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -16,8 +18,7 @@ class BodoPhysicalSortRule private constructor(config: Config) : ConverterRule(c
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalSortRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalSortRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalSortRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

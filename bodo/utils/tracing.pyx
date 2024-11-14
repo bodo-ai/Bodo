@@ -1,5 +1,4 @@
 import atexit
-import contextlib
 import os
 import time
 import warnings
@@ -40,7 +39,7 @@ cdef inline tracing_supported():
         return True
     else:
         key1 = b"{\xd5'*\xc1N\x90\xf1\xf9\xbfy\xc7\xf4\xc0"
-        key2 = b'9\x9ace\x9e\x1a\xc2\xb0\xba\xfa&\x83\xb1\x96'
+        key2 = b"9\x9ace\x9e\x1a\xc2\xb0\xba\xfa&\x83\xb1\x96"
         # bitwise_xor(key1, key2) == b"BODO_TRACE_DEV"
         # BODO_TRACE_DEV is an undocumented environment variable that we don't
         # provide to everyone. This is a way of not revealing the name in the

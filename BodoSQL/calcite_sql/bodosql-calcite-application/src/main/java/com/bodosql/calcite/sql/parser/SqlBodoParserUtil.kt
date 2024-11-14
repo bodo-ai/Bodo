@@ -38,7 +38,8 @@ class SqlBodoParserUtil {
          */
         @JvmStatic
         fun parseString(s: String): String =
-            SqlParserUtil.parseString(s)
+            SqlParserUtil
+                .parseString(s)
                 .replace(ESCAPE_SEQUENCES) { res ->
                     when (val ch = res.groupValues[1]) {
                         "b" -> "\b"
@@ -201,7 +202,9 @@ class SqlBodoParserUtil {
             for (intervalInfo in splitStrings) {
                 val trimmedStr = intervalInfo.trim { it <= ' ' }
                 val intervalParts =
-                    trimmedStr.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }
+                    trimmedStr
+                        .split("\\s+".toRegex())
+                        .dropLastWhile { it.isEmpty() }
                         .toTypedArray()
                 if (intervalParts.size == 1 || intervalParts.size == 2) {
                     val intervalAmountStr: String

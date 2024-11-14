@@ -46,15 +46,9 @@ class TreeReverserDuplicateTracker : RelVisitor() {
         }
     }
 
-    fun getHeights(): HashMap<RelNode, Int> {
-        return maxHeight
-    }
+    fun getHeights(): HashMap<RelNode, Int> = maxHeight
 
-    fun getReversedTree(): HashMap<RelNode, MutableList<RelNode>> {
-        return treeReverse
-    }
+    fun getReversedTree(): HashMap<RelNode, MutableList<RelNode>> = treeReverse
 
-    fun getNodeCounts(): HashMap<RelNode, Int> {
-        return uniqueParentCounter
-    }
+    fun getNodeCounts(): HashMap<RelNode, Int> = uniqueParentCounter
 }

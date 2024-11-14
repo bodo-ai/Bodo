@@ -29,15 +29,12 @@ open class SnowflakeCatalogTable(
     schemaPath: ImmutableList<String>,
     columns: List<BodoSQLColumn>,
     private val catalog: SnowflakeCatalog,
-) :
-    CatalogTable(name, schemaPath, columns, catalog) {
+) : CatalogTable(name, schemaPath, columns, catalog) {
     // Hold the statistics for this table.
     private val statistic: Statistic = StatisticImpl()
 
     /** Interface to get the Snowflake Catalog.  */
-    override fun getCatalog(): SnowflakeCatalog {
-        return catalog
-    }
+    override fun getCatalog(): SnowflakeCatalog = catalog
 
     /**
      *
@@ -45,9 +42,7 @@ open class SnowflakeCatalogTable(
      *
      * @return Do we have read access?
      */
-    override fun canRead(): Boolean {
-        return this.catalog.canReadTable(fullPath)
-    }
+    override fun canRead(): Boolean = this.catalog.canReadTable(fullPath)
 
     private val columnDistinctCount =
         com.bodosql.calcite.application.utils.Memoizer.memoize<Int, Double?> { column: Int ->
@@ -62,9 +57,7 @@ open class SnowflakeCatalogTable(
      *
      * @return Estimated distinct count for this table.
      */
-    override fun getColumnDistinctCount(column: Int): Double? {
-        return columnDistinctCount.apply(column)
-    }
+    override fun getColumnDistinctCount(column: Int): Double? = columnDistinctCount.apply(column)
 
     /**
      * Estimate the distinct count for a column by submitting an APPROX_COUNT_DISTINCT call to
@@ -117,9 +110,7 @@ open class SnowflakeCatalogTable(
      * Wrappers around submitRowCountQueryEstimateInternal that handles memoization. See
      * submitRowCountQueryEstimateInternal for documentation.
      */
-    fun trySubmitIntegerMetadataQuerySnowflake(sql: SqlString): Long? {
-        return trySubmitLongMetadataQuerySnowflakeMemoizedFn.apply(sql)
-    }
+    fun trySubmitIntegerMetadataQuerySnowflake(sql: SqlString): Long? = trySubmitLongMetadataQuerySnowflakeMemoizedFn.apply(sql)
 
     private val trySubmitLongMetadataQuerySnowflakeMemoizedFn =
         com.bodosql.calcite.application.utils.Memoizer.memoize<SqlString, Long?> { metadataSelectQueryString: SqlString ->
@@ -133,9 +124,8 @@ open class SnowflakeCatalogTable(
      * SnowflakeCatalog#trySubmitIntegerMetadataQuery for the full documentation.
      * @return A long result from the query or NULL.
      */
-    private fun trySubmitLongMetadataQuerySnowflakeInternal(metadataSelectQueryString: SqlString): Long? {
-        return catalog.trySubmitLongMetadataQuery(metadataSelectQueryString)
-    }
+    private fun trySubmitLongMetadataQuerySnowflakeInternal(metadataSelectQueryString: SqlString): Long? =
+        catalog.trySubmitLongMetadataQuery(metadataSelectQueryString)
 
     override fun toRel(
         toRelContext: RelOptTable.ToRelContext,
@@ -178,9 +168,7 @@ open class SnowflakeCatalogTable(
         return baseRelNode
     }
 
-    override fun getStatistic(): Statistic {
-        return statistic
-    }
+    override fun getStatistic(): Statistic = statistic
 
     fun isIcebergTable(): Boolean {
         // Note: This needs to be outside catalog.isIcebergTable so
@@ -200,19 +188,16 @@ open class SnowflakeCatalogTable(
      *                          be possible to remove in the future since we append to a table.
      * @return The WriteTarget for the table.
      */
-    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget {
-        return SnowflakeNativeWriteTarget(
+    override fun getInsertIntoWriteTarget(columnNamesGlobal: Variable): WriteTarget =
+        SnowflakeNativeWriteTarget(
             name,
             parentFullPath,
             WriteTarget.IfExistsBehavior.APPEND,
             columnNamesGlobal,
             generatePythonConnStr(parentFullPath),
         )
-    }
 
-    override fun getDDLExecutor(): DDLExecutor {
-        return catalog.ddlExecutor
-    }
+    override fun getDDLExecutor(): DDLExecutor = catalog.ddlExecutor
 
     private inner class StatisticImpl : Statistic {
         private val rowCount: Supplier<Double?> = Suppliers.memoize { estimateRowCount() }
@@ -222,9 +207,7 @@ open class SnowflakeCatalogTable(
          *
          * @return estimated row count for this table.
          */
-        override fun getRowCount(): Double? {
-            return rowCount.get()
-        }
+        override fun getRowCount(): Double? = rowCount.get()
 
         /**
          * Retrieves the estimated row count for this table. It performs a query every time this is
@@ -232,8 +215,6 @@ open class SnowflakeCatalogTable(
          *
          * @return estimated row count for this table.
          */
-        private fun estimateRowCount(): Double? {
-            return catalog.estimateRowCount(fullPath)
-        }
+        private fun estimateRowCount(): Double? = catalog.estimateRowCount(fullPath)
     }
 }

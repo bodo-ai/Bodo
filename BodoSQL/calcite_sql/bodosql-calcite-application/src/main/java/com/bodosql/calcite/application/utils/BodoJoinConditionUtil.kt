@@ -26,9 +26,17 @@ class BodoJoinConditionUtil {
         @JvmStatic
         private val validLiteralTypes =
             setOf(
-                SqlTypeName.TINYINT, SqlTypeName.SMALLINT, SqlTypeName.INTEGER, SqlTypeName.BIGINT,
-                SqlTypeName.FLOAT, SqlTypeName.REAL, SqlTypeName.DOUBLE, SqlTypeName.DECIMAL, SqlTypeName.CHAR,
-                SqlTypeName.VARCHAR, SqlTypeName.BOOLEAN,
+                SqlTypeName.TINYINT,
+                SqlTypeName.SMALLINT,
+                SqlTypeName.INTEGER,
+                SqlTypeName.BIGINT,
+                SqlTypeName.FLOAT,
+                SqlTypeName.REAL,
+                SqlTypeName.DOUBLE,
+                SqlTypeName.DECIMAL,
+                SqlTypeName.CHAR,
+                SqlTypeName.VARCHAR,
+                SqlTypeName.BOOLEAN,
             )
 
         /**
@@ -36,9 +44,7 @@ class BodoJoinConditionUtil {
          * generated code.
          */
         @JvmStatic
-        private fun isValidLiteral(literal: RexLiteral): Boolean {
-            return validLiteralTypes.contains(literal.type.sqlTypeName)
-        }
+        private fun isValidLiteral(literal: RexLiteral): Boolean = validLiteralTypes.contains(literal.type.sqlTypeName)
 
         /**
          * SqlKinds of functions that are valid to use in a join condition's
@@ -47,10 +53,20 @@ class BodoJoinConditionUtil {
         @JvmStatic
         private val validBuiltinFunctionKinds =
             setOf(
-                SqlKind.EQUALS, SqlKind.NOT_EQUALS, SqlKind.GREATER_THAN,
-                SqlKind.GREATER_THAN_OR_EQUAL, SqlKind.LESS_THAN,
-                SqlKind.LESS_THAN_OR_EQUAL, SqlKind.AND, SqlKind.OR, SqlKind.PLUS, SqlKind.MINUS,
-                SqlKind.TIMES, SqlKind.DIVIDE, SqlKind.NOT, SqlKind.IS_NOT_TRUE,
+                SqlKind.EQUALS,
+                SqlKind.NOT_EQUALS,
+                SqlKind.GREATER_THAN,
+                SqlKind.GREATER_THAN_OR_EQUAL,
+                SqlKind.LESS_THAN,
+                SqlKind.LESS_THAN_OR_EQUAL,
+                SqlKind.AND,
+                SqlKind.OR,
+                SqlKind.PLUS,
+                SqlKind.MINUS,
+                SqlKind.TIMES,
+                SqlKind.DIVIDE,
+                SqlKind.NOT,
+                SqlKind.IS_NOT_TRUE,
             )
 
         /**
@@ -58,11 +74,10 @@ class BodoJoinConditionUtil {
          * (Calcite builtin functions) is valid to use in a join condition's
          * generated code.
          */
-        @JvmStatic private fun isValidBuiltinFunction(call: RexCall): Boolean {
-            return (call.op != SqlStdOperatorTable.DATETIME_PLUS) &&
+        @JvmStatic private fun isValidBuiltinFunction(call: RexCall): Boolean =
+            (call.op != SqlStdOperatorTable.DATETIME_PLUS) &&
                 (call.op != SqlStdOperatorTable.MINUS_DATE) &&
                 validBuiltinFunctionKinds.contains(call.kind)
-        }
 
         /**
          * SqlKinds of functions that represent functions whose names need to be
@@ -76,9 +91,8 @@ class BodoJoinConditionUtil {
          * (generally functions we have added) is valid to use in a join condition's
          * generated code.
          */
-        @JvmStatic private fun isValidOtherFunction(call: RexCall): Boolean {
-            return otherFunctionKinds.contains(call.kind) && call.op.name == NumericOperatorTable.POW.name
-        }
+        @JvmStatic private fun isValidOtherFunction(call: RexCall): Boolean =
+            otherFunctionKinds.contains(call.kind) && call.op.name == NumericOperatorTable.POW.name
 
         /**
          * Determine if a generic RexNode is valid to use in a join condition's
@@ -86,8 +100,8 @@ class BodoJoinConditionUtil {
          * and function calls.
          */
         @JvmStatic
-        fun isValidNode(node: RexNode): Boolean {
-            return when (node) {
+        fun isValidNode(node: RexNode): Boolean =
+            when (node) {
                 is RexLiteral -> isValidLiteral(node)
                 is RexInputRef -> true
                 is RexCall ->
@@ -100,7 +114,6 @@ class BodoJoinConditionUtil {
                     }
                 else -> false
             }
-        }
 
         /**
          * Returns a pair to describe if the left and right table are used.
@@ -271,8 +284,8 @@ class BodoJoinConditionUtil {
          * a clean error message.
          */
         @JvmStatic
-        fun isTransformableToValid(join: Join): Boolean {
-            return when (join.joinType) {
+        fun isTransformableToValid(join: Join): Boolean =
+            when (join.joinType) {
                 JoinRelType.INNER -> {
                     true
                 }
@@ -285,7 +298,6 @@ class BodoJoinConditionUtil {
                     isPushableFunction(join.condition, join.left.rowType.fieldCount, join.rowType.fieldCount)
                 }
             }
-        }
 
         /**
          * Determine if a join can become valid through a transformation.
@@ -293,8 +305,6 @@ class BodoJoinConditionUtil {
          * or no transformation is possible.
          */
         @JvmStatic
-        fun requiresTransformationToValid(join: Join): Boolean {
-            return !isValidNode(join.condition) && isTransformableToValid(join)
-        }
+        fun requiresTransformationToValid(join: Join): Boolean = !isValidNode(join.condition) && isTransformableToValid(join)
     }
 }

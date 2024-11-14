@@ -6,7 +6,10 @@ import org.apache.calcite.rel.RelNode
  * Wrapper around a RelRoot to track information about caching in a way that is
  * mutable.
  */
-class CachedPlanInfo private constructor(var plan: RelNode, private var numConsumers: Int) {
+class CachedPlanInfo private constructor(
+    var plan: RelNode,
+    private var numConsumers: Int,
+) {
     fun removeConsumer() {
         numConsumers--
     }
@@ -19,16 +22,12 @@ class CachedPlanInfo private constructor(var plan: RelNode, private var numConsu
         numConsumers += num
     }
 
-    fun getNumConsumers(): Int {
-        return numConsumers
-    }
+    fun getNumConsumers(): Int = numConsumers
 
     companion object {
         fun create(
             plan: RelNode,
             numConsumers: Int,
-        ): CachedPlanInfo {
-            return CachedPlanInfo(plan, numConsumers)
-        }
+        ): CachedPlanInfo = CachedPlanInfo(plan, numConsumers)
     }
 }

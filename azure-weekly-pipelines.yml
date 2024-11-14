@@ -653,4 +653,3 @@ stages:
       matrix:
         TEST_3P:
           NP: 3
-

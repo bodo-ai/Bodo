@@ -76,13 +76,12 @@ class FileSystemCatalog(
      * @return A converted schemaPath to the file system representation
      * of the location.
      */
-    private fun schemaPathToFilePath(schemaPath: ImmutableList<String>): Path {
-        return if (schemaPath.isEmpty()) {
+    private fun schemaPathToFilePath(schemaPath: ImmutableList<String>): Path =
+        if (schemaPath.isEmpty()) {
             rootPath
         } else {
             fs.resolvePath(Path(schemaPath.joinToString(separator = "/")))
         }
-    }
 
     /**
      * Convert a given schemaPath and tableName, which is the "path" to a table,
@@ -95,17 +94,14 @@ class FileSystemCatalog(
     private fun tableInfoToFilePath(
         schemaPath: ImmutableList<String>,
         tableName: String,
-    ): Path {
-        return Path(schemaPathToFilePath(schemaPath), Path(tableName))
-    }
+    ): Path = Path(schemaPathToFilePath(schemaPath), Path(tableName))
 
-    private fun getDirectoryContents(path: Path): List<Path> {
-        return if (fs.getFileStatus(path).isDirectory) {
+    private fun getDirectoryContents(path: Path): List<Path> =
+        if (fs.getFileStatus(path).isDirectory) {
             fs.listStatus(path).map { it.path }
         } else {
             listOf()
         }
-    }
 
     /**
      * Determine if the given path information refers to a schema. Within the
@@ -113,9 +109,7 @@ class FileSystemCatalog(
      * @param path The file system path.
      * @return Is this path referring to a schema?
      */
-    private fun isSchema(path: Path): Boolean {
-        return !isTable(path) && fs.getFileStatus(path).isDirectory
-    }
+    private fun isSchema(path: Path): Boolean = !isTable(path) && fs.getFileStatus(path).isDirectory
 
     /**
      * Determine if the given path information refers to a table. Within the
@@ -126,9 +120,7 @@ class FileSystemCatalog(
      * @param path The file system path.
      * @return Is this path referring to a table?
      */
-    private fun isTable(path: Path): Boolean {
-        return isIcebergTable(path)
-    }
+    private fun isTable(path: Path): Boolean = isIcebergTable(path)
 
     /**
      * Is the given path an Iceberg table. An iceberg table is defined
@@ -213,9 +205,7 @@ class FileSystemCatalog(
      * Return the number of levels at which a default schema may be found.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int {
-        return defaultSchemaList.size
-    }
+    override fun numDefaultSchemaLevels(): Int = defaultSchemaList.size
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.
@@ -303,9 +293,7 @@ class FileSystemCatalog(
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return True
      */
-    override fun schemaDepthMayContainTables(depth: Int): Boolean {
-        return true
-    }
+    override fun schemaDepthMayContainTables(depth: Int): Boolean = true
 
     /**
      * Returns if a schema with the given depth is allowed to contain subSchemas.
@@ -314,9 +302,7 @@ class FileSystemCatalog(
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return True.
      */
-    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean {
-        return true
-    }
+    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean = true
 
     /**
      * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
@@ -330,9 +316,7 @@ class FileSystemCatalog(
      * @param schemaPath The schema component to define the connection not including the table name.
      * @return An Expr representing the connection string.
      */
-    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
-        return Expr.StringLiteral(pathToBodoString(rootPath, true))
-    }
+    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr = Expr.StringLiteral(pathToBodoString(rootPath, true))
 
     /**
      *  Create a FileSystem object from the given connection string.
@@ -373,8 +357,8 @@ class FileSystemCatalog(
         createTableType: CreateTableType,
         ifExistsBehavior: IfExistsBehavior,
         columnNamesGlobal: Variable,
-    ): WriteTarget {
-        return if (writeDefault == WriteTarget.WriteTargetEnum.ICEBERG) {
+    ): WriteTarget =
+        if (writeDefault == WriteTarget.WriteTargetEnum.ICEBERG) {
             IcebergWriteTarget(
                 tableName,
                 schema,
@@ -392,7 +376,6 @@ class FileSystemCatalog(
                 pathToBodoString(tableInfoToFilePath(schema, tableName), false),
             )
         }
-    }
 
     companion object {
         /**

@@ -20,7 +20,9 @@ import org.apache.calcite.util.ImmutableBitSet
  * can contain multiple window functions, so additional utilities are needed to ensure an operation is safe
  * for all window functions.
  */
-class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
+class WindowFilterTranspose(
+    numCols: Int,
+) : RexVisitorImpl<Unit>(true) {
     // Track which columns can be filtered. The visitor will modify this by computing
     // an intersection.
     private var filterableColumns = ImmutableBitSet.range(numCols)
@@ -40,9 +42,7 @@ class WindowFilterTranspose(numCols: Int) : RexVisitorImpl<Unit>(true) {
         filterableColumns = filterableColumns.intersect(windowUsedColumns)
     }
 
-    fun build(): ImmutableBitSet {
-        return filterableColumns
-    }
+    fun build(): ImmutableBitSet = filterableColumns
 
     companion object {
         /**

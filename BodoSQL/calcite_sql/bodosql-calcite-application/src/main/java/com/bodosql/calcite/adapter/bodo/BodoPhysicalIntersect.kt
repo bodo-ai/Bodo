@@ -12,14 +12,13 @@ class BodoPhysicalIntersect(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : Intersect(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), inputs, all), BodoPhysicalRel {
+) : Intersect(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), inputs, all),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
         all: Boolean,
-    ): BodoPhysicalIntersect {
-        return BodoPhysicalIntersect(cluster, traitSet, inputs, all)
-    }
+    ): BodoPhysicalIntersect = BodoPhysicalIntersect(cluster, traitSet, inputs, all)
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -41,8 +40,6 @@ class BodoPhysicalIntersect(
             cluster: RelOptCluster,
             inputs: List<RelNode>,
             all: Boolean,
-        ): BodoPhysicalIntersect {
-            return BodoPhysicalIntersect(cluster, cluster.traitSet(), inputs, all)
-        }
+        ): BodoPhysicalIntersect = BodoPhysicalIntersect(cluster, cluster.traitSet(), inputs, all)
     }
 }

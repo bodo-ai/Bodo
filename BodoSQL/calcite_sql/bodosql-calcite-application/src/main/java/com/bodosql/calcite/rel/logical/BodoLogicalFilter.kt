@@ -21,9 +21,7 @@ class BodoLogicalFilter(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): BodoLogicalFilter {
-        return BodoLogicalFilter(cluster, traitSet, input, condition)
-    }
+    ): BodoLogicalFilter = BodoLogicalFilter(cluster, traitSet, input, condition)
 
     companion object {
         fun create(
@@ -33,11 +31,11 @@ class BodoLogicalFilter(
             val cluster = input.cluster
             val mq = cluster.metadataQuery
             val traitSet =
-                cluster.traitSetOf(Convention.NONE)
+                cluster
+                    .traitSetOf(Convention.NONE)
                     .replaceIfs(RelCollationTraitDef.INSTANCE) {
                         RelMdCollation.filter(mq, input)
-                    }
-                    .replaceIf(RelDistributionTraitDef.INSTANCE) {
+                    }.replaceIf(RelDistributionTraitDef.INSTANCE) {
                         RelMdDistribution.filter(mq, input)
                     }
             return BodoLogicalFilter(cluster, traitSet, input, condition)

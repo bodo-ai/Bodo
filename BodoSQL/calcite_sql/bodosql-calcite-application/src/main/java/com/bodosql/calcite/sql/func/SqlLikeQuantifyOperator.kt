@@ -42,9 +42,7 @@ class SqlLikeQuantifyOperator(
         assert(kind == SqlKind.LIKE)
     }
 
-    override fun getOperandCountRange(): SqlOperandCountRange {
-        return SqlOperandCountRanges.between(2, 3)
-    }
+    override fun getOperandCountRange(): SqlOperandCountRange = SqlOperandCountRanges.between(2, 3)
 
     override fun deriveType(
         validator: SqlValidator,

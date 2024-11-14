@@ -34,9 +34,7 @@ class SqlSnowflakeShowSchemas(
 
     override fun getOperator(): SqlOperator = OPERATOR
 
-    override fun getOperandList(): MutableList<SqlNode>? {
-        return ImmutableList.of(dbName)
-    }
+    override fun getOperandList(): MutableList<SqlNode>? = ImmutableList.of(dbName)
 
     override fun unparseShowOperation(
         writer: SqlWriter,

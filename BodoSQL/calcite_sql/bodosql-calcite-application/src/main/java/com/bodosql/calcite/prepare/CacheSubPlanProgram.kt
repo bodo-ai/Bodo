@@ -62,13 +62,12 @@ class CacheSubPlanProgram : Program {
         requiredOutputTraits: RelTraitSet,
         materializations: MutableList<RelOptMaterialization>,
         lattices: MutableList<RelOptLattice>,
-    ): RelNode {
-        return if (RelationalAlgebraGenerator.coveringExpressionCaching) {
+    ): RelNode =
+        if (RelationalAlgebraGenerator.coveringExpressionCaching) {
             runCoveringExpressions(rel, planner.executor)
         } else {
             runExactMatch(rel)
         }
-    }
 
     /**
      * Implement caching across sections of the plan that can match
@@ -240,8 +239,7 @@ class CacheSubPlanProgram : Program {
                             cluster.nextCacheId(),
                         )
                     }
-                parents.forEach {
-                        parent ->
+                parents.forEach { parent ->
                     var cacheReplacement: RelNode = cacheNode.copy(cacheNode.traitSet, cacheNode.inputs)
                     val baseNode = parent.first.baseNode
                     if (parent.first.filter != null) {
@@ -341,7 +339,8 @@ class CacheSubPlanProgram : Program {
                         val parent = it.second
                         if (parent is Project) {
                             val projects = parent.projects
-                            projects.map { node -> // Remap any columns in the condition.
+                            projects.map { node ->
+                                // Remap any columns in the condition.
                                 val mapping = Mappings.source(columnIndices, cacheRoot.rowType.fieldCount)
                                 val updatedNode = node.accept(RexPermuteInputsShuttle(mapping, cacheRoot))
                                 if (computeMap.contains(updatedNode)) {
@@ -427,7 +426,8 @@ class CacheSubPlanProgram : Program {
                     processCaching(newRoot, newStates)
                 }
             } else if (parents.all {
-                    it.second is Aggregate && (it.second as Aggregate).groupSets.size == 1 &&
+                    it.second is Aggregate &&
+                        (it.second as Aggregate).groupSets.size == 1 &&
                         (it.second as Aggregate).aggCallList.all { agg ->
                             !agg.hasFilter() && agg.distinctKeys == null
                         }
@@ -536,7 +536,9 @@ class CacheSubPlanProgram : Program {
                                 )
                             // If any filter cannot be remapped, we will need to materialize.
                             val materializedCaching =
-                                filterInfo.withIndex().filter { !it.value.second }
+                                filterInfo
+                                    .withIndex()
+                                    .filter { !it.value.second }
                                     .map { Pair(it.value.first, it.index) }
                             Pair(
                                 materializedCaching.isEmpty(),
@@ -607,7 +609,11 @@ class CacheSubPlanProgram : Program {
                     } else {
                         // Any groups of size 1 must be fully materialized.
                         val materializedParents =
-                            groupMap.filter { it.value.size == 1 }.values.flatten().map { parents[it] }
+                            groupMap
+                                .filter { it.value.size == 1 }
+                                .values
+                                .flatten()
+                                .map { parents[it] }
                         val newCacheRoot =
                             generateCacheNodes(cacheRoot, materializedParents, numConsumers)
                         val continuedGroups =
@@ -672,8 +678,7 @@ class CacheSubPlanProgram : Program {
                     val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
                     val newCollation =
                         RelCollations.of(
-                            aggCall.collation.fieldCollations.map {
-                                    fieldCollation ->
+                            aggCall.collation.fieldCollations.map { fieldCollation ->
                                 fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
                             },
                         )
@@ -721,8 +726,7 @@ class CacheSubPlanProgram : Program {
                             val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
                             val newCollation =
                                 RelCollations.of(
-                                    aggCall.collation.fieldCollations.map {
-                                            fieldCollation ->
+                                    aggCall.collation.fieldCollations.map { fieldCollation ->
                                         fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
                                     },
                                 )
@@ -770,8 +774,7 @@ class CacheSubPlanProgram : Program {
                             val newArgs = aggCall.argList.map { idx -> relBuilder.field(indices[idx]) }
                             val newCollation =
                                 RelCollations.of(
-                                    aggCall.collation.fieldCollations.map {
-                                            fieldCollation ->
+                                    aggCall.collation.fieldCollations.map { fieldCollation ->
                                         fieldCollation.withFieldIndex(indices[fieldCollation.fieldIndex])
                                     },
                                 )
@@ -829,13 +832,13 @@ class CacheSubPlanProgram : Program {
             aggCall: AggregateCall,
             newArgs: List<RexNode>,
             newCollation: RelCollation,
-        ): AggCall {
-            return relBuilder.aggregateCall(aggCall.aggregation, newArgs)
+        ): AggCall =
+            relBuilder
+                .aggregateCall(aggCall.aggregation, newArgs)
                 .distinct(aggCall.isDistinct)
                 .approximate(aggCall.isApproximate)
                 .ignoreNulls(aggCall.ignoreNulls())
                 .sort(newCollation)
-        }
 
         /**
          * Process a join that is known to be a candidate for caching. This also includes
@@ -1299,7 +1302,10 @@ class CacheSubPlanProgram : Program {
         }
     }
 
-    private class CacheReplacement(private val cluster: BodoRelOptCluster, private val cacheNodes: Set<Int>) : RelShuttleImpl() {
+    private class CacheReplacement(
+        private val cluster: BodoRelOptCluster,
+        private val cacheNodes: Set<Int>,
+    ) : RelShuttleImpl() {
         // Ensure we only compute each cache node once.
         private val cacheNodeMap = mutableMapOf<Int, CachedSubPlanBase>()
 
@@ -1327,8 +1333,6 @@ class CacheSubPlanProgram : Program {
 
     companion object {
         @JvmStatic
-        fun canCacheNode(rel: RelNode): Boolean {
-            return rel is BodoPhysicalRel && rel !is BodoPhysicalCachedSubPlan
-        }
+        fun canCacheNode(rel: RelNode): Boolean = rel is BodoPhysicalRel && rel !is BodoPhysicalCachedSubPlan
     }
 }

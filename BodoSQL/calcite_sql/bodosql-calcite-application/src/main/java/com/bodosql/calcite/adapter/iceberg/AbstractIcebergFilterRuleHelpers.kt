@@ -159,12 +159,11 @@ class AbstractIcebergFilterRuleHelpers {
             )
 
         @JvmStatic
-        private fun isSupportedGenericCall(call: RexCall): Boolean {
-            return (call.kind == SqlKind.OTHER_FUNCTION || call.kind == SqlKind.OTHER) &&
+        private fun isSupportedGenericCall(call: RexCall): Boolean =
+            (call.kind == SqlKind.OTHER_FUNCTION || call.kind == SqlKind.OTHER) &&
                 SUPPORTED_GENERIC_CALL_NAME.contains(
                     call.operator.name,
                 )
-        }
 
         @JvmStatic
         fun isPushableCondition(condition: RexNode): Boolean {
@@ -230,13 +229,12 @@ class AbstractIcebergFilterRuleHelpers {
         fun isPartiallyPushableFilter(
             filter: Filter,
             partialFilterDerivationFunction: (RexNode) -> RexNode,
-        ): Boolean {
-            return FilterUtils.isPartiallyPushableFilter(
+        ): Boolean =
+            FilterUtils.isPartiallyPushableFilter(
                 filter,
                 ::isPushableCondition,
                 partialFilterDerivationFunction,
             )
-        }
 
         /**
          * Determine if all of a filter is pushable.
@@ -247,13 +245,12 @@ class AbstractIcebergFilterRuleHelpers {
             rexBuilder: RexBuilder,
             rexSimplify: RexSimplify,
             predicateList: RelOptPredicateList,
-        ): Boolean {
-            return FilterUtils.isFullyPushableFilter(
+        ): Boolean =
+            FilterUtils.isFullyPushableFilter(
                 filter,
                 ::isPushableCondition,
                 generatePartialDerivationFunction(rexBuilder, rexSimplify, predicateList),
             )
-        }
 
         /**
          * Split a Filter into a pair of RexNodes that are pushed into Iceberg
@@ -267,22 +264,21 @@ class AbstractIcebergFilterRuleHelpers {
             rexBuilder: RexBuilder,
             rexSimplify: RexSimplify,
             predicateList: RelOptPredicateList,
-        ): Pair<RexNode?, RexNode?> {
-            return FilterUtils.extractPushableConditions(
+        ): Pair<RexNode?, RexNode?> =
+            FilterUtils.extractPushableConditions(
                 filter.condition,
                 filter.cluster.rexBuilder,
                 ::isPushableCondition,
                 generatePartialDerivationFunction(rexBuilder, rexSimplify, predicateList),
             )
-        }
 
         @JvmStatic
         fun generatePartialDerivationFunction(
             rexBuilder: RexBuilder,
             rexSimplify: RexSimplify,
             predicateList: RelOptPredicateList,
-        ): (RexNode) -> RexNode {
-            return { condition: RexNode ->
+        ): (RexNode) -> RexNode =
+            { condition: RexNode ->
                 val updatedCondition = rexBuilder.makeCall(SqlStdOperatorTable.IS_NOT_NULL, condition)
                 val simplifiedUpdatedCondition = rexSimplify.simplifyUnknownAsFalse(updatedCondition)
                 if (predicateList.pulledUpPredicates.isEmpty()) {
@@ -304,6 +300,5 @@ class AbstractIcebergFilterRuleHelpers {
                     }
                 }
             }
-        }
     }
 }

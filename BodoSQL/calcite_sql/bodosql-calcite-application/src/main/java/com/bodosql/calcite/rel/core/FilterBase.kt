@@ -23,9 +23,7 @@ open class FilterBase(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): FilterBase {
-        return FilterBase(cluster, traitSet, input, condition)
-    }
+    ): FilterBase = FilterBase(cluster, traitSet, input, condition)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

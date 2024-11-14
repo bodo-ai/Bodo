@@ -22,9 +22,7 @@ class BodoLogicalSort(
         collation: RelCollation,
         offset: RexNode?,
         fetch: RexNode?,
-    ): BodoLogicalSort {
-        return BodoLogicalSort(cluster, traitSet, input, collation, offset, fetch)
-    }
+    ): BodoLogicalSort = BodoLogicalSort(cluster, traitSet, input, collation, offset, fetch)
 
     companion object {
         @JvmStatic

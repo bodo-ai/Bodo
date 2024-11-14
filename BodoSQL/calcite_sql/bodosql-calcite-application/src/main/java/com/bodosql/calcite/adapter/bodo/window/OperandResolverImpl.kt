@@ -9,8 +9,11 @@ import org.apache.calcite.rex.RexNode
 import org.apache.calcite.rex.RexWindowBound
 import java.math.BigDecimal
 
-internal class OperandResolverImpl(ctx: BodoPhysicalRel.BuildContext, input: BodoEngineTable, val fields: List<Field>) :
-    OperandResolver {
+internal class OperandResolverImpl(
+    ctx: BodoPhysicalRel.BuildContext,
+    input: BodoEngineTable,
+    val fields: List<Field>,
+) : OperandResolver {
     private val rexTranslator = ctx.rexTranslator(input)
 
     // Translator for args that must always be arrays.
@@ -58,7 +61,8 @@ internal class OperandResolverImpl(ctx: BodoPhysicalRel.BuildContext, input: Bod
                         "-",
                         Expr.IntegerLiteral(
                             (node.offset as RexLiteral)
-                                .getValueAs(BigDecimal::class.java)!!.intValueExact(),
+                                .getValueAs(BigDecimal::class.java)!!
+                                .intValueExact(),
                         ),
                     )
                 node.isFollowing -> Expr.IntegerLiteral((node.offset as RexLiteral).getValueAs(BigDecimal::class.java)!!.intValueExact())

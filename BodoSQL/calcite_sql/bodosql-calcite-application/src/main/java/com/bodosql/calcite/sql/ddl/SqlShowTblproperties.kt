@@ -34,9 +34,7 @@ class SqlShowTblproperties(
 
     override fun getOperator(): SqlOperator = OPERATOR
 
-    override fun getOperandList(): MutableList<SqlNode>? {
-        return ImmutableNullableList.of(table, property)
-    }
+    override fun getOperandList(): MutableList<SqlNode>? = ImmutableNullableList.of(table, property)
 
     /**
      * This begins unparsing the clause after SHOW as the superclass

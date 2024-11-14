@@ -212,7 +212,9 @@ public class CatalogSchema extends BodoSqlSchema {
         visitor, varName, createTablePath(tableName), ifExists, createTableType, meta);
   }
 
-  /** @return The catalog for the schema. */
+  /**
+   * @return The catalog for the schema.
+   */
   public BodoSQLCatalog getCatalog() {
     return catalog;
   }

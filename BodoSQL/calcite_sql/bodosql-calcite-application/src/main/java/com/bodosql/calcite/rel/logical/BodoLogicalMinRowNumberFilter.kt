@@ -23,9 +23,7 @@ class BodoLogicalMinRowNumberFilter(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): BodoLogicalMinRowNumberFilter {
-        return BodoLogicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
-    }
+    ): BodoLogicalMinRowNumberFilter = BodoLogicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
 
     companion object {
         @JvmStatic
@@ -36,11 +34,11 @@ class BodoLogicalMinRowNumberFilter(
             val cluster = input.cluster
             val mq = cluster.metadataQuery
             val traitSet =
-                cluster.traitSetOf(Convention.NONE)
+                cluster
+                    .traitSetOf(Convention.NONE)
                     .replaceIfs(RelCollationTraitDef.INSTANCE) {
                         RelMdCollation.filter(mq, input)
-                    }
-                    .replaceIf(RelDistributionTraitDef.INSTANCE) {
+                    }.replaceIf(RelDistributionTraitDef.INSTANCE) {
                         RelMdDistribution.filter(mq, input)
                     }
             val inputsToKeep = ImmutableBitSet.range(input.rowType.fieldCount)

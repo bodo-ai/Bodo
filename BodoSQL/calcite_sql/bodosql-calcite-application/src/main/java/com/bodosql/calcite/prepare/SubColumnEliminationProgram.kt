@@ -35,7 +35,9 @@ object SubColumnEliminationProgram : Program {
         return rel.accept(shuttle)
     }
 
-    private class Visitor(private val builder: RelBuilder) : RelShuttleImpl() {
+    private class Visitor(
+        private val builder: RelBuilder,
+    ) : RelShuttleImpl() {
         /**
          * Note the RelShuttleImpl() is designed for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
@@ -43,8 +45,8 @@ object SubColumnEliminationProgram : Program {
          * implementations. We could replace this with a custom ReflectiveVisitor,
          * but this doesn't seem useful given time constraints
          */
-        override fun visit(node: RelNode): RelNode {
-            return if (node is BodoPhysicalProject) {
+        override fun visit(node: RelNode): RelNode =
+            if (node is BodoPhysicalProject) {
                 val result = AbstractBodoCommonSubexpressionRule.applySubexpressionElimination(builder, node)
                 if (result != null) {
                     visit(result)
@@ -54,6 +56,5 @@ object SubColumnEliminationProgram : Program {
             } else {
                 super.visit(node)
             }
-        }
     }
 }

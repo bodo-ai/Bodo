@@ -21,15 +21,16 @@ import org.apache.calcite.tools.RelBuilder
  * Note: This isn't a RelShuttle because the BodoPhysicalRel is a simpler interface given
  * the implementation requirements.
  */
-class BatchingPropertyPass(private val builder: RelBuilder) {
+class BatchingPropertyPass(
+    private val builder: RelBuilder,
+) {
     private val cacheVisitor = CachedResultVisitor(generateCacheNodeFunction())
 
     /**
      * Generate the function to cache the BatchingProperty for a BodoPhysicalCachedSubPlan.
      */
-    private fun generateCacheNodeFunction(): (BodoPhysicalCachedSubPlan) -> BatchingProperty {
-        return {
-                cachedNode: BodoPhysicalCachedSubPlan ->
+    private fun generateCacheNodeFunction(): (BodoPhysicalCachedSubPlan) -> BatchingProperty =
+        { cachedNode: BodoPhysicalCachedSubPlan ->
             val newRoot = visit(cachedNode.cachedPlan.plan)
             val property = getOutputBatchingProperty(newRoot)
             val expectedInputProperty = cachedNode.expectedInputBatchingProperty(property)
@@ -45,7 +46,6 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
             cachedNode.cachedPlan.plan = cacheBody
             inputProperty
         }
-    }
 
     /**
      * Generate the code to insert a SeparateStreamExchange or
@@ -57,13 +57,12 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
     private fun generateExchangeInput(
         input: RelNode,
         expectedInputProperty: BatchingProperty,
-    ): RelNode {
-        return if (expectedInputProperty == BatchingProperty.STREAMING) {
+    ): RelNode =
+        if (expectedInputProperty == BatchingProperty.STREAMING) {
             SeparateStreamExchange(input.cluster, input.traitSet.replace(expectedInputProperty), input)
         } else {
             CombineStreamsExchange(input.cluster, input.traitSet.replace(expectedInputProperty), input)
         }
-    }
 
     /**
      * Cache visitors are special because we must both visit the cached section
@@ -212,8 +211,8 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
             rel: RelNode,
             builder: RelBuilder,
             hasRequiredOutput: Boolean = true,
-        ): RelNode {
-            return if (rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == null) {
+        ): RelNode =
+            if (rel.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) == null) {
                 // Ignore for non-streaming
                 rel
             } else {
@@ -228,11 +227,9 @@ class BatchingPropertyPass(private val builder: RelBuilder) {
                     CombineStreamsExchange(output.cluster, output.traitSet.replace(requiredBatchingProperty), output)
                 }
             }
-        }
 
         @JvmStatic
-        private fun getOutputBatchingProperty(node: RelNode): BatchingProperty {
-            return node.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
-        }
+        private fun getOutputBatchingProperty(node: RelNode): BatchingProperty =
+            node.traitSet.getTrait(BatchingPropertyTraitDef.INSTANCE) ?: BatchingProperty.NONE
     }
 }

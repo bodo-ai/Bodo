@@ -15,13 +15,12 @@ class BodoPhysicalValues(
     rowType: RelDataType,
     tuples: ImmutableList<ImmutableList<RexLiteral>>,
     traitSet: RelTraitSet,
-) : Values(cluster, rowType, tuples, traitSet.replace(BodoPhysicalRel.CONVENTION)), BodoPhysicalRel {
+) : Values(cluster, rowType, tuples, traitSet.replace(BodoPhysicalRel.CONVENTION)),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoPhysicalValues {
-        return BodoPhysicalValues(cluster, getRowType(), tuples, traitSet.replace(BodoPhysicalRel.CONVENTION))
-    }
+    ): BodoPhysicalValues = BodoPhysicalValues(cluster, getRowType(), tuples, traitSet.replace(BodoPhysicalRel.CONVENTION))
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -44,8 +43,6 @@ class BodoPhysicalValues(
             traitSet: RelTraitSet,
             rowType: RelDataType,
             tuples: ImmutableList<ImmutableList<RexLiteral>>,
-        ): BodoPhysicalValues {
-            return BodoPhysicalValues(cluster, rowType, tuples, traitSet)
-        }
+        ): BodoPhysicalValues = BodoPhysicalValues(cluster, rowType, tuples, traitSet)
     }
 }

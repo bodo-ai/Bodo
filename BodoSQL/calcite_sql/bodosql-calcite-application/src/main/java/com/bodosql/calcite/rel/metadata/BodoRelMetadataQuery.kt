@@ -19,7 +19,9 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery
  * Also inspired by the custom RelMetadataQuery in Dremio:
  *https://github.com/dremio/dremio-oss/blob/be47367c523e4eded35df4e8fff725f53160558e/sabot/kernel/src/main/java/com/dremio/exec/planner/cost/DremioRelMetadataQuery.java#L32
  */
-class BodoRelMetadataQuery(provider: MetadataHandlerProvider) : RelMetadataQuery(provider) {
+class BodoRelMetadataQuery(
+    provider: MetadataHandlerProvider,
+) : RelMetadataQuery(provider) {
     private var columnDistinctCountHandler: ColumnDistinctCount.Handler = handler(ColumnDistinctCount.Handler::class.java)
 
     fun getColumnDistinctCount(

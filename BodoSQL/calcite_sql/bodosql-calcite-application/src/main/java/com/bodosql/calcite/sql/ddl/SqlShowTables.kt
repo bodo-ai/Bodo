@@ -28,9 +28,7 @@ class SqlShowTables(
 
     override fun getOperator(): SqlOperator = OPERATOR
 
-    override fun getOperandList(): MutableList<SqlNode>? {
-        return ImmutableList.of(schemaName)
-    }
+    override fun getOperandList(): MutableList<SqlNode>? = ImmutableList.of(schemaName)
 
     /**
      * This begins unparsing the clause after SHOW as the superclass

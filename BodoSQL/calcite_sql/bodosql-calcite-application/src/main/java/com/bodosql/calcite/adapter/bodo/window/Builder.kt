@@ -10,7 +10,10 @@ import org.apache.calcite.rex.RexOver
 import org.apache.calcite.rex.RexShuttle
 import org.apache.calcite.sql.SqlKind
 
-internal class Builder(val cluster: RelOptCluster, val input: BodoEngineTable) : RexShuttle() {
+internal class Builder(
+    val cluster: RelOptCluster,
+    val input: BodoEngineTable,
+) : RexShuttle() {
     private val overExprs = mutableListOf<RexOver>()
     private var index = 0
 

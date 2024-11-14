@@ -68,13 +68,14 @@ open class MinRowNumberFilterBase(
         return cluster.typeFactory.createStructType(newInputFields)
     }
 
-    override fun explainTerms(pw: RelWriter): RelWriter? {
-        return pw.item("input", getInput()).item("partition", partitionColSet)
+    override fun explainTerms(pw: RelWriter): RelWriter? =
+        pw
+            .item("input", getInput())
+            .item("partition", partitionColSet)
             .item("order", orderColSet)
             .item("ascending", ascendingList)
             .item("nullLast", nullPosList)
             .item("inputsToKeep", inputsToKeep)
-    }
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

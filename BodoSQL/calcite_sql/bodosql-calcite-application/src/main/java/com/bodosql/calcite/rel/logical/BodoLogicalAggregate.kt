@@ -25,9 +25,7 @@ class BodoLogicalAggregate(
         groupSet: ImmutableBitSet,
         groupSets: List<ImmutableBitSet>?,
         aggCalls: List<AggregateCall>,
-    ): BodoLogicalAggregate {
-        return BodoLogicalAggregate(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls)
-    }
+    ): BodoLogicalAggregate = BodoLogicalAggregate(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls)
 
     companion object {
         @JvmStatic

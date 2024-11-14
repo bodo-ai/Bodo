@@ -40,7 +40,9 @@ import org.apache.iceberg.view.View
  * the requirements in each individual implementation, but for now we will
  * be explicitly calling the public Iceberg API during development.
  */
-abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCatalog where T : Catalog, T : SupportsNamespaces {
+abstract class IcebergCatalog<T>(
+    private val icebergConnection: T,
+) : BodoSQLCatalog where T : Catalog, T : SupportsNamespaces {
     /**
      * Load an Iceberg table from the connector via its path information.
      * @param schemaPath The schema path to the table.
@@ -112,21 +114,22 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         return if (summaryRowCount == null) {
             val io = table.io()
             val manifests = currentSnapshot.allManifests(io)
-            manifests.sumOf {
-                // Summary values from the manifest list to avoid checking each manifest file.
-                val addedRows = it.addedRowsCount()
-                val existingRows = it.existingRowsCount()
-                val deletedRows = it.deletedRowsCount()
-                if (addedRows == null || existingRows == null || deletedRows == null) {
-                    // We don't have 1 or more of the optional values, we need to actually
-                    // read the avro file and check the data_file field
-                    val manifestContents = ManifestFiles.read(it, io)
-                    val sign = if (manifestContents.isDeleteManifestReader) -1 else 1
-                    manifestContents.sumOf { f -> sign * f.recordCount() }
-                } else {
-                    (addedRows + existingRows) - deletedRows
-                }
-            }.toDouble()
+            manifests
+                .sumOf {
+                    // Summary values from the manifest list to avoid checking each manifest file.
+                    val addedRows = it.addedRowsCount()
+                    val existingRows = it.existingRowsCount()
+                    val deletedRows = it.deletedRowsCount()
+                    if (addedRows == null || existingRows == null || deletedRows == null) {
+                        // We don't have 1 or more of the optional values, we need to actually
+                        // read the avro file and check the data_file field
+                        val manifestContents = ManifestFiles.read(it, io)
+                        val sign = if (manifestContents.isDeleteManifestReader) -1 else 1
+                        manifestContents.sumOf { f -> sign * f.recordCount() }
+                    } else {
+                        (addedRows + existingRows) - deletedRows
+                    }
+                }.toDouble()
         } else {
             summaryRowCount
         }
@@ -170,9 +173,7 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         return null
     }
 
-    override fun getAccountName(): String? {
-        return null
-    }
+    override fun getAccountName(): String? = null
 
     private fun isView(
         schemaPath: ImmutableList<String>,
@@ -195,8 +196,8 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         schemaName: String,
     ): CatalogSchema = CatalogSchema(schemaName, schemaPath.size + 1, schemaPath, this)
 
-    override fun tryGetViewMetadata(names: MutableList<String>): InlineViewMetadata? {
-        return if (icebergConnection is ViewCatalog) {
+    override fun tryGetViewMetadata(names: MutableList<String>): InlineViewMetadata? =
+        if (icebergConnection is ViewCatalog) {
             val id = tablePathToTableIdentifier(ImmutableList.copyOf(Util.skipLast(names)), Util.last(names))
             try {
                 val view = icebergConnection.loadView(id)
@@ -207,15 +208,10 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         } else {
             null
         }
-    }
 
-    fun getIcebergConnection(): T {
-        return icebergConnection
-    }
+    fun getIcebergConnection(): T = icebergConnection
 
-    override fun getDBType(): String {
-        return "ICEBERG"
-    }
+    override fun getDBType(): String = "ICEBERG"
 
     companion object {
         // All Iceberg Timestamp columns have precision 6
@@ -229,9 +225,7 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
          * strings, into an Iceberg Namespace.
          */
         @JvmStatic
-        fun schemaPathToNamespace(schemaPath: List<String>): Namespace {
-            return Namespace.of(*schemaPath.toTypedArray())
-        }
+        fun schemaPathToNamespace(schemaPath: List<String>): Namespace = Namespace.of(*schemaPath.toTypedArray())
 
         /**
          * Convert a BodoSQL representation for a table, which is an immutable list of strings
@@ -251,8 +245,8 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
         }
 
         @JvmStatic
-        private fun icebergTypeToBodoSQLColumnDataType(type: Type): BodoSQLColumnDataType {
-            return when (type.typeId()) {
+        private fun icebergTypeToBodoSQLColumnDataType(type: Type): BodoSQLColumnDataType =
+            when (type.typeId()) {
                 Type.TypeID.BOOLEAN -> BodoSQLColumnDataType.BOOL8
                 Type.TypeID.INTEGER -> BodoSQLColumnDataType.INT32
                 Type.TypeID.LONG -> BodoSQLColumnDataType.INT64
@@ -277,7 +271,6 @@ abstract class IcebergCatalog<T>(private val icebergConnection: T) : BodoSQLCata
                 Type.TypeID.STRUCT -> BodoSQLColumnDataType.STRUCT
                 else -> throw RuntimeException("Unsupported Iceberg Type")
             }
-        }
 
         /**
          * Convert an Iceberg File type to its corresponding ColumnDataTypeInfo

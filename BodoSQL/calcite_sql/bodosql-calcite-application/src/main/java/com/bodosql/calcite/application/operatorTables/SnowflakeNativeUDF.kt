@@ -47,9 +47,7 @@ class SnowflakeNativeUDF private constructor(
             parameterNames: List<String>,
             argTypes: List<RelDataType>,
             returnType: RelDataType,
-        ): SnowflakeNativeUDF {
-            return SnowflakeNativeUDF(name, body, language, parameterNames, argTypes, returnType)
-        }
+        ): SnowflakeNativeUDF = SnowflakeNativeUDF(name, body, language, parameterNames, argTypes, returnType)
 
         /**
          * Wrap a list of RelDataTypes in a RelRecordType

@@ -19,7 +19,5 @@ interface CustomConsistencySqlOperandTypeChecker : SqlOperandTypeChecker {
         typeFactory: RelDataTypeFactory,
     ): List<RelDataType>
 
-    override fun getConsistency(): SqlOperandTypeChecker.Consistency {
-        return SqlOperandTypeChecker.Consistency.CUSTOM
-    }
+    override fun getConsistency(): SqlOperandTypeChecker.Consistency = SqlOperandTypeChecker.Consistency.CUSTOM
 }

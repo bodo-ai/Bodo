@@ -6,7 +6,9 @@ import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Intersect
 import org.apache.calcite.rel.logical.LogicalIntersect
 
-class BodoPhysicalIntersectRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalIntersectRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -16,8 +18,7 @@ class BodoPhysicalIntersectRule private constructor(config: Config) : ConverterR
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalIntersectRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalIntersectRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalIntersectRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

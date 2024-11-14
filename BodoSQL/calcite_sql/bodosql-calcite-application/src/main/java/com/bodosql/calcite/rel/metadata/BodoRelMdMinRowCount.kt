@@ -32,13 +32,12 @@ class BodoRelMdMinRowCount : RelMdMinRowCount() {
     override fun getMinRowCount(
         rel: Join,
         mq: RelMetadataQuery,
-    ): Double {
-        return if (rel.condition.isAlwaysTrue && productJoinTypes.contains(rel.joinType)) {
+    ): Double =
+        if (rel.condition.isAlwaysTrue && productJoinTypes.contains(rel.joinType)) {
             val left = mq.getMinRowCount(rel.left)
             val right = mq.getMinRowCount(rel.right)
             right?.let { left?.times(it) } ?: 0.0
         } else {
             0.0
         }
-    }
 }

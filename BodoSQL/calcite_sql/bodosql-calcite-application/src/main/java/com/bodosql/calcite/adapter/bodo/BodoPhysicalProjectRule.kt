@@ -6,7 +6,9 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Project
 
-class BodoPhysicalProjectRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalProjectRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -16,8 +18,7 @@ class BodoPhysicalProjectRule private constructor(config: Config) : ConverterRul
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalProjectRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalProjectRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalProjectRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

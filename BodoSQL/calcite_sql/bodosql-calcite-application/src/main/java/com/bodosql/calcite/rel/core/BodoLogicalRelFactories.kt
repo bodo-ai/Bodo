@@ -101,12 +101,11 @@ object BodoLogicalRelFactories {
         kind: SqlKind,
         inputs: List<RelNode>,
         all: Boolean,
-    ): RelNode {
-        return when (kind) {
+    ): RelNode =
+        when (kind) {
             SqlKind.UNION -> BodoLogicalUnion.create(inputs, all)
             else -> DEFAULT_SET_OP_FACTORY.createSetOp(kind, inputs, all)
         }
-    }
 
     private fun createAggregate(
         input: RelNode,
@@ -114,16 +113,12 @@ object BodoLogicalRelFactories {
         groupSet: ImmutableBitSet,
         groupSets: ImmutableList<ImmutableBitSet>,
         aggCalls: List<AggregateCall>,
-    ): RelNode {
-        return BodoLogicalAggregate.create(input, hints, groupSet, groupSets, aggCalls)
-    }
+    ): RelNode = BodoLogicalAggregate.create(input, hints, groupSet, groupSets, aggCalls)
 
     private fun createSort(
         input: RelNode,
         collation: RelCollation,
         offset: RexNode?,
         fetch: RexNode?,
-    ): RelNode {
-        return BodoLogicalSort.create(input, collation, offset, fetch)
-    }
+    ): RelNode = BodoLogicalSort.create(input, collation, offset, fetch)
 }

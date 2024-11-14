@@ -265,7 +265,9 @@ public interface BodoSQLColumn {
       }
     }
 
-    /** @return A string that represents a nullable version of this type. */
+    /**
+     * @return A string that represents a nullable version of this type.
+     */
     public String getTypeString() {
       switch (this) {
         case NULL:

@@ -15,7 +15,10 @@ import org.apache.calcite.sql.SqlOperator
  * overwrite the operands so we reference the correct local ref inside of the generated
  * dataframe so we use this class to store that information.
  */
-internal class OverFunc internal constructor(val over: RexOver, val operands: List<RexNode>) {
+internal class OverFunc internal constructor(
+    val over: RexOver,
+    val operands: List<RexNode>,
+) {
     val kind: SqlKind get() = over.kind
     val op: SqlOperator get() = over.op
     val window: RexWindow get() = over.window

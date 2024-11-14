@@ -40,7 +40,9 @@ class SearchArgExpandProgram : Program {
         return result
     }
 
-    private class RelVisitor(private val cacheHandler: CacheNodeSingleVisitHandler) : RelShuttleImpl() {
+    private class RelVisitor(
+        private val cacheHandler: CacheNodeSingleVisitHandler,
+    ) : RelShuttleImpl() {
         /**
          * Note the RelShuttleImpl() is design for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
@@ -98,7 +100,9 @@ class SearchArgExpandProgram : Program {
         }
     }
 
-    private class RexVisitor(private val rexBuilder: RexBuilder) : RexShuttle() {
+    private class RexVisitor(
+        private val rexBuilder: RexBuilder,
+    ) : RexShuttle() {
         override fun visitCall(call: RexCall): RexNode {
             return when (call.op.kind) {
                 SqlKind.AND, SqlKind.OR -> {

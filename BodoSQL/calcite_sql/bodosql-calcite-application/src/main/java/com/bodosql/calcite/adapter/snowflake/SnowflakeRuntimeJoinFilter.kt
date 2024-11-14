@@ -33,9 +33,7 @@ class SnowflakeRuntimeJoinFilter private constructor(
     override fun copy(
         traitSet: RelTraitSet,
         inputs: MutableList<RelNode>,
-    ): SnowflakeRuntimeJoinFilter {
-        return copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
-    }
+    ): SnowflakeRuntimeJoinFilter = copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
 
     /**
      * Return a new SnowflakeRuntimeJoinFilter with only a different set of columns.
@@ -45,8 +43,8 @@ class SnowflakeRuntimeJoinFilter private constructor(
         input: RelNode,
         newEqualityColumns: List<List<Int>>,
         newNonEqualityColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
-    ): SnowflakeRuntimeJoinFilter {
-        return SnowflakeRuntimeJoinFilter(
+    ): SnowflakeRuntimeJoinFilter =
+        SnowflakeRuntimeJoinFilter(
             cluster,
             traitSet,
             input,
@@ -56,7 +54,6 @@ class SnowflakeRuntimeJoinFilter private constructor(
             newNonEqualityColumns,
             catalogTable,
         )
-    }
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

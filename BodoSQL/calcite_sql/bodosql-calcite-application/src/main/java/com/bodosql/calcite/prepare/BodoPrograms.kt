@@ -201,21 +201,27 @@ object BodoPrograms {
      * This will run the set of planner rules that we use to optimize
      * the relational expression before we perform code generation.
      */
-    private open class HepOptimizerProgram(ruleSet: Iterable<RelOptRule>, limitMap: Map<RelOptRule, Int> = mapOf()) : Program {
+    private open class HepOptimizerProgram(
+        ruleSet: Iterable<RelOptRule>,
+        limitMap: Map<RelOptRule, Int> = mapOf(),
+    ) : Program {
         private val program =
-            HepProgramBuilder().also { b ->
-                for (rule in ruleSet) {
-                    if (limitMap.containsKey(rule)) {
-                        // addMatchLimit will apply to all subsequently added rule instances, so we add the limit,
-                        // add the rule instance that we want to limit, and then reset the match limit to the default.
-                        b.addMatchLimit(
-                            limitMap[rule]!!,
-                        ).addRuleInstance(rule).addMatchLimit(org.apache.calcite.plan.hep.HepProgram.MATCH_UNTIL_FIXPOINT)
-                    } else {
-                        b.addRuleInstance(rule)
+            HepProgramBuilder()
+                .also { b ->
+                    for (rule in ruleSet) {
+                        if (limitMap.containsKey(rule)) {
+                            // addMatchLimit will apply to all subsequently added rule instances, so we add the limit,
+                            // add the rule instance that we want to limit, and then reset the match limit to the default.
+                            b
+                                .addMatchLimit(
+                                    limitMap[rule]!!,
+                                ).addRuleInstance(rule)
+                                .addMatchLimit(org.apache.calcite.plan.hep.HepProgram.MATCH_UNTIL_FIXPOINT)
+                        } else {
+                            b.addRuleInstance(rule)
+                        }
                     }
-                }
-            }.build()
+                }.build()
 
         override fun run(
             planner: RelOptPlanner?,
@@ -259,7 +265,9 @@ object BodoPrograms {
         }
     }
 
-    private class RuleSetProgram(ruleSet: Iterable<RelOptRule>) : Program {
+    private class RuleSetProgram(
+        ruleSet: Iterable<RelOptRule>,
+    ) : Program {
         private val program = Programs.ofRules(ruleSet)
 
         override fun run(
@@ -268,25 +276,24 @@ object BodoPrograms {
             requiredOutputTraits: RelTraitSet,
             materializations: List<RelOptMaterialization>,
             lattices: List<RelOptLattice>,
-        ): RelNode {
-            return program.run(planner, rel, requiredOutputTraits, materializations, lattices)
-        }
+        ): RelNode = program.run(planner, rel, requiredOutputTraits, materializations, lattices)
     }
 
     /**
      * This program removes subqueries from the query and then
      * removes the correlation nodes that it produces.
      */
-    private class PreprocessorProgram : Program by Programs.sequence(
-        // Remove subqueries and correlation nodes from the query.
-        SubQueryRemoveProgram(),
-        DecorrelateProgram(),
-        RewriteProgram(),
-        FlattenCaseExpressionsProgram,
-        // Convert calcite logical nodes to bodo logical nodes
-        // when necessary.
-        LogicalConverterProgram,
-    )
+    private class PreprocessorProgram :
+        Program by Programs.sequence(
+            // Remove subqueries and correlation nodes from the query.
+            SubQueryRemoveProgram(),
+            DecorrelateProgram(),
+            RewriteProgram(),
+            FlattenCaseExpressionsProgram,
+            // Convert calcite logical nodes to bodo logical nodes
+            // when necessary.
+            LogicalConverterProgram,
+        )
 
     /**
      * This program removes subqueries from the query.
@@ -305,19 +312,20 @@ object BodoPrograms {
         }
     }
 
-    private class RewriteProgram : Program by HepOptimizerProgram(
-        // TODO: Move to the normal HEP step and operate on our logical
-        // nodes instead of the default.
-        listOf(
-            JoinExtractOverRule.Config.DEFAULT.toRule(),
-            ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
-            SINGLE_VALUE_REMOVE_RULE,
-            SingleValuesOptimizationRules.JOIN_LEFT_INSTANCE,
-            SingleValuesOptimizationRules.JOIN_RIGHT_INSTANCE,
-            SingleValuesOptimizationRules.JOIN_LEFT_PROJECT_INSTANCE,
-            SingleValuesOptimizationRules.JOIN_RIGHT_PROJECT_INSTANCE,
-        ),
-    )
+    private class RewriteProgram :
+        Program by HepOptimizerProgram(
+            // TODO: Move to the normal HEP step and operate on our logical
+            // nodes instead of the default.
+            listOf(
+                JoinExtractOverRule.Config.DEFAULT.toRule(),
+                ListAggOptionalReplaceRule.Config.DEFAULT.toRule(),
+                SINGLE_VALUE_REMOVE_RULE,
+                SingleValuesOptimizationRules.JOIN_LEFT_INSTANCE,
+                SingleValuesOptimizationRules.JOIN_RIGHT_INSTANCE,
+                SingleValuesOptimizationRules.JOIN_LEFT_PROJECT_INSTANCE,
+                SingleValuesOptimizationRules.JOIN_RIGHT_PROJECT_INSTANCE,
+            ),
+        )
 
     /**
      * Simplify Snowflake sections in a way to creates a simpler
@@ -346,7 +354,7 @@ object BodoPrograms {
         }
     }
 
-    private class MetadataPreprocessProgram() : Program {
+    private class MetadataPreprocessProgram : Program {
         override fun run(
             planner: RelOptPlanner,
             rel: RelNode,
@@ -460,7 +468,9 @@ object BodoPrograms {
                 )
             }
 
-            class CaseExpressionUnwrapper(private val rexBuilder: RexBuilder) : RexShuttle() {
+            class CaseExpressionUnwrapper(
+                private val rexBuilder: RexBuilder,
+            ) : RexShuttle() {
                 override fun visitCall(call: RexCall): RexNode {
                     var foundNestedCase = false
                     if (call.operator === SqlStdOperatorTable.CASE) {
@@ -527,11 +537,12 @@ object BodoPrograms {
      * This information can then be utilized by the runtime stage to enable specific
      * runtime checks.
      */
-    private class DecorateAttributesProgram : Program by Programs.hep(
-        listOf(BodoPhysicalRules.BODO_PHYSICAL_JOIN_REBALANCE_OUTPUT_RULE),
-        false,
-        DefaultRelMetadataProvider.INSTANCE,
-    )
+    private class DecorateAttributesProgram :
+        Program by Programs.hep(
+            listOf(BodoPhysicalRules.BODO_PHYSICAL_JOIN_REBALANCE_OUTPUT_RULE),
+            false,
+            DefaultRelMetadataProvider.INSTANCE,
+        )
 
     /**
      * Merges relational nodes that have identical digests.
@@ -556,9 +567,10 @@ object BodoPrograms {
 
     // Converts RelNodes containing RexOver calls to a sequence of
     // Window RelNodes, possibly interleaved with Project nodes.
-    private class WindowConversionProgram : Program by HepOptimizerProgram(
-        BodoRules.WINDOW_CONVERSION_RULES,
-    )
+    private class WindowConversionProgram :
+        Program by HepOptimizerProgram(
+            BodoRules.WINDOW_CONVERSION_RULES,
+        )
 
     // Converts BodoPhysicalWindow rel nodes back to BodoPhysicalProject for codegen purposes
     object WindowProjectTransformProgram : Program by ShuttleProgram(Visitor) {
@@ -574,32 +586,38 @@ object BodoPrograms {
         }
     }
 
-    private class ProjectionPullUpPass : Program by HepOptimizerProgram(
-        PROJECTION_PULL_UP_RULES,
-    )
+    private class ProjectionPullUpPass :
+        Program by HepOptimizerProgram(
+            PROJECTION_PULL_UP_RULES,
+        )
 
-    private class FilterPushdownPass : Program by HepOptimizerProgram(
-        Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES),
-        mapOf(
-            Pair(BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES, 100),
-            Pair(
-                JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
-                100,
+    private class FilterPushdownPass :
+        Program by HepOptimizerProgram(
+            Iterables.concat(BodoRules.FILTER_PUSH_DOWN_RULES, BodoRules.SIMPLIFICATION_RULES),
+            mapOf(
+                Pair(BodoRules.JOIN_PUSH_TRANSITIVE_PREDICATES, 100),
+                Pair(
+                    JOIN_DERIVE_IS_NOT_NULL_FILTER_RULE,
+                    100,
+                ),
             ),
-        ),
-    )
+        )
 
-    private class FieldPushdownPass : Program by HepOptimizerProgram(
-        ProjectionPushdownRules.plus(FieldPushdownRules),
-    )
+    private class FieldPushdownPass :
+        Program by HepOptimizerProgram(
+            ProjectionPushdownRules.plus(FieldPushdownRules),
+        )
 
-    private class SnowflakeColumnPruning : Program by Programs.hep(
-        listOf(SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE),
-        true,
-        DefaultRelMetadataProvider.INSTANCE,
-    )
+    private class SnowflakeColumnPruning :
+        Program by Programs.hep(
+            listOf(SNOWFLAKE_PROJECT_CONVERTER_LOCK_RULE),
+            true,
+            DefaultRelMetadataProvider.INSTANCE,
+        )
 
-    private class TrimFieldsProgram(private val isPhysical: Boolean) : Program {
+    private class TrimFieldsProgram(
+        private val isPhysical: Boolean,
+    ) : Program {
         override fun run(
             planner: RelOptPlanner,
             rel: RelNode,
@@ -616,13 +634,14 @@ object BodoPrograms {
                         )
                     physicalBuilder.transform { t -> t.withBloat(-1) }
                 } else {
-                    com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER.create(rel.cluster, null)
+                    com.bodosql.calcite.rel.core.BodoLogicalRelFactories.BODO_LOGICAL_BUILDER
+                        .create(rel.cluster, null)
                 }
             return BodoRelFieldTrimmer(null, relBuilder, isPhysical).trim(rel)
         }
     }
 
-    private class BatchingPropertyProgram() : Program {
+    private class BatchingPropertyProgram : Program {
         override fun run(
             planner: RelOptPlanner,
             rel: RelNode,
@@ -630,7 +649,9 @@ object BodoPrograms {
             materializations: MutableList<RelOptMaterialization>,
             lattices: MutableList<RelOptLattice>,
         ): RelNode {
-            val physicalBuilder = com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER.create(rel.cluster, null)
+            val physicalBuilder =
+                com.bodosql.calcite.rel.core.BodoPhysicalRelFactories.BODO_PHYSICAL_BUILDER
+                    .create(rel.cluster, null)
             val builder = physicalBuilder.transform { t -> t.withBloat(-1) }
             return BatchingPropertyPass.applyBatchingInfo(rel, builder)
         }
@@ -650,7 +671,9 @@ object BodoPrograms {
      * Simple program that does nothing but dump the output to stdout.
      * Should only be used for debugging
      */
-    class PrintDebugProgram(private val prefixMessage: String = "") : Program {
+    class PrintDebugProgram(
+        private val prefixMessage: String = "",
+    ) : Program {
         override fun run(
             planner: RelOptPlanner?,
             rel: RelNode,

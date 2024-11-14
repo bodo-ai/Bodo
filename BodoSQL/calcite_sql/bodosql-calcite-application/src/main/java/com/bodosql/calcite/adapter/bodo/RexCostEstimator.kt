@@ -53,7 +53,8 @@ object RexCostEstimator : RexVisitor<Cost> {
         if (call.operands.isNotEmpty()) {
             cost =
                 cost.plus(
-                    call.operands.asSequence()
+                    call.operands
+                        .asSequence()
                         .map { op -> op.accept(this) }
                         .reduce { l, r -> l.plus(r) as Cost },
                 ) as Cost

@@ -4,7 +4,9 @@ import com.bodosql.calcite.adapter.common.TimerSupportedRel
 import org.apache.calcite.rel.metadata.RelMdParallelism
 import org.apache.calcite.rel.metadata.RelMetadataQuery
 
-class BodoRelMdParallelism(private val ranks: Int) : RelMdParallelism() {
+class BodoRelMdParallelism(
+    private val ranks: Int,
+) : RelMdParallelism() {
     fun splitCount(
         rel: TimerSupportedRel,
         mq: RelMetadataQuery,

@@ -36,8 +36,7 @@ class BodoSqlCreateTableAs(
 
     override fun getColumnCommentStrings(): List<String?>? =
         getcolumnList()?.map {
-            (it as SqlSnowflakeColumnDeclaration).comment?.let {
-                    c ->
+            (it as SqlSnowflakeColumnDeclaration).comment?.let { c ->
                 (c as SqlLiteral).getValueAs(String::class.java)
             }
         }

@@ -6,7 +6,9 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Window
 
-class BodoPhysicalWindowRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalWindowRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -16,8 +18,7 @@ class BodoPhysicalWindowRule private constructor(config: Config) : ConverterRule
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalWindowRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalWindowRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalWindowRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

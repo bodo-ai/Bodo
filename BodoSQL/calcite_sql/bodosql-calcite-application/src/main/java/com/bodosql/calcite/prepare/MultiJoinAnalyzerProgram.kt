@@ -30,7 +30,9 @@ class MultiJoinAnalyzerProgram : AnalysisProgram() {
         countVisitor.go(retrieveInputPlan())
     }
 
-    private class MultiJoinCounter(val multiJoinList: MutableList<Int>) : RelVisitor() {
+    private class MultiJoinCounter(
+        val multiJoinList: MutableList<Int>,
+    ) : RelVisitor() {
         override fun visit(
             node: RelNode,
             ordinal: Int,

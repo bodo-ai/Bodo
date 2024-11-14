@@ -152,10 +152,11 @@ jobs:
           ./sonar-scanner-4.8.1.3023-linux/bin/sonar-scanner \
             -Dsonar.projectBaseDir=. \
             -Dsonar.pullrequest.key=${{ github.event.pull_request.number }} \
-            -Dsonar.pullrequest.branch=${{ github.head_ref }}
+            -Dsonar.pullrequest.branch=$HEAD_REF
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          HEAD_REF: ${{ github.head_ref }}
 
       # Notify GitHub Checks
       # If any test runs failed, this step should fail

@@ -25,9 +25,7 @@ open class SortBase(
         collation: RelCollation,
         offset: RexNode?,
         fetch: RexNode?,
-    ): SortBase {
-        return SortBase(cluster, traitSet, input, collation, offset, fetch)
-    }
+    ): SortBase = SortBase(cluster, traitSet, input, collation, offset, fetch)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

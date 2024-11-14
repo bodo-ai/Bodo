@@ -34,85 +34,60 @@ class StreamingRexToBodoTranslator(
      *
      * @return The list of pairs to generate dict_encoding_state=stateVar, func_id=NEW_FUNC_ID
      */
-    private fun genDictEncodingArgs(): List<Pair<String, Expr>> {
-        return listOf(
+    private fun genDictEncodingArgs(): List<Pair<String, Expr>> =
+        listOf(
             Pair<String, Expr>("dict_encoding_state", stateVar),
             Pair<String, Expr>("func_id", builder.symbolTable.genFuncID()),
         )
-    }
 
-    override fun visitBinOpScan(operation: RexCall): Expr {
-        return this.visitBinOpScan(operation, genDictEncodingArgs())
-    }
+    override fun visitBinOpScan(operation: RexCall): Expr = this.visitBinOpScan(operation, genDictEncodingArgs())
 
-    override fun visitLikeOp(node: RexCall): Expr {
-        return visitLikeOp(node, genDictEncodingArgs())
-    }
+    override fun visitLikeOp(node: RexCall): Expr = visitLikeOp(node, genDictEncodingArgs())
 
     override fun visitCastScan(
         operation: RexCall,
         isSafe: Boolean,
-    ): Expr {
-        return visitCastScan(operation, isSafe, IsScalar.isScalar(operation), genDictEncodingArgs())
-    }
+    ): Expr = visitCastScan(operation, isSafe, IsScalar.isScalar(operation), genDictEncodingArgs())
 
-    override fun visitSubstringScan(node: RexCall): Expr {
-        return visitSubstringScan(node, genDictEncodingArgs())
-    }
+    override fun visitSubstringScan(node: RexCall): Expr = visitSubstringScan(node, genDictEncodingArgs())
 
     override fun visitNullIgnoringGenericFunc(
         fnOperation: RexCall,
         isSingleRow: Boolean,
         argScalars: List<Boolean>,
-    ): Expr {
-        return visitNullIgnoringGenericFunc(fnOperation, isSingleRow, genDictEncodingArgs(), argScalars)
-    }
+    ): Expr = visitNullIgnoringGenericFunc(fnOperation, isSingleRow, genDictEncodingArgs(), argScalars)
 
     override fun visitDynamicCast(
         arg: Expr,
         inputType: RelDataType,
         outputType: RelDataType,
         isScalar: Boolean,
-    ): Expr {
-        return visitDynamicCast(arg, inputType, outputType, isScalar, genDictEncodingArgs())
-    }
+    ): Expr = visitDynamicCast(arg, inputType, outputType, isScalar, genDictEncodingArgs())
 
     override fun visitTrimFunc(
         fnName: String,
         stringToBeTrimmed: Expr,
         charactersToBeTrimmed: Expr,
-    ): Expr {
-        return visitTrimFunc(fnName, stringToBeTrimmed, charactersToBeTrimmed, genDictEncodingArgs())
-    }
+    ): Expr = visitTrimFunc(fnName, stringToBeTrimmed, charactersToBeTrimmed, genDictEncodingArgs())
 
     override fun visitLeastGreatest(
         fnName: String,
         operands: List<Expr>,
-    ): Expr {
-        return visitLeastGreatest(fnName, operands, genDictEncodingArgs())
-    }
+    ): Expr = visitLeastGreatest(fnName, operands, genDictEncodingArgs())
 
-    override fun visitNullIfFunc(operands: List<Expr>): Expr {
-        return visitNullIfFunc(operands, genDictEncodingArgs())
-    }
+    override fun visitNullIfFunc(operands: List<Expr>): Expr = visitNullIfFunc(operands, genDictEncodingArgs())
 
-    override fun visitPosition(operands: List<Expr>): Expr {
-        return visitPosition(operands, genDictEncodingArgs())
-    }
+    override fun visitPosition(operands: List<Expr>): Expr = visitPosition(operands, genDictEncodingArgs())
 
     override fun visitCastFunc(
         fnOperation: RexCall,
         operands: List<Expr>,
         argScalars: List<Boolean>,
-    ): Expr {
-        return visitCastFunc(fnOperation, operands, argScalars, genDictEncodingArgs())
-    }
+    ): Expr = visitCastFunc(fnOperation, operands, argScalars, genDictEncodingArgs())
 
     override fun visitStringFunc(
         fnOperation: RexCall,
         operands: List<Expr>,
         isSingleRow: Boolean,
-    ): Expr {
-        return visitStringFunc(fnOperation, operands, genDictEncodingArgs(), isSingleRow)
-    }
+    ): Expr = visitStringFunc(fnOperation, operands, genDictEncodingArgs(), isSingleRow)
 }

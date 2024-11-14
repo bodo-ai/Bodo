@@ -1,4 +1,5 @@
 package com.bodosql.calcite.application.operatorTables;
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -306,6 +307,7 @@ public class SqlNullPolicyFunction extends SqlFunction {
         monotonicityInference,
         nullablePolicy);
   }
+
   /** Returns a copy of this function with a given determinism. */
   public SqlNullPolicyFunction withDeterministic(boolean deterministic) {
     return new SqlNullPolicyFunction(

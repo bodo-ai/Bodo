@@ -21,9 +21,7 @@ class OperatorEmission(
     /**
      * Initialize the first pipeline, so it's safe to generate timers.
      */
-    fun initFirstPipeline(ctx: BodoPhysicalRel.BuildContext): BodoEngineTable? {
-        return firstPipeline.initializePipeline(ctx, 0)
-    }
+    fun initFirstPipeline(ctx: BodoPhysicalRel.BuildContext): BodoEngineTable? = firstPipeline.initializePipeline(ctx, 0)
 
     fun emitOperator(
         ctx: BodoPhysicalRel.BuildContext,

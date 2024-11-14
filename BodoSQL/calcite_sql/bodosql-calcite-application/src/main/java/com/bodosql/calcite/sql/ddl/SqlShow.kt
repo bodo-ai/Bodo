@@ -8,7 +8,10 @@ import org.apache.calcite.sql.parser.SqlParserPos
  * Base class for SHOW statements parse tree nodes. The portion of the statement covered by this
  * class is simply the keyword "SHOW". Subclasses handle whatever comes after.
  */
-abstract class SqlShow protected constructor(pos: SqlParserPos, val isTerse: Boolean) : SqlCall(pos) {
+abstract class SqlShow protected constructor(
+    pos: SqlParserPos,
+    val isTerse: Boolean,
+) : SqlCall(pos) {
     override fun unparse(
         writer: SqlWriter,
         leftPrec: Int,

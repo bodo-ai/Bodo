@@ -31,8 +31,8 @@ class JsonPecUtil {
          * Returns whether a function call is a casting function besides
          * regular CAST or TRY_CAST.
          */
-        fun isCastFunc(node: RexCall): Boolean {
-            return when (node.operator.name) {
+        fun isCastFunc(node: RexCall): Boolean =
+            when (node.operator.name) {
                 CastingOperatorTable.TO_ARRAY.name,
                 CastingOperatorTable.TO_VARIANT.name,
                 CastingOperatorTable.TO_OBJECT.name,
@@ -72,20 +72,18 @@ class JsonPecUtil {
                 -> node.operands.size == 1
                 else -> false
             }
-        }
 
         /**
          * Returns whether a type is a semi-structured type.
          */
-        private fun isSemiStructuredType(type: RelDataType): Boolean {
-            return when (type.sqlTypeName) {
+        private fun isSemiStructuredType(type: RelDataType): Boolean =
+            when (type.sqlTypeName) {
                 SqlTypeName.ARRAY,
                 SqlTypeName.MAP,
                 SqlTypeName.OTHER,
                 -> true
                 else -> false
             }
-        }
 
         /**
          * Returns whether a node matches the CAST portion of the PeC
@@ -100,14 +98,14 @@ class JsonPecUtil {
         private fun isPecCast(
             node: RexNode,
             semiStructured: Boolean,
-        ): Boolean {
-            return if (node is RexCall && (node.kind == SqlKind.CAST || node.kind == SqlKind.SAFE_CAST || isCastFunc(node))) {
-                (semiStructured == isSemiStructuredType(node.type)) && (node.operands[0] is RexCall) &&
+        ): Boolean =
+            if (node is RexCall && (node.kind == SqlKind.CAST || node.kind == SqlKind.SAFE_CAST || isCastFunc(node))) {
+                (semiStructured == isSemiStructuredType(node.type)) &&
+                    (node.operands[0] is RexCall) &&
                     isPecExtract(node.operands[0] as RexCall)
             } else {
                 false
             }
-        }
 
         /**
          * Returns whether a node matches the EXTRACT portion of the PeC
@@ -118,8 +116,8 @@ class JsonPecUtil {
          *
          * @param node The node being checked.
          */
-        private fun isPecExtract(node: RexCall): Boolean {
-            return when (node.operator.name) {
+        private fun isPecExtract(node: RexCall): Boolean =
+            when (node.operator.name) {
                 ObjectOperatorTable.PARSE_JSON.name -> true
                 SqlStdOperatorTable.ITEM.name,
                 ObjectOperatorTable.GET_PATH.name,
@@ -127,7 +125,6 @@ class JsonPecUtil {
                 -> (node.operands[0] is RexCall && isPecExtract(node.operands[0] as RexCall)) || isPecCast(node.operands[0], true)
                 else -> false
             }
-        }
 
         /**
          * Rewrites a PEC node into a JSON_EXTRACT_PATH_TEXT call followed by a cast.
@@ -173,8 +170,8 @@ class JsonPecUtil {
             node: RexCall,
             builder: RexBuilder,
             pathSoFar: RexNode?,
-        ): Pair<RexNode, RexNode> {
-            return when (node.operator.name) {
+        ): Pair<RexNode, RexNode> =
+            when (node.operator.name) {
                 // Base case: when we reach the PARSE_JSON call, its input
                 // is the string that is to be parsed.
                 ObjectOperatorTable.PARSE_JSON.name -> {
@@ -197,7 +194,6 @@ class JsonPecUtil {
                 // so we skip to its input.
                 else -> rewritePecHelper(node.operands[0] as RexCall, builder, pathSoFar)
             }
-        }
 
         /**
          * Helper function for rewritePecHelper that prepends a new extraction component
