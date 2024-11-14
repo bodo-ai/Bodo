@@ -1031,6 +1031,11 @@ def _test_equal_guard(
 def sort_series_values_index(S):
     if S.index.dtype == pd.StringDtype("pyarrow"):
         S.index = S.index.astype("string")
+
+    # Avoid Arrow array sorting bugs in Pandas as of 2.2
+    if isinstance(S.index.dtype, pd.ArrowDtype):
+        S = S.set_axis(S.index.array._pa_array.to_pandas()).rename_axis(S.index.names)
+
     S1 = S.sort_index()
     # pandas fails if all null integer column is sorted
     if S1.isnull().all():
@@ -1083,6 +1088,13 @@ def sort_dataframe_values_index(df):
             else x
         )
     )
+
+    # Avoid Arrow array sorting bugs in Pandas as of 2.2
+    if isinstance(df.index.dtype, pd.ArrowDtype):
+        df = df.set_index(df.index.array._pa_array.to_pandas()).rename_axis(
+            df.index.names
+        )
+
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
 
