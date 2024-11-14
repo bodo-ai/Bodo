@@ -115,7 +115,7 @@ def typeof_pd_index(val, c):
     ):
         # At least some index values contain the actual dtype in
         # Pandas 1.4.
-        if isinstance(val.dtype, pd.core.arrays.integer.IntegerDtype):
+        if isinstance(val.dtype, (pd.core.arrays.integer.IntegerDtype, pd.ArrowDtype)):
             # Get the numpy dtype
             numpy_dtype = val.dtype.numpy_dtype
             # Convert the numpy dtype to the Numba type
@@ -150,7 +150,7 @@ def typeof_pd_index(val, c):
     ):
         # At least some index values contain the actual dtype in
         # Pandas 1.4.
-        if isinstance(val.dtype, (pd.Float32Dtype, pd.Float64Dtype)):
+        if isinstance(val.dtype, (pd.Float32Dtype, pd.Float64Dtype, pd.ArrowDtype)):
             # Get the numpy dtype
             numpy_dtype = val.dtype.numpy_dtype
             # Convert the numpy dtype to the Numba type

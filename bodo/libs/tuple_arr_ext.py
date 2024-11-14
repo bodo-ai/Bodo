@@ -92,13 +92,13 @@ def unbox_tuple_array(typ, val, c):
     """
     Unbox an array with tuple values.
     """
-    return bodo.libs.array.unbox_nested_array(typ, val, c)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @box(TupleArrayType)
 def box_tuple_arr(typ, val, c):
     """box tuple array into python objects"""
-    return bodo.libs.array.box_nested_array(typ, val, c)
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @numba.njit

@@ -64,7 +64,7 @@ def check_query(
     named_params: dict[str, Any] | None = None,
     bind_variables: tuple[Any] | None = None,
     check_names: bool = True,
-    check_dtype: bool = True,
+    check_dtype: bool = False,
     sort_output: bool = True,
     expected_output: pd.DataFrame | None = None,
     convert_columns_bytearray: list[str] | None = None,

@@ -2070,14 +2070,14 @@ def test_merge_bool_nan(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "A": [3, 1, 1, 3, 4, 2, 4, 11],
-            "B": [True, False, True, False, np.nan, True, False, True],
+            "B": [True, False, True, False, None, True, False, True],
         }
     )
 
     df2 = pd.DataFrame(
         {
             "A": [2, 1, 4, 4, 3, 2, 4, 11],
-            "C": [False, True, np.nan, False, False, True, False, True],
+            "C": [False, True, None, False, False, True, False, True],
         }
     )
     check_func(

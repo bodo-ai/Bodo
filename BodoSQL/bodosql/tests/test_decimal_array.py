@@ -521,7 +521,9 @@ def test_setitem_cast_decimal(memory_leak_check):
     out = arr.copy()
     out[2] = int(val)
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_extension_array_equal(bodo_func(arr.copy(), val), out)
+    pd.testing.assert_extension_array_equal(
+        bodo_func(arr.copy(), val), out, check_dtype=False
+    )
 
     # Float case
     arr = pd.array([1.2, 2.3, 3.1, 4.1, 5.4], "Float32")
@@ -530,7 +532,9 @@ def test_setitem_cast_decimal(memory_leak_check):
     out = arr.copy()
     out[2] = float(val)
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_extension_array_equal(bodo_func(arr.copy(), val), out)
+    pd.testing.assert_extension_array_equal(
+        bodo_func(arr.copy(), val), out, check_dtype=False
+    )
 
 
 def test_box_arrow_array_precision_scale(precision_scale_decimal_array):

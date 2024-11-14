@@ -266,7 +266,7 @@ def unbox_struct_array(typ, val, c):
     """
     Unbox an array with struct values.
     """
-    return bodo.libs.array.unbox_nested_array(typ, val, c)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 def _get_struct_arr_payload(context, builder, arr_typ, arr):
@@ -286,7 +286,7 @@ def _get_struct_arr_payload(context, builder, arr_typ, arr):
 @box(StructArrayType)
 def box_struct_arr(typ, val, c):
     """box struct array into python objects."""
-    return bodo.libs.array.box_nested_array(typ, val, c)
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 def _fix_nested_counts(nested_counts, struct_arr_type, nested_counts_type, builder):

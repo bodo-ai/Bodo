@@ -231,7 +231,7 @@ def unbox_array_item_array(typ, val, c):
     """
     Unbox a numpy array with array of data values.
     """
-    return bodo.libs.array.unbox_nested_array(typ, val, c)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 def _get_array_item_arr_payload(context, builder, arr_typ, arr):
@@ -251,7 +251,7 @@ def _get_array_item_arr_payload(context, builder, arr_typ, arr):
 @box(ArrayItemArrayType)
 def box_array_item_arr(typ, val, c):
     """box packed native representation of array of item array into python objects"""
-    return bodo.libs.array.box_nested_array(typ, val, c)
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 def lower_pre_alloc_array_item_array(context, builder, sig, args):

@@ -4,6 +4,7 @@ import operator
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from bodo.tests.utils import check_func, get_num_test_workers
@@ -70,6 +71,18 @@ def test_unbox(bool_arr_value, memory_leak_check):
         return arr_arg
 
     check_func(impl2, (bool_arr_value,))
+
+
+@pytest.mark.slow
+def test_unbox_arrow_ext(memory_leak_check):
+    """Make sure boxing/unboxing works for ArrowExtensionArray input"""
+
+    # unbox and box
+    def impl(arr_arg):
+        return arr_arg
+
+    A = pd.arrays.ArrowExtensionArray(pa.array([True, None, False, True, True]))
+    check_func(impl, (A,))
 
 
 @pytest.mark.slow

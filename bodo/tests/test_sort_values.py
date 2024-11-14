@@ -58,7 +58,7 @@ pytestmark = pytest_pandas
                 {
                     "A": pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
                     "B": [1.1, np.nan, 4.2, 3.1, -1.3],
-                    "C": [True, False, False, np.nan, True],
+                    "C": [True, False, False, None, True],
                 },
                 range(0, 5, 1),
             ),
@@ -74,7 +74,7 @@ pytestmark = pytest_pandas
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
         ),
         # bool list, numpy array
-        # TODO: change to "A": [True, False, False, np.nan, True])
+        # TODO: change to "A": [True, False, False, None, True])
         # after string column with nans is properly sorted
         # and a Series(bool list) test too
         pytest.param(

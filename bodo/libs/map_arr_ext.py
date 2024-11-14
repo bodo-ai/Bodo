@@ -120,13 +120,13 @@ def unbox_map_array(typ, val, c):
     """
     Unbox an array with dictionary values.
     """
-    return bodo.libs.array.unbox_nested_array(typ, val, c)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @box(MapArrayType)
 def box_map_arr(typ, val, c):
     """box packed native representation of map array into python objects"""
-    return bodo.libs.array.box_nested_array(typ, val, c)
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 def init_map_arr_codegen(context, builder, sig, args):
