@@ -2276,7 +2276,7 @@ def test_random_series_all(memory_leak_check):
             if val == 1:
                 val_B = False
             if val == 2:
-                val_B = np.nan
+                val_B = None
             eList.append(val_B)
         return pd.Series(eList)
 
@@ -2300,7 +2300,7 @@ def test_random_series_any(memory_leak_check):
             if val == 1:
                 val_B = False
             if val == 2:
-                val_B = np.nan
+                val_B = None
             eList.append(val_B)
         return pd.Series(eList)
 
