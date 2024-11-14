@@ -5,6 +5,8 @@ import pandas as pd
 import pytest
 
 import bodo
+import bodo.hiframes
+import bodo.hiframes.table
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.series import BodoSeries
 from bodo.tests.dataframe_common import df_value_params
@@ -179,6 +181,40 @@ def test_spawn_distributed():
 
     A = pd.Series(np.ones(1000, dtype=np.int64))
     assert test(_get_dist_arg(A)) == 1000
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pd.RangeIndex(100, -100, -5, name="ABC"),
+        pd.Index([3, 4, 1, 7, 0]),
+        pd.MultiIndex.from_arrays(
+            [
+                np.arange(5),
+                pd.date_range("2001-10-15", periods=5),
+            ],
+            names=["AA", None],
+        ),
+        bodo.hiframes.table.Table((np.arange(6),)),
+        pd.Categorical([1, 4, 5, 1, 4]),
+        pd.arrays.IntervalArray(
+            [
+                pd.Interval(0, 1),
+                pd.Interval(0, 3),
+                pd.Interval(4, 6),
+                pd.Interval(0, 3),
+                pd.Interval(4, 6),
+            ]
+        ),
+    ],
+)
+def test_distributed_others(arg):
+    """Test less common distributable arguments and return values (Index, ...)"""
+
+    def test(arg):
+        return arg
+
+    check_func(test, (arg,), only_spawn=True, check_pandas_types=False)
 
 
 def test_distributed_small_output():
