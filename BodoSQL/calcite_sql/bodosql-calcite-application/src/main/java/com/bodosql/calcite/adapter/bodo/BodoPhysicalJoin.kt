@@ -29,7 +29,8 @@ class BodoPhysicalJoin(
     val originalJoinFilterKeyLocations: List<Int>,
     val buildColumnMapping: Map<Int, Int> = mapOf(),
     val broadcastBuildSide: Boolean,
-) : JoinBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), hints, left, right, condition, joinType), BodoPhysicalRel {
+) : JoinBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), hints, left, right, condition, joinType),
+    BodoPhysicalRel {
     init {
         if (joinFilterID != -1) {
             assert(originalJoinFilterKeyLocations.isNotEmpty() || buildColumnMapping.isNotEmpty())
@@ -64,8 +65,8 @@ class BodoPhysicalJoin(
         )
     }
 
-    override fun withHints(hintList: MutableList<RelHint>): BodoPhysicalJoin {
-        return BodoPhysicalJoin(
+    override fun withHints(hintList: MutableList<RelHint>): BodoPhysicalJoin =
+        BodoPhysicalJoin(
             cluster,
             traitSet,
             hintList,
@@ -79,7 +80,6 @@ class BodoPhysicalJoin(
             buildColumnMapping,
             broadcastBuildSide,
         )
-    }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -96,15 +96,15 @@ class BodoPhysicalJoin(
         TODO("Not yet implemented")
     }
 
-    override fun explainTerms(pw: RelWriter): RelWriter {
-        return super.explainTerms(pw)
+    override fun explainTerms(pw: RelWriter): RelWriter =
+        super
+            .explainTerms(pw)
             .itemIf("rebalanceOutput", rebalanceOutput, rebalanceOutput)
             .itemIf("JoinID", joinFilterID, joinFilterID != -1)
             .itemIf("Broadcast", broadcastBuildSide, broadcastBuildSide)
-    }
 
-    fun withRebalanceOutput(rebalanceOutput: Boolean): BodoPhysicalJoin {
-        return BodoPhysicalJoin(
+    fun withRebalanceOutput(rebalanceOutput: Boolean): BodoPhysicalJoin =
+        BodoPhysicalJoin(
             cluster,
             traitSet,
             hints,
@@ -118,10 +118,9 @@ class BodoPhysicalJoin(
             buildColumnMapping,
             broadcastBuildSide,
         )
-    }
 
-    fun withBroadcastBuildSide(broadcastBuildSide: Boolean): BodoPhysicalJoin {
-        return BodoPhysicalJoin(
+    fun withBroadcastBuildSide(broadcastBuildSide: Boolean): BodoPhysicalJoin =
+        BodoPhysicalJoin(
             cluster,
             traitSet,
             hints,
@@ -135,11 +134,9 @@ class BodoPhysicalJoin(
             buildColumnMapping,
             broadcastBuildSide,
         )
-    }
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
 
     /**
      * Get join build memory estimate for memory budget comptroller

@@ -32,8 +32,7 @@ open class WindowBase(
     rowType: RelDataType,
     groups: List<Group>,
     val inputsToKeep: ImmutableBitSet,
-) :
-    Window(cluster, traitSet, hints, input, constants, rowType, groups) {
+) : Window(cluster, traitSet, hints, input, constants, rowType, groups) {
     override fun explainTerms(pw: RelWriter): RelWriter? {
         super.explainTerms(pw)
         pw.item("constants", constants)
@@ -63,32 +62,26 @@ open class WindowBase(
         return planner.makeCost(rows = rows, cpu = rows * groupsCost)
     }
 
-    override fun copy(constants: MutableList<RexLiteral>): WindowBase {
+    override fun copy(constants: MutableList<RexLiteral>): WindowBase =
         throw UnsupportedOperationException("Copy must be implemented by WindowBase subclasses")
-    }
 
     // Returns the number of input columns
-    private fun getNumInputReferences(): Int {
-        return input.rowType.fieldCount
-    }
+    private fun getNumInputReferences(): Int = input.rowType.fieldCount
 
     // Retrieves the list of references from the child node that are
     // passed through.
-    private fun getPassThroughReferences(): List<RexNode> {
-        return inputsToKeep.map {
+    private fun getPassThroughReferences(): List<RexNode> =
+        inputsToKeep.map {
             RexInputRef(it, input.rowType.fieldList[it].type)
         }
-    }
 
     // Retrieves the list of references from the aggregation calls
     // that refer to constants instead of references from
     // the inputs.
-    fun getConstantReferences(): List<RexNode> {
-        return constants.mapIndexed {
-                idx, lit ->
+    fun getConstantReferences(): List<RexNode> =
+        constants.mapIndexed { idx, lit ->
             RexInputRef(idx + getNumInputReferences(), lit.type)
         }
-    }
 
     // Creates a list of terms that could be used in a projection to
     // have the same effect as the Window node.
@@ -108,12 +101,10 @@ open class WindowBase(
             )
 
         // Convert each agg call within each group to a RexOver
-        groups.forEach {
-                group ->
+        groups.forEach { group ->
             val partitionKeys = keyBitSetToInputRefs(group.keys, input)
             val orderKeys = group.collation().fieldCollations.map { relFieldCollationToRexFieldCollation(it, input) }
-            group.aggCalls.forEach {
-                    aggCall ->
+            group.aggCalls.forEach { aggCall ->
                 val asOver =
                     builder.makeOver(
                         aggCall.getType(),
@@ -165,10 +156,9 @@ open class WindowBase(
         fun keyBitSetToInputRefs(
             keys: ImmutableBitSet,
             rel: RelNode,
-        ): List<RexNode> {
-            return keys.toList().map {
+        ): List<RexNode> =
+            keys.toList().map {
                 RexInputRef(it, rel.rowType.fieldList[it].type)
             }
-        }
     }
 }

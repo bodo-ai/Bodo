@@ -6,7 +6,10 @@ import org.apache.calcite.sql.SqlWriter
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.util.Litmus
 
-class SqlNamedParam(baseParamName: String, pos: SqlParserPos) : SqlDynamicParam(-1, pos) {
+class SqlNamedParam(
+    baseParamName: String,
+    pos: SqlParserPos,
+) : SqlDynamicParam(-1, pos) {
     // Remove the leading @ from the parameter name.
     // TODO: Handle in parser.
     val paramName = baseParamName.substring(1)

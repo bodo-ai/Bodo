@@ -27,8 +27,15 @@ open class BodoLogicalTableCreate private constructor(
         assert(traitSet.containsIfApplicable(Convention.NONE))
         assert(inputs.size == 1)
         return BodoLogicalTableCreate(
-            cluster, traitSet, inputs[0], getSchema(), tableName,
-            isReplace, createTableType, path, this.meta,
+            cluster,
+            traitSet,
+            inputs[0],
+            getSchema(),
+            tableName,
+            isReplace,
+            createTableType,
+            path,
+            this.meta,
         )
     }
 
@@ -46,8 +53,15 @@ open class BodoLogicalTableCreate private constructor(
             val cluster = input.cluster
             val traitSet = cluster.traitSetOf(Convention.NONE)
             return BodoLogicalTableCreate(
-                cluster, traitSet, input, schema, tableName,
-                isReplace, createTableType, path, meta,
+                cluster,
+                traitSet,
+                input,
+                schema,
+                tableName,
+                isReplace,
+                createTableType,
+                path,
+                meta,
             )
         }
     }

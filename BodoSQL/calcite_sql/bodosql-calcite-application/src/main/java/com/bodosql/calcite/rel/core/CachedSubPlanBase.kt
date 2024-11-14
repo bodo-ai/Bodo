@@ -31,18 +31,14 @@ open class CachedSubPlanBase protected constructor(
         return CachedSubPlanBase(cachedPlan, cacheID, cluster, traitSet)
     }
 
-    override fun explainTerms(pw: RelWriter): RelWriter {
-        return super.explainTerms(pw)
+    override fun explainTerms(pw: RelWriter): RelWriter =
+        super
+            .explainTerms(pw)
             .item("CacheID", cacheID)
-    }
 
-    override fun deriveRowType(): RelDataType {
-        return cachedPlan.plan.rowType
-    }
+    override fun deriveRowType(): RelDataType = cachedPlan.plan.rowType
 
-    override fun estimateRowCount(mq: RelMetadataQuery): Double {
-        return cachedPlan.plan.estimateRowCount(mq)
-    }
+    override fun estimateRowCount(mq: RelMetadataQuery): Double = cachedPlan.plan.estimateRowCount(mq)
 
     // TODO: Add cost calculation. This is tricky because the cost should be amortized
     // across the uses.

@@ -38,9 +38,8 @@ open class TableFunctionScanBase(
         elementType: Type?,
         rowType: RelDataType?,
         columnMappings: MutableSet<RelColumnMapping>?,
-    ): TableFunctionScan? {
-        return BodoPhysicalTableFunctionScan(cluster, traitSet!!, inputs!!, rexCall!! as RexCall, elementType, rowType!!, columnMappings)
-    }
+    ): TableFunctionScan? =
+        BodoPhysicalTableFunctionScan(cluster, traitSet!!, inputs!!, rexCall!! as RexCall, elementType, rowType!!, columnMappings)
 
     override fun estimateRowCount(mq: RelMetadataQuery): Double {
         val rexCall = call as RexCall

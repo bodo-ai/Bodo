@@ -8,26 +8,27 @@ import org.immutables.value.Value
 
 @BodoSQLStyleImmutable
 @Value.Enclosing
-abstract class AbstractSnowflakeLimitRule protected constructor(config: Config) :
-    RelRule<AbstractSnowflakeLimitRule.Config>(config) {
-        override fun onMatch(call: RelOptRuleCall) {
-            val (sort, rel) = extractSortNodes<SnowflakeRel>(call)
-            val catalogTable = rel.getCatalogTable()
+abstract class AbstractSnowflakeLimitRule protected constructor(
+    config: Config,
+) : RelRule<AbstractSnowflakeLimitRule.Config>(config) {
+    override fun onMatch(call: RelOptRuleCall) {
+        val (sort, rel) = extractSortNodes<SnowflakeRel>(call)
+        val catalogTable = rel.getCatalogTable()
 
-            val newNode =
-                SnowflakeSort.create(
-                    sort.cluster,
-                    sort.traitSet,
-                    rel,
-                    sort.collation,
-                    sort.offset,
-                    sort.fetch,
-                    catalogTable,
-                )
-            call.transformTo(newNode)
-            // New plan is absolutely better than old plan.
-            call.planner.prune(sort)
-        }
-
-        interface Config : RelRule.Config
+        val newNode =
+            SnowflakeSort.create(
+                sort.cluster,
+                sort.traitSet,
+                rel,
+                sort.collation,
+                sort.offset,
+                sort.fetch,
+                catalogTable,
+            )
+        call.transformTo(newNode)
+        // New plan is absolutely better than old plan.
+        call.planner.prune(sort)
     }
+
+    interface Config : RelRule.Config
+}

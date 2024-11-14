@@ -18,8 +18,8 @@ class FilterUtils private constructor() {
          * Extract the nodes for standard Filter conversion rules.
          */
         @JvmStatic
-        fun <E> extractFilterNodes(call: RelOptRuleCall): Pair<Filter, E> {
-            return when (call.rels.size) {
+        fun <E> extractFilterNodes(call: RelOptRuleCall): Pair<Filter, E> =
+            when (call.rels.size) {
                 // Inputs are:
                 // Filter ->
                 //     XXXToPandasConverter ->
@@ -30,7 +30,6 @@ class FilterUtils private constructor() {
                 //     XXXRel
                 else -> Pair(call.rel(0), call.rel(1))
             }
-        }
 
         /**
          * @param condition The conditions to a filter that are being checked to see if it is a

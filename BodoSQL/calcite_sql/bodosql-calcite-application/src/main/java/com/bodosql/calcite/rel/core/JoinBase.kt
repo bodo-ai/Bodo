@@ -34,10 +34,12 @@ abstract class JoinBase(
         // While we don't materialize all of these rows, the condition cost should
         // reflect that fact.
         val conditionRows =
-            inputs.map { mq.getRowCount(it) }
+            inputs
+                .map { mq.getRowCount(it) }
                 .reduce { a, b -> a * b }
         val conditionCost =
-            condition.accept(RexCostEstimator)
+            condition
+                .accept(RexCostEstimator)
                 .multiplyBy(conditionRows)
 
         // Compute the memory cost from each of the inputs. Join must use every column
@@ -71,7 +73,5 @@ abstract class JoinBase(
         return planner.makeCost(rows = rows, from = totalCost)
     }
 
-    override fun estimateRowCount(mq: RelMetadataQuery): Double {
-        return Util.first(mq.getRowCount(this), 1.0)
-    }
+    override fun estimateRowCount(mq: RelMetadataQuery): Double = Util.first(mq.getRowCount(this), 1.0)
 }

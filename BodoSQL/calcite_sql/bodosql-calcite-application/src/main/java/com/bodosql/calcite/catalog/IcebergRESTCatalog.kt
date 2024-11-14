@@ -86,9 +86,7 @@ open class IcebergRESTCatalog(
      * Tabular catalogs don't have subSchemas, so this method always returns 1.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int {
-        return 1
-    }
+    override fun numDefaultSchemaLevels(): Int = 1
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.
@@ -165,9 +163,7 @@ open class IcebergRESTCatalog(
      *
      * @return The source DB location.
      */
-    override fun getDBType(): String {
-        return "ICEBERG"
-    }
+    override fun getDBType(): String = "ICEBERG"
 
     /**
      * Returns if a schema with the given depth is allowed to contain tables.
@@ -176,9 +172,7 @@ open class IcebergRESTCatalog(
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return True
      */
-    override fun schemaDepthMayContainTables(depth: Int): Boolean {
-        return true
-    }
+    override fun schemaDepthMayContainTables(depth: Int): Boolean = true
 
     /**
      * Returns if a schema with the given depth is allowed to contain subSchemas.
@@ -187,9 +181,7 @@ open class IcebergRESTCatalog(
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return false.
      */
-    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean {
-        return depth == 0
-    }
+    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean = depth == 0
 
     /**
      * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
@@ -232,23 +224,20 @@ open class IcebergRESTCatalog(
         createTableType: SqlCreateTable.CreateTableType,
         ifExistsBehavior: WriteTarget.IfExistsBehavior,
         columnNamesGlobal: Variable,
-    ): WriteTarget {
-        return IcebergWriteTarget(
+    ): WriteTarget =
+        IcebergWriteTarget(
             tableName,
             schema,
             ifExistsBehavior,
             columnNamesGlobal,
             generatePythonConnStr(schema),
         )
-    }
 
     /**
      * Return the catalog's token.
      * @return The catalog's token.
      */
-    fun getToken(): String? {
-        return getIcebergConnection().properties()["token"]
-    }
+    fun getToken(): String? = getIcebergConnection().properties()["token"]
 
     companion object {
         /**

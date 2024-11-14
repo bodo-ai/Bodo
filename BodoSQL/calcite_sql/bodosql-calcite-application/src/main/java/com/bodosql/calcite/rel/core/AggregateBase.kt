@@ -29,9 +29,7 @@ open class AggregateBase(
         groupSet: ImmutableBitSet,
         groupSets: List<ImmutableBitSet>?,
         aggCalls: List<AggregateCall>,
-    ): AggregateBase {
-        return AggregateBase(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls)
-    }
+    ): AggregateBase = AggregateBase(cluster, traitSet, hints, input, groupSet, groupSets, aggCalls)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -43,7 +41,8 @@ open class AggregateBase(
             if (aggCalls.isEmpty()) {
                 Cost()
             } else {
-                aggCalls.map { aggCall -> AggCostEstimator.estimateFunctionCost(aggCall) }
+                aggCalls
+                    .map { aggCall -> AggCostEstimator.estimateFunctionCost(aggCall) }
                     .reduce { l, r -> l.plus(r) as Cost }
             }
         val cost = distinctCost + funcCost

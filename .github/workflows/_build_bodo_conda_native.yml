@@ -78,7 +78,7 @@ jobs:
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
             -e nightly_conda_build_config.yaml --python '${{ inputs.python-version }}'
-          
+
           # Export Location for Artifacting
           echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
         env:

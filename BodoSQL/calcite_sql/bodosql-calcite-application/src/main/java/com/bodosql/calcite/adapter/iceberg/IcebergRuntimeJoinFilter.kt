@@ -33,9 +33,7 @@ class IcebergRuntimeJoinFilter private constructor(
     override fun copy(
         traitSet: RelTraitSet,
         inputs: MutableList<RelNode>,
-    ): IcebergRuntimeJoinFilter {
-        return copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
-    }
+    ): IcebergRuntimeJoinFilter = copy(traitSet, sole(inputs), equalityFilterColumns, nonEqualityFilterInfo)
 
     /**
      * Return a new IcebergRuntimeJoinFilter with only a different set of columns.
@@ -45,8 +43,8 @@ class IcebergRuntimeJoinFilter private constructor(
         input: RelNode,
         newEqualityColumns: List<List<Int>>,
         newNonEqualityColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
-    ): IcebergRuntimeJoinFilter {
-        return IcebergRuntimeJoinFilter(
+    ): IcebergRuntimeJoinFilter =
+        IcebergRuntimeJoinFilter(
             cluster,
             traitSet,
             input,
@@ -56,7 +54,6 @@ class IcebergRuntimeJoinFilter private constructor(
             newNonEqualityColumns,
             catalogTable,
         )
-    }
 
     override fun computeSelfCost(
         planner: RelOptPlanner,

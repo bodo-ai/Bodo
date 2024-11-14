@@ -5,4 +5,6 @@ package com.bodosql.calcite.ir
  * functionality from a regular Variable at this time,
  * but it enables compiler checking.
  */
-open class StateVariable(name: String) : Variable(name)
+open class StateVariable(
+    name: String,
+) : Variable(name)

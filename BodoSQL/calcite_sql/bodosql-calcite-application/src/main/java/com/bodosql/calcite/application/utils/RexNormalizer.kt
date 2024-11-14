@@ -11,10 +11,10 @@ import org.apache.calcite.sql.`fun`.SqlCastFunction
 /**
  * Force each call to be normalized in a RexNode.
  */
-class RexNormalizer private constructor(private val rexBuilder: RexBuilder) : RexShuttle() {
-    override fun visitOver(over: RexOver): RexNode {
-        return over
-    }
+class RexNormalizer private constructor(
+    private val rexBuilder: RexBuilder,
+) : RexShuttle() {
+    override fun visitOver(over: RexOver): RexNode = over
 
     override fun visitCall(call: RexCall): RexNode {
         // Use an array to pass a boolean by reference and update

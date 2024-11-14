@@ -22,7 +22,9 @@ import org.apache.calcite.sql.type.SqlTypeName
 import java.math.BigDecimal
 import java.util.Locale
 
-class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
+class BodoSnowflakeSqlDialect(
+    context: Context,
+) : SnowflakeSqlDialect(context) {
     /**
      * Helper method for outputting just the duration part of an Interval literal
      */
@@ -69,8 +71,22 @@ class BodoSnowflakeSqlDialect(context: Context) : SnowflakeSqlDialect(context) {
     // This is directly copied from SqlDialect
     private val hexits =
         charArrayOf(
-            '0', '1', '2', '3', '4', '5', '6', '7',
-            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
+            '0',
+            '1',
+            '2',
+            '3',
+            '4',
+            '5',
+            '6',
+            '7',
+            '8',
+            '9',
+            'a',
+            'b',
+            'c',
+            'd',
+            'e',
+            'f',
         )
 
     /**

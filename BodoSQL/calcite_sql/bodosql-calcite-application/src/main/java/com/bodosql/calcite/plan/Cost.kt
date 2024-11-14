@@ -102,8 +102,8 @@ class Cost private constructor(
 
     private fun isLt(other: Cost): Boolean = this.totalCost() < other.totalCost()
 
-    override fun plus(other: RelOptCost): RelOptCost {
-        return convert(other).let { c ->
+    override fun plus(other: RelOptCost): RelOptCost =
+        convert(other).let { c ->
             Cost(
                 rows = rows + c.rows,
                 cpu = cpu + c.cpu,
@@ -112,10 +112,9 @@ class Cost private constructor(
                 cost = value + c.value,
             )
         }
-    }
 
-    override fun minus(other: RelOptCost): RelOptCost {
-        return convert(other).let { c ->
+    override fun minus(other: RelOptCost): RelOptCost =
+        convert(other).let { c ->
             Cost(
                 rows = rows - c.rows,
                 cpu = cpu - c.cpu,
@@ -124,21 +123,17 @@ class Cost private constructor(
                 cost = value - c.value,
             )
         }
-    }
 
-    override fun multiplyBy(factor: Double): RelOptCost {
-        return Cost(
+    override fun multiplyBy(factor: Double): RelOptCost =
+        Cost(
             rows = rows * factor,
             cpu = cpu * factor,
             io = io * factor,
             mem = mem * factor,
             cost = value * factor,
         )
-    }
 
-    override fun divideBy(other: RelOptCost): Double {
-        return convert(other).let { c -> value / c.value }
-    }
+    override fun divideBy(other: RelOptCost): Double = convert(other).let { c -> value / c.value }
 
     override fun toString(): String = "{${df(rows)} rows, ${df(cpu)} cpu, ${df(io)} io, ${df(mem)} mem}".format(rows, cpu, io, mem)
 
@@ -187,12 +182,11 @@ fun RelOptPlanner.makeCost(
     cpu: Double = 0.0,
     io: Double = 0.0,
     mem: Double = 0.0,
-): RelOptCost {
-    return when (val factory = costFactory) {
+): RelOptCost =
+    when (val factory = costFactory) {
         is CostFactory -> factory.makeCost(rows, cpu, io, mem)
         else -> factory.makeCost(rows, cpu, io)
     }
-}
 
 /**
  * Convenience method for producing a cost from another cost.

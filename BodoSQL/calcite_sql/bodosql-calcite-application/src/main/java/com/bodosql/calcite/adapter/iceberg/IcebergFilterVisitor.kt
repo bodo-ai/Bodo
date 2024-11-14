@@ -52,7 +52,10 @@ private val GENERIC_CALL_TO_OPSTR =
 private val REWRITE_UNARY_KINDS = setOf(SqlKind.IS_NOT_TRUE, SqlKind.IS_NOT_FALSE)
 private val REWRITE_BINOP_KINDS = setOf(SqlKind.IS_DISTINCT_FROM, SqlKind.IS_NOT_DISTINCT_FROM)
 
-class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ctx: BodoPhysicalRel.BuildContext) : RexVisitor<Expr> {
+class IcebergFilterVisitor(
+    private val topNode: IcebergTableScan,
+    private val ctx: BodoPhysicalRel.BuildContext,
+) : RexVisitor<Expr> {
     private val scalarTranslator = ctx.scalarRexTranslator()
 
     // Static Class that can be accessed outside this class
@@ -292,52 +295,38 @@ class IcebergFilterVisitor(private val topNode: IcebergTableScan, private val ct
     /**
      * Unreachable code because we do not accept filters that only contain a RexLiteral.
      */
-    override fun visitLiteral(var1: RexLiteral): Expr {
+    override fun visitLiteral(var1: RexLiteral): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexLiteral")
-    }
 
     // ------ It's impossible at codegen for a filter to contain any of the following ------
-    override fun visitLocalRef(var1: RexLocalRef): Expr {
+    override fun visitLocalRef(var1: RexLocalRef): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexLocalRef")
-    }
 
-    override fun visitOver(var1: RexOver): Expr {
-        throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexLocalRef")
-    }
+    override fun visitOver(var1: RexOver): Expr = throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexLocalRef")
 
-    override fun visitCorrelVariable(var1: RexCorrelVariable): Expr {
+    override fun visitCorrelVariable(var1: RexCorrelVariable): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexCorrelVariable")
-    }
 
-    override fun visitDynamicParam(var1: RexDynamicParam): Expr {
+    override fun visitDynamicParam(var1: RexDynamicParam): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexDynamicParam")
-    }
 
-    override fun visitRangeRef(var1: RexRangeRef): Expr {
+    override fun visitRangeRef(var1: RexRangeRef): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexRangeRef")
-    }
 
-    override fun visitFieldAccess(var1: RexFieldAccess): Expr {
+    override fun visitFieldAccess(var1: RexFieldAccess): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexFieldAccess")
-    }
 
-    override fun visitSubQuery(var1: RexSubQuery): Expr {
+    override fun visitSubQuery(var1: RexSubQuery): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexSubQuery")
-    }
 
-    override fun visitTableInputRef(p0: RexTableInputRef): Expr {
+    override fun visitTableInputRef(p0: RexTableInputRef): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexTableInputRef")
-    }
 
-    override fun visitPatternFieldRef(p0: RexPatternFieldRef): Expr {
+    override fun visitPatternFieldRef(p0: RexPatternFieldRef): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a RexPatternFieldRef")
-    }
 
-    override fun visitLambda(var1: RexLambda): Expr {
-        throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a Lambda")
-    }
+    override fun visitLambda(var1: RexLambda): Expr = throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a Lambda")
 
-    override fun visitLambdaRef(var1: RexLambdaRef): Expr {
+    override fun visitLambdaRef(var1: RexLambdaRef): Expr =
         throw NotImplementedError("IcebergFilterVisitor in Codegen should not see a LambdaRef")
-    }
 }

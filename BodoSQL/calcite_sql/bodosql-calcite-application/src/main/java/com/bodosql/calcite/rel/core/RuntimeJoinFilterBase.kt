@@ -46,20 +46,18 @@ open class RuntimeJoinFilterBase(
         input: RelNode,
         newEqualityColumns: List<List<Int>>,
         newNonEqualityColumns: List<List<NonEqualityJoinFilterColumnInfo>>,
-    ): RuntimeJoinFilterBase {
-        throw UnsupportedOperationException("Runtime Join Filter implementation must extend copy")
-    }
+    ): RuntimeJoinFilterBase = throw UnsupportedOperationException("Runtime Join Filter implementation must extend copy")
 
     override fun explainTerms(pw: RelWriter): RelWriter {
         // Only display the new columns to avoid confusion in the plans.
         val displayedColumns =
-            equalityFilterColumns.withIndex().map {
-                    (idx, columns) ->
+            equalityFilterColumns.withIndex().map { (idx, columns) ->
                 columns.withIndex().filter { equalityIsFirstLocations[idx][it.index] }.map { it.value }
             }
         val allKeysReady = equalityFilterColumns.map { colList -> colList.all { it != -1 } }
 
-        return pw.item("input", getInput())
+        return pw
+            .item("input", getInput())
             .item("joinIDs", joinFilterIDs)
             .item("equalityColumnsList", displayedColumns)
             .itemIf("allEqualityKeysReady", allKeysReady, allKeysReady.any())

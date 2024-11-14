@@ -291,6 +291,7 @@ public class StringFnCodeGen {
         List.of(stringToBeTrimmed, charactersToBeTrimmed),
         streamingNamedArgs);
   }
+
   /**
    * Function that returns the rexInfo for a SUBSTRING Function call
    *

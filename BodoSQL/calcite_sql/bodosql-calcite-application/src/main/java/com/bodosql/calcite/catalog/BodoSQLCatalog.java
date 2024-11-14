@@ -266,6 +266,5 @@ public interface BodoSQLCatalog {
    * @param names A list of two names starting with SCHEMA_NAME and ending with TABLE_NAME.
    * @return The InlineViewMetadata loaded from the catalog or null if no information is available.
    */
-  @Nullable
-  InlineViewMetadata tryGetViewMetadata(List<String> names);
+  @Nullable InlineViewMetadata tryGetViewMetadata(List<String> names);
 }

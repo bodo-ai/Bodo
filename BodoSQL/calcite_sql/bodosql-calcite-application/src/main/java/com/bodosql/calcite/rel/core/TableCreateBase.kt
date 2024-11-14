@@ -23,7 +23,8 @@ open class TableCreateBase(
 ) : TableCreate(cluster, traitSet, input) {
     override fun explainTerms(pw: RelWriter): RelWriter {
         var result =
-            super.explainTerms(pw)
+            super
+                .explainTerms(pw)
                 .item("TableName", tableName)
                 .item("Target Schema", this.path)
                 .item("IsReplace", isReplace)
@@ -35,36 +36,33 @@ open class TableCreateBase(
             result =
                 result.item(
                     "Column Comments",
-                    meta.columnComments!!.mapIndexed {
-                            idx,
-                            value,
-                        ->
-                        value?.let { Pair(this.getRowType().fieldNames[idx], value) }
-                    }.filterNotNull(),
+                    meta.columnComments!!
+                        .mapIndexed {
+                                idx,
+                                value,
+                            ->
+                            value?.let { Pair(this.getRowType().fieldNames[idx], value) }
+                        }.filterNotNull(),
                 )
         }
         if (meta.tableProperties != null) {
             result =
                 result.item(
-                    "Table Properties", meta.tableProperties!!,
+                    "Table Properties",
+                    meta.tableProperties!!,
                 )
         }
         return result
     }
 
-    open fun getSchema(): Schema {
-        return schema
-    }
+    open fun getSchema(): Schema = schema
 
-    fun getSchemaPath(): List<String> {
-        return path
-    }
+    fun getSchemaPath(): List<String> = path
 
-    fun getIfExistsBehavior(): IfExistsBehavior {
-        return if (isReplace) {
+    fun getIfExistsBehavior(): IfExistsBehavior =
+        if (isReplace) {
             IfExistsBehavior.REPLACE
         } else {
             IfExistsBehavior.FAIL
         }
-    }
 }

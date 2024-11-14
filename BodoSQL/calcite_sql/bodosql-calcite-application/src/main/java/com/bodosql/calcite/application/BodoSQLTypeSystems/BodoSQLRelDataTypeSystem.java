@@ -136,17 +136,17 @@ public class BodoSQLRelDataTypeSystem extends RelDataTypeSystemImpl {
       case VARBINARY:
       case VARCHAR:
         return getMaxPrecision(typeName);
-        // Snowflake:
-        // INT , INTEGER , BIGINT , SMALLINT , TINYINT , BYTEINT
-        // Synonymous with NUMBER, except that precision and scale cannot be specified
+      // Snowflake:
+      // INT , INTEGER , BIGINT , SMALLINT , TINYINT , BYTEINT
+      // Synonymous with NUMBER, except that precision and scale cannot be specified
       case TINYINT:
       case SMALLINT:
-        // NOTE Disabling integer as it impacted bitwise and other time epoch tests.
-        // case INTEGER:
+      // NOTE Disabling integer as it impacted bitwise and other time epoch tests.
+      // case INTEGER:
       case BIGINT:
       case DECIMAL:
         return getMaxNumericPrecision();
-        // Snowflake: Time precision default is 9.
+      // Snowflake: Time precision default is 9.
       case TIME:
       case TIMESTAMP:
       case TIMESTAMP_WITH_LOCAL_TIME_ZONE:

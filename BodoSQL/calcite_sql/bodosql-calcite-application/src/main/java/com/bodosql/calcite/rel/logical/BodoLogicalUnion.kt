@@ -16,9 +16,7 @@ class BodoLogicalUnion(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
         all: Boolean,
-    ): BodoLogicalUnion {
-        return BodoLogicalUnion(cluster, traitSet, inputs, all)
-    }
+    ): BodoLogicalUnion = BodoLogicalUnion(cluster, traitSet, inputs, all)
 
     companion object {
         @JvmStatic

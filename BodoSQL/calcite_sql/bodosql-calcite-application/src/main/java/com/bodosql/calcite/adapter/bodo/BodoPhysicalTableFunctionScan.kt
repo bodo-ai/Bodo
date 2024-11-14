@@ -28,26 +28,24 @@ class BodoPhysicalTableFunctionScan(
     elementType: Type?,
     rowType: RelDataType,
     columnMappings: Set<RelColumnMapping>?,
-) :
-    TableFunctionScanBase(
-            cluster,
-            traits.replace(BodoPhysicalRel.CONVENTION),
-            inputs,
-            call,
-            elementType,
-            rowType,
-            columnMappings,
-        ),
-        BodoPhysicalRel {
+) : TableFunctionScanBase(
+        cluster,
+        traits.replace(BodoPhysicalRel.CONVENTION),
+        inputs,
+        call,
+        elementType,
+        rowType,
+        columnMappings,
+    ),
+    BodoPhysicalRel {
     /**
      * Emits the code necessary for implementing this relational operator.
      *
      * @param implementor implementation handler.
      * @return the variable that represents this relational expression.
      */
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return (implementor::build)(listOf()) {
-                ctx, _ ->
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        (implementor::build)(listOf()) { ctx, _ ->
             if ((call as RexCall).operator.name == TableFunctionOperatorTable.GENERATOR.name) {
                 emitGenerator(ctx, call as RexCall)
             } else if ((call as RexCall).operator.name == EXTERNAL_TABLE_FILES_NAME) {
@@ -56,7 +54,6 @@ class BodoPhysicalTableFunctionScan(
                 throw BodoSQLCodegenException("Flatten node does not currently support codegen for operation $call")
             }
         }
-    }
 
     /**
      * Emits the code necessary to calculate a call to the GENERATOR function.
@@ -135,8 +132,6 @@ class BodoPhysicalTableFunctionScan(
             inputs: List<RelNode>,
             call: RexCall,
             rowType: RelDataType,
-        ): BodoPhysicalTableFunctionScan {
-            return BodoPhysicalTableFunctionScan(cluster, cluster.traitSet(), inputs, call, null, rowType, null)
-        }
+        ): BodoPhysicalTableFunctionScan = BodoPhysicalTableFunctionScan(cluster, cluster.traitSet(), inputs, call, null, rowType, null)
     }
 }

@@ -81,9 +81,7 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
         mq: RelMetadataQuery,
         groupKey: ImmutableBitSet,
         predicate: RexNode?,
-    ): Double? {
-        return mq.getDistinctRowCount(rel.input, groupKey, predicate)
-    }
+    ): Double? = mq.getDistinctRowCount(rel.input, groupKey, predicate)
 
     override fun getDistinctRowCount(
         rel: RelNode,
@@ -103,18 +101,14 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
         mq: RelMetadataQuery,
         groupKey: ImmutableBitSet,
         predicate: RexNode?,
-    ): Double? {
-        return cartesianApproximationDistinctRowCount(rel, mq, groupKey)
-    }
+    ): Double? = cartesianApproximationDistinctRowCount(rel, mq, groupKey)
 
     override fun getDistinctRowCount(
         rel: Project,
         mq: RelMetadataQuery,
         groupKey: ImmutableBitSet,
         predicate: RexNode?,
-    ): Double? {
-        return cartesianApproximationDistinctRowCount(rel, mq, groupKey)
-    }
+    ): Double? = cartesianApproximationDistinctRowCount(rel, mq, groupKey)
 
     fun getDistinctRowCount(
         rel: BodoPhysicalMinRowNumberFilter,
@@ -139,13 +133,14 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
         val asProjExprs = rel.convertToProjExprs()
         val passThroughKeys =
             ImmutableBitSet.of(
-                groupKey.map {
-                    if (it < rel.inputsToKeep.cardinality()) {
-                        rel.inputsToKeep.nth(it)
-                    } else {
-                        -1
-                    }
-                }.filter { it >= 0 },
+                groupKey
+                    .map {
+                        if (it < rel.inputsToKeep.cardinality()) {
+                            rel.inputsToKeep.nth(it)
+                        } else {
+                            -1
+                        }
+                    }.filter { it >= 0 },
             )
         val newGroupKey =
             groupKey.filter { idx ->
@@ -176,7 +171,8 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
                                     SqlKind.LAST_VALUE,
                                     SqlKind.LEAD,
                                     SqlKind.LAG,
-                                ).contains(over.operator.kind) || over.window.lowerBound.isUnbounded
+                                ).contains(over.operator.kind) ||
+                                    over.window.lowerBound.isUnbounded
                             val upperCheck =
                                 listOf(
                                     SqlKind.FIRST_VALUE,
@@ -184,7 +180,8 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
                                     SqlKind.NTH_VALUE,
                                     SqlKind.LEAD,
                                     SqlKind.LAG,
-                                ).contains(over.operator.kind) || over.window.upperBound.isUnbounded
+                                ).contains(over.operator.kind) ||
+                                    over.window.upperBound.isUnbounded
                             if (lowerCheck && upperCheck) {
                                 // If any partition keys are not also grouping keys, keep this key
                                 partitionKeys.any { !passThroughKeys.get(it) } ||
@@ -213,7 +210,5 @@ class BodoRelMdDistinctRowCount : RelMdDistinctRowCount() {
         mq: RelMetadataQuery,
         groupKey: ImmutableBitSet,
         predicate: RexNode?,
-    ): Double? {
-        return cartesianApproximationDistinctRowCount(rel, mq, groupKey)
-    }
+    ): Double? = cartesianApproximationDistinctRowCount(rel, mq, groupKey)
 }

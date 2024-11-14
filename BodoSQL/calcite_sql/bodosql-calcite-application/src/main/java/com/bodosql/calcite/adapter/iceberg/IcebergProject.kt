@@ -23,15 +23,14 @@ class IcebergProject(
     projects: List<RexNode>,
     rowType: RelDataType,
     private val catalogTable: CatalogTable,
-) : ProjectBase(cluster, traitSet.replace(IcebergRel.CONVENTION), ImmutableList.of(), input, projects, rowType), IcebergRel {
+) : ProjectBase(cluster, traitSet.replace(IcebergRel.CONVENTION), ImmutableList.of(), input, projects, rowType),
+    IcebergRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): Project {
-        return IcebergProject(cluster, traitSet, input, projects, rowType, catalogTable)
-    }
+    ): Project = IcebergProject(cluster, traitSet, input, projects, rowType, catalogTable)
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -50,9 +49,7 @@ class IcebergProject(
             projects: List<RexNode>,
             rowType: RelDataType,
             catalogTable: CatalogTable,
-        ): IcebergProject {
-            return IcebergProject(cluster, traitSet, input, projects, rowType, catalogTable)
-        }
+        ): IcebergProject = IcebergProject(cluster, traitSet, input, projects, rowType, catalogTable)
 
         @JvmStatic
         fun create(

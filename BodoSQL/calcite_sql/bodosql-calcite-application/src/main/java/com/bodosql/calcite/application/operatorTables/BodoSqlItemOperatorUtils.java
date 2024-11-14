@@ -112,16 +112,16 @@ public class BodoSqlItemOperatorUtils {
       return null;
     }
     switch (operandType.getSqlTypeName()) {
-        // BODO CHANGE: SF allows for indexing with pretty much anything,
-        // so we allow any index value
+      // BODO CHANGE: SF allows for indexing with pretty much anything,
+      // so we allow any index value
       case ARRAY:
       case MAP:
       case ANY:
       case DYNAMIC_STAR:
         return null;
-        // I'm not screwing with Row indexing though, because I'm not entirely certain where this is
-        // used,
-        // and I don't want to make unnecessary changes that end up breaking things
+      // I'm not screwing with Row indexing though, because I'm not entirely certain where this is
+      // used,
+      // and I don't want to make unnecessary changes that end up breaking things
       case ROW:
         return OperandTypes.family(SqlTypeFamily.INTEGER)
             .or(OperandTypes.family(SqlTypeFamily.CHARACTER));

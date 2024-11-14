@@ -57,51 +57,40 @@ data class NonEqualityJoinFilterColumnInfo(
 
 enum class NonEqualityType {
     LESS_THAN {
-        override fun toString(): String {
-            return "<"
-        }
+        override fun toString(): String = "<"
     },
     LESS_THAN_OR_EQUAL {
-        override fun toString(): String {
-            return "<="
-        }
+        override fun toString(): String = "<="
     },
     GREATER_THAN {
-        override fun toString(): String {
-            return ">"
-        }
+        override fun toString(): String = ">"
     },
     GREATER_THAN_OR_EQUAL {
-        override fun toString(): String {
-            return ">="
-        }
+        override fun toString(): String = ">="
     }, ;
 
-    override fun toString(): String {
-        return when (this) {
+    override fun toString(): String =
+        when (this) {
             LESS_THAN -> "<"
             LESS_THAN_OR_EQUAL -> "<="
             GREATER_THAN -> ">"
             GREATER_THAN_OR_EQUAL -> ">="
         }
-    }
 
-    fun reverse(): NonEqualityType {
-        return when (this) {
+    fun reverse(): NonEqualityType =
+        when (this) {
             LESS_THAN -> GREATER_THAN
             LESS_THAN_OR_EQUAL -> GREATER_THAN_OR_EQUAL
             GREATER_THAN -> LESS_THAN
             GREATER_THAN_OR_EQUAL -> LESS_THAN_OR_EQUAL
         }
-    }
 }
 
-fun nonEqualityTypeFromKind(kind: SqlKind): NonEqualityType {
-    return when (kind) {
+fun nonEqualityTypeFromKind(kind: SqlKind): NonEqualityType =
+    when (kind) {
         SqlKind.LESS_THAN -> NonEqualityType.LESS_THAN
         SqlKind.LESS_THAN_OR_EQUAL -> NonEqualityType.LESS_THAN_OR_EQUAL
         SqlKind.GREATER_THAN -> NonEqualityType.GREATER_THAN
         SqlKind.GREATER_THAN_OR_EQUAL -> NonEqualityType.GREATER_THAN_OR_EQUAL
         else -> throw IllegalArgumentException("Unsupported kind: $kind")
     }
-}

@@ -21,7 +21,8 @@ class BodoPhysicalMinRowNumberFilter(
     child: RelNode,
     condition: RexNode,
     inputsToKeep: ImmutableBitSet,
-) : MinRowNumberFilterBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), child, condition, inputsToKeep), BodoPhysicalRel {
+) : MinRowNumberFilterBase(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), child, condition, inputsToKeep),
+    BodoPhysicalRel {
     fun asBodoProjectFilter(): BodoPhysicalRel {
         val asBodoFilter = BodoPhysicalFilter(cluster, traitSet, input, condition)
         return if (inputsToKeep.cardinality() == input.rowType.fieldCount) {
@@ -40,9 +41,7 @@ class BodoPhysicalMinRowNumberFilter(
         traitSet: RelTraitSet,
         input: RelNode,
         condition: RexNode,
-    ): BodoPhysicalMinRowNumberFilter {
-        return BodoPhysicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
-    }
+    ): BodoPhysicalMinRowNumberFilter = BodoPhysicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -67,9 +66,8 @@ class BodoPhysicalMinRowNumberFilter(
         TODO("Not yet implemented")
     }
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty =
+        ExpectedBatchingProperty.streamingIfPossibleProperty(getRowType())
 
     /**
      * Get memory estimate for memory budget comptroller.
@@ -87,9 +85,7 @@ class BodoPhysicalMinRowNumberFilter(
             input: RelNode,
             condition: RexNode,
             inputsToKeep: ImmutableBitSet,
-        ): BodoPhysicalMinRowNumberFilter {
-            return BodoPhysicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
-        }
+        ): BodoPhysicalMinRowNumberFilter = BodoPhysicalMinRowNumberFilter(cluster, traitSet, input, condition, inputsToKeep)
 
         fun create(
             cluster: RelOptCluster,

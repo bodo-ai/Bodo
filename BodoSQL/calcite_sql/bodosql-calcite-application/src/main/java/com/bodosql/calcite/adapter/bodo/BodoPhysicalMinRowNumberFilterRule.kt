@@ -6,7 +6,9 @@ import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.Filter
 
-class BodoPhysicalMinRowNumberFilterRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalMinRowNumberFilterRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -16,8 +18,7 @@ class BodoPhysicalMinRowNumberFilterRule private constructor(config: Config) : C
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalMinRowNumberFilterRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalMinRowNumberFilterRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalMinRowNumberFilterRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

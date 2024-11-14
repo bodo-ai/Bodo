@@ -34,8 +34,12 @@ import org.apache.calcite.sql.type.SqlTypeFamily
 import java.lang.RuntimeException
 import java.math.BigDecimal
 
-class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet, input: RelNode) :
-    ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(BodoPhysicalRel.CONVENTION), input), BodoPhysicalRel {
+class IcebergToBodoPhysicalConverter(
+    cluster: RelOptCluster,
+    traits: RelTraitSet,
+    input: RelNode,
+) : ConverterImpl(cluster, ConventionTraitDef.INSTANCE, traits.replace(BodoPhysicalRel.CONVENTION), input),
+    BodoPhysicalRel {
     init {
         // Initialize the type to avoid errors with Kotlin suggesting to access
         // the protected field directly.
@@ -45,9 +49,7 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): RelNode {
-        return IcebergToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
-    }
+    ): RelNode = IcebergToBodoPhysicalConverter(cluster, traitSet, sole(inputs))
 
     /**
      * Even if IcebergToBodoPhysicalConverter is a BodoPhysicalRel, it is still
@@ -205,14 +207,14 @@ class IcebergToBodoPhysicalConverter(cluster: RelOptCluster, traits: RelTraitSet
         // dictionary encoded.
         val dictArgs: MutableList<String> = mutableListOf()
         val rowCount = cluster.metadataQuery.getRowCount(relInput)
-        relInput.getRowType().fieldList.mapIndexed {
-                idx, field ->
+        relInput.getRowType().fieldList.mapIndexed { idx, field ->
             if (getRowType().fieldList[idx].type.family == SqlTypeFamily.CHARACTER) {
                 val distinctRowCount =
                     (cluster.metadataQuery as BodoRelMetadataQuery).getColumnDistinctCount(relInput, idx)
                 // A column is added if it is a string column whose distinct count is less than
                 // a certain ratio of the total row count, and is also less than the batch size.
-                if (rowCount != null && distinctRowCount != null &&
+                if (rowCount != null &&
+                    distinctRowCount != null &&
                     distinctRowCount / rowCount <= RelationalAlgebraGenerator.READ_DICT_THRESHOLD &&
                     distinctRowCount < RelationalAlgebraGenerator.streamingBatchSize
                 ) {

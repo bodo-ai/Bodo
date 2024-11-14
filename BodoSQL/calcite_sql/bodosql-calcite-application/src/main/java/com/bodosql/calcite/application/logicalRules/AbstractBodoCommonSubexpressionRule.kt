@@ -73,174 +73,173 @@ import org.apache.calcite.tools.RelBuilder
  *           Project(EXPR0=[$0 + 1], EXPR1=[$0 - 1])
  * </code>
  */
-abstract class AbstractBodoCommonSubexpressionRule protected constructor(config: Config) :
-    RelRule<AbstractBodoCommonSubexpressionRule.Config>(config) {
-        override fun onMatch(call: RelOptRuleCall) {
-            val project: Project = call.rel(0)
-            val result = applySubexpressionElimination(call.builder(), project)
-            if (result != null) {
-                call.transformTo(result)
+abstract class AbstractBodoCommonSubexpressionRule protected constructor(
+    config: Config,
+) : RelRule<AbstractBodoCommonSubexpressionRule.Config>(config) {
+    override fun onMatch(call: RelOptRuleCall) {
+        val project: Project = call.rel(0)
+        val result = applySubexpressionElimination(call.builder(), project)
+        if (result != null) {
+            call.transformTo(result)
+        }
+    }
+
+    interface Config : RelRule.Config
+
+    companion object {
+        @JvmStatic
+        fun applySubexpressionElimination(
+            originalBuilder: RelBuilder,
+            project: Project,
+        ): RelNode? {
+            val builder = originalBuilder.transform { b: RelBuilder.Config -> b.withBloat(-1) }
+
+            // Count how many times each non-trivial RexNode appears in the projection,
+            // as well as the maximum for any of their descendants.
+            val callCounter = RexCallCounter()
+            project.projects.forEach {
+                it.accept(callCounter)
+            }
+
+            // Create the basic list of child input refs.
+            val childNodes: MutableList<RexNode> = mutableListOf()
+            project.input.rowType.fieldList.forEachIndexed { idx, field ->
+                childNodes.add(RexInputRef(idx, field.type))
+            }
+
+            // Use the dynamic programming algorithm to eject nodes from
+            // the original projection into the child nodes & create
+            // the new nodes without the removed layer of common subexpressions.
+            val nodesToEject: MutableSet<RexNode> = mutableSetOf()
+            project.projects.forEach {
+                getNodesToEject(
+                    callCounter.nodeCounts,
+                    callCounter.caseCounts,
+                    callCounter.maxCounts,
+                    it,
+                    nodesToEject,
+                )
+            }
+
+            // Abort if we can not eject any nodes.
+            if (nodesToEject.isEmpty()) {
+                return null
+            }
+
+            val ejector = SubexpressionEjector(nodesToEject, childNodes)
+            val newExprs = project.projects.map { it.accept(ejector) }
+
+            builder.push(project.input)
+            builder.project(childNodes)
+            builder.project(newExprs, project.rowType.fieldNames)
+            val newProject = builder.build()
+            return newProject
+        }
+
+        private fun getNodesToEject(
+            counts: Map<RexNode, Int>,
+            caseCounts: Map<RexNode, Int>,
+            maxCounts: Map<RexNode, Int>,
+            node: RexNode,
+            ejectSet: MutableSet<RexNode>,
+        ) {
+            if (node is RexCall) {
+                val count = counts[node]?.let { it + (caseCounts[node] ?: 0) }
+                val maxCount = maxCounts[node]
+                if (count != null && maxCount != null && count > 1 && count >= maxCount) {
+                    ejectSet.add(node)
+                } else {
+                    node.operands.forEach { getNodesToEject(counts, caseCounts, maxCounts, it, ejectSet) }
+                }
             }
         }
 
-        interface Config : RelRule.Config
+        /**
+         * Visitor used to count the number of occurrences of
+         * RexCall and RexOver nodes from a collection of RexNodes,
+         * such as a projection, to help identify opportunities for
+         * common subexpression elimination. Does not keep track of
+         * base-case nodes like literals or input refs.
+         *
+         * Also keeps track of the maximum number of counts between
+         * the node and any of its descendants.
+         *
+         * Keeps track of nodes instead of CASE statements separately.
+         */
+        class RexCallCounter : RexVisitorImpl<Unit>(true) {
+            val nodeCounts: MutableMap<RexNode, Int> = mutableMapOf()
+            val caseCounts: MutableMap<RexNode, Int> = mutableMapOf()
+            val maxCounts: MutableMap<RexNode, Int> = mutableMapOf()
+            var insideCase = false
 
-        companion object {
-            @JvmStatic
-            fun applySubexpressionElimination(
-                originalBuilder: RelBuilder,
-                project: Project,
-            ): RelNode? {
-                val builder = originalBuilder.transform { b: RelBuilder.Config -> b.withBloat(-1) }
-
-                // Count how many times each non-trivial RexNode appears in the projection,
-                // as well as the maximum for any of their descendants.
-                val callCounter = RexCallCounter()
-                project.projects.forEach {
-                    it.accept(callCounter)
+            override fun visitCall(call: RexCall) {
+                if (insideCase) {
+                    val selfCount = (caseCounts[call] ?: 0) + 1
+                    caseCounts[call] = selfCount
+                } else {
+                    val selfCount = (nodeCounts[call] ?: 0) + 1
+                    nodeCounts[call] = selfCount
                 }
-
-                // Create the basic list of child input refs.
-                val childNodes: MutableList<RexNode> = mutableListOf()
-                project.input.rowType.fieldList.forEachIndexed {
-                        idx, field ->
-                    childNodes.add(RexInputRef(idx, field.type))
+                val curCount = nodeCounts[call]?.let { it + (caseCounts[call] ?: 0) } ?: 0
+                val maxCount = maxOf(call.operands.map { maxCounts[it] ?: 0 }.maxOrNull() ?: 0, curCount)
+                maxCounts[call] = maxCount
+                val oldInsideCase = insideCase
+                if (call.kind == SqlKind.CASE) {
+                    insideCase = true
                 }
-
-                // Use the dynamic programming algorithm to eject nodes from
-                // the original projection into the child nodes & create
-                // the new nodes without the removed layer of common subexpressions.
-                val nodesToEject: MutableSet<RexNode> = mutableSetOf()
-                project.projects.forEach {
-                    getNodesToEject(
-                        callCounter.nodeCounts,
-                        callCounter.caseCounts,
-                        callCounter.maxCounts,
-                        it,
-                        nodesToEject,
-                    )
+                val result = super.visitCall(call)
+                if (call.kind == SqlKind.CASE) {
+                    insideCase = oldInsideCase
                 }
-
-                // Abort if we can not eject any nodes.
-                if (nodesToEject.isEmpty()) {
-                    return null
-                }
-
-                val ejector = SubexpressionEjector(nodesToEject, childNodes)
-                val newExprs = project.projects.map { it.accept(ejector) }
-
-                builder.push(project.input)
-                builder.project(childNodes)
-                builder.project(newExprs, project.rowType.fieldNames)
-                val newProject = builder.build()
-                return newProject
+                return result
             }
 
-            private fun getNodesToEject(
-                counts: Map<RexNode, Int>,
-                caseCounts: Map<RexNode, Int>,
-                maxCounts: Map<RexNode, Int>,
-                node: RexNode,
-                ejectSet: MutableSet<RexNode>,
-            ) {
-                if (node is RexCall) {
-                    val count = counts[node]?.let { it + (caseCounts[node] ?: 0) }
-                    val maxCount = maxCounts[node]
-                    if (count != null && maxCount != null && count > 1 && count >= maxCount) {
-                        ejectSet.add(node)
-                    } else {
-                        node.operands.forEach { getNodesToEject(counts, caseCounts, maxCounts, it, ejectSet) }
-                    }
+            override fun visitOver(over: RexOver) {
+                if (insideCase) {
+                    val selfCount = (caseCounts[over] ?: 0) + 1
+                    caseCounts[over] = selfCount
+                } else {
+                    val selfCount = (nodeCounts[over] ?: 0) + 1
+                    nodeCounts[over] = selfCount
                 }
+                super.visitCall(over)
+            }
+        }
+
+        class SubexpressionEjector(
+            val ejectNodes: Set<RexNode>,
+            val childNodes: MutableList<RexNode>,
+        ) : RexShuttle() {
+            private val pushedWindows = ejectNodes.any { RexOver.containsOver(it) }
+
+            override fun visitCall(call: RexCall): RexNode {
+                if (ejectNodes.contains(call)) {
+                    return lookupOrAdd(call)
+                }
+                return super.visitCall(call)
             }
 
-            /**
-             * Visitor used to count the number of occurrences of
-             * RexCall and RexOver nodes from a collection of RexNodes,
-             * such as a projection, to help identify opportunities for
-             * common subexpression elimination. Does not keep track of
-             * base-case nodes like literals or input refs.
-             *
-             * Also keeps track of the maximum number of counts between
-             * the node and any of its descendants.
-             *
-             * Keeps track of nodes instead of CASE statements separately.
-             */
-            class RexCallCounter : RexVisitorImpl<Unit>(true) {
-                val nodeCounts: MutableMap<RexNode, Int> = mutableMapOf()
-                val caseCounts: MutableMap<RexNode, Int> = mutableMapOf()
-                val maxCounts: MutableMap<RexNode, Int> = mutableMapOf()
-                var insideCase = false
-
-                override fun visitCall(call: RexCall) {
-                    if (insideCase) {
-                        val selfCount = (caseCounts[call] ?: 0) + 1
-                        caseCounts[call] = selfCount
-                    } else {
-                        val selfCount = (nodeCounts[call] ?: 0) + 1
-                        nodeCounts[call] = selfCount
-                    }
-                    val curCount = nodeCounts[call]?.let { it + (caseCounts[call] ?: 0) } ?: 0
-                    val maxCount = maxOf(call.operands.map { maxCounts[it] ?: 0 }.maxOrNull() ?: 0, curCount)
-                    maxCounts[call] = maxCount
-                    val oldInsideCase = insideCase
-                    if (call.kind == SqlKind.CASE) {
-                        insideCase = true
-                    }
-                    val result = super.visitCall(call)
-                    if (call.kind == SqlKind.CASE) {
-                        insideCase = oldInsideCase
-                    }
-                    return result
+            override fun visitOver(over: RexOver): RexNode {
+                if (ejectNodes.contains(over)) {
+                    return lookupOrAdd(over)
                 }
-
-                override fun visitOver(over: RexOver) {
-                    if (insideCase) {
-                        val selfCount = (caseCounts[over] ?: 0) + 1
-                        caseCounts[over] = selfCount
-                    } else {
-                        val selfCount = (nodeCounts[over] ?: 0) + 1
-                        nodeCounts[over] = selfCount
-                    }
-                    super.visitCall(over)
+                val result = super.visitOver(over)
+                // If the window function call was not modified, we should push it down as well if any
+                // other window function calls were pushed.
+                if (pushedWindows && result == over) {
+                    return lookupOrAdd(over)
                 }
+                return result
             }
 
-            class SubexpressionEjector(
-                val ejectNodes: Set<RexNode>,
-                val childNodes: MutableList<RexNode>,
-            ) : RexShuttle() {
-                private val pushedWindows = ejectNodes.any { RexOver.containsOver(it) }
-
-                override fun visitCall(call: RexCall): RexNode {
-                    if (ejectNodes.contains(call)) {
-                        return lookupOrAdd(call)
-                    }
-                    return super.visitCall(call)
+            private fun lookupOrAdd(node: RexNode): RexNode {
+                childNodes.forEachIndexed { idx, childNode ->
+                    if (childNode == node) return RexInputRef(idx, node.type)
                 }
-
-                override fun visitOver(over: RexOver): RexNode {
-                    if (ejectNodes.contains(over)) {
-                        return lookupOrAdd(over)
-                    }
-                    val result = super.visitOver(over)
-                    // If the window function call was not modified, we should push it down as well if any
-                    // other window function calls were pushed.
-                    if (pushedWindows && result == over) {
-                        return lookupOrAdd(over)
-                    }
-                    return result
-                }
-
-                private fun lookupOrAdd(node: RexNode): RexNode {
-                    childNodes.forEachIndexed {
-                            idx, childNode ->
-                        if (childNode == node) return RexInputRef(idx, node.type)
-                    }
-                    val idx = childNodes.size
-                    childNodes.add(node)
-                    return RexInputRef(idx, node.type)
-                }
+                val idx = childNodes.size
+                childNodes.add(node)
+                return RexInputRef(idx, node.type)
             }
         }
     }
+}

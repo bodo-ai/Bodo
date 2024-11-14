@@ -550,7 +550,6 @@ cdef shared_ptr[CStmt] unbox_stmt(stmt, c_bool empty_loc=False):
 cdef shared_ptr[CBlock] unbox_block(object block, c_bool empty_loc=False):
     """Unbox ir.Block object into equivalent C++ version"""
     cdef shared_ptr[CBlock] c_block = make_shared[CBlock](unbox_loc(block.loc, empty_loc))
-    cdef shared_ptr[CInst] c_inst
 
     for inst in block.body:
         c_block.get().body.push_back(unbox_stmt(inst, empty_loc))
@@ -574,8 +573,8 @@ cdef shared_ptr[CFunctionIR] unbox_ir(object f_ir, c_bool empty_loc=False):
 
 
 cdef public c_string cpp_ir_native_to_string(object func_ir):
-    cdef shared_ptr[CFunctionIR] ir = unbox_ir(func_ir, empty_loc=True)
-    return ir.get().ToString()
+    cdef shared_ptr[CFunctionIR] fir = unbox_ir(func_ir, empty_loc=True)
+    return fir.get().ToString()
 
 
 def ir_native_to_string(func_ir):
@@ -595,10 +594,12 @@ cdef box_calltypes(unordered_map[CExprPtr, shared_ptr[CSignature]] calltypes):
 
 
 def bodo_type_inference(interp, args, return_type,
-                         locals={}, raise_errors=True):
+                         locals=None, raise_errors=True):
     """Call native type inferer (boxes arguments and unboxes results).
     Throws error if native type inferer was unsuccessful due to gaps (needs fallback to Numba).
     """
+    if locals is None:
+        locals = {}
     if len(args) != interp.arg_count:
         raise TypeError("Mismatch number of argument types")
 

@@ -7,7 +7,9 @@ import org.apache.calcite.rel.convert.ConverterRule
 import org.apache.calcite.rel.core.TableFunctionScan
 import org.apache.calcite.rex.RexCall
 
-class BodoPhysicalTableFunctionScanRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalTableFunctionScanRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -17,8 +19,7 @@ class BodoPhysicalTableFunctionScanRule private constructor(config: Config) : Co
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalTableFunctionScanRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalTableFunctionScanRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalTableFunctionScanRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

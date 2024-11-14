@@ -33,7 +33,9 @@ object HintApplicationProgram : Program {
         return rel.accept(shuttle)
     }
 
-    private class Visitor(private val builder: RelBuilder) : RelShuttleImpl() {
+    private class Visitor(
+        private val builder: RelBuilder,
+    ) : RelShuttleImpl() {
         /**
          * Note the RelShuttleImpl() is designed for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection

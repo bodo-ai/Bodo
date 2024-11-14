@@ -83,9 +83,7 @@ class BodoMetadataRestrictionScan {
         fun canRequestColumnDistinctiveness(
             tableName: List<String>,
             columnName: String,
-        ): Boolean {
-            return columnsAllowedToRequest.contains("${tableName.joinToString(".")}.$columnName".uppercase(Locale.ROOT))
-        }
+        ): Boolean = columnsAllowedToRequest.contains("${tableName.joinToString(".")}.$columnName".uppercase(Locale.ROOT))
 
         /**
          * Takes in a RexNode and determines whether it corresponds to a column
@@ -136,8 +134,7 @@ class BodoMetadataRestrictionScan {
                         // add the corresponding columns to the list (if they
                         // are inferable from a single column).
                         it.operands.forEach { operand ->
-                            getColumnForDistinctness(operand)?.let {
-                                    col ->
+                            getColumnForDistinctness(operand)?.let { col ->
                                 equiJoins.add(col)
                             }
                         }
@@ -175,8 +172,10 @@ class BodoMetadataRestrictionScan {
                     val tablePath = table.fullPath.joinToString(".")
                     columnsAllowedToRequest.add("$tablePath.$columnName".uppercase(Locale.ROOT))
                 }
-            } else if (node is SetOp || node is Filter ||
-                node is SnowflakeToBodoPhysicalConverter || node is IcebergToBodoPhysicalConverter
+            } else if (node is SetOp ||
+                node is Filter ||
+                node is SnowflakeToBodoPhysicalConverter ||
+                node is IcebergToBodoPhysicalConverter
             ) {
                 // For these types of RelNodes, forward the scan onto all the children un-modified.
                 node.inputs.forEach { findColumnsThatCanBeRequested(it, cols) }
@@ -267,8 +266,7 @@ class BodoMetadataRestrictionScan {
                 val newCols: MutableSet<Int> = mutableSetOf()
                 val offset = node.usedColOutputs.cardinality()
                 val usedInputs = node.repeatColumns.toList()
-                usedInputs.mapIndexed {
-                        idx, value ->
+                usedInputs.mapIndexed { idx, value ->
                     if (cols.contains(idx + offset)) {
                         newCols.add(value)
                     }

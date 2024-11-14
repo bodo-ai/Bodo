@@ -8,8 +8,11 @@ import org.apache.calcite.plan.RelTraitSet
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.SingleRel
 
-class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, input: RelNode) :
-    SingleRel(
+class SeparateStreamExchange(
+    cluster: RelOptCluster,
+    traitSet: RelTraitSet,
+    input: RelNode,
+) : SingleRel(
         cluster,
         traitSet.replace(BodoPhysicalRel.CONVENTION),
         input,
@@ -22,13 +25,9 @@ class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): RelNode? {
-        return SeparateStreamExchange(cluster, traitSet, inputs[0])
-    }
+    ): RelNode? = SeparateStreamExchange(cluster, traitSet, inputs[0])
 
-    override fun isEnforcer(): Boolean {
-        return true
-    }
+    override fun isEnforcer(): Boolean = true
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         // This should never be called, we need to handle SeparateStreamExchange
@@ -36,17 +35,11 @@ class SeparateStreamExchange(cluster: RelOptCluster, traitSet: RelTraitSet, inpu
         TODO("Not yet implemented")
     }
 
-    override fun splitCount(numRanks: Int): Int {
-        return 1
-    }
+    override fun splitCount(numRanks: Int): Int = 1
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return BatchingProperty.STREAMING
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = BatchingProperty.STREAMING
 
-    override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return BatchingProperty.SINGLE_BATCH
-    }
+    override fun expectedInputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = BatchingProperty.SINGLE_BATCH
 
     override fun initStateVariable(ctx: BodoPhysicalRel.BuildContext): StateVariable {
         TODO("Not yet implemented")

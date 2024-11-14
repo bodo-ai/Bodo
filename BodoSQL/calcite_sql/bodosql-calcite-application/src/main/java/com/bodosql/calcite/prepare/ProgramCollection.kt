@@ -7,7 +7,9 @@ typealias ProgramFactory = (optimize: Boolean) -> Program
 /**
  * Collection of programs each planner must define.
  */
-data class ProgramCollection(val programFactory: ProgramFactory) {
+data class ProgramCollection(
+    val programFactory: ProgramFactory,
+) {
     /**
      * Structures the above into a list for the planner.
      *

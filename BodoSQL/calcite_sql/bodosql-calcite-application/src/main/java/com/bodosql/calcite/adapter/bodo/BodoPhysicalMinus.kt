@@ -12,14 +12,13 @@ class BodoPhysicalMinus(
     traitSet: RelTraitSet,
     inputs: List<RelNode>,
     all: Boolean,
-) : Minus(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), inputs, all), BodoPhysicalRel {
+) : Minus(cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), inputs, all),
+    BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
         all: Boolean,
-    ): BodoPhysicalMinus {
-        return BodoPhysicalMinus(cluster, traitSet, inputs, all)
-    }
+    ): BodoPhysicalMinus = BodoPhysicalMinus(cluster, traitSet, inputs, all)
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")
@@ -41,8 +40,6 @@ class BodoPhysicalMinus(
             cluster: RelOptCluster,
             inputs: List<RelNode>,
             all: Boolean,
-        ): BodoPhysicalMinus {
-            return BodoPhysicalMinus(cluster, cluster.traitSet(), inputs, all)
-        }
+        ): BodoPhysicalMinus = BodoPhysicalMinus(cluster, cluster.traitSet(), inputs, all)
     }
 }

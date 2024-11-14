@@ -24,14 +24,13 @@ abstract class PipelineEmission(
     fun initializePipeline(
         ctx: BodoPhysicalRel.BuildContext,
         pipelineIdx: Int,
-    ): BodoEngineTable? {
-        return if (startPipeline) {
+    ): BodoEngineTable? =
+        if (startPipeline) {
             ctx.startPipeline()
             null
         } else {
             ctx.visitChild(child!!, pipelineIdx)
         }
-    }
 
     fun terminatePipeline(ctx: BodoPhysicalRel.BuildContext) {
         if (terminatingStage != null) {

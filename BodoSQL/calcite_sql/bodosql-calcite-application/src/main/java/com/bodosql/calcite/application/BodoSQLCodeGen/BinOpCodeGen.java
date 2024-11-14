@@ -116,6 +116,7 @@ public class BinOpCodeGen {
     }
     return generateBinOpCodeHelper(args, binOpKind, builder, streamingNamedArgs, argScalars);
   }
+
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
    * have more than two arguments because repeated use of the same operator are grouped into the

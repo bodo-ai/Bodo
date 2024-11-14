@@ -22,7 +22,9 @@ import java.util.stream.Collectors
  * Implementation of MetadataHandlerProvider to enable updating cluster.setMetadataQuerySupplier.
  * This is largely based on JaninoRelMetadataProvider inside Calcite.
  */
-class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadataProvider) : MetadataHandlerProvider {
+class BodoRelMetadataHandlerProvider(
+    private val relMetadataProvider: RelMetadataProvider,
+) : MetadataHandlerProvider {
     /**
      * This is largely replicated from both Calcite and Dremio. My understanding of the code (which
      * may not be fully correct) is:
@@ -39,7 +41,9 @@ class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadat
      */
     override fun <MH : MetadataHandler<*>?> handler(handlerClass: Class<MH>): MH {
         val handlers =
-            relMetadataProvider.handlers(handlerClass).stream()
+            relMetadataProvider
+                .handlers(handlerClass)
+                .stream()
                 .distinct()
                 .collect(Collectors.toList())
         val generatedHandler = RelMetadataHandlerGeneratorUtil.generateHandler(handlerClass, handlers)
@@ -80,7 +84,8 @@ class BodoRelMetadataHandlerProvider(private val relMetadataProvider: RelMetadat
         val o: Any
         try {
             constructor =
-                compiler.classLoader.loadClass(className)
+                compiler.classLoader
+                    .loadClass(className)
                     .declaredConstructors[0]
             o = constructor.newInstance(*argList.toTypedArray())
         } catch (e: IllegalArgumentException) {

@@ -4,13 +4,18 @@ import com.bodosql.calcite.ir.Expr
 import com.google.common.collect.ImmutableList
 import org.apache.iceberg.CatalogProperties
 
-class TabularCatalog(warehouse: String, restUri: String, token: String? = null, credential: String? = null) : IcebergRESTCatalog(
-    restUri,
-    warehouse,
-    token,
-    credential,
-    defaultSchema = "default",
-) {
+class TabularCatalog(
+    warehouse: String,
+    restUri: String,
+    token: String? = null,
+    credential: String? = null,
+) : IcebergRESTCatalog(
+        restUri,
+        warehouse,
+        token,
+        credential,
+        defaultSchema = "default",
+    ) {
     init {
         if (token == null && credential == null) {
             throw IllegalArgumentException("Either token or credential must be provided.")

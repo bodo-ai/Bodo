@@ -29,15 +29,14 @@ class PandasProject(
     input: RelNode,
     projects: List<RexNode>,
     rowType: RelDataType,
-) : ProjectBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), input, projects, rowType), PandasRel {
+) : ProjectBase(cluster, traitSet.replace(PandasRel.CONVENTION), ImmutableList.of(), input, projects, rowType),
+    PandasRel {
     override fun copy(
         traitSet: RelTraitSet,
         input: RelNode,
         projects: List<RexNode>,
         rowType: RelDataType,
-    ): PandasProject {
-        return PandasProject(cluster, traitSet, input, projects, rowType)
-    }
+    ): PandasProject = PandasProject(cluster, traitSet, input, projects, rowType)
 
     /**
      * Emits the code necessary for implementing this relational operator.
@@ -48,8 +47,8 @@ class PandasProject(
      * @param implementor implementation handler.
      * @return the variable that represents this relational expression.
      */
-    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
-        return if (isStreaming()) {
+    override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable =
+        if (isStreaming()) {
             val stage =
                 OutputtingStageEmission(
                     { ctx, stateVar, table ->
@@ -83,7 +82,6 @@ class PandasProject(
                 generateDataFrame(ctx, inputVar, translator, projects, localRefs, projects, input)
             }
         }
-    }
 
     override fun computeSelfCost(
         planner: RelOptPlanner,
@@ -93,9 +91,7 @@ class PandasProject(
         return planner.makeCost(cpu = 0.0, mem = 0.0, rows = rows)
     }
 
-    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty {
-        return inputBatchingProperty
-    }
+    override fun expectedOutputBatchingProperty(inputBatchingProperty: BatchingProperty): BatchingProperty = inputBatchingProperty
 
     companion object {
         @JvmStatic
@@ -105,9 +101,7 @@ class PandasProject(
             input: RelNode,
             projects: List<RexNode>,
             rowType: RelDataType,
-        ): PandasProject {
-            return PandasProject(cluster, traitSet, input, projects, rowType)
-        }
+        ): PandasProject = PandasProject(cluster, traitSet, input, projects, rowType)
 
         @JvmStatic
         fun create(

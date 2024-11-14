@@ -1055,8 +1055,7 @@ public class AggregateReduceFunctionsRule extends RelRule<AggregateReduceFunctio
      * <p>Any aggregate function whose type is omitted from this set, OR which does not pass the
      * {@link #extraCondition}, will be ignored.
      */
-    @Nullable
-    Set<SqlKind> functionsToReduce();
+    @Nullable Set<SqlKind> functionsToReduce();
 
     /**
      * A test that must pass before attempting to reduce any aggregate function.

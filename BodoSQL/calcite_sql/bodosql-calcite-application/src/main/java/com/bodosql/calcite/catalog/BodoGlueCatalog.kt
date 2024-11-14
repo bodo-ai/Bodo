@@ -13,7 +13,9 @@ import com.google.common.collect.ImmutableList
 import org.apache.calcite.sql.ddl.SqlCreateTable
 import org.apache.iceberg.aws.glue.GlueCatalog
 
-class BodoGlueCatalog(private val warehouse: String) : IcebergCatalog<GlueCatalog>(createGlueCatalog(warehouse)) {
+class BodoGlueCatalog(
+    private val warehouse: String,
+) : IcebergCatalog<GlueCatalog>(createGlueCatalog(warehouse)) {
     /**
      * Generates the code necessary to submit the remote query to the catalog DB.
      *
@@ -30,9 +32,7 @@ class BodoGlueCatalog(private val warehouse: String) : IcebergCatalog<GlueCatalo
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return true if the depth is 1 and false otherwise.
      */
-    override fun schemaDepthMayContainTables(depth: Int): Boolean {
-        return depth == 1
-    }
+    override fun schemaDepthMayContainTables(depth: Int): Boolean = depth == 1
 
     /**
      * Returns if a schema with the given depth is allowed to contain subSchemas.
@@ -41,9 +41,7 @@ class BodoGlueCatalog(private val warehouse: String) : IcebergCatalog<GlueCatalo
      * @param depth The number of parent schemas that would need to be visited to reach the root.
      * @return true if the depth is 0 and false otherwise.
      */
-    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean {
-        return depth == 0
-    }
+    override fun schemaDepthMayContainSubSchemas(depth: Int): Boolean = depth == 0
 
     /**
      * Generate a Python connection string used to read from or write to a Catalog in Bodo's SQL
@@ -57,9 +55,8 @@ class BodoGlueCatalog(private val warehouse: String) : IcebergCatalog<GlueCatalo
      * @param schemaPath The schema component to define the connection not including the table name.
      * @return The connection string
      */
-    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr {
-        return Expr.Call("bodosql.get_glue_connection", Expr.StringLiteral(warehouse))
-    }
+    override fun generatePythonConnStr(schemaPath: ImmutableList<String>): Expr =
+        Expr.Call("bodosql.get_glue_connection", Expr.StringLiteral(warehouse))
 
     /**
      * Return the desired WriteTarget for a create table operation.
@@ -78,15 +75,14 @@ class BodoGlueCatalog(private val warehouse: String) : IcebergCatalog<GlueCatalo
         createTableType: SqlCreateTable.CreateTableType,
         ifExistsBehavior: WriteTarget.IfExistsBehavior,
         columnNamesGlobal: Variable,
-    ): WriteTarget {
-        return IcebergWriteTarget(
+    ): WriteTarget =
+        IcebergWriteTarget(
             tableName,
             schema,
             ifExistsBehavior,
             columnNamesGlobal,
             generatePythonConnStr(schema),
         )
-    }
 
     /**
      * Returns a set of all table names with the given schema name.
@@ -146,9 +142,7 @@ class BodoGlueCatalog(private val warehouse: String) : IcebergCatalog<GlueCatalo
      * Glue catalogs don't have subSchemas, so this method always returns 1.
      * @return The number of levels a default schema can be found.
      */
-    override fun numDefaultSchemaLevels(): Int {
-        return 1
-    }
+    override fun numDefaultSchemaLevels(): Int = 1
 
     /**
      * Generates the code necessary to produce an append write expression from the given catalog.

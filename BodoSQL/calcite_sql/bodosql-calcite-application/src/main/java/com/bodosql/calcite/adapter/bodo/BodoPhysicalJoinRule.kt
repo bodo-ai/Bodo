@@ -10,7 +10,9 @@ import org.apache.calcite.sql.SqlUtil
 import org.apache.calcite.sql.parser.SqlParserPos
 import org.apache.calcite.util.BodoStatic.BODO_SQL_RESOURCE
 
-class BodoPhysicalJoinRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalJoinRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -20,8 +22,7 @@ class BodoPhysicalJoinRule private constructor(config: Config) : ConverterRule(c
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalJoinRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalJoinRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalJoinRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode? {

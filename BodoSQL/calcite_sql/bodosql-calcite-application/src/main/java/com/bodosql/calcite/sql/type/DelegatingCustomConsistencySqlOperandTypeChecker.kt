@@ -23,45 +23,30 @@ class DelegatingCustomConsistencySqlOperandTypeChecker(
     override fun checkOperandTypes(
         callBinding: SqlCallBinding?,
         throwOnFailure: Boolean,
-    ): Boolean {
-        return base.checkOperandTypes(callBinding, throwOnFailure)
-    }
+    ): Boolean = base.checkOperandTypes(callBinding, throwOnFailure)
 
-    override fun getOperandCountRange(): SqlOperandCountRange {
-        return base.operandCountRange
-    }
+    override fun getOperandCountRange(): SqlOperandCountRange = base.operandCountRange
 
     override fun getAllowedSignatures(
         op: SqlOperator?,
         opName: String?,
-    ): String {
-        return base.getAllowedSignatures(op, opName)
-    }
+    ): String = base.getAllowedSignatures(op, opName)
 
-    override fun isOptional(i: Int): Boolean {
-        return base.isOptional(i)
-    }
+    override fun isOptional(i: Int): Boolean = base.isOptional(i)
 
-    override fun isFixedParameters(): Boolean {
-        return base.isFixedParameters
-    }
+    override fun isFixedParameters(): Boolean = base.isFixedParameters
 
-    override fun typeInference(): SqlOperandTypeInference? {
-        return base.typeInference()
-    }
+    override fun typeInference(): SqlOperandTypeInference? = base.typeInference()
 
     // ~~~~Disabled implementations~~~~
-    override fun withGenerator(signatureGenerator: BiFunction<SqlOperator?, String?, String?>?): CompositeOperandTypeChecker? {
+    override fun withGenerator(signatureGenerator: BiFunction<SqlOperator?, String?, String?>?): CompositeOperandTypeChecker? =
         throw UnsupportedOperationException("withGenerator not supported for DelegatingCustomConsistencySqlOperandTypeChecker")
-    }
 
-    override fun and(checker: SqlOperandTypeChecker?): SqlOperandTypeChecker? {
+    override fun and(checker: SqlOperandTypeChecker?): SqlOperandTypeChecker? =
         throw UnsupportedOperationException("and not supported for DelegatingCustomConsistencySqlOperandTypeChecker")
-    }
 
-    override fun or(checker: SqlOperandTypeChecker?): SqlOperandTypeChecker? {
+    override fun or(checker: SqlOperandTypeChecker?): SqlOperandTypeChecker? =
         throw UnsupportedOperationException("or not supported for DelegatingCustomConsistencySqlOperandTypeChecker")
-    }
 
     // ~Custom consistency logic
 
@@ -73,7 +58,5 @@ class DelegatingCustomConsistencySqlOperandTypeChecker(
     override fun deriveConsistencyOperandTypes(
         inputTypes: List<RelDataType>,
         typeFactory: RelDataTypeFactory,
-    ): List<RelDataType> {
-        return deriveConsistencyOperandTypesImpl(inputTypes, typeFactory)
-    }
+    ): List<RelDataType> = deriveConsistencyOperandTypesImpl(inputTypes, typeFactory)
 }

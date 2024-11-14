@@ -5,7 +5,7 @@ keyword. We need this to be able to get the shared_ptr<FileSystem> from
 PyFileSystem
 """
 cimport pyarrow.lib
-from libcpp.memory cimport shared_ptr, make_shared
+from libcpp.memory cimport shared_ptr
 from pyarrow._fs cimport PyFileSystem, FileSystem
 from pyarrow.includes.common cimport *
 from pyarrow.includes.libarrow_fs cimport CFileSystem

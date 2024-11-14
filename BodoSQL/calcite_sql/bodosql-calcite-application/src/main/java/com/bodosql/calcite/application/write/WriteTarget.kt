@@ -83,9 +83,7 @@ abstract class WriteTarget(
      * so we default to a NoOp.
      * @return An operation that includes the finalization behavior.
      */
-    open fun streamingCreateTableFinalize(): Op {
-        return Op.NoOp
-    }
+    open fun streamingCreateTableFinalize(): Op = Op.NoOp
 
     /**
      * Final step to mark an insert into operation as done.
@@ -93,9 +91,7 @@ abstract class WriteTarget(
      * so we default to a NoOp.
      * @return An operation that includes the finalization behavior.
      */
-    open fun streamingInsertIntoFinalize(): Op {
-        return Op.NoOp
-    }
+    open fun streamingInsertIntoFinalize(): Op = Op.NoOp
 
     /** Enum describing write behavior when the table already exists.  */
     enum class IfExistsBehavior {
@@ -121,8 +117,8 @@ abstract class WriteTarget(
 
         companion object {
             @JvmStatic
-            fun fromString(strVal: String): WriteTargetEnum {
-                return when (strVal) {
+            fun fromString(strVal: String): WriteTargetEnum =
+                when (strVal) {
                     "parquet" -> {
                         PARQUET
                     }
@@ -135,7 +131,6 @@ abstract class WriteTarget(
                         throw java.lang.RuntimeException("Unsupported Write Target Enum")
                     }
                 }
-            }
         }
     }
 }

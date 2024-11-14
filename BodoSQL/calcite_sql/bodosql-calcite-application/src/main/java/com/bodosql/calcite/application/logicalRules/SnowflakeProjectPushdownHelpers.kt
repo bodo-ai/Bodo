@@ -44,9 +44,7 @@ class SnowflakeProjectPushdownHelpers {
          * that the value is non-trivial (not an input ref).
          */
         @JvmStatic
-        fun isNonTrivialPushableExpr(node: RexNode): Boolean {
-            return node !is RexInputRef && isPushableNode(node)
-        }
+        fun isNonTrivialPushableExpr(node: RexNode): Boolean = node !is RexInputRef && isPushableNode(node)
 
         @JvmStatic
         fun containsNonTrivialPushableExprs(node: RelNode): Boolean {
@@ -125,8 +123,7 @@ class SnowflakeProjectPushdownHelpers {
             // recomputing canPushLeft, but I couldn't figure it out
             val leftProjects = expressionsToTryAndPush.filter { curVal -> canPushLeft(curVal, leftBound) }
             val rightProjects =
-                expressionsToTryAndPush.filter {
-                        curVal ->
+                expressionsToTryAndPush.filter { curVal ->
                     canPushRight(curVal, leftBound) && !canPushLeft(curVal, leftBound)
                 }
 
@@ -153,12 +150,14 @@ class SnowflakeProjectPushdownHelpers {
                     Pair(node, idx + oldRight.rowType.fieldCount)
                 }
             val expressionMap: Map<RexNode, RexNode> =
-                leftExpressionsIndexed.plus(rightExpressionsIndexed).map { rexNodeAndNewIndex: Pair<RexNode, Int> ->
-                    Pair(
-                        rexNodeAndNewIndex.first,
-                        builder.rexBuilder.makeInputRef(rexNodeAndNewIndex.first.type, rexNodeAndNewIndex.second),
-                    )
-                }.toMap()
+                leftExpressionsIndexed
+                    .plus(rightExpressionsIndexed)
+                    .map { rexNodeAndNewIndex: Pair<RexNode, Int> ->
+                        Pair(
+                            rexNodeAndNewIndex.first,
+                            builder.rexBuilder.makeInputRef(rexNodeAndNewIndex.first.type, rexNodeAndNewIndex.second),
+                        )
+                    }.toMap()
             // Update the input refs in the join condition
             val oldLeftFieldCount = oldLeft.rowType.fieldCount
             val oldRightFieldCount = oldRight.rowType.fieldCount
@@ -240,7 +239,10 @@ class SnowflakeProjectPushdownHelpers {
      * Note that this shouldn't be called directly on a RelNode, as this can lead to RelBuilders throwing
      * errors due to incorrectly typed RelNodes.
      */
-    class Replacer(val initialFieldCount: Int, val rexBuilder: RexBuilder) : RexShuttle() {
+    class Replacer(
+        val initialFieldCount: Int,
+        val rexBuilder: RexBuilder,
+    ) : RexShuttle() {
         val replacedExprs = mutableListOf<RexNode>()
         var currentFieldIndex = initialFieldCount
 
@@ -259,41 +261,28 @@ class SnowflakeProjectPushdownHelpers {
 
         // ~ Methods ----------------------------------------------------------------
 
-        override fun visitCall(call: RexCall): RexNode {
-            return visitRexInternal(call) ?: super.visitCall(call)
-        }
+        override fun visitCall(call: RexCall): RexNode = visitRexInternal(call) ?: super.visitCall(call)
 
-        override fun visitOver(over: RexOver): RexNode {
-            return visitRexInternal(over) ?: super.visitOver(over)
-        }
+        override fun visitOver(over: RexOver): RexNode = visitRexInternal(over) ?: super.visitOver(over)
 
-        override fun visitCorrelVariable(correlVariable: RexCorrelVariable): RexNode {
-            return visitRexInternal(correlVariable) ?: super.visitCorrelVariable(correlVariable)
-        }
+        override fun visitCorrelVariable(correlVariable: RexCorrelVariable): RexNode =
+            visitRexInternal(correlVariable) ?: super.visitCorrelVariable(correlVariable)
 
-        override fun visitDynamicParam(dynamicParam: RexDynamicParam): RexNode {
-            return visitRexInternal(dynamicParam) ?: super.visitDynamicParam(dynamicParam)
-        }
+        override fun visitDynamicParam(dynamicParam: RexDynamicParam): RexNode =
+            visitRexInternal(dynamicParam) ?: super.visitDynamicParam(dynamicParam)
 
-        override fun visitRangeRef(rangeRef: RexRangeRef): RexNode {
-            return visitRexInternal(rangeRef) ?: super.visitRangeRef(rangeRef)
-        }
+        override fun visitRangeRef(rangeRef: RexRangeRef): RexNode = visitRexInternal(rangeRef) ?: super.visitRangeRef(rangeRef)
 
-        override fun visitFieldAccess(fieldAccess: RexFieldAccess): RexNode {
-            return visitRexInternal(fieldAccess) ?: super.visitFieldAccess(fieldAccess)
-        }
+        override fun visitFieldAccess(fieldAccess: RexFieldAccess): RexNode =
+            visitRexInternal(fieldAccess) ?: super.visitFieldAccess(fieldAccess)
 
-        override fun visitSubQuery(subQuery: RexSubQuery): RexNode {
-            return visitRexInternal(subQuery) ?: super.visitSubQuery(subQuery)
-        }
+        override fun visitSubQuery(subQuery: RexSubQuery): RexNode = visitRexInternal(subQuery) ?: super.visitSubQuery(subQuery)
 
-        override fun visitTableInputRef(fieldRef: RexTableInputRef): RexNode {
-            return visitRexInternal(fieldRef) ?: super.visitTableInputRef(fieldRef)
-        }
+        override fun visitTableInputRef(fieldRef: RexTableInputRef): RexNode =
+            visitRexInternal(fieldRef) ?: super.visitTableInputRef(fieldRef)
 
-        override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): RexNode {
-            return visitRexInternal(fieldRef) ?: super.visitPatternFieldRef(fieldRef)
-        }
+        override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): RexNode =
+            visitRexInternal(fieldRef) ?: super.visitPatternFieldRef(fieldRef)
     }
 
     /**
@@ -302,55 +291,44 @@ class SnowflakeProjectPushdownHelpers {
      *
      * Note that this shouldn't be called directly on a RelNode, due to issues with typing.
      */
-    class MapReplacer(val map: Map<RexNode, RexNode>, val builder: RexBuilder) : RexShuttle() {
-        private fun returnIfInMap(node: RexNode): RexNode? {
-            return map.get(node)
-        }
+    class MapReplacer(
+        val map: Map<RexNode, RexNode>,
+        val builder: RexBuilder,
+    ) : RexShuttle() {
+        private fun returnIfInMap(node: RexNode): RexNode? = map.get(node)
 
         // ~ Methods ----------------------------------------------------------------
 
-        override fun visitCall(call: RexCall): RexNode {
-            return returnIfInMap(call) ?: super.visitCall(call)
-        }
+        override fun visitCall(call: RexCall): RexNode = returnIfInMap(call) ?: super.visitCall(call)
 
-        override fun visitOver(over: RexOver): RexNode {
-            return returnIfInMap(over) ?: super.visitOver(over)
-        }
+        override fun visitOver(over: RexOver): RexNode = returnIfInMap(over) ?: super.visitOver(over)
 
-        override fun visitCorrelVariable(correlVariable: RexCorrelVariable): RexNode {
-            return returnIfInMap(correlVariable) ?: super.visitCorrelVariable(correlVariable)
-        }
+        override fun visitCorrelVariable(correlVariable: RexCorrelVariable): RexNode =
+            returnIfInMap(correlVariable) ?: super.visitCorrelVariable(correlVariable)
 
-        override fun visitDynamicParam(dynamicParam: RexDynamicParam): RexNode {
-            return returnIfInMap(dynamicParam) ?: super.visitDynamicParam(dynamicParam)
-        }
+        override fun visitDynamicParam(dynamicParam: RexDynamicParam): RexNode =
+            returnIfInMap(dynamicParam) ?: super.visitDynamicParam(dynamicParam)
 
-        override fun visitRangeRef(rangeRef: RexRangeRef): RexNode {
-            return returnIfInMap(rangeRef) ?: super.visitRangeRef(rangeRef)
-        }
+        override fun visitRangeRef(rangeRef: RexRangeRef): RexNode = returnIfInMap(rangeRef) ?: super.visitRangeRef(rangeRef)
 
-        override fun visitFieldAccess(fieldAccess: RexFieldAccess): RexNode {
-            return returnIfInMap(fieldAccess) ?: super.visitFieldAccess(fieldAccess)
-        }
+        override fun visitFieldAccess(fieldAccess: RexFieldAccess): RexNode =
+            returnIfInMap(fieldAccess) ?: super.visitFieldAccess(fieldAccess)
 
-        override fun visitSubQuery(subQuery: RexSubQuery): RexNode {
-            return returnIfInMap(subQuery) ?: super.visitSubQuery(subQuery)
-        }
+        override fun visitSubQuery(subQuery: RexSubQuery): RexNode = returnIfInMap(subQuery) ?: super.visitSubQuery(subQuery)
 
-        override fun visitTableInputRef(fieldRef: RexTableInputRef): RexNode {
-            return returnIfInMap(fieldRef) ?: super.visitTableInputRef(fieldRef)
-        }
+        override fun visitTableInputRef(fieldRef: RexTableInputRef): RexNode = returnIfInMap(fieldRef) ?: super.visitTableInputRef(fieldRef)
 
-        override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): RexNode {
-            return returnIfInMap(fieldRef) ?: super.visitPatternFieldRef(fieldRef)
-        }
+        override fun visitPatternFieldRef(fieldRef: RexPatternFieldRef): RexNode =
+            returnIfInMap(fieldRef) ?: super.visitPatternFieldRef(fieldRef)
     }
 
     /**
      * Wrapper that takes a predicate, and sets seenPredicate if it encounters any RexNode that fulfils the predicate.
      * Currently used for predicates.
      */
-    private class FinderAsShuttle(val predicate: (RexNode) -> Boolean) : RexShuttle() {
+    private class FinderAsShuttle(
+        val predicate: (RexNode) -> Boolean,
+    ) : RexShuttle() {
         var seenPredicate = false
 
         override fun visitInputRef(inputRef: RexInputRef): RexNode {

@@ -55,13 +55,12 @@ class ExpectedBatchingProperty {
         private fun getBatchingProperty(
             streaming: Boolean,
             nodeTypes: List<RelDataType>,
-        ): BatchingProperty {
-            return if (streaming) {
+        ): BatchingProperty =
+            if (streaming) {
                 BatchingProperty.STREAMING
             } else {
                 BatchingProperty.SINGLE_BATCH
             }
-        }
 
         @JvmStatic
         fun alwaysSingleBatchProperty(): BatchingProperty = getBatchingProperty(false, listOf())
@@ -128,9 +127,8 @@ class ExpectedBatchingProperty {
          * Determine if we are just pruning columns and or adding
          * literals, do we want to use Streaming.
          */
-        private fun columnPruningIsStreaming(inputBatchingProperty: BatchingProperty): Boolean {
-            return inputBatchingProperty.satisfies(BatchingProperty.STREAMING)
-        }
+        private fun columnPruningIsStreaming(inputBatchingProperty: BatchingProperty): Boolean =
+            inputBatchingProperty.satisfies(BatchingProperty.STREAMING)
 
         @JvmStatic
         private val unsupportedAggregates =
@@ -158,22 +156,18 @@ class ExpectedBatchingProperty {
         // Note: This is based on the list in the GroupbyState
         // constructor in _stream_groupby.cpp.
         @JvmStatic
-        private fun isAccumulateType(type: RelDataType): Boolean {
-            return type is VariantSqlType || SqlTypeFamily.STRING.contains(type) || semiStructuredTypes.contains(type.sqlTypeName)
-        }
+        private fun isAccumulateType(type: RelDataType): Boolean =
+            type is VariantSqlType || SqlTypeFamily.STRING.contains(type) || semiStructuredTypes.contains(type.sqlTypeName)
 
         @JvmStatic
-        fun streamingSupportedWithoutAccumulateAggFunction(a: AggregateCall): Boolean {
-            return streamingSupportedAggFunction(a) &&
+        fun streamingSupportedWithoutAccumulateAggFunction(a: AggregateCall): Boolean =
+            streamingSupportedAggFunction(a) &&
                 !(
                     a.isDistinct || accumulateOnlyAggregates.contains(a.aggregation.name) || isAccumulateType(a.getType())
                 )
-        }
 
         @JvmStatic
-        fun streamingSupportedAggFunction(a: AggregateCall): Boolean {
-            return !a.hasFilter() && !unsupportedAggregates.contains(a.aggregation.name)
-        }
+        fun streamingSupportedAggFunction(a: AggregateCall): Boolean = !a.hasFilter() && !unsupportedAggregates.contains(a.aggregation.name)
 
         /**
          * Determine the streaming trait that can be used for an aggregation.
@@ -199,18 +193,21 @@ class ExpectedBatchingProperty {
         ): BatchingProperty {
             var canStream =
                 (
-                    groupSet.cardinality() != 0 && groupSets.size == 1 && groupSets[0] == groupSet &&
-                        aggCallList.all {
-                                a ->
+                    groupSet.cardinality() != 0 &&
+                        groupSets.size == 1 &&
+                        groupSets[0] == groupSet &&
+                        aggCallList.all { a ->
                             streamingSupportedAggFunction(a)
                         }
-                ) || (
-                    groupSets.all { !it.isEmpty } && aggCallList.all { streamingSupportedWithoutAccumulateAggFunction(it) } &&
-                        groupSet.all {
-                            val keyType = rowType.fieldList[it].type
-                            !semiStructuredTypes.contains(keyType.sqlTypeName) && keyType!is VariantSqlType
-                        }
-                )
+                ) ||
+                    (
+                        groupSets.all { !it.isEmpty } &&
+                            aggCallList.all { streamingSupportedWithoutAccumulateAggFunction(it) } &&
+                            groupSet.all {
+                                val keyType = rowType.fieldList[it].type
+                                !semiStructuredTypes.contains(keyType.sqlTypeName) && keyType!is VariantSqlType
+                            }
+                    )
 
             val nodeTypes = rowTypeToTypes(rowType)
             return getBatchingProperty(canStream, nodeTypes)

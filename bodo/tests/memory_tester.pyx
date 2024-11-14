@@ -15,7 +15,6 @@ from libc.stdlib cimport malloc
 from libc.string cimport strcpy
 from pyarrow.lib cimport MemoryPool, _Weakrefable, check_status
 
-import pyarrow as pa
 from pyarrow.lib import frombytes
 
 

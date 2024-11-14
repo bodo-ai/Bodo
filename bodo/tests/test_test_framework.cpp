@@ -7,8 +7,7 @@ bodo::tests::suite test_framework_tests([] {
         // verify that before/after_each cannot be registered after a test is.
         bodo::tests::suite test_suite([] {}, false);
         std::vector<std::string> markers = {};
-        test_suite.add_test(
-            "foo", [] {}, markers, 0);
+        test_suite.add_test("foo", [] {}, markers, 0);
 
         bool caught_exception = false;
         try {

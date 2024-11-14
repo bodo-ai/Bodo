@@ -17,8 +17,8 @@ class CheckTablePermissions {
          * Intended to return False if any table cannot be read.
          */
         @JvmStatic
-        fun canRead(rel: RelNode): Boolean {
-            return try {
+        fun canRead(rel: RelNode): Boolean =
+            try {
                 object : RelVisitor() {
                     override fun visit(
                         node: RelNode,
@@ -39,6 +39,5 @@ class CheckTablePermissions {
             } catch (e: Util.FoundOne) {
                 false
             }
-        }
     }
 }

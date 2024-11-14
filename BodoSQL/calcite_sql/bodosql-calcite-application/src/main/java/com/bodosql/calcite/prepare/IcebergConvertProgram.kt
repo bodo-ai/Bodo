@@ -44,8 +44,8 @@ object IcebergConvertProgram : Program {
         requiredOutputTraits: RelTraitSet,
         materializations: MutableList<RelOptMaterialization>,
         lattices: MutableList<RelOptLattice>,
-    ): RelNode {
-        return if (RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
+    ): RelNode =
+        if (RelationalAlgebraGenerator.enableSnowflakeIcebergTables) {
             val rexBuilder = rel.cluster.rexBuilder
             val executor: RexExecutor = Util.first(planner.executor, RexUtil.EXECUTOR)
             val simplify = BodoRexSimplify(rexBuilder, RelOptPredicateList.EMPTY, executor)
@@ -54,9 +54,11 @@ object IcebergConvertProgram : Program {
         } else {
             rel
         }
-    }
 
-    private class Visitor(private val rexBuilder: RexBuilder, private val simplify: RexSimplify) : RelShuttleImpl() {
+    private class Visitor(
+        private val rexBuilder: RexBuilder,
+        private val simplify: RexSimplify,
+    ) : RelShuttleImpl() {
         /**
          * Note the RelShuttleImpl() is designed for logical nodes and therefore
          * isn't designed to run on Physical nodes. It does not have reflection
@@ -99,17 +101,17 @@ object IcebergConvertProgram : Program {
         }
 
         // Physical node implementations
-        private fun visit(node: SnowflakeTableScan): RelNode {
-            return if (node.getCatalogTable().isIcebergTable()) {
-                IcebergTableScan.create(node.cluster, node.table!!, node.getCatalogTable())
+        private fun visit(node: SnowflakeTableScan): RelNode =
+            if (node.getCatalogTable().isIcebergTable()) {
+                IcebergTableScan
+                    .create(node.cluster, node.table!!, node.getCatalogTable())
                     .cloneWithProject(node.keptColumns)
             } else {
                 node
             }
-        }
 
-        private fun visit(node: SnowflakeToBodoPhysicalConverter): RelNode {
-            return when (val newInput = visit(node.input)) {
+        private fun visit(node: SnowflakeToBodoPhysicalConverter): RelNode =
+            when (val newInput = visit(node.input)) {
                 is SnowflakeRel -> {
                     // A node aborted the conversion process. Just return.
                     node
@@ -125,10 +127,9 @@ object IcebergConvertProgram : Program {
                     IcebergToBodoPhysicalConverter(node.cluster, node.traitSet, newInput)
                 }
             }
-        }
 
-        private fun visit(node: SnowflakeProject): RelNode {
-            return when (val newInput = visit(node.input)) {
+        private fun visit(node: SnowflakeProject): RelNode =
+            when (val newInput = visit(node.input)) {
                 is SnowflakeRel -> {
                     // A node aborted the code generation. Just return.
                     node
@@ -157,10 +158,9 @@ object IcebergConvertProgram : Program {
                     }
                 }
             }
-        }
 
-        private fun visit(node: SnowflakeFilter): RelNode {
-            return when (val newInput = visit(node.input)) {
+        private fun visit(node: SnowflakeFilter): RelNode =
+            when (val newInput = visit(node.input)) {
                 is SnowflakeRel -> {
                     // A node aborted the code generation. Just return.
                     node
@@ -206,10 +206,9 @@ object IcebergConvertProgram : Program {
                     }
                 }
             }
-        }
 
-        private fun visit(node: SnowflakeSort): RelNode {
-            return when (val newInput = visit(node.input)) {
+        private fun visit(node: SnowflakeSort): RelNode =
+            when (val newInput = visit(node.input)) {
                 is SnowflakeRel -> {
                     // A node aborted the code generation. Just return.
                     node
@@ -232,10 +231,9 @@ object IcebergConvertProgram : Program {
                     )
                 }
             }
-        }
 
-        private fun visit(node: SnowflakeAggregate): RelNode {
-            return when (val newInput = visit(node.input)) {
+        private fun visit(node: SnowflakeAggregate): RelNode =
+            when (val newInput = visit(node.input)) {
                 is SnowflakeRel -> {
                     // A node aborted the code generation. Just return.
                     node
@@ -259,7 +257,6 @@ object IcebergConvertProgram : Program {
                     }
                 }
             }
-        }
 
         companion object {
             /**

@@ -26,19 +26,32 @@ class BodoPhysicalTableModify(
     sourceExpressionList: List<RexNode>?,
     flattened: Boolean,
 ) : TableModify(
-        cluster, traitSet.replace(BodoPhysicalRel.CONVENTION), table, catalogReader,
-        input, operation, updateColumnList, sourceExpressionList, flattened,
+        cluster,
+        traitSet.replace(BodoPhysicalRel.CONVENTION),
+        table,
+        catalogReader,
+        input,
+        operation,
+        updateColumnList,
+        sourceExpressionList,
+        flattened,
     ),
     BodoPhysicalRel {
     override fun copy(
         traitSet: RelTraitSet,
         inputs: List<RelNode>,
-    ): BodoPhysicalTableModify {
-        return BodoPhysicalTableModify(
-            cluster, traitSet, table, catalogReader,
-            sole(inputs), operation, updateColumnList, sourceExpressionList, isFlattened,
+    ): BodoPhysicalTableModify =
+        BodoPhysicalTableModify(
+            cluster,
+            traitSet,
+            table,
+            catalogReader,
+            sole(inputs),
+            operation,
+            updateColumnList,
+            sourceExpressionList,
+            isFlattened,
         )
-    }
 
     override fun emit(implementor: BodoPhysicalRel.Implementor): BodoEngineTable {
         TODO("Not yet implemented")

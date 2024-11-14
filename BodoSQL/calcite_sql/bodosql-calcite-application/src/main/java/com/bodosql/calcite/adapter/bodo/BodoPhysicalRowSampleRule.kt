@@ -5,7 +5,9 @@ import org.apache.calcite.plan.Convention
 import org.apache.calcite.rel.RelNode
 import org.apache.calcite.rel.convert.ConverterRule
 
-class BodoPhysicalRowSampleRule private constructor(config: Config) : ConverterRule(config) {
+class BodoPhysicalRowSampleRule private constructor(
+    config: Config,
+) : ConverterRule(config) {
     companion object {
         @JvmField
         val DEFAULT_CONFIG: Config =
@@ -15,8 +17,7 @@ class BodoPhysicalRowSampleRule private constructor(config: Config) : ConverterR
                     Convention.NONE,
                     BodoPhysicalRel.CONVENTION,
                     "BodoPhysicalRowSampleRule",
-                )
-                .withRuleFactory { config -> BodoPhysicalRowSampleRule(config) }
+                ).withRuleFactory { config -> BodoPhysicalRowSampleRule(config) }
     }
 
     override fun convert(rel: RelNode): RelNode {

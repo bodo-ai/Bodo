@@ -43,7 +43,9 @@ import org.apache.calcite.sql2rel.StandardConvertletTableConfig
 import org.apache.calcite.tools.FrameworkConfig
 import org.apache.calcite.tools.Frameworks
 
-class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config)) {
+class PlannerImpl(
+    config: Config,
+) : AbstractPlannerImpl(frameworkConfig(config)) {
     private val defaultSchemas = config.defaultSchemas
 
     companion object {
@@ -97,21 +99,21 @@ class PlannerImpl(config: Config) : AbstractPlannerImpl(frameworkConfig(config))
                     else ->
                         throw Exception("Unrecognized bodo sql style: " + config.sqlStyle)
                 }
-            return Frameworks.newConfigBuilder()
+            return Frameworks
+                .newConfigBuilder()
                 .operatorTable(BodoOperatorTable)
                 .typeSystem(config.typeSystem)
                 .sqlToRelConverterConfig(
-                    SqlToRelConverter.config()
+                    SqlToRelConverter
+                        .config()
                         .withInSubQueryThreshold(Integer.MAX_VALUE)
                         .withHintStrategyTable(getHintStrategyTable()),
-                )
-                .parserConfig(parserConfig)
+                ).parserConfig(parserConfig)
                 .convertletTable(
                     BodoConvertletTable(
                         StandardConvertletTableConfig(false, false),
                     ),
-                )
-                .sqlValidatorConfig(validator)
+                ).sqlValidatorConfig(validator)
                 .costFactory(CostFactory())
                 .traitDefs(config.plannerType.traitDefs())
                 .programs(config.plannerType.programs().toList())

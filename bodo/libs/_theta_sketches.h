@@ -82,9 +82,9 @@ class CompactSketchCollection {
     CompactSketchCollection(
         std::vector<std::optional<datasketches::compact_theta_sketch>>&&
             sketches)
-        : sketches(std::move(sketches)){};
+        : sketches(std::move(sketches)) {};
     // Destructor.
-    ~CompactSketchCollection(){};
+    ~CompactSketchCollection() {};
 
     /**
      * @brief Gather the CompactSketchCollection onto rank 0 and combine them
@@ -212,7 +212,7 @@ class UpdateSketchCollection {
         }
     }
     // Destructor.
-    ~UpdateSketchCollection(){};
+    ~UpdateSketchCollection() {};
 
     /**
      * @brief Modifies a column's sketch in place when we have received a new
