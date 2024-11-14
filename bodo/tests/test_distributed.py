@@ -2545,7 +2545,6 @@ def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
     _check_scatterv_gatherv_allgatherv((df_value,), n)
 
 
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
     """test using scatterv for all supported dataframe types inside jit functions"""
 
