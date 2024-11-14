@@ -77,6 +77,7 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
                         head_axis0.start,
                         head_axis0.start + (head_axis0.step * nrows),
                         head_axis0.step,
+                        name=head_axis0.name,
                     )
                 case pd.Index:
                     new_axis0 = pd.Index(index_data, name=head_axis0.name)
@@ -329,6 +330,7 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
                         head_axis.start,
                         head_axis.start + (head_axis.step * nrows),
                         head_axis.step,
+                        name=head_axis.name,
                     )
                 case pd.Index:
                     new_axis = pd.Index(index_data, name=head_axis.name)

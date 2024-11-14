@@ -48,6 +48,7 @@ class LazyBlockManager(BlockManager, LazyMetadataMixin[BlockManager]):
                                 ss_axis.start,
                                 ss_axis.start + (ss_axis.step * nrows),
                                 ss_axis.step,
+                                name=ss_axis.name,
                             )
                         )
                     case pd.Index:
@@ -298,6 +299,7 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
                         head_axis.start,
                         head_axis.start + (head_axis.step * nrows),
                         head_axis.step,
+                        name=head_axis.name,
                     )
                 case pd.Index:
                     assert index_data is not None
