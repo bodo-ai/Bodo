@@ -111,10 +111,6 @@ void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
 void bool_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* bool_arr, int64_t n);
 void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n);
-int is_bool_array(PyArrayObject* arr);
-int is_pd_boolean_array(PyObject* arr);
-void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
-                          int64_t n);
 void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,
                    uint8_t* data);
 void print_list_str_arr(uint64_t n, const char* data,
@@ -191,9 +187,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     SetAttrStringFromVoidPtr(m, get_utf8_size);
     SetAttrStringFromVoidPtr(m, bool_arr_to_bitmap);
     SetAttrStringFromVoidPtr(m, mask_arr_to_bitmap);
-    SetAttrStringFromVoidPtr(m, is_bool_array);
-    SetAttrStringFromVoidPtr(m, is_pd_boolean_array);
-    SetAttrStringFromVoidPtr(m, unbox_bool_array_obj);
     SetAttrStringFromVoidPtr(m, memcmp);
     SetAttrStringFromVoidPtr(m, bytes_to_hex);
     SetAttrStringFromVoidPtr(m, bytes_fromhex);
@@ -685,110 +678,6 @@ void mask_arr_to_bitmap(uint8_t* bitmap_arr, uint8_t* mask_arr, int64_t n) {
                                  bitmap_arr[i / 8]) &
             kBitmask[i % 8];
     }
-}
-
-int is_bool_array(PyArrayObject* arr) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return false;                  \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    PyArray_Descr* dtype = PyArray_DTYPE(arr);
-    CHECK(dtype, "getting dtype failed");
-    // printf("dtype kind %c type %c\n", dtype->kind, dtype->type);
-
-    // returning int instead of bool to avoid potential bool call convention
-    // issues
-    int res = dtype->kind == 'b';
-    PyGILState_Release(gilstate);
-    return res;
-#undef CHECK
-}
-
-int is_pd_boolean_array(PyObject* arr) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return false;                  \
-    }
-
-    auto gilstate = PyGILState_Ensure();
-    // pd.arrays.BooleanArray
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
-    CHECK(pd_arrays_obj, "getting pd.arrays failed");
-    PyObject* pd_arrays_bool_arr_obj =
-        PyObject_GetAttrString(pd_arrays_obj, "BooleanArray");
-    CHECK(pd_arrays_obj, "getting pd.arrays.BooleanArray failed");
-
-    // isinstance(arr, BooleanArray)
-    int ret = PyObject_IsInstance(arr, pd_arrays_bool_arr_obj);
-    CHECK(ret >= 0, "isinstance fails");
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(pd_arrays_obj);
-    Py_DECREF(pd_arrays_bool_arr_obj);
-    PyGILState_Release(gilstate);
-    return ret;
-
-#undef CHECK
-}
-
-void unbox_bool_array_obj(PyArrayObject* arr, uint8_t* data, uint8_t* bitmap,
-                          int64_t n) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return;                        \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    // get pd.NA object to check for new NA kind
-    // simple equality check is enough since the object is a singleton
-    // example:
-    // https://github.com/pandas-dev/pandas/blob/fcadff30da9feb3edb3acda662ff6143b7cb2d9f/pandas/_libs/missing.pyx#L57
-    PyObject* pd_mod = PyImport_ImportModule("pandas");
-    CHECK(pd_mod, "importing pandas module failed");
-    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
-    CHECK(C_NA, "getting pd.NA failed");
-
-    for (uint64_t i = 0; i < uint64_t(n); ++i) {
-        auto p = PyArray_GETPTR1((PyArrayObject*)arr, i);
-        CHECK(p, "getting offset in numpy array failed");
-        PyObject* s = PyArray_GETITEM(arr, (const char*)p);
-        CHECK(s, "getting element failed");
-        // Pandas stores NA as either None or nan
-        if (s == Py_None ||
-            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
-            s == C_NA) {
-            // null bit
-            ClearBit(bitmap, i);
-            ClearBit(data, i);
-        } else {
-            SetBit(bitmap, i);
-            int is_true = PyObject_IsTrue(s);
-            CHECK(is_true != -1, "invalid bool element");
-            // Set the data bit
-            data[i / 8] ^= static_cast<uint8_t>(-static_cast<uint8_t>(is_true) ^
-                                                data[i / 8]) &
-                           kBitmask[i % 8];
-        }
-        Py_DECREF(s);
-    }
-
-    Py_DECREF(pd_mod);
-    Py_DECREF(C_NA);
-    PyGILState_Release(gilstate);
-#undef CHECK
 }
 
 void print_str_arr(uint64_t n, uint64_t n_chars, offset_t* offsets,

@@ -5,6 +5,7 @@ import operator
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from numba.core import types
 
@@ -52,6 +53,17 @@ def test_float_arr_box_unbox(nullable_float_values, float_dtype, memory_leak_che
         return arr
 
     check_func(impl, (pd.array(nullable_float_values, dtype=float_dtype),))
+
+
+@pytest.mark.slow
+def test_float_arr_box_unbox_arrow_ext(memory_leak_check):
+    """Make sure ArrowExtensionArray of float values can be boxed/unboxed"""
+
+    def impl(arr):
+        return arr
+
+    A = pd.arrays.ArrowExtensionArray(pa.array([1.1, None, 3.3, 4.4, 5.5]))
+    check_func(impl, (A,))
 
 
 @pytest.mark.slow

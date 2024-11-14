@@ -299,7 +299,7 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
                 ]
                 * 2,
                 "C": np.arange(12).astype(np.float64),
-                "D": [True, False, np.nan, False, False, True] * 2,
+                "D": [True, False, None, False, False, True] * 2,
             }
         )
     ]

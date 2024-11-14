@@ -3257,7 +3257,7 @@ def box_decimal_arr(typ, val, c):
     Box decimal array into Pandas Arrow extension array
     """
     # Reusing nested array boxing since it covers decimal arrays as well
-    return bodo.libs.array.box_nested_array(typ, val, c)
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @unbox(DecimalArrayType)
@@ -3267,7 +3267,7 @@ def unbox_decimal_arr(typ, val, c):
     DecimalArray
     """
     # Reusing nested array unboxing since it covers decimal arrays as well
-    return bodo.libs.array.unbox_nested_array(typ, val, c)
+    return bodo.libs.array.unbox_array_using_arrow(typ, val, c)
 
 
 @overload_method(DecimalArrayType, "copy", no_unliteral=True)

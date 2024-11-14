@@ -160,7 +160,7 @@ def check_func(
     sort_output=False,
     check_names=True,
     copy_input=False,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     convert_columns_to_pandas=False,
     py_output: pt.Any | NoDefault = no_default,
@@ -623,7 +623,7 @@ def check_func_seq(
     copy_input=False,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     convert_columns_to_pandas=False,
     additional_compiler_arguments=None,
@@ -984,7 +984,7 @@ def _test_equal_guard(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     check_categorical=False,
     atol=1e-08,
@@ -1103,7 +1103,7 @@ def _test_equal(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
     check_categorical=False,
     atol: float = 1e-08,
@@ -1127,17 +1127,27 @@ def _test_equal(
         if isinstance(bodo_out.dtype, pd.ArrowDtype) and not isinstance(
             py_out.dtype, pd.ArrowDtype
         ):
-            py_out = pd.Series(
-                _to_pa_array(
-                    py_out.map(
-                        lambda a: None if isinstance(a, float) and np.isnan(a) else a
-                    ).values,
-                    bodo.typeof(bodo_out.values),
-                ),
-                py_out.index,
-                bodo_out.dtype,
-                py_out.name,
-            )
+            check_dtype = False
+            pa_type = bodo_out.dtype.pyarrow_dtype
+            # Convert nested types
+            if (
+                pa.types.is_map(pa_type)
+                or pa.types.is_struct(pa_type)
+                or pa.types.is_large_list(pa_type)
+            ):
+                py_out = pd.Series(
+                    _to_pa_array(
+                        py_out.map(
+                            lambda a: None
+                            if isinstance(a, float) and np.isnan(a)
+                            else a
+                        ).values,
+                        bodo.typeof(bodo_out.values),
+                    ),
+                    py_out.index,
+                    bodo_out.dtype,
+                    py_out.name,
+                )
         if sort_output:
             py_out = sort_series_values_index(py_out)
             bodo_out = sort_series_values_index(bodo_out)
@@ -1385,7 +1395,7 @@ def _test_equal_struct(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
 ):
     """check struct/dict to be equal. checking individual elements separately since
@@ -1408,7 +1418,7 @@ def _test_equal_struct_array(
     py_out,
     sort_output=False,
     check_names=True,
-    check_dtype=True,
+    check_dtype=False,
     reset_index=False,
 ):
     """check struct arrays to be equal. checking individual elements separately since

@@ -59,7 +59,7 @@ series_val_params = [
         id="boolean_nona",
     ),  # bool array without NA
     pytest.param(
-        pd.Series([True, False, False, np.nan, True] * 2, dtype="boolean"),
+        pd.Series([True, False, False, None, True] * 2, dtype="boolean"),
         id="boolean_withna",
     ),  # bool array with NA
     pytest.param(

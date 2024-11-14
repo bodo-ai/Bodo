@@ -5,7 +5,6 @@ However, nulls are stored in bit arrays similar to Arrow's arrays.
 
 import operator
 
-import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -35,8 +34,6 @@ import bodo
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
 from bodo.libs import array_ext, hstr_ext  # noqa: F401  # isort:skip
 
-ll.add_symbol("is_pd_float_array", array_ext.is_pd_float_array)
-ll.add_symbol("float_array_from_sequence", array_ext.float_array_from_sequence)
 
 from bodo.utils.indexing import (
     array_getitem_bool_index,
@@ -172,158 +169,13 @@ def unbox_float_array(typ, obj, c):  # pragma: no cover
     """
     Convert a pd.arrays.FloatingArray object to a native FloatingArray structure.
     """
-    n_obj = c.pyapi.call_method(obj, "__len__", ())
-    n = c.pyapi.long_as_longlong(n_obj)
-    c.pyapi.decref(n_obj)
-
-    # TODO: handle or disallow reflection
-    float_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    n_bytes = c.builder.udiv(
-        c.builder.add(n, lir.Constant(lir.IntType(64), 7)),
-        lir.Constant(lir.IntType(64), 8),
-    )
-    bitmap_arr_struct = bodo.utils.utils._empty_nd_impl(
-        c.context, c.builder, types.Array(types.uint8, 1, "C"), [n_bytes]
-    )
-
-    fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="is_pd_float_array"
-    )
-
-    is_pd_float = c.builder.call(fn, [obj])
-    cond_pd = c.builder.icmp_unsigned("!=", is_pd_float, is_pd_float.type(0))
-    with c.builder.if_else(cond_pd) as (pd_then, pd_otherwise):
-        with pd_then:
-            data_obj = c.pyapi.object_getattr_string(obj, "_data")
-            float_arr.data = c.pyapi.to_native_value(
-                types.Array(typ.dtype, 1, "C"), data_obj
-            ).value
-
-            mask_arr_obj = c.pyapi.object_getattr_string(obj, "_mask")
-            mask_arr = c.pyapi.to_native_value(
-                types.Array(types.bool_, 1, "C"), mask_arr_obj
-            ).value
-            c.pyapi.decref(data_obj)
-            c.pyapi.decref(mask_arr_obj)
-
-            mask_arr_struct = c.context.make_array(types.Array(types.bool_, 1, "C"))(
-                c.context, c.builder, mask_arr
-            )
-
-            fnty = lir.FunctionType(
-                lir.VoidType(),
-                [
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(64),
-                ],
-            )
-            fn = cgutils.get_or_insert_function(
-                c.builder.module, fnty, name="mask_arr_to_bitmap"
-            )
-            c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
-
-            # clean up native mask array after creating bitmap from it
-            c.context.nrt.decref(c.builder, types.Array(types.bool_, 1, "C"), mask_arr)
-        with pd_otherwise:
-            # assuming objects are all float64 (TODO: handle corner cases like np.float32)
-            data_arr_struct = bodo.utils.utils._empty_nd_impl(
-                c.context, c.builder, types.Array(typ.dtype, 1, "C"), [n]
-            )
-            fnty = lir.FunctionType(
-                lir.IntType(32),
-                [
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                ],
-            )
-            unbox_fn = cgutils.get_or_insert_function(
-                c.builder.module, fnty, name="float_array_from_sequence"
-            )
-            c.builder.call(
-                unbox_fn,
-                [
-                    obj,
-                    c.builder.bitcast(
-                        data_arr_struct.data, lir.IntType(8).as_pointer()
-                    ),
-                    bitmap_arr_struct.data,
-                ],
-            )
-            float_arr.data = data_arr_struct._getvalue()
-
-    float_arr.null_bitmap = bitmap_arr_struct._getvalue()
-    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
-    return NativeValue(float_arr._getvalue(), is_error=is_error)
+    return bodo.libs.array.unbox_array_using_arrow(typ, obj, c)
 
 
 @box(FloatingArrayType)
 def box_float_array(typ, val, c):  # pragma: no cover
-    """Box float array into pandas FloatingArray object. Null bitmap is converted
-    to mask array.
-    """
-    # box float array's data and bitmap
-    float_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    data = c.pyapi.from_native_value(
-        types.Array(typ.dtype, 1, "C"), float_arr.data, c.env_manager
-    )
-    bitmap_arr_data = c.context.make_array(types.Array(types.uint8, 1, "C"))(
-        c.context, c.builder, float_arr.null_bitmap
-    ).data
-
-    # allocate mask array
-    n_obj = c.pyapi.call_method(data, "__len__", ())
-    n = c.pyapi.long_as_longlong(n_obj)
-    mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-    np_class_obj = c.pyapi.import_module_noblock(mod_name)
-    bool_dtype = c.pyapi.object_getattr_string(np_class_obj, "bool_")
-    mask_arr = c.pyapi.call_method(np_class_obj, "empty", (n_obj, bool_dtype))
-    mask_arr_ctypes = c.pyapi.object_getattr_string(mask_arr, "ctypes")
-    mask_arr_data = c.pyapi.object_getattr_string(mask_arr_ctypes, "data")
-    mask_arr_ptr = c.builder.inttoptr(
-        c.pyapi.long_as_longlong(mask_arr_data), lir.IntType(8).as_pointer()
-    )
-
-    # fill mask array
-    with cgutils.for_range(c.builder, n) as loop:
-        # (bits[i >> 3] >> (i & 0x07)) & 1
-        i = loop.index
-        byte_ind = c.builder.lshr(i, lir.Constant(lir.IntType(64), 3))
-        byte = c.builder.load(cgutils.gep(c.builder, bitmap_arr_data, byte_ind))
-        mask = c.builder.trunc(
-            c.builder.and_(i, lir.Constant(lir.IntType(64), 7)), lir.IntType(8)
-        )
-        val = c.builder.and_(
-            c.builder.lshr(byte, mask), lir.Constant(lir.IntType(8), 1)
-        )
-        # flip value since bitmap uses opposite convention
-        val = c.builder.xor(val, lir.Constant(lir.IntType(8), 1))
-        ptr = cgutils.gep(c.builder, mask_arr_ptr, i)
-        c.builder.store(val, ptr)
-
-    # clean up bitmap after mask array is created
-    c.context.nrt.decref(
-        c.builder, types.Array(types.uint8, 1, "C"), float_arr.null_bitmap
-    )
-
-    # create FloatingArray
-    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
-    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
-    arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
-    res = c.pyapi.call_method(arr_mod_obj, "FloatingArray", (data, mask_arr))
-
-    c.pyapi.decref(pd_class_obj)
-    c.pyapi.decref(n_obj)
-    c.pyapi.decref(np_class_obj)
-    c.pyapi.decref(bool_dtype)
-    c.pyapi.decref(mask_arr_ctypes)
-    c.pyapi.decref(mask_arr_data)
-    c.pyapi.decref(arr_mod_obj)
-    c.pyapi.decref(data)
-    c.pyapi.decref(mask_arr)
-    return res
+    """Box float array into pandas ArrowExtensionArray."""
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @intrinsic

@@ -981,7 +981,7 @@ def test_series_astype_float_to_int_arr(S, memory_leak_check):
         pytest.param(
             pd.Series([True, False, False, True, True]), marks=pytest.mark.slow
         ),
-        pd.Series([True, False, False, np.nan, True]),
+        pd.Series([True, False, False, None, True]),
     ],
 )
 def test_series_astype_bool_arr(S, memory_leak_check):
@@ -2424,9 +2424,7 @@ def test_series_binary_ufunc(ufunc, memory_leak_check):
         pd.Series(
             [True, False, False, True, True, True, False, False], dtype="boolean"
         ),
-        pd.Series(
-            [True, False, np.nan, True, True, False, True, False], dtype="boolean"
-        ),
+        pd.Series([True, False, None, True, True, False, True, False], dtype="boolean"),
     ],
 )
 def test_series_bool_cmp_op(S, op, memory_leak_check):
@@ -2452,9 +2450,7 @@ def test_series_bool_cmp_op(S, op, memory_leak_check):
         pd.Series(
             [True, False, False, True, True, True, False, False], dtype="boolean"
         ),
-        pd.Series(
-            [True, False, np.nan, True, True, False, True, False], dtype="boolean"
-        ),
+        pd.Series([True, False, None, True, True, False, True, False], dtype="boolean"),
     ],
 )
 def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
@@ -2464,7 +2460,7 @@ def test_series_bool_vals_cmp_op(S, op, memory_leak_check):
     way and the result is a missing value in output.
          -
     The following is badly treated in pandas 1.1.0 currently:
-    pd.Series([True, False, np.nan, True, True, False, True, False]) .
+    pd.Series([True, False, None, True, True, False, True, False]) .
     Instead of [True, True, <NA>, True, ..., True], pandas returns
     [True, True, False, True, ..., True].
     Adding the ', dtype="boolean"' resolves the issue.
