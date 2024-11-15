@@ -8,39 +8,29 @@ source:
 build:
   number: {{ GIT_DESCRIBE_NUMBER|int }}
   script_env:
-  - CHECK_LICENSE_EXPIRED
-  - CHECK_LICENSE_CORE_COUNT
-  - CHECK_LICENSE_PLATFORM
-  # Conda-Build deletes .git, so we need to determine the version beforehand
-  # and then pass it to setuptools_scm in the build script (setup.py).
-  # https://conda-forge.org/docs/maintainer/knowledge_base.html#using-setuptools-scm
-  - SETUPTOOLS_SCM_PRETEND_VERSION={{ BODO_VERSION }}
-  # Necessary for sccache to find AWS
-  - AWS_ACCESS_KEY_ID
-  - AWS_SECRET_ACCESS_KEY
+    - CHECK_LICENSE_EXPIRED
+    - CHECK_LICENSE_CORE_COUNT
+    - CHECK_LICENSE_PLATFORM
+    - BUILD_WITH_V8
+    # Necessary for sccache to find AWS
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    # Flag for disabling sccache in the build environment
+    - DISABLE_SCCACHE_IN_BUILD
   rpaths:
     - lib
     - {{ PREFIX }}/lib
     - {{ SP_DIR }}/pyarrow
 
-build_platform:
-  osx_arm64: osx_64
-test_on_native_only: true
-
 requirements:
   build:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
-    - python                                # [build_platform != target_platform]
-    - cross-python_{{ target_platform }}    # [build_platform != target_platform]
-    - cython ~=3.0                           # [build_platform != target_platform]
-    - cmake                                 # [build_platform != target_platform]
-    - ninja                                 # [build_platform != target_platform]
-    - numpy >=1.24,<1.27                    # [build_platform != target_platform]
-    - libarrow =17.0.0                      # [build_platform != target_platform]
-    - pyarrow =17.0.0                       # [build_platform != target_platform]
-    - numba 0.60.0
     - sccache
+    # This should be installed automatically as a depended of the cpp compiler,
+    # but we need to explicitly specify it so that we can pin the version with
+    # the variant file for pip.
+    - libstdcxx-ng  # [linux64]
 
   host:
     - python
@@ -51,8 +41,11 @@ requirements:
     - cython ~=3.0
     - setuptools_scm >=8
     - scikit-build-core
+    - cmake
+    - ninja
     - mpi4py =3.1.5
 
+    - numba =0.60.0
     # Compatible with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.24,<1.27
@@ -70,6 +63,8 @@ requirements:
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
+    # See comment on build libstdcxx-ng above
+    - libstdcxx-ng  # [linux64]
     - requests
     - aws-sdk-cpp
     - zstd<=1.5.6
@@ -81,7 +76,7 @@ requirements:
     - pandas >=2.2,<2.3
     - fsspec >=2021.09
     - pyarrow =17.0.0
-    - numba =0.60.0
+    - numba 0.60.0
     - mpich *=h* # [not win]
     - msmpi # [win]
     - vs2015_runtime # [win]
@@ -92,10 +87,8 @@ requirements:
     - zstd<=1.5.6
     - cloudpickle >=3.0,<4.0
 
-  # run constrained will not install these packages when building,
+  # run_constrained means these packages are not required deps
   # but will restrict them if they are present in the conda env.
-  # currently matplotlib is an optional dependency, and we only
-  # support up to 3.8.2
   run_constrained:
     - matplotlib <= 3.8.2
     - numpy >=1.24,<1.27

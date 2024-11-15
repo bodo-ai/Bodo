@@ -58,12 +58,14 @@ module "runners" {
       runner_config = merge(local.base_runner_config, {
         # Instance Type(s) (Multiple Options to Choose for Spot)
         instance_types = [
-          "c7i.xlarge", "m7i.xlarge", "r7i.xlarge",
-          "c7i-flex.xlarge", "m7i-flex.xlarge",
-          "c6i.xlarge", "m6i.xlarge", "r6i.xlarge",
-          "c6a.xlarge", "m6a.xlarge", "r6a.xlarge",
-          "c6id.xlarge", "m6id.xlarge", "r6id.xlarge",
-          "c6in.xlarge", "m6in.xlarge", "r6in.xlarge",
+          // Disable for now until OOM is confirmed
+          // "c7i.xlarge", "c7i-flex.xlarge", "c6i.xlarge", "c6a.xlarge", "c6id.xlarge", "c6in.xlarge", 
+          "m7i.xlarge", "r7i.xlarge",
+          "m7i-flex.xlarge",
+          "m6i.xlarge", "r6i.xlarge",
+          "m6a.xlarge", "r6a.xlarge",
+          "m6id.xlarge", "r6id.xlarge",
+          "m6in.xlarge", "r6in.xlarge",
           "i4i.xlarge"
         ]
         # Prefix runners with the environment name
