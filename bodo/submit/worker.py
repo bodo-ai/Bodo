@@ -453,7 +453,7 @@ def worker_loop(
     while True:
         debug_worker_msg(logger, "Waiting for command")
         # TODO Change this to a wait that doesn't spin cycles
-        # unnecessarily (e.g. see end_py in bodo/dl/utils.py)
+        # unnecessarily
         command = spawner_intercomm.bcast(None, 0)
         debug_worker_msg(logger, f"Received command: {command}")
 
