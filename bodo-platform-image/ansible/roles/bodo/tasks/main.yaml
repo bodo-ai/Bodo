@@ -1,3 +1,0 @@
----
-- name: BODO | Install bodo and its dependencies.
-  include: bodo.yaml

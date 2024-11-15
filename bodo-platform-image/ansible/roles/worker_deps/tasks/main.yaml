@@ -1,3 +1,0 @@
----
-- name: WORKER_DEPS | Install all non-Bodo dependencies
-  include: install_deps.yaml

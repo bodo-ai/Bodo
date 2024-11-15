@@ -1,7 +1,0 @@
-
-URL_BODO: https://{{ conda_username | urlencode }}:{{ conda_token | urlencode }}@bodo.jfrog.io/artifactory/api/conda/bodo.ai-platform
-BODO_VERSION: "{{ bodo_version }}"
-BODOSQL_VERSION: "{{ bodosql_version }}"
-BODOSQL_CHANNEL: "{{ bodosql_channel }}"
-ICEBERG_CONNECTOR_VERSION: "{{ iceberg_connector_version }}"
-ICEBERG_CONNECTOR_CHANNEL: "{{ iceberg_connector_channel }}"
