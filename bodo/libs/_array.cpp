@@ -34,7 +34,7 @@ array_info* struct_array_to_info(int64_t n_fields, int64_t n_items,
                                              field_names + n_fields);
     // Get length from an inner array in case n_items is set wrong since this
     // field is new and there could be gaps somewhere. See
-    // https://github.com/Bodo-inc/Bodo/pull/6891
+    // https://github.com/bodo-ai/Bodo/pull/6891
     if (inner_arrs_vec.size() > 0) {
         n_items = inner_arrs_vec[0]->length;
     }

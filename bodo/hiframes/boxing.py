@@ -406,7 +406,7 @@ def _dtype_from_type_enum_list(typ_enum_list):
     remaining, typ = _dtype_from_type_enum_list_recursor(typ_enum_list)
     if len(remaining) != 0:  # pragma: no cover
         raise_bodo_error(
-            f"Unexpected Internal Error while converting typing metadata: Dtype list was not fully consumed.\n Input typ_enum_list: {typ_enum_list}.\nRemainder: {remaining}. Please file the error here: https://github.com/Bodo-inc/Feedback"
+            f"Unexpected Internal Error while converting typing metadata: Dtype list was not fully consumed.\n Input typ_enum_list: {typ_enum_list}.\nRemainder: {remaining}. Please file the error here: https://github.com/bodo-ai/Feedback"
         )
     return typ
 
@@ -527,7 +527,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
         # This is generally used to pass things like struct names, which are a part of the type.
         if len(typ_enum_list) == 1:  # pragma: no cover
             raise_bodo_error(
-                "Unexpected Internal Error while converting typing metadata: Encountered 'Literal' internal enum value with no value following it. Please file the error here: https://github.com/Bodo-inc/Feedback"
+                "Unexpected Internal Error while converting typing metadata: Encountered 'Literal' internal enum value with no value following it. Please file the error here: https://github.com/bodo-ai/Feedback"
             )
         lit_val = typ_enum_list[1]
         remainder = typ_enum_list[2:]
@@ -535,7 +535,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
     elif typ_enum_list[0] == SeriesDtypeEnum.LiteralType.value:
         if len(typ_enum_list) == 1:  # pragma: no cover
             raise_bodo_error(
-                "Unexpected Internal Error while converting typing metadata: Encountered 'LiteralType' internal enum value with no value following it. Please file the error here: https://github.com/Bodo-inc/Feedback"
+                "Unexpected Internal Error while converting typing metadata: Encountered 'LiteralType' internal enum value with no value following it. Please file the error here: https://github.com/bodo-ai/Feedback"
             )
         lit_val = typ_enum_list[1]
         remainder = typ_enum_list[2:]
@@ -617,7 +617,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
 
     else:  # pragma: no cover
         raise_bodo_error(
-            f"Unexpected Internal Error while converting typing metadata: unable to infer dtype for type enum {typ_enum_list[0]}. Please file the error here: https://github.com/Bodo-inc/Feedback"
+            f"Unexpected Internal Error while converting typing metadata: unable to infer dtype for type enum {typ_enum_list[0]}. Please file the error here: https://github.com/bodo-ai/Feedback"
         )
 
 

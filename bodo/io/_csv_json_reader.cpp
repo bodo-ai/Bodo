@@ -1897,7 +1897,7 @@ void read_file_info(const std::vector<std::string> &file_names,
             // no need to read more chunks in this file.
             // NOTE: if chunksize is not used it'll be -1. If used, we decrease
             // until it reaches 0. See
-            // https://github.com/Bodo-inc/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
+            // https://github.com/bodo-ai/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
             // Hence the check:
             if (!(skiprows_list_info->is_skiprows_list &&
                   skiprows_list_info->skiprows[0]) &&
@@ -1907,7 +1907,7 @@ void read_file_info(const std::vector<std::string> &file_names,
         // If scan reached start and end position, no need to read more files.
         // NOTE: if chunksize is not used it'll be -1. If used, we decrease
         // until it reaches 0. See
-        // https://github.com/Bodo-inc/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
+        // https://github.com/bodo-ai/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
         // Hence the check:
         if (!(skiprows_list_info->is_skiprows_list &&
               skiprows_list_info->skiprows[0]) &&

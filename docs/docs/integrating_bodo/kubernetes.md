@@ -14,7 +14,7 @@ You need the following to deploy your Bodo application using Kubernetes:
 
 - **A Docker image containing the Bodo application scripts and their intended Bodo version made available on a Docker registry, so that Kubernetes can pull it.**
 
-    For this example, we created a [Docker image](https://hub.docker.com/r/bodoaidocker/bodo-kubernetes/tags){target="blank"} using [this Dockerfile](https://github.com/Bodo-inc/Bodo-examples/blob/08c2b8991b5626473a0a7541411ac9d268191892/08-Kubernetes/Dockerfile){target="blank"} and uploaded it to Docker Hub. It includes a Bodo application called `pi.py` that calculates the value of pi using the Monte Carlo method, and can be used to validate your setup.
+    For this example, we created a [Docker image](https://hub.docker.com/r/bodoaidocker/bodo-kubernetes/tags){target="blank"} using [this Dockerfile](https://github.com/bodo-ai/Bodo-examples/blob/08c2b8991b5626473a0a7541411ac9d268191892/08-Kubernetes/Dockerfile){target="blank"} and uploaded it to Docker Hub. It includes a Bodo application called `pi.py` that calculates the value of pi using the Monte Carlo method, and can be used to validate your setup.
 
     You can use this as a base image for your own Docker image. If you want to use a private registry, you can follow the instructions [here](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/){target="blank"}.
 
@@ -99,7 +99,7 @@ Here are the steps create an AWS EKS cluster using KOPS.
 [//]: # ()
 [//]: # (    ```shell)
 
-[//]: # (    git clone https://github.com/Bodo-inc/Bodo-examples.git)
+[//]: # (    git clone https://github.com/bodo-ai/Bodo-examples.git)
 
 [//]: # (    ```)
 
@@ -204,8 +204,8 @@ mpijobs.kubeflow.org    2024-04-02T19:43:04Z
 
 ### Run your Bodo application
 
-1. Define a kubernetes resource for your Bodo workload, such as the one defined in [`mpijob.yaml`](https://github.com/Bodo-inc/Bodo-examples/blob/08c2b8991b5626473a0a7541411ac9d268191892/08-Kubernetes/mpijob.yaml){target="blank"}
-that runs the [pi](https://github.com/Bodo-inc/Bodo-examples/blob/08c2b8991b5626473a0a7541411ac9d268191892/08-Kubernetes/pi.py){target="blank"} example. You can modify it based on your cluster configuration:
+1. Define a kubernetes resource for your Bodo workload, such as the one defined in [`mpijob.yaml`](https://github.com/bodo-ai/Bodo-examples/blob/08c2b8991b5626473a0a7541411ac9d268191892/08-Kubernetes/mpijob.yaml){target="blank"}
+that runs the [pi](https://github.com/bodo-ai/Bodo-examples/blob/08c2b8991b5626473a0a7541411ac9d268191892/08-Kubernetes/pi.py){target="blank"} example. You can modify it based on your cluster configuration:
    1. Update `spec.slotsPerWorker` with the number of physical cores (_not_ vCPUs) on each node
    2. Set `spec.mpiReplicaSpecs.Worker.replicas` to the number of worker nodes in your cluster.
    3. Build the image using the Dockerfile or use `bodoaidocker/bodo-kubernetes` and replace the image at

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# original code is here https://github.com/Bodo-inc/search_grids
+# original code is here https://github.com/bodo-ai/search_grids
 
 import math
 

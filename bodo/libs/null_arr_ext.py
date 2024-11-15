@@ -89,7 +89,7 @@ class NullArrayModel(models.StructModel):
             # Keep an extra field that is always 1 so we can determine
             # if the struct is null or not. We use context.get_constant_null
             # inside ensure_column_unboxed and this will become all 0s.
-            # https://github.com/Bodo-inc/Bodo/blob/3108eb47a7a79861739b1ae3a4939c1525ef16ae/bodo/hiframes/table.py#L1195
+            # https://github.com/bodo-ai/Bodo/blob/3108eb47a7a79861739b1ae3a4939c1525ef16ae/bodo/hiframes/table.py#L1195
             # https://github.com/numba/numba/blob/135d15047c5237f751d4b81347effe2a3704288b/numba/core/base.py#L522
             # https://github.com/numba/llvmlite/blob/dffe582d6080494ba8e39689d09aacde1952214c/llvmlite/ir/values.py#L457
             # https://github.com/numba/llvmlite/blob/dffe582d6080494ba8e39689d09aacde1952214c/llvmlite/ir/types.py#L545

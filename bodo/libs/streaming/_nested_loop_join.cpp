@@ -265,7 +265,7 @@ void nested_loop_join_local_chunk(
 
     // cfunc is passed in batch format for nested loop join
     // see here:
-    // https://github.com/Bodo-inc/Bodo/blob/fd987eca2684b9178a13caf41f23349f92a0a96e/bodo/libs/stream_join.py#L470
+    // https://github.com/bodo-ai/Bodo/blob/fd987eca2684b9178a13caf41f23349f92a0a96e/bodo/libs/stream_join.py#L470
     cond_expr_fn_batch_t cond_func =
         (cond_expr_fn_batch_t)join_state->cond_func;
 
