@@ -252,13 +252,11 @@ def lower_constant_int_arr(context, builder, typ, pyval):
     dtype = pyval.dtype
     if dtype == np.object_:
         dtype = np.int64
-    elif isinstance(dtype, pd.ArrowDtype):
+    elif isinstance(dtype, (pd.ArrowDtype, pd.core.dtypes.dtypes.BaseMaskedDtype)):
         dtype = dtype.numpy_dtype
-    else:
-        assert isinstance(
-            pyval, pd.arrays.IntegerArray
-        ), "lower_constant_int_arr: IntegerArray expected"
+    elif isinstance(dtype, pd.arrays.IntegerArray):
         dtype = pyval.dtype.type
+    assert np.issubdtype(dtype, np.integer), f"Invalid dtype {dtype} for IntegerArray"
     data_arr = np.empty(n, dtype)
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
     for i, s in enumerate(pyval):

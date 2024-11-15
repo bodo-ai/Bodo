@@ -657,7 +657,7 @@ def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
         bodo.libs.bool_arr_ext.get_bool_arr_data(A).copy(),
         bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A).copy(),
-        A._length,
+        len(A),
     )  # pragma: no cover
 
 
