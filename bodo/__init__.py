@@ -403,7 +403,6 @@ from bodo.hiframes.table import TableType
 
 
 import bodo.compiler  # isort:skip
-import bodo.dl
 
 use_pandas_join = False
 use_cpp_drop_duplicates = True
