@@ -1100,6 +1100,14 @@ def sort_dataframe_values_index(df):
 
 def _to_pa_array(py_out, bodo_arr_type):
     """Convert object array to Arrow array with specified Bodo type"""
+    if (
+        isinstance(bodo_arr_type, bodo.IntegerArrayType)
+        and isinstance(py_out, np.ndarray)
+        and np.issubdtype(py_out.dtype, np.floating)
+    ):
+        # When trying to convert a numpy float array to an integer array we need to convert to a pandas nullable integer array first
+        # to avoid issues with NaN/None values
+        py_out = pd.array(py_out, str(bodo_arr_type.dtype).capitalize())
     arrow_type = bodo.io.helpers._numba_to_pyarrow_type(
         bodo_arr_type, use_dict_arr=True
     )[0]
