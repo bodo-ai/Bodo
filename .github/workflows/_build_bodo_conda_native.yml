@@ -66,7 +66,7 @@ jobs:
       - name: Build Bodo Conda Package
         run: |
           set -exo pipefail
-          cd buildscripts/bodo/bodo-conda-recipe
+          cd buildscripts/bodo/conda-recipe
 
           # --no-verify because it doesn't work for Conda v2 packages
           # --no-anaconda-upload because we'll upload ourselves
@@ -77,7 +77,7 @@ jobs:
           conda build . $PLATFORM_CHANNEL -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
-            -e nightly_conda_build_config.yaml --python '${{ inputs.python-version }}'
+            --python '${{ inputs.python-version }}'
 
           # Export Location for Artifacting
           echo "CONDA_BLD_PATH=$HOME/conda-bld" >> $GITHUB_ENV
@@ -110,7 +110,7 @@ jobs:
 
           echo "BODO_VERSION: $BODO_VERSION"
           echo $ARTIFACTORY_CHANNEL
-          ./buildscripts/bodo/azure/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
+          ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}{1}', (inputs.platform-build == true) && '-platform' || '', (inputs.is-release) && '-dev' || '') }}
