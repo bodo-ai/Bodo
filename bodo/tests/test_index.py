@@ -21,7 +21,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 
-pytestmark = pytest_pandas + [pytest.mark.skip("[BSE-4151] Fix segfaults in PR CI")]
+pytestmark = pytest_pandas
 
 
 @pytest.mark.slow
@@ -1043,7 +1043,6 @@ def test_index_sort_values(index):
         ),
         pytest.param(
             pd.date_range(start="2018-01-10", end="2019-01-10", periods=13),
-            marks=pytest.mark.skip(reason="[BSE-4151] Fix segfault on PR CI"),
         ),
         pd.DatetimeIndex(
             pd.array(
@@ -1058,7 +1057,6 @@ def test_index_sort_values(index):
         ),
         pytest.param(
             pd.CategoricalIndex([1, 5, 2, 0]),
-            marks=pytest.mark.skip(reason="[BSE-4151] Fix segfault on PR CI"),
         ),
         pytest.param(
             pd.CategoricalIndex(pd.array([None, 15, 14, 11, 12, 10, None])),
@@ -1237,7 +1235,6 @@ def test_index_get_loc_error_checking():
         ),
         pytest.param(
             pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
-            marks=pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI"),
         ),
     ],
 )
@@ -1685,7 +1682,6 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val), test_impl(dti_val))
 
 
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.date_fields)
 def test_datetime_field(dti_val, field, memory_leak_check):
     """tests datetime index.field. This should be inlined in series pass"""
@@ -1724,7 +1720,6 @@ def test_datetime_max(dti_val, memory_leak_check):
     np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
 
 
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 def test_tz_aware_datetime_max_min(memory_leak_check):
     def max_impl(A):
         return A.max()
