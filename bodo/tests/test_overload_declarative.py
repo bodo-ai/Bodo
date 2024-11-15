@@ -32,6 +32,11 @@ from bodo.ir.declarative_templates import (
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError, is_overload_const_str_equal
 
+pytestmark = pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="setattr doesn't change worker state",
+)
+
 
 def _val_to_string(val):
     """
