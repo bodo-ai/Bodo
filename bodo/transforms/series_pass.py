@@ -2455,7 +2455,7 @@ class SeriesPass:
                     # create the new categorical dtype inside the function instead of passing as
                     # constant. This avoids constant lowered Index inside the dtype, which can
                     # be slow since it cannot have a dictionary.
-                    # see https://github.com/Bodo-inc/Bodo/pull/3563
+                    # see https://github.com/bodo-ai/Bodo/pull/3563
                     is_ordered = typ.dtype.ordered
                     int_type = typ.dtype.int_type
                     new_cats_arr = bodo.utils.utils.create_categorical_type(

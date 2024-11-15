@@ -10,7 +10,7 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 # Clone the repo and checkout the desired branch
-psh git clone -b develop https://$GITHUB_TOKEN@github.com/Bodo-inc/Bodo.git
+psh git clone -b develop https://$GITHUB_TOKEN@github.com/bodo-ai/Bodo.git
 
 # Install Pixi
 psh curl -fsSL https://pixi.sh/install.sh | bash

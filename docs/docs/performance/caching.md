@@ -63,7 +63,7 @@ Total execution time: 0.518 secs
 
 !!! note
     `data/cycling_dataset.pq` is located in the Bodo tutorial
-    [repo](https://github.com/Bodo-inc/Bodo-tutorial).
+    [repo](https://github.com/bodo-ai/Bodo-tutorial).
 
 
 ## Cache Location and Portability
@@ -195,4 +195,4 @@ from cache.
 
 If the compiler reports that it is not able to cache a function, or load
 a function from cache, please report the issue
-[on our feedback respository](https://github.com/Bodo-inc/Feedback).
+[on our feedback respository](https://github.com/bodo-ai/Feedback).

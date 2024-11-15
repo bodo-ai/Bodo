@@ -765,7 +765,7 @@ def cat_replace_overload(arr, to_replace, value):
         # create the new categorical dtype inside the function instead of passing as
         # constant. This avoids constant lowered Index inside the dtype, which can be
         # slow since it cannot have a dictionary.
-        # see https://github.com/Bodo-inc/Bodo/pull/3563
+        # see https://github.com/bodo-ai/Bodo/pull/3563
         new_categories = bodo.utils.utils.create_categorical_type(
             cats_list, arr.dtype.data.data, _ordered
         )
@@ -971,7 +971,7 @@ def pd_categorical_overload(
             # create the new categorical dtype inside the function instead of passing as
             # constant. This avoids constant lowered Index inside the dtype, which can
             # be slow since it cannot have a dictionary.
-            # see https://github.com/Bodo-inc/Bodo/pull/3563
+            # see https://github.com/bodo-ai/Bodo/pull/3563
             new_cats_arr = pd.CategoricalDtype(
                 pd.array(const_categories), is_ordered
             ).categories.array

@@ -1,5 +1,5 @@
 """Support XGBoost (Scikit-Learn Wrapper interface for XGBoost) using object mode of Numba"""
-# Tests are in https://github.com/Bodo-inc/engine-e2e-tests/tree/xgb-tests/xgboost
+# Tests are in https://github.com/bodo-ai/engine-e2e-tests/tree/xgb-tests/xgboost
 
 import sys
 

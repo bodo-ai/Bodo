@@ -15,7 +15,7 @@ sudo apt install python3.11-venv -y
 
 # Clone the repo
 export GITHUB_PAT=
-git clone https://"$GITHUB_PAT"@github.com/Bodo-inc/Bodo.git
+git clone https://"$GITHUB_PAT"@github.com/bodo-ai/Bodo.git
 
 # Create a virtual environment
 python3.11 -m venv venv

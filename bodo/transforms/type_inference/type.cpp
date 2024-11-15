@@ -27,7 +27,7 @@ Type* unliteral_type(Type* t) {
     return t;
 }
 
-// https://github.com/Bodo-inc/Bodo/blob/4d3e1bbb323c56c5067aeb6310e915e1a96def4c/bodo/numba_compat.py#L5361
+// https://github.com/bodo-ai/Bodo/blob/4d3e1bbb323c56c5067aeb6310e915e1a96def4c/bodo/numba_compat.py#L5361
 // NOTE: returns nullptr if unification failed
 Type* unify_pairs(Type* first, Type* second) {
     if (first == second) {

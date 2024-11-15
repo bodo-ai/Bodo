@@ -54,7 +54,7 @@ Distribute data manually by *scattering* data from one process to all processes.
   
 !!! note
     `data/cycling_dataset.pq` is located in the Bodo tutorial
-    [repo](https://github.com/Bodo-inc/Bodo-tutorial).
+    [repo](https://github.com/bodo-ai/Bodo-tutorial).
 
 - This is not a strict requirement. However, since this might be bad practice in certain situations, 
   Bodo will throw a warning if the data is not None on other ranks.

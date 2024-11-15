@@ -123,7 +123,7 @@ _numba_to_c_type_map = {
     bodo.libs.binary_arr_ext.bytes_type: CTypeEnum.BINARY.value,
     # Null arrays are passed as nullable bool arrays to C++ currently.
     # TODO[BSE-433]: support null dtype in C++ directly
-    # https://github.com/Bodo-inc/Bodo/blob/b9b38a8643d61a5038bcf4a3a5dff4f14040b76c/bodo/libs/_array.cpp#L165
+    # https://github.com/bodo-ai/Bodo/blob/b9b38a8643d61a5038bcf4a3a5dff4f14040b76c/bodo/libs/_array.cpp#L165
     null_dtype: CTypeEnum.Bool.value,
     types.complex64: CTypeEnum.COMPLEX64.value,
     types.complex128: CTypeEnum.COMPLEX128.value,
@@ -1034,7 +1034,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             # create the new categorical dtype inside the function instead of passing as
             # constant. This avoids constant lowered Index inside the dtype, which can
             # be slow since it cannot have a dictionary.
-            # see https://github.com/Bodo-inc/Bodo/pull/3563
+            # see https://github.com/bodo-ai/Bodo/pull/3563
             is_ordered = typ.dtype.ordered
             int_type = typ.dtype.int_type
             new_cats_arr = create_categorical_type(

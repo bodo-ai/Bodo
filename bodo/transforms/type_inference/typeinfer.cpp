@@ -112,7 +112,7 @@ std::shared_ptr<Signature> resolve_function_type(Type* fnty,
     return sig;
 }
 
-// https://github.com/Bodo-inc/Bodo/blob/18094bb44a243e9f2160e2500de0e4ce69db8afb/bodo/numba_compat.py#L2952
+// https://github.com/bodo-ai/Bodo/blob/18094bb44a243e9f2160e2500de0e4ce69db8afb/bodo/numba_compat.py#L2952
 void CallConstraint::resolve(TypeInferer& inferer, TypeVarMap typevars,
                              Type* fnty) {
     // TODO[BSE-3931]: handle argument folding

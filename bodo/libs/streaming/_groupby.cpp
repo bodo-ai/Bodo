@@ -229,7 +229,7 @@ std::shared_ptr<table_info> get_update_table(
     }
 
     // similar to update() function of GroupbyPipeline:
-    // https://github.com/Bodo-inc/Bodo/blob/58f995dec2507a84afefbb27af01d67bd40fabb4/bodo/libs/_groupby.cpp#L546
+    // https://github.com/bodo-ai/Bodo/blob/58f995dec2507a84afefbb27af01d67bd40fabb4/bodo/libs/_groupby.cpp#L546
 
     // Get the grouping_info:
     std::vector<grouping_info> grp_infos =
@@ -2642,7 +2642,7 @@ GroupbyState::GroupbyState(
         // NOTE: adding all functions that need accumulating inputs for now
         // but they may not be supported in streaming groupby yet
         // Should be kept in sync with
-        // https://github.com/Bodo-inc/Bodo/blob/56c77832aea4c4d5b33fd5cf631b201f4157f73a/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/rel/core/AggregateBase.kt#L58
+        // https://github.com/bodo-ai/Bodo/blob/56c77832aea4c4d5b33fd5cf631b201f4157f73a/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/rel/core/AggregateBase.kt#L58
         if (ftype == Bodo_FTypes::median || ftype == Bodo_FTypes::mode ||
             ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
             ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax ||
@@ -3586,7 +3586,7 @@ void GroupbyState::InitOutputBuffer(
 
     // Keys are always the first columns in groupby output and match input
     // array types and dictionaries for DICT arrays. See
-    // https://github.com/Bodo-inc/Bodo/blob/f94ab6d2c78e3a536a8383ddf71956cc238fccc8/bodo/libs/_groupby_common.cpp#L604
+    // https://github.com/bodo-ai/Bodo/blob/f94ab6d2c78e3a536a8383ddf71956cc238fccc8/bodo/libs/_groupby_common.cpp#L604
     for (size_t i = 0; i < this->n_keys; i++) {
         output_dict_builders[i] = this->build_table_dict_builders[i];
     }

@@ -481,7 +481,7 @@ std::shared_ptr<arrow::Array> bodo_array_to_arrow(
             // offsets due to slicing, which is applied in data1(). Can't pass
             // the offset directly to Arrow since Bodo only applies the offset
             // to the data array, not null bitmap:
-            // https://github.com/Bodo-inc/Bodo/blob/338f8ea3c11016bd560e5158b1ec0abf732856ed/bodo/utils/indexing.py
+            // https://github.com/bodo-ai/Bodo/blob/338f8ea3c11016bd560e5158b1ec0abf732856ed/bodo/utils/indexing.py
             std::shared_ptr<BodoBuffer> out_buffer =
                 std::make_shared<BodoBuffer>((uint8_t *)array->data1(),
                                              in_num_bytes,
