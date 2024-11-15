@@ -79,7 +79,7 @@ jobs:
 
           # --------- Run Tests -----------
           cd e2e-tests
-          pytest -s -v --durations=0 --ignore=deep_learning
+          pytest -s -v --durations=0
           cd ..
           pytest -s -v --durations=0 bodo/tests/test_javascript*
 
