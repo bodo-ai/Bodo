@@ -47,7 +47,16 @@ Homepage = "https://bodo.ai"
 Documentation = "https://docs.bodo.ai"
 
 [project.optional-dependencies]
-hdfs = ["h5py"]
+hdf5 = ["h5py"]
+sklearn = ["scikit-learn==1.4.*"]
+plot = ["matplotlib <=3.8.2"]
+s3fs = ["s3fs >=2022.1.0"]
+adlfs = ["adlfs >=2022.1.0"]
+gcsfs = ["gcsfs >=2022.1.0"]
+snowflake = ["snowflake-connector-python"]
+mysql = ["sqlalchemy", "PyMySQL"]
+postgres = ["sqlalchemy", "psycopg2"]
+oracle = ["sqlalchemy", "cx-Oracle", "libaio"]
 
 # -------------------------- CMake Config -------------------------- #
 

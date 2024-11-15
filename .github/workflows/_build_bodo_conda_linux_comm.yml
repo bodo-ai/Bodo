@@ -54,7 +54,7 @@ jobs:
           set -exo pipefail
           source /opt/conda/etc/profile.d/conda.sh
           conda activate bodo_build
-          cd buildscripts/bodo/bodo-conda-recipe
+          cd buildscripts/bodo/conda-recipe
 
           # --no-verify because it doesn't work for Conda v2 packages
           # --no-anaconda-upload because we'll upload ourselves
@@ -65,7 +65,7 @@ jobs:
           conda build . $PLATFORM_CHANNEL -c conda-forge \
             --no-verify --no-anaconda-upload \
             --croot $HOME/conda-bld --build-id-pat 'bb' \
-            -e nightly_conda_build_config.yaml --python '${{ inputs.python-version }}'
+            --python '${{ inputs.python-version }}'
         env:
           CONDA_SOLVER: libmamba
           # Sccache Creds
@@ -96,7 +96,7 @@ jobs:
 
           echo "BODO_VERSION: $BODO_VERSION"
           echo $ARTIFACTORY_CHANNEL
-          ./buildscripts/bodo/azure/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
+          ./buildscripts/bodo/publish_binary.sh $ARTIFACTORY_CHANNEL "linux-64" $BODO_VERSION
         env:
           IS_RELEASE: ${{ inputs.is-release }}
           ARTIFACTORY_CHANNEL: ${{ format('bodo.ai{0}', (inputs.is-release) && '-dev' || '') }}
