@@ -1,3 +1,0 @@
----
-- name: EFA | Prepare EFA drivers.
-  include: efa.yaml

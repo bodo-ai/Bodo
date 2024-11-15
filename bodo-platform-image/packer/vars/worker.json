@@ -1,4 +1,0 @@
-{
-    "node_role"     : "worker",
-    "playbook_file" : "worker_playbook.yaml"
-}

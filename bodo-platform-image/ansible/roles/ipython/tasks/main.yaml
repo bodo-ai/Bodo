@@ -1,5 +1,0 @@
----
-- name: IPYTHON | Install IPython
-  include: ipython.yaml
-- name: IPYTHON | Install bodo-platform-extensions packages
-  include: platform_extensions.yaml

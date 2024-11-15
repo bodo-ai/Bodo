@@ -1,3 +1,0 @@
----
-- name: INTELL MPI | Intel MPI installation.
-  include: intelmpi.yaml

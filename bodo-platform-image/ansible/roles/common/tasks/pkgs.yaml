@@ -1,7 +1,0 @@
----
-- name: COMMON | Install common packages.
-  dnf:
-    name: "{{ COMMON_PACKAGES }}"
-    state: installed
-  tags:
-    - common
