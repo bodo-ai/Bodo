@@ -1,6 +1,0 @@
----
-- name: COMMON | Install common packages.
-  include: pkgs.yaml
-
-- name: COMMON | Create MPI Cluster user
-  include: user.yaml

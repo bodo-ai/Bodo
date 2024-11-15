@@ -1,3 +1,0 @@
----
-- name: CONDA | Install Miniforge
-  include: conda.yaml

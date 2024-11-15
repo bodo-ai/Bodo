@@ -1,3 +1,0 @@
-dicttoxml==1.7.4
-IPython
-bodo_platform_utils==2.0.0

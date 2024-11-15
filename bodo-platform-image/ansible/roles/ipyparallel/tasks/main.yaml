@@ -1,5 +1,0 @@
----
-- name: IPYPARALLEL | Install IPyParallel
-  include: ipyparallel.yaml
-- name: IPYPARALLEL | Install Bodo-Platform-IPyParallel-Kernel
-  include: platform_ipyparallel_kernel.yaml
