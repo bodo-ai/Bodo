@@ -3091,7 +3091,7 @@ def test_snowflake_filter_pushdown_edgecase(memory_leak_check):
     """
     Test that filter pushdown works for an edge case
     
-    (https://github.com/Bodo-inc/customer-sample-code/blob/2c34f3195ab9e6db26931669c2ae81d2402526e5/faire/120_queries/queries/q011.sql)
+    
     """
 
     @bodo.jit(inline="never")

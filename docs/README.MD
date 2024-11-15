@@ -1,7 +1,7 @@
 ## Clone the bodo platform repository and set required env vars
 
 > [!WARNING]
-> You need to have https://github.com/Bodo-inc/bodo-platform cloned and updated. Ensure you are on the `main` branch.
+> You need to have https://github.com/bodo-ai/bodo-platform cloned and updated. Ensure you are on the `main` branch.
 > You need to set the PLATFORM_SDK_PATH env var to the path of the `sdk2` folder in the bodo-platform repo.
 
 - `export PLATFORM_SDK_PATH=<path_to_sdk2_folder_in_bodo_platform_repo/>`

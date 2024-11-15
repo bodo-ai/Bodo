@@ -195,7 +195,7 @@ jobs:
       export IS_RELEASE=`git tag --points-at HEAD`
       if [[ -n "$IS_RELEASE" ]]; then
         source activate ${{ parameters.CONDA_ENV }}
-        git clone https://github.com/Bodo-inc/Bodo-examples.git
+        git clone https://github.com/bodo-ai/Bodo-examples.git
         cd Bodo-examples/06-Compare-Bodo-with-Spark/tpch/
         # Invalid env variables for AWS credentials in the pipeline, s3 access is denied unless we run it by resetting them
         AWS_ACCESS_KEY_ID="" AWS_SECRET_ACCESS_KEY="" mpiexec -n 4 python bodo_queries.py --folder s3://bodo-example-data/tpch/SF1

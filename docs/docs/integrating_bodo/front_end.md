@@ -5,7 +5,7 @@ dashboards. This page provides a walk-through of creating a
 [Streamlit](https://streamlit.io/){target=blank} app with Bodo on your laptop or VM.
 
 All the code referenced on this page is available
-[here](https://github.com/Bodo-inc/Bodo-examples), and the steps to
+[here](https://github.com/bodo-ai/Bodo-examples), and the steps to
 running the app are provided [below][runtaxipickup].
 
 ## The Taxi Pickup App
@@ -138,7 +138,7 @@ st.bar_chart(hist_values)
 
 ## Running the Taxi Pickup App {#runtaxipickup}
 
-Clone the [Bodo Examples](https://github.com/Bodo-inc/Bodo-examples)
+Clone the [Bodo Examples](https://github.com/bodo-ai/Bodo-examples)
 repository and navigate to the `streamlit` directory. The
 directory has the following structure:
 
@@ -207,6 +207,6 @@ visualization to show up.
 ![Taxi Pickup Streamlit App with Bodo](../img/streamlit_pd_vs_bodo.png#center)
 
 If you face any issues while running the app, please let us know through
-our [Feedback](https://github.com/Bodo-inc/Feedback) repository, or join
+our [Feedback](https://github.com/bodo-ai/Feedback) repository, or join
 our [community slack](https://join.slack.com/t/bodocommunity/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA)
 to communicate directly with Bodo engineers.

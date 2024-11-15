@@ -350,7 +350,7 @@ def overload_get_fname_prefix(base_prefix, iter):
     purposes.
 
     We add zeros before iteration number similar to rank number in Parquet write:
-    https://github.com/Bodo-inc/Bodo/blob/d28883f3cffe37dfc2e6e68e5779f327ea4a16b7/bodo/io/_fs_io.cpp#L66
+    https://github.com/bodo-ai/Bodo/blob/d28883f3cffe37dfc2e6e68e5779f327ea4a16b7/bodo/io/_fs_io.cpp#L66
 
     However, iteration numbers are unbounded and we don't know how many zeros to add.
     Therefore, we assume a max number initially but increase it if it was reached.

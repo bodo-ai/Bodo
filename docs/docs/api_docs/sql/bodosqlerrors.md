@@ -141,7 +141,7 @@ you have provided or may not be supported in BodoSQL.
   There are a variety of reasons this could occur, but here are some of the common ones:
 
  * A typo in one of the query words, for example ``groupby`` instead of ``group by``. In this situation ``line X, column Y`` should point you to the first typo.
- * All the components are legal SQL keywords, but they are used in an incorrect order. Please refer to our support syntax to check for legal constructions. If you believe your query should be supported [please file an issue](https://github.com/Bodo-inc/Feedback).
+ * All the components are legal SQL keywords, but they are used in an incorrect order. Please refer to our support syntax to check for legal constructions. If you believe your query should be supported [please file an issue](https://github.com/bodo-ai/Feedback).
  * Trying to use double-quotes for a string literal (i.e. ```py"example"
  ``` instead of ``'example'``)
  * Unclosed parenthesis or trailing commas

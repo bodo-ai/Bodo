@@ -1,5 +1,5 @@
 """
-See https://github.com/Bodo-inc/examples-dev/blob/main/beer_reviews.py
+See https://github.com/bodo-ai/examples-dev/blob/main/beer_reviews.py
 """
 
 import sys

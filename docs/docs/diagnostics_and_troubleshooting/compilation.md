@@ -336,7 +336,7 @@ export PYTHONUNBUFFERED=1
 ## Requesting Unsupported Functionality and Reporting Errors
 
 If you want to request a new feature, or report a bug you have found,
-please create an issue in our[Feedback](https://github.com/Bodo-inc/Feedback) repository. If you
+please create an issue in our[Feedback](https://github.com/bodo-ai/Feedback) repository. If you
 encounter an error which is not covered on this page, please report it
 to our Feedback repository as well.
 

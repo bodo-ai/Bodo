@@ -2766,7 +2766,7 @@ def lower_constant_str_arr(context, builder, typ, pyval):
     n_const = context.get_constant(types.int64, n)
 
     # create constant meminfos for offsets and nulls
-    # see here: https://github.com/Bodo-inc/Bodo/blob/90e1bcfa82d588f08e2d2dd27f9b28266015da42/bodo/numba_compat.py#L4445
+    # see here: https://github.com/bodo-ai/Bodo/blob/90e1bcfa82d588f08e2d2dd27f9b28266015da42/bodo/numba_compat.py#L4445
     chars_const = cgutils.create_constant_array(
         lir.IntType(8), bytearray(char_arr.data)
     )

@@ -698,7 +698,7 @@ def overload_var(A):
     """Implements np.var() for nullable float arrays.
     Unlike Numpy arrays, this currently skips NAs to match SQL behavior since it's
     used in BodoSQL groupby:
-    https://github.com/Bodo-inc/Bodo/blob/9384eee70c35eb16fd88e70456b4e6a89a485059/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/AggCodeGen.java#L48
+    https://github.com/bodo-ai/Bodo/blob/9384eee70c35eb16fd88e70456b4e6a89a485059/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/AggCodeGen.java#L48
     """
     if not isinstance(A, FloatingArrayType):
         return
@@ -714,7 +714,7 @@ def overload_std(A):
     """Implements np.std() for nullable float arrays.
     Unlike Numpy arrays, this currently skips NAs to match SQL behavior since it's
     used in BodoSQL groupby:
-    https://github.com/Bodo-inc/Bodo/blob/9384eee70c35eb16fd88e70456b4e6a89a485059/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/AggCodeGen.java#L48
+    https://github.com/bodo-ai/Bodo/blob/9384eee70c35eb16fd88e70456b4e6a89a485059/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/AggCodeGen.java#L48
     """
     if not isinstance(A, FloatingArrayType):
         return

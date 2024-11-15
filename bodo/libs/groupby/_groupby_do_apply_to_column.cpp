@@ -540,7 +540,7 @@ void apply_to_column_dict(
 
                     // Can potentially cache converted doubles due to properties
                     // of dictionary encoded strings:
-                    // https://github.com/Bodo-inc/Bodo/pull/5471/files/f14a47db40b3abbcb968b6de84ab4ddb0b2f1e83#r1212472922
+                    // https://github.com/bodo-ai/Bodo/pull/5471/files/f14a47db40b3abbcb968b6de84ab4ddb0b2f1e83#r1212472922
                     double double_substr = 0;
                     try {
                         double_substr = stod(substr);

@@ -780,7 +780,7 @@ def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
     columns passed to determine_str_as_dict_columns is not
     ordered the same on all ranks.
     For more context, see https://bodo.atlassian.net/browse/BE-3679
-    This was fixed in https://github.com/Bodo-inc/Bodo/pull/4356.
+    This was fixed in https://github.com/bodo-ai/Bodo/pull/4356.
     The probability of invoking the failure is high when the
     number of columns is higher, which is why we are creating
     a table with 100 string columns: 50 which should be dictionary
@@ -2370,7 +2370,7 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn, memory_leak
     Some compilation errors can only be observed when running multiple steps.
     This is to test one such common use case, which is reading a table
     from a parquet file and writing it as an Iceberg table.
-    This unit test was added as part of https://github.com/Bodo-inc/Bodo/pull/4145
+    This unit test was added as part of https://github.com/bodo-ai/Bodo/pull/4145
     where an error for such use case was found.
     """
 
