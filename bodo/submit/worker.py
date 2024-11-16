@@ -251,6 +251,8 @@ def _gather_res(
         or isinstance(res, bodo.hiframes.table.Table)
         or isinstance(res, pd.Categorical)
         or isinstance(res, pd.arrays.IntervalArray)
+        # TODO[BSE-4205]: move DatetimeArray to use Arrow
+        or isinstance(res, pd.arrays.DatetimeArray)
     ):
         # If the result is empty on rank 0, we can't send a head to the spawner
         # so just gather the results and send it all to to the spawner
