@@ -1040,6 +1040,10 @@ def test_df_apply_datetime(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="TODO[BSE-4207] Fix module import of UDFs in workers",
+)
 def test_udf_other_module(memory_leak_check):
     """Test Bodo compiler pipeline replacement for a UDF function dependency in another
     module [BE-1315]
