@@ -384,11 +384,12 @@ class Spawner:
         Returns:
             ArgMetadata or None: ArgMetadata if argument is distributable, None otherwise
         """
+        dist_comm_meta = ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
         if isinstance(arg, BodoLazyWrapper):
             if arg._lazy:
                 return ArgMetadata.LAZY
             dist_flags.append(arg_name)
-            return ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
+            return dist_comm_meta
 
         # Handle distributed data inside tuples
         if isinstance(arg, tuple):
@@ -411,18 +412,18 @@ class Spawner:
 
         if is_distributable_typ(data_type):
             dist_flags.append(arg_name)
-            return ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
+            return dist_comm_meta
 
         # Send metadata to receive tables and reconstruct BodoSQLContext on workers
         # properly.
         if type(arg).__name__ == "BodoSQLContext":
             # Import bodosql lazily to avoid import overhead when not necessary
-            from bodosql import BodoSQLContext
+            from bodosql import BodoSQLContext, TablePath
 
             assert isinstance(arg, BodoSQLContext), "invalid BodoSQLContext"
             table_metas = {
-                tname: ArgMetadata.BROADCAST if is_replicated else ArgMetadata.SCATTER
-                for tname in arg.tables.keys()
+                tname: table if isinstance(table, TablePath) else dist_comm_meta
+                for tname, table in arg.tables.items()
             }
             dist_flags.append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
@@ -460,7 +461,7 @@ class Spawner:
                         root=self.bcast_root,
                         comm=spawner.worker_intercomm,
                     )
-                else:
+                elif tmeta is ArgMetadata.SCATTER:
                     bodo.libs.distributed_api.scatterv(
                         arg.tables[tname],
                         root=self.bcast_root,
@@ -500,8 +501,6 @@ class Spawner:
             for name, arg in kwargs.items()
         }
 
-        # Using cloudpickle for arguments since there could be functions.
-        # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         def compute_args_to_send(arg, arg_meta):
             if isinstance(arg, tuple):
                 return tuple(
@@ -522,6 +521,9 @@ class Spawner:
                 kwargs.keys(), zip(kwargs.values(), kwargs_meta.values())
             )
         }
+
+        # Using cloudpickle for arguments since there could be functions.
+        # See bodo/tests/test_series_part2.py::test_series_map_func_cases1
         pickled_args = cloudpickle.dumps((args_to_send, kwargs_to_send))
         self.worker_intercomm.bcast(pickled_args, root=self.bcast_root)
         dispatcher.decorator_args["distributed_block"] = (

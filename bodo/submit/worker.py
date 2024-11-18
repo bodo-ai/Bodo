@@ -80,10 +80,12 @@ def _recv_arg(
                 return (RESULT_REGISTRY[res_id], arg)
 
     if isinstance(arg, BodoSQLContextMetadata):
-        from bodosql import BodoSQLContext
+        from bodosql import BodoSQLContext, TablePath
 
         tables = {
-            tname: _recv_arg(tmeta, spawner_intercomm)[0]
+            tname: tmeta
+            if isinstance(tmeta, TablePath)
+            else _recv_arg(tmeta, spawner_intercomm)[0]
             for tname, tmeta in arg.tables.items()
         }
         # BSE-4154: Support lazy data structures in bodosql context arguments
