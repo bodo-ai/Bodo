@@ -25,7 +25,7 @@ def test_iceberg_basic_df():
         os.chdir(os.path.dirname(__file__))
         # remove __pycache__ (numba stores cache in there)
         shutil.rmtree("__pycache__", ignore_errors=True)
-        run_cmd(cmd, timeout=timeout)
+        run_cmd(cmd, timeout=timeout, additional_envs={"BODO_NUM_WORKERS": "1"})
 
         # Run again on cached code
         cmd.append("--require_cache")
