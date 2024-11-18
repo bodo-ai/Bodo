@@ -1750,7 +1750,8 @@ def _value_to_array(val):
     """convert list or dict value to object array for typing purposes"""
     assert isinstance(val, (list, dict, Dict))
     if isinstance(val, (dict, Dict)):
-        val = dict(val)
+        if isinstance(val, Dict):
+            val = dict(val)
         return np.array([val], np.object_)
 
     # add None to list to avoid Numpy's automatic conversion to 2D arrays
