@@ -268,6 +268,18 @@ class LazyArrayManager(ArrayManager, LazyMetadataMixin[ArrayManager]):
             self._del_func(r_id)
             self._del_func = None
 
+    def __len__(self) -> int:
+        """
+        Get length of the arrays in the manager.
+        Uses nrows if we don't have the data yet.
+        Otherwise, verify that data shape is not corrupted and return nrows.
+        Note that we cannot simply call the super implementation due to layout axis being swapped.
+        """
+        if self._md_head is not None:
+            return self._md_nrows
+        self._verify_integrity()
+        return self.shape_proper[0]
+
 
 class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayManager]):
     """
@@ -496,3 +508,12 @@ class LazySingleArrayManager(SingleArrayManager, LazyMetadataMixin[SingleArrayMa
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
+
+    def __len__(self) -> int:
+        """
+        Get length of the arrays in the manager.
+        Uses nrows if we don't have the data yet, otherwise uses the super implementation.
+        """
+        if self._md_head is not None:
+            return self._md_nrows
+        return super().__len__()

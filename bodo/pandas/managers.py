@@ -3,6 +3,9 @@ from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+from pandas._libs.internals import (
+    BlockPlacement,
+)
 from pandas.core.arrays.arrow.array import ArrowExtensionArray
 from pandas.core.internals.blocks import (
     Block,
@@ -410,10 +413,6 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             self._md_head = None
             self._collect_func = None
 
-    # BSE-4097
-    # TODO Override get_slice for s.head() support BSE-4097
-    # TODO Override __len__
-
     def __getattribute__(self, name: str) -> pt.Any:
         """
         Intercept attribute access to collect data from workers if needed.
@@ -445,3 +444,43 @@ class LazySingleBlockManager(SingleBlockManager, LazyMetadataMixin[SingleBlockMa
             assert self._del_func is not None
             self._del_func(r_id)
             self._del_func = None
+
+    def __len__(self) -> int:
+        """
+        Get length of the arrays in the manager.
+        Uses nrows if we don't have the data yet, otherwise uses the super implementation.
+        """
+        if self._md_head is not None:
+            return self._md_nrows
+        return super().__len__()
+
+    def get_slice(self, slobj: slice, axis: int = 0) -> SingleBlockManager:
+        """
+        Returns a new SingleBlockManager with the data sliced along the given axis.
+        If we don't have the data yet, and the slice is within the head, we slice the head,
+        otherwise we collect and slice the full data. A slice along axis 1 will always lead to a full collection.
+        """
+        if axis >= self.ndim:
+            raise IndexError("Requested axis not found in manager")
+
+        start = slobj.start if slobj.start else 0
+        stop = slobj.stop if slobj.stop else 0
+        if (
+            (self._md_head is not None)
+            and start <= len(self._md_head)
+            and stop <= len(self._md_head)
+            and axis == 0
+        ):
+            tmp_block = self._md_head._block
+            array = tmp_block.values[slobj]
+            bp = BlockPlacement(slice(0, len(array)))
+            block = type(tmp_block)(array, placement=bp, ndim=1, refs=tmp_block.refs)
+            new_index = self.index._getitem_slice(slobj)
+            return type(self)(block, new_index)
+
+        blk = self._block
+        array = blk.values[slobj]
+        bp = BlockPlacement(slice(0, len(array)))
+        block = type(blk)(array, placement=bp, ndim=1, refs=blk.refs)
+        new_index = self.index._getitem_slice(slobj)
+        return type(self)(block, new_index)
