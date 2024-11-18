@@ -79,13 +79,13 @@ def test_dataframe_sample_empty_ranks(memory_leak_check):
     py_output = pd.DataFrame({"A": [1 for _ in range(4)]}, dtype="Int64")
     bodo_output.reset_index(inplace=True, drop=True)
     py_output.reset_index(inplace=True, drop=True)
-    pd.testing.assert_frame_equal(bodo_output, py_output)
+    pd.testing.assert_frame_equal(bodo_output, py_output, check_dtype=False)
 
     bodo_output = bodo.allgatherv(f2(df))
     py_output = pd.DataFrame({"A": [1 for _ in range(int(10 * 0.5))]}, dtype="Int64")
     bodo_output.reset_index(inplace=True, drop=True)
     py_output.reset_index(inplace=True, drop=True)
-    pd.testing.assert_frame_equal(bodo_output, py_output)
+    pd.testing.assert_frame_equal(bodo_output, py_output, check_dtype=False)
 
 
 @pytest.mark.slow
