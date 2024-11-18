@@ -836,6 +836,9 @@ class BufferPool final : public IBufferPool {
     /// @brief Get the current allocation stats for the BufferPool
     boost::json::object get_stats() const;
 
+    /// @brief Helper function for printing the stats to std::cerr.
+    void print_stats();
+
    protected:
     /// @brief Options that were used for building the BufferPool.
     BufferPoolOptions options_;
@@ -1011,9 +1014,6 @@ class BufferPool final : public IBufferPool {
      * @return ::arrow::Status
      */
     ::arrow::Status evict_handler(uint64_t bytes, const std::string& caller);
-
-    /// @brief Helper function for printing the stats to std::cerr.
-    void print_stats();
 };
 
 /// Helper Tools for using BufferPool in STL Containers
