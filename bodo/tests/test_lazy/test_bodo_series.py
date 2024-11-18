@@ -234,3 +234,54 @@ def test_bodo_series_del_func_not_called_if_collected(single_pandas_managers):
     lsa._collect()
     del lsa
     assert not del_called
+
+
+def test_len(single_pandas_managers, head_s, collect_func, del_func):
+    """Tests that len() returns the right value and does not trigger data fetch"""
+    lazy_manager, pandas_manager = single_pandas_managers
+
+    lsam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_s._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+
+    # len() does not trigger a data fetch
+    assert len(lsam) == 40
+    lam_s: BodoSeries = BodoSeries._from_mgr(lsam, [])
+    assert lam_s._lazy
+
+    # force collect
+    lsam._collect()
+    assert not lam_s._lazy
+    assert len(lsam) == 40
+
+
+def test_slice(single_pandas_managers, head_s, collect_func, del_func):
+    """Tests that slicing returns the correct value and does not trigger data fetch unnecessarily"""
+    lazy_manager, pandas_manager = single_pandas_managers
+
+    lsam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_s._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+
+    # slicing head does not trigger a data fetch
+    lam_s: BodoSeries = BodoSeries._from_mgr(lsam, [])
+    lam_sliced_head_s = lam_s[1:3]
+    assert lam_s._lazy
+    assert lam_sliced_head_s.tolist() == (head_s[1:3]).tolist()
+
+    # slicing for data outside of head triggers a fetch
+    lam_sliced_s = lam_s[10:30]
+    assert not lam_s._lazy
+    assert lam_sliced_s.tolist() == (collect_func(0)[10:30]).tolist()
