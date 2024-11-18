@@ -84,7 +84,7 @@ def test_series_map_none_str(memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: a + "2" if not pd.isna(a) else None)
 
-    S = pd.Series(["AA", "B", np.nan, "D", "CDE"] * 4)
+    S = pd.Series(["AA", "B", None, "D", "CDE"] * 4)
     check_func(test_impl, (S,), check_dtype=False, only_1DVar=True)
 
 
@@ -1180,7 +1180,7 @@ def test_series_tail_zero(memory_leak_check):
         (pd.Series([3, 2, np.nan, 2, 7], [3, 4, 2, 1, 0], name="A"), [2.0, 3.0]),
         (
             pd.Series(
-                ["aa", "b", "ccc", "A", np.nan, "b"], [3, 4, 2, 1, 0, -1], name="A"
+                ["aa", "b", "ccc", "A", None, "b"], [3, 4, 2, 1, 0, -1], name="A"
             ),
             ["aa", "b"],
         ),
@@ -2364,10 +2364,10 @@ def test_series_np_where_binary(memory_leak_check):
         return np.where(S == b"aa")
 
     S1 = pd.Series(
-        [b"aa", b"asdfa", b"aa", np.nan, b"s", b"aa", b"asdgs"] * 2,
+        [b"aa", b"asdfa", b"aa", None, b"s", b"aa", b"asdgs"] * 2,
     )
     S2 = pd.Series(
-        [np.nan, b"asdga", b"alsdnf", np.nan, b"aa", b"aa", b"mnbhju"] * 2,
+        [None, b"asdga", b"alsdnf", None, b"aa", b"aa", b"mnbhju"] * 2,
     )
 
     check_func(test_impl1, (S1, S2, b"nabjhij"))
@@ -2639,10 +2639,10 @@ def test_series_where_binary(memory_leak_check):
         return S.where(S == b"hello", v)
 
     S = pd.Series(
-        [b"hello", b"b", b"hello world", b"csjk", np.nan, b"aa", b"hello"] * 3,
+        [b"hello", b"b", b"hello world", b"csjk", None, b"aa", b"hello"] * 3,
     )
     S2 = pd.Series(
-        [b"hello", b"b", b"hello world", b"csjk", np.nan, b"aa", b"hello"] * 3,
+        [b"hello", b"b", b"hello world", b"csjk", None, b"aa", b"hello"] * 3,
     )
     A = np.array(
         [b"adsgk", b"", b"ags", b"", b"askjdga", None, b"asdf"] * 3, dtype=object
@@ -2752,10 +2752,10 @@ def test_series_mask_binary(memory_leak_check):
         return S.mask(S != b"hsjldf", val)
 
     S = pd.Series(
-        np.array([np.nan, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
+        np.array([None, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
     )
-    other_series = pd.Series([b"sadkjf", b"asdf", b"nkjhg", np.nan, b"sdlfj"])
-    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", np.nan, b"sdlfj"], dtype=object)
+    other_series = pd.Series([b"sadkjf", b"asdf", b"nkjhg", None, b"sdlfj"])
+    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", None, b"sdlfj"], dtype=object)
     np.random.seed(0)
 
     check_func(test_impl, (S, b"sasadgk"))
@@ -2786,7 +2786,7 @@ def test_series_mask_cat_literal(memory_leak_check):
         return S.mask(cond, "AB")
 
     S = pd.Series(
-        ["AB", "AA", "AB", np.nan, "A", "AA", "AB"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+        ["AB", "AA", "AB", None, "A", "AA", "AB"], [5, 1, 2, 0, 3, 4, 9], name="AA"
     ).astype("category")
     cond = S == "AA"
     check_func(test_impl, (S, cond))
@@ -3171,7 +3171,7 @@ def test_series_astype_num_constructors(memory_leak_check):
     def impl1(A):
         return A.astype(float)
 
-    S = pd.Series(["3.2", "1", "3.2", np.nan, "5.1"])
+    S = pd.Series(["3.2", "1", "3.2", None, "5.1"])
     check_func(impl1, (S,), convert_to_nullable_float=False)
 
     def impl2(A):
@@ -3729,7 +3729,7 @@ def test_series_keys(S, memory_leak_check):
             pd.Series(["A", "A", "B", "D", "D"]), "B", "C", id="string-scalar-bound"
         ),
         pytest.param(
-            pd.Series(["A", np.nan, "D", "E", "Z"]),
+            pd.Series(["A", None, "D", "E", "Z"]),
             "B",
             "Q",
             id="string-scalar-bound-2",

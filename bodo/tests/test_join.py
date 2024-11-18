@@ -240,7 +240,7 @@ def _gen_df_str(n):
     for _ in range(n):
         # store NA with 30% chance
         if random.random() < 0.3:
-            str_vals.append(np.nan)
+            str_vals.append(None)
             continue
 
         k = random.randint(1, 10)
@@ -266,7 +266,7 @@ def _gen_df_binary(n, seed=None):
     for _ in range(n):
         # store NA with 30% chance
         if np.random.ranf() < 0.3:
-            bin_vals.append(np.nan)
+            bin_vals.append(None)
             continue
 
         bin_vals.append(bytes(np.random.randint(1, 100)))
@@ -1961,13 +1961,13 @@ def test_merge_str_nan1(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "key1": ["foo", "bar", "baz", "baz", "c4", "c7"],
-            "A": ["b", "", "ss", "a", "b2", np.nan],
+            "A": ["b", "", "ss", "a", "b2", None],
         }
     )
     df2 = pd.DataFrame(
         {
             "key2": ["baz", "bar", "baz", "foo", "c4", "c7"],
-            "B": ["b", np.nan, "", "AA", "c", "a1"],
+            "B": ["b", None, "", "AA", "c", "a1"],
         }
     )
 
@@ -2024,13 +2024,13 @@ def test_merge_binary_nan1(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "key1": [b"foo", b"bar", b"baz", b"baz", b"c4", b"c7"],
-            "A": [b"b", b"", b"ss", b"a", b"b2", np.nan],
+            "A": [b"b", b"", b"ss", b"a", b"b2", None],
         }
     )
     df2 = pd.DataFrame(
         {
             "key2": [b"baz", b"bar", b"baz", b"foo", b"c4", b"c7"],
-            "B": [b"b", np.nan, b"", b"AA", b"c", b"a1"],
+            "B": [b"b", None, b"", b"AA", b"c", b"a1"],
         }
     )
 

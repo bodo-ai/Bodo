@@ -61,11 +61,8 @@ double str_to_float64(std::string* str);
 float str_to_float32(std::string* str);
 int64_t get_str_len(std::string* str);
 
-void* np_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer, const uint8_t* null_bitmap,
-                                 const int is_bytes);
-void* pd_pyarrow_array_from_string_array(array_info* str_arr);
+void* pd_pyarrow_array_from_string_array(array_info* str_arr,
+                                         const int is_bytes);
 
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
@@ -151,7 +148,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     SetAttrStringFromVoidPtr(m, str_to_float32);
     SetAttrStringFromVoidPtr(m, get_str_len);
     SetAttrStringFromVoidPtr(m, pd_pyarrow_array_from_string_array);
-    SetAttrStringFromVoidPtr(m, np_array_from_string_array);
     SetAttrStringFromVoidPtr(m, setitem_string_array);
     SetAttrStringFromVoidPtr(m, setitem_binary_array);
 
@@ -523,66 +519,18 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
     }
 }
 
-/// @brief  From a StringArray create a numpy array of string objects
-/// @return numpy array of str objects
-/// @param[in] no_strings number of strings found in buffer
-/// @param[in] offset_table offsets for strings in buffer
-/// @param[in] buffer with concatenated strings (from StringArray)
-void* np_array_from_string_array(int64_t no_strings,
-                                 const offset_t* offset_table,
-                                 const char* buffer, const uint8_t* null_bitmap,
-                                 const int is_bytes) {
-#undef CHECK
-#define CHECK(expr, msg)               \
-    if (!(expr)) {                     \
-        std::cerr << msg << std::endl; \
-        PyGILState_Release(gilstate);  \
-        return NULL;                   \
-    }
-    auto gilstate = PyGILState_Ensure();
-
-    npy_intp dims[] = {no_strings};
-    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
-    CHECK(ret, "allocating numpy array failed");
-    int err;
-
-    for (int64_t i = 0; i < no_strings; ++i) {
-        auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
-        CHECK(p, "getting offset in numpy array failed");
-        if (is_na(null_bitmap, i)) {
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, Py_None);
-        } else {
-            PyObject* s;
-            if (is_bytes) {
-                s = PyBytes_FromStringAndSize(
-                    buffer + offset_table[i],
-                    offset_table[i + 1] - offset_table[i]);
-            } else {
-                s = PyUnicode_FromStringAndSize(
-                    buffer + offset_table[i],
-                    offset_table[i + 1] - offset_table[i]);
-            }
-            CHECK(s, "creating Python string/unicode object failed");
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-            Py_DECREF(s);
-        }
-        CHECK(err == 0, "setting item in numpy array failed");
-    }
-
-    PyGILState_Release(gilstate);
-    return ret;
-#undef CHECK
-}
-
 /**
  * @brief Create Pandas ArrowStringArray from Bodo's packed StringArray or
- * dict-encoded string array
+ * dict-encoded string array. Creates ArrowExtensionArray for binary arrays if
+ * is_bytes is set.
  *
- * @param str_arr input string array or dict-encoded string array (deleted by
- * function after use)
- * @return void* Pandas ArrowStringArray
+ * @param str_arr input string array, dict-encoded string array, or binary array
+ * (deleted by function after use)
+ * @param is_bytes 1 if input is binary array otherwise 0
+ * @return void* Pandas ArrowStringArray or ArrowExtensionArray
  */
-void* pd_pyarrow_array_from_string_array(array_info* str_arr) {
+void* pd_pyarrow_array_from_string_array(array_info* str_arr,
+                                         const int is_bytes) {
 #undef CHECK
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -612,7 +560,8 @@ void* pd_pyarrow_array_from_string_array(array_info* str_arr) {
     CHECK(pd_arrays_mod, "importing pandas.arrays module failed");
 
     PyObject* str_arr_obj = PyObject_CallMethod(
-        pd_arrays_mod, "ArrowStringArray", "O", pyarrow_arr);
+        pd_arrays_mod, is_bytes ? "ArrowExtensionArray" : "ArrowStringArray",
+        "O", pyarrow_arr);
 
     Py_DECREF(pd_mod);
     Py_DECREF(pd_arrays_mod);

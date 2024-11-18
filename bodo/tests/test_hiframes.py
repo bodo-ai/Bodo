@@ -362,7 +362,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.replace("AB*", "EE", regex=True)
 
-        df = pd.DataFrame({"A": ["ABCC", "CABBD", np.nan, "CCD"]})
+        df = pd.DataFrame({"A": ["ABCC", "CABBD", None, "CCD"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
@@ -370,7 +370,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.replace("AB", "EE", regex=False)
 
-        df = pd.DataFrame({"A": ["ABCC", "CABBD", np.nan, "AA"]})
+        df = pd.DataFrame({"A": ["ABCC", "CABBD", None, "AA"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 
@@ -379,7 +379,7 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.replace("AB*", "EE", regex=True)
             return B
 
-        A = ["ABCC", "CABBD", "CCD", "CCDAABB", np.nan, "ED"]
+        A = ["ABCC", "CABBD", "CCD", "CCDAABB", None, "ED"]
         start, end = get_start_end(len(A))
         # TODO: support Index
         df = pd.DataFrame({"A": A}).iloc[start:end].reset_index(drop=True)
@@ -400,7 +400,7 @@ class TestHiFrames(unittest.TestCase):
         def test_impl(df):
             return df.A.str.split()
 
-        df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", np.nan, "g\t f"]})
+        df = pd.DataFrame({"A": ["AB CC", "C ABB D", "G ", None, "g\t f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(
             bodo_func(df), test_impl(df), check_names=False, check_dtype=False
@@ -411,7 +411,7 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.split(",")
             return B
 
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
+        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", None, "g,f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df))
 
@@ -422,7 +422,7 @@ class TestHiFrames(unittest.TestCase):
             df2 = pd.DataFrame({"B": B})
             return df2[df2.B.str.len() > 1]
 
-        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
+        df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", None, "g,f"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_frame_equal(
             bodo_func(df), test_impl(df), check_column_type=False
@@ -475,7 +475,7 @@ class TestHiFrames(unittest.TestCase):
             B = df.A.str.split(",")
             return B.str.get(1)
 
-        df = pd.DataFrame({"A": ["AAA", "AB,CC", np.nan, "C,ABB,D"]})
+        df = pd.DataFrame({"A": ["AAA", "AB,CC", None, "C,ABB,D"]})
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(df), test_impl(df), check_dtype=False)
 

@@ -326,15 +326,14 @@ def box_dict_arr(typ, val, c):
             c.pyapi.pyobj,
             [
                 lir.IntType(8).as_pointer(),
+                lir.IntType(32),
             ],
         )
         box_fname = "pd_pyarrow_array_from_string_array"
         fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
         arr = c.builder.call(
             fn_get,
-            [
-                arr_info,
-            ],
+            [arr_info, c.context.get_constant(types.int32, 0)],
         )
         c.context.nrt.decref(c.builder, typ, val)
         return arr

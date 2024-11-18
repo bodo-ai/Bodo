@@ -12,7 +12,7 @@ from bodo.tests.utils import check_func, generate_comparison_ops_func
 @pytest.fixture(
     params=[
         np.array(
-            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2,
+            [b"", b"abc", b"c", None, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2,
             object,
         ),
     ]
@@ -138,7 +138,7 @@ def test_binary_binary_comparison_ops(binary_arr_value, cmp_op, memory_leak_chec
     Test logical comparisons between binary array and binary array.
     """
     func = generate_comparison_ops_func(cmp_op)
-    arg1 = np.array([b"", b"c", np.nan, bytes(2)] * 4, object)
+    arg1 = np.array([b"", b"c", None, bytes(2)] * 4, object)
     # Generate a py_output value because pandas doesn't handle null
     pandas_func = generate_comparison_ops_func(cmp_op, check_na=True)
     py_output = pd.array([None] * len(binary_arr_value), dtype="boolean")
@@ -314,7 +314,7 @@ def test_setitem_int(memory_leak_check):
         A[idx] = val
         return A
 
-    A = np.array([b"AB", b"", b"121", np.nan, b"abcd", bytes(3)], object)
+    A = np.array([b"AB", b"", b"121", None, b"abcd", bytes(3)], object)
     idx = 2
     val = b"212"  # same size as element 2 but different value
     check_func(test_impl, (A, idx, val), copy_input=True)

@@ -126,8 +126,8 @@ def test_string_base16_cast(memory_leak_check):
 def test_cmp_binary_op(cmp_op, memory_leak_check):
     func = generate_comparison_ops_func(cmp_op)
 
-    A1 = pd.array(["A", np.nan, "CC", "DD", np.nan, "ABC"])
-    A2 = pd.array(["A", np.nan, "CCD", "AADD", "DAA", "ABCE"])
+    A1 = pd.array(["A", None, "CC", "DD", None, "ABC"])
+    A2 = pd.array(["A", None, "CCD", "AADD", "DAA", "ABCE"])
     check_func(func, (A1, A2))
     check_func(func, (A1, "DD"))
     check_func(func, ("CCD", A2))
@@ -185,7 +185,7 @@ def test_string_array_getitem_na(ind, memory_leak_check):
         return S.iloc[index]
 
     bodo_func = bodo.jit(impl)
-    S = pd.Series(["A", np.nan, "CC", "DD"] + gen_nonascii_list(2))
+    S = pd.Series(["A", None, "CC", "DD"] + gen_nonascii_list(2))
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
 
