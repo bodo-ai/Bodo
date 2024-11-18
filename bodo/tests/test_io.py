@@ -1494,7 +1494,6 @@ def test_csv_relative_path(datapath, memory_leak_check):
     check_func(impl1, (), check_dtype=False, py_output=py_output)
 
 
-@pytest.mark.skip("BSE-4151: Test killed on PR CI")
 def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
     """
     Test reading string arrays as dictionary-encoded in read_csv when specified by the
