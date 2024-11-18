@@ -9,7 +9,6 @@ import os
 from datetime import date
 
 import numba
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -77,22 +76,6 @@ def test_join(
 
 def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
     """tests selecting from multiple tables based upon a where clause"""
-
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        or x in (np.float32, np.float64)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -105,7 +88,6 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
@@ -184,21 +166,6 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
     Query that demonstrates that a join with an AND expression
     will merge on a common column, rather than just merge the entire tables.
     """
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        or x in (np.float32, np.float64)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     query = """
         SELECT
             table1.A, table2.B
@@ -211,7 +178,6 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         # TODO[BE-3478]: enable dict-encoded string test when fixed
         use_dict_encoded_strings=False,
     )
@@ -227,22 +193,6 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
         byte_array_cols = ["A", "B"]
     else:
         byte_array_cols = []
-
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        or x in (np.float32, np.float64)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     query = """
         SELECT
             table1.A, table2.B
@@ -255,28 +205,12 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=byte_array_cols,
     )
 
 
 def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     """test all possible join types"""
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        or x in (np.float32, np.float64)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -290,7 +224,6 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
@@ -299,21 +232,6 @@ def test_join_different_size_tables(
     join_dataframes, spark_info, join_type, memory_leak_check
 ):
     """tests that join operations still works when the dataframes have different sizes"""
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        or x in (np.float32, np.float64)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -331,7 +249,6 @@ def test_join_different_size_tables(
         copied_join_dataframes,
         spark_info,
         check_names=False,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 

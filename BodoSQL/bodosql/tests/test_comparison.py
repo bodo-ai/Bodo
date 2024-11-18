@@ -412,13 +412,6 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
     else:
         scalar_val1, scalar_val2 = (3, 4)
 
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     query = f"""SELECT
                  t1.A as A1,
                  t2.A as A2
@@ -434,7 +427,6 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
-        check_dtype=check_dtype,
     )
 
 

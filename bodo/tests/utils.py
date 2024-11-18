@@ -1916,7 +1916,7 @@ def convert_non_pandas_columns(df):
                 e_str = ",".join(f_ent) + ","
                 e_list_str.append(e_str)
             else:
-                e_list_str.append(np.nan)
+                e_list_str.append(None)
         df_copy[e_col_name] = e_list_str
     for e_col_name in col_names_array_item:
         e_list_str = []
@@ -1938,7 +1938,7 @@ def convert_non_pandas_columns(df):
                 e_str = ",".join([str(x) for x in e_ent]) + ","
                 e_list_str.append(e_str)
             else:
-                e_list_str.append(np.nan)
+                e_list_str.append(None)
         df_copy[e_col_name] = e_list_str
     for e_col_name in col_names_arrow_array_item:
         e_list_str = []
@@ -2335,7 +2335,7 @@ def gen_random_list_string_array(option, n):
         e_list = []
         for _ in range(n):
             if random.random() < 0.1:
-                e_ent = np.nan
+                e_ent = None
             else:
                 e_ent = rand_col_str(random.randint(1, 3))
             e_list.append(e_ent)
@@ -2406,7 +2406,7 @@ def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
     for _ in range(n):
         # store NA with 30% chance
         if random.random() < 0.3:
-            str_vals.append(np.nan)
+            str_vals.append(None)
             continue
 
         k = random.randint(1, max_str_len)

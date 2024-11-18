@@ -111,21 +111,6 @@ def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
     """
     Tests distinct works in the case where we are selecting multiple columns from the same table
     """
-
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -143,7 +128,6 @@ def test_distinct_within_table(join_dataframes, spark_info, memory_leak_check):
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 

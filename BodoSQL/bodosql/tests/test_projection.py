@@ -227,20 +227,6 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
     tests that the select and from operators are working correctly for simple cases
     """
     if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
     ):
@@ -265,14 +251,12 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
         query1,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray1,
     )
     check_query(
         query2,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray2,
     )
 
@@ -282,13 +266,6 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
     """
     Tests that simple nested SQL queries using only select and from work as intended
     """
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -309,7 +286,6 @@ def test_nested_select_from(join_dataframes, spark_info, memory_leak_check):
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
@@ -319,13 +295,6 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
     """
     Tests that heavily nested SQL queries using only select and from work as intended
     """
-    if any(
-        isinstance(x, pd.core.arrays.integer.IntegerDtype)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
@@ -355,7 +324,6 @@ def test_heavily_nested_select_from(join_dataframes, spark_info, memory_leak_che
         query,
         join_dataframes,
         spark_info,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 

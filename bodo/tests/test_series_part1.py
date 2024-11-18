@@ -131,7 +131,7 @@ def test_series_constructor_init_str(memory_leak_check):
 
     def impl(n):
         I = np.arange(n)
-        return pd.Series(index=I, data=np.nan, dtype="str")
+        return pd.Series(index=I, data=None, dtype="str")
 
     check_func(impl, (111,))
 
@@ -224,7 +224,7 @@ def test_string_series_fillna_inplace():
 def test_binary_series_fillna_inplace():
     """tests fillna on binary series with inplace = True"""
 
-    A = pd.Series([b"sakdhjlf", b"a", np.nan, b"asdjg", bytes(1)] * 3)
+    A = pd.Series([b"sakdhjlf", b"a", None, b"asdjg", bytes(1)] * 3)
     A2 = pd.Series([bytes(1), b"avsjbdhjof", b"bjknjoiuh", b"abnsdgd", b""] * 3)
 
     def impl0(S):
@@ -1210,7 +1210,7 @@ def test_series_iat_setitem_datetime(memory_leak_check):
             datetime.timedelta(3, 3, 3),
             datetime.timedelta(2, 2, 2),
             datetime.timedelta(1, 1, 1),
-            np.nan,
+            None,
             datetime.timedelta(5, 5, 5),
         ]
     )
@@ -1423,7 +1423,7 @@ def test_series_iloc_setitem_datetime_scalar(memory_leak_check):
             datetime.timedelta(3, 3, 3),
             datetime.timedelta(2, 2, 2),
             datetime.timedelta(1, 1, 1),
-            np.nan,
+            None,
             datetime.timedelta(5, 5, 5),
         ]
     )

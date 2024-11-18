@@ -54,7 +54,7 @@ def test_pd_isna_getitem(memory_leak_check):
         return pd.isnull(A[i])
 
     df = pd.DataFrame(
-        {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
+        {"A": ["AA", None, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
         [1.1, -2.1, 7.1, 0.1, 3.1],
     )
     check_func(impl1, (df,))
@@ -73,7 +73,7 @@ def test_setitem_na(memory_leak_check):
         S.iloc[i] = None
         return S
 
-    S = pd.Series(["AA", np.nan, "", "D", "GG"], name="C")
+    S = pd.Series(["AA", None, "", "D", "GG"], name="C")
     # TODO: support distributed setitem with scalar
     bodo_func = bodo.jit(impl)
     pd.testing.assert_series_equal(
@@ -502,7 +502,7 @@ def test_df_filter(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1] * 2,
-            "B": ["A", "B", np.nan, "ACDE", "C", np.nan, "AA"] * 2,
+            "B": ["A", "B", None, "ACDE", "C", None, "AA"] * 2,
             "C": [2, 3, -1, 1, np.nan, 3.1, -1] * 2,
         }
     )
@@ -1486,7 +1486,7 @@ def test_df_fillna_type_mismatch_failure():
                 "C": pd.Series([np.nan] * 5 + [1.1] + [np.nan] * 5, dtype="float32"),
             }
         ),
-        pd.DataFrame({"A": pd.Series([np.nan] * 35, dtype="boolean")}),
+        pd.DataFrame({"A": pd.Series([None] * 35, dtype="boolean")}),
     ],
 )
 def fillna_dataframe(request):
@@ -2505,7 +2505,7 @@ def test_df_fillna_str_inplace(memory_leak_check):
         return df
 
     df_str = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", np.nan, "c", "bdd", "c", "a"]}
+        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", None, "c", "bdd", "c", "a"]}
     )
     check_func(test_impl, (df_str,), copy_input=True, use_dict_encoded_strings=False)
 
@@ -2520,7 +2520,7 @@ def test_df_fillna_binary_inplace(memory_leak_check):
     df_str = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [b"ab", b"", np.nan, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
+            "B": [b"ab", b"", None, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
         }
     )
     check_func(test_impl, (df_str,), copy_input=True)
@@ -2818,7 +2818,7 @@ def test_unsupported_df_method():
         # timedelta
         pd.DataFrame({"D": pd.Series(pd.timedelta_range(start="1 day", periods=4))}),
         # string
-        pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", np.nan]}),
+        pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", None]}),
         # nullable int
         pd.DataFrame({"A": pd.Series([1, 2] * 20, dtype="Int32"), "B": [2, 3] * 20}),
         # categorical and boolean

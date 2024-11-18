@@ -1760,7 +1760,7 @@ def test_series_dt_type(memory_leak_check):
     def impl(S):
         return S.dt.year
 
-    S = pd.Series([" bbCD ", "ABC", " mCDm ", np.nan, "abcffcc", "", "A"])
+    S = pd.Series([" bbCD ", "ABC", " mCDm ", None, "abcffcc", "", "A"])
 
     with pytest.raises(
         BodoError, match="Can only use .dt accessor with datetimelike values."

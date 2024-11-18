@@ -63,7 +63,7 @@ df_value_params = [
     pytest.param(
         pd.DataFrame(
             {
-                "A": ["AA", np.nan, "", "D", "GG", "FF"],
+                "A": ["AA", None, "", "D", "GG", "FF"],
                 "B": [1, 8, 4, -1, 2, 10],
                 "C": gen_nonascii_list(6),
             },
@@ -224,7 +224,7 @@ def select_dtypes_df(request):
         pytest.param(pd.RangeIndex(5), marks=pytest.mark.slow),
         # dataframe
         pd.DataFrame(
-            {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
+            {"A": ["AA", None, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
             [1.1, -2.1, 7.1, 0.1, 3.1],
         ),
         # scalars

@@ -20,7 +20,7 @@ pytestmark = pytest_pandas
                     "ABCDD,OSAJD",
                     "a1b2d314f,sdf234",
                     "22!@#,$@#$",
-                    np.nan,
+                    None,
                     "A,C,V,B,B",
                     "AA",
                     "",
@@ -37,7 +37,7 @@ pytestmark = pytest_pandas
                     "¿abc¡Y tú, quién te crees?",
                     "ÕÕÕú¡úú,úũ¿ééé",
                     "россия очень, холодная страна",
-                    np.nan,
+                    None,
                     "مرحبا, العالم ، هذا هو بودو",
                     "Γειά σου ,Κόσμε",
                     "Español es agra,dable escuchar",
@@ -53,7 +53,7 @@ pytestmark = pytest_pandas
                 [
                     "아1, 오늘 저녁은 뭐먹지",
                     "나,는 유,니,코,드 테스팅 중",
-                    np.nan,
+                    None,
                     "こんにち,は世界",
                     "大处着眼，小处着手。",
                     "오늘도 피츠버그의 날씨는 매우, 구림",
@@ -71,7 +71,7 @@ pytestmark = pytest_pandas
                     "😀🐍,⚡😅😂",
                     "🌶🍔,🏈💔💑💕",
                     "𠁆𠁪,𠀓𠄩𠆶",
-                    np.nan,
+                    None,
                     "🏈,💔,𠄩,😅",
                     "🠂,🠋🢇🄐,🞧",
                     "🢇🄐,🏈𠆶💑😅",
@@ -95,7 +95,7 @@ pytestmark = pytest_pandas
                 "C,ABB,D",
                 "¿abc¡Y tú, quién te cre\t\tes?",
                 "오늘도 피츠버그의 날씨는 매\t우, 구림",
-                np.nan,
+                None,
                 "🏈,💔,𠄩,😅",
                 "大处着眼，小处着手。",
                 "🠂,🠋🢇🄐,🞧",
@@ -312,22 +312,22 @@ def test_series_str_split_explode(memory_leak_check):
         return df.A.str.split(",").explode()
 
     df = pd.DataFrame(
-        {"A": pd.array(["A B C", "A", "D E", "A N C E Q  R#R##R#RR F", np.nan] * 5)}
+        {"A": pd.array(["A B C", "A", "D E", "A N C E Q  R#R##R#RR F", None] * 5)}
     )
     check_func(test_impl1, (df,))
     df = pd.DataFrame(
-        {"A": pd.array(["A,B,C", "A", "D,E", "", "A,N,C,E,Q  R#R##R#RR,F", np.nan] * 5)}
+        {"A": pd.array(["A,B,C", "A", "D,E", "", "A,N,C,E,Q  R#R##R#RR,F", None] * 5)}
     )
     check_func(test_impl2, (df,))
 
     df = pd.DataFrame(
-        {"A": pd.array(["Ȩ Ç Ḑ", "ẞ", "Ő Ű", "Å Ů ẘ ẙ Q Ð#Ð##Ð#ÐÐ F", np.nan] * 5)}
+        {"A": pd.array(["Ȩ Ç Ḑ", "ẞ", "Ő Ű", "Å Ů ẘ ẙ Q Ð#Ð##Ð#ÐÐ F", None] * 5)}
     )
 
     check_func(test_impl1, (df,))
 
     df = pd.DataFrame(
-        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "", "Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", np.nan] * 5)}
+        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "", "Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", None] * 5)}
     )
 
     check_func(test_impl2, (df,))
@@ -665,7 +665,7 @@ def test_re_syntax(case, memory_leak_check):
             "ABCDD,OSAJD",
             "a1b2d314f,sdf234",
             "22!@#,$@#$",
-            np.nan,
+            None,
             "A,C,V,B,B",
             "ABcd",
             "",
@@ -773,7 +773,7 @@ def test_extractall():
         return S.str.extractall(r"(?P<BBB>[abd]+)\d+")
 
     S = pd.Series(
-        ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        ["a1b1", "b1", None, "a2", "c2", "ddd", "dd4d1", "d22c2"],
         [4, 3, 5, 1, 0, 2, 6, 11],
         name="AA",
     )
@@ -784,7 +784,7 @@ def test_extractall():
         return S.str.extractall(r"([чен]+)\d+([ст]+)\d+")
 
     S2 = pd.Series(
-        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["чьь1т33", "ьнн2с222", "странаст2", None, "ьнне33ст3"] * 2,
         ["е3", "не3", "н2с2", "AA", "C"] * 2,
     )
     check_func(test_impl2, (S2,))
@@ -865,7 +865,7 @@ def test_encode(memory_leak_check):
             "ABCDD,OSAJD",
             "a1b2d314f,sdf234",
             "22!@#,$@#$",
-            np.nan,
+            None,
             "A,C,V,B,B",
             "AA",
             "",
@@ -882,7 +882,7 @@ def test_encode(memory_leak_check):
     [
         (
             pd.Series(
-                ["alpha", "beta", "alphabet", "patatasbravas", np.nan, "houseofcards"]
+                ["alpha", "beta", "alphabet", "patatasbravas", None, "houseofcards"]
             ),
             "a",
             0,
@@ -895,9 +895,7 @@ def test_encode(memory_leak_check):
             6,
         ),
         (
-            pd.Series(
-                ["bagel", np.nan, "gelatin", "gelato", "angelfish", "evangelist"]
-            ),
+            pd.Series(["bagel", None, "gelatin", "gelato", "angelfish", "evangelist"]),
             "gel",
             0,
             10,
@@ -1402,7 +1400,7 @@ def test_join_splitview_nan_entry(memory_leak_check):
         B = S.str.split(",")
         return B.str.join("-")
 
-    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", np.nan], [4, 3, 1], name="A")
+    S = pd.Series(["ABCDD,OSAJD", "a1b2d314f,sdf234", None], [4, 3, 1], name="A")
     check_func(test_impl, (S,), check_typing_issues=False)
 
 
@@ -1512,7 +1510,7 @@ def test_partition(expand, memory_leak_check):
                     None,
                     "Hello",
                     None,
-                    np.nan,
+                    None,
                     "good bye",
                     "Hiß GoodBye1",
                     "ßßßßßßßßß",
@@ -1541,14 +1539,14 @@ def test_partition(expand, memory_leak_check):
                     "¿abc¡Y tú, quién te crees?",
                     "ÕÕÕú¡úú,úũ¿ééé",
                     "россия очень, холодная страна",
-                    np.nan,
+                    None,
                     "@$!@*()$D" "مرحبا, العالم ، هذا هو بودو",
                     "Γειά σου ,Κόσμε",
                     "Español es agra,dable escuchar",
                     "😀🐍,⚡😅😂",
                     "🌶🍔,🏈💔💑💕",
                     "𠁆𠁪,𠀓𠄩𠆶",
-                    np.nan,
+                    None,
                     "🏈,💔,𠄩,😅\t\t",
                     "🠂,🠋🢇🄐,🞧",
                     "🢇🄐,🏈𠆶💑😅",
@@ -1588,12 +1586,12 @@ def test_fullmatch(pattern, case, memory_leak_check):
             "abcdef",
             "ab",
             "abce",
-            np.nan,
+            None,
             "ABCDEf",
             "AB!@#$S",
             "¿abc¡Y tú, quién te cre\t\tes?",
             "오늘도 피츠버그의 날씨는 매\t우, 구림",
-            np.nan,
+            None,
             "🏈,💔,𠄩,😅",
             "大处着眼，小处着手。",
             "🠂,🠋🢇🄐,🞧",

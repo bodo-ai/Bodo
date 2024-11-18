@@ -2794,7 +2794,7 @@ def test_groupby_nunique_dropna(memory_leak_check):
             # Nullable boolean
             "C": pd.Series([True, None, None, None, True, True, True], dtype="boolean"),
             # Nullable Binary
-            "H": [b"AA", b"B", np.nan, b"B", np.nan, b"AA", b"B"],
+            "H": [b"AA", b"B", None, b"B", None, b"AA", b"B"],
         },
     )
 
@@ -2868,7 +2868,7 @@ def test_count(memory_leak_check):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": gen_nonascii_list(7),
         }
     )
@@ -2886,7 +2886,7 @@ def test_count(memory_leak_check):
     df_bin = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [b"", bytes(13), np.nan, b"asd", b"wesds", b"asdk", np.nan],
+            "B": [b"", bytes(13), None, b"asd", b"wesds", b"asdk", None],
             "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
         }
     )
@@ -2926,7 +2926,7 @@ def test_count_select_col(memory_leak_check):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
             "D": gen_nonascii_list(7),
         }
@@ -2944,7 +2944,7 @@ def test_count_select_col(memory_leak_check):
     df_bin = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
-            "B": [b"", bytes(13), np.nan, b"asd", b"wesds", b"asdk", np.nan],
+            "B": [b"", bytes(13), None, b"asd", b"wesds", b"asdk", None],
             "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
         }
     )
@@ -3039,7 +3039,7 @@ def test_median_nullable_int_bool(memory_leak_check):
         pd.DataFrame(
             {
                 "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-                "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+                "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             }
         ),
         pd.DataFrame(
@@ -3059,10 +3059,10 @@ def test_median_nullable_int_bool(memory_leak_check):
                 ],
                 "B": [
                     b"ccc",
-                    np.nan,
+                    None,
                     b"bb",
                     b"aa",
-                    np.nan,
+                    None,
                     b"ggg",
                     b"rr",
                     b"sdalk",
@@ -3114,19 +3114,19 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
     )
     df_str = pd.DataFrame(
         {
-            "A": [np.nan, "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "A": [None, "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
         }
     )
     df_bin = pd.DataFrame(
         {
             "A": [
                 b"aaa",
-                np.nan,
+                None,
                 b"baaa",
                 b"baaa",
                 b"aaa",
-                np.nan,
+                None,
                 b"aaa",
                 b"asdf",
                 b"anmb",
@@ -3134,10 +3134,10 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
             ],
             "B": [
                 b"ccc",
-                np.nan,
+                None,
                 b"bb",
                 b"aa",
-                np.nan,
+                None,
                 b"ggg",
                 b"rr",
                 b"aksjdhg",
@@ -4866,7 +4866,7 @@ def test_first_last(test_df):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": gen_nonascii_list(7),
         }
     )
@@ -4891,7 +4891,7 @@ def test_first_last(test_df):
     df_bin = pd.DataFrame(
         {
             "A": [1, 1, 3, 3, 2, 1, 2],
-            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "B": [b"ccc", None, b"bb", b"aa", None, b"ggg", b"rr"],
             "C": [b"cc", b"aa", b"aa", b"bb", b"vv", b"cc", b"cc"],
         }
     )
@@ -4990,7 +4990,7 @@ def test_first_last_supported_types(memory_leak_check):
     df_bin = pd.DataFrame(
         {
             "A": [2, 1, 1, 2, 3] * 2,
-            "C": [b"ab", b"cd", np.nan, b"gh", b"ijk"] * 2,
+            "C": [b"ab", b"cd", None, b"gh", b"ijk"] * 2,
         }
     )
     check_func(impl1, (df_bin,), sort_output=True)
@@ -5039,7 +5039,7 @@ def test_first_last_one_col(test_df):
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
-            "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
+            "B": ["ccc", None, "bb", "aa", None, "ggg", "rr"],
             "C": gen_nonascii_list(7),
         }
     )
@@ -5057,7 +5057,7 @@ def test_first_last_one_col(test_df):
     df_bin = pd.DataFrame(
         {
             "A": [1, 1, 3, 3, 2, 1, 2],
-            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "B": [b"ccc", None, b"bb", b"aa", None, b"ggg", b"rr"],
             "C": [b"cc", b"aa", b"aa", b"bb", b"vv", b"cc", b"cc"],
         }
     )
@@ -6109,14 +6109,14 @@ def test_groupby_shift_timedelta(memory_leak_check):
                 datetime.timedelta(3, 3, 3),
                 datetime.timedelta(2, 2, 2),
                 datetime.timedelta(1, 1, 1),
-                np.nan,
+                None,
                 datetime.timedelta(5, 5, 5),
             ],
             "B": [
                 datetime.timedelta(3, 3, 3),
                 datetime.timedelta(2, 2, 2),
                 datetime.timedelta(1, 1, 1),
-                np.nan,
+                None,
                 datetime.timedelta(5, 5, 5),
             ],
         }
@@ -6136,7 +6136,7 @@ def test_groupby_shift_binary(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [1, 1, 1, 2, 2] * 2,
-            "B": [b"hkjl", b"jkhb", np.nan, bytes(4), b"mhgt"] * 2,
+            "B": [b"hkjl", b"jkhb", None, bytes(4), b"mhgt"] * 2,
         }
     )
     check_func(impl2, (df,))
@@ -6507,7 +6507,7 @@ def test_cumulatives_supported_cases(memory_leak_check):
             pd.DataFrame(
                 {
                     "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                    "B": [b"ab", b"cd", b"ef", np.nan, b"mm", b"a", b"abc", b"x"],
+                    "B": [b"ab", b"cd", b"ef", None, b"mm", b"a", b"abc", b"x"],
                 }
             ),
             marks=pytest.mark.slow,
@@ -6580,7 +6580,7 @@ def test_count_supported_cases(memory_leak_check):
             "A": [2, 1, 1, 2, 3],
             "B": [1.1, 2.2, 3.3, 4.4, 1.1],
             "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
-            "D": [b"ab", b"cd", b"ef", np.nan, b"mm"],
+            "D": [b"ab", b"cd", b"ef", None, b"mm"],
         }
     )
     check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
@@ -6968,10 +6968,10 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
                         datetime.timedelta(3, 3, 3),
                         datetime.timedelta(2, 2, 2),
                         datetime.timedelta(1, 1, 1),
-                        np.nan,
+                        None,
                         datetime.timedelta(5, 5, 5),
-                        np.nan,
-                        np.nan,
+                        None,
+                        None,
                     ],
                     "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
                 }
@@ -7001,7 +7001,7 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": ["CC", "aa", "b", np.nan, "aa", np.nan, "aa", "CC"],
+                    "A": ["CC", "aa", "b", None, "aa", None, "aa", "CC"],
                     "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
                 },
             ),
@@ -7011,7 +7011,7 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [b"CC", b"aa", b"b", np.nan, b"aa", np.nan, b"aa", b"CC"],
+                    "A": [b"CC", b"aa", b"b", None, b"aa", None, b"aa", b"CC"],
                     "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
                 },
             ),
@@ -7021,7 +7021,7 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [np.nan, False, True, True, True],
+                    "A": [None, False, True, True, True],
                     "B": [1.0, 2.0, 2, 1, 3],
                 },
             ),
@@ -7031,7 +7031,7 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": ["CC", "aa", "b", np.nan] * 20,
+                    "A": ["CC", "aa", "b", None] * 20,
                     "B": [10.2, 11.1, 1.1, 2.2] * 20,
                 },
             ),
@@ -7043,7 +7043,7 @@ def test_groupby_na_key(df, memory_leak_check):
     """
     Test groupby(dropna=False)
     """
-    if bodo.get_size() > 2 and set(df["A"]) == {np.nan, True, False}:
+    if bodo.get_size() > 2 and set(df["A"]) == {None, True, False}:
         # This produces empty output on one rank with np3 so we skip to avoid
         # hangs
         return
@@ -7184,7 +7184,7 @@ def test_head(memory_leak_check):
             "H": pd.Series([1, 1, np.nan, 1, 2, np.nan, 2], dtype="Int64"),
             "I": [True, True, False, True, True, False, False],
             "J": pd.array([True, False, None, True, True, False, True]),
-            "K": [b"ab", b"cd", np.nan, b"ef", b"mm", b"", b"xxx"],
+            "K": [b"ab", b"cd", None, b"ef", b"mm", b"", b"xxx"],
             "L": pd.array(
                 [float(i) if i % 2 else None for i in range(7)], dtype="float64"
             ),

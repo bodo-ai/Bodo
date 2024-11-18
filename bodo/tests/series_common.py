@@ -168,7 +168,7 @@ series_val_params = [
     ),
     pytest.param(
         pd.Series(
-            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2
+            [b"", b"abc", b"c", None, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2
         ),
         id="binary",
     ),
