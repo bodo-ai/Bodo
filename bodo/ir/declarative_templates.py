@@ -382,7 +382,6 @@ class _OverloadDeclarativeAttributeTemplate(
         # There should only be one template
         for template in fnty.templates:
             self._inline_overloads.update(template._inline_overloads)
-        self.document()
         return sig.return_type
 
 
