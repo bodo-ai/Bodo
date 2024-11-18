@@ -6989,7 +6989,7 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
                                     start="2/1/2015", end="2/24/2016", periods=6
                                 )
                             ),
-                            pd.Series(data=[None]),
+                            pd.Series(data=[pd.NaT]),
                         ]
                     ),
                     "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
