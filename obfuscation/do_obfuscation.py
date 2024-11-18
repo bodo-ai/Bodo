@@ -12,7 +12,7 @@ Use:
 
 The output shows the result of the operations."""
 
-list_dir = ["", "dl", "ir", "io", "utils", "hiframes", "libs"]
+list_dir = ["", "ir", "io", "utils", "hiframes", "libs"]
 
 file_dir = os.path.dirname(os.path.realpath(__file__))
 

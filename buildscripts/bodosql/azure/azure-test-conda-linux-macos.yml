@@ -155,4 +155,5 @@ jobs:
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       AWS_REGION: us-east-1
       BODO_STREAMING_ENABLED: ${{ parameters.BODO_STREAMING_ENABLED }}
+      BODO_SPAWN_MODE: "0"
     displayName: 'Test BodoSQL'
