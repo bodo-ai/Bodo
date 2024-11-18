@@ -1995,7 +1995,7 @@ def get_value_for_type(dtype):  # pragma: no cover
     if dtype == bodo.null_array_type:
         import pyarrow as pa
 
-        return pa.nulls(1)
+        return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
     if isinstance(dtype, bodo.StructArrayType):
