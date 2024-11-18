@@ -434,7 +434,17 @@ def bodo_get_distinct_group(raw_data, raw_order):
 
 
 def array_agg_distinct_func(group):
-    if isinstance(group["data"].dtype, pd.ArrowDtype):
+    def _is_nested_pa_dtype(pa_dtype):
+        return (
+            pa.types.is_list(pa_dtype)
+            or pa.types.is_large_list(pa_dtype)
+            or pa.types.is_struct(pa_dtype)
+            or pa.types.is_map(pa_dtype)
+        )
+
+    if isinstance(group["data"].dtype, pd.ArrowDtype) and _is_nested_pa_dtype(
+        group["data"].dtype.pyarrow_dtype
+    ):
         # Using bodo.jit since its implementation of sorting and dropna
         # works on semi-structured data better than the Python/Pandas version.
         @bodo.jit(distributed=False)
