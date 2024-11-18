@@ -335,12 +335,14 @@ def test_spawn_type_register():
     )
 
 
-@pytest.mark.skip(reason="[BSE-4193]: fix test on PR CI")
+@pytest.mark.no_cover
 def test_spawn_atexit_delete_result():
     """Tests that results in the user program are deleted properly upon exit,
     even after spawner has been destroyed"""
 
-    additional_envs = {"BODO_NUM_WORKERS": str(1)}
+    additional_envs = {
+        "BODO_NUM_WORKERS": str(1),
+    }
 
     cmd = [sys.executable, "-u", "-m", "spawn_exit"]
     # get directory of test python executable
