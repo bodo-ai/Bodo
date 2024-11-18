@@ -209,7 +209,6 @@ def _send_output(
 
     if is_distributed:
         distributed_return_metadata = _build_distributed_return_metadata(res, logger)
-        debug_worker_msg(logger, f"{distributed_return_metadata=}")
         if bodo.get_rank() == 0:
             debug_worker_msg(logger, "Sending distributed result metadata to spawner")
             # Send the result id and a small chunk to the spawner
