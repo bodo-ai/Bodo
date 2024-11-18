@@ -79,3 +79,5 @@ dependencies:
 
   # Spawn mode serialization
   - cloudpickle>=3.0.0
+  # Spawn mode other dependencies
+  - psutil

@@ -60,7 +60,7 @@ jobs:
           run: |
             # TODO: Remove once fully moved to GA
             rm -rf setup.cfg
-  
+
             # Bodo Tests: Coverage is collected
             pytest -s -v -Wignore \
               --cov-report= --cov=bodo \
@@ -99,6 +99,7 @@ jobs:
             SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
             AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
             AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
+            BODO_SPAWN_MODE: "0"
   
         # Upload
         - name: Prepare Outputs

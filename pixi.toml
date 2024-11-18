@@ -76,6 +76,7 @@ pyarrow = "17.0.0"
 fsspec = ">=2021.09"
 requests = "*"
 cloudpickle = ">=3.0,<4.0"
+psutil = "*"
 # Core Java Deps
 openjdk = "=11"
 py4j = "==0.10.9.7"
@@ -161,7 +162,6 @@ flaky = "*"
 
 # Other Deps
 pyyaml = "*"
-psutil = "*"
 
 # Developer Tools
 ruff = "*"

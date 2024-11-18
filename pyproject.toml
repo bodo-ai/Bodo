@@ -40,6 +40,7 @@ dependencies = [
     "fsspec>=2021.09",
     "requests",
     "cloudpickle>=3.0,<4.0",
+    "psutil",
 ]
 
 [project.urls]
