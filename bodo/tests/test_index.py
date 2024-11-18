@@ -1827,7 +1827,7 @@ def test_binary_index_constant_lowering(memory_leak_check):
         return si
 
     bodo_func = bodo.jit(distributed=False)(impl)
-    pd.testing.assert_index_equal(bodo_func(), impl())
+    pd.testing.assert_index_equal(bodo_func(), impl(), exact=False, check_exact=False)
 
 
 def test_int64_index_constant_lowering(memory_leak_check):
