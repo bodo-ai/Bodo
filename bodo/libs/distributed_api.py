@@ -1829,18 +1829,27 @@ def _scatterv_np(data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, c
     return scatterv_arr_impl
 
 
-def _get_array_first_val_fix_decimal(arr):
+def _get_array_first_val_fix_decimal_dict(arr):
     """Get first value of array but make sure decimal array returns PyArrow scalar
     which preserves precision/scale (Pandas by default returns decimal.Decimal).
+    Also makes sure dictionary-encoded string array returns DictStringSentinel to allow
+    proper unboxing type inference.
     """
     import pyarrow as pa
 
-    assert len(arr) > 0, "_get_array_first_val_fix_decimal: empty array"
+    from bodo.hiframes.boxing import DictStringSentinel
+
+    assert len(arr) > 0, "_get_array_first_val_fix_decimal_dict: empty array"
 
     if isinstance(arr, pd.arrays.ArrowExtensionArray) and pa.types.is_decimal128(
         arr.dtype.pyarrow_dtype
     ):
         return arr._pa_array[0]
+
+    if isinstance(arr, pd.arrays.ArrowExtensionArray) and pa.types.is_dictionary(
+        arr.dtype.pyarrow_dtype
+    ):
+        return DictStringSentinel()
 
     return arr[0]
 
@@ -1955,12 +1964,13 @@ def get_value_for_type(dtype):  # pragma: no cover
             [-1], dtype.dtype.categories, dtype.dtype.ordered
         )
 
-    # TupleArray
+    # Tuple
     if isinstance(dtype, types.BaseTuple):
         return tuple(get_value_for_type(t) for t in dtype.types)
 
     # ArrayItemArray
     if isinstance(dtype, ArrayItemArrayType):
+        # TODO[BSE-4213]: Use Arrow arrays
         return pd.Series([get_value_for_type(dtype.dtype)]).values
 
     # IntervalArray
@@ -1989,10 +1999,13 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # StructArray
     if isinstance(dtype, bodo.StructArrayType):
+        # TODO[BSE-4213]: Use Arrow arrays
         return np.array(
             [
                 {
-                    field_name: _get_array_first_val_fix_decimal(get_value_for_type(t))
+                    field_name: _get_array_first_val_fix_decimal_dict(
+                        get_value_for_type(t)
+                    )
                     for field_name, t in zip(dtype.names, dtype.data)
                 }
             ],
@@ -2001,10 +2014,11 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # TupleArray
     if isinstance(dtype, bodo.TupleArrayType):
+        # TODO[BSE-4213]: Use Arrow arrays
         return pd.array(
             [
                 tuple(
-                    _get_array_first_val_fix_decimal(get_value_for_type(t))
+                    _get_array_first_val_fix_decimal_dict(get_value_for_type(t))
                     for t in dtype.data
                 )
             ],
@@ -2013,13 +2027,14 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # MapArrayType
     if isinstance(dtype, bodo.MapArrayType):
+        # TODO[BSE-4213]: Use Arrow arrays
         from bodo.hiframes.boxing import BodoMapWrapper
 
         dict_val = BodoMapWrapper(
             {
-                _get_array_first_val_fix_decimal(
+                _get_array_first_val_fix_decimal_dict(
                     get_value_for_type(dtype.key_arr_type)
-                ): _get_array_first_val_fix_decimal(
+                ): _get_array_first_val_fix_decimal_dict(
                     get_value_for_type(dtype.value_arr_type)
                 )
             }
