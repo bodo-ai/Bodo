@@ -71,7 +71,6 @@ dependencies:
 
   # Other Deps
   - pyyaml
-  - psutil
   - bs4
 
   # Developer tools

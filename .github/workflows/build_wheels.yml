@@ -123,12 +123,11 @@ jobs:
           pip install bodo
       - name: Test
         run: |
-          mpiexec -n 2 python -c '\
+          export BODO_NUM_WORKERS=2
+          python -c '\
           import bodo
           import pandas as pd
-          if bodo.get_rank() == 0:
-              pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
-          bodo.barrier()
+          pd.DataFrame({"a": [1, 2, 3]}).to_parquet("test.parquet")
           @bodo.jit
           def f():
               df = pd.read_parquet("test.parquet")

@@ -23,6 +23,7 @@ def test_join_rebalance():
             "-u",
             "join_rebalance.py",
         ]
-        run_cmd(cmd)
+        # disabling spawn mode
+        run_cmd(cmd, additional_envs={"BODO_SPAWN_MODE": "0"})
     finally:
         os.chdir(pytest_working_dir)

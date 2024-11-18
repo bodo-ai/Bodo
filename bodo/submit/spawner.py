@@ -122,7 +122,7 @@ class Spawner:
             ]
             if "BODO_DYLD_INSERT_LIBRARIES" in os.environ:
                 environ_args.append(
-                    f"DYLD_INSERT_LIBRARIES={os.environ["BODO_DYLD_INSERT_LIBRARIES"]}"
+                    f"DYLD_INSERT_LIBRARIES={os.environ['BODO_DYLD_INSERT_LIBRARIES']}"
                 )
 
             # run python with -u to prevent STDOUT from buffering

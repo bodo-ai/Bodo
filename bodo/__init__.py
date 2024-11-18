@@ -154,7 +154,7 @@ bodo_disable_streaming_window_sort = (
 # Snowflake-managed Iceberg tables in the BodoSQL plan.
 prefetch_sf_iceberg = os.environ.get("BODO_PREFETCH_SF_ICEBERG", "1") != "0"
 
-spawn_mode = os.environ.get("BODO_SPAWN_MODE", "0") != "0"
+spawn_mode = os.environ.get("BODO_SPAWN_MODE", "1") != "0"
 
 
 def get_sql_config_str() -> str:

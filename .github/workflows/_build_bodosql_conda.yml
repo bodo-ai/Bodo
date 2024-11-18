@@ -59,6 +59,7 @@ jobs:
         shell: bash
         env:
           BODOSQL_VERSION: ${{ env.BODOSQL_VERSION }}
+          BODO_NUM_WORKERS: 1
 
       - name: Upload Conda Package
         uses: actions/upload-artifact@v4
