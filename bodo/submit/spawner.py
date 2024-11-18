@@ -586,6 +586,9 @@ class SubmitDispatcher:
     def __init__(self, py_func, decorator_args):
         self.py_func = py_func
         self.decorator_args = decorator_args
+        # Extra globals to pickle (used for BodoSQL globals that are not visible to
+        # cloudpickle, e.g. inside CASE implementation string)
+        self.extra_globals = {}
 
     def __call__(self, *args, **kwargs):
         return submit_func_to_workers(
@@ -593,9 +596,10 @@ class SubmitDispatcher:
         )
 
     @classmethod
-    def get_dispatcher(cls, py_func, decorator_args):
+    def get_dispatcher(cls, py_func, decorator_args, extra_globals):
         # Instead of unpickling into a new SubmitDispatcher, we call bodo.jit to
         # return the real dispatcher
+        py_func.__globals__.update(extra_globals)
         decorator = bodo.jit(**decorator_args)
         return decorator(py_func)
 
@@ -603,4 +607,14 @@ class SubmitDispatcher:
         # Pickle this object by pickling the underlying function (which is
         # guaranteed to have the extra properties necessary to build the actual
         # dispatcher via bodo.jit on the worker side)
-        return SubmitDispatcher.get_dispatcher, (self.py_func, self.decorator_args)
+        return SubmitDispatcher.get_dispatcher, (
+            self.py_func,
+            self.decorator_args,
+            self.extra_globals,
+        )
+
+    def add_extra_globals(self, glbls):
+        """Add extra globals to be pickled (used for BodoSQL globals that are not visible to
+        cloudpickle, e.g. inside CASE implementation strings)
+        """
+        self.extra_globals.update(glbls)

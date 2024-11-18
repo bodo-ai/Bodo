@@ -1032,6 +1032,7 @@ class BodoSQLContext:
 
     def sql(self, sql, params_dict=None, dynamic_params_list=None, **jit_options):
         import bodosql
+        from bodo.submit.spawner import SubmitDispatcher
 
         if params_dict is None:
             params_dict = {}
@@ -1096,7 +1097,16 @@ class BodoSQLContext:
                     TABLE_ARG_PREFIX + x for x in jit_options["replicated"]
                 ]
 
-            return bodo.jit(impl, **jit_options)(
+            dispatcher = bodo.jit(impl, **jit_options)
+
+            # Save BodoSQL globals in SubmitDispatcher to be handled in pickling
+            # properly. Internal CASE implementation strings may use some globals that
+            # are not visible to cloudpickle as used by the function. See:
+            # test_json_fns.py::test_object_construct_keep_null[no_nested-no_null-with_case]
+            if isinstance(dispatcher, SubmitDispatcher):
+                dispatcher.add_extra_globals(glbls)
+
+            return dispatcher(
                 *(
                     list(self.tables.values())
                     + dynamic_params_list
