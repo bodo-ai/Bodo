@@ -95,6 +95,12 @@ class BodoMapWrapper(dict):
     pass
 
 
+# Wrapper class around str to make typing treat str value as dictionary-encoded string
+# array element not a regular string.
+class DictStringSentinel(str):
+    pass
+
+
 def _set_bodo_meta_in_pandas():
     """
     Avoid pandas warnings for Bodo metadata setattr in boxing of Series/DataFrame.
@@ -1635,7 +1641,9 @@ def _infer_ndarray_obj_dtype(val):
     first_val = val[i]
     # For compilation purposes we also impose a limit to the size
     # of the struct as very large structs cannot be efficiently compiled.
-    if isinstance(first_val, str):
+    if isinstance(first_val, DictStringSentinel):
+        return bodo.dict_str_arr_type
+    elif isinstance(first_val, str):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
     elif isinstance(first_val, (bytes, bytearray)):
         return binary_array_type
@@ -1759,6 +1767,9 @@ def _get_struct_value_arr_type(v):
 
     if isinstance(v, list):
         return dtype_to_array_type(numba.typeof(_value_to_array(v)))
+
+    if isinstance(v, DictStringSentinel):
+        return bodo.dict_str_arr_type
 
     if _is_scalar_value(v) and pd.isna(v):
         # assume string array if first field value is NA
