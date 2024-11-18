@@ -24,7 +24,6 @@ std::tuple<int64_t, bodo_array_type::arr_type_enum>
 get_update_ftype_idx_arr_type_for_mrnf(size_t n_orderby_arrs,
                                        const std::vector<bool>& asc_vec,
                                        const std::vector<bool>& na_pos_vec) {
-    assert(n_orderby_arrs > 0);
     int64_t update_ftype;
     bodo_array_type::arr_type_enum update_idx_arr_type;
     if (n_orderby_arrs == 1) {
