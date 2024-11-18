@@ -3762,8 +3762,10 @@ def test_merge_parallel_optimize(n, memory_leak_check):
         return df3.B.sum()
 
     check_func(test_impl, (n,))
-    assert count_array_REPs() == 0  # assert parallelism
-    assert count_parfor_REPs() == 0  # assert parallelism
+    # Compilation info not available in check_func spawn testing mode
+    if not bodo.tests.utils.test_spawn_mode_enabled:
+        assert count_array_REPs() == 0  # assert parallelism
+        assert count_parfor_REPs() == 0  # assert parallelism
 
 
 @pytest.mark.slow
