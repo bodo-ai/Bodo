@@ -369,7 +369,7 @@ def test_getitem_ind(ind, memory_leak_check):
             [
                 "this is a regular sentence",
                 "https://docs.python.org/3/tutorial/index.html",
-                np.nan,
+                None,
             ]
         )
     ]

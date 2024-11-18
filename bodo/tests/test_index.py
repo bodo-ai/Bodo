@@ -337,7 +337,7 @@ def test_binary_infer(memory_leak_check):
         impl,
         (
             pd.Index(
-                np.array([b"ajkshdg", b"jhasdgf", b"asdfajd", np.nan] * 3),
+                np.array([b"ajkshdg", b"jhasdgf", b"asdfajd", None] * 3),
                 name="my_index",
             ),
         ),

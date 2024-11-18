@@ -838,7 +838,7 @@ class TestDataFrame(unittest.TestCase):
             {
                 "A": [1.0, 2.0, 4.0, 1.0],
                 "B": ["aa", "b", None, "ccc"],
-                "C": [np.nan, ["AA", "A"], ["B"], ["CC", "D"]],
+                "C": [None, ["AA", "A"], ["B"], ["CC", "D"]],
             }
         )
         bodo_func = bodo.jit(test_impl)

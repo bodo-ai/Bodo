@@ -1136,7 +1136,6 @@ ll.add_symbol("get_str_len", hstr_ext.get_str_len)
 ll.add_symbol("setitem_string_array", hstr_ext.setitem_string_array)
 ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", array_ext.string_array_from_sequence)
-ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
 ll.add_symbol(
     "pd_pyarrow_array_from_string_array", hstr_ext.pd_pyarrow_array_from_string_array
 )
@@ -1474,68 +1473,27 @@ def set_string_array_range(typingctx, out_typ, in_typ, curr_str_typ, curr_chars_
 @box(StringArrayType)
 def box_str_arr(typ, val, c):
     """box string array into numpy object array with string values"""
+    from bodo.libs.array import array_info_type, array_to_info_codegen
+
     assert typ in [binary_array_type, string_array_type]
-    array_struct = c.context.make_helper(c.builder, typ, val)
-    array_item_data_type = ArrayItemArrayType(char_arr_type)
-    payload = _get_array_item_arr_payload(
-        c.context, c.builder, array_item_data_type, array_struct.data
-    )
     is_bytes = c.context.get_constant(types.int32, int(typ == binary_array_type))
 
-    # box to Pandas ArrowStringArray to minimize boxing overhead
-    if typ != binary_array_type:
-        from bodo.libs.array import array_info_type, array_to_info_codegen
-
-        arr_info = array_to_info_codegen(
-            c.context, c.builder, array_info_type(typ), (val,)
-        )
-        fnty = lir.FunctionType(
-            c.pyapi.pyobj,
-            [
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        box_fname = "pd_pyarrow_array_from_string_array"
-        fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
-        arr = c.builder.call(
-            fn_get,
-            [
-                arr_info,
-            ],
-        )
-        c.context.nrt.decref(c.builder, typ, val)
-        return arr
-
+    # Box to Pandas ArrowStringArray or ArrowExtensionArray to minimize boxing overhead
+    # and avoid type inference issues downstream.
+    arr_info = array_to_info_codegen(c.context, c.builder, array_info_type(typ), (val,))
     fnty = lir.FunctionType(
-        c.context.get_argument_type(types.pyobject),
+        c.pyapi.pyobj,
         [
-            lir.IntType(64),
-            lir.IntType(offset_type.bitwidth).as_pointer(),
-            lir.IntType(8).as_pointer(),
             lir.IntType(8).as_pointer(),
             lir.IntType(32),
         ],
     )
-    box_fname = "np_array_from_string_array"
+    box_fname = "pd_pyarrow_array_from_string_array"
     fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
-    offsets_ptr = c.builder.bitcast(
-        c.context.nrt.meminfo_data(c.builder, payload.offsets),
-        c.context.get_data_type(offset_type).as_pointer(),
-    )
-    data_arr = c.context.make_helper(c.builder, char_arr_type, payload.data)
-    data_ptr = get_data_ptr_cg(c.context, c.builder, data_arr)
-    null_bitmap_ptr = c.context.nrt.meminfo_data(c.builder, payload.null_bitmap)
     arr = c.builder.call(
         fn_get,
-        [
-            payload.n_arrays,
-            offsets_ptr,
-            data_ptr,
-            null_bitmap_ptr,
-            is_bytes,
-        ],
+        [arr_info, is_bytes],
     )
-
     c.context.nrt.decref(c.builder, typ, val)
     return arr
 

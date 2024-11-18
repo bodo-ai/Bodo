@@ -1395,12 +1395,12 @@ def test_str_extractall(memory_leak_check):
         return pd.Series(data=A, index=I).str.extractall(r"([чен]+)\d+([ст]+)\d+")
 
     S1 = pd.Series(
-        ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        ["a1b1", "b1", None, "a2", "c2", "ddd", "dd4d1", "d22c2"],
         [4, 3, 5, 1, 0, 2, 6, 11],
         name="AA",
     )
     S2 = pd.Series(
-        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["чьь1т33", "ьнн2с222", "странаст2", None, "ьнне33ст3"] * 2,
         ["е3", "не3", "н2с2", "AA", "C"] * 2,
     )
     A1 = pa.array(S1, type=pa.dictionary(pa.int32(), pa.string()))

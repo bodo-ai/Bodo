@@ -1123,7 +1123,7 @@ def test_read_string_array_col(memory_leak_check):
                 ["test \0 zero"],
                 ["true", "10", "2023-10-20", "hello"],
                 ["why", "does", "snowflake", "use"],
-                np.nan,
+                None,
             ]
         }
     )
@@ -1162,7 +1162,7 @@ def test_read_numeric_array_col(memory_leak_check):
                 [-1235.0, 0.01234567890123456789],
                 [10.0, 10.0, np.nan],
                 [12345678901234567890.0],
-                np.nan,
+                None,
             ]
         }
     )

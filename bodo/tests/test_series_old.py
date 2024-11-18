@@ -685,7 +685,7 @@ class TestSeries(unittest.TestCase):
         self.assertEqual(bodo_func(S), test_impl(S))
         S = pd.Series([np.nan, np.nan])
         self.assertEqual(bodo_func(S), test_impl(S))
-        S = pd.Series(["aa", "bb", np.nan])
+        S = pd.Series(["aa", "bb", None])
         self.assertEqual(bodo_func(S), test_impl(S))
 
     def test_series_mean1(self):
@@ -773,8 +773,8 @@ class TestSeries(unittest.TestCase):
             return pd.concat([S1, S2])
 
         bodo_func = bodo.jit(test_impl)
-        S1 = pd.Series(["aa", "bb", np.nan, "", "GGG"])
-        S2 = pd.Series(["1", "12", "", np.nan, "A"])
+        S1 = pd.Series(["aa", "bb", None, "", "GGG"])
+        S2 = pd.Series(["1", "12", "", None, "A"])
         # TODO: handle index in concat
         pd.testing.assert_series_equal(
             bodo_func(S1, S2),
@@ -835,7 +835,7 @@ class TestSeries(unittest.TestCase):
             test_impl = loc_vars["test_impl"]
             # XXX: \t support pending Numba #4188
             # S = pd.Series([' \tbbCD\t ', 'ABC', ' mCDm\t', 'abc'])
-            S = pd.Series([" bbCD ", "ABC", " mCDm ", np.nan, "abc"])
+            S = pd.Series([" bbCD ", "ABC", " mCDm ", None, "abc"])
             check_func(test_impl, (S,))
 
     def test_series_strip_with_args(self):
@@ -859,7 +859,7 @@ class TestSeries(unittest.TestCase):
                     " bbCD ",
                     "ABC",
                     " mCDm ",
-                    np.nan,
+                    None,
                     "abc",
                 ]
             )
@@ -886,7 +886,7 @@ class TestSeries(unittest.TestCase):
             exec(func_text, {"bodo": bodo}, loc_vars)
             test_impl = loc_vars["test_impl"]
             S = pd.Series(
-                [" 1aB ", "982", "ABC", "  ", np.nan, "abc", "Hi There", "100.20"]
+                [" 1aB ", "982", "ABC", "  ", None, "abc", "Hi There", "100.20"]
             )
             check_func(test_impl, (S,))
 

@@ -148,18 +148,18 @@ pytestmark = pytest_pandas
                         b"AA",
                         b"",
                         b"D",
-                        np.nan,
+                        None,
                         b"B",
                         b"ZZ",
-                        np.nan,
+                        None,
                         b"F123",
                     ],
                     "B": [
                         b"jkasdf",
                         b"asdfas",
-                        np.nan,
+                        None,
                         b"D",
-                        np.nan,
+                        None,
                         b"asdgas",
                         b"sdga",
                         b"sdaladnc",
@@ -410,7 +410,7 @@ def test_sort_values_str(memory_leak_check):
         for _ in range(n):
             # store NA with 30% chance
             if random.random() < 0.3:
-                str_vals.append(np.nan)
+                str_vals.append(None)
                 continue
 
             k = random.randint(1, 10)
@@ -451,7 +451,7 @@ def test_sort_values_binary(memory_leak_check):
         for _ in range(n):
             # store NA with 30% chance
             if np.random.randint(0, 10) < 3:
-                bytes_vals.append(np.nan)
+                bytes_vals.append(None)
                 continue
 
             val = bytes(np.random.randint(1, 100))
@@ -672,7 +672,7 @@ def test_sort_values_strings(n, len_str, memory_leak_check):
         for _ in range(n):
             prob = random.randint(1, 10)
             if prob == 1:
-                val = np.nan
+                val = None
             else:
                 k = random.randint(1, len_str)
                 k2 = len_str - k
@@ -703,7 +703,7 @@ def test_sort_random_values_binary():
         for _ in range(n):
             prob = np.random.randint(1, 10)
             if prob == 1:
-                val = np.nan
+                val = None
             else:
                 val = bytes(np.random.randint(1, 100))
 
@@ -974,11 +974,11 @@ def test_sort_with_nan_entries(memory_leak_check):
     def impl1(df):
         return df.sort_values(by="A", kind="mergesort")
 
-    df1 = pd.DataFrame({"A": ["AA", np.nan, "", "D", "GG"]})
+    df1 = pd.DataFrame({"A": ["AA", None, "", "D", "GG"]})
     df2 = pd.DataFrame({"A": [1, 8, 4, np.nan, 3]})
     df3 = pd.DataFrame({"A": pd.array([1, 2, None, 3], dtype="UInt16")})
     df4 = pd.DataFrame({"A": pd.Series([1, 8, 4, np.nan, 3], dtype="Int32")})
-    df5 = pd.DataFrame({"A": pd.Series(["AA", np.nan, "", "D", "GG"])})
+    df5 = pd.DataFrame({"A": pd.Series(["AA", None, "", "D", "GG"])})
     check_func(impl1, (df1,), sort_output=False, check_typing_issues=False)
     check_func(impl1, (df2,), sort_output=False)
     check_func(impl1, (df3,), sort_output=False)
@@ -1024,7 +1024,7 @@ def test_sort_values_key_rm_dead(memory_leak_check):
                 "¿abc¡Y tú, quién te crees?",
                 "ÕÕÕú¡úú,úũ¿ééé",
                 "россия очень, холодная страна",
-                np.nan,
+                None,
                 "مرحبا, العالم ، هذا هو بودو",
                 "Γειά σου ,Κόσμε",
             ],
@@ -2061,7 +2061,7 @@ def test_list_string_arrow():
         e_list = []
         for _ in range(n):
             if random.random() < 0.1:
-                e_ent = np.nan
+                e_ent = None
             else:
                 e_ent = []
                 for _ in range(random.randint(1, 5)):

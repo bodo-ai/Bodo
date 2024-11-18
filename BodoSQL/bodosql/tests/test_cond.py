@@ -666,21 +666,6 @@ def test_ifnull_multitable(
     join_dataframes, spark_info, ifnull_equivalent_fn, memory_leak_check
 ):
     """Checks ifnull function with columns from multiple tables"""
-    if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        or x in (np.float32, np.float64)
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
     query = "Select IFNULL(table2.B, table1.B) from table1, table2"
     spark_query = (
         f"Select {ifnull_equivalent_fn}(table2.B, table1.B) from table1, table2"
@@ -691,7 +676,6 @@ def test_ifnull_multitable(
         spark_info,
         check_names=False,
         equivalent_spark_query=spark_query,
-        check_dtype=check_dtype,
     )
 
 
@@ -828,20 +812,6 @@ def test_nullif_case(bodosql_nullable_numeric_types, spark_info, memory_leak_che
 def test_nullif_multi_table(join_dataframes, spark_info, memory_leak_check):
     """Checks nullif function with columns from multiple tables"""
     if any(
-        isinstance(
-            x,
-            (
-                pd.core.arrays.integer.IntegerDtype,
-                pd.Float32Dtype,
-                pd.Float64Dtype,
-            ),
-        )
-        for x in join_dataframes["TABLE1"].dtypes
-    ):
-        check_dtype = False
-    else:
-        check_dtype = True
-    if any(
         isinstance(join_dataframes["TABLE1"][colname].values[0], bytes)
         for colname in join_dataframes["TABLE1"].columns
     ):
@@ -854,7 +824,6 @@ def test_nullif_multi_table(join_dataframes, spark_info, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
-        check_dtype=check_dtype,
         convert_columns_bytearray=convert_columns_bytearray,
     )
 
