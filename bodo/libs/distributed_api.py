@@ -1999,6 +1999,12 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # StructArray
     if isinstance(dtype, bodo.StructArrayType):
+        import pyarrow as pa
+
+        # Handle empty struct corner case which can have typing issues
+        if dtype == bodo.StructArrayType((), ()):
+            return pd.array([{}], pd.ArrowDtype(pa.struct([])))
+
         # TODO[BSE-4213]: Use Arrow arrays
         return np.array(
             [
@@ -2914,11 +2920,20 @@ def scatterv_impl_jit(
             ", ".join([f"'{f}'" for f in data.names]),
             "," if n_fields > 0 else "",
         )
-        func_text += f"  return bodo.libs.struct_arr_ext.init_struct_arr({n_fields}, {new_data_tuple_str}, out_null_bitmap, {field_names_tuple_str})\n"
+        out_len = (
+            "len(new_inner_data_arr_0)"
+            if n_fields > 0
+            else "bodo.libs.distributed_api.get_node_portion(bcast_scalar(len(data), root, comm), bodo.get_size(), bodo.get_rank())"
+        )
+        func_text += f"  return bodo.libs.struct_arr_ext.init_struct_arr({out_len}, {new_data_tuple_str}, out_null_bitmap, {field_names_tuple_str})\n"
         loc_vars = {}
         exec(
             func_text,
-            {"bodo": bodo, "_scatterv_null_bitmap": _scatterv_null_bitmap},
+            {
+                "bodo": bodo,
+                "_scatterv_null_bitmap": _scatterv_null_bitmap,
+                "bcast_scalar": bcast_scalar,
+            },
             loc_vars,
         )
         impl_struct = loc_vars["impl_struct"]
