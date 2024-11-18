@@ -3,6 +3,7 @@ import pytest
 from pandas.core.internals.array_manager import ArrayManager
 
 from bodo.pandas.frame import BodoDataFrame
+from bodo.pandas.managers import LazyBlockManager
 from bodo.tests.test_lazy.utils import pandas_managers  # noqa
 
 
@@ -342,3 +343,70 @@ def test_del_func_not_called_if_collected(pandas_managers, head_df, collect_func
     lsa._collect()
     del lsa
     assert not del_called
+
+
+def test_len(pandas_managers, head_df, collect_func):
+    """Tests that len() returns the right value and does not trigger data fetch"""
+    lazy_manager, pandas_manager = pandas_managers
+
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+
+    if isinstance(lam, LazyBlockManager):
+        pytest.skip(
+            "Can't easily override methods for `LazyBlockManager` since it's implemented in Cython"
+        )
+
+    # len() does not trigger a data fetch
+    assert len(lam) == 40
+    lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
+    assert lam_df._lazy
+
+    # force collect
+    lam._collect()
+    assert not lam_df._lazy
+    assert len(lam) == 40
+
+
+def test_slice(pandas_managers, head_df, collect_func):
+    """Tests that slicing returns the correct value and does not trigger data fetch unnecessarily"""
+    lazy_manager, pandas_manager = pandas_managers
+
+    lam = lazy_manager(
+        [],
+        [],
+        result_id="abc",
+        nrows=40,
+        head=head_df._mgr,
+        collect_func=collect_func,
+        del_func=del_func,
+    )
+
+    if isinstance(lam, LazyBlockManager):
+        pytest.skip(
+            "Can't easily override methods for `LazyBlockManager` since it's implemented in Cython"
+        )
+
+    # slicing head does not trigger a data fetch
+    lam_df: BodoDataFrame = BodoDataFrame.from_lazy_mgr(lam, head_df)
+    lam_sliced_head_df = lam_df[1:3]
+    assert lam_df._lazy
+    assert lam_sliced_head_df.equals(head_df[1:3])
+
+    # slicing for cols triggers a data fetch
+    lam_sliced_df = lam_df["A0"]
+    assert not lam_df._lazy
+    assert lam_sliced_df.equals(collect_func(0)["A0"])
+
+    # slicing for rows after slicing over cols
+    lam_sliced_twice_df = lam_sliced_df[1:3]
+    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][1:3])
+    lam_sliced_twice_df = lam_sliced_df[10:30]
+    assert lam_sliced_twice_df.equals(collect_func(0)["A0"][10:30])
