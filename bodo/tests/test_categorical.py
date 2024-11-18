@@ -355,9 +355,9 @@ def test_astype(memory_leak_check):
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 3, 7, 8, 12] * 10)
     check_func(impl1, (A,))
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", "B", "CC"])
-    check_func(impl2, (A,))
+    check_func(impl2, (A,), py_output=A.astype(str).astype(object))
     A = pd.Categorical(gen_nonascii_list(7))
-    check_func(impl2, (A,))
+    check_func(impl2, (A,), py_output=A.astype(str).astype(object))
 
 
 @pytest.mark.slow
