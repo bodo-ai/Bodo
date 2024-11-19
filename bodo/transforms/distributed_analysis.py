@@ -74,6 +74,7 @@ from bodo.utils.utils import (
     is_distributable_tuple_typ,
     is_distributable_typ,
     is_expr,
+    is_ml_support_loaded,
     is_np_array_typ,
     is_slice_equiv_arr,
     is_whole_slice,
@@ -923,13 +924,13 @@ class DistributedAnalysis:
 
         if (
             func_name in {"fit", "predict"}
-            and "bodo.libs.xgb_ext" in sys.modules
+            and "bodo.ml_support.xgb_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.xgb_ext.BodoXGBClassifierType,
-                    bodo.libs.xgb_ext.BodoXGBRegressorType,
+                    bodo.ml_support.xgb_ext.BodoXGBClassifierType,
+                    bodo.ml_support.xgb_ext.BodoXGBRegressorType,
                 ),
             )
         ):  # pragma: no cover
@@ -1037,11 +1038,11 @@ class DistributedAnalysis:
 
         if (
             func_name == "predict_proba"
-            and "bodo.libs.xgb_ext" in sys.modules
+            and "bodo.ml_support.xgb_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (bodo.libs.xgb_ext.BodoXGBClassifierType,),
+                (bodo.ml_support.xgb_ext.BodoXGBClassifierType,),
             )
         ):  # pragma: no cover
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -1049,21 +1050,21 @@ class DistributedAnalysis:
 
         if (
             func_name in {"fit", "predict", "score"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
-                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
-                    bodo.libs.sklearn_ext.BodoSGDRegressorType,
-                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
-                    bodo.libs.sklearn_ext.BodoMultinomialNBType,
-                    bodo.libs.sklearn_ext.BodoLassoType,
-                    bodo.libs.sklearn_ext.BodoLinearRegressionType,
-                    bodo.libs.sklearn_ext.BodoRidgeType,
-                    bodo.libs.sklearn_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
                 ),
             )
         ):
@@ -1078,14 +1079,14 @@ class DistributedAnalysis:
 
         if (
             func_name in {"predict_proba", "predict_log_proba"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
-                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
                 ),
             )
         ):
@@ -1095,11 +1096,11 @@ class DistributedAnalysis:
 
         if (
             func_name in {"fit", "predict", "score", "transform"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoKMeansClusteringType,
+                bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
             )
         ):
             self._analyze_call_sklearn_cluster_kmeans(
@@ -1110,17 +1111,17 @@ class DistributedAnalysis:
         if (
             func_name
             in {"fit", "partial_fit", "transform", "inverse_transform", "fit_transform"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoPreprocessingOneHotEncoderType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingRobustScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
         ):
@@ -1131,13 +1132,13 @@ class DistributedAnalysis:
 
         if (
             func_name in {"fit_transform"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_feature_extraction_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,
-                    bodo.libs.sklearn_ext.BodoFExtractCountVectorizerType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
                 ),
             )
         ):
@@ -1242,11 +1243,11 @@ class DistributedAnalysis:
 
         if (
             func_name in {"split"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,
+                bodo.ml_support.sklearn_model_selection_ext.BodoModelSelectionKFoldType,
             )
         ):
             # Not checking get_n_splits for KFold since it might not have a first arg
@@ -1257,11 +1258,11 @@ class DistributedAnalysis:
 
         if (
             func_name in {"split", "get_n_splits"}
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoModelSelectionLeavePOutType,
+                bodo.ml_support.sklearn_model_selection_ext.BodoModelSelectionLeavePOutType,
             )
         ):
             self._analyze_call_sklearn_cross_validators(
