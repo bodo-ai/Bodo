@@ -1,7 +1,6 @@
 # Cache
 **/__pycache__/
 .cache
-.fftw*_wisdom
 .pixi
 
 # Compiled python modules.
