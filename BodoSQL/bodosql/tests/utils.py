@@ -316,6 +316,11 @@ def check_query(
     # Only run Python mode when spawn testing is enabled since others aren't applicable
     if bodo.tests.utils.test_spawn_mode_enabled:
         run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
+        if only_jit_seq:
+            warnings.warn(
+                "check_query: no tests are being run since spawn enabled and only_jit_seq=True."
+            )
+            return
 
     if not (run_jit_seq or run_jit_1D or run_jit_1DVar or run_python):
         warnings.warn("check_query: No tests are being run.")
