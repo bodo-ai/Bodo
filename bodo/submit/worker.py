@@ -503,6 +503,10 @@ def worker_loop(
             (type_name, type_value) = spawner_intercomm.bcast(None, 0)
             setattr(types, type_name, type_value)
             debug_worker_msg(logger, f"Added type {type_name}")
+        elif command == CommandType.SET_CONFIG.value:
+            (config_name, config_value) = spawner_intercomm.bcast(None, 0)
+            setattr(bodo, config_name, config_value)
+            debug_worker_msg(logger, f"Set config {config_name}={config_value}")
         else:
             raise ValueError(f"Unsupported command '{command}!")
 

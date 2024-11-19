@@ -17,6 +17,7 @@ from bodo.tests.utils import (
     dist_IR_contains,
     gen_nonascii_list,
     pytest_mark_one_rank,
+    temp_config_override,
 )
 from bodosql.tests.utils import check_query
 
@@ -274,11 +275,9 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
     """
     Test a case that makes sure the no inlining path works as expected.
     """
-    try:
-        # Save the old threshold and set it to 1 so that the case statement
-        # is not inlined.
-        old_threshold = bodo.COMPLEX_CASE_THRESHOLD
-        bodo.COMPLEX_CASE_THRESHOLD = 1
+    # Save the old threshold and set it to 1 so that the case statement
+    # is not inlined.
+    with temp_config_override("COMPLEX_CASE_THRESHOLD", 1):
         query = "Select B, Case WHEN A = 1 THEN 1 WHEN A = 2 THEN 2 WHEN B > 6 THEN 3 ELSE NULL END as CASERES FROM table1"
         check_query(
             query,
@@ -304,10 +303,6 @@ def test_case_no_inlining(basic_df, spark_info, memory_leak_check):
                         fdef is not None and fdef[0] == "bodosql_case_kernel"
                     )
         assert found, "bodosql_case_kernel not found in IR, case statement was inlined"
-
-    finally:
-        # restore the old threshold
-        bodo.COMPLEX_CASE_THRESHOLD = old_threshold
 
 
 @pytest.mark.timeout(600)

@@ -5,8 +5,11 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-import bodo
-from bodo.tests.utils import nullable_float_arr_maker, pytest_slow_unless_window
+from bodo.tests.utils import (
+    nullable_float_arr_maker,
+    pytest_slow_unless_window,
+    temp_config_override,
+)
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
@@ -674,9 +677,7 @@ def test_bit_agg(data, dtype, memory_leak_check):
             ),
         }
     )
-    old_use_decimal = bodo.bodo_use_decimal
-    try:
-        bodo.bodo_use_decimal = True
+    with temp_config_override("bodo_use_decimal", True):
         check_query(
             query,
             ctx,
@@ -685,8 +686,6 @@ def test_bit_agg(data, dtype, memory_leak_check):
             check_names=False,
             expected_output=expected,
         )
-    finally:
-        bodo.bodo_use_decimal = old_use_decimal
 
 
 @pytest.mark.parametrize(

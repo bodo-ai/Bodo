@@ -22,6 +22,7 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     pytest_snowflake,
     run_rank0,
+    temp_config_override,
     temp_env_override,
 )
 from bodosql.tests.test_types.test_snowflake_catalog import assert_tables_equal
@@ -668,11 +669,7 @@ def test_prefetch_flag(memory_leak_check):
     Test that if the prefetch flag is set, a prefetch occurs
     """
 
-    old_prefetch_flag = bodo.prefetch_sf_iceberg
-
-    try:
-        bodo.prefetch_sf_iceberg = True
-
+    with temp_config_override("prefetch_sf_iceberg", True):
         catalog = bodosql.SnowflakeCatalog(
             os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
@@ -713,6 +710,3 @@ def test_prefetch_flag(memory_leak_check):
             )
             # TODO: How can we check that the table was loaded from the CachingCatalog
             # It doesn't have logging support
-
-    finally:
-        bodo.prefetch_sf_iceberg = old_prefetch_flag

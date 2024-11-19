@@ -3255,6 +3255,31 @@ def temp_env_override(env_vars: dict[str, str | None]):
 
 
 @contextmanager
+def temp_config_override(name: str, val: pt.Any):
+    """Update a Bodo global config and restore it after."""
+
+    def set_config(name, val):
+        import bodo
+
+        setattr(bodo, name, val)
+        if test_spawn_mode_enabled:
+            import bodo.submit.spawner
+            from bodo.submit.spawner import CommandType
+
+            spawner = bodo.submit.spawner.get_spawner()
+            bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+            spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
+            spawner.worker_intercomm.bcast((name, val), bcast_root)
+
+    old_val = getattr(bodo, name)
+    try:
+        set_config(name, val)
+        yield
+    finally:
+        set_config(name, old_val)
+
+
+@contextmanager
 def set_broadcast_join(broadcast: bool):
     """
     Context manager for enabling/disabling broadcast join in a test.
