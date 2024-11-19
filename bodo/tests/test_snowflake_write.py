@@ -44,6 +44,7 @@ from bodo.tests.utils import (
     reduce_sum,
     run_rank0,
     snowflake_cred_env_vars_present,
+    temp_env_override,
 )
 from bodo.utils.testing import ensure_clean_snowflake_table
 from bodo.utils.typing import BodoWarning
@@ -722,10 +723,13 @@ def test_to_sql_wrong_password():
         df = pd.DataFrame({"A": np.arange(100)})
         df.to_sql("table", conn_str, schema="Public", index=False, if_exists="append")
 
-    with pytest.raises(RuntimeError, match="Could not connect to Snowflake backend"):
-        impl(
-            "snowflake://SF_USERNAME:SF_PASSWORD@sf_account/database/PUBLIC?warehouse=warehouse"
-        )
+    with (
+        pytest.raises(
+            RuntimeError, match="Incorrect username or password was specified"
+        ),
+        temp_env_override({"SF_PASSWORD": "wrong_password"}),
+    ):
+        impl(get_snowflake_connection_string("TEST_DB", "PUBLIC"))
 
 
 @pytest.mark.parametrize(
