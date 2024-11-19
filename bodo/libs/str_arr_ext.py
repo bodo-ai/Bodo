@@ -2540,6 +2540,17 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
 def pd_arr_encode(arr, encoding, errors):
     """Encode string array using Pandas Series.str.encode"""
     S = pd.Series(arr)
+    if (
+        isinstance(S.array, pd.core.arrays.ArrowStringArray)
+        and S.array._pa_array.num_chunks > 0
+        and isinstance(S.array._pa_array.chunks[0], pa.DictionaryArray)
+    ):
+        # convert to string array, for some reason calling to_numpy (which is called by encode) on a dict encoded ArrowStringArray
+        # throws a not implemented error from Arrow
+        return (
+            S.array._pa_array.to_pandas().str.encode(encoding, errors).array.to_numpy()
+        )
+
     return S.str.encode(encoding, errors).array.to_numpy()
 
 
