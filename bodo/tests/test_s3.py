@@ -10,7 +10,7 @@ from bodo.tests.utils import _get_dist_arg, cast_dt64_to_ns, check_func
 from bodo.utils.testing import ensure_clean2
 from bodo.utils.typing import BodoError
 
-pytestmark = [pytest.mark.s3, pytest.mark.slow]
+pytestmark = pytest.mark.s3
 
 
 @pytest.mark.parquet
