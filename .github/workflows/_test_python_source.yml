@@ -41,12 +41,12 @@ jobs:
           with:
             path: hadoop.tar.gz
             key: hadoop-3.3.2-${{ runner.os }}
-        - name: Install SAS, Minio, Pytest-Split and Clean Cache
+        - name: Install SAS and Clean Cache
           run: |
             # Build SAS Token Provider
             ./buildscripts/install_azurefs_sas_token_provider.sh
             # Clean Maven and Spark Ivy Cache
-            rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+            rm -rf "$HOME"/.ivy2/cache "$HOME"/.ivy2/jars "$HOME"/.m2/repository
         - name: Configure AWS Credentials
           uses: aws-actions/configure-aws-credentials@v4
           with:
@@ -84,7 +84,7 @@ jobs:
             # If neither Bodo nor BodoSQL fails, the exit code will be 0
             # If one fails, the exit code will be 1
             # If both fail, the exit code will be 2
-            exit $(($test_exit_code + $?))
+            exit $((test_exit_code + $?))
           env:
             BODO_TESTING_ONLY_RUN_1D_VAR: true
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
