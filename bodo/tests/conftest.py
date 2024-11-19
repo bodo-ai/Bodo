@@ -329,6 +329,7 @@ def minio_server_with_s3_envs(minio_server: tuple[str, str, str]):
         {
             "AWS_ACCESS_KEY_ID": minio_server[0],
             "AWS_SECRET_ACCESS_KEY": minio_server[1],
+            "AWS_SESSION_TOKEN": None,
         }
     ):
         yield minio_server
