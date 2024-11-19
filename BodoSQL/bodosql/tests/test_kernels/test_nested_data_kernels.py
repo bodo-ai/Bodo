@@ -3268,6 +3268,10 @@ def test_to_object_valid(data, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="only_seq=True disables spawn testing so pytest.raises fails",
+)
 @pytest.mark.parametrize(
     "data",
     [
