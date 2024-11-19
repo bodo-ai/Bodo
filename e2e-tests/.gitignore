@@ -7,8 +7,3 @@ __pycache__/
 
 #ignore any generated log files
 *.log
-
-#ignore any temporary pq files created/used while synthesizing data
-
-
-
