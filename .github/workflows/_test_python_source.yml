@@ -19,16 +19,10 @@ on:
         required: true
         type: boolean
 
-# Recommended with setup-micromamba
-# https://github.com/mamba-org/setup-micromamba#about-login-shells
-defaults:
-  run:
-    shell: bash -l {0}
-
 jobs:
   run:
     name: Build and Run Tests Helper
-    runs-on: [self-hosted, medium]
+    runs-on: self-hosted-medium
     steps:
         # Setup
         - uses: actions/checkout@v4
@@ -90,6 +84,7 @@ jobs:
             PYTEST_MARKER: ${{ inputs.pytest-marker }}
             BODO_TEST_SPAWN_MODE: ${{ inputs.pytest-marker == 'spawn_mode' && '1' || '0' }}
             BODOSQL_PY4J_GATEWAY_PORT: "auto"
+            BODO_SPAWN_MODE: "0"
             # Testing Credentials
             SF_USERNAME: ${{ secrets.SF_USERNAME }}
             SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
@@ -99,7 +94,6 @@ jobs:
             SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
             AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
             AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
-            BODO_SPAWN_MODE: "0"
   
         # Upload
         - name: Prepare Outputs

@@ -27,6 +27,8 @@ jobs:
             remote_max_retries: 5
             remote_backoff_factor: 60
             aggressive_update_packages: []
+            conda_build:
+              pkg_format: 2
 
       - name: 'Set Secret File Permissions and Conda Build and Publish Iceberg Binary to Artifactory'
         run: |
