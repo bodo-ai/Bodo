@@ -874,7 +874,11 @@ def test_encode(memory_leak_check):
         [4, 3, 5, 1, 0, -3, 2, -5, 6, 10, -2, 7, -1, -4],
         name="A",
     )
-    check_func(test_impl, (S,), check_dtype=False)
+    check_func(
+        test_impl,
+        (S,),
+        check_dtype=False,
+    )
 
 
 @pytest.mark.parametrize(
