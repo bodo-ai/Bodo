@@ -260,7 +260,6 @@ def _test_helper(
 
 
 @pytest_mark_one_rank
-@pytest.mark.skip("[BSE-4151] Fix segfault in test and re-enable")
 def test_split_during_append_table(
     build_probe_outer, broadcast, memory_leak_check, capfd
 ):
