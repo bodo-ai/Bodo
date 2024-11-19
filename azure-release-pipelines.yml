@@ -53,7 +53,6 @@ stages:
       name: Bodo_Tests
       caching_test: false
       spawn_mode_test: false
-      CONDA_ENV: 'bodo'
       matrix:
         ${{ each slice in split(variables.bodo_1p_each, ',') }}:
           ${{ format('BODO_1P_{0}_OF_{1}', slice, variables.bodo_1p_total) }}:
@@ -72,7 +71,6 @@ stages:
       name: Linux_cache
       caching_test: true
       spawn_mode_test: false
-      CONDA_ENV: 'bodo'
       matrix:
         TEST_2P:
           NP: 2
@@ -81,7 +79,6 @@ stages:
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       name: Bodo_Spawn_mode_tests
-      CONDA_ENV: 'bodo'
       caching_test: false
       spawn_mode_test: true
       matrix:
@@ -104,7 +101,6 @@ stages:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
       name: BodoSQL_Streaming_Tests
-      CONDA_ENV: run_bodo_sql
       SPAWN_MODE_TEST: false
       BODO_STREAMING_ENABLED: 1
       matrix:
@@ -124,7 +120,6 @@ stages:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
       name: BodoSQL_Streaming_Caching_Tests
-      CONDA_ENV: build_bodo_sql
       CACHE_TEST: true
       SPAWN_MODE_TEST: false
       BODO_STREAMING_ENABLED: 1
@@ -138,7 +133,6 @@ stages:
       # Note: this name is not important, as we explicitly pass CACHE_TEST and
       # check uname to determine the os for the bodoSQL tests
       name: BodoSQL_Streaming_Spawn_mode_tests
-      CONDA_ENV: run_bodo_sql
       CACHE_TEST: false
       SPAWN_MODE_TEST: true
       BODO_STREAMING_ENABLED: 1
@@ -151,13 +145,12 @@ stages:
           PYTEST_MARKER: "spawn_mode"
 
 # Comment out till OOM issue is resolved.
-# Tests already run on AWS CI
+# Tests already run on PR CI
 # Java Unit Tests
 # - stage: Test_BodoSQL_Maven
 #   displayName: 'Test BodoSQL Maven Unit Tests'
 #   dependsOn: []
 #   jobs:
-
 #   - template: buildscripts/bodosql/azure/azure-test-mvn-linux.yml
 #     parameters:
 #       name: BODOSQL_maven_unit_tests

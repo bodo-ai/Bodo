@@ -36,7 +36,7 @@ fi
 PACKAGE_DIR=$HOME/conda-bld
 
 # Upload to Anaconda
-package=`ls $PACKAGE_DIR/noarch/bodosql*.tar.bz2`
+package=`ls $PACKAGE_DIR/noarch/bodosql*.conda`
 if [[ -z "$package" ]]; then
   echo "Unable to Find Package. Exiting ..."
   exit 1

@@ -25,7 +25,7 @@ fi
 
 PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
-for package in `ls $PACKAGE_DIR/bodo*.tar.bz2 $PACKAGE_DIR/bodo*.conda`; do
+for package in `ls $PACKAGE_DIR/bodo*.conda`; do
     package_name=`basename $package`
     curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
     if [[ ! -z "$label" ]]; then

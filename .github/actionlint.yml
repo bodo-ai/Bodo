@@ -4,3 +4,5 @@ self-hosted-runner:
     - medium
     - large
     - xlarge
+    - self-hosted-small
+    - self-hosted-medium

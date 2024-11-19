@@ -32,6 +32,7 @@ jobs:
           mamba create -y -n bodo_build conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
           conda activate bodo_build
           conda list
+          conda config --set conda_build.pkg_format 2
 
           set -exo pipefail
           # Location is fixed inside Docker container
