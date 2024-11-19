@@ -35,6 +35,8 @@ jobs:
             remote_max_retries: 5
             remote_backoff_factor: 60
             aggressive_update_packages: []
+            conda_build:
+              pkg_format: 2
 
       - name: 'Download the Bodo conda'
         uses: actions/download-artifact@v4

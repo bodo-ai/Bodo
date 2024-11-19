@@ -39,7 +39,7 @@ cd buildscripts/iceberg/conda-recipe/
 conda build . -c conda-forge
 
 # Upload to Anaconda
-package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.tar.bz2`
+package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.conda`
 if [[ -z "$package" ]]; then
   echo "Unable to Find Package. Exiting ..."
   exit 1

@@ -2,9 +2,6 @@ parameters:
 - name: name
   type: string
   default: ''
-- name: CONDA_ENV
-  type: string
-  default: ''
 - name: matrix
   type: object
   default: []
@@ -31,73 +28,31 @@ jobs:
       ${{ insert }}: ${{ parameters.matrix }}
 
   steps:
-  # TODO: Use Micromamba when it supports remote_max_retries
   - script: |
       set -exo pipefail
-      curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
-      bash Miniforge3-$(uname)-$(uname -m).sh -b
-    displayName: 'Install Miniforge'
-
-  - bash: echo "##vso[task.prependpath]$HOME/miniforge3/bin"
-    displayName: Add Mamba to PATH
-
-  - script: |
-      conda config --set remote_max_retries 5
-      conda config --set remote_backoff_factor 60
-      # Ensure that conda/mamba install/update/remove commands
-      # do not try to mutate the environment beyond what's required.
-      conda config --add aggressive_update_packages nodefaults
-    displayName: 'Set Conda Config'
+      curl -fsSL https://pixi.sh/install.sh | bash
+      source ~/.bashrc
+      echo "##vso[task.prependpath]$HOME/.pixi/bin"
+    displayName: Install Pixi
+  - script: pixi install -v --locked -e azure
+    displayName: Install Test Environment
 
   - script: |
-      source activate base
-      mamba install -y pip
-      pip install pipx
-      pipx run conda-lock install --dev -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
-    displayName: 'Create Mamba Env'
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-
-      # Enable Sccache to use and save C/C++ cache to S3
-      # TODO: Should we move directly into CMake?
-      export SCCACHE_BUCKET=engine-codebuild-cache
-      export SCCACHE_REGION=us-east-2
-      export SCCACHE_S3_USE_SSL=true
-      export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-      export SCCACHE_LOG=debug
-      # We should just use sccache directly on CI
-      export DISABLE_CCACHE=1
-      pip install --no-deps --no-build-isolation -Cbuild.verbose=true -ve .
-
-      cd $(System.DefaultWorkingDirectory)/BodoSQL
-      pip install --no-deps --no-build-isolation -ve .
-      cd $(System.DefaultWorkingDirectory)/iceberg
-      pip install --no-deps --no-build-isolation -ve .
+      set -exo pipefail
+      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-bodosql
+      pixi run -e azure build-iceberg
+      pixi run -e azure -- sccache --show-stats
     env:
-      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      DISABLE_CCACHE: 1  # Just use sccache directly on CI
+      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
     displayName: 'Build Bodo, BodoSQL, and Iceberg Connector'
 
   - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-
-      mkdir env
-      mamba env export | tee env/environment.yml
-      mamba list --explicit > env/package-list.txt
-      pip list | tee env/requirements.txt
-    continueOnError: true
-    displayName: Export Environment Spec
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
 
       wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
       cd azurefs-sas-token-provider
@@ -106,9 +61,15 @@ jobs:
     retryCountOnTaskFailure: 5
 
   - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
+      pixi list
+      pixi run pip list
+    continueOnError: true
+    displayName: Export Environment Spec
+
+  - script: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
       python -c "import bodo; print(bodo.__version__)"
       python -c "import bodosql; print(bodosql.__version__)"
 

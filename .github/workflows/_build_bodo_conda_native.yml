@@ -46,10 +46,13 @@ jobs:
         uses: mamba-org/setup-micromamba@v1
         with:
           environment-name: bodo_build
-          create-args: conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
+          create-args: python=3.11 conda-build anaconda-client python-libarchive-c setuptools_scm -c conda-forge
           cache-environment: true
           generate-run-shell: true
           init-shell: bash
+          condarc: |
+            conda_build:
+              pkg_format: 2
       - name: Get Version
         run: |
           set -exo pipefail
@@ -57,8 +60,6 @@ jobs:
           echo "IS_RELEASE=`git tag --points-at HEAD`" >> $GITHUB_ENV
       - name: Obfuscate
         run: |
-          micromamba create -y -n bodo_obfuscate python=3.11
-          micromamba activate bodo_obfuscate
           set -exo pipefail         
           cd obfuscation
           ./do_obfuscation.py

@@ -24,7 +24,7 @@ cd buildscripts/azurefs-sas-token-provider/conda-recipe/
 conda build . -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
 
 # Upload to Anaconda
-package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-azurefs-sas-token-provider*.tar.bz2`
+package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-azurefs-sas-token-provider*.conda`
 if [[ -z "$package" ]]; then
   echo "Unable to Find Package. Exiting ..."
   exit 1

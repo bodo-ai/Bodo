@@ -5,9 +5,6 @@ parameters:
 - name: matrix
   type: object
   default: []
-- name: CONDA_ENV
-  type: string
-  default: ''
 - name: caching_test
   type: boolean
   default: false
@@ -25,8 +22,6 @@ jobs:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
     - group: TabularCredentials
-    - name: CONDA_ENV
-      value: 'bodo'
   pool: ScalingVMSet
   strategy:
     matrix:
@@ -35,74 +30,17 @@ jobs:
   steps:
   - script: |
       set -exo pipefail
-      curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
-      bash Miniforge3-$(uname)-$(uname -m).sh -b
-    displayName: 'Install Miniforge'
-
-  - bash: echo "##vso[task.prependpath]$HOME/miniforge3/bin"
-    displayName: Add Mamba to PATH
-
-  - script: |
-      conda config --set remote_max_retries 5
-      conda config --set remote_backoff_factor 60
-      # Ensure that conda/mamba install/update/remove commands
-      # do not try to mutate the environment beyond what's required.
-      conda config --add aggressive_update_packages nodefaults
-    displayName: 'Set Conda Config'
-
-  - script: |
-      source activate base
-      mamba install -y pip
-      pip install pipx
-      pipx run conda-lock install --dev -n ${{ parameters.CONDA_ENV }} $(System.DefaultWorkingDirectory)/buildscripts/envs/conda-lock.yml
-    displayName: 'Create Mamba Env'
-    retryCountOnTaskFailure: 5
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-
-      # Enable Sccache to use and save C/C++ cache to S3
-      # TODO: Should we move directly into CMake?
-      export SCCACHE_BUCKET=engine-codebuild-cache
-      export SCCACHE_REGION=us-east-2
-      export SCCACHE_S3_USE_SSL=true
-      export SCCACHE_S3_SERVER_SIDE_ENCRYPTION=true
-      # We should just use sccache directly on CI
-      export DISABLE_CCACHE=1
-      # Build from Source with Arrow Fork
-      export USE_BODO_ARROW_FORK=1
-      pip install --no-deps --no-build-isolation -Cbuild.verbose=true -ve .
-
-      cd iceberg
-      pip install --no-deps --no-build-isolation -ve .
-    env:
-      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
-      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
-    displayName: 'Build Bodo & Iceberg Connector'
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
-
-      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
-      cd azurefs-sas-token-provider
-      pip install --no-deps --no-build-isolation -ve .
-    displayName: "Setup Snowflake ADLS Testing (only Linux)"
-    retryCountOnTaskFailure: 5
-
-  - script: |
-      buildscripts/setup_minio.sh
-    displayName: 'Setup Minio'
-    retryCountOnTaskFailure: 5
+      curl -fsSL https://pixi.sh/install.sh | bash
+      source ~/.bashrc
+      echo "##vso[task.prependpath]$HOME/.pixi/bin"
+    displayName: Install Pixi
+  - script: pixi install -v --locked -e azure
+    displayName: Install Test Environment
 
   - script: |
       set -exo pipefail
-
-      source activate base
-      mamba install -y -c conda-forge unzip
+      pixi global install unzip
+      which unzip
 
       if [[ "$(uname)" == 'Linux' ]]; then
         wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
@@ -115,25 +53,36 @@ jobs:
     retryCountOnTaskFailure: 5
 
   - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
+      set -exo pipefail
+      pixi run -e azure build-bodo -Cbuild.verbose=true
+      pixi run -e azure build-iceberg
+      pixi run -e azure -- sccache --show-stats
+    env:
+      AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+      AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      DISABLE_CCACHE: 1  # Just use sccache directly on CI
+      USE_BODO_ARROW_FORK: 1  # Build from Source with Arrow Fork
+    displayName: 'Build Bodo & Iceberg Connector'
 
-      mkdir env
-      mamba env export | tee env/environment.yml
-      mamba list --explicit > env/package-list.txt
-      pip list | tee env/requirements.txt
+  - bash: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
+      wget -q -O - "https://adlsresources.blob.core.windows.net/adlsresources/hadoop-3.3.2.tar.gz" | sudo tar -xzf - -C /opt
+      cd azurefs-sas-token-provider
+      pip install --no-deps --no-build-isolation -ve .
+    displayName: "Setup Snowflake ADLS Testing (only Linux)"
+    retryCountOnTaskFailure: 5
+
+  - bash: |
+      pixi list
+      pixi run pip list
     continueOnError: true
     displayName: Export Environment Spec
 
-  - publish: $(System.DefaultWorkingDirectory)/env
-    artifact: TestEnv $(Agent.JobName)
-    continueOnError: true
-
-  - script: |
-      set -eo pipefail
-      source activate ${{ parameters.CONDA_ENV }}
-      set -x
+  - bash: |
+      set -exo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
 
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
@@ -193,9 +142,10 @@ jobs:
 
   - script: |
       set -eo pipefail
+      eval "$(pixi shell-hook --shell bash -e azure)"
+
       export IS_RELEASE=`git tag --points-at HEAD`
       if [[ -n "$IS_RELEASE" ]]; then
-        source activate ${{ parameters.CONDA_ENV }}
         git clone https://github.com/bodo-ai/Bodo-examples.git
         cd Bodo-examples/06-Compare-Bodo-with-Spark/tpch/
         # Invalid env variables for AWS credentials in the pipeline, s3 access is denied unless we run it by resetting them

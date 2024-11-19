@@ -36,48 +36,37 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
-      CONDA_ENV: 'bodo'
       PYTHON_VERSION: 3.8
       matrix:
         BODO_3P_1_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_1of10
         BODO_3P_2_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_2of10
         BODO_3P_3_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_3of10
         BODO_3P_4_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_4of10
         BODO_3P_5_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_5of10
         BODO_3P_6_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_6of10
         BODO_3P_7_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_7of10
         BODO_3P_8_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_8of10
         BODO_3P_9_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_9of10
         BODO_3P_10_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -87,48 +76,37 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
-      CONDA_ENV: 'bodo'
       PYTHON_VERSION: 3.9
       matrix:
         BODO_3P_1_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_1of10
         BODO_3P_2_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_2of10
         BODO_3P_3_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_3of10
         BODO_3P_4_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_4of10
         BODO_3P_5_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_5of10
         BODO_3P_6_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_6of10
         BODO_3P_7_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_7of10
         BODO_3P_8_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_8of10
         BODO_3P_9_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_9of10
         BODO_3P_10_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -143,43 +121,33 @@ stages:
       matrix:
         BODO_3P_1_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_1of10
         BODO_3P_2_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_2of10
         BODO_3P_3_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_3of10
         BODO_3P_4_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_4of10
         BODO_3P_5_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_5of10
         BODO_3P_6_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_6of10
         BODO_3P_7_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_7of10
         BODO_3P_8_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_8of10
         BODO_3P_9_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_9of10
         BODO_3P_10_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -187,48 +155,37 @@ stages:
       name: Linux_38py
       useNumbaDev: false
       caching_test: false
-      CONDA_ENV: 'bodo'
       PYTHON_VERSION: 3.8
       matrix:
         BODO_3P_1_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_1of10
         BODO_3P_2_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_2of10
         BODO_3P_3_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_3of10
         BODO_3P_4_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_4of10
         BODO_3P_5_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_5of10
         BODO_3P_6_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_6of10
         BODO_3P_7_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_7of10
         BODO_3P_8_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_8of10
         BODO_3P_9_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_9of10
         BODO_3P_10_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -236,48 +193,37 @@ stages:
       name: Linux_39py
       useNumbaDev: false
       caching_test: false
-      CONDA_ENV: 'bodo'
       PYTHON_VERSION: 3.9
       matrix:
         BODO_3P_1_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_1of10
         BODO_3P_2_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_2of10
         BODO_3P_3_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_3of10
         BODO_3P_4_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_4of10
         BODO_3P_5_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_5of10
         BODO_3P_6_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_6of10
         BODO_3P_7_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_7of10
         BODO_3P_8_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_8of10
         BODO_3P_9_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_9of10
         BODO_3P_10_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
@@ -289,56 +235,44 @@ stages:
       matrix:
         BODO_3P_1_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_1of10
         BODO_3P_2_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_2of10
         BODO_3P_3_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_3of10
         BODO_3P_4_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_4of10
         BODO_3P_5_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_5of10
         BODO_3P_6_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_6of10
         BODO_3P_7_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_7of10
         BODO_3P_8_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_8of10
         BODO_3P_9_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: bodo_9of10
         BODO_3P_10_OF_10:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER:  bodo_10of10
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Linux_cache
-      useNumbaDev: false
       caching_test: true
       PYTHON_VERSION: 3.10
       matrix:
         TEST_3P:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: ""
 
   - template: buildscripts/bodo/azure/azure-test-conda-linux-macos.yml
@@ -347,13 +281,11 @@ stages:
       name: macOS_cache
       ### NOTE: The template doesn't actually support this parameter!
       vmImage: macOS-latest
-      useNumbaDev: false
       caching_test: true
       PYTHON_VERSION: 3.10
       matrix:
         TEST_3P:
           NP: 3
-          CONDA_ENV: 'bodo'
           PYTEST_MARKER: ""
 
   # BodoSQL tests
@@ -369,7 +301,6 @@ stages:
       name: BODOSQL_Linux_38py
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.8
       matrix:
         BODOSQL_3P_1_OF_7:
@@ -400,7 +331,6 @@ stages:
       name: BODOSQL_Linux_39py
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.9
       matrix:
         BODOSQL_3P_1_OF_7:
@@ -431,7 +361,6 @@ stages:
       name: BODOSQL_Linux_310py
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
         BODOSQL_3P_1_OF_7:
@@ -464,7 +393,6 @@ stages:
       vmImage: macOS-latest
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.8
       matrix:
         BODOSQL_3P_1_OF_7:
@@ -497,7 +425,6 @@ stages:
       vmImage: macOS-latest
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.9
       matrix:
         BODOSQL_3P_1_OF_7:
@@ -530,7 +457,6 @@ stages:
       vmImage: macOS-latest
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
         BODOSQL_3P_1_OF_7:
@@ -562,7 +488,6 @@ stages:
       name: BODOSQL_Linux_cache
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
       CACHE_TEST: true
       PYTEST_MARKER: ""
@@ -579,7 +504,6 @@ stages:
       vmImage: macOS-latest
       ## NOTE: The template doesn't support this!!
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
       CACHE_TEST: true
       PYTEST_MARKER: ""

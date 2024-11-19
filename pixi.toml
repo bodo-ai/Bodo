@@ -59,6 +59,9 @@ b = { depends-on = ["build"] }              # Alias for build
 clean = { cmd = "pip uninstall -y bodo bodosql bodo-iceberg-connector && bash buildscripts/clean.sh" }
 
 
+[system-requirements]
+macos = "11.0"
+
 [dependencies]
 pip = "*"
 # Core C++ Deps
