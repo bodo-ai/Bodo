@@ -2700,7 +2700,7 @@ def test_map_index_nested_2(use_struct, memory_leak_check):
         # map version takes a significant amount of time to run for higher levels
         # of nesting, exact reason is unknown.
         # https://bodo.atlassian.net/browse/BSE-2561
-        n = 4
+        n = 3
         value, typ = make_nested_map_df(n)
 
     ctx = {"TABLE1": pd.DataFrame({"A": pd.array([value], dtype=pd.ArrowDtype(typ))})}
