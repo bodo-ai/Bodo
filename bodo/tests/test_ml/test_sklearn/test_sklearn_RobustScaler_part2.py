@@ -10,8 +10,12 @@ which can cause OOM issues on nightly due to numba caching artifacts.
 import pytest
 from sklearn.preprocessing import RobustScaler
 
-from bodo.tests.test_sklearn_part3 import gen_sklearn_scalers_random_data
-from bodo.tests.test_sklearn_part4 import robust_scalar_data  # noqa: F401
+from bodo.tests.test_ml.test_sklearn.test_sklearn_preprocessing import (
+    gen_sklearn_scalers_random_data,
+)
+from bodo.tests.test_ml.test_sklearn.test_sklearn_RobustScaler_part1 import (
+    robust_scalar_data,  # noqa: F401
+)
 from bodo.tests.utils import check_func
 
 pytestmark = [pytest.mark.ml, pytest.mark.weekly]

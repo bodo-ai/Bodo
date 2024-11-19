@@ -8,6 +8,7 @@ import hashlib
 import inspect
 import keyword
 import re
+import sys
 import traceback
 import typing as pt
 import warnings
@@ -1040,7 +1041,7 @@ def overload_alloc_type(n, t, s=None, dict_ref_arr=None):
             new_cats_arr = create_categorical_type(
                 typ.dtype.categories, typ.dtype.data.data, is_ordered
             )
-            new_cats_tup = MetaType(typ.dtype.categories)
+            new_cats_tup = MetaType(tuple(new_cats_arr))
             return (
                 lambda n,
                 t,
@@ -1862,6 +1863,23 @@ def run_rank0(func: Callable, bcast_result: bool = True, result_default=None):
         return result
 
     return inner
+
+
+def is_ml_support_loaded():
+    ml_support_modules = (
+        "bodo.ml_support.sklearn_cluster_ext",
+        "bodo.ml_support.sklearn_ensemble_ext",
+        "bodo.ml_support.sklearn_ext",
+        "bodo.ml_support.sklearn_feature_extraction_ext",
+        "bodo.ml_support.sklearn_linear_model_ext",
+        "bodo.ml_support.sklearn_metrics_ext",
+        "bodo.ml_support.sklearn_model_selection_ext",
+        "bodo.ml_support.sklearn_naive_bayes_ext",
+        "bodo.ml_support.sklearn_preprocessing_ext",
+        "bodo.ml_support.sklearn_svm_ext",
+        "bodo.ml_support.sklearn_utils_ext",
+    )
+    return any(module in sys.modules for module in ml_support_modules)
 
 
 @dataclass

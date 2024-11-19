@@ -88,6 +88,7 @@ from bodo.utils.utils import (
     is_call,
     is_call_assign,
     is_expr,
+    is_ml_support_loaded,
     is_np_array_typ,
     is_slice_equiv_arr,
     is_whole_slice,
@@ -609,13 +610,13 @@ class DistributedPass:
 
         if (
             func_name == "fit"
-            and "bodo.libs.xgb_ext" in sys.modules
+            and "bodo.ml_support.xgb_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.xgb_ext.BodoXGBClassifierType,
-                    bodo.libs.xgb_ext.BodoXGBRegressorType,
+                    bodo.ml_support.xgb_ext.BodoXGBClassifierType,
+                    bodo.ml_support.xgb_ext.BodoXGBRegressorType,
                 ),
             )
         ):  # pragma: no cover
@@ -625,28 +626,28 @@ class DistributedPass:
 
         if (
             func_name == "fit"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
-                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
-                    bodo.libs.sklearn_ext.BodoSGDRegressorType,
-                    bodo.libs.sklearn_ext.BodoKMeansClusteringType,
-                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
-                    bodo.libs.sklearn_ext.BodoLinearRegressionType,
-                    bodo.libs.sklearn_ext.BodoMultinomialNBType,
-                    bodo.libs.sklearn_ext.BodoLassoType,
-                    bodo.libs.sklearn_ext.BodoRidgeType,
-                    bodo.libs.sklearn_ext.BodoLinearSVCType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingOneHotEncoderType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingRobustScalerType,
-                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingOneHotEncoderType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingStandardScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingRobustScalerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
@@ -656,11 +657,11 @@ class DistributedPass:
 
         if (
             func_name == "partial_fit"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
+                bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingMaxAbsScalerType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
@@ -669,22 +670,22 @@ class DistributedPass:
 
         if (
             func_name == "score"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and is_ml_support_loaded()
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
-                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
-                    bodo.libs.sklearn_ext.BodoSGDClassifierType,
-                    bodo.libs.sklearn_ext.BodoSGDRegressorType,
-                    bodo.libs.sklearn_ext.BodoKMeansClusteringType,
-                    bodo.libs.sklearn_ext.BodoLogisticRegressionType,
-                    bodo.libs.sklearn_ext.BodoLinearRegressionType,
-                    bodo.libs.sklearn_ext.BodoMultinomialNBType,
-                    bodo.libs.sklearn_ext.BodoLassoType,
-                    bodo.libs.sklearn_ext.BodoRidgeType,
-                    bodo.libs.sklearn_ext.BodoLinearSVCType,
+                    bodo.ml_support.sklearn_cluster_ext.BodoKMeansClusteringType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestClassifierType,
+                    bodo.ml_support.sklearn_ensemble_ext.BodoRandomForestRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDClassifierType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoSGDRegressorType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLogisticRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLinearRegressionType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoLassoType,
+                    bodo.ml_support.sklearn_linear_model_ext.BodoRidgeType,
+                    bodo.ml_support.sklearn_naive_bayes_ext.BodoMultinomialNBType,
+                    bodo.ml_support.sklearn_svm_ext.BodoLinearSVCType,
                 ),
             )
         ):
@@ -693,14 +694,17 @@ class DistributedPass:
                 return [assign]
         if (
             func_name == "fit_transform"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and (
+                "bodo.ml_support.sklearn_feature_extraction_ext" in sys.modules
+                or "bodo.ml_support.sklearn_preprocessing_ext" in sys.modules
+            )
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
-                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
-                    bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,
-                    bodo.libs.sklearn_ext.BodoFExtractCountVectorizerType,
+                    bodo.ml_support.sklearn_preprocessing_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractHashingVectorizerType,
+                    bodo.ml_support.sklearn_feature_extraction_ext.BodoFExtractCountVectorizerType,
                 ),
             )
         ):
@@ -1323,11 +1327,11 @@ class DistributedPass:
 
         if (
             func_name == "split"
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,
+                bodo.ml_support.sklearn_model_selection_ext.BodoModelSelectionKFoldType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
@@ -1337,11 +1341,11 @@ class DistributedPass:
 
         if (
             func_name in ("split", "get_n_splits")
-            and "bodo.libs.sklearn_ext" in sys.modules
+            and "bodo.ml_support.sklearn_model_selection_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                bodo.libs.sklearn_ext.BodoModelSelectionLeavePOutType,
+                bodo.ml_support.sklearn_model_selection_ext.BodoModelSelectionLeavePOutType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):

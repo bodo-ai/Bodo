@@ -1,19 +1,14 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test miscellaneous supported sklearn models and methods
-Currently this file tests:
-MultinomialNB, OneHotEncoder, LabelEncoder, MinMaxScaler, StandardScaler
-"""
+"""Test supported sklearn preprocessing models and methods"""
 
 import random
 
 import numpy as np
 import pandas as pd
 import pytest
-import scipy
 from scipy.sparse import csr_matrix, issparse
 from scipy.special import comb
 from sklearn.model_selection import LeavePOut
-from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import (
     LabelEncoder,
     MaxAbsScaler,
@@ -179,33 +174,6 @@ def test_label_encoder(values, classes, memory_leak_check):
         return result
 
     check_func(test_fit_transform, (values,))
-
-
-def test_naive_mnnb_csr(memory_leak_check):
-    """Test csr matrix with MultinomialNB
-    Taken from here (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/tests/test_naive_bayes.py#L461)
-    """
-
-    def test_mnnb(X, y2):
-        clf = MultinomialNB()
-        clf.fit(X, y2)
-        y_pred = clf.predict(X)
-        return y_pred
-
-    rng = np.random.RandomState(42)
-
-    # Data is 6 random integer points in a 100 dimensional space classified to
-    # three classes.
-    X2 = rng.randint(5, size=(6, 100))
-    y2 = np.array([1, 1, 2, 2, 3, 3])
-    X = scipy.sparse.csr_matrix(X2)
-    y_pred = bodo.jit(distributed=["X", "y2", "y_pred"])(test_mnnb)(
-        _get_dist_arg(X), _get_dist_arg(y2)
-    )
-    y_pred = bodo.allgatherv(y_pred)
-    assert_array_equal(y_pred, y2)
-
-    check_func(test_mnnb, (X, y2))
 
 
 # ----------------------- OneHotEncoder -----------------------

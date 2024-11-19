@@ -1,166 +1,19 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test miscellaneous supported sklearn models and methods
-Currently this file tests:
-train_test_split, MultinomialNB, LinearSVC,
-"""
+"""Test supported sklearn model selection methods"""
 
 import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
-from sklearn import datasets
-from sklearn.metrics import precision_score
 from sklearn.model_selection import KFold, train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.svm import LinearSVC
 from sklearn.utils import shuffle
 from sklearn.utils._testing import assert_array_equal, assert_raises
-from sklearn.utils.validation import check_random_state
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
 pytestmark = [pytest.mark.ml, pytest.mark.weekly]
-
-
-# --------------------Multinomial Naive Bayes Tests-----------------#
-def test_multinomial_nb(memory_leak_check):
-    """Test Multinomial Naive Bayes
-    Taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/tests/test_naive_bayes.py#L442
-    """
-    rng = np.random.RandomState(0)
-    X = rng.randint(5, size=(6, 100))
-    y = np.array([1, 1, 2, 2, 3, 3])
-
-    def impl_fit(X, y):
-        clf = MultinomialNB()
-        clf.fit(X, y)
-        return clf
-
-    clf = bodo.jit(distributed=["X", "y"])(impl_fit)(
-        _get_dist_arg(np.array(X)),
-        _get_dist_arg(np.array(y)),
-    )
-    # class_log_prior_: Smoothed empirical log probability for each class.
-    # It's computation is replicated by all ranks
-    np.testing.assert_array_almost_equal(
-        np.log(np.array([2, 2, 2]) / 6.0), clf.class_log_prior_, 8
-    )
-
-    def impl_predict(X, y):
-        clf = MultinomialNB()
-        y_pred = clf.fit(X, y).predict(X)
-        return y_pred
-
-    check_func(
-        impl_predict,
-        (X, y),
-        py_output=y,
-        is_out_distributed=True,
-    )
-
-    X = np.array([[1, 0, 0], [1, 1, 0]])
-    y = np.array([0, 1])
-
-    def test_alpha_vector(X, y):
-        # Setting alpha=np.array with same length
-        # as number of features should be fine
-        alpha = np.array([1, 2, 1])
-        nb = MultinomialNB(alpha=alpha)
-        nb.fit(X, y)
-        return nb
-
-    # Test feature probabilities uses pseudo-counts (alpha)
-    nb = bodo.jit(distributed=["X", "y"])(test_alpha_vector)(
-        _get_dist_arg(np.array(X)),
-        _get_dist_arg(np.array(y)),
-    )
-    feature_prob = np.array([[2 / 5, 2 / 5, 1 / 5], [1 / 3, 1 / 2, 1 / 6]])
-    # feature_log_prob_: Empirical log probability of features given a class, P(x_i|y).
-    # Computation is distributed and then gathered and replicated in all ranks.
-    np.testing.assert_array_almost_equal(nb.feature_log_prob_, np.log(feature_prob))
-
-    # Test dataframe.
-    train = pd.DataFrame(
-        {"A": range(20), "B": range(100, 120), "C": range(20, 40), "D": range(40, 60)}
-    )
-    train_labels = pd.Series(range(20))
-
-    check_func(impl_predict, (train, train_labels))
-
-
-def test_multinomial_nb_score(memory_leak_check):
-    rng = np.random.RandomState(0)
-    X = rng.randint(5, size=(6, 100))
-    y = np.array([1, 1, 2, 2, 3, 3])
-
-    def impl(X, y):
-        clf = MultinomialNB()
-        clf.fit(X, y)
-        score = clf.score(X, y)
-        return score
-
-    check_func(impl, (X, y))
-
-
-# --------------------Linear SVC -----------------#
-# also load the iris dataset
-# and randomly permute it
-iris = datasets.load_iris()
-rng = check_random_state(0)
-perm = rng.permutation(iris.target.size)
-iris.data = iris.data[perm]
-iris.target = iris.target[perm]
-
-
-def test_svm_linear_svc(memory_leak_check):
-    """
-    Test LinearSVC
-    """
-    # Toy dataset where features correspond directly to labels.
-    X = iris.data
-    y = iris.target
-    classes = [0, 1, 2]
-
-    def impl_fit(X, y):
-        clf = LinearSVC()
-        clf.fit(X, y)
-        return clf
-
-    clf = bodo.jit(distributed=["X", "y"])(impl_fit)(
-        _get_dist_arg(X),
-        _get_dist_arg(y),
-    )
-    np.testing.assert_array_equal(clf.classes_, classes)
-
-    def impl_pred(X, y):
-        clf = LinearSVC()
-        clf.fit(X, y)
-        y_pred = clf.predict(X)
-        score = precision_score(y, y_pred, average="micro")
-        return score
-
-    bodo_score_result = bodo.jit(distributed=["X", "y"])(impl_pred)(
-        _get_dist_arg(X),
-        _get_dist_arg(y),
-    )
-
-    sklearn_score_result = impl_pred(X, y)
-    np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
-
-    def impl_score(X, y):
-        clf = LinearSVC()
-        clf.fit(X, y)
-        return clf.score(X, y)
-
-    bodo_score_result = bodo.jit(distributed=["X", "y"])(impl_score)(
-        _get_dist_arg(X),
-        _get_dist_arg(y),
-    )
-
-    sklearn_score_result = impl_score(X, y)
-    np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
 
 
 # ----------------------------shuffle-----------------------------
