@@ -22,6 +22,7 @@ class CommandType(str, Enum):
     GATHER = "gather"
     DELETE_RESULT = "delete_result"
     REGISTER_TYPE = "register_type"
+    SET_CONFIG = "set_config"
 
 
 def poll_for_barrier(comm: MPI.Comm, poll_freq: float | None = 0.1):
