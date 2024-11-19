@@ -9,7 +9,11 @@ from pandas.api.types import is_float_dtype
 
 import bodo
 import bodosql
-from bodo.tests.utils import check_func, pytest_slow_unless_codegen
+from bodo.tests.utils import (
+    check_func,
+    pytest_slow_unless_codegen,
+    temp_config_override,
+)
 from bodosql.kernels.array_kernel_utils import vectorized_sol
 
 # Skip unless any library or BodoSQL codegen or files were changed
@@ -1101,12 +1105,8 @@ def test_to_number_decimal_to_decimal(precision_scale_decimal_array, memory_leak
         ["1", "1.55", "1.56", "10.56", "1000.5", None, None, "10004.1", "-11.41"],
         dtype=pd.ArrowDtype(pa.decimal128(28, 3)),
     )
-    old_use_decimal = bodo.bodo_use_decimal
-    try:
-        bodo.bodo_use_decimal = True
+    with temp_config_override("bodo_use_decimal", True):
         check_func(impl, (precision_scale_decimal_array,), py_output=py_output)
-    finally:
-        bodo.bodo_use_decimal = old_use_decimal
 
 
 def test_try_to_number_decimal_to_decimal(
@@ -1119,9 +1119,5 @@ def test_try_to_number_decimal_to_decimal(
         ["1", "1.55", "1.56", None, None, None, None, None, None],
         dtype=pd.ArrowDtype(pa.decimal128(4, 3)),
     )
-    old_use_decimal = bodo.bodo_use_decimal
-    try:
-        bodo.bodo_use_decimal = True
+    with temp_config_override("bodo_use_decimal", True):
         check_func(impl, (precision_scale_decimal_array,), py_output=py_output)
-    finally:
-        bodo.bodo_use_decimal = old_use_decimal

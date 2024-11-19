@@ -6,9 +6,8 @@ Test correctness of SQL queries containing orderby on BodoSQL
 import pandas as pd
 import pytest
 
-import bodo
 from bodo.tests.timezone_common import representative_tz  # noqa
-from bodo.tests.utils import pytest_slow_unless_codegen
+from bodo.tests.utils import pytest_slow_unless_codegen, temp_config_override
 from bodosql.tests.utils import check_query
 
 # Skip unless any codegen files were changed
@@ -630,9 +629,7 @@ def test_orderby_spark_style(query, answer, memory_leak_check):
     rules.
     """
 
-    old_style = bodo.bodo_sql_style
-    try:
-        bodo.bodo_sql_style = "SPARK"
+    with temp_config_override("bodo_sql_style", "SPARK"):
         df = pd.DataFrame(
             {
                 "A": pd.array([1, 2, 3, 4, None, 5, None, 1, 2], dtype="Int64"),
@@ -646,5 +643,3 @@ def test_orderby_spark_style(query, answer, memory_leak_check):
             sort_output=False,
             check_dtype=False,
         )
-    finally:
-        bodo.bodo_sql_style = old_style

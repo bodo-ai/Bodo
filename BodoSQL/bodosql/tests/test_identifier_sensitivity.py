@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import temp_config_override
 from bodosql.tests.utils import check_query
 
 
@@ -29,9 +30,7 @@ def test_spark_name_matching_invalid(memory_leak_check):
         bodo.utils.typing.BodoError,
         match=r"Object 'TABLE1' not found within '__BODOLOCAL__'; did you mean 'table1'?",
     ):
-        old_sql_style = bodo.bodo_sql_style
-        try:
-            bodo.bodo_sql_style = "SNOWFLAKE"
+        with temp_config_override("bodo_sql_style", "SNOWFLAKE"):
             check_query(
                 query,
                 {"table1": df},
@@ -40,8 +39,6 @@ def test_spark_name_matching_invalid(memory_leak_check):
                 check_dtype=False,
                 expected_output=df.loc[:, ["Gamma", "Alpha"]],
             )
-        finally:
-            bodo.bodo_sql_style = old_sql_style
 
 
 def test_spark_name_matching_valid(memory_leak_check):
@@ -57,9 +54,7 @@ def test_spark_name_matching_valid(memory_leak_check):
             "Gamma": [100, 200, 300, 400, 500],
         }
     )
-    old_sql_style = bodo.bodo_sql_style
-    try:
-        bodo.bodo_sql_style = "SPARK"
+    with temp_config_override("bodo_sql_style", "SPARK"):
         check_query(
             query,
             {"table1": df},
@@ -68,5 +63,3 @@ def test_spark_name_matching_valid(memory_leak_check):
             check_dtype=False,
             expected_output=df.loc[:, ["Gamma", "Alpha"]],
         )
-    finally:
-        bodo.bodo_sql_style = old_sql_style

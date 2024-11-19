@@ -7,7 +7,7 @@ import pyarrow as pa
 import pytest
 
 from bodo import Time, TimestampTZ
-from bodo.tests.utils import pytest_slow_unless_window
+from bodo.tests.utils import pytest_slow_unless_window, temp_config_override
 from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
@@ -214,7 +214,6 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
     """
     Tests that lead/lag works with different literal types
     """
-    import bodo
 
     shift_amt = 10
 
@@ -245,10 +244,7 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
     )
     query_no_default = "SELECT LEAD(C,10) OVER (PARTITION BY A ORDER BY B) FROM TABLE1"
 
-    old_use_decimal = bodo.bodo_use_decimal
-    try:
-        bodo.bodo_use_decimal = True
-
+    with temp_config_override("bodo_use_decimal", True):
         check_query(
             query if use_default else query_no_default,
             {"TABLE1": in_df},
@@ -260,9 +256,6 @@ def test_lead_lag_defaults(input_arr, default, default_str, use_default):
             session_tz="US/Pacific",
             enable_timestamp_tz=True,
         )
-
-    finally:
-        bodo.bodo_use_decimal = old_use_decimal
 
 
 def test_lead_lag_multiple(spark_info, memory_leak_check):
