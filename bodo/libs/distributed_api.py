@@ -11,6 +11,7 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
@@ -1835,7 +1836,6 @@ def _get_array_first_val_fix_decimal_dict(arr):
     Also makes sure dictionary-encoded string array returns DictStringSentinel to allow
     proper unboxing type inference.
     """
-    import pyarrow as pa
 
     from bodo.hiframes.boxing import DictStringSentinel
 
@@ -1871,8 +1871,6 @@ def get_value_for_type(dtype):  # pragma: no cover
         return pd.array(["A"], "string")
 
     if dtype == bodo.dict_str_arr_type:
-        import pyarrow as pa
-
         return pd.array(["a"], pd.ArrowDtype(pa.dictionary(pa.int32(), pa.string())))
 
     if dtype == binary_array_type:
@@ -1896,8 +1894,6 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # Decimal array
     if isinstance(dtype, DecimalArrayType):
-        import pyarrow as pa
-
         return pd.array(
             [0], dtype=pd.ArrowDtype(pa.decimal128(dtype.precision, dtype.scale))
         )
@@ -1925,8 +1921,6 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # MultiIndex index
     if isinstance(dtype, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
-        import pyarrow as pa
-
         name = get_value_for_type(dtype.name_typ)
         names = tuple(get_value_for_type(t) for t in dtype.names_typ)
         arrs = tuple(get_value_for_type(t) for t in dtype.array_types)
@@ -1993,14 +1987,10 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # NullArray
     if dtype == bodo.null_array_type:
-        import pyarrow as pa
-
         return pd.arrays.ArrowExtensionArray(pa.nulls(1))
 
     # StructArray
     if isinstance(dtype, bodo.StructArrayType):
-        import pyarrow as pa
-
         # Handle empty struct corner case which can have typing issues
         if dtype == bodo.StructArrayType((), ()):
             return pd.array([{}], pd.ArrowDtype(pa.struct([])))
