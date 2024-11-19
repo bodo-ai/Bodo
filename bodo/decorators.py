@@ -389,9 +389,19 @@ def _init_extensions():
 
     need_refresh = False
 
-    if "sklearn" in sys.modules and "bodo.libs.sklearn_ext" not in sys.modules:
+    if "sklearn" in sys.modules and "bodo.ml_support.sklearn_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.libs.sklearn_ext  # noqa
+        import bodo.ml_support.sklearn_ext  # noqa
+        import bodo.ml_support.sklearn_cluster_ext  # noqa
+        import bodo.ml_support.sklearn_ensemble_ext  # noqa
+        import bodo.ml_support.sklearn_feature_extraction_ext  # noqa
+        import bodo.ml_support.sklearn_linear_model_ext  # noqa
+        import bodo.ml_support.sklearn_metrics_ext  # noqa
+        import bodo.ml_support.sklearn_model_selection_ext  # noqa
+        import bodo.ml_support.sklearn_naive_bayes_ext  # noqa
+        import bodo.ml_support.sklearn_preprocessing_ext  # noqa
+        import bodo.ml_support.sklearn_svm_ext  # noqa
+        import bodo.ml_support.sklearn_utils_ext  # noqa
 
         need_refresh = True
 
@@ -401,9 +411,9 @@ def _init_extensions():
 
         need_refresh = True
 
-    if "xgboost" in sys.modules and "bodo.libs.xgb_ext" not in sys.modules:
+    if "xgboost" in sys.modules and "bodo.ml_support.xgb_ext" not in sys.modules:
         # side effect: initialize Numba extensions
-        import bodo.libs.xgb_ext  # noqa
+        import bodo.ml_support.xgb_ext  # noqa
 
         need_refresh = True
 

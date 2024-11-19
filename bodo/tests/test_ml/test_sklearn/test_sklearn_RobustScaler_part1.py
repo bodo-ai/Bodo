@@ -13,7 +13,9 @@ import pytest
 from sklearn.preprocessing import RobustScaler
 
 import bodo
-from bodo.tests.test_sklearn_part3 import gen_sklearn_scalers_random_data
+from bodo.tests.test_ml.test_sklearn.test_sklearn_preprocessing import (
+    gen_sklearn_scalers_random_data,
+)
 from bodo.tests.utils import _get_dist_arg, check_func
 
 pytestmark = [pytest.mark.ml, pytest.mark.weekly]
