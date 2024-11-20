@@ -2553,6 +2553,22 @@ def scatterv_impl_jit(
 
         return impl_timedelta_arr
 
+    # NullArray
+    if data == bodo.null_array_type:
+
+        def impl_null_arr(
+            data, send_counts=None, warn_if_dist=True, root=DEFAULT_ROOT, comm=0
+        ):  # pragma: no cover
+            _, is_intercomm, is_sender, _ = get_scatter_comm_info(root, comm)
+            n = bodo.libs.distributed_api.get_node_portion(
+                bcast_scalar(len(data), root, comm), bodo.get_size(), bodo.get_rank()
+            )
+            if is_intercomm and is_sender:
+                n = 0
+            return bodo.libs.null_arr_ext.init_null_array(n)
+
+        return impl_null_arr
+
     # TimestampTZ array
     if data == bodo.timestamptz_array_type:
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))

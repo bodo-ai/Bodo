@@ -65,7 +65,7 @@ def test_null_arr_getitem(memory_leak_check):
     check_func(
         impl2,
         (n, idx),
-        py_output=pd.array([None] * len(idx), dtype=pd.BooleanDtype()),
+        py_output=pd.array([None] * len(idx), dtype=pd.ArrowDtype(pa.null())),
         check_dtype=False,
         dist_test=False,
     )
@@ -87,7 +87,7 @@ def test_null_arr_getitem(memory_leak_check):
     check_func(
         impl2,
         (n, idx),
-        py_output=pd.array([None] * 5, dtype=pd.BooleanDtype()),
+        py_output=pd.array([None] * 5, dtype=pd.ArrowDtype(pa.null())),
         check_dtype=False,
     )
 
@@ -118,7 +118,7 @@ def test_astype_check(memory_leak_check):
         return S.astype(np.dtype("datetime64[ns]"))
 
     n = 10
-    py_output = pd.array([None] * n, dtype=pd.BooleanDtype())
+    py_output = pd.array([None] * n, dtype=pd.ArrowDtype(pa.null()))
     check_func(test_impl, (n,), py_output=py_output)
 
 

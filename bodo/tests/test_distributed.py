@@ -2501,6 +2501,11 @@ def get_random_int64index(n):
             id="timedelta",
         ),
         pytest.param(
+            pd.arrays.ArrowExtensionArray(pa.nulls(10)),
+            marks=pytest.mark.slow,
+            id="null",
+        ),
+        pytest.param(
             np.matrix(
                 [
                     [0.2, 1.5, 0.2, 0.1],

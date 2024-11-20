@@ -138,21 +138,8 @@ def typeof_null_array(val, c):
 
 @box(NullArrayType)
 def box_null_arr(typ, val, c):
-    """Box null array into a pyarrow null array.
-    TODO: Convert to a Pandas array with a null pyarrow type
-    when we switch to Pandas 2.0.
-    """
-    null_array = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    len_obj = c.pyapi.long_from_longlong(null_array.length)
-
-    mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
-    pa_class_obj = c.pyapi.import_module_noblock(mod_name)
-    nulls_arr_obj = c.pyapi.call_method(pa_class_obj, "nulls", (len_obj,))
-
-    c.pyapi.decref(pa_class_obj)
-    c.pyapi.decref(len_obj)
-    c.context.nrt.decref(c.builder, typ, val)
-    return nulls_arr_obj
+    """Box null array into a pyarrow null array."""
+    return bodo.libs.array.box_array_using_arrow(typ, val, c)
 
 
 @unbox(NullArrayType)

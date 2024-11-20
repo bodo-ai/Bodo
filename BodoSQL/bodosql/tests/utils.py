@@ -1264,9 +1264,15 @@ def _check_query_equal(
         expected_output = bodo.tests.utils.convert_non_pandas_columns(expected_output)
     # NOTE: zero length dataframe may cause errors in Arrow's sort
     if sort_output and len(bodosql_output.dropna(how="all")):
-        bodosql_output = bodosql_output.sort_values(
-            bodosql_output.columns.tolist()
-        ).reset_index(drop=True)
+        # Avoid sorting PyArrow null columns since causes errors in Pandas
+        sort_colnames = [
+            c
+            for i, c in enumerate(bodosql_output.columns)
+            if bodosql_output.dtypes.iloc[i] != pd.ArrowDtype(pa.null())
+        ]
+        bodosql_output = bodosql_output.sort_values(sort_colnames).reset_index(
+            drop=True
+        )
         expected_output = expected_output.sort_values(
             expected_output.columns.tolist()
         ).reset_index(drop=True)

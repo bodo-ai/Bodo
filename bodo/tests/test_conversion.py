@@ -24,7 +24,11 @@ def test_coerce_scalar_to_array_unknown(memory_leak_check, scalar):
         x = bodo.utils.conversion.coerce_scalar_to_array(scalar, 1, numba.types.unknown)
         return pd.Series(x)
 
-    assert f()[0] == scalar
+    out = f()[0]
+    if scalar is None:
+        assert out is pd.NA
+    else:
+        assert out == scalar
 
 
 @pytest_mark_one_rank
@@ -45,4 +49,8 @@ def test_list_to_array_unknown(memory_leak_check, scalar):
         x = bodo.utils.conversion.list_to_array([scalar], numba.types.unknown)
         return pd.Series(x)
 
-    assert f()[0] == scalar
+    out = f()[0]
+    if scalar is None:
+        assert out is pd.NA
+    else:
+        assert out == scalar
