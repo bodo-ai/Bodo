@@ -1855,9 +1855,13 @@ def _get_array_first_val_fix_decimal_dict(arr):
 
 
 # skipping coverage since only called on multiple core case
-def get_value_for_type(dtype):  # pragma: no cover
+def get_value_for_type(dtype, use_arrow_time=False):  # pragma: no cover
     """returns a value of type 'dtype' to enable calling an njit function with the
     proper input type.
+
+    Args:
+        dtype (types.Type): input data type
+        use_arrow_time (bool, optional): Use Arrow time64 array for TimeArray input (limited to precision=9 cases, used in nested arrays). Defaults to False.
     """
     # object arrays like decimal array can't be empty since they are not typed so we
     # create all arrays with size of 1 to be consistent
@@ -1964,8 +1968,10 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # ArrayItemArray
     if isinstance(dtype, ArrayItemArrayType):
-        # TODO[BSE-4213]: Use Arrow arrays
-        return pd.Series([get_value_for_type(dtype.dtype)]).values
+        pa_arr = pa.LargeListArray.from_arrays(
+            [0, 1], get_value_for_type(dtype.dtype, True)
+        )
+        return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # IntervalArray
     if isinstance(dtype, IntervalArrayType):
@@ -1983,6 +1989,13 @@ def get_value_for_type(dtype):  # pragma: no cover
     # TimeArray
     if isinstance(dtype, TimeArrayType):
         precision = dtype.precision
+        if use_arrow_time:
+            assert (
+                precision == 9
+            ), "get_value_for_type: only nanosecond precision is supported for nested data"
+            return pd.array(
+                [bodo.Time(3, precision=precision)], pd.ArrowDtype(pa.time64("ns"))
+            )
         return np.array([bodo.Time(3, precision=precision)], object)
 
     # NullArray
@@ -1995,18 +2008,10 @@ def get_value_for_type(dtype):  # pragma: no cover
         if dtype == bodo.StructArrayType((), ()):
             return pd.array([{}], pd.ArrowDtype(pa.struct([])))
 
-        # TODO[BSE-4213]: Use Arrow arrays
-        return np.array(
-            [
-                {
-                    field_name: _get_array_first_val_fix_decimal_dict(
-                        get_value_for_type(t)
-                    )
-                    for field_name, t in zip(dtype.names, dtype.data)
-                }
-            ],
-            object,
+        pa_arr = pa.StructArray.from_arrays(
+            tuple(get_value_for_type(t, True) for t in dtype.data), dtype.names
         )
+        return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # TupleArray
     if isinstance(dtype, bodo.TupleArrayType):
@@ -2023,19 +2028,12 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # MapArrayType
     if isinstance(dtype, bodo.MapArrayType):
-        # TODO[BSE-4213]: Use Arrow arrays
-        from bodo.hiframes.boxing import BodoMapWrapper
-
-        dict_val = BodoMapWrapper(
-            {
-                _get_array_first_val_fix_decimal_dict(
-                    get_value_for_type(dtype.key_arr_type)
-                ): _get_array_first_val_fix_decimal_dict(
-                    get_value_for_type(dtype.value_arr_type)
-                )
-            }
+        pa_arr = pa.MapArray.from_arrays(
+            [0, 1],
+            get_value_for_type(dtype.key_arr_type, True),
+            get_value_for_type(dtype.value_arr_type, True),
         )
-        return np.array([dict_val], object)
+        return pd.arrays.ArrowExtensionArray(pa_arr)
 
     # Numpy Matrix
     if isinstance(dtype, bodo.MatrixType):

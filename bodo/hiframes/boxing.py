@@ -89,12 +89,6 @@ _use_dict_str_type = False
 struct_size_limit = 100
 
 
-# Wrapper class around dict to make typing treat dict value as map array element not
-# struct array element. See get_value_for_type().
-class BodoMapWrapper(dict):
-    pass
-
-
 # Wrapper class around str to make typing treat str value as dictionary-encoded string
 # array element not a regular string.
 class DictStringSentinel(str):
@@ -1681,7 +1675,6 @@ def _infer_ndarray_obj_dtype(val):
         isinstance(first_val, (dict, Dict))
         and (len(first_val.keys()) <= struct_size_limit)
         and all(isinstance(k, str) for k in first_val.keys())
-        and not isinstance(first_val, BodoMapWrapper)
     ):
         field_names = tuple(first_val.keys())
         # TODO: handle None value in first_val elements
