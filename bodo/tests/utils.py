@@ -1031,7 +1031,12 @@ def sort_series_values_index(S):
 
     # Avoid Arrow array sorting bugs in Pandas as of 2.2
     if isinstance(S.index.dtype, pd.ArrowDtype):
-        S = S.set_axis(S.index.array._pa_array.to_pandas()).rename_axis(S.index.names)
+        pa_index_arr = S.index.array._pa_array.combine_chunks()
+        # Decode dictionary-encoded strings since to_pandas() converts dictionary array
+        # to categorical.
+        if pa.types.is_dictionary(pa_index_arr.type):
+            pa_index_arr = pa_index_arr.dictionary_decode()
+        S = S.set_axis(pa_index_arr.to_pandas()).rename_axis(S.index.names)
 
     S1 = S.sort_index()
     # pandas fails if all null integer column is sorted
@@ -1088,9 +1093,12 @@ def sort_dataframe_values_index(df):
 
     # Avoid Arrow array sorting bugs in Pandas as of 2.2
     if isinstance(df.index.dtype, pd.ArrowDtype):
-        df = df.set_index(df.index.array._pa_array.to_pandas()).rename_axis(
-            df.index.names
-        )
+        pa_index_arr = df.index.array._pa_array.combine_chunks()
+        # Decode dictionary-encoded strings since to_pandas() converts dictionary array
+        # to categorical.
+        if pa.types.is_dictionary(pa_index_arr.type):
+            pa_index_arr = pa_index_arr.dictionary_decode()
+        df = df.set_index(pa_index_arr.to_pandas()).rename_axis(df.index.names)
 
     return df.rename_axis(eName).sort_values(list_col_names, kind="mergesort")
 
