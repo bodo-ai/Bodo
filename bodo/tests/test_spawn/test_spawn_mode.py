@@ -10,7 +10,7 @@ import bodo
 from bodo.pandas.array_manager import LazyArrayManager
 from bodo.pandas.frame import BodoDataFrame
 from bodo.pandas.managers import LazyBlockManager
-from bodo.submit.spawner import destroy_spawner, get_num_workers
+from bodo.submit.spawner import SubmitDispatcher, destroy_spawner, get_num_workers
 from bodo.tests.utils import (
     _test_equal,
     check_func,
@@ -293,6 +293,16 @@ def test_args_tuple_list_dict():
     _test_equal(impl(arg), arg)
     arg = {"k1": df, "k23": df}
     _test_equal(impl(arg), arg)
+
+
+def test_dist_false():
+    """Make sure distributed=False disables spawn"""
+
+    @bodo.jit(spawn=True, distributed=False)
+    def f(A):
+        return A
+
+    assert not isinstance(f, SubmitDispatcher)
 
 
 def test_results_deleted_after_collection(datapath):
