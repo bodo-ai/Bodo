@@ -131,18 +131,19 @@ gen_data()
 test()
 ```
 
-Save this code in a file called `example.py`, and run it on a single
+Save this code in a file called `example.py`, and run it on all cores
 core as follows:
 
 ```console
 python example.py
 ```
 
-Alternatively, to run the code on four cores, you can use `mpiexec`:
+Alternatively, to run it on a single core:
 
 ```console
-mpiexec -n 8 python example.py
+BODO_NUM_WORKERS=1 python example.py
 ```
+
 
 !!! note
     You may need to delete `example1.pq` between consecutive runs.

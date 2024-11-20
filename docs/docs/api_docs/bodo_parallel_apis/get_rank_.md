@@ -7,20 +7,24 @@ Get the process number from Bodo (called `rank` in MPI terminology).
 ### Example Usage
 
     
-Save following code in `get_rank.py` file and run with `mpiexec`.
+Save following code in `get_rank.py` file and run with multiple cores.
 
 ```py
 import bodo
-# some work only on rank 0
-if bodo.get_rank() == 0:
-    print("rank 0 done")
 
-# some work on every process
-print("rank", bodo.get_rank(), "here")
+@bodo.jit
+def run_in_parallel():
+    # some work only on rank 0
+    if bodo.get_rank() == 0:
+        print("rank 0 done")
+
+    # some work on every process
+    print("rank", bodo.get_rank(), "here")
+run_in_parallel()
 ```
 
 ```console 
-mpiexec -n 4 python get_rank.py
+BODO_NUM_WORKERS=4 python get_rank.py
 ```
 
 Output

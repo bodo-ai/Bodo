@@ -132,7 +132,7 @@ Save this code in `bodo_data_transform.py` and run on a single core from
 command line:
 
 ``` 
-$ python bodo_data_transform.py
+$ BODO_NUM_WORKERS=1 python bodo_data_transform.py
 Total time: 1.78
 ```
 
@@ -140,17 +140,19 @@ This code is *94x* faster with Bodo than Pandas even on a single core,
 because Bodo compiles the function into a native binary, eliminating the
 interpreter overheads in `apply`.
 
-Now let's run the code on 8 CPU cores using `mpiexec` in command line:
+Now let's run the code on all CPU cores - the example below assumes an 8 core
+machine.
 
 ``` 
-$ mpiexec -n 8 python bodo_data_transform.py
+$ python bodo_data_transform.py
 Total time: 0.38
 ```
 
 Using 8 cores gets an additional *~5x* speedup. The same program can be
 scaled to larger datasets and as many cores as necessary in compute
-clusters and cloud environments (e.g.
-`mpiexec -n 10000 python bodo_data_transform.py`).
+clusters and cloud environments. An explicit limit on the number of cores used
+can be set with the environment variable `BODO_NUM_WORKERS`, but by default Bodo
+will use all available cores.
 
 See the documentation on [bodo parallelism basics][basics] for more
 details about Bodo's JIT compilation workflow and parallel computation
@@ -235,11 +237,9 @@ to make caching default in the future. See [caching][caching] for more informati
 Parallel Python Processes
 -------------------------
 
-Bodo uses the [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
-parallelism model, which runs the full program on all cores from the
-beginning. Essentially, `mpiexec` launches identical Python processes but
-Bodo divides the data and computation in JIT functions to exploit
-parallelism.
+Bodo will execute code decorated with `bodo.jit` in parallel. The function is
+run on all cores, but Bodo divides the data and computation in JIT functions to
+exploit parallelism.
 
 Let's try a simple example that demonstrates how chunks of data are
 loaded in parallel:
@@ -265,29 +265,12 @@ if __name__ == "__main__":
     load_data_bodo()
 ```
 
-Save this code in `load_data.py` and run on two cores (output prints of
-the cores are mixed):
+Save this code in `load_data.py` and run on two cores:
 
 <details> <summary> Click to expand output</summary>
 
     ```console
-    $ mpiexec -n 2 python load_data.py
-    pandas dataframe:
-                     A        B
-    0              NaT        0
-    1       2013-01-03        1
-    2       2013-01-03        2
-    3              NaT        3
-    4       2013-01-03        4
-    ...            ...      ...
-    9999995 2015-09-29  9999995
-    9999996 2015-09-29  9999996
-    9999997 2015-09-29  9999997
-    9999998 2015-09-29  9999998
-    9999999 2015-09-29  9999999
-    
-    [10000000 rows x 2 columns]
-    
+    $ BODO_NUM_WORKERS=2 python load_data.py
     pandas dataframe:
                      A        B
     0              NaT        0
@@ -320,8 +303,6 @@ the cores are mixed):
     
     [5000000 rows x 2 columns]
     
-    pandas dataframe:
-                     A        B
     5000000 2014-05-18  5000000
     5000001 2014-05-18  5000001
     5000002 2014-05-18  5000002
@@ -339,13 +320,21 @@ the cores are mixed):
 
 </details>   
 
-The first two dataframes printed are regular Pandas dataframes which are
-replicated on both processes and have all 10 million rows. However, the
-last two dataframes printed are Bodo parallelized Pandas dataframes,
-with 5 million rows each. In this case, Bodo parallelizes `read_parquet`
-automatically and loads different chunks of data in different cores.
-Therefore, the non-JIT parts of the Python program are replicated across
-cores whereas Bodo JIT functions are parallelized.
+The first dataframe is a regular Pandas dataframe and has all 10 million rows.
+However, the second dataframe is a Bodo parallelized Pandas
+dataframe which is split into two chunks with 5 million rows each. In this case,
+Bodo parallelizes `read_parquet` automatically and loads different chunks of
+data in different cores.
+
+When parallelizable input is given to a function (e.g. Pandas DataFrames/Series,
+numpy Arrays), Bodo will automatically distribute input for parallel
+computation, freeing users from having to manually reason about transforming
+data for parallel computation (see more on that below). For values returned by
+JIT'ed functions, Bodo will avoid gathering all of the output back onto a single
+process unless the full data is actually used outside of a parallel context.
+This means that for large programs running across distributed clusters, one does
+not need to worry about crashes due to running out of memory when retrieving a
+large object from a JIT call.
 
 ### Parallel Computation
 
@@ -371,13 +360,13 @@ if __name__ == "__main__":
 Save this code as `data_groupby.py` and run from command line:
 
 ``` 
-$ mpiexec -n 8 python data_groupby.py
+$ BODO_NUM_WORKERS=8 python data_groupby.py
 ```
 
 This program uses `groupby` which requires rows with the same key to be
-aggregated together. Therefore, Bodo *shuffles* the data automatically
-under the hoods using MPI, and the user doesn't need to worry about
-parallelism challenges like communication.
+aggregated together. Therefore, Bodo *shuffles* the data automatically, and the
+user doesn't need to worry about parallelism challenges
+like communication.
 
 <br>
 
@@ -581,4 +570,201 @@ Using Bodo in Jupyter Notebooks {#jupyter}
 See [Interactive Bodo Cluster Setup using IPyParallel][ipyparallelsetup] for more
 information.
 
+Using Bodo in Single Program Multiple Data (SPMD) mode
+-------------------------------
 
+For some advanced users, there may be programs that are easier to write in SPMD
+style where the entire program is run on all cores. Under the hood, Bodo
+leverages
+[MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
+to manage parallel execution. This means that Bodo can be launched as an MPI
+process and be informed to use existing processes instead of launching a new
+group of workers.
+
+Let's revisit the same example from before, but with SPMD mode:
+
+``` py
+import pandas as pd
+import bodo
+
+
+def load_data_pandas():
+    df = pd.read_parquet("pd_example.pq")
+    print("pandas dataframe: ", df)
+
+
+# By setting spawn=False, we inform Bodo to use the existing set of MPI
+# processes
+@bodo.jit(spawn=False)
+def load_data_bodo():
+    df = pd.read_parquet("pd_example.pq")
+    print("Bodo dataframe: ", df)
+
+
+if __name__ == "__main__":
+    load_data_pandas()
+    load_data_bodo()
+```
+
+Save this code in `load_data.py` and run on two cores (output prints of
+the cores are mixed):
+
+<details> <summary> Click to expand output</summary>
+
+    ```console
+    $ mpiexec -n 2 python load_data.py
+    pandas dataframe:
+                     A        B
+    0              NaT        0
+    1       2013-01-03        1
+    2       2013-01-03        2
+    3              NaT        3
+    4       2013-01-03        4
+    ...            ...      ...
+    9999995 2015-09-29  9999995
+    9999996 2015-09-29  9999996
+    9999997 2015-09-29  9999997
+    9999998 2015-09-29  9999998
+    9999999 2015-09-29  9999999
+    
+    [10000000 rows x 2 columns]
+    
+    pandas dataframe:
+                     A        B
+    0              NaT        0
+    1       2013-01-03        1
+    2       2013-01-03        2
+    3              NaT        3
+    4       2013-01-03        4
+    ...            ...      ...
+    9999995 2015-09-29  9999995
+    9999996 2015-09-29  9999996
+    9999997 2015-09-29  9999997
+    9999998 2015-09-29  9999998
+    9999999 2015-09-29  9999999
+    
+    [10000000 rows x 2 columns]
+    
+    Bodo dataframe:
+                     A        B
+    0       1970-01-01        0
+    1       2013-01-03        1
+    2       2013-01-03        2
+    3       2013-01-03        3
+    4       2013-01-03        4
+    ...            ...      ...
+    4999995 2014-05-17  4999995
+    4999996 2014-05-17  4999996
+    4999997 2014-05-17  4999997
+    4999998 2014-05-17  4999998
+    4999999 2014-05-17  4999999
+    
+    [5000000 rows x 2 columns]
+    
+    pandas dataframe:
+                     A        B
+    5000000 2014-05-18  5000000
+    5000001 2014-05-18  5000001
+    5000002 2014-05-18  5000002
+    5000003 2014-05-18  5000003
+    5000004 2014-05-18  5000004
+    ...            ...      ...
+    9999995 2015-09-29  9999995
+    9999996 2015-09-29  9999996
+    9999997 2015-09-29  9999997
+    9999998 2015-09-29  9999998
+    9999999 2015-09-29  9999999
+    
+    [5000000 rows x 2 columns]
+    ```
+
+</details>   
+
+`mpiexec` launches identical Python processes but Bodo divides the
+data and computation in JIT functions to exploit parallelism.
+
+Unlike default mode, in SPMD mode, the regular pandas dataframe with all 10 million
+rows initially exists on both cores. Because each core is running the full
+program, we see the pandas dataframe printed twice. 
+
+The last two dataframes printed are Bodo parallelized Pandas dataframes, with 5
+million rows each. In this case, Bodo parallelizes `read_parquet` automatically
+and loads different chunks of data in different cores. Therefore, the non-JIT
+parts of the Python program are replicated across cores whereas Bodo JIT
+functions are parallelized.
+
+One of the challenges of using SPMD mode is that third-party libraries are
+usually not aware of the MPI runtime, and may not expect to be run on every
+core. A common workaround is to use `bodo.get_rank()` to get a unique ID per
+core (integers from `0` to `num processes`), and conditionally execute code only
+when the rank is `0`.
+
+The advantage of SPMD mode is that operations outside of JIT functions that do
+not need access to the full table are inherently parallelized. Since each core
+only has a chunk of the data, when these chunks are returned to regular python
+from a JIT function, subsequent operations will happen on all ranks to a subset
+of the full dataframe. However, this can be error-prone, as operations that
+require access to all rows will need explicit communication. Consider the
+following:
+
+``` py
+import pandas as pd
+import bodo
+
+
+@bodo.jit(spawn=False)
+def load_data_bodo():
+    df = pd.read_parquet("pd_example.pq")
+    return df["B"]
+
+
+if __name__ == "__main__":
+    col_B = load_data_bodo()
+    print("sum", col_B.sum())
+```
+
+Saving the above as `example.py` and running with 2 cores:
+
+```console
+$ mpiexec -n 2 python load_data.py
+sum 12499997500000
+sum 37499997500000
+```
+
+We see that each core prints out the sum of their local data. However, in most
+cases we likely want the sum of the entire table. The ideal way to do this is to
+move the `.sum()` call into the JIT function so that Bodo can efficiently
+parallelize the `sum` and distribute the results. However, to do this outside of
+the JIT function, one would need to handle the communication explicitly:
+
+``` py
+import pandas as pd
+import bodo
+from bodo.mpi4py import MPI
+
+
+@bodo.jit(spawn=False)
+def load_data_bodo():
+    df = pd.read_parquet("pd_example.pq")
+    return df["B"]
+
+
+if __name__ == "__main__":
+    col_B = load_data_bodo()
+    local_sum = col_B.sum()
+
+    comm = MPI.COMM_WORLD
+    global_sum = comm.allreduce(local_sum, op=MPI.SUM)
+    print("sum", global_sum)
+```
+
+In some cases, SPMD mode can also have lower overhead by eliminating the need to
+communicate between the spawned processes and the main application. However,
+this tends to not be a significant source of overhead unless the application is
+very short-lived.
+
+To summarize, SPMD mode allows non-JIT code to operate on chunks of data, but
+makes it harder to write correct programs (e.g. there are risks around code that
+is unaware that it's running in a distributed environment). In most cases, it is
+preferable to use the default mode (and use object mode within JIT functions to
+call non-JIT libraries on chunks of data).

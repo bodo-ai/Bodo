@@ -59,7 +59,7 @@ print("\nbodo:")
 bodo_calc_pi(n)
 ```
 
-The output of this code is as follows:
+The output of this code on a single core is as follows:
 
 ```console
 python:
@@ -97,7 +97,7 @@ calc_pi(2 * 10**8)
 Launched on eight parallel cores:
 
 ```console
-$ mpiexec -n 8 python calc_pi.py
+$ BODO_NUM_WORKERS=8 python calc_pi.py
 Execution time: 0.5736249439651147
 result: 3.14161474
 ```

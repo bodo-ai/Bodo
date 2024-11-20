@@ -41,6 +41,9 @@ configuration and application behavior. We recommend trying *block
 mapping* and *round-robin mapping* options below for your application to
 achieve the best performance.
 
+!!! info "Important"
+    These options are only supported in SPMD mode
+
 ### Block Mapping
 
 In block mapping, cores of each node in the `hostfile` are filled with

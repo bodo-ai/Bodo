@@ -126,23 +126,24 @@ not distributed, `to_parquet(name)` writes to a single file called
 ```py
 df = pd.DataFrame({"A": range(10)})
 
-@bodo.jit
+# Only execute on a single core
+@bodo.jit(distributed=False)
 def example1_pq(df):
     df.to_parquet("example1.pq")
 
-@bodo.jit(distributed={"df"})
+# Execute on all cores
+@bodo.jit
 def example2_pq(df):
     df.to_parquet("example2.pq")
 
-if bodo.get_rank() == 0:
-    example1_pq(df)
+example1_pq(df)
 example2_pq(df)
 ```
 
 Run the code above with 4 processors:
 
 ```shell
-mpiexec -n 4 python example_pq.py
+BODO_NUM_WORKERS=4 python example_pq.py
 ```
 
 `example1_pq(df)` writes 1 single file, and `example2_pq(df)` writes a
@@ -298,23 +299,24 @@ def read_test():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
-    @bodo.jit
+    # Only execute on a single core
+    @bodo.jit(distributed=False)
     def example1_csv(df):
         df.to_csv("example1.csv")
 
-    @bodo.jit(distributed={"df"})
+    # Execute on all cores
+    @bodo.jit
     def example2_csv(df):
         df.to_csv("example2.csv")
 
-    if bodo.get_rank() == 0:
-        example1_csv(df)
+    example1_csv(df)
     example2_csv(df)
     ```
 
     Run the code above with 4 processors:
 
     ```shell
-    mpiexec -n 4 python example_csv.py
+    BODO_NUM_WORKERS=4 python example_csv.py
     ```
 
     each ``example1_csv(df)`` and ``example2_csv(df)`` writes to a single file:
@@ -332,23 +334,22 @@ def read_test():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
-    @bodo.jit
+    @bodo.jit(distributed=False)
     def example1_csv(df):
         df.to_csv("s3://bucket-name/example1.csv")
 
-    @bodo.jit(distributed={"df"})
+    @bodo.jit
     def example2_csv(df):
         df.to_csv("s3://bucket-name/example2.csv")
 
-    if bodo.get_rank() == 0:
-        example1_csv(df)
+    example1_csv(df)
     example2_csv(df)
     ```
 
     Run the code above with 4 processors:
 
     ```shell
-    mpiexec -n 4 python example_csv.py
+    BODO_NUM_WORKERS=4 python example_csv.py
     ```
 
     ``example1_csv(df)`` writes 1 single file, and ``example2_csv(df)`` writes a folder containing 4 csv files:
@@ -405,23 +406,24 @@ def example_read_json_multi_lines():
         ```py
         df = pd.DataFrame({"A": np.arange(n)})
 
-        @bodo.jit
+        # Only execute on a single core
+        @bodo.jit(distributed=False)
         def example1_json(df):
             df.to_json("example1.json", orient="records", lines=True)
 
-        @bodo.jit(distributed={"df"})
+        # Execute on all cores
+        @bodo.jit
         def example2_json(df):
             df.to_json("example2.json", orient="records", lines=True)
 
-        if bodo.get_rank() == 0:
-            example1_json(df)
+        example1_json(df)
         example2_jsons(df)
         ```
 
         Run the code above with 4 processors:
 
         ```shell
-        mpiexec -n 4 python example_json.py
+        BODO_NUM_WORKERS=4 python example_json.py
         ```
 
         each ``example1_json(df)`` and ``example2_json(df)`` writes to a single file:
@@ -442,23 +444,24 @@ def example_read_json_multi_lines():
     ```py
     df = pd.DataFrame({"A": np.arange(n)})
 
-    @bodo.jit
+    # Only execute on a single core
+    @bodo.jit(distributed=False)
     def example1_json(df):
         df.to_json("s3://bucket-name/example1.json")
 
-    @bodo.jit(distributed={"df"})
+    # Execute on all cores
+    @bodo.jit
     def example2_json(df):
         df.to_json("s3://bucket-name/example2.json")
 
-    if bodo.get_rank() == 0:
-        example1_json(df)
+    example1_json(df)
     example2_json(df)
     ```
 
     Run the code above with 4 processors:
 
     ```shell
-    mpiexec -n 4 python example_json.py
+    BODO_NUM_WORKERS=4 python example_json.py
     ```
 
     ``example1_json(df)`` writes 1 single file, and ``example2_json(df)`` writes a folder containing 4 json files:
