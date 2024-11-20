@@ -86,20 +86,19 @@ steps):
     variable `BODO_LICENSE` is automatically added when the environment
     is activated.
 
-## Using MPI in Clusters with Bodo Enterprise Edition {#mpienterpriseclusters}
+## Enabling parallelism in Clusters with Bodo Enterprise Edition {#mpienterpriseclusters}
 
-MPI can be configured on clusters easily. The cluster nodes need to have
-passwordless SSH enabled between them, and there should be a host file
-listing their addresses (see an example tutorial
+Bodo relies on MPI for parallel compute. MPI can be configured on clusters
+easily. The cluster nodes need to have passwordless SSH enabled between them,
+and there should be a host file listing their addresses (see an example tutorial
 [here](https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/){target="blank"}).
-MPI usually needs to be configured to launch one
-process per physical core for best performance. This avoids potential resource contention
-between processes due to the high efficiency of MPI. For example, a
-cluster of four nodes, each with 16 physical cores, would use 64 MPI
-processes:
+MPI usually needs to be configured to launch one process per physical core for
+best performance. This avoids potential resource contention between processes
+due to the high efficiency of MPI. For example, a cluster of four nodes, each
+with 16 physical cores, can use up to 64 MPI processes:
 
 ```shell
-mpiexec -n 64 python example.py
+BODO_NUM_WORKERS=64 python example.py
 ```
 
 For cloud instances, one physical core usually corresponds to two vCPUs.

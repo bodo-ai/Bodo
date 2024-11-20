@@ -19,16 +19,17 @@ import pandas as pd
 @bodo.jit
 def mean_power():
     df = pd.read_parquet("data/cycling_dataset.pq")
-    return bodo.allgatherv(df)
+    df = bodo.allgatherv(df)
+    print(df)
+    return df
 
 df = mean_power()
-print(df)
 ```
 
-Save code in ``test_allgatherv.py`` file and run with `mpiexec`.
+Save code in ``test_allgatherv.py`` file and run with 4 processes.
 
 ```shell
-mpiexec -n 4 python test_allgatherv.py
+BODO_NUM_WORKERS=4 python test_allgatherv.py
 ```
 
 Output:

@@ -108,12 +108,10 @@ print(result)
 To run the code, save it to a file, e.g. `test_bodo_sql.py`, and run the following command in your terminal:
 
 ```bash
-mpiexec -n 8 python test_bodo_sql.py
+python test_bodo_sql.py
 ```
 
-Replace `8` with the number of cores you want to use. Note that the first time you run this code, it may take a few seconds to compile the code. Next time you run the code, it will execute much faster. Check the [SQL API Reference][bodosql] for the full list of supported SQL operations.
 
-
-
-
-
+By default Bodo will use all available cores. To set a limit on the number of processes spawned, set the environment variable `BODO_NUM_WORKERS`.
+Note that the first time you run this code, it may take a few seconds to compile the code.
+Next time you run the code, it will execute much faster. Check the [SQL API Reference][bodosql] for the full list of supported SQL operations.
