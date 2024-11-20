@@ -1706,6 +1706,7 @@ def _infer_ndarray_obj_dtype(val):
         if isinstance(first_val, list):
             first_val = np.array(first_val, object)
         dtype = numba.typeof(first_val)
+        dtype = to_nullable_type(dtype)
         if _use_dict_str_type and dtype == string_array_type:
             dtype = bodo.dict_str_arr_type
         return ArrayItemArrayType(dtype)

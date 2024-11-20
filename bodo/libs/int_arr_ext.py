@@ -653,6 +653,18 @@ def cast_nullable_int_array_to_numpy(context, builder, fromty, toty, val):
     return context.compile_internal(builder, f, toty(fromty), [val])
 
 
+@overload(np.asarray)
+def overload_asarray(A):
+    """Support np.asarray() for nullable int arrays"""
+    if not isinstance(A, IntegerArrayType):
+        return
+
+    def impl(A):  # pragma: no cover
+        return get_int_arr_data(A)
+
+    return impl
+
+
 ############################### numpy ufuncs #################################
 
 

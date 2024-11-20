@@ -583,6 +583,18 @@ def cast_float_array(context, builder, fromty, toty, val):
     return context.compile_internal(builder, f, toty(fromty), [val])
 
 
+@overload(np.asarray)
+def overload_asarray(A):
+    """Support np.asarray() for nullable float arrays"""
+    if not isinstance(A, FloatingArrayType):
+        return
+
+    def impl(A):  # pragma: no cover
+        return get_float_arr_data(A)
+
+    return impl
+
+
 ############################### numpy ufuncs #################################
 
 
