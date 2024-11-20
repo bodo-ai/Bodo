@@ -262,11 +262,6 @@ def check_func(
         run_seq, run_1D, run_1DVar, run_spawn = False, False, False, True
         check_pandas_types = False
 
-    if run_spawn:
-        # _use_dict_str_type flag doesn't propagate to worker processes currently
-        # so this option doesn't work yet.
-        use_dict_encoded_strings = False
-
     n_pes = bodo.get_size()
 
     # avoid running sequential tests on multi-process configs to save time
@@ -322,16 +317,16 @@ def check_func(
         # test table format for dataframes (non-table format tested below if flag is
         # None)
         if use_table_format is None or use_table_format:
-            bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = 0
+            set_config("bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", 0)
 
         # test dict-encoded string arrays if flag is set (dict-encoded tested below if
         # flag is None)
         if use_dict_encoded_strings:
-            bodo.hiframes.boxing._use_dict_str_type = True
+            set_config("bodo.hiframes.boxing._use_dict_str_type", True)
 
         # Test all dict-like arguments as map arrays (no structs) if flag is set
         if use_map_arrays:
-            bodo.hiframes.boxing.struct_size_limit = -1
+            set_config("bodo.hiframes.boxing.struct_size_limit", -1)
 
         # sequential
         if run_seq:
@@ -481,9 +476,11 @@ def check_func(
             )
             bodo_funcs["spawn"] = bodo_func
     finally:
-        bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
-        bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
-        bodo.hiframes.boxing.struct_size_limit = saved_struct_size_limit
+        set_config(
+            "bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD", saved_TABLE_FORMAT_THRESHOLD
+        )
+        set_config("bodo.hiframes.boxing._use_dict_str_type", saved_use_dict_str_type)
+        set_config("bodo.hiframes.boxing.struct_size_limit", saved_struct_size_limit)
 
     # test non-table format case if there is any dataframe in input
     if use_table_format is None and any(
@@ -3254,29 +3251,33 @@ def temp_env_override(env_vars: dict[str, str | None]):
         update_env_vars(old_env)
 
 
+def set_config(name, val):
+    """Set global configuration value (both spawner and workers)
+    E.g. bodo.hiframes.boxing._use_dict_str_type = True
+    """
+    from bodo.submit.utils import set_global_config
+
+    set_global_config(name, val)
+    if test_spawn_mode_enabled:
+        import bodo.submit.spawner
+        from bodo.submit.spawner import CommandType
+
+        spawner = bodo.submit.spawner.get_spawner()
+        bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
+        spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
+        spawner.worker_intercomm.bcast((name, val), bcast_root)
+
+
 @contextmanager
 def temp_config_override(name: str, val: pt.Any):
-    """Update a Bodo global config and restore it after."""
-
-    def set_config(name, val):
-        import bodo
-
-        setattr(bodo, name, val)
-        if test_spawn_mode_enabled:
-            import bodo.submit.spawner
-            from bodo.submit.spawner import CommandType
-
-            spawner = bodo.submit.spawner.get_spawner()
-            bcast_root = MPI.ROOT if bodo.get_rank() == 0 else MPI.PROC_NULL
-            spawner.worker_intercomm.bcast(CommandType.SET_CONFIG.value, bcast_root)
-            spawner.worker_intercomm.bcast((name, val), bcast_root)
+    """Update a Bodo global config and restore it after (e.g. bodo_use_decimal)"""
 
     old_val = getattr(bodo, name)
     try:
-        set_config(name, val)
+        set_config("bodo." + name, val)
         yield
     finally:
-        set_config(name, old_val)
+        set_config("bodo." + name, old_val)
 
 
 @contextmanager

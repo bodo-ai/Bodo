@@ -2,6 +2,7 @@
 """Utilities for Spawn Mode"""
 
 import logging
+import typing as pt
 from enum import Enum
 from time import sleep
 
@@ -59,3 +60,19 @@ class ArgMetadata(str, Enum):
     BROADCAST = "broadcast"
     SCATTER = "scatter"
     LAZY = "lazy"
+
+
+def set_global_config(config_name: str, config_value: pt.Any):
+    """Set global configuration value by name (for internal testing use only)
+    (e.g. "bodo.hiframes.boxing._use_dict_str_type")
+    """
+    # Get module and attribute sections of config_name
+    # (e.g. "bodo.hiframes.boxing._use_dict_str_type" -> "bodo.hiframes.boxing"
+    # and "_use_dict_str_type")
+    c_split = config_name.split(".")
+    attr = c_split[-1]
+    mod_name = ".".join(c_split[:-1])
+    locs = {}
+    exec(f"import {mod_name}; mod = {mod_name}", globals(), locs)
+    mod = locs["mod"]
+    setattr(mod, attr, config_value)
