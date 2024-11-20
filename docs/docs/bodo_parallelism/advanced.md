@@ -128,9 +128,10 @@ A similar flag is `distributed_block` which informs bodo that the data is
 distributed in equal chunks across cores (as done and expected by Bodo).
 Typically, this is used when output
 of `bodo.scatterv` is passed to a JIT function to allow for optimization and parallelization of more complex code.
+(This example assumes [SPMD mode](bodo_parallelism_basics.md#spmd))
 
 ```py
-@bodo.jit(distributed_block=["A"])
+@bodo.jit(spawn=False, distributed_block=["A"])
 def f(A):
     ...
 
@@ -338,6 +339,17 @@ support natively:
 
 ### Passing Distributed Data
 
+By default, Bodo will transparently handle distributing inputs across all
+processes and will lazily collect output back onto the main process as the data
+is accessed. In other words, programs that access data outside of a JIT context
+will incur some overhead as the data is collected back onto a single process,
+while programs that pass data between JIT functions will run faster. Note that
+peeking at the first few rows of data will also be fast and efficient but
+operations that require the full table (e.g. printing out the entire table) will
+trigger collection of values.
+
+### Passing Distributed Data in SPMD mode
+
 Bodo can receive or return chunks of distributed data to allow flexible
 integration with any non-Bodo Python code. The following example passes
 chunks of data to interpolate with Scipy, and returns interpolation
@@ -395,8 +407,28 @@ f()
 
 ## Run code on a single rank {#run_on_single_rank}
 
-In cases where some code needs to be run on a single MPI rank, you can
-do so in a python script as follows:
+By default, all non-JIT code will only be run on a single rank. Within a JIT
+function, if there's some code you want to only run from a single rank, you can
+do so as follows:
+```py
+@bodo.jit
+def f():
+    if bodo.get_rank() == 0:
+        with bodo.objmode():
+            # Remove directory
+            import os, shutil
+            if os.path.exists("data/data.pq"):
+                shutil.rmtree("data/data.pq")
+
+    # To synchronize all ranks before proceeding
+    bodo.barrier()
+
+    ...
+```
+
+This is similar in SPMD mode (where the whole script is launched as parallel
+MPI processes), except you will need to ensure that code that must only run on a
+single rank is protected even outside of JIT functions: 
 
 ```py
 if bodo.get_rank() == 0:
@@ -436,7 +468,7 @@ This can be used as any other magic:
 
 In cases where some code needs to be run once on each node in a
 multi-node cluster, such as a file system operation, installing
-packages, etc., it can be done as follows:
+packages, etc., it can be done as follows from inside a JIT function:
 
 ```py
 if bodo.get_rank() in bodo.get_nodes_first_ranks():
@@ -449,7 +481,9 @@ if bodo.get_rank() in bodo.get_nodes_first_ranks():
 bodo.barrier()
 ```
 
-The same can be done when running on an IPyParallel cluster using the
+In SPMD mode the above can also be run outside of JIT functions.
+
+The same can be achieved when running on an IPyParallel cluster using the
 `%%px` magic:
 
 ``` py

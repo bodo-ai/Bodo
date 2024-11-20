@@ -23,18 +23,17 @@ Manually redistribute data evenly across [selected] ranks.
     def mean_power():
         df = pd.read_parquet("data/cycling_dataset.pq")
         df = df.sort_values("power")[df["power"] > 400]
-        return df
+        print(df.shape)
+        df = bodo.rebalance(df, parallel=True)
+        print("After rebalance: ", df.shape)
     
-    df = mean_power()
-    print(df.shape)
-    df = bodo.rebalance(df, parallel=True)
-    print("After rebalance: ", df.shape)
+    mean_power()
     ```
 
-    Save code in ``test_rebalance.py`` file and run with `mpiexec`.
+    Save code in ``test_rebalance.py`` file and run with 4 processes.
     
     ```shell
-    mpiexec -n 4 python test_rebalance.py
+    BODO_NUM_WORKERS=4 python test_rebalance.py
     ```
     
     ```console
@@ -54,12 +53,16 @@ Manually redistribute data evenly across [selected] ranks.
 
 - Example to distribute the data from all ranks to subset of ranks using ``dests`` argument.
 
+    !!! note
+        The following example uses [SPMD mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd). 
+
+
     ```py
     
     import bodo
     import pandas as pd
     
-    @bodo.jit
+    @bodo.jit(spawn=False)
     def mean_power():
         df = pd.read_parquet("data/cycling_dataset.pq")
         df = df.sort_values("power")[df["power"] > 400]
@@ -70,7 +73,7 @@ Manually redistribute data evenly across [selected] ranks.
     df = bodo.rebalance(df, dests=[1,3], parallel=True)
     print("After rebalance: ", df.shape)
     ```
-    Save code in ``test_rebalance.py`` file and run with `mpiexec`.
+    Save code in ``test_rebalance.py`` file and run with 4 processes.
     
     ```shell
     mpiexec -n 4 python test_rebalance.py

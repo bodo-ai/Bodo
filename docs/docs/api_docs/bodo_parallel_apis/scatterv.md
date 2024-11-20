@@ -10,7 +10,10 @@ Distribute data manually by *scattering* data from one process to all processes.
 - ``warn_if_dist``: flag to print a BodoWarning if ``data`` is already distributed.
 
 !!! note 
-    Currently, `bodo.scatterv` only supports scattering from rank 0.
+      Currently, `bodo.scatterv` only supports scattering from rank 0.
+
+!!! note
+      The following examples use [SPMD mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
 
 ### Example Usage
 
@@ -22,7 +25,7 @@ Distribute data manually by *scattering* data from one process to all processes.
   import pandas as pd
   
   
-  @bodo.jit(distributed=["df"])
+  @bodo.jit(spawn=False, distributed=["df"])
   def mean_power(df):
       x = df.power.mean()
       return x
@@ -93,7 +96,7 @@ Distribute data manually by *scattering* data from one process to all processes.
   import bodo
   import pandas as pd
   
-  @bodo.jit()
+  @bodo.jit(spawn=False)
   def impl():
       if bodo.get_rank() == 0:
           df = pd.DataFrame({"A": [1,2,3,4,5,6,7,8]})

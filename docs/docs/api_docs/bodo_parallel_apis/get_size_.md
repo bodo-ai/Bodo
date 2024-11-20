@@ -6,21 +6,25 @@ Get the total number of processes.
 
 ### Example Usage
     
-Save following code in `get_rank_size.py` file and run with `mpiexec`.
+Save following code in `get_rank.py` file and run with multiple cores.
 
 ```py
 import bodo
-# some work only on rank 0
-if bodo.get_rank() == 0:
-    print("rank 0 done")
 
-# some work on every process
-print("rank", bodo.get_rank(), "here")
-print("total ranks:", bodo.get_size())
+@bodo.jit
+def run_in_parallel():
+    # some work only on rank 0
+    if bodo.get_rank() == 0:
+        print("rank 0 done")
+
+    # some work on every process
+    print("rank", bodo.get_rank(), "here")
+    print("total ranks:", bodo.get_size())
+run_in_parallel()
 ```
 
 ```console 
-mpiexec -n 4 python get_rank_size.py
+BODO_NUM_WORKERS=4 python get_rank.py
 ```
 
 Output
