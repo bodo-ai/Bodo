@@ -6,6 +6,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo
 from bodo import Time, TimestampTZ
 from bodo.tests.utils import pytest_slow_unless_window, temp_config_override
 from bodosql.tests.test_window.window_common import count_window_applies
@@ -56,6 +57,10 @@ def test_lead_lag_mixed(spark_info, memory_leak_check):
     count_window_applies(pandas_code, 1, ["LEAD", "LAG"])
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "func, shift_amt",
     [

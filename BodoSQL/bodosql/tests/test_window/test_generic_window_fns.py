@@ -6,6 +6,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+import bodo
 from bodo.mpi4py import MPI
 from bodo.tests.utils import pytest_slow_unless_window, temp_env_override
 from bodosql.tests.test_window.window_common import (  # noqa
@@ -516,6 +517,10 @@ def test_all_null():
     )
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "df",
     [
@@ -575,6 +580,10 @@ def test_simple_sum(df, spark_info, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "df",
     [
@@ -640,6 +649,10 @@ def test_simple_count(df, spark_info, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "partition_col",
     [
@@ -692,6 +705,10 @@ def test_simple_count_star(partition_col, spark_info, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 def test_multiple_sum_count(spark_info, capfd):
     """Verifies that the correct path is taken for SUM/COUNT when called multiple times"""
     from bodo.mpi4py import MPI
@@ -738,6 +755,10 @@ def test_multiple_sum_count(spark_info, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "df",
     [
@@ -801,6 +822,10 @@ def test_simple_count(df, spark_info, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "partition_col",
     [
@@ -851,6 +876,10 @@ def test_simple_count_star(partition_col, spark_info, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "func_name, answer_func, out_dtype",
     [
@@ -1056,6 +1085,10 @@ def test_simple_aggfuncs(func_name, answer_func, out_dtype, df, arg_strings, cap
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "data, expected_out",
     [
@@ -1110,6 +1143,10 @@ def test_avg_over_blank(data, expected_out, capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 def test_countstar_over_blank(capfd):
     """Checks that count(*) over () works properly and takes the correct codepath"""
 
@@ -1151,6 +1188,10 @@ def test_countstar_over_blank(capfd):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 def test_multiple_over_blank(capfd):
     """Checks that multiple FUNC(X) OVER () work properly and takes the correct codepath"""
     from bodo.mpi4py import MPI
