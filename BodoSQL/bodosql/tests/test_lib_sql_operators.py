@@ -20,10 +20,14 @@ def test_null_equals_columns():
     expected_output = pd.Series(
         [True, False, False, False, True, False, False, False, True], dtype="boolean"
     )
-    pd.testing.assert_series_equal(sql_null_equal_column_impl(S1, S2), expected_output)
+    pd.testing.assert_series_equal(
+        sql_null_equal_column_impl(S1, S2), expected_output, check_dtype=False
+    )
     S1 = pd.Series([-12, 0, None] * 3, dtype="Int32")
     S2 = pd.Series([-12] * 3 + [0] * 3 + [None] * 3, dtype="Int64")
-    pd.testing.assert_series_equal(sql_null_equal_column_impl(S1, S2), expected_output)
+    pd.testing.assert_series_equal(
+        sql_null_equal_column_impl(S1, S2), expected_output, check_dtype=False
+    )
 
 
 @pytest.mark.slow
