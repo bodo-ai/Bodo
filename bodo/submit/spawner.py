@@ -425,6 +425,12 @@ class Spawner:
                 tname: table if isinstance(table, TablePath) else dist_comm_meta
                 for tname, table in arg.tables.items()
             }
+
+            # BodoSQLContext without table data is treated as replicated in distributed
+            # analysis
+            if len(table_metas) == 0:
+                return None
+
             dist_flags.append(arg_name)
             return BodoSQLContextMetadata(table_metas, arg.catalog, arg.default_tz)
 
