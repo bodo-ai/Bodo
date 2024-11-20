@@ -862,6 +862,10 @@ def test_single_value2(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="only_jit_seq=True disables spawn testing so pytest.raises fails",
+)
 @pytest.mark.slow
 def test_single_value_error():
     """Make sure Calcite's SINGLE_VALUE Agg implementation raises an error for input
