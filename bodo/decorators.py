@@ -309,7 +309,8 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     # Use spawn mode if specified in decorator or enabled globally (decorator takes
     # precedence)
     disable_jit = os.environ.get("NUMBA_DISABLE_JIT", "0") == "1"
-    if options.get("spawn", bodo.spawn_mode) and not disable_jit:
+    dist_mode = options.get("distributed", True) is not False
+    if options.get("spawn", bodo.spawn_mode) and not disable_jit and dist_mode:
         from bodo.submit.spawner import SubmitDispatcher
         from bodo.submit.worker_state import is_worker
 
