@@ -3267,3 +3267,26 @@ def test_gatherv_intercomm(scatter_gather_data, memory_leak_check):
         None, root=bcast_root, comm=spawner.worker_intercomm
     )
     _test_equal(out, scatter_gather_data)
+
+
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        bodo.MapArrayType(bodo.dict_str_arr_type, bodo.FloatingArrayType(bodo.float32)),
+        bodo.StructArrayType(
+            (
+                bodo.ArrayItemArrayType(bodo.dict_str_arr_type),
+                bodo.MapArrayType(
+                    bodo.IntegerArrayType(bodo.int32), bodo.DatetimeArrayType(None)
+                ),
+            ),
+            ("A", "B"),
+        ),
+    ],
+)
+def test_get_value_for_type(dtype):
+    """Make sure get_value_for_type() produces correct sample data that matches input
+    data type.
+    """
+    data = bodo.libs.distributed_api.get_value_for_type(dtype)
+    assert bodo.typeof(data) == dtype
