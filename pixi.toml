@@ -158,6 +158,7 @@ minio-server = "*"
 # Testing and CI Tools
 pytest = "*"
 pytest-cov = "*"
+pytest-mock = "*"
 pytest-xdist = "*"
 pytest-timeout = "*"
 pytest-split = "*"
