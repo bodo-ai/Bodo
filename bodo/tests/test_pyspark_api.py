@@ -14,6 +14,11 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="PySpark API not supported in spawn",
+)
+
 
 @pytest.mark.slow
 def test_session_box(memory_leak_check):
