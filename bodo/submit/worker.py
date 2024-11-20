@@ -10,6 +10,7 @@ import socket
 import sys
 import typing as pt
 import uuid
+import warnings
 from copy import deepcopy
 
 import cloudpickle
@@ -36,6 +37,7 @@ from bodo.submit.utils import (
     set_global_config,
 )
 from bodo.submit.worker_state import set_is_worker
+from bodo.utils.typing import BodoWarning
 
 DISTRIBUTED_RETURN_HEAD_SIZE: int = 5
 
@@ -239,6 +241,23 @@ def _gather_res(
             all_updated_is_distributed.append(updated_is_distributed)
             all_updated_res.append(updated_res)
         return tuple(all_updated_is_distributed), tuple(all_updated_res)
+
+    # Handle corner case of returning BodoSQLContext
+    if type(res).__name__ == "BodoSQLContext":
+        # Import bodosql lazily to avoid import overhead when not necessary
+        from bodosql import BodoSQLContext
+
+        assert isinstance(res, BodoSQLContext), "invalid BodoSQLContext"
+        warnings.warn(
+            BodoWarning(
+                "Gathering tables of BodoSQLContext since returning distributed BodoSQLContext from spawned JIT functions not supported yet."
+            )
+        )
+        res.tables = {
+            name: (bodo.gatherv(table, root=0) if is_distributed[i] else table)
+            for i, (name, table) in enumerate(res.tables.items())
+        }
+        return False, res
 
     # BSE-4101: Support lazy numpy arrays
     if is_distributed and (
