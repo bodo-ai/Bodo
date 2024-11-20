@@ -232,6 +232,7 @@ def test_first_last_nth(window_calls, all_window_df, spark_info):
         check_names=False,
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
+        use_duckdb=True,
     )
 
 
