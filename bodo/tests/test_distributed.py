@@ -2540,7 +2540,6 @@ def test_scatterv_gatherv_allgatherv_python(scatter_gather_data, memory_leak_che
     _check_scatterv_gatherv_allgatherv((scatter_gather_data,), n)
 
 
-@pytest.mark.skip(reason="[BSE-4151] Test failing on PR CI")
 def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
     """Test bodo.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
     n = len(df_value)
