@@ -745,6 +745,10 @@ def test_dense_rank_stress_test(datapath, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "window_func, expected_df",
     [
@@ -837,6 +841,10 @@ def test_partitionless_rank_fns(capfd, window_func, expected_df, memory_leak_che
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "window_func, expected_df, expected_log_message",
     [
@@ -1061,6 +1069,10 @@ def ntile_df():
     return df
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 @pytest.mark.parametrize(
     "n_bins",
     [
@@ -1127,6 +1139,10 @@ def test_ntile(ntile_df, capfd, spark_info, n_bins):
     assert assert_success
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="capfd doesn't work for spawn",
+)
 def test_multiple_rank_fns(spark_info, capfd, memory_leak_check):
     """
     Tests that multiple rank functions can be computed together in the sort based impl
