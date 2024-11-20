@@ -34,12 +34,12 @@ from bodo.tests.utils import (
     create_snowflake_table,
     create_snowflake_table_from_select_query,
     drop_snowflake_table,
-    enable_bodo_use_decimal,
     enable_timestamptz,
     gen_unique_table_id,
     get_snowflake_connection_string,
     pytest_mark_one_rank,
     pytest_snowflake,
+    temp_config_override,
 )
 from bodo.utils.testing import ensure_clean_snowflake_table
 from bodo.utils.typing import BodoError
@@ -3486,7 +3486,7 @@ def test_snowflake_catalog_read_and_sum_decimal(
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 2):
-        with enable_bodo_use_decimal():
+        with temp_config_override("bodo_use_decimal", True):
             check_func(
                 impl,
                 (bc, query),

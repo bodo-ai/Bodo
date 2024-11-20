@@ -3381,25 +3381,10 @@ def enable_timestamptz():
 
     old_value = bodo.enable_timestamp_tz
     try:
-        bodo.enable_timestamp_tz = True
+        set_config("bodo.enable_timestamp_tz", True)
         yield
     finally:
-        bodo.enable_timestamp_tz = old_value
-
-
-@contextmanager
-def enable_bodo_use_decimal():
-    """
-    Context manager to enable bodo_use_decimal in Bodo. This is useful for testing
-    decimal functionality.
-    """
-
-    old_value = bodo.bodo_use_decimal
-    try:
-        bodo.bodo_use_decimal = True
-        yield
-    finally:
-        bodo.bodo_use_decimal = old_value
+        set_config("bodo.enable_timestamp_tz", old_value)
 
 
 def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame, check_dtype: bool = True):
