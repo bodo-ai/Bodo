@@ -1097,6 +1097,8 @@ def sort_dataframe_values_index(df):
 
 def _to_pa_array(py_out, bodo_arr_type):
     """Convert object array to Arrow array with specified Bodo type"""
+    if isinstance(py_out, np.ndarray) and isinstance(py_out.dtype, np.dtypes.StrDType):
+        py_out = py_out.astype(object)
     if (
         isinstance(bodo_arr_type, bodo.IntegerArrayType)
         and isinstance(py_out, np.ndarray)

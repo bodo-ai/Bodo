@@ -838,7 +838,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             pd.array([1, 2, 3600, 102973109, None], pd.Int32Dtype()),
             False,
             None,
-            np.array(
+            pd.array(
                 [
                     "1970-01-01 00:00:01 +0000",
                     "1970-01-01 00:00:02 +0000",
@@ -896,7 +896,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             "America/Los_Angeles",
-            np.array(
+            pd.array(
                 [
                     "2021-01-02 04:49:05 +0000",
                     "2021-01-02 04:49:05 +0000",
@@ -948,7 +948,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             None,
-            np.array(
+            pd.array(
                 [
                     "2000-12-21 16:01:07 +0200",
                     "2000-12-21 16:01:07.123456789 +0200",
@@ -973,7 +973,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             "Asia/Kathmandu",
-            np.array(
+            pd.array(
                 [
                     "2025-05-06 15:28:09 +0545",
                     "1970-01-01 00:00:00 +0000",
@@ -997,7 +997,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             None,
-            np.array(
+            pd.array(
                 [
                     "2021-01-02 03:04:05 +0000",
                     "2022-02-03 04:05:06 +0000",
@@ -1021,7 +1021,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             "America/Los_Angeles",
-            np.array(
+            pd.array(
                 [
                     "2021-01-02 03:04:05 -0800",
                     "2022-02-03 04:05:06 -0800",
@@ -1045,7 +1045,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             "Asia/Kathmandu",
-            np.array(
+            pd.array(
                 [
                     "2021-01-02 03:04:05 -0800",
                     "2022-02-03 04:05:06 -0800",
@@ -1069,7 +1069,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             None,
-            np.array(
+            pd.array(
                 [
                     "2021-01-02 00:00:00 +0000",
                     "2022-02-03 00:00:00 +0000",
@@ -1093,7 +1093,7 @@ def test_to_timestamp_from_timestamptz(tz, answer, memory_leak_check):
             ),
             False,
             "America/Los_Angeles",
-            np.array(
+            pd.array(
                 [
                     "2021-01-02 00:00:00 -0800",
                     "2022-02-03 00:00:00 -0800",
