@@ -1648,6 +1648,10 @@ def test_hex_encode_decode(query_fmt, uppercase, col_fmt, memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    bodo.tests.utils.test_spawn_mode_enabled,
+    reason="only_jit_seq=True disables spawn testing so pytest.raises fails",
+)
 @pytest_mark_one_rank
 @pytest.mark.parametrize(
     "func",
