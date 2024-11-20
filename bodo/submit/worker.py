@@ -33,6 +33,7 @@ from bodo.submit.utils import (
     CommandType,
     debug_msg,
     poll_for_barrier,
+    set_global_config,
 )
 from bodo.submit.worker_state import set_is_worker
 
@@ -505,7 +506,7 @@ def worker_loop(
             debug_worker_msg(logger, f"Added type {type_name}")
         elif command == CommandType.SET_CONFIG.value:
             (config_name, config_value) = spawner_intercomm.bcast(None, 0)
-            setattr(bodo, config_name, config_value)
+            set_global_config(config_name, config_value)
             debug_worker_msg(logger, f"Set config {config_name}={config_value}")
         else:
             raise ValueError(f"Unsupported command '{command}!")
