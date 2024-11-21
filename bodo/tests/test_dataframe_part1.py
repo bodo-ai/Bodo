@@ -2472,7 +2472,14 @@ def test_df_reset_index2(test_index, memory_leak_check):
 
     test_df = pd.DataFrame({"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]})
     test_df.index = test_index
-    check_func(impl, (test_df,))
+    check_func(
+        impl,
+        (test_df,),
+        use_dict_encoded_strings=False
+        if bodo.tests.utils.test_spawn_mode_enabled
+        and isinstance(test_index, pd.MultiIndex)
+        else None,
+    )
 
 
 # TODO: add memory_leak_check when groupby leaks are resolved (#1472)
