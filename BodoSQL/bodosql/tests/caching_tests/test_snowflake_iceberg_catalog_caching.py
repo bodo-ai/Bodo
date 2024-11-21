@@ -83,7 +83,9 @@ def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
                 stream,
                 'Execution time for prefetching SF-managed Iceberg metadata "TEST_DB"."PUBLIC"."BODOSQL_ICEBERG_READ_TEST"',
             )
-            if check_cache:
+            # Iceberg connector is used only on rank 0 so tmp_path of other ranks is
+            # not valid (see get_iceberg_file_list_parallel).
+            if check_cache and (bodo.get_rank() == 0):
                 with open(connector_output) as f:
                     contents = f.read()
                     assert (
