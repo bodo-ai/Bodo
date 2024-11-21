@@ -193,6 +193,6 @@ def test_nbytes(memory_leak_check):
         ],
         object,
     )
-    check_func(impl, (tuple_value,), py_output=113, only_seq=True)
-    py_out = 112 + get_num_test_workers()  # one byte for null_bitmap per rank
+    check_func(impl, (tuple_value,), py_output=115, only_seq=True)
+    py_out = 112 + 3 * get_num_test_workers()  # 3 bytes for null_bitmaps per rank
     check_func(impl, (tuple_value,), py_output=py_out, only_1DVar=True)
