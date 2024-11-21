@@ -1760,25 +1760,11 @@ class SeriesPass:
                 assign.value = var_def.args[1]
                 return [assign]
 
-        if fdef == ("get_bool_arr_data", "bodo.libs.bool_arr_ext"):
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
-            if call_def == ("init_bool_array", "bodo.libs.bool_arr_ext"):
-                assign.value = var_def.args[0]
-                return [assign]
-
-        if fdef == ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext"):
-            var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
-            if call_def == ("init_bool_array", "bodo.libs.bool_arr_ext"):
-                assign.value = var_def.args[1]
-                return [assign]
-
-        # inline IntegerArrayType.copy()
+        # inline IntegerArrayType.astype()
         if (
             isinstance(func_mod, ir.Var)
             and isinstance(self.typemap[func_mod.name], IntegerArrayType)
-            and func_name in ("copy", "astype", "sum")
+            and func_name in ("astype", "sum")
         ):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1795,11 +1781,11 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        # inline FloatingArrayType.copy()
+        # inline FloatingArrayType.astype()
         if (
             isinstance(func_mod, ir.Var)
             and isinstance(self.typemap[func_mod.name], FloatingArrayType)
-            and func_name in ("copy", "astype", "sum")
+            and func_name in ("astype", "sum")
         ):  # pragma: no cover
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -1816,11 +1802,11 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        # inline BooleanArray.copy()
+        # inline BooleanArray.astype()
         if (
             isinstance(func_mod, ir.Var)
             and self.typemap[func_mod.name] == boolean_array_type
-            and func_name in ("copy", "astype")
+            and func_name in ("astype",)
         ):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
