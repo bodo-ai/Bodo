@@ -234,64 +234,6 @@ def init_bool_array(typingctx, data, null_bitmap, length):
     return sig, lower_init_bool_array
 
 
-# using a function for getting data to enable extending various analysis
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_bool_arr_data(A):
-    return lambda A: A._data
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_bool_arr_bitmap(A):
-    return lambda A: A._null_bitmap
-
-
-# array analysis extension
-def get_bool_arr_data_equiv(self, scope, equiv_set, loc, args, kws):
-    assert len(args) == 1 and not kws
-    var = args[0]
-    if equiv_set.has_shape(var):
-        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
-    return None
-
-
-ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_get_bool_arr_data = (
-    get_bool_arr_data_equiv
-)
-
-
-def init_bool_array_equiv(self, scope, equiv_set, loc, args, kws):
-    assert len(args) == 3 and not kws
-    # Length is now stored in arg 2
-    return ArrayAnalysis.AnalyzeResult(shape=args[2], pre=[])
-
-
-ArrayAnalysis._analyze_op_call_bodo_libs_bool_arr_ext_init_bool_array = (
-    init_bool_array_equiv
-)
-
-
-def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
-    assert len(args) >= 1
-    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-
-
-def alias_ext_init_bool_array(lhs_name, args, alias_map, arg_aliases):
-    assert len(args) == 3
-    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
-    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
-
-
-numba.core.ir_utils.alias_func_extensions[
-    ("init_bool_array", "bodo.libs.bool_arr_ext")
-] = alias_ext_init_bool_array
-numba.core.ir_utils.alias_func_extensions[
-    ("get_bool_arr_data", "bodo.libs.bool_arr_ext")
-] = alias_ext_dummy_func
-numba.core.ir_utils.alias_func_extensions[
-    ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext")
-] = alias_ext_dummy_func
-
-
 @register_jitable(inline="always")
 def get_boolean_array_bytes_from_length(length):
     """
@@ -655,8 +597,8 @@ def bool_arr_nbytes_overload(A):
 @overload_method(BooleanArrayType, "copy", no_unliteral=True)
 def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
-        bodo.libs.bool_arr_ext.get_bool_arr_data(A).copy(),
-        bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A).copy(),
+        A._data.copy(),
+        A._null_bitmap.copy(),
         len(A),
     )  # pragma: no cover
 

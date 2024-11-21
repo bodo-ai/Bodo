@@ -160,8 +160,6 @@ no_side_effect_call_tuples = {
     # str array
     ("inplace_eq", "str_arr_ext", "libs", bodo),
     # bool array
-    ("get_bool_arr_data", "bool_arr_ext", "libs", bodo),
-    ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_false_bool_array", "bool_arr_ext", "libs", bodo),
