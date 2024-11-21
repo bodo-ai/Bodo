@@ -1846,9 +1846,10 @@ def fix_boxed_nested_array(arr, arrow_type):
         warnings.warn(
             "Returning object arrays during boxing since tuple arrays are not supported by Arrow. Use struct arrays for better performance."
         )
-        return pd.array(new_arr, pd.ArrowDtype(new_arr.type)).map(
-            lambda a: None if pd.isna(a) else tuple(a.values())
-        )
+        out = pd.array(new_arr, pd.ArrowDtype(new_arr.type))
+        return pd.Series(
+            [None if pd.isna(a) else tuple(a.values()) for a in out]
+        ).values
 
     return pd.arrays.ArrowExtensionArray(new_arr)
 
