@@ -485,7 +485,8 @@ def test_lateral_flatten_with_array_agg(memory_leak_check):
                     [16],
                     [None, 17],
                     [18],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
             ),
         }
     )
@@ -504,7 +505,8 @@ def test_lateral_flatten_with_array_agg(memory_leak_check):
                     [16],
                     [17],
                     [18],
-                ]
+                ],
+                dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
             ),
         }
     )
