@@ -94,7 +94,9 @@ jobs:
             SF_AZURE_ACCOUNT: ${{ secrets.SF_AZURE_ACCOUNT }}
             AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}
             AZURE_STORAGE_ACCOUNT_KEY: ${{ secrets.AZURE_STORAGE_ACCOUNT_KEY }}
-  
+            BODO_TEST_SQL_DB_CREDENTIAL: ${{ secrets.BODO_TEST_SQL_DB_CREDENTIAL }}
+            BODO_TEST_ORACLE_DB_CREDENTIAL: ${{ secrets.BODO_TEST_ORACLE_DB_CREDENTIAL }}
+
         # Upload
         - name: Prepare Outputs
           if: inputs.collect-coverage && (success() || failure())

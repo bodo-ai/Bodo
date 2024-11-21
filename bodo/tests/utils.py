@@ -47,10 +47,8 @@ from bodo.utils.utils import (
 test_spawn_mode_enabled = os.environ.get("BODO_CHECK_FUNC_SPAWN_MODE", "0") != "0"
 
 # TODO: Include testing DBs for other systems: MSSQL, SQLite, ...
-sql_user_pass_and_hostname = (
-    "user:pass@localhost"
-)
-oracle_user_pass_and_hostname = "user:pass@localhost"
+sql_user_pass_and_hostname = os.environ.get("BODO_TEST_SQL_DB_CREDENTIAL")
+oracle_user_pass_and_hostname = os.environ.get("BODO_TEST_ORACLE_DB_CREDENTIAL")
 
 
 class NoDefault:
