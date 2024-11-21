@@ -80,11 +80,11 @@ def test_nbytes(memory_leak_check):
             {8: 3.3, 5: 6.3},
         ]
     )
-    check_func(impl, (map_value,), py_output=253, only_seq=True)
+    check_func(impl, (map_value,), py_output=255, only_seq=True)
     n_pes = get_num_test_workers()
-    py_out = 240 + 11 * n_pes
+    py_out = 240 + 12 * n_pes
     if n_pes == 1:
-        py_out += 2
+        py_out += 3
     check_func(impl, (map_value,), py_output=py_out, only_1DVar=True)
 
 
