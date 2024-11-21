@@ -438,6 +438,16 @@ def key_values_to_dict(key_arr, value_arr, null_bitmask):
     }
 
 
+@overload(len)
+def overload_len(A):
+    if isinstance(A, MapScalarType):
+
+        def impl_len(A):
+            return len(A._keys)
+
+        return impl_len
+
+
 @box(MapScalarType)
 def box_map_value(typ, val, c):
     """box map value into python dictionary objects"""
