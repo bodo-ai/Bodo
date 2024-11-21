@@ -563,8 +563,8 @@ def check_func(
 
 def _convert_float_to_nullable_float(arg):
     """Convert float array/Series/Index/DataFrame to nullable float"""
-    # tuple
-    if isinstance(arg, tuple):
+    # tuple (avoiding isinstance since PySpark Row is a subclass of tuple)
+    if type(arg) is tuple:
         return tuple(_convert_float_to_nullable_float(a) for a in arg)
 
     # Numpy float array
