@@ -890,6 +890,12 @@ def overload_log_loss(
     vs not provided for type unification purposes.
     """
     check_sklearn_version()
+    if isinstance(y_pred, numba.core.types.containers.List) and isinstance(
+        y_pred.dtype, numba.core.types.List
+    ):
+        raise BodoError(
+            "log_loss does not support list input for 2D y_pred, please use numpy array instead"
+        )
 
     func_text = "def _log_loss_impl(\n"
     func_text += "    y_true,\n"
@@ -903,7 +909,10 @@ def overload_log_loss(
     # User could pass lists and numba throws error if passing lists
     # to object mode, so we convert to arrays
     func_text += "    y_true = bodo.utils.conversion.coerce_to_array(y_true)\n"
-    func_text += "    y_pred = bodo.utils.conversion.coerce_to_array(y_pred)\n"
+    if bodo.hiframes.pd_series_ext.is_series_type(y_pred) or isinstance(
+        y_pred, numba.core.types.containers.List
+    ):
+        func_text += "    y_pred = bodo.utils.conversion.coerce_to_array(y_pred)\n"
     # Coerce optional args from lists to arrays if needed
     if not is_overload_none(sample_weight):
         func_text += (
