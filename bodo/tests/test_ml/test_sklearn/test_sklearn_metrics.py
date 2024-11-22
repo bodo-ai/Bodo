@@ -212,6 +212,30 @@ def test_score(data, average, memory_leak_check):
             None,
             None,
         ),
+        (
+            # Checking that a 1D y_pred is handled correctly
+            np.array([1, 2] * 3),
+            pd.Series([0.2, 0.7] * 3),
+            None,
+            None,
+        ),
+        (
+            # Checking that list args work for 1D y_pred
+            [1, 2] * 3,
+            [0.2, 0.7] * 3,
+            None,
+            None,
+        ),
+        pytest.param(
+            (
+                # Checking that list args work for 2D y_pred
+                [1, 2, 3] * 3,
+                [[0.2, 0.7, 0.1], [0.6, 0.2, 0.2], [0.6, 0.1, 0.3]] * 3,
+                None,
+                None,
+            ),
+            marks=pytest.mark.xfail(raises=BodoError),
+        ),
     ],
 )
 @pytest.mark.parametrize("normalize", [True, False])
