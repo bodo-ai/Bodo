@@ -1,5 +1,9 @@
 # Data Visualization {#data_visualization}
 
+[!NOTE]
+> This is an experimental feature and may not function as intended in all scenarios. Please share any feedback or issues encountered for further improvement.
+
+
 Bodo supports Matplotlib visualization natively inside JIT functions.
 This page specifies the supported Matplotlib APIs and classes. In
 general, these APIs support all arguments except for the restrictions
