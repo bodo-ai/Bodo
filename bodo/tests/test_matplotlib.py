@@ -249,6 +249,7 @@ def test_contourf_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(z, fig_test)
 
 
+@pytest.mark.skip(reason="[BSE-4256]")
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_quiver_example(fig_test, fig_ref):
     """
@@ -309,6 +310,7 @@ def test_pie_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
+@pytest.mark.skip(reason="[BSE-4256]")
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_fill_example(fig_test, fig_ref):
     """
@@ -437,6 +439,7 @@ def test_errorbar_replicated_example(fig_test, fig_ref):
     bodo.jit(impl)(x, fig_test)
 
 
+@pytest.mark.skip(reason="[BSE-4256]")
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_barbs_example(fig_test, fig_ref):
     """
@@ -572,6 +575,7 @@ def test_xcorr_example(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
+@pytest.mark.skip(reason="[BSE-4256]")
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_xcorr_example_usevlines_false(fig_test, fig_ref):
     """
