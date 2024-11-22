@@ -22,6 +22,7 @@ jobs:
     - group: AWS-427-S3-Access-Keys
     - group: SnowflakeCredentials
     - group: TabularCredentials
+    - group: SQLDBCredentials
   pool: ScalingVMSet
   strategy:
     matrix:
@@ -137,6 +138,8 @@ jobs:
       AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
       BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST: ${{ parameters.BODO_TESTING_PIPELINE_HAS_MULTI_RANK_TEST }}
       TABULAR_CREDENTIAL: $(TABULAR_CREDENTIAL)
+      BODO_TEST_SQL_DB_CREDENTIAL: $(SQL_DB_CREDENTIAL)
+      BODO_TEST_ORACLE_DB_CREDENTIAL: $(ORACLE_DB_CREDENTIAL)
       BODO_SPAWN_MODE: "0"
     displayName: 'Test Bodo'
 

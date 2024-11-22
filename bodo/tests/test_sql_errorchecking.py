@@ -17,6 +17,8 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.sql
+
 
 @pytest.mark.slow
 def test_read_sql_error_sqlalchemy():
