@@ -7,6 +7,7 @@ import pytest
 # Add test harnesses when adding new catalogs.
 from ddltest_harness import DDLTestHarness
 from filesystem_test_harness import FilesystemTestHarness
+from numba.core.config import shutil
 from tabular_test_harness import TabularTestHarness
 
 import bodo
@@ -21,17 +22,23 @@ pytestmark = pytest_tabular
 
 @pytest.fixture(scope="session")
 def test_harness_path(tmp_path_factory):
+    # BSE-4273: Use the current relative path + iceberg_db database like
+    # other iceberg tests
     path = None
     if bodo.get_rank() == 0:
-        path = str(tmp_path_factory.mktemp("iceberg"))
+        path = str(Path("test_harness").resolve())
+        os.makedirs(path, exist_ok=True)
     path = MPI.COMM_WORLD.bcast(path)
     assert Path(path).exists(), "Failed to create filesystem catalog across all ranks"
-    return path
+    yield path
+    bodo.barrier()
+    if bodo.get_rank() == 0:
+        shutil.rmtree(path)
 
 
 @pytest.fixture(scope="session")
-def filesystem_test_harness():
-    catalog = bodosql.FileSystemCatalog(os.path.curdir, "iceberg")
+def filesystem_test_harness(test_harness_path):
+    catalog = bodosql.FileSystemCatalog(test_harness_path)
     return FilesystemTestHarness(catalog)
 
 
