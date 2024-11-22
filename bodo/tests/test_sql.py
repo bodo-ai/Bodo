@@ -25,6 +25,8 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean_mysql_psql_table
 
+pytestmark = pytest.mark.sql
+
 
 @pytest.mark.parametrize("chunksize", [None, 4])
 def test_write_sql_aws(chunksize, memory_leak_check):
