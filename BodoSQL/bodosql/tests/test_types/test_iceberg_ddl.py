@@ -34,6 +34,7 @@ def test_harness_path(tmp_path_factory):
     bodo.barrier()
     if bodo.get_rank() == 0:
         shutil.rmtree(path)
+    bodo.barrier()
 
 
 @pytest.fixture(scope="session")

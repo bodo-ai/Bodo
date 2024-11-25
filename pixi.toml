@@ -217,12 +217,13 @@ httpie = "*"
 # Restricted to match Intel MPI. Upgrade with IMPI.
 [feature.local-mpi.dependencies]
 # Using h* to avoid the "external_*" kind
-mpich = { version = "4.2.*", build = "h*" }
+mpich = { version = "4.1.*", build = "h*" }
 [feature.platform-mpi]
+channels = ["conda-forge/label/broken"]
 platforms = ["linux-64"]
 # Want to use Intel MPI on platform, so use "external_*"
 # https://conda-forge.org/docs/user/tipsandtricks/#using-external-message-passing-interface-mpi-libraries
-dependencies = { mpich = { version = "4.2.*", build = "external_*" } }
+dependencies = { mpich = { version = "4.1.2", build = "external_4", channel = "conda-forge/label/broken" } }
 
 # Azure CI
 [feature.azure.dependencies]
