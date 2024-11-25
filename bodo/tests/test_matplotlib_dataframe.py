@@ -29,7 +29,7 @@ pytestmark = pytest.mark.skip if matplotlib_import_failed else pytest_pandas
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_simple(fig_test, fig_ref):
     """
     Tests a basic example for df.plot replicated.
@@ -48,7 +48,7 @@ def test_df_plot_simple(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_labels(fig_test, fig_ref):
     """
     Tests an example for df.plot with xlabel, ylabel, title
@@ -74,7 +74,7 @@ def test_df_plot_labels(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_ticks(fig_test, fig_ref):
     """
     Tests an example for df.plot with xlabel, ylabel, title
@@ -100,7 +100,7 @@ def test_df_plot_ticks(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_simple_scatter(fig_test, fig_ref):
     """
     Tests a basic example for df.plot(scatter)
@@ -120,7 +120,7 @@ def test_df_plot_simple_scatter(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_labels_scatter(fig_test, fig_ref):
     """
     Tests an example for df.plot(scatter) with xlabel, ylabel, title
@@ -148,7 +148,7 @@ def test_df_plot_labels_scatter(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_ticks_scatter(fig_test, fig_ref):
     """
     Tests an example for df.plot(scatter) with xlabel, ylabel, title
@@ -176,7 +176,7 @@ def test_df_plot_ticks_scatter(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_simple_dist(fig_test, fig_ref):
     """
     Tests a basic example for df.plot distributed.
@@ -197,7 +197,7 @@ def test_df_plot_simple_dist(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_labels_dist(fig_test, fig_ref):
     """
     Tests an example for df.plot with xlabel, ylabel, title
@@ -226,7 +226,7 @@ def test_df_plot_labels_dist(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_ticks_dist(fig_test, fig_ref):
     """
     Tests an example for df.plot with xlabel, ylabel, title
@@ -255,7 +255,7 @@ def test_df_plot_ticks_dist(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_simple_scatter_dist(fig_test, fig_ref):
     """
     Tests a basic example for df.plot(scatter)
@@ -277,7 +277,7 @@ def test_df_plot_simple_scatter_dist(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_labels_scatter_dist(fig_test, fig_ref):
     """
     Tests an example for df.plot(scatter) with xlabel, ylabel, title
@@ -307,7 +307,7 @@ def test_df_plot_labels_scatter_dist(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_ticks_scatter_dist(fig_test, fig_ref):
     """
     Tests an example for df.plot(scatter) with xlabel, ylabel, title
@@ -337,7 +337,7 @@ def test_df_plot_ticks_scatter_dist(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_x_y_none_distributed(fig_test, fig_ref):
     """
     Tests a basic example for df.plot where x and y are None.
@@ -361,7 +361,7 @@ def test_df_plot_x_y_none_distributed(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_x_none_distributed(fig_test, fig_ref):
     """
     Tests a basic example for df.plot where x is None.
@@ -384,7 +384,7 @@ def test_df_plot_x_none_distributed(fig_test, fig_ref):
 
 
 @pytest.mark.weekly
-@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(tol=0.1)
 def test_df_plot_y_none_distributed(fig_test, fig_ref):
     """
     Tests a basic example for df.plot where x is None.

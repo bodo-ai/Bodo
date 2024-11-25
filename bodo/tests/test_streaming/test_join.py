@@ -2953,13 +2953,16 @@ def test_hash_join_nested_array(memory_leak_check):
                 ),
             ),
             "C": pd.array([1, 2, 3, 4] * 5),
-            "D": np.array(["1", "2", "3", "4"] * 5),
+            "D": pd.array(["1", "2", "3", "4"] * 5, "string"),
         }
     )
     build_table = pd.DataFrame(
         {
             "E": np.array([1, 2, 3, 4] * 5),
-            "F": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 5, object),
+            "F": pd.array(
+                [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 5,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
+            ),
             "G": pd.Series(
                 [[["9", "8"], ["7"]], [[None], ["6"]], [["5"], ["4"]], None] * 5,
                 dtype=pd.ArrowDtype(
@@ -3092,13 +3095,19 @@ def test_nested_loop_join_nested_array(memory_leak_check):
     probe_table = pd.DataFrame(
         {
             "A": np.array([1, 2, 3, 4] * 5),
-            "B": np.array([[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 5, object),
+            "B": pd.array(
+                [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 5,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
+            ),
         }
     )
     build_table = pd.DataFrame(
         {
             "C": np.array([2, 3, 4, 5] * 5),
-            "D": np.array([[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 5, object),
+            "D": pd.array(
+                [[[9, 8], [7]], [[None], [6]], [[5], [4]], None] * 5,
+                dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
+            ),
         }
     )
     build_keys_inds = bodo.utils.typing.MetaType(())
