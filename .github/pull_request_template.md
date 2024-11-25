@@ -1,30 +1,30 @@
+## Changes included in this PR
+
+<!-- Include a brief description of the changes presented in this PR and any extra context that might be helpful for reviewers. -->
+
+## Testing strategy
+
+<!-- 
+Before requesting review, verify that your changes pass PR CI by adding "[run ci]" to your commit message (or add a new blank commit with that message) or explain why CI is not necessary (e.g. docs changes). 
+
+Briefly mention how this change is tested e.g. "new unit tests added". To pass automated coverage checks, ensure that you have added `# pragma: no cover` to jitted functions. 
+
+Ensure that newly added tests work locally on 3 ranks using both SPMD and spawn mode (default) when applicable. For example:
+
+SPMD mode: 
+  `export BODO_SPAWN_MODE=0;
+  mpiexec -n 3 pytest -svW ignore bodo/tests/test_dataframe.py::my_new_test`
+
+Spawn mode (default mode): 
+  `export BODO_NUM_WORKERS=3;
+  pytest -svW ignore bodo/tests/test_dataframe.py::my_new_test`
+-->
+
+## User facing changes
+
+<!-- Mention any changes to user facing APIs here and ensure that the documentation is up to date in Bodo/docs/docs -->
+
+## Checklist
 - [ ] Pipelines passed before requesting review. To run CI you must include `[run CI]` in your commit message.
-- [ ] Added docstrings and comments to new code.
-
-- Python code checklist:
-  - Coverage:
-   - [ ] added test for new feature.
-   - [ ] added `#pragma no cover` for jitted functions
-
-  - Issue checklist:
-    - [ ] Includes `[BE-XXXX]` in the title.
-
-  - Testing:
-    - [ ] Tested any newly added tests with np3
-
-    ( Example: `mpiexec -n 3 pytest -s -v -W ignore bodo/tests/test_dataframe.py::my_new_test` )
-
-    - [ ] Run [CI nightly on PR](https://bodo.atlassian.net/wiki/spaces/B/pages/998047993/6.+Running+Nightly+CI+on+a+Development+Branch) (if PR has large number of files changes and/or has an effect on compiler passes)
-
-
-  - Tracing:
-    - [ ] Newly added code has tracing events where appropriate (in Python and C++)
-
-  - Formatting:
-    - [ ] Ran pre-commit hooks.
-
-- Documentation:
-  - [ ] Added documentation for changes/updates/new implementation in docs.
-
-  - [ ] Updates the draft release notes on confluence if it should be mentioned
-  in the release notes. These can be found at `Bodo-Engine/Draft Release Notes` with the name of the next major release.
+- [ ] I am familiar with the [Contributing Guide](https://github.com/bodo-ai/Bodo/blob/develop/CONTRIBUTING.md) 
+- [ ] I have installed + ran pre-commit hooks.
