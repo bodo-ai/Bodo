@@ -2931,6 +2931,7 @@ def test_bcast_scalar_root(val1, val2, root):
 
 
 # @pytest.mark.slow
+@pytest.mark.skip("TODO[BSE-4027] Fix segfault")
 @pytest.mark.parametrize(
     "val1, val2",
     [

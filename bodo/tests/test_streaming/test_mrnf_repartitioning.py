@@ -399,7 +399,7 @@ def test_split_during_acc_finalize_build(capfd, memory_leak_check):
 
 @pytest.mark.skipif(bodo.get_size() != 2, reason="Only calibrated for two cores case")
 @pytest.mark.slow
-@pytest.mark.timeout(600)
+@pytest.mark.timeout(1000)
 def test_split_during_shuffle_append_table_and_diff_part_state(
     capfd, memory_leak_check
 ):

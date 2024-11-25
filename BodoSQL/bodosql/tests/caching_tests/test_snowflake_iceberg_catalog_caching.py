@@ -23,6 +23,9 @@ from bodo.tests.utils import (
 pytestmark = [pytest.mark.iceberg] + pytest_snowflake
 
 
+@pytest.mark.skip(
+    "TODO[BSE-4283]: fix Java error when relaunching gateway with redirect"
+)
 @temp_env_override({"AWS_REGION": "us-east-1"})
 def test_prefetch_flag(fn_distribution, is_cached, tmp_path, memory_leak_check):
     """

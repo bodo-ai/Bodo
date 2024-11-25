@@ -672,10 +672,14 @@ def test_groupby_multiple_funcs(func_names, memory_leak_check):
             pd.DataFrame(
                 {
                     "A": [1, 2, 1, 0, 2, 1, 2, 2],
-                    "B": np.array(
-                        [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2, object
+                    "B": pd.array(
+                        [[[1, 2], [3]], [[None], [4]], [[5], [6]], None] * 2,
+                        dtype=pd.ArrowDtype(pa.large_list(pa.large_list(pa.int64()))),
                     ),
-                    "C": np.array([[1, 2], [3], [4, 5, 6], [0]] * 2, object),
+                    "C": pd.array(
+                        [[1, 2], [3], [4, 5, 6], [0]] * 2,
+                        dtype=pd.ArrowDtype(pa.large_list(pa.int64())),
+                    ),
                     "D": pd.array([1, 2, 3, 4] * 2),
                     "E": ["xyz", "xyz", "wxy", "wxy"] * 2,
                     "F": pd.array(
