@@ -1,43 +1,78 @@
-# Bodo
+# Bodo: High-Performance Python Compute Engine for Data and AI
 
-[![Build Status](https://dev.azure.com/bodo-inc/Bodo/_apis/build/status/Bodo-inc.Bodo?branchName=develop)](https://dev.azure.com/bodo-inc/Bodo/_build/latest?definitionId=1&branchName=develop)
-[![codecov](https://codecov.io/gh/Bodo-inc/Bodo/branch/develop/graph/badge.svg?token=zYHQy0R9ck)](https://codecov.io/gh/Bodo-inc/Bodo)
+Bodo is a cutting-edge compute engine that brings high-performance computing (HPC) speed
+and scalability to Python data and AI programs. Powered by an innovative auto-parallelizing
+just-in-time (JIT) compiler, Bodo transforms Python programs into highly optimized,
+parallel binaries without requiring code rewrites.
 
-## The Python Supercomputing Analytics Platform
-
-Bodo scales analytics/ML codes in Python
-to bare-metal cluster/cloud performance automatically.
-It compiles a subset of Python (Pandas/Numpy) to efficient parallel binaries
-with MPI, requiring only minimal code changes.
-Bodo is orders of magnitude faster than
-alternatives like [Apache Spark](http://spark.apache.org).
-
-[Development guide](https://bodo.atlassian.net/wiki/spaces/B/overview) includes Bodo's development documentation. Below is a list of useful documents:
-- [Getting Started](https://bodo.atlassian.net/wiki/spaces/B/pages/1012891649/Getting+Started)
-- [Building Bodo from Source](https://bodo.atlassian.net/wiki/spaces/B/pages/1018986500/Building+Bodo+from+Source)
-- [Bodo Engine Architecture](https://bodo.atlassian.net/wiki/spaces/B/pages/1017905469/Bodo+Engine+Architecture): Compiler Stages, Builtin Functions, IR Extensions.
-- [Development Lifecycle](https://bodo.atlassian.net/wiki/spaces/B/pages/1020788774/Development+Lifecycle): Process of contributing to Bodo.
-- [How to add Tests](https://bodo.atlassian.net/wiki/spaces/B/pages/998866982/Testing): Writing tests and how to use pytest framework
-- [Debugging](https://bodo.atlassian.net/wiki/spaces/B/pages/998113329/Debugging)
-- [Code Style](https://bodo.atlassian.net/wiki/spaces/B/pages/497876993/CodeStyle+Pre-Commits): Bodo Code style guide
-- [CI/CD](https://bodo.atlassian.net/wiki/spaces/B/pages/998735873/CI+Information): Testing with Continuous Integration
-- [Performance Benchmarking Tips](https://bodo.atlassian.net/wiki/spaces/B/pages/1019412507/Benchmarking+Tips)
-- [Code Coverage](https://bodo.atlassian.net/wiki/spaces/B/pages/1019707445/Code+Coverage)
-- [Useful Numba knowledge](https://bodo.atlassian.net/wiki/spaces/B/pages/1020821588/Numba+Getting+Started)
-- [Development using Docker](https://bodo.atlassian.net/wiki/spaces/B/pages/1019674751/Develop+using+Docker)
-- [Conda Build](https://bodo.atlassian.net/wiki/spaces/B/pages/1020231739/Conda+Build+Bodo)
-- [Release Checklist](https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist)
-- [Customer Ops](https://bodo.atlassian.net/wiki/spaces/B/pages/1019674699/Customer+Ops)
-- [Bodo User Documentation](https://docs.bodo.ai)
+Unlike traditional distributed computing frameworks, Bodo:
+- Seamlessly supports native Python APIs like Pandas and NumPy.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true distributed execution.
 
 
-# BodoSQL Documentation
+## Key Features
 
-Most the relevant documentation can be found on the [BodoSQL Confluence](https://bodo.atlassian.net/wiki/spaces/BodoSQL/overview). You may also encounter Bodo related issues. For those you should use the [Bodo-Engine Confluence](https://bodo.atlassian.net/wiki/spaces/B/overview).
+- Automatic Optimization & Parallelization of Python programs using Pandas and NumPy.
+- Linear Scalability from laptops to large-scale clusters and supercomputers.
+- Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
+- High-Performance SQL Engine that is natively integrated into Python.
 
-# Frequently used Pages
+See Bodo documentation to learn more: https://docs.bodo.ai/
 
-- [Getting Started](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1022492691/Getting+Started)
-- [BodoSQL Overview](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1021837518/BodoSQL+Overview)
-- [Installing BodoSQL](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/497811474/Building+and+Installing+BodoSQL)
-- [Release Checklist](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/872251393/BodoSQL+Release+Checklist)
+
+## Installation
+
+Bodo can be installed using Pip or Conda:
+
+```bash
+pip install -U bodo
+```
+
+or 
+
+```bash
+conda create -n Bodo python=3.12 -c conda-forge
+conda activate Bodo
+conda install bodo -c bodo.ai -c conda-forge
+```
+
+## Example Code
+
+Here is an example Pandas code that reads and processes a sample Parquet dataset with Bodo.
+
+
+```python
+import pandas as pd
+import numpy as np
+import bodo
+import time
+
+# Generate sample data
+NUM_GROUPS = 30
+NUM_ROWS = 20_000_000
+
+df = pd.DataFrame({
+    "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+    "B": np.arange(NUM_ROWS)
+})
+df.to_parquet("my_data.pq")
+
+@bodo.jit(cache=True)
+def computation():
+    t1 = time.time()
+    df = pd.read_parquet("my_data.pq")
+    df1 = df[df.B > 4].A.sum()
+    print("Execution time:", time.time() - t1)
+    return df1
+
+result = computation()
+print(result)
+```
+
+## How to Contribute
+
+Please read our latest [project contribution guide](CONTRIBUTING.md).
+
+## Getting involved
+
+You can join our community and collaborate with other contributors by joining our [Slack channel](https://bodocommunity.slack.com/join/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA#/shared-invite/email) – we’re excited to hear your ideas and help you get started!
