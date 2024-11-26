@@ -27,5 +27,5 @@ requirements:
 about:
 home: https://bodo.ai/
 license: Proprietary
-license_file: LICENSE
+license_file: LICENSE.md
 summary: Bodo Iceberg Connector
