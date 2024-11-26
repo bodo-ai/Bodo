@@ -12,6 +12,7 @@ This section provides a collection of guides to help you go from beginner to exp
 ### Installation and Setup Guides 
 This section provides guides to help you install and set up Bodo on your local machine or get onboarded on Bodo Platform on AWS or Azure.
 
+- [Local Installation][install]
 - [Bodo Platform on AWS][bodo_platform_aws]
 - [Bodo Platform on Azure][bodo_platform_azure]
 
@@ -20,23 +21,6 @@ This section provides guides to help you install and set up Bodo on your local m
 ### [Python Developer's Guide][devguide]
 
 If you are a developer and want to get started with Bodo, this guide will help you get started with Bodo on your local machine.
-
----
-
-### Using the Bodo Cloud Platform
-
-This set of guides explains the basics of using the Bodo cloud platform and associated concepts.
-
-- [Organization Basics][organization-basics]
-- [Creating a Cluster][creating_clusters]
-- [Using Notebooks][notebooks]
-- [Using native SQL with Catalogs][sql_catalog]
-- [Running a Batch Job][running-batch-jobs]
-- [Using your own Instance Role for a Cluster][instance_role_cluster]
-- [Managing Packages on the cluster using IPyParallel magics - Conda and Pip][managing-packages]
-- [Running shell commands on the cluster using IPyParallel magics][shell-commands]
-- [Connecting to a Cluster][connecting_to_a_cluster]
-- [Troubleshooting][troubleshooting]
 
 ---
 
@@ -55,6 +39,30 @@ This section provides a collection of guides to help you understand how Bodo par
 This guide demonstrates how to use Bodo's file I/O APIs to read and write data.
 
 ---
+
+### [Iceberg][iceberg_intro]
+
+This guide demonstrates how to use Bodo for reading and writing Iceberg tables.
+
+---
+
+### Using the Bodo Cloud Platform
+
+This set of guides explains the basics of using the Bodo cloud platform and associated concepts.
+
+- [Organization Basics][organization-basics]
+- [Creating a Cluster][creating_clusters]
+- [Using Notebooks][notebooks]
+- [Using native SQL with Catalogs][sql_catalog]
+- [Running a Batch Job][running-batch-jobs]
+- [Using your own Instance Role for a Cluster][instance_role_cluster]
+- [Managing Packages on the cluster using Jupyter magics - Conda and Pip][managing-packages]
+- [Running shell commands on the cluster using Jupyter magics][shell-commands]
+- [Connecting to a Cluster][connecting_to_a_cluster]
+- [Troubleshooting][troubleshooting]
+
+---
+
 
 ### [Using Regular Python inside Bodo (Object Mode)][objmode]
 

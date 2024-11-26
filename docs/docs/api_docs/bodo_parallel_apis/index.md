@@ -13,4 +13,3 @@ finer-grained control over data distribution and processes.
 -  [`bodo.random_shuffle`][bodorandom_shuffle]
 -  [`bodo.rebalance`][bodorebalance]          
 -  [`bodo.scatterv`][bodoscatterv]            
-

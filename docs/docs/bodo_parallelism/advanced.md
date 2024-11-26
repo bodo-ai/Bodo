@@ -128,7 +128,7 @@ A similar flag is `distributed_block` which informs bodo that the data is
 distributed in equal chunks across cores (as done and expected by Bodo).
 Typically, this is used when output
 of `bodo.scatterv` is passed to a JIT function to allow for optimization and parallelization of more complex code.
-(This example assumes [SPMD mode](bodo_parallelism_basics.md#spmd))
+(This example assumes [SPMD launch mode](bodo_parallelism_basics.md#spmd))
 
 ```py
 @bodo.jit(spawn=False, distributed_block=["A"])
@@ -348,7 +348,7 @@ peeking at the first few rows of data will also be fast and efficient but
 operations that require the full table (e.g. printing out the entire table) will
 trigger collection of values.
 
-### Passing Distributed Data in SPMD mode
+### Passing Distributed Data in SPMD launch mode
 
 Bodo can receive or return chunks of distributed data to allow flexible
 integration with any non-Bodo Python code. The following example passes
@@ -426,7 +426,7 @@ def f():
     ...
 ```
 
-This is similar in SPMD mode (where the whole script is launched as parallel
+This is similar in SPMD launch mode (where the whole script is launched as parallel
 MPI processes), except you will need to ensure that code that must only run on a
 single rank is protected even outside of JIT functions: 
 
@@ -439,29 +439,6 @@ if bodo.get_rank() == 0:
 
 # To synchronize all ranks before proceeding
 bodo.barrier()
-```
-
-When running code on an IPyParallel cluster using the `%%px` magic, you
-can do this instead:
-
-``` py
-%%px --targets 0
-# Install package
-!conda install pandas-datareader
-```
-
-An alias can be defined for convenience:
-
-``` py
-%alias_magic p0 px -p "--targets 0"
-```
-
-This can be used as any other magic:
-
-``` py
-%%p0
-# Install package
-!conda install pandas-datareader
 ```
 
 ## Run code once on each node {#run_on_each_node}
@@ -481,17 +458,8 @@ if bodo.get_rank() in bodo.get_nodes_first_ranks():
 bodo.barrier()
 ```
 
-In SPMD mode the above can also be run outside of JIT functions.
+In SPMD launch mode the above can also be run outside of JIT functions.
 
-The same can be achieved when running on an IPyParallel cluster using the
-`%%px` magic:
-
-``` py
-%%px
-if bodo.get_rank() in bodo.get_nodes_first_ranks():
-    # Install package on all nodes
-    !conda install pandas-datareader
-```
 
 !!! warning
     Running code on a single rank or a subset of ranks can lead to

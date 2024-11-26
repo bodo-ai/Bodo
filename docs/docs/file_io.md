@@ -25,7 +25,9 @@ automatically
 (see below for supported formats and APIs).
 
 !!! warning
-    Performing I/O in regular Python (outside JIT functions) replicates
+    Performing I/O in regular Python (outside JIT functions)
+    causes data distribution overheads when data is passed to JIT functions.
+    In addition, SPMD launch mode replicates
     data on all Python processes,
     which can result in out-of-memory errors if the data is large.
     For example, a 1 GB dataframe replicated on 1000 cores consumes

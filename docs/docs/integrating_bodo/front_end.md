@@ -29,8 +29,7 @@ def load_data_pandas(pq_file_path, date_col='date/time'):
 
 ### Bodo version of the Taxi Pickup App
 
-To run the app using Bodo, we will use the same process as running the
-app on an [IPyParallel cluster][ipyparallelsetup]. For this app, we want to visualize all the data, so in the
+For this app, we want to visualize all the data, so in the
 Bodo version of this function, we disable automatic data distribution
 using the `returns_maybe_distributed` flag, and use `bodo.gatherv` to
 gather all the data onto a single process:

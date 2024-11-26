@@ -5,9 +5,9 @@ hide:
 tags:
   - install
 ---
-# Installing Bodo Community Edition {#install}
+# Installing Bodo Engine {#install}
 
-Bodo can be installed as a using the `conda` command (see how to install [conda][conda] below). 
+Bodo compute engine can be installed using the `conda` command (see how to install [conda][conda] below). 
 We recommend creating a `conda` environment and installing 
 Bodo and its dependencies in it as shown below:
 
@@ -19,13 +19,8 @@ conda install bodo -c bodo.ai -c conda-forge
 
 Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
 for parallelization, which is automatically installed as part of the
-`conda` install command above. This command installs Bodo Community
-Edition by default, which is free and works on up to 8 cores. For
-information on Bodo Enterprise Edition and pricing, please [contact
-us](https://bodo.ai/contact/).
+`conda` install command above.
 
-!!! seealso "See Also"
-    [Configuring Bodo Enterprise Edition][enterprise]
 
 ## How to Install Conda {#conda}
 
@@ -49,30 +44,14 @@ chmod +x miniconda.sh
 export PATH=$HOME/miniconda3/bin:$PATH
 ```
 
-### On Windows
-
-```console
-start /wait "" Miniconda3-latest-Windows-x86_64.exe /InstallationType=JustMe /RegisterPython=0 /S /D=%UserProfile%\Miniconda3
-```
-
-Open the Anaconda Prompt to use Bodo (click Start, select Anaconda
-Prompt). You may use other terminals if you have already added Anaconda
-to your PATH.
-
 ## Optional Dependencies {#optionaldep}
 
 Some Bodo functionality may require other dependencies, as summarized in
 the table below. All optional dependencies except Hadoop can be
-installed using the commands
+installed using the command:
 
 ```console
-conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk -c conda-forge
-```
-
-and 
-
-```console
-pip install deltalake
+conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.14.*=*mpich*' openjdk deltalake -c conda-forge
 ```
 
 
@@ -148,6 +127,48 @@ BODO_NUM_WORKERS=1 python example.py
 !!! note
     You may need to delete `example1.pq` between consecutive runs.
 
-!!! seealso "See Also"
-    [Interactive Bodo Cluster Setup using IPyParallel][ipyparallelsetup]
 
+## Enabling parallelism in Clusters
+
+Bodo relies on MPI for parallel compute. MPI can be configured on clusters
+easily. The cluster nodes need to have passwordless SSH enabled between them,
+and there should be a host file listing their addresses (see an example tutorial
+[here](https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/){target="blank"}).
+MPI usually needs to be configured to launch one process per physical core for
+best performance. This avoids potential resource contention between processes
+due to the high efficiency of MPI. For example, a cluster of four nodes, each
+with 16 physical cores, can use up to 64 MPI processes:
+
+```shell
+BODO_NUM_WORKERS=64 python example.py
+```
+
+For cloud instances, one physical core typically corresponds to two vCPUs.
+For example, an instance with 32 vCPUs has 16 physical cores.
+
+
+## Setting up passwordless SSH on your multi-node cluster {#passwordless_ssh}
+
+Using MPI on a multi-node cluster requires setting up passwordless SSH
+between the hosts. There are multiple ways to do this. Here is one way:
+
+1.  Generate an SSH key pair using a tool like `ssh-keygen`, for
+    instance:
+    
+    ```shell
+    ssh-keygen -b 2048 -f cluster_ssh_key -N ""
+    ```
+    
+2.  Copy over the generated private key (`cluster_ssh_key`) and public key (`cluster_ssh_key.pub`) to all the hosts and 
+    store them in `~/.ssh/id_rsa` and `~/.ssh/id_rsa.pub` respectively.
+
+3.  Add the public key to `~/.ssh/authorized_keys` on all hosts.
+
+4.  To disable host key checking, add the following to `~/.ssh/config`
+    on each host:
+
+    ```shell
+    Host *
+        StrictHostKeyChecking no
+    ```
+    

@@ -1,4 +1,4 @@
-# Bodo SQL Quickstart (Local) {#quickstart-local-sql}
+# Bodo SQL Quick Start {#quickstart-local-sql}
 
 This quickstart guide will walk you through the process of running a simple SQL query using Bodo on your local machine.
 
