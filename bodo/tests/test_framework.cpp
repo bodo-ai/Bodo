@@ -130,44 +130,44 @@ PyTypeObject PyTestCase::TYPE = {
     (destructor)&PyTestCase::destroy, /* tp_dealloc */
     0,                                /* tp_print */
     &PyTestCase_getattr,              /* tp_getattr */
-    0,                                /* tp_setattr */
-    0,                                /* tp_compare */
+    nullptr,                          /* tp_setattr */
+    nullptr,                          /* tp_compare */
     &PyTestCase_as_str,               /* tp_repr */
-    0,                                /* tp_as_number */
-    0,                                /* tp_as_sequence */
-    0,                                /* tp_as_mapping */
-    0,                                /* tp_hash  */
+    nullptr,                          /* tp_as_number */
+    nullptr,                          /* tp_as_sequence */
+    nullptr,                          /* tp_as_mapping */
+    nullptr,                          /* tp_hash  */
     &PyTestCase_call,                 /* tp_call */
     &PyTestCase_as_str,               /* tp_str */
-    0,                                /* tp_getattro */
-    0,                                /* tp_setattro */
-    0,                                /* tp_as_buffer */
+    nullptr,                          /* tp_getattro */
+    nullptr,                          /* tp_setattro */
+    nullptr,                          /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,               /* tp_flags */
     "PyTest C++ test case",           /* tp_doc */
-    0,                                /* tp_traverse */
-    0,                                /* tp_clear */
-    0,                                /* tp_richcompare */
+    nullptr,                          /* tp_traverse */
+    nullptr,                          /* tp_clear */
+    nullptr,                          /* tp_richcompare */
     0,                                /* tp_weaklistoffset */
-    0,                                /* tp_iter */
-    0,                                /* tp_iternext */
-    0,                                /* tp_methods */
-    0,                                /* tp_members */
-    0,                                /* tp_getset */
-    0,                                /* tp_base */
-    0,                                /* tp_dict */
-    0,                                /* tp_descr_get */
-    0,                                /* tp_descr_set */
+    nullptr,                          /* tp_iter */
+    nullptr,                          /* tp_iternext */
+    nullptr,                          /* tp_methods */
+    nullptr,                          /* tp_members */
+    nullptr,                          /* tp_getset */
+    nullptr,                          /* tp_base */
+    nullptr,                          /* tp_dict */
+    nullptr,                          /* tp_descr_get */
+    nullptr,                          /* tp_descr_set */
     0,                                /* tp_dictoffset */
-    0,                                /* tp_init */
-    0,                                /* tp_alloc */
-    0,                                /* tp_new */
+    nullptr,                          /* tp_init */
+    nullptr,                          /* tp_alloc */
+    nullptr,                          /* tp_new */
 };
 
 PyMODINIT_FUNC PyInit_test_cpp(void) {
     PyObject *m;
-    MOD_DEF(m, "test_cpp", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "test_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     if (PyType_Ready(&PyTestCase::TYPE) != 0) {
         Py_DECREF(m);

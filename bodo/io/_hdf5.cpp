@@ -1,12 +1,13 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <climits>
 #include <cstdio>
 #include <iostream>
 #include <string>
+
+#include <hdf5.h>
+#include <mpi.h>
+
 #include "../libs/_bodo_common.h"
-#include "hdf5.h"
-#include "mpi.h"
 
 extern "C" {
 
@@ -31,9 +32,9 @@ void h5g_close(hid_t group_id);
 
 PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject* m;
-    MOD_DEF(m, "_hdf5", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "_hdf5", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     SetAttrStringFromVoidPtr(m, h5_open);
@@ -125,7 +126,7 @@ int64_t h5_size(hid_t dataset_id, int dim) {
     CHECK(space_id != -1, "h5 size get_space error");
     hsize_t data_ndim = H5Sget_simple_extent_ndims(space_id);
     hsize_t* space_dims = new hsize_t[data_ndim];
-    H5Sget_simple_extent_dims(space_id, space_dims, NULL);
+    H5Sget_simple_extent_dims(space_id, space_dims, nullptr);
     H5Sclose(space_id);
     hsize_t ret = space_dims[dim];
     delete[] space_dims;
@@ -139,8 +140,8 @@ hid_t get_dset_space_from_range(hid_t dataset_id, int64_t* starts,
 
     hsize_t* HDF5_start = (hsize_t*)starts;
     hsize_t* HDF5_count = (hsize_t*)counts;
-    herr_t ret = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, NULL,
-                                     HDF5_count, NULL);
+    herr_t ret = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start,
+                                     nullptr, HDF5_count, nullptr);
     CHECK(ret != -1, "h5 read select_hyperslab error");
     return space_id;
 }
@@ -164,7 +165,7 @@ int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
     }
 
     hid_t mem_dataspace =
-        H5Screate_simple((hsize_t)ndims, (hsize_t*)counts, NULL);
+        H5Screate_simple((hsize_t)ndims, (hsize_t*)counts, nullptr);
     CHECK(mem_dataspace != -1, "h5 read create_simple error");
     hid_t h5_typ = get_h5_typ(typ_enum);
     ret = H5Dread(dataset_id, h5_typ, mem_dataspace, space_id, xfer_plist_id,
@@ -196,7 +197,7 @@ hid_t get_dset_space_from_indices(hid_t dataset_id, int ndims, int64_t* starts,
         HDF5_start[0] = 0;
         HDF5_count[0] = 0;
         HDF5_block[0] = 0;
-        H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, NULL,
+        H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, nullptr,
                             HDF5_count, HDF5_block);
         return space_id;
     }
@@ -204,13 +205,13 @@ hid_t get_dset_space_from_indices(hid_t dataset_id, int ndims, int64_t* starts,
     HDF5_start[0] = indices[0];
     HDF5_count[0] = 1;
     HDF5_block[0] = 1;
-    H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, NULL, HDF5_count,
-                        HDF5_block);
+    H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, nullptr,
+                        HDF5_count, HDF5_block);
     for (int i = 1; i < n_indices; i++) {
         HDF5_start[0] = indices[i];
         // printf("ind %d\n", indices[i]);
         herr_t ret = H5Sselect_hyperslab(space_id, H5S_SELECT_OR, HDF5_start,
-                                         NULL, HDF5_count, HDF5_block);
+                                         nullptr, HDF5_count, HDF5_block);
         CHECK(ret != -1, "h5 read select_hyperslab error");
     }
 
@@ -243,7 +244,7 @@ int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
     }
 
     hid_t mem_dataspace =
-        H5Screate_simple((hsize_t)ndims, (hsize_t*)counts, NULL);
+        H5Screate_simple((hsize_t)ndims, (hsize_t*)counts, nullptr);
     CHECK(mem_dataspace != -1, "h5 read create_simple error");
     hid_t h5_typ = get_h5_typ(typ_enum);
     ret = H5Dread(dataset_id, h5_typ, mem_dataspace, space_id, xfer_plist_id,
@@ -304,7 +305,7 @@ void h5_close_file_objects(hid_t file_id, unsigned types) {
     // get object id list
     size_t count = H5Fget_obj_count(file_id, types);
     hid_t* obj_list = (hid_t*)malloc(sizeof(hid_t) * count);
-    if (obj_list == NULL)
+    if (obj_list == nullptr)
         return;
     H5Fget_obj_ids(file_id, types, count, obj_list);
     // TODO: check file_id of objects like h5py/files.py:close
@@ -339,7 +340,7 @@ hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims, int64_t* counts,
     hid_t dataset_id;
     hid_t filespace;
     hid_t h5_typ = get_h5_typ(typ_enum);
-    filespace = H5Screate_simple(ndims, (const hsize_t*)counts, NULL);
+    filespace = H5Screate_simple(ndims, (const hsize_t*)counts, nullptr);
     dataset_id = H5Dcreate(file_id, dset_name, h5_typ, filespace, H5P_DEFAULT,
                            H5P_DEFAULT, H5P_DEFAULT);
     H5Sclose(filespace);
@@ -378,10 +379,10 @@ int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
         H5Pset_dxpl_mpio(xfer_plist_id, H5FD_MPIO_COLLECTIVE);
     }
 
-    ret = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, NULL,
-                              HDF5_count, NULL);
+    ret = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, HDF5_start, nullptr,
+                              HDF5_count, nullptr);
     CHECK(ret != -1, "h5 write select_hyperslab error");
-    hid_t mem_dataspace = H5Screate_simple((hsize_t)ndims, HDF5_count, NULL);
+    hid_t mem_dataspace = H5Screate_simple((hsize_t)ndims, HDF5_count, nullptr);
     CHECK(mem_dataspace != -1, "h5 write create_simple error");
     hid_t h5_typ = get_h5_typ(typ_enum);
     ret = H5Dwrite(dataset_id, h5_typ, mem_dataspace, space_id, xfer_plist_id,
@@ -405,10 +406,10 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     // first call gets size:
     // https://support.hdfgroup.org/HDF5/doc1.8/RM/RM_H5L.html#Link-GetNameByIdx
     int size = H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
-                                  (hsize_t)ind, NULL, 0, H5P_DEFAULT);
+                                  (hsize_t)ind, nullptr, 0, H5P_DEFAULT);
     char* name = (char*)malloc(size + 1);
-    if (name == NULL)
-        return NULL;
+    if (name == nullptr)
+        return nullptr;
     (void)H5Lget_name_by_idx(file_id, ".", H5_INDEX_NAME, H5_ITER_NATIVE,
                              (hsize_t)ind, name, size + 1, H5P_DEFAULT);
     // printf("g name:%s\n", name);

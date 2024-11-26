@@ -88,7 +88,7 @@
  * - Removed all "register" storage class specifiers
  */
 
-#include <string.h>
+#include <cstring>
 
 #include "_base64.h"
 

@@ -1,20 +1,15 @@
 #pragma once
 
-#include "../_array_hash.h"
-#include "../_array_utils.h"
 #include "../_bodo_common.h"
-#include "../_bodo_to_arrow.h"
 #include "../_chunked_table_builder.h"
 #include "../_dict_builder.h"
 #include "../_operator_pool.h"
 #include "../_query_profile_collector.h"
 #include "../_table_builder.h"
-#include "_shuffle.h"
-
-#include "../groupby/_groupby.h"
 #include "../groupby/_groupby_col_set.h"
-#include "../groupby/_groupby_ftypes.h"
-#include "../groupby/_groupby_groups.h"
+#include "../vendored/hyperloglog.hpp"
+
+#include "_shuffle.h"
 
 // Default threshold for Groupby operator's OperatorBufferPool
 #define GROUPBY_OPERATOR_BUFFER_POOL_ERROR_THRESHOLD 0.5

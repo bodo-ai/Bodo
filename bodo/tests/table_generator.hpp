@@ -1,11 +1,12 @@
 #pragma once
 
+#include <arrow/builder.h>
+#include <arrow/table.h>
 #include <string>
-#include "../io/arrow_reader.h"
+
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_table_builder.h"
 #include "./test.hpp"
-#include "arrow/builder.h"
 
 namespace {
 /**

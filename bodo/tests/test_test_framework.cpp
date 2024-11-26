@@ -1,6 +1,7 @@
 /// Tests of the C++ testing infrastructure
 
 #include "./test.hpp"
+
 bodo::tests::suite test_framework_tests([] {
     bodo::tests::test("Registering before/after_each after tests", [] {
         // This test constructs a fake suite and registers tests manually to
@@ -32,12 +33,12 @@ bodo::tests::suite test_framework_tests([] {
         std::vector<std::string> events;
         bodo::tests::suite test_suite([] {}, false);
         std::vector<std::string> markers = {};
-        test_suite.before_each([&] { events.push_back("before"); });
-        test_suite.after_each([&] { events.push_back("after"); });
+        test_suite.before_each([&] { events.emplace_back("before"); });
+        test_suite.after_each([&] { events.emplace_back("after"); });
         test_suite.add_test(
-            "test0", [&] { events.push_back("test0"); }, markers, 0);
+            "test0", [&] { events.emplace_back("test0"); }, markers, 0);
         test_suite.add_test(
-            "test1", [&] { events.push_back("test1"); }, markers, 1);
+            "test1", [&] { events.emplace_back("test1"); }, markers, 1);
 
         auto& tests = test_suite.tests();
         tests.at("test0").func_();

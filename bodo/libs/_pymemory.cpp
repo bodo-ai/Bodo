@@ -1,5 +1,6 @@
 // Copyright (C) 2024 Bodo Inc. All rights reserved
 #include "_pymemory.h"
+#include "_bodo_common.h"
 
 extern "C" {
 
@@ -52,12 +53,15 @@ PyMODINIT_FUNC PyInit_memory_cpp(void) {
          METH_NOARGS, "No Docs"},
 
         // Sentinel required, otherwise segfault?
-        {NULL, NULL, 0, NULL}};
-    static struct PyModuleDef moduledef = {PyModuleDef_HEAD_INIT, "memory_cpp",
-                                           "No Docs", -1, SpamMethods};
+        {nullptr, nullptr, 0, nullptr}};
+    static struct PyModuleDef moduledef = {.m_base = PyModuleDef_HEAD_INIT,
+                                           .m_name = "memory_cpp",
+                                           .m_doc = "No Docs",
+                                           .m_size = -1,
+                                           .m_methods = SpamMethods};
     PyObject* m = PyModule_Create(&moduledef);
-    if (m == NULL) {
-        return NULL;
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

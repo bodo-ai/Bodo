@@ -23,7 +23,6 @@
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
-#include "../libs/_datetime_utils.h"
 #include "../libs/_dict_builder.h"
 #include "_fs_io.h"
 
@@ -446,7 +445,7 @@ int64_t pq_write_py_entry(const char *_path_name, table_info *table,
             table->columns.push_back(index_ptr);
             const char *used_name =
                 strcmp(idx_name, "null") != 0 ? idx_name : "__index_level_0__";
-            col_names.push_back(used_name);
+            col_names.emplace_back(used_name);
         }
         // Generate the metadata for the arrow table, including any index
         // metadata.
@@ -628,9 +627,8 @@ void pq_write_partitioned_py_entry(
 
         std::vector<std::string> arrow_column_names =
             array_to_string_vector(col_names_arr_no_partitions);
-        for (auto it = key_to_partition.begin(); it != key_to_partition.end();
-             it++) {
-            const partition_write_info &p = it->second;
+        for (auto &it : key_to_partition) {
+            const partition_write_info &p = it.second;
             std::shared_ptr<table_info> part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
             // NOTE: we pass is_parallel=False because we already took care

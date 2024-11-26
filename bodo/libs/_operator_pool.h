@@ -14,7 +14,6 @@ namespace bodo {
  * but we aren't doing that at this point to keep the implementation
  * simple. We might change this in the future if it becomes important
  * to track actual allocation size.
- *
  */
 class OperatorBufferPool final : public IBufferPool {
    public:

@@ -1,18 +1,13 @@
 #pragma once
 #include <unordered_set>
-#include "../_array_hash.h"
-#include "../_array_utils.h"
+
 #include "../_bodo_common.h"
-#include "../_bodo_to_arrow.h"
 #include "../_chunked_table_builder.h"
 #include "../_dict_builder.h"
-#include "../_distributed.h"
 #include "../_join.h"
-#include "../_nested_loop_join.h"
 #include "../_operator_pool.h"
 #include "../_pinnable.h"
 #include "../_query_profile_collector.h"
-#include "../_shuffle.h"
 #include "../_table_builder.h"
 #include "../vendored/simd-block-fixed-fpp.h"
 #include "_shuffle.h"

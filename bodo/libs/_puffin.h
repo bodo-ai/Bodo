@@ -2,8 +2,7 @@
 
 #include <Python.h>
 #include <boost/json.hpp>
-#include "_array_utils.h"
-#include "_bodo_common.h"
+
 #include "_theta_sketches.h"
 
 /**

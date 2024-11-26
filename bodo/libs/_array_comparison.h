@@ -1,4 +1,6 @@
+#pragma once
 #include <vector>
+
 #include "_bodo_common.h"
 
 /** This code test keys if two keys are greater or equal

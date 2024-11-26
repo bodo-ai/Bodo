@@ -1,5 +1,7 @@
 #include "_puffin.h"
 #include <arrow/python/api.h>
+#include <algorithm>
+
 #include "../io/_fs_io.h"
 #include "../io/iceberg_helpers.h"
 
@@ -205,7 +207,7 @@ std::pair<std::string, int32_t> PuffinFile::serialize() {
     } else {
         // Convert to little endian
         std::string str = std::string(payload_size_bytes, 4);
-        std::reverse(std::begin(str), std::end(str));
+        std::ranges::reverse(str);
         const char *little_endian_bytes = str.c_str();
         ss.write(little_endian_bytes, sizeof(int32_t));
     }
@@ -256,7 +258,7 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
         const char *bytes =
             reinterpret_cast<const char *>(&footer_payload_size);
         std::string str = std::string(bytes, 4);
-        std::reverse(std::begin(str), std::end(str));
+        std::ranges::reverse(str);
         footer_payload_size = *reinterpret_cast<const int32_t *>(str.c_str());
     }
     if (file_size < (size_t)footer_payload_size + 20) {
@@ -324,9 +326,9 @@ std::unique_ptr<PuffinFile> PuffinFile::deserialize(std::string src) {
     // Using the metadata, extract the string components from the original raw
     // string corresponding to each of the blobs.
     std::vector<std::string> file_blobs;
-    for (size_t blob_idx = 0; blob_idx < metadata.size(); blob_idx++) {
-        file_blobs.push_back(src.substr(metadata[blob_idx].get_offset(),
-                                        metadata[blob_idx].get_length()));
+    for (auto &blob_idx : metadata) {
+        file_blobs.push_back(
+            src.substr(blob_idx.get_offset(), blob_idx.get_length()));
     }
 
     return std::make_unique<PuffinFile>(file_blobs, metadata, file_properties);
@@ -701,9 +703,9 @@ array_info *read_puffin_file_ndvs_py_entrypt(
 
 PyMODINIT_FUNC PyInit_puffin_file(void) {
     PyObject *m;
-    MOD_DEF(m, "puffin_file", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "puffin_file", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

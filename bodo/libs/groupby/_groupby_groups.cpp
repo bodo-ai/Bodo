@@ -1,8 +1,9 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 
 #include "_groupby_groups.h"
+
+#include "../_array_hash.h"
 #include "../_bodo_common.h"
-#include "../_dict_builder.h"
 #include "_groupby_hashing.h"
 
 /**
@@ -572,10 +573,10 @@ static int64_t get_groupby_labels_loop(
         }
     }
     int64_t pos = 0 + na_pos;
-    for (size_t i = 0; i < group_rows.size(); i++) {
-        memcpy(sort_idx + pos, group_rows[i].data(),
-               group_rows[i].size() * sizeof(int64_t));
-        pos += group_rows[i].size();
+    for (auto& group_row : group_rows) {
+        memcpy(sort_idx + pos, group_row.data(),
+               group_row.size() * sizeof(int64_t));
+        pos += group_row.size();
     }
     return next_group - 1;
 }
@@ -660,7 +661,7 @@ int64_t get_groupby_labels(std::shared_ptr<table_info> table,
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
 
     HashLookupIn32bitTable hash_fct{hashes};
-    KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
+    KeyEqualLookupIn32bitTable equal_fct{.n_keys = n_keys, .table = table};
 
     const bool check_for_null_keys = true;
     using rh_flat_t =

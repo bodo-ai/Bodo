@@ -1,12 +1,14 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_hash.h"
+#include <algorithm>
+#include <span>
+
 #include <Python.h>
 #include <arrow/api.h>
 #include <arrow/array/data.h>
 #include <arrow/compute/api_scalar.h>
 #include <arrow/compute/api_vector.h>
-#include <span>
-#include "_array_utils.h"
+
 #include "_bodo_common.h"
 
 /**
@@ -1647,7 +1649,7 @@ create_several_array_hashmap(
     for (size_t i = 0; i < arrs.size(); i++) {
         lengths[i] = arrs[i]->child_arrays[0]->length;
     }
-    size_t max_length = *std::max_element(lengths.begin(), lengths.end());
+    size_t max_length = *std::ranges::max_element(lengths);
     dict_value_to_unified_index->reserve(max_length);
     return dict_value_to_unified_index;
 }
@@ -1870,8 +1872,8 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
 
     delete dict_value_to_unified_index;
     // Free all of the hashes
-    for (size_t i = 0; i < hashes.size(); i++) {
-        hashes[i].reset();
+    for (auto& hash : hashes) {
+        hash.reset();
     }
 
     // Now that we have all of the dictionary elements we can create the
@@ -1922,8 +1924,8 @@ void unify_several_dictionaries(std::vector<std::shared_ptr<array_info>>& arrs,
     }
 
     // replace old dictionaries with a new one
-    for (size_t i = 0; i < arrs.size(); i++) {
-        arrs[i]->child_arrays[0] = new_dict;
+    for (const auto& arr : arrs) {
+        arr->child_arrays[0] = new_dict;
     }
 }
 
@@ -1964,9 +1966,13 @@ void unify_dictionaries(std::shared_ptr<array_info> arr1,
 
     // hash map mapping dictionary values of arr1 and arr2 to index in unified
     // dictionary
-    HashDict hash_fct{arr1_dictionary_len, arr1_hashes, arr2_hashes};
-    KeyEqualDict equal_fct{arr1_dictionary_len, arr1->child_arrays[0],
-                           arr2->child_arrays[0] /*, is_na_equal*/};
+    HashDict hash_fct{.global_array_rows = arr1_dictionary_len,
+                      .global_array_hashes = arr1_hashes,
+                      .local_array_hashes = arr2_hashes};
+    KeyEqualDict equal_fct{
+        .global_array_rows = arr1_dictionary_len,
+        .global_dictionary = arr1->child_arrays[0],
+        .local_dictionary = arr2->child_arrays[0] /*, is_na_equal*/};
     auto* dict_value_to_unified_index =
         new bodo::unord_map_container<size_t, dict_indices_t, HashDict,
                                       KeyEqualDict>({}, hash_fct, equal_fct);

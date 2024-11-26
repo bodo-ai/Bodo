@@ -28,6 +28,17 @@ elseif ((NOT DEFINED ENV{DISABLE_SCCACHE}) AND SCCACHE_EXECUTABLE)
 endif()
 
 
+# ---------------------------- Enable C++ Linting ----------------------------
+# Clang-Tidy is only available on MacOS as we use GCC on Linux
+find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+if (CLANG_TIDY_EXE)
+  message(STATUS "Found Clang-Tidy: ${CLANG_TIDY_EXE}")
+  set(CLANG_TIDY_COMMAND "${CLANG_TIDY_EXE}" "--checks=.clang-tidy" "--fix-errors")
+else()
+  message(STATUS "Clang-Tidy not found")
+  set(CLANG_TIDY_COMMAND "")
+endif()
+
 # ----------------------------- Declare Dependencies -------------------------
 # We need to do this before setting CMake Options so they aren't propagated
 set(BUILD_WITH_V8 "$ENV{BUILD_WITH_V8}")
@@ -417,6 +428,8 @@ set(sources_list
   "bodo/io/parquet_write.cpp"
   "bodo/io/snowflake_reader.cpp"
   "bodo/io/timestamptz_parser.cpp"
+  "bodo/io/arrow_compat.cpp"
+  "bodo/io/iceberg_helpers.cpp"
   "bodo/libs/_array.cpp"
   "bodo/libs/_array_build_buffer.cpp"
   "bodo/libs/_array_hash.cpp"
@@ -442,6 +455,7 @@ set(sources_list
   "bodo/libs/groupby/_groupby_mpi_exscan.cpp"
   "bodo/libs/groupby/_groupby_update.cpp"
   "bodo/libs/_hash_join.cpp"
+  "bodo/libs/_nested_loop_join_impl.cpp"
   "bodo/libs/_nested_loop_join.cpp"
   "bodo/libs/_interval_join.cpp"
   "bodo/libs/_join_hashing.cpp"
@@ -482,7 +496,6 @@ set(sources_list
   "bodo/libs/_theta_sketches.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_io_cpu_thread_pool.cpp"
-  "bodo/io/arrow_compat.cpp"
 )
 
 if (BUILD_WITH_V8)
@@ -496,19 +509,11 @@ endif()
 # that are incomptible
 set(allow_implicit_fallthrough_list
   "bodo/io/arrow.cpp"
-  "bodo/io/arrow_reader.cpp"
-  "bodo/io/iceberg_parquet_reader.cpp"
   "bodo/io/iceberg_parquet_write.cpp"
-  "bodo/io/json_col_parser.cpp"
-  "bodo/io/parquet_reader.cpp"
-  "bodo/io/parquet_write.cpp"
-  "bodo/io/snowflake_reader.cpp"
-  "bodo/io/timestamptz_parser.cpp"
-  "bodo/libs/vendored/_murmurhash3.cpp"
   "bodo/libs/_puffin.cpp"
   "bodo/libs/_theta_sketches.cpp"
+  "bodo/libs/vendored/_murmurhash3.cpp"
   "bodo/libs/vendored/gason/gason.cpp"
-
 )
 
 # TODO: Replace with ctest when integrating Catch2
@@ -546,9 +551,9 @@ if (NOT (CMAKE_BUILD_TYPE STREQUAL "Release") AND NOT DEFINED ENV{BODO_SKIP_CPP_
       )
   endif()
   list(APPEND sources_list "${test_list}")
-  # TODO(aneesh) tests can be compiled without -Werror=implict-fallthrough for
-  # now, but it's not ideal - this should be fixed over time
-  list(APPEND allow_implicit_fallthrough_list ${test_list})
+  list(APPEND allow_implicit_fallthrough_list 
+    "bodo/tests/test_puffin.cpp"
+    "bodo/tests/test_theta_sketches.cpp")
 endif()
 
 python_add_library(ext MODULE WITH_SOABI "${sources_list}")
@@ -685,6 +690,7 @@ add_dependencies(ext pyfs _hdfs tracing pyarrow_wrappers)
 target_include_directories(ext PRIVATE ${datasketches_INSTALL_DIR}/include/DataSketches)
 add_dependencies(ext datasketches)
 
+set_target_properties(ext PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 
 install(TARGETS ext DESTINATION "bodo/")
 

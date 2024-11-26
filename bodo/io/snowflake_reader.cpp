@@ -3,14 +3,12 @@
 // Implementation of SnowflakeReader (subclass of ArrowReader) with
 // functionality that is specific to reading from Snowflake
 
-#include <chrono>
 #include <queue>
 #include "arrow_reader.h"
 
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_dict_builder.h"
 #include "../libs/_distributed.h"
-#include "../libs/_table_builder.h"
 
 /**
  * @brief Struct for storing SnowflakeReader metrics.
@@ -145,8 +143,7 @@ class SnowflakeReader : public ArrowReader {
         // Dict builder metrics
         DictBuilderMetrics dict_builder_metrics;
         MetricBase::StatValue n_dict_builders = 0;
-        for (size_t i = 0; i < this->dict_builders.size(); i++) {
-            const auto& dict_builder = this->dict_builders[i];
+        for (const auto& dict_builder : this->dict_builders) {
             if (dict_builder != nullptr) {
                 dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
                 n_dict_builders++;
@@ -160,7 +157,7 @@ class SnowflakeReader : public ArrowReader {
     }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows) override {
+    void add_piece(PyObject* piece, int64_t num_rows) override {
         Py_INCREF(piece);  // keeping a reference to this piece
         result_batches.push(piece);
     }
@@ -182,7 +179,7 @@ class SnowflakeReader : public ArrowReader {
             sf_mod, "get_dataset", "ssOOOOO", query, conn, this->pyarrow_schema,
             py_only_length_query, py_is_select_query, py_is_parallel,
             py_is_independent);
-        if (ds_tuple == NULL && PyErr_Occurred()) {
+        if (ds_tuple == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
         Py_DECREF(sf_mod);
@@ -204,7 +201,7 @@ class SnowflakeReader : public ArrowReader {
         this->metrics.sf_data_prep_time = sf_exec_time_us;
         Py_DECREF(ds_tuple);
         this->sf_conn = PyObject_GetAttrString(ds, "conn");
-        if (sf_conn == NULL) {
+        if (sf_conn == nullptr) {
             throw std::runtime_error(
                 "Could not retrieve conn attribute of Snowflake dataset");
         }
@@ -242,7 +239,7 @@ class SnowflakeReader : public ArrowReader {
         time_pt start = start_timer();
         PyObject* arrow_table_py =
             PyObject_CallMethod(next_piece, "to_arrow", "O", sf_conn);
-        if (arrow_table_py == NULL && PyErr_Occurred()) {
+        if (arrow_table_py == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
@@ -522,7 +519,7 @@ ArrowReader* snowflake_reader_init_py_entry(
         if (std::string(e.what()) != "python") {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
-        return NULL;
+        return nullptr;
     }
 }
 

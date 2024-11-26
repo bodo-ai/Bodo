@@ -1016,9 +1016,9 @@ void* box_timestamptz_array(int64_t n, const int64_t* data_ts,
 
 PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "hdatetime_ext", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "hdatetime_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init numpy
     import_array();

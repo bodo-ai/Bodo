@@ -3,17 +3,17 @@
 #include <climits>
 #include <cstdio>
 #include <filesystem>
-#include <iostream>
 #include <string>
+
+#include <arrow/filesystem/s3fs.h>
+#include <arrow/io/hdfs.h>
+#include <arrow/result.h>
+#include <mpi.h>
 
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "_fs_io.h"
-#include "arrow/filesystem/s3fs.h"
-#include "arrow/io/hdfs.h"
-#include "arrow/result.h"
-#include "mpi.h"
 
 FileReader* f_reader = nullptr;  // File reader used by S3 / Hdfs
 PyObject* f_mod = nullptr;       // imported python module:
@@ -45,9 +45,9 @@ void file_write_parallel_py_entrypt(const char* file_name, char* buff,
 
 PyMODINIT_FUNC PyInit_hio(void) {
     PyObject* m;
-    MOD_DEF(m, "hio", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "hio", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // numpy read
     SetAttrStringFromVoidPtr(m, get_file_size);
@@ -72,7 +72,7 @@ uint64_t get_file_size(const char* file_name) {
             get_fs_reader_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
 
             s3_reader_init_t func =
-                (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
+                (s3_reader_init_t)PyNumber_AsSsize_t(func_obj, nullptr);
 
             f_reader = func(file_name + 5, "", false, true);
             f_size = f_reader->getSize();
@@ -85,7 +85,7 @@ uint64_t get_file_size(const char* file_name) {
             get_fs_reader_pyobject(Bodo_Fs::hdfs, "", f_mod, func_obj);
 
             hdfs_reader_init_t func =
-                (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, NULL);
+                (hdfs_reader_init_t)PyNumber_AsSsize_t(func_obj, nullptr);
 
             f_reader = func(file_name, "", false, true);
             f_size = f_reader->getSize();
@@ -138,7 +138,7 @@ void file_read(const char* file_name, void* buff, int64_t size,
         } else {
             // posix
             FILE* fp = fopen(file_name, "rb");
-            if (fp == NULL)
+            if (fp == nullptr)
                 return;
             int64_t seek_res = fseek(fp, offset, SEEK_SET);
             if (seek_res != 0)
@@ -169,10 +169,11 @@ void file_write(const char* file_name, void* buff, int64_t size) {
         import_fs_module(Bodo_Fs::s3, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
 
-        s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+        s3_get_fs_t s3_get_fs =
+            (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
         s3_get_fs(&s3_fs, "", false);
 
-        open_file_outstream(Bodo_Fs::s3, "", file_name + 5, s3_fs, NULL,
+        open_file_outstream(Bodo_Fs::s3, "", file_name + 5, s3_fs, nullptr,
                             &out_stream);
 
         CHECK_ARROW(out_stream->Write(buff, size),
@@ -191,13 +192,13 @@ void file_write(const char* file_name, void* buff, int64_t size) {
         get_get_fs_pyobject(Bodo_Fs::hdfs, "", f_mod, func_obj);
 
         hdfs_get_fs_t hdfs_get_fs =
-            (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+            (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
         hdfs_get_fs(file_name, &hdfs_fs);
 
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
             ::arrow::fs::FileSystemFromUri(orig_path, &fname);
 
-        open_file_outstream(Bodo_Fs::hdfs, "", fname, NULL, hdfs_fs,
+        open_file_outstream(Bodo_Fs::hdfs, "", fname, nullptr, hdfs_fs,
                             &out_stream);
 
         CHECK_ARROW(out_stream->Write(buff, size),
@@ -210,7 +211,7 @@ void file_write(const char* file_name, void* buff, int64_t size) {
     } else {
         // posix
         FILE* fp = fopen(file_name, "wb");
-        if (fp == NULL) {
+        if (fp == nullptr) {
             return;
         }
         size_t ret_code = fwrite(buff, 1, (size_t)size, fp);
@@ -311,10 +312,11 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
         // load bodo module, s3_get_fs, then write
         import_fs_module(Bodo_Fs::s3, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
-        s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+        s3_get_fs_t s3_get_fs =
+            (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
         s3_get_fs(&s3_fs, "", false);
         parallel_in_order_write(Bodo_Fs::s3, "", fname, buff, count, elem_size,
-                                s3_fs, NULL);
+                                s3_fs, nullptr);
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else if (strncmp("hdfs://", file_name, 7) == 0) {
@@ -327,12 +329,12 @@ void file_write_parallel(const char* file_name, char* buff, int64_t start,
         import_fs_module(Bodo_Fs::hdfs, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::hdfs, "", f_mod, func_obj);
         hdfs_get_fs_t hdfs_get_fs =
-            (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+            (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
         hdfs_get_fs(file_name, &hdfs_fs);
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
             ::arrow::fs::FileSystemFromUri(orig_path, &fname);
         parallel_in_order_write(Bodo_Fs::hdfs, "", fname, buff, count,
-                                elem_size, NULL, hdfs_fs);
+                                elem_size, nullptr, hdfs_fs);
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
         // TODO gcs

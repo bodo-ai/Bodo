@@ -1,4 +1,5 @@
 #include "../../libs/streaming/_groupby.h"
+#include "../../libs/vendored/_murmurhash3.h"
 #include "../test.hpp"
 
 // Enable access to protected methods

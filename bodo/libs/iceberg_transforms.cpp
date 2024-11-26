@@ -9,13 +9,8 @@
 #include <numpy/arrayobject.h>
 
 #include "_array_hash.h"
-#include "_array_operations.h"
-#include "_array_utils.h"
 #include "_datetime_ext.h"
 #include "_datetime_utils.h"
-#include "_distributed.h"
-#include "_shuffle.h"
-#include "vendored/gfx/timsort.hpp"
 
 //
 // Utilities for Iceberg Transforms

@@ -6,6 +6,7 @@
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
 #include "_groupby_ftypes.h"
+
 /**
  * The file contains the templated aggregate functions that are used
  * for the update step of groupby and will be inlined.

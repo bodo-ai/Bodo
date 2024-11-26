@@ -56,7 +56,7 @@ void copy_string_values_transform(
         bodo::default_buffer_memory_manager()) {
     assert(tmp_col->arr_type == bodo_array_type::STRING);
     int64_t num_groups = grp_info.num_groups;
-    std::shared_ptr<array_info> out_arr = NULL;
+    std::shared_ptr<array_info> out_arr = nullptr;
     // first we have to deal with offsets first so we
     // need one first loop to determine the needed length. In the second
     // loop, the assignation is made. If the entries are missing then the

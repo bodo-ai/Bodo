@@ -1,11 +1,3 @@
-/**
- * @file _lead_lag.h
- * @author Benjamin Owad (benjamin@bodo.ai)
- * @brief Function prototypes for lead/lag.
- *
- * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
- *
- */
 #pragma once
 
 #include "_array_utils.h"

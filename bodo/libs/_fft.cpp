@@ -1,5 +1,7 @@
 #include "_fft.h"
+#include <algorithm>
 #include <numeric>
+
 #include "_array_utils.h"
 #include "_distributed.h"
 #include "_mpi.h"
@@ -340,7 +342,7 @@ fftshift_redistribute_across_ranks(std::shared_ptr<array_info> arr,
     }
     //  Do this so leftover -1s don't mess up global_idx_offset_per_rank
     //  below
-    std::replace(send_offsets.begin(), send_offsets.end(), -1, 0);
+    std::ranges::replace(send_offsets, -1, 0);
     recv_offsets[npes] = global_arr_len;
     // Distribute send_counts so we can calculate recv_counts/offsets
     CHECK_MPI(MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(),
@@ -502,8 +504,8 @@ void fftshift(std::shared_ptr<array_info> arr, uint64_t shape[2],
         memcpy(recv_arr->buffers[0]->mutable_data(),
                arr->buffers[0]->mutable_data(),
                sizeof(fftw_complex_type<dtype>) * arr->length);
-        recv_data.push_back({recv_arr, global_idx_offset_per_rank,
-                             std::vector<int>(npes + 1, 0)});
+        recv_data.emplace_back(recv_arr, global_idx_offset_per_rank,
+                               std::vector<int>(npes + 1, 0));
     }
     // This assumes each rank will always send one contiguous chunk to each
     // other rank Justification: each row is contiguous in memory and on the
@@ -615,9 +617,9 @@ array_info* fftshift_py_entry(array_info* arr, uint64_t shape[2],
 
 PyMODINIT_FUNC PyInit_fft_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "fft_cpp", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "fft_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     bodo_common_init();
 

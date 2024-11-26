@@ -1,13 +1,7 @@
-/**
- * @file _crypto_funcs.h
- * @author Pintao Zou (pintao@bodo.ai)
- * @brief Function prototypes for SHA2 and other crypto SQL functions.
- *
- * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
- *
- */
+// Copyright (C) 2023 Bodo Inc. All rights reserved.
 #pragma once
-#include "_bodo_common.h"
+
+#include <cstdint>
 
 enum crypto_function {
     md5 = 0,

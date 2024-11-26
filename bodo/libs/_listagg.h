@@ -1,11 +1,3 @@
-
-/**
- * @file _listagg.cpp
- * @author Keaton Drebes (keaton@bodo.ai)
- * @brief Prototypes for the LISTAGG SQL function without group by.
- *
- * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
- */
 #pragma once
 
 #include "_bodo_common.h"

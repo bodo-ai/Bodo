@@ -18,7 +18,6 @@
 #include <tuple>
 #include <vector>
 
-#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
 
@@ -326,7 +325,7 @@ class TDigest::TDigestImpl {
     void MergeInput(std::vector<double>& input) {
         total_weight_ += input.size();
 
-        std::sort(input.begin(), input.end());
+        std::ranges::sort(input);
         min_ = std::min(min_, input.front());
         max_ = std::max(max_, input.back());
 
@@ -338,14 +337,15 @@ class TDigest::TDigestImpl {
             if (td[tdigest_index].mean < input[input_index]) {
                 merger_.Add(td[tdigest_index++]);
             } else {
-                merger_.Add(Centroid{input[input_index++], 1});
+                merger_.Add(
+                    Centroid{.mean = input[input_index++], .weight = 1});
             }
         }
         while (tdigest_index < td.size()) {
             merger_.Add(td[tdigest_index++]);
         }
         while (input_index < input.size()) {
-            merger_.Add(Centroid{input[input_index++], 1});
+            merger_.Add(Centroid{.mean = input[input_index++], .weight = 1});
         }
         merger_.Reset(0, nullptr);
 

@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <limits>
 
+#include "../_bodo_common.h"
+
 /**
  * This files contains the functions used for the eval step of
  * hashed based groupby. This is the a step that converts the

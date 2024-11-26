@@ -5,7 +5,6 @@
 #include "../_distributed.h"
 #include "../_query_profile_collector.h"
 #include "../_table_builder.h"
-#include "fmt/format.h"
 
 #define DEFAULT_SHUFFLE_THRESHOLD 50 * 1024 * 1024  // 50MiB
 #define MIN_SHUFFLE_THRESHOLD 50 * 1024 * 1024      // 50MiB

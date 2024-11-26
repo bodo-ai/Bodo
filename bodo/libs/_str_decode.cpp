@@ -1,5 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
+#include "_meminfo.h"
 
 #ifndef Py_UNREACHABLE
 #define Py_UNREACHABLE() abort()

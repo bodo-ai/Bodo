@@ -2,12 +2,13 @@
 #pragma once
 
 #include "../_bodo_common.h"
+
 /**
  * This file declares the functions that are used to determine and utilize
  * the MPI_Exscan strategy for groupby. This strategy is used when we have
  * only cumulative operations to avoid shuffling the data.
  */
-const int max_global_number_groups_exscan = 1000;
+constexpr int max_global_number_groups_exscan = 1000;
 
 /**
  * @brief Determine the strategy to be used for the computation of the groupby.

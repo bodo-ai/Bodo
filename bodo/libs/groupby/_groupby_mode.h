@@ -2,7 +2,7 @@
 #pragma once
 
 #include "../_bodo_common.h"
-#include "_groupby_common.h"
+#include "_groupby.h"
 
 /**
  * Mode computation for array of any supported array type or dtype.

@@ -7,6 +7,7 @@
 #include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <utility>
 
 #include <arrow/compute/expression.h>
 #include <arrow/compute/type_fwd.h>
@@ -354,8 +355,7 @@ std::shared_ptr<::arrow::RecordBatch> EvolveRecordBatch(
 
 // ------------ Arrow Helpers -----------
 
-namespace bodo {
-namespace arrow_py_compat {
+namespace bodo::arrow_py_compat {
 
 /**
  * @brief Equivalent to PyArrow's Scanner._make_scan_options. The main change is
@@ -491,8 +491,7 @@ static std::shared_ptr<arrow::RecordBatchReader> scanner_to_rb_reader(
     return reader;
 }
 
-}  // namespace arrow_py_compat
-}  // namespace bodo
+}  // namespace bodo::arrow_py_compat
 
 struct IcebergParquetReaderMetrics {
     using stat_t = MetricBase::StatValue;
@@ -600,7 +599,7 @@ class IcebergParquetReader : public ArrowReader {
           database_schema(_database_schema),
           table_name(_table_name),
           iceberg_filter_str(_iceberg_filter_str),
-          expr_filter_f_str(_expr_filter_f_str),
+          expr_filter_f_str(std::move(_expr_filter_f_str)),
           filter_scalars(_filter_scalars) {
 #ifdef USE_BODO_ARROW_FORK
         // Unless explicitly disabled, use our own SingleThreadedCpuThreadPool
@@ -617,7 +616,7 @@ class IcebergParquetReader : public ArrowReader {
 #endif
     }
 
-    virtual ~IcebergParquetReader() {
+    ~IcebergParquetReader() override {
         // When an unsupported schema evolution is detected in
         // `bodo.io.iceberg.get_iceberg_pq_dataset`, a Python exception
         // is thrown. That exception is detected and converted to a C++
@@ -771,7 +770,7 @@ class IcebergParquetReader : public ArrowReader {
             str_as_dict_cols_py, this->iceberg_filter_str,
             this->expr_filter_f_str.c_str(), this->filter_scalars,
             force_row_level_py);
-        if (ds == NULL && PyErr_Occurred()) {
+        if (ds == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
@@ -794,7 +793,7 @@ class IcebergParquetReader : public ArrowReader {
 
         // Copy over metrics. This object is of type IcebergPqDatasetMetrics.
         PyObject* ds_metrics_py = PyObject_GetAttrString(ds, "metrics");
-        if (ds_metrics_py == NULL) {
+        if (ds_metrics_py == nullptr) {
             throw std::runtime_error(
                 "IcebergParquetReader::get_dataset: metrics attribute not in "
                 "dataset!");
@@ -866,13 +865,13 @@ class IcebergParquetReader : public ArrowReader {
         // pieces_myrank_py = bodo.io.iceberg.distribute_pieces(pieces_py)
         PyObject* pieces_myrank_py = PyObject_CallMethod(
             iceberg_mod, "distribute_pieces", "O", pieces_py);
-        if (pieces_myrank_py == NULL && PyErr_Occurred()) {
+        if (pieces_myrank_py == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
         PyObject* piece;
         PyObject* iterator = PyObject_GetIter(pieces_myrank_py);
-        if (iterator == NULL) {
+        if (iterator == nullptr) {
             throw std::runtime_error(
                 "ArrowReader::distribute_pieces(): error getting "
                 "pieces iterator");
@@ -881,7 +880,7 @@ class IcebergParquetReader : public ArrowReader {
         while ((piece = PyIter_Next(iterator))) {
             PyObject* num_rows_piece_py =
                 PyObject_GetAttrString(piece, "_bodo_num_rows");
-            if (num_rows_piece_py == NULL) {
+            if (num_rows_piece_py == nullptr) {
                 throw std::runtime_error(
                     "ArrowReader::distribute_pieces(): _bodo_num_rows "
                     "attribute not in piece");
@@ -921,7 +920,7 @@ class IcebergParquetReader : public ArrowReader {
         // file.
         PyObject* schema_group_idx_py =
             PyObject_GetAttrString(piece, "schema_group_idx");
-        if (schema_group_idx_py == NULL) {
+        if (schema_group_idx_py == nullptr) {
             throw std::runtime_error(
                 "schema_group_idx_py attribute not in piece");
         }
@@ -1183,8 +1182,8 @@ class IcebergParquetReader : public ArrowReader {
                              this->is_nullable, this->str_as_dict_colnames,
                              this->create_dict_encoding_from_strings);
 
-        for (size_t i = 0; i < batches.size(); i++) {
-            builder.append(std::move(batches[i]));
+        for (auto& batch : batches) {
+            builder.append(std::move(batch));
         }
         batches.clear();
 
@@ -1263,7 +1262,7 @@ class IcebergParquetReader : public ArrowReader {
             this->pyarrow_schema);
         iceberg_reader_metrics.init_scanners_get_pa_datasets_time +=
             end_timer(start);
-        if (datasets_updated_offset_tup == NULL && PyErr_Occurred()) {
+        if (datasets_updated_offset_tup == nullptr && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
@@ -1694,7 +1693,7 @@ table_info* iceberg_pq_read_py_entry(
         if (std::string(e.what()) != "python") {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1760,6 +1759,6 @@ ArrowReader* iceberg_pq_reader_init_py_entry(
         if (std::string(e.what()) != "python") {
             PyErr_SetString(PyExc_RuntimeError, e.what());
         }
-        return NULL;
+        return nullptr;
     }
 }

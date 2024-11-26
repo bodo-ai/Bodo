@@ -1,9 +1,14 @@
 #include "_sort.h"
+#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <memory>
 #include <numeric>
 #include <unordered_set>
+#include <utility>
+
+#include <fmt/format.h>
+
 #include "../_array_operations.h"
 #include "../_array_utils.h"
 #include "../_bodo_common.h"
@@ -11,11 +16,9 @@
 #include "../_dict_builder.h"
 #include "../_memory_budget.h"
 #include "../_query_profile_collector.h"
-#include "../_shuffle.h"
 #include "../_table_builder_utils.h"
 #include "../_utils.h"
 #include "_shuffle.h"
-#include "fmt/format.h"
 
 #define QUERY_PROFILE_SORT_INIT_STAGE_ID 0
 #define QUERY_PROFILE_SORT_BUILD_STAGE_ID 1
@@ -301,7 +304,7 @@ ExternalKWayMergeSorter::ExternalKWayMergeSorter(
     size_t output_chunk_size_, int64_t K_, int64_t processing_chunk_size_,
     bool enable_inmem_concat_sort_, bool debug_mode_,
     bodo::IBufferPool* const pool, std::shared_ptr<::arrow::MemoryManager> mm)
-    : schema(schema),
+    : schema(std::move(schema)),
       dict_builders(dict_builders_),
       n_keys(n_keys),
       vect_ascending(vect_ascending),
@@ -313,7 +316,7 @@ ExternalKWayMergeSorter::ExternalKWayMergeSorter(
       debug_mode(debug_mode_),
       comp(*this),
       pool(pool),
-      mm(mm) {
+      mm(std::move(mm)) {
     // Either both limit and offset are -1, or they are both >= 0
     if (limit >= 0) {
         sortlimits = std::make_optional(SortLimits(limit, offset));
@@ -404,7 +407,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
         DEFAULT_MAX_RESIZE_COUNT_FOR_VARIABLE_SIZE_DTYPES, pool, mm);
     VHeapComparator vcomp(comp);
     time_pt start_make_heap = start_timer();
-    std::make_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
+    std::ranges::make_heap(sorted_chunks, vcomp);
     this->metrics.merge_chunks_make_heap_time += end_timer(start_make_heap);
 
     time_pt start_pop, start_push;
@@ -416,7 +419,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
                            [&](auto& chunks) { return !chunks.empty(); }));
         // find the minimum row
         start_pop = start_timer();
-        std::pop_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
+        std::ranges::pop_heap(sorted_chunks, vcomp);
         this->metrics.merge_chunks_pop_heap_time += end_timer(start_pop);
         auto& min_vec = sorted_chunks.back();
         std::reference_wrapper<TableAndRange> min = min_vec.front();
@@ -513,7 +516,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::MergeChunks(
             // need to push it back onto the heap to find the next smallest
             // row.
             start_push = start_timer();
-            std::push_heap(sorted_chunks.begin(), sorted_chunks.end(), vcomp);
+            std::ranges::push_heap(sorted_chunks, vcomp);
             this->metrics.merge_chunks_push_heap_time += end_timer(start_push);
         }
     }
@@ -873,8 +876,7 @@ std::deque<TableAndRange> ExternalKWayMergeSorter::Finalize(
 }
 
 template <typename IndexT>
-    requires(std::is_same<IndexT, int32_t>::value ||
-             std::is_same<IndexT, int64_t>::value)
+    requires(std::is_same_v<IndexT, int32_t> || std::is_same_v<IndexT, int64_t>)
 std::deque<TableAndRange>
 ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem(
     std::shared_ptr<table_info> table, bodo::vector<IndexT>&& out_idxs) {
@@ -929,7 +931,7 @@ ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem(
     return out_table_builder.chunks;
 }
 
-// Explicit instantiaion of templates for linking
+// Explicit instantiation of templates for linking
 template std::deque<TableAndRange>
 ExternalKWayMergeSorter::SelectRowsAndProduceOutputInMem(
     std::shared_ptr<table_info> table, bodo::vector<int32_t>&& out_idxs);
@@ -1372,8 +1374,8 @@ StreamSortState::PartitionChunksByRank(
         int64_t table_size = static_cast<int64_t>(chunk->nrows());
         for (int64_t row = 0; row < table_size; row++) {
             // Find the first rank where bounds[rank] > chunk.table[row]
-            auto dst_rank = std::lower_bound(
-                ranks.begin(), ranks.end(), row, [&](int rank, int row) {
+            auto dst_rank =
+                std::ranges::lower_bound(ranks, row, [&](int rank, int row) {
                     if (rank == (n_pes - 1)) {
                         return false;
                     }
@@ -1723,10 +1725,10 @@ ExternalKWayMergeSorter StreamSortState::GlobalSort_Partition(
                 // XXX shuffle_issend will make redundant copies of many of
                 // these buffers even though they can be reused as is. This is
                 // something to optimize.
-                send_states.emplace_back(std::make_tuple(
+                send_states.emplace_back(
                     host_to_send_to,
                     shuffle_issend(std::move(table_to_send), std::move(hashes),
-                                   nullptr, MPI_COMM_WORLD, starting_msg_tag)));
+                                   nullptr, MPI_COMM_WORLD, starting_msg_tag));
                 ranks_to_inflight_tags[host_to_send_to].insert(
                     starting_msg_tag);
                 this->metrics.shuffle_issend_time += end_timer(start_issend);
@@ -1992,8 +1994,7 @@ void StreamSortState::ReportBuildMetrics(std::vector<MetricBase>& metrics_out) {
     // DictBuilder metrics
     DictBuilderMetrics dict_builder_metrics;
     MetricBase::StatValue n_dict_builders = 0;
-    for (size_t i = 0; i < this->dict_builders.size(); i++) {
-        const auto& dict_builder = this->dict_builders[i];
+    for (const auto& dict_builder : this->dict_builders) {
         if (dict_builder != nullptr) {
             dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
             n_dict_builders++;
@@ -2134,9 +2135,9 @@ void delete_stream_sort_state(StreamSortState* state) { delete state; }
 
 PyMODINIT_FUNC PyInit_stream_sort_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "stream_sort_cpp", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "stream_sort_cpp", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

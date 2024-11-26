@@ -6,9 +6,10 @@
  */
 
 #include "_datetime_utils.h"
+#include <Python.h>
 #include <iostream>
+
 #include "../libs/_datetime_ext.h"
-#include "Python.h"
 #include "_datetime_ext.h"
 
 /**

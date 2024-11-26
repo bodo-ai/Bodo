@@ -15,7 +15,7 @@ std::tuple<int, int> dist_get_ranks_on_node() {
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized) {
-        CHECK_MPI(MPI_Init(NULL, NULL),
+        CHECK_MPI(MPI_Init(nullptr, nullptr),
                   "dist_get_ranks_on_node: MPI error on MPI_Init:");
     }
 

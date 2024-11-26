@@ -12,12 +12,11 @@
 #include <arrow/io/api.h>
 #include <arrow/result.h>
 #include <arrow/util/uri.h>
+#include <mpi.h>
 
-#include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
 #include "_fs_io.h"
 #include "arrow_compat.h"
-#include "mpi.h"
 
 // Helper to ensure that the pyarrow wrappers have been imported.
 // We use a static variable to make sure we only do the import once.
@@ -140,7 +139,7 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
             import_fs_module(Bodo_Fs::s3, "", fs_mod);
             get_get_fs_pyobject(Bodo_Fs::s3, "", fs_mod, func_obj);
             s3_get_fs_t s3_get_fs =
-                (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+                (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
             std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
             s3_get_fs(&s3_fs, s3_bucket_region, s3fs_anon);
             fs = s3_fs;
@@ -150,7 +149,7 @@ get_reader_file_system(std::string file_path, std::string s3_bucket_region,
             import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
             get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);
             hdfs_get_fs_t hdfs_get_fs =
-                (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
+                (hdfs_get_fs_t)PyNumber_AsSsize_t(func_obj, nullptr);
             std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
             hdfs_get_fs(file_path, &hdfs_fs);
             fs = hdfs_fs;
@@ -293,7 +292,7 @@ void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
     import_fs_module(Bodo_Fs::hdfs, file_type, f_mod);
     get_get_fs_pyobject(Bodo_Fs::hdfs, file_type, f_mod, hdfs_func_obj);
     hdfs_get_fs_t hdfs_get_fs =
-        (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
+        (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, nullptr);
     arrow::Status status;
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
     hdfs_get_fs(orig_path, &hdfs_fs);
@@ -348,16 +347,16 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             import_fs_module(fs_option, file_type, f_mod);
             get_get_fs_pyobject(fs_option, file_type, f_mod, s3_func_obj);
             s3_get_fs_t s3_get_fs =
-                (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, NULL);
+                (s3_get_fs_t)PyNumber_AsSsize_t(s3_func_obj, nullptr);
 
             s3_get_fs(&s3_fs, bucket_region, false);
             if (is_parallel) {
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;  // append file name to output path
                 open_file_outstream(fs_option, file_type, out_path.string(),
-                                    s3_fs, NULL, out_stream);
+                                    s3_fs, nullptr, out_stream);
             } else {
-                open_file_outstream(fs_option, file_type, fname, s3_fs, NULL,
+                open_file_outstream(fs_option, file_type, fname, s3_fs, nullptr,
                                     out_stream);
             }
 
@@ -371,7 +370,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             import_fs_module(fs_option, file_type, f_mod);
             get_get_fs_pyobject(fs_option, file_type, f_mod, hdfs_func_obj);
             hdfs_get_fs_t hdfs_get_fs =
-                (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
+                (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, nullptr);
 
             std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
             arrow::Status status;
@@ -383,10 +382,10 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                 std::filesystem::path out_path(dirname);
                 out_path /= fname;
                 open_file_outstream(fs_option, file_type, out_path.string(),
-                                    NULL, hdfs_fs, out_stream);
+                                    nullptr, hdfs_fs, out_stream);
             } else {
-                open_file_outstream(fs_option, file_type, fname, NULL, hdfs_fs,
-                                    out_stream);
+                open_file_outstream(fs_option, file_type, fname, nullptr,
+                                    hdfs_fs, out_stream);
             }
 
             Py_DECREF(f_mod);
@@ -437,7 +436,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
             import_fs_module(fs_option, file_type, f_mod);
             get_get_fs_pyobject(fs_option, file_type, f_mod, gcs_func_obj);
             gcs_get_fs_t gcs_get_fs =
-                (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, NULL);
+                (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, nullptr);
             std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
             gcs_get_fs(&fs);
             if (is_parallel) {
@@ -521,7 +520,7 @@ void parallel_in_order_write(
             } while (!complete);
         } else {
             // 0 rank open outstream first
-            open_file_outstream(Bodo_Fs::s3, "", fname, s3_fs, NULL,
+            open_file_outstream(Bodo_Fs::s3, "", fname, s3_fs, nullptr,
                                 &out_stream);
             // 0 rank use vector `recv_buffer` to store buff
             std::vector<char> recv_buffer;
@@ -583,8 +582,8 @@ void parallel_in_order_write(
                       "parallel_in_order_write: MPI error on MPI_Recv:");
             open_file_appendstream(file_type, fname, hdfs_fs, &out_stream);
         } else {  // 0 rank open outstream instead
-            open_file_outstream(Bodo_Fs::hdfs, file_type, fname, NULL, hdfs_fs,
-                                &out_stream);
+            open_file_outstream(Bodo_Fs::hdfs, file_type, fname, nullptr,
+                                hdfs_fs, &out_stream);
         }
 
         // all ranks write & close stream

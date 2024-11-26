@@ -336,7 +336,8 @@ std::unique_ptr<array_info> decimal_arr_to_double(
     try {
         for (size_t i = 0; i < len; i++) {
             if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
-                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
             } else {
                 double* out_ptr =
                     out_arr
@@ -386,7 +387,8 @@ array_info* decimal_array_sign_py_entry(array_info* arr_) {
             alloc_nullable_array_no_nulls(len, Bodo_CTypes::INT8);
         for (size_t i = 0; i < len; i++) {
             if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
-                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
             } else {
                 int8_t* out_ptr =
                     out_arr
@@ -1491,7 +1493,8 @@ std::unique_ptr<array_info> round_decimal_array(
         out_arr->scale = output_s;
         for (size_t i = 0; i < len; i++) {
             if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
-                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
             } else {
                 arrow::Decimal128* out_ptr =
                     out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
@@ -1627,7 +1630,7 @@ std::unique_ptr<array_info> ceil_floor_decimal_array(
     out_arr->scale = output_s;
     for (size_t i = 0; i < len; i++) {
         if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
-            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
         } else {
             arrow::Decimal128* out_ptr =
                 out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
@@ -1763,7 +1766,7 @@ std::unique_ptr<array_info> trunc_decimal_array(
     out_arr->scale = output_s;
     for (size_t i = 0; i < len; i++) {
         if (!arr->get_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i)) {
-            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
         } else {
             arrow::Decimal128* out_ptr =
                 out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL,
@@ -2097,11 +2100,12 @@ void float_to_decimal_arr(std::shared_ptr<array_info>& arr_in,
     for (size_t row = 0; row < n_rows; row++) {
         T f = in_buffer[row];
         if (is_null_at<ArrType, T, DType>(*arr_in, row)) {
-            arr_out->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row, 0);
+            arr_out->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row,
+                                                                      false);
         } else if (isnan_alltype<T, DType>(f) || std::abs(f) >= max_value) {
             if constexpr (null_on_error) {
-                arr_out->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(row,
-                                                                          0);
+                arr_out->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    row, false);
             } else {
                 throw std::runtime_error("Invalid float to decimal cast: " +
                                          std::to_string(f));
@@ -2113,7 +2117,8 @@ void float_to_decimal_arr(std::shared_ptr<array_info>& arr_in,
                                    answer);
             uint64_t low_bits = answer.low_bits();
             int64_t high_bits = answer.high_bits();
-            decimal_value res = {static_cast<int64_t>(low_bits), high_bits};
+            decimal_value res = {.low = static_cast<int64_t>(low_bits),
+                                 .high = high_bits};
             out_buffer[row] = res;
         }
     }
@@ -2227,7 +2232,7 @@ decimal_value int64_to_decimal(int64_t value) {
     arrow::Decimal128 dec(value);
     auto low_bits = dec.low_bits();
     auto high_bits = dec.high_bits();
-    return {static_cast<int64_t>(low_bits), high_bits};
+    return {.low = static_cast<int64_t>(low_bits), .high = high_bits};
 }
 
 void unbox_decimal(PyObject* obj, uint8_t* data);
@@ -2589,7 +2594,7 @@ std::unique_ptr<array_info> str_to_decimal_array(
         out_arr->data1<bodo_array_type::NULLABLE_INT_BOOL, arrow::Decimal128>();
     for (size_t i = 0; i < n_rows; i++) {
         if (is_na(in_nulls, i)) {
-            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+            out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, false);
             continue;
         }
         offset_t start = in_offsets[i];
@@ -2599,7 +2604,8 @@ std::unique_ptr<array_info> str_to_decimal_array(
         out_data[i] = str_to_decimal_scalar(str_val, precision, scale, &error);
         if (error) {
             if (null_on_error) {
-                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(i, 0);
+                out_arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(
+                    i, false);
             } else {
                 throw std::runtime_error(
                     "String value is out of range for decimal or doesn't parse "
@@ -2709,9 +2715,9 @@ array_info* decimal_array_to_str_array_py_entry(array_info* arr_) {
 
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "decimal_ext", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "decimal_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init numpy
     import_array();
