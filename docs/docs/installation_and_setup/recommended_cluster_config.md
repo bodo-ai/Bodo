@@ -56,10 +56,6 @@ networking as well as EFA.
 
 -   ***Ensure that the file descriptor limit (`ulimit -n`) is set to a
     large number like `65000`.***
-     
-    This is especially useful when using
-    IPyParallel which opens direct connections between `ipengine` and
-    `ipcontroller` processes.
 
 -   ***Avoid unnecessary threading inside the application since it can
     conflict with MPI parallelism.*** 

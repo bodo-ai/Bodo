@@ -54,7 +54,7 @@ Manually redistribute data evenly across [selected] ranks.
 - Example to distribute the data from all ranks to subset of ranks using ``dests`` argument.
 
     !!! note
-        The following example uses [SPMD mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd). 
+        The following example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
 
 
     ```py

@@ -1,4 +1,4 @@
-# Bodo Python Quickstart (Local) {#quickstart-local-python}
+# Bodo Python Quick Start {#quickstart-local-python}
 
 This quickstart guide will walk you through the process of running a simple Python computation using Bodo on your local machine.
 

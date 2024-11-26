@@ -12,8 +12,8 @@ Unlike traditional distributed computing frameworks, Bodo:
 
 ## Key Features
 
-- Automatic Optimization & Parallelization of Python programs using Pandas and NumPy.
-- Linear Scalability from laptops to large-scale clusters and supercomputers.
+- Automatic optimization & parallelization of Python programs using Pandas and NumPy.
+- Linear scalability from laptops to large-scale clusters and supercomputers.
 - Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
 - High-Performance SQL Engine that is natively integrated into Python.
 
