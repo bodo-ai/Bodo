@@ -49,7 +49,6 @@ jobs:
         run: |
           set -exo pipefail
           source $HOME/micromamba/etc/profile.d/micromamba.sh
-
           micromamba activate bodosql_build
 
           # Determine Output Version

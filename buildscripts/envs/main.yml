@@ -26,7 +26,7 @@ dependencies:
   # MPI
   # Using h* to avoid the "external_0.conda" kind
   # Restricted to match Intel MPI. Upgrade with IMPI.
-  - mpich 4.2.3=h*
+  - mpich <4.2=h*
 
   # Java
   - openjdk =11
