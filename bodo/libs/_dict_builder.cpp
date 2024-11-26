@@ -1,15 +1,16 @@
 #include "_dict_builder.h"
 #include <fmt/format.h>
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <memory>
 
+#include "_array_build_buffer.h"
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_query_profile_collector.h"
-#include "_table_builder.h"
 
 /* -------------------------- DictBuilderMetrics -------------------------- */
 
@@ -252,9 +253,9 @@ std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
         return in_arr;
     }
 
-    auto cache_entry = std::find_if(
-        this->cached_filter_array_transposes.begin(),
-        this->cached_filter_array_transposes.end(),
+    auto cache_entry = std::ranges::find_if(
+        this->cached_filter_array_transposes,
+
         [batch_dict](const std::pair<DictionaryID, std::vector<int>> entry) {
             return entry.first.arr_id == batch_dict->array_id;
         });
@@ -285,8 +286,8 @@ std::shared_ptr<array_info> DictionaryBuilder::TransposeExisting(
         update_transpose_map(new_transpose_map);
 
         if (valid_arr_id) {
-            auto dict_id =
-                DictionaryID{batch_dict->array_id, batch_dict->length};
+            auto dict_id = DictionaryID{.arr_id = batch_dict->array_id,
+                                        .length = batch_dict->length};
             // Update the cached id and transpose map
             active_transpose_map = &this->_AddToFilterCache(
                 std::make_pair(dict_id, std::move(new_transpose_map)));
@@ -389,12 +390,13 @@ DictionaryBuilder::DictionaryBuilder(
     size_t transpose_cache_size, size_t filter_transpose_cache_size)
     : is_key(is_key_),
       child_dict_builders(child_dict_builders_),
-      cached_array_transposes(
-          transpose_cache_size,
-          std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())),
+      cached_array_transposes(transpose_cache_size,
+                              std::pair(DictionaryID{.arr_id = -1, .length = 0},
+                                        std::vector<dict_indices_t>())),
       cached_filter_array_transposes(
           filter_transpose_cache_size,
-          std::pair(DictionaryID{-1, 0}, std::vector<dict_indices_t>())) {
+          std::pair(DictionaryID{.arr_id = -1, .length = 0},
+                    std::vector<dict_indices_t>())) {
     // Nested arrays don't need other internal state
     if (child_dict_builders_.size() > 0) {
         assert(dict == nullptr);
@@ -526,9 +528,9 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         return in_arr;
     }
 
-    auto cache_entry = std::find_if(
-        this->cached_array_transposes.begin(),
-        this->cached_array_transposes.end(),
+    auto cache_entry = std::ranges::find_if(
+        this->cached_array_transposes,
+
         [batch_dict](const std::pair<DictionaryID, std::vector<int>> entry) {
             return entry.first.arr_id == batch_dict->array_id;
         });
@@ -555,8 +557,8 @@ std::shared_ptr<array_info> DictionaryBuilder::UnifyDictionaryArray(
         do_unify(new_transpose_map);
 
         if (valid_arr_id) {
-            auto dict_id =
-                DictionaryID{batch_dict->array_id, batch_dict->length};
+            auto dict_id = DictionaryID{.arr_id = batch_dict->array_id,
+                                        .length = batch_dict->length};
             // Update the cached id and transpose map
             active_transpose_map = &this->_AddToCache(
                 std::make_pair(dict_id, std::move(new_transpose_map)));
@@ -600,9 +602,7 @@ DictBuilderMetrics DictionaryBuilder::GetMetrics() const {
     if (this->child_dict_builders.size() > 0) {
         // Combine metrics from all children dict-builders recursively.
         DictBuilderMetrics combined_metrics;
-        for (size_t i = 0; i < this->child_dict_builders.size(); i++) {
-            std::shared_ptr<DictionaryBuilder> child_builder =
-                this->child_dict_builders[i];
+        for (auto child_builder : this->child_dict_builders) {
             if (child_builder == nullptr) {
                 continue;
             }
@@ -844,9 +844,13 @@ void update_local_dictionary_remove_duplicates(
     hash_array(hashes_global_dict.get(), global_dictionary, global_dict_len,
                hash_seed, false, /*global_dict_needed=*/false);
 
-    HashDict hash_fct{global_dict_len, hashes_global_dict, hashes_local_dict};
-    KeyEqualDict equal_fct{global_dict_len, global_dictionary,
-                           local_dictionary /*, is_na_equal*/};
+    HashDict hash_fct{.global_array_rows = global_dict_len,
+                      .global_array_hashes = hashes_global_dict,
+                      .local_array_hashes = hashes_local_dict};
+    KeyEqualDict equal_fct{
+        .global_array_rows = global_dict_len,
+        .global_dictionary = global_dictionary,
+        .local_dictionary = local_dictionary /*, is_na_equal*/};
     // dict_value_to_global_index will map a dictionary value (string) to
     // its index in the global dictionary array. We don't want strings as
     // keys of the hash map because that would be inefficient in terms of

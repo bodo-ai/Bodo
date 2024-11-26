@@ -3,6 +3,7 @@
 // Functions to write Bodo arrays to Iceberg table (parquet format)
 
 #include <arrow/filesystem/filesystem.h>
+#include <algorithm>
 #include <memory>
 #if _MSC_VER >= 1900
 #undef timezone
@@ -68,7 +69,7 @@ PyObject *buffer_to_little_endian_bytes(T value) {
     } else {
         // Convert to little endian
         std::string str = std::string(initial_bytes, sizeof(T));
-        std::reverse(std::begin(str), std::end(str));
+        std::ranges::reverse(str);
         const char *bytes = str.c_str();
         return PyBytes_FromStringAndSize(bytes, sizeof(T));
     }
@@ -183,7 +184,7 @@ PyObject *arrow_scalar_to_iceberg_bytes(std::shared_ptr<arrow::Scalar> scalar) {
                 // Otherwise, get the leading bytes and reverse to convert
                 // to big endian.
                 std::string str = std::string(initial_bytes, n_bytes);
-                std::reverse(std::begin(str), std::end(str));
+                std::ranges::reverse(str);
                 const char *bytes = str.c_str();
                 return PyBytes_FromStringAndSize(bytes, n_bytes);
             }
@@ -1011,9 +1012,8 @@ void iceberg_pq_write(const char *table_data_loc,
         tracing::Event ev_part_write(
             "iceberg_pq_write_partition_spec_write_parts", is_parallel);
         // Write the file for each partition key
-        for (auto it = key_to_partition.begin(); it != key_to_partition.end();
-             it++) {
-            const partition_write_info &p = it->second;
+        for (auto &it : key_to_partition) {
+            const partition_write_info &p = it.second;
             std::shared_ptr<table_info> part_table =
                 RetrieveTable(new_table, p.rows, new_table->ncols());
             // NOTE: we pass is_parallel=False because we already took care of

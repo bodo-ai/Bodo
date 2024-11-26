@@ -1,6 +1,8 @@
 #include "_groupby.h"
+
 #include <fmt/format.h>
 #include <mpi.h>
+#include <algorithm>
 #include <cstring>
 #include <list>
 #include <memory>
@@ -20,6 +22,7 @@
 #include "../groupby/_groupby_col_set.h"
 #include "../groupby/_groupby_common.h"
 #include "../groupby/_groupby_ftypes.h"
+#include "../groupby/_groupby_groups.h"
 #include "_shuffle.h"
 #include "arrow/util/bit_util.h"
 
@@ -1856,8 +1859,9 @@ void GroupbyIncrementalShuffleState::ResetAfterShuffle() {
         if (capacity >
                 (SHUFFLE_BUFFER_CUTOFF_MULTIPLIER * this->shuffle_threshold) &&
             (capacity * SHUFFLE_BUFFER_MIN_UTILIZATION) > buffer_used_size) {
-            this->pre_reduction_table_buffer.reset(
-                new TableBuildBuffer(this->schema, this->dict_builders));
+            this->pre_reduction_table_buffer =
+                std::make_unique<TableBuildBuffer>(this->schema,
+                                                   this->dict_builders);
             this->metrics.n_pre_reduction_buffer_reset++;
         }
     }
@@ -2283,10 +2287,10 @@ GroupbyOutputState::determine_batched_send_counts(
                 batches_to_recv_this_iter[receiver];
             if (batches_to_send_overall[sender][receiver] > 0 &&
                 max_batches_can_receive_this_iter > 0) {
-                size_t batches_ = std::min(
-                    std::min(batches_left_to_send_this_iter,
-                             batches_to_send_overall[sender][receiver]),
-                    max_batches_can_receive_this_iter);
+                size_t batches_ =
+                    std::min({batches_left_to_send_this_iter,
+                              batches_to_send_overall[sender][receiver],
+                              max_batches_can_receive_this_iter});
                 batches_left_to_send_this_iter -= batches_;
                 batches_to_send_overall[sender][receiver] -= batches_;
                 to_send_this_iter[sender][receiver] += batches_;
@@ -2637,8 +2641,7 @@ GroupbyState::GroupbyState(
     this->f_running_value_offsets.push_back(n_keys);
     int32_t curr_running_value_offset = n_keys;
 
-    for (size_t i = 0; i < ftypes.size(); i++) {
-        int ftype = ftypes[i];
+    for (int ftype : ftypes) {
         // NOTE: adding all functions that need accumulating inputs for now
         // but they may not be supported in streaming groupby yet
         // Should be kept in sync with
@@ -2901,8 +2904,8 @@ GroupbyState::GroupbyState(
     // See if all ColSet functions are nunique, which enables optimization of
     // dropping duplicate shuffle table rows before shuffle
     this->nunique_only = (ftypes.size() > 0);
-    for (size_t i = 0; i < ftypes.size(); i++) {
-        if (ftypes[i] != Bodo_FTypes::nunique) {
+    for (int ftype : ftypes) {
+        if (ftype != Bodo_FTypes::nunique) {
             this->nunique_only = false;
         }
     }
@@ -3124,9 +3127,9 @@ void GroupbyState::SplitPartition(size_t idx) {
 
 std::string GroupbyState::GetPartitionStateString() const {
     std::string partition_state = "[";
-    for (size_t i = 0; i < this->partition_state.size(); i++) {
-        size_t num_top_bits = this->partition_state[i].first;
-        uint32_t top_bitmask = this->partition_state[i].second;
+    for (const auto& i : this->partition_state) {
+        size_t num_top_bits = i.first;
+        uint32_t top_bitmask = i.second;
         partition_state +=
             fmt::format("({0}, {1:#b}),", num_top_bits, top_bitmask);
     }
@@ -3886,8 +3889,7 @@ void GroupbyState::ReportAndResetBuildMetrics(bool is_final) {
         assert(is_final);
         DictBuilderMetrics dict_builder_metrics;
         MetricBase::StatValue n_dict_builders = 0;
-        for (size_t i = 0; i < this->build_table_dict_builders.size(); i++) {
-            const auto& dict_builder = this->build_table_dict_builders[i];
+        for (const auto& dict_builder : this->build_table_dict_builders) {
             if (dict_builder != nullptr) {
                 dict_builder_metrics.add_metrics(dict_builder->GetMetrics());
                 n_dict_builders++;
@@ -4690,7 +4692,7 @@ table_info* groupby_produce_output_batch_py_entry(GroupbyState* groupby_state,
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -4725,7 +4727,7 @@ table_info* grouping_sets_produce_output_batch_py_entry(
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -5054,9 +5056,9 @@ GroupingSetsState* grouping_sets_state_init_py_entry(
                         if (kept_columns[orig_idx]) {
                             // Part of this grouping set's keys already, so we
                             // just need to find its index
-                            auto it = std::find(kept_input_column_idxs.begin(),
-                                                kept_input_column_idxs.end(),
-                                                orig_idx);
+                            auto it = std::ranges::find(kept_input_column_idxs,
+
+                                                        orig_idx);
                             ASSERT(it != kept_input_column_idxs.end());
                             new_idx = std::distance(
                                 kept_input_column_idxs.begin(), it);
@@ -5216,9 +5218,9 @@ uint32_t get_partition_top_bitmask_by_idx(GroupbyState* groupby_state,
 
 PyMODINIT_FUNC PyInit_stream_groupby_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "stream_groupby_cpp", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "stream_groupby_cpp", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     bodo_common_init();
 

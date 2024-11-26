@@ -1,4 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include <algorithm>
+
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -30,8 +32,8 @@ double compute_population_skew(int64_t val) {
     double mean = sum / nranks;
     // Compute Xi - mu
     std::vector<double> diff(nranks);
-    std::transform(vals_each_rank.begin(), vals_each_rank.end(), diff.begin(),
-                   [mean](double x) { return x - mean; });
+    std::ranges::transform(vals_each_rank, diff.begin(),
+                           [mean](double x) { return x - mean; });
     // Compute sum(xi^2)
     double sq_sum =
         std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
@@ -43,12 +45,12 @@ double compute_population_skew(int64_t val) {
     double stddev = std::sqrt(sq_sum / nranks);
     std::vector<double> elems(nranks);
     // Compute (Xi - mu) / stdev
-    std::transform(diff.begin(), diff.end(), elems.begin(),
-                   [stddev](double x) { return x / stddev; });
+    std::ranges::transform(diff, elems.begin(),
+                           [stddev](double x) { return x / stddev; });
     // Compute elem^3
     std::vector<double> cubes(nranks);
-    std::transform(elems.begin(), elems.end(), cubes.begin(),
-                   [](double x) { return x * x * x; });
+    std::ranges::transform(elems, cubes.begin(),
+                           [](double x) { return x * x * x; });
     // Compute skew = sum(cubes)
     double skew = std::accumulate(cubes.begin(), cubes.end(), 0.0);
     return skew;
@@ -1503,7 +1505,9 @@ void hash_join_compute_tuples_helper(
     joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct{
         build_nonequal_key_hashes};
     joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct{
-        build_table, build_data_key_cols, build_data_key_n_cols};
+        .build_table = build_table,
+        .build_data_key_cols = build_data_key_cols,
+        .build_data_key_n_cols = build_data_key_n_cols};
 
     // [BE-1078]: how much should we reserve?
     build_write_idxs.reserve(probe_table_rows);
@@ -1829,7 +1833,9 @@ std::shared_ptr<table_info> hash_join_table_inner(
 
     tracing::Event ev_alloc_map("alloc_hashmap", parallel_trace);
     joinHashFcts::HashHashJoinTable hash_fct{
-        build_table_rows, build_table_hashes, probe_table_hashes};
+        .short_table_rows = build_table_rows,
+        .short_table_hashes = build_table_hashes,
+        .long_table_hashes = probe_table_hashes};
 
     // 'groups' is single contiguous buffer of row ids arranged by groups.
     // 'group_offsets' store the offsets for the individual groups within the
@@ -2459,6 +2465,6 @@ table_info* hash_join_table(
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }

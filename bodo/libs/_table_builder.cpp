@@ -1,7 +1,6 @@
 #include "_table_builder.h"
 #include <memory>
 
-#include "_array_hash.h"
 #include "_table_builder_utils.h"
 #include "streaming/_join.h"
 
@@ -472,8 +471,8 @@ void TableBuildBuffer::ReserveTableRow(
 }
 
 void TableBuildBuffer::Reset() {
-    for (size_t i = 0; i < array_buffers.size(); i++) {
-        array_buffers[i].Reset();
+    for (auto& array_buffer : array_buffers) {
+        array_buffer.Reset();
     }
 }
 
@@ -656,9 +655,9 @@ void delete_chunked_table_builder_state(ChunkedTableBuilderState* state) {
 
 PyMODINIT_FUNC PyInit_table_builder_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "table_builder_cpp", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "table_builder_cpp", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

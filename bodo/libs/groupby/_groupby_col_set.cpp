@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <numeric>
+#include <utility>
 
 #include <fmt/format.h>
 
@@ -31,12 +32,12 @@
 
 BasicColSet::BasicColSet(std::shared_ptr<array_info> in_col, int ftype,
                          bool combine_step, bool use_sql_rules)
-    : in_col(in_col),
+    : in_col(std::move(in_col)),
       ftype(ftype),
       combine_step(combine_step),
       use_sql_rules(use_sql_rules) {}
 
-BasicColSet::~BasicColSet() {}
+BasicColSet::~BasicColSet() = default;
 
 void BasicColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -63,8 +64,8 @@ void BasicColSet::update(const std::vector<grouping_info>& grp_infos,
 typename std::vector<std::shared_ptr<array_info>>::iterator
 BasicColSet::update_after_shuffle(
     typename std::vector<std::shared_ptr<array_info>>::iterator& it) {
-    for (size_t i_col = 0; i_col < update_cols.size(); i_col++) {
-        update_cols[i_col] = *(it++);
+    for (auto& update_col : update_cols) {
+        update_col = *(it++);
     }
     return it;
 }
@@ -103,7 +104,7 @@ const std::vector<std::shared_ptr<array_info>> BasicColSet::getOutputColumns() {
 
 SizeColSet::SizeColSet(bool combine_step, bool use_sql_rules)
     : BasicColSet(nullptr, Bodo_FTypes::size, combine_step, use_sql_rules) {}
-SizeColSet::~SizeColSet() {};
+SizeColSet::~SizeColSet() = default;
 
 void SizeColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -130,7 +131,7 @@ FirstColSet::FirstColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                          bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::first, combine_step, use_sql_rules) {}
 
-FirstColSet::~FirstColSet() {}
+FirstColSet::~FirstColSet() = default;
 
 void FirstColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -210,7 +211,7 @@ MeanColSet::MeanColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                        bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::mean, combine_step, use_sql_rules) {}
 
-MeanColSet::~MeanColSet() {}
+MeanColSet::~MeanColSet() = default;
 
 void MeanColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -274,9 +275,9 @@ IdxMinMaxColSet::IdxMinMaxColSet(std::shared_ptr<array_info> in_col,
                                  int ftype, bool combine_step,
                                  bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules),
-      index_col(_index_col) {}
+      index_col(std::move(_index_col)) {}
 
-IdxMinMaxColSet::~IdxMinMaxColSet() {}
+IdxMinMaxColSet::~IdxMinMaxColSet() = default;
 
 void IdxMinMaxColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -378,7 +379,7 @@ BoolXorColSet::BoolXorColSet(std::shared_ptr<array_info> in_col, int ftype,
                              bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
 
-BoolXorColSet::~BoolXorColSet() {}
+BoolXorColSet::~BoolXorColSet() = default;
 
 void BoolXorColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -448,7 +449,7 @@ VarStdColSet::VarStdColSet(std::shared_ptr<array_info> in_col, int ftype,
                            bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
 
-VarStdColSet::~VarStdColSet() {}
+VarStdColSet::~VarStdColSet() = default;
 
 void VarStdColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -624,7 +625,7 @@ SkewColSet::SkewColSet(std::shared_ptr<array_info> in_col, int ftype,
                        bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
 
-SkewColSet::~SkewColSet() {}
+SkewColSet::~SkewColSet() = default;
 
 void SkewColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -792,16 +793,16 @@ ListAggColSet::ListAggColSet(
     std::vector<std::shared_ptr<array_info>> _orderby_cols,
     std::vector<bool> _window_ascending, std::vector<bool> _window_na_position)
     : BasicColSet(in_col, Bodo_FTypes::listagg, false, true),
-      orderby_cols(_orderby_cols),
-      window_ascending(_window_ascending),
-      window_na_position(_window_na_position) {
+      orderby_cols(std::move(_orderby_cols)),
+      window_ascending(std::move(_window_ascending)),
+      window_na_position(std::move(_window_na_position)) {
     std::shared_ptr<array_info> string_array;
     if (sep_col->arr_type == bodo_array_type::arr_type_enum::DICT) {
         string_array = sep_col->child_arrays[0];
 
     } else if (sep_col->arr_type == bodo_array_type::arr_type_enum::STRING) {
         // If NUMBA_DEVELOPER_MODE, output stderr message
-        if (std::getenv("NUMBA_DEVELOPER_MODE") != NULL) {
+        if (std::getenv("NUMBA_DEVELOPER_MODE") != nullptr) {
             std::cerr
                 << "Internal error in ListAggColSet constructor: Separator "
                    "array is not dictionary type.\n";
@@ -823,7 +824,7 @@ ListAggColSet::ListAggColSet(
     this->listagg_sep = substr;
 }
 
-ListAggColSet::~ListAggColSet() {}
+ListAggColSet::~ListAggColSet() = default;
 
 void ListAggColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1180,13 +1181,13 @@ ArrayAggColSet::ArrayAggColSet(
     std::vector<bool> _ascending, std::vector<bool> _na_position, int ftype,
     bool _is_parallel)
     : BasicColSet(in_col, ftype, false, true),
-      orderby_cols(_orderby_cols),
-      ascending(_ascending),
-      na_position(_na_position),
+      orderby_cols(std::move(_orderby_cols)),
+      ascending(std::move(_ascending)),
+      na_position(std::move(_na_position)),
       is_distinct(ftype == Bodo_FTypes::array_agg_distinct),
       is_parallel(_is_parallel) {}
 
-ArrayAggColSet::~ArrayAggColSet() {}
+ArrayAggColSet::~ArrayAggColSet() = default;
 
 void ArrayAggColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1235,10 +1236,10 @@ ObjectAggColSet::ObjectAggColSet(std::shared_ptr<array_info> _key_col,
                                  bool _is_parallel)
     : BasicColSet(_key_col, Bodo_FTypes::object_agg, false, true),
       key_col(_key_col),
-      val_col(_val_col),
+      val_col(std::move(_val_col)),
       is_parallel(_is_parallel) {}
 
-ObjectAggColSet::~ObjectAggColSet() {}
+ObjectAggColSet::~ObjectAggColSet() = default;
 
 void ObjectAggColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1283,7 +1284,7 @@ KurtColSet::KurtColSet(std::shared_ptr<array_info> in_col, int ftype,
                        bool combine_step, bool use_sql_rules)
     : BasicColSet(in_col, ftype, combine_step, use_sql_rules) {}
 
-KurtColSet::~KurtColSet() {}
+KurtColSet::~KurtColSet() = default;
 
 void KurtColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1464,11 +1465,11 @@ UdfColSet::UdfColSet(std::shared_ptr<array_info> in_col, bool combine_step,
                      std::shared_ptr<table_info> udf_table, int udf_table_idx,
                      int n_redvars, bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::udf, combine_step, use_sql_rules),
-      udf_table(udf_table),
+      udf_table(std::move(udf_table)),
       udf_table_idx(udf_table_idx),
       n_redvars(n_redvars) {}
 
-UdfColSet::~UdfColSet() {}
+UdfColSet::~UdfColSet() = default;
 
 void UdfColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1555,7 +1556,7 @@ GeneralUdfColSet::GeneralUdfColSet(std::shared_ptr<array_info> in_col,
                                    int udf_table_idx, bool use_sql_rules)
     : UdfColSet(in_col, false, udf_table, udf_table_idx, 0, use_sql_rules) {}
 
-GeneralUdfColSet::~GeneralUdfColSet() {}
+GeneralUdfColSet::~GeneralUdfColSet() = default;
 
 void GeneralUdfColSet::fill_in_columns(
     const std::shared_ptr<table_info>& general_in_table,
@@ -1591,7 +1592,7 @@ PercentileColSet::PercentileColSet(std::shared_ptr<array_info> in_col,
     }
 }
 
-PercentileColSet::~PercentileColSet() {}
+PercentileColSet::~PercentileColSet() = default;
 
 void PercentileColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1634,7 +1635,7 @@ MedianColSet::MedianColSet(std::shared_ptr<array_info> in_col,
     : BasicColSet(in_col, Bodo_FTypes::median, false, use_sql_rules),
       skip_na_data(_skip_na_data) {}
 
-MedianColSet::~MedianColSet() {}
+MedianColSet::~MedianColSet() = default;
 
 void MedianColSet::alloc_update_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1672,7 +1673,7 @@ void MedianColSet::update(const std::vector<grouping_info>& grp_infos,
 ModeColSet::ModeColSet(std::shared_ptr<array_info> in_col, bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::mode, false, use_sql_rules) {}
 
-ModeColSet::~ModeColSet() {}
+ModeColSet::~ModeColSet() = default;
 
 void ModeColSet::update(const std::vector<grouping_info>& grp_infos,
                         bodo::IBufferPool* const pool,
@@ -1691,10 +1692,10 @@ NUniqueColSet::NUniqueColSet(std::shared_ptr<array_info> in_col,
                              bool use_sql_rules)
     : BasicColSet(in_col, Bodo_FTypes::nunique, do_combine, use_sql_rules),
       skip_na_data(_skip_na_data),
-      my_nunique_table(nunique_table),
+      my_nunique_table(std::move(nunique_table)),
       is_parallel(_is_parallel) {}
 
-NUniqueColSet::~NUniqueColSet() {}
+NUniqueColSet::~NUniqueColSet() = default;
 
 void NUniqueColSet::update(const std::vector<grouping_info>& grp_infos,
                            bodo::IBufferPool* const pool,
@@ -1730,7 +1731,7 @@ CumOpColSet::CumOpColSet(std::shared_ptr<array_info> in_col, int ftype,
     : BasicColSet(in_col, ftype, false, use_sql_rules),
       skip_na_data(_skip_na_data) {}
 
-CumOpColSet::~CumOpColSet() {}
+CumOpColSet::~CumOpColSet() = default;
 
 void CumOpColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1762,7 +1763,7 @@ void CumOpColSet::update(const std::vector<grouping_info>& grp_infos,
 ShiftColSet::ShiftColSet(std::shared_ptr<array_info> in_col, int ftype,
                          int64_t _periods, bool use_sql_rules)
     : BasicColSet(in_col, ftype, false, use_sql_rules), periods(_periods) {}
-ShiftColSet::~ShiftColSet() {}
+ShiftColSet::~ShiftColSet() = default;
 
 void ShiftColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1792,11 +1793,11 @@ TransformColSet::TransformColSet(std::shared_ptr<array_info> in_col, int ftype,
       transform_func(_func_num) {
     transform_op_col =
         makeColSet({in_col}, nullptr, transform_func, do_combine, false, 0,
-                   {transform_func}, 0, is_parallel, {false}, {false}, {0}, 0,
-                   nullptr, nullptr, 0, nullptr, use_sql_rules);
+                   {transform_func}, 0, is_parallel, {false}, {false},
+                   {nullptr}, 0, nullptr, nullptr, 0, nullptr, use_sql_rules);
 }
 
-TransformColSet::~TransformColSet() {}
+TransformColSet::~TransformColSet() = default;
 
 void TransformColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1864,7 +1865,7 @@ HeadColSet::HeadColSet(std::shared_ptr<array_info> in_col, int ftype,
                        bool use_sql_rules)
     : BasicColSet(in_col, ftype, false, use_sql_rules) {}
 
-HeadColSet::~HeadColSet() {}
+HeadColSet::~HeadColSet() = default;
 
 void HeadColSet::alloc_running_value_columns(
     size_t update_col_len, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1905,7 +1906,7 @@ StreamingMRNFColSet::StreamingMRNFColSet(std::vector<bool>& _asc,
                                                this->na_pos);
 }
 
-StreamingMRNFColSet::~StreamingMRNFColSet() {}
+StreamingMRNFColSet::~StreamingMRNFColSet() = default;
 
 void StreamingMRNFColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -1941,15 +1942,15 @@ WindowColSet::WindowColSet(
        // WindowColSet
       BasicColSet(nullptr, Bodo_FTypes::window, false, use_sql_rules),
       input_cols(in_cols),
-      window_funcs(_window_funcs),
+      window_funcs(std::move(_window_funcs)),
       asc(_asc),
       na_pos(_na_pos),
-      window_args(_window_args),
+      window_args(std::move(_window_args)),
       n_input_cols(_n_input_cols),
       is_parallel(_is_parallel),
       in_arr_types_vec(std::move(_in_arr_types_vec)) {}
 
-WindowColSet::~WindowColSet() {}
+WindowColSet::~WindowColSet() = default;
 
 void WindowColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,
@@ -2075,7 +2076,7 @@ NgroupColSet::NgroupColSet(std::shared_ptr<array_info> in_col,
     : BasicColSet(in_col, Bodo_FTypes::ngroup, false, use_sql_rules),
       is_parallel(_is_parallel) {}
 
-NgroupColSet::~NgroupColSet() {}
+NgroupColSet::~NgroupColSet() = default;
 
 void NgroupColSet::alloc_running_value_columns(
     size_t num_groups, std::vector<std::shared_ptr<array_info>>& out_cols,

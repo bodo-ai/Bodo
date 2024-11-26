@@ -2,6 +2,7 @@
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
+#include <algorithm>
 #include <iostream>
 #include <set>
 #include <string>
@@ -121,9 +122,9 @@ void re_escape_with_output(char* pattern, int64_t length, char* out_pattern,
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
-    MOD_DEF(m, "hstr_ext", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "hstr_ext", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // init numpy
     import_array();
@@ -250,7 +251,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
     out_view->index_offsets = index_offsets;
     out_view->data_offsets = new offset_t[data_offs.size()];
     // TODO: avoid copy
-    std::copy(data_offs.cbegin(), data_offs.cend(), out_view->data_offsets);
+    std::ranges::copy(data_offs, out_view->data_offsets);
 
     // copying the null_bitmap. Maybe we can avoid that
     // in some cases.
@@ -365,7 +366,7 @@ void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
 }
 
 int64_t get_utf8_size(char* str, int64_t len, int kind) {
-    return unicode_to_utf8(NULL, str, len, kind);
+    return unicode_to_utf8(nullptr, str, len, kind);
 }
 
 void set_string_array_range(offset_t* out_offsets, char* out_data,

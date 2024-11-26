@@ -537,8 +537,8 @@ void ArrayBuildBuffer::ReserveArray(const std::shared_ptr<array_info>& in_arr) {
 }
 
 template <typename T>
-    requires(std::is_same<T, std::vector<std::shared_ptr<table_info>>>::value ||
-             std::is_same<T, std::deque<std::shared_ptr<table_info>>>::value)
+    requires(std::is_same_v<T, std::vector<std::shared_ptr<table_info>>> ||
+             std::is_same_v<T, std::deque<std::shared_ptr<table_info>>>)
 void ArrayBuildBuffer::ReserveArrayChunks(const T& chunks,
                                           const size_t array_idx,
                                           const bool input_is_unpinned) {

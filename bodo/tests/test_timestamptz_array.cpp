@@ -1,4 +1,3 @@
-#include <iostream>
 #include <sstream>
 #include "../libs/_array_hash.h"
 #include "../libs/_array_operations.h"
@@ -51,14 +50,14 @@ std::unique_ptr<table_info> make_timestamptz_arr() {
     offset_buffer[0] = 150;
 
     // Index 1: Null
-    arr->set_null_bit(1, 0);
+    arr->set_null_bit(1, false);
 
     // Index 2: UTC = 2024-3-14 00:00:00.000000000, offset = -01:00
     ts_buffer[2] = 1710374400000000000;
     offset_buffer[2] = -60;
 
     // Index 3: Null
-    arr->set_null_bit(3, 0);
+    arr->set_null_bit(3, false);
 
     // Index 4: UTC = 1999-12-31 23:59:59.999999250, offset = +11:01
     ts_buffer[4] = 946684799999999250;

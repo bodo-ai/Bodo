@@ -1,15 +1,6 @@
 
-/**
- * @file _listagg.cpp
- * @author Keaton Drebes (keaton@bodo.ai)
- * @brief Implementation for the LISTAGG SQL function without group by.
- *
- * @copyright Copyright (C) 2023 Bodo Inc. All rights reserved.
- */
-
 #include "_listagg.h"
 #include "_array_operations.h"
-#include "_array_utils.h"
 #include "_bodo_common.h"
 
 /**
@@ -246,9 +237,9 @@ char *listagg_seq_py(table_info *raw_in_table, char *separator,
 // Initialize lead_lag_seq_py function for usage with python
 PyMODINIT_FUNC PyInit_listagg(void) {
     PyObject *m;
-    MOD_DEF(m, "listagg", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "listagg", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

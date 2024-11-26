@@ -5,7 +5,7 @@
 #include <boost/json.hpp>
 #include <chrono>
 #include <iostream>
-#include <unordered_set>
+
 #include "../io/_io.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
@@ -406,9 +406,9 @@ static int64_t get_output_row_counts_for_op_stage_py_entry(int64_t operator_id,
 
 PyMODINIT_FUNC PyInit_query_profile_collector_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "query_profile_collector", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "query_profile_collector", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

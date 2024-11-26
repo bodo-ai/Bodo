@@ -2,7 +2,6 @@
 #pragma once
 
 #include "_groupby.h"
-#include "_groupby_ftypes.h"
 
 /**
  * The file declares the aggregate functions that are used

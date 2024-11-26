@@ -4,11 +4,13 @@
 #include <arrow/util/io_util.h>
 #include <arrow/util/logging.h>
 #include <fmt/format.h>
+#include <algorithm>
 #include <any>
 #include <condition_variable>
 #include <deque>
 #include <iostream>
 #include <mutex>
+#include <ranges>
 #include <stdexcept>
 #include <thread>
 
@@ -73,11 +75,11 @@ struct AtForkState {
     };
 
     void MaintainHandlersUnlocked() {
-        auto it = std::remove_if(handlers_.begin(), handlers_.end(),
-                                 [](const std::weak_ptr<AtForkHandler>& ptr) {
-                                     return ptr.expired();
-                                 });
-        handlers_.erase(it, handlers_.end());
+        auto it = std::ranges::remove_if(
+            handlers_, [](const std::weak_ptr<AtForkHandler>& ptr) {
+                return ptr.expired();
+            });
+        handlers_.erase(it.begin(), handlers_.end());
     }
 
     void BeforeFork() {
@@ -107,8 +109,7 @@ struct AtForkState {
         handlers_while_forking_.clear();
 
         // Execute handlers in reverse order
-        for (auto it = handlers.rbegin(); it != handlers.rend(); ++it) {
-            auto&& handler = *it;
+        for (auto& handler : std::ranges::reverse_view(handlers)) {
             if (handler.handler->parent_after) {
                 handler.handler->parent_after(std::move(handler.token));
             }
@@ -130,8 +131,7 @@ struct AtForkState {
         handlers_while_forking_.clear();
 
         // Execute handlers in reverse order
-        for (auto it = handlers.rbegin(); it != handlers.rend(); ++it) {
-            auto&& handler = *it;
+        for (auto& handler : std::ranges::reverse_view(handlers)) {
             if (handler.handler->child_after) {
                 handler.handler->child_after(std::move(handler.token));
             }

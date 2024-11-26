@@ -2,7 +2,6 @@
 
 #include "_array_build_buffer.h"
 #include "_bodo_common.h"
-#include "_bodo_to_arrow.h"
 #include "_dict_builder.h"
 
 std::unique_ptr<array_info> alloc_empty_array(

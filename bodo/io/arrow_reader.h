@@ -19,9 +19,9 @@
 #include <arrow/type.h>
 
 #include "../libs/_bodo_common.h"
+#include "../libs/_chunked_table_builder.h"
 #include "../libs/_dict_builder.h"
 #include "../libs/_query_profile_collector.h"
-#include "../libs/_table_builder.h"
 
 #define QUERY_PROFILE_INIT_STAGE_ID 0
 #define QUERY_PROFILE_READ_STAGE_ID 1

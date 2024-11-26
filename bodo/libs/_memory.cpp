@@ -1,5 +1,6 @@
 #include "_memory.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -17,13 +18,13 @@
 #include <malloc.h>
 #endif
 #include <sys/mman.h>
-#include "_mpi.h"
 
 #include <fmt/args.h>
 #include <fmt/chrono.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 
+#include "_mpi.h"
 #include "_utils.h"
 
 #undef CHECK_ARROW_AND_ASSIGN
@@ -840,9 +841,9 @@ BufferPool::BufferPool(const BufferPoolOptions& options)
     // Take the minumum of this, and the number specified in options_
     // to get the actual number of size-classes.
     // The absolute max is 63 (since it needs to be encodable in 6 bits).
-    uint8_t num_size_classes = static_cast<uint8_t>(std::min(
-        std::min(this->options_.max_num_size_classes, max_num_size_classes),
-        (uint64_t)63));
+    uint8_t num_size_classes =
+        static_cast<uint8_t>(std::min({this->options_.max_num_size_classes,
+                                       max_num_size_classes, (uint64_t)63}));
 
     this->malloc_threshold_ =
         static_cast<uint64_t>(MALLOC_THRESHOLD_RATIO * min_size_class_bytes);
@@ -933,9 +934,9 @@ inline int64_t BufferPool::find_size_class_idx(int64_t size) const {
     if (static_cast<uint64_t>(size) > this->size_class_bytes_.back()) {
         return -1;
     }
-    return std::distance(this->size_class_bytes_.begin(),
-                         std::lower_bound(this->size_class_bytes_.begin(),
-                                          this->size_class_bytes_.end(), size));
+    return std::distance(
+        this->size_class_bytes_.begin(),
+        std::ranges::lower_bound(this->size_class_bytes_, size));
 }
 
 // static
@@ -1801,8 +1802,7 @@ void BufferPool::print_stats() {
     };
 
     std::vector<size_t> col_widths(8);
-    std::transform(std::begin(COL_NAMES), std::end(COL_NAMES),
-                   col_widths.begin(), strlen);
+    std::ranges::transform(COL_NAMES, col_widths.begin(), strlen);
 
     fmt::dynamic_format_arg_store<fmt::format_context> store;
     store.push_back("");

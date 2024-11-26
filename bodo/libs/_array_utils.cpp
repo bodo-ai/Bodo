@@ -302,7 +302,7 @@ std::shared_ptr<array_info> RetrieveArray_SingleColumn_F_numpy(
     bodo::IBufferPool* const pool = bodo::BufferPool::DefaultPtr(),
     std::shared_ptr<::arrow::MemoryManager> mm =
         bodo::default_buffer_memory_manager()) {
-    std::shared_ptr<array_info> out_arr = NULL;
+    std::shared_ptr<array_info> out_arr = nullptr;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     assert(arr_type == bodo_array_type::NUMPY);
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -784,7 +784,7 @@ std::shared_ptr<array_info> RetrieveArray_TwoColumns(
             "dictionary");
     }
     size_t nRowOut = long_write_idxs.size();
-    std::shared_ptr<array_info> out_arr = NULL;
+    std::shared_ptr<array_info> out_arr = nullptr;
     /* The function for computing the returning values
      * In the output is the column index to use and the row index to use.
      * The row index may be -1 though.
@@ -2357,8 +2357,8 @@ void DEBUG_PrintTable(std::ostream& os,
 
 void DEBUG_PrintUnorderedMap(std::ostream& os,
                              std::unordered_map<uint64_t, uint64_t> map) {
-    for (auto it = map.begin(); it != map.end(); it++) {
-        os << it->first << ": " << it->second << "\n";
+    for (auto& it : map) {
+        os << it.first << ": " << it.second << "\n";
     }
 }
 
@@ -2383,7 +2383,7 @@ void DEBUG_PrintRefct(std::ostream& os,
                       std::vector<std::shared_ptr<array_info>> const& ListArr) {
     int nCol = ListArr.size();
     auto GetNRTinfo = [](NRT_MemInfo* meminf) -> std::string {
-        if (meminf == NULL)
+        if (meminf == nullptr)
             return "NULL";
         return "(refct=" + std::to_string(meminf->refct) + ")";
     };

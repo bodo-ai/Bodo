@@ -1,20 +1,21 @@
-#include <iostream>
 #include <sstream>
 #include "../libs/_array_utils.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/groupby/_groupby_col_set.h"
+#include "../libs/groupby/_groupby_ftypes.h"
 #include "../libs/window/_window_compute.h"
-#include "./test.hpp"
-#include "table_generator.hpp"
 
-typedef enum {
+#include "./table_generator.hpp"
+#include "./test.hpp"
+
+using empty_return_enum = enum {
     ZERO,
     ONE,
     NULL_OUTPUT,
     EMPTY_STRING,
     EMPTY_ARRAY,
     EMPTY_MAP,
-} empty_return_enum;
+};
 
 // Create an array of the desired type without directly setting the null bit
 template <bodo_array_type::arr_type_enum ArrType, Bodo_CTypes::CTypeEnum DType>

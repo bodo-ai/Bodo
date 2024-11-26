@@ -62,7 +62,10 @@ void DictEncodingState::set_array(int64_t func_id, int64_t cache_dict_id,
                                   std::shared_ptr<array_info> arr,
                                   int64_t new_dict_id) {
     this->one_input_map.insert_or_assign(
-        func_id, CacheEntry{arr, new_dict_id, cache_dict_id, cache_dict_len});
+        func_id, CacheEntry{.array = arr,
+                            .output_dict_id = new_dict_id,
+                            .dict_id = cache_dict_id,
+                            .dict_len = cache_dict_len});
     this->num_set_calls += 1;
 }
 
@@ -90,8 +93,10 @@ void DictEncodingState::set_array_multi_input(
     std::vector<int64_t> cache_dict_lengths, std::shared_ptr<array_info> arr,
     int64_t new_dict_id) {
     this->multi_input_map.insert_or_assign(
-        func_id,
-        MultiCacheEntry{arr, cache_dict_ids, cache_dict_lengths, new_dict_id});
+        func_id, MultiCacheEntry{.array = arr,
+                                 .dict_ids = cache_dict_ids,
+                                 .dict_lengths = cache_dict_lengths,
+                                 .output_dict_id = new_dict_id});
     this->num_set_calls += 1;
 }
 
@@ -262,9 +267,9 @@ void delete_dict_encoding_state(DictEncodingState* state) { delete state; }
 
 PyMODINIT_FUNC PyInit_stream_dict_encoding_cpp(void) {
     PyObject* m;
-    MOD_DEF(m, "stream_dict_encoding_cpp", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "stream_dict_encoding_cpp", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

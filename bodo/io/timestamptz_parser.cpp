@@ -2,9 +2,8 @@
 
 #include <arrow/builder.h>
 #include <arrow/type.h>
-#include <iostream>
 
-#include "../libs/_bodo_common.h"
+#include "../libs/_memory.h"
 
 int Parser::consume_char(char c) {
     if (pos >= ts_str.size()) {
@@ -184,7 +183,7 @@ std::pair<int64_t, int16_t> Parser::parse_timestamptz() {
 
     // Convert the timestamp to UTC by subtracting the offset from the
     // timestamp, and normalize
-    struct tm t = {0};
+    struct tm t = {.tm_sec = 0};
     t.tm_year = year - 1900;
     t.tm_mon = month - 1;
     t.tm_mday = day;
@@ -219,7 +218,7 @@ void parse_to_struct(arrow::StructBuilder& struct_builder,
     auto offset_builder = std::static_pointer_cast<arrow::Int16Builder>(
         struct_builder.child_builder(1));
 
-    Parser parser = {ttz_str};
+    Parser parser = {.ts_str = ttz_str};
     auto [ts, offset] = parser.parse_timestamptz();
 
     if (!ts_builder->Append(ts).ok()) {

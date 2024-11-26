@@ -1,5 +1,4 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
-
 #include "_groupby_mpi_exscan.h"
 #include "../_array_hash.h"
 #include "../_array_operations.h"
@@ -7,7 +6,6 @@
 #include "../_bodo_common.h"
 #include "../_dict_builder.h"
 #include "../_distributed.h"
-#include "../_shuffle.h"
 #include "_groupby_common.h"
 #include "_groupby_ftypes.h"
 #include "_groupby_hashing.h"
@@ -133,10 +131,12 @@ std::shared_ptr<array_info> compute_categorical_index(
     concat_column.insert(concat_column.end(), in_table->columns.begin(),
                          in_table->columns.begin() + num_keys);
 
-    HashComputeCategoricalIndex hash_fct{hashes_full, hashes_in_table,
-                                         n_rows_full};
-    HashEqualComputeCategoricalIndex equal_fct{num_keys, n_rows_full,
-                                               &concat_column};
+    HashComputeCategoricalIndex hash_fct{.hashes_full = hashes_full,
+                                         .hashes_in_table = hashes_in_table,
+                                         .n_rows_full = n_rows_full};
+    HashEqualComputeCategoricalIndex equal_fct{.num_keys = num_keys,
+                                               .n_rows_full = n_rows_full,
+                                               .concat_column = &concat_column};
     bodo::unord_map_container<size_t, size_t, HashComputeCategoricalIndex,
                               HashEqualComputeCategoricalIndex>
         entSet({}, hash_fct, equal_fct);

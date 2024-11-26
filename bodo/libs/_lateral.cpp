@@ -1,7 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_lateral.h"
 #include <Python.h>
-#include <iostream>
+
 #include "_array_utils.h"
 #include "_bodo_common.h"
 
@@ -351,7 +351,7 @@ std::shared_ptr<array_info> interleave_string_arrays(
         if (row_to_pick != -1 &&
             // TODO XXX Can this get_null_bit be templated?
             inner_arrs[field_to_pick]->get_null_bit(row_to_pick)) {
-            SetBitTo(null_vector.data(), row, 1);
+            SetBitTo(null_vector.data(), row, true);
             std::string s;
             if (inner_arrs[field_to_pick]->arr_type ==
                 bodo_array_type::STRING) {
@@ -365,8 +365,8 @@ std::shared_ptr<array_info> interleave_string_arrays(
             }
             string_vector.push_back(s);
         } else {
-            SetBitTo(null_vector.data(), row, 0);
-            string_vector.push_back("");
+            SetBitTo(null_vector.data(), row, false);
+            string_vector.emplace_back("");
         }
     }
     std::shared_ptr<array_info> res = create_string_array(
@@ -817,7 +817,7 @@ std::unique_ptr<table_info> lateral_flatten_struct(
         bodo::vector<uint8_t> null_vector((n_fields + 7) >> 3, 0, pool);
         bodo::vector<std::string> string_vector;
         for (size_t i = 0; i < n_fields; i++) {
-            SetBitTo(null_vector.data(), i, 1);
+            SetBitTo(null_vector.data(), i, true);
             string_vector.push_back(explode_arr->field_names[i]);
         }
 
@@ -936,15 +936,15 @@ table_info *lateral_flatten_py_entrypt(table_info *in_table, int64_t *n_rows,
         return raw_result;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
 PyMODINIT_FUNC PyInit_lateral_cpp(void) {
     PyObject *m;
-    MOD_DEF(m, "lateral_cpp", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "lateral_cpp", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

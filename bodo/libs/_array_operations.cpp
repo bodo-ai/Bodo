@@ -1,15 +1,16 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_operations.h"
+#include <algorithm>
 #include <boost/xpressive/xpressive.hpp>
 #include <functional>
 #include <random>
-#include <set>
+
+#include "_array_build_buffer.h"
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_shuffle.h"
-#include "_table_builder.h"
 #include "streaming/_dict_encoding.h"
 #include "vendored/gfx/timsort.hpp"
 
@@ -272,8 +273,7 @@ std::shared_ptr<table_info> get_samples_from_table_parallel(
 //
 
 template <typename IndexT>
-    requires(std::is_same<IndexT, int32_t>::value ||
-             std::is_same<IndexT, int64_t>::value)
+    requires(std::is_same_v<IndexT, int32_t> || std::is_same_v<IndexT, int64_t>)
 bodo::vector<IndexT> sort_values_table_local_get_indices(
     std::shared_ptr<table_info> in_table, size_t n_keys,
     const int64_t* vect_ascending, const int64_t* na_position, bool is_parallel,
@@ -351,6 +351,7 @@ template bodo::vector<int64_t> sort_values_table_local_get_indices(
  * tracing should be parallel or not)
  */
 template <typename IndexT>
+    requires(std::is_same_v<IndexT, int32_t> || std::is_same_v<IndexT, int64_t>)
 std::shared_ptr<table_info> sort_values_table_local(
     std::shared_ptr<table_info> in_table, int64_t n_key,
     const int64_t* vect_ascending, const int64_t* na_position,
@@ -629,7 +630,7 @@ table_info* sort_values_table_py_entry(table_info* in_table, int64_t n_keys,
         return new table_info(*out);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1041,7 +1042,7 @@ std::shared_ptr<array_info> get_parallel_sort_bounds_for_domain(
         }
     }
 
-    std::shared_ptr<array_info> concatenated_samples = NULL;
+    std::shared_ptr<array_info> concatenated_samples = nullptr;
     if (myrank == mpi_root) {
         // Concatenate locally_sorted_cols into a single array_info, sort it and
         // then compute the split bounds on this.
@@ -1116,7 +1117,7 @@ std::shared_ptr<table_info> sort_table_for_interval_join(
     // 1. Compute destination ranks for each row in both tables
     //
 
-    std::shared_ptr<table_info> table_to_send = NULL;
+    std::shared_ptr<table_info> table_to_send = nullptr;
     // In this case, we compute the ranks directly, and treat them as the hashes
     // (the modulo step later doesn't end up changing these values since they're
     // all already between 0 and n_pes-1).
@@ -1178,7 +1179,7 @@ table_info* sort_table_for_interval_join_py_entrypoint(table_info* table,
         return new table_info(*sorted_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1396,7 +1397,8 @@ static std::shared_ptr<table_info> drop_duplicates_keys_inner(
     uint32_t seed = SEED_HASH_CONTAINER;
     std::shared_ptr<uint32_t[]> hashes = hash_keys(key_arrs, seed, is_parallel);
     HashDropDuplicates hash_fct{hashes};
-    KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
+    KeyEqualDropDuplicates equal_fct{.key_arrs = &key_arrs,
+                                     .num_keys = num_keys};
     bodo::unord_map_container<size_t, size_t, HashDropDuplicates,
                               KeyEqualDropDuplicates>
         entSet({}, hash_fct, equal_fct);
@@ -1481,7 +1483,8 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
                            /*global_dict_needed=*/false);
     }
     HashDropDuplicates hash_fct{hashes};
-    KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
+    KeyEqualDropDuplicates equal_fct{.key_arrs = &key_arrs,
+                                     .num_keys = num_keys};
     bodo::unord_map_container<size_t, size_t, HashDropDuplicates,
                               KeyEqualDropDuplicates>
         entSet({}, hash_fct, equal_fct, pool);
@@ -1538,7 +1541,7 @@ bodo::vector<int64_t> drop_duplicates_table_helper(
                 if (group == 0) {
                     next_ent++;
                     group = next_ent;
-                    ListRowPair.push_back({i_row, -1});
+                    ListRowPair.emplace_back(i_row, -1);
                 } else {
                     size_t pos = group - 1;
                     ListRowPair[pos].second = i_row;
@@ -1735,7 +1738,7 @@ table_info* drop_duplicates_table_py_entry(table_info* in_table,
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1859,7 +1862,7 @@ table_info* union_tables(table_info** in_tables, int64_t num_tables,
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -1873,7 +1876,7 @@ table_info* concat_tables_py_entry(table_info** in_tables, int64_t num_tables) {
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -2073,8 +2076,7 @@ std::shared_ptr<table_info> sample_table_inner_parallel(
                 int64_t idx_rand = ListIdxSampled[i_samp];
                 int i_proc =
                     std::distance(ListEnds.begin(),
-                                  std::lower_bound(ListEnds.begin(),
-                                                   ListEnds.end(), idx_rand));
+                                  std::ranges::lower_bound(ListEnds, idx_rand));
                 ListIdxSampled[i_samp] -= ListStarts[i_proc];
                 ListByProcessor[i_samp] = i_proc;
                 ListCounts[i_proc]++;
@@ -2195,7 +2197,7 @@ table_info* sample_table_py_entry(table_info* in_table, int64_t n, double frac,
         }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 

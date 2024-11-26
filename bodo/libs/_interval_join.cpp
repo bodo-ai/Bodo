@@ -5,7 +5,7 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_join.h"
-#include "_shuffle.h"
+#include "_nested_loop_join_impl.h"
 
 /**
  * @brief Check if an array contains a NA value according
@@ -385,6 +385,6 @@ table_info* interval_join_table(
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }

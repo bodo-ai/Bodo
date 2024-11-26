@@ -2,7 +2,6 @@
 
 #include <cstdio>
 #include <filesystem>
-#include <iostream>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -25,13 +24,13 @@
 #include <boost/uuid/uuid.hpp>             // uuid class
 #include <boost/uuid/uuid_generators.hpp>  // generators
 #include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
+#include <utility>
 
 #include <fmt/chrono.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 
 #include "_mpi.h"
-
 #include "_utils.h"
 
 #undef CHECK_ARROW_AND_ASSIGN
@@ -173,7 +172,7 @@ std::shared_ptr<StorageOptions> StorageOptions::Defaults(uint8_t tier) {
 
 StorageManager::StorageManager(std::string storage_name,
                                std::shared_ptr<StorageOptions> options)
-    : storage_name(storage_name), options(options) {
+    : storage_name(std::move(storage_name)), options(std::move(options)) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -196,7 +195,7 @@ class ArrowStorageManager final : public StorageManager {
         : StorageManager(storage_name, options),
           is_object_store(is_object_store_),
           location(std::filesystem::path(options->location) / this->uuid),
-          fs(fs) {
+          fs(std::move(fs)) {
         this->size_class_bytes.assign(size_class_bytes_.begin(),
                                       size_class_bytes_.end());
 

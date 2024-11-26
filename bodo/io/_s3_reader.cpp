@@ -1,6 +1,9 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 
+#include <algorithm>
+#include <cassert>
+
 #include <arrow/filesystem/filesystem.h>
 #include <arrow/filesystem/s3fs.h>
 #include <arrow/io/interfaces.h>
@@ -14,7 +17,7 @@
 #include <fmt/format.h>
 #include <boost/json/parser.hpp>
 #include <boost/json/value_to.hpp>
-#include <cassert>
+
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
 #include "_s3_reader.h"
@@ -240,7 +243,7 @@ std::string IcebergRestAwsCredentialsProvider::getToken(
     // Generated using --libcurl
     CURL *hnd;
     struct curl_slist *slist1;
-    slist1 = NULL;
+    slist1 = nullptr;
     slist1 = curl_slist_append(
         slist1, "content-type: application/x-www-form-urlencoded");
     hnd = curl_easy_init();
@@ -290,9 +293,9 @@ std::string IcebergRestAwsCredentialsProvider::getToken(
     }
 
     curl_easy_cleanup(hnd);
-    hnd = NULL;
+    hnd = nullptr;
     curl_slist_free_all(slist1);
-    slist1 = NULL;
+    slist1 = nullptr;
 
     try {
         boost::json::parser parser;
@@ -474,14 +477,14 @@ class S3FileReader : public SingleFileReader {
                                fs->region())
         this->assign_f_type(_fname);
     }
-    bool seek(int64_t pos) {
+    bool seek(int64_t pos) override {
         status = s3_file->Seek(pos + this->csv_header_bytes);
         return status.ok();
     }
-    bool ok() { return status.ok(); }
-    bool read_to_buff(char *s, int64_t size) {
+    bool ok() override { return status.ok(); }
+    bool read_to_buff(char *s, int64_t size) override {
         if (size == 0) {  // hack for minio, read_csv size 0
-            return 1;
+            return true;
         }
         int64_t bytes_read = 0;
         arrow::Result<int64_t> res = s3_file->Read(size, s);
@@ -489,7 +492,7 @@ class S3FileReader : public SingleFileReader {
                                fs->region());
         return status.ok() && (bytes_read == size);
     }
-    uint64_t getSize() {
+    uint64_t getSize() override {
         int64_t size = -1;
         arrow::Result<int64_t> res = s3_file->GetSize();
         CHECK_ARROW_AND_ASSIGN(res, "S3 file GetSize() ", size, fs->region());
@@ -526,16 +529,15 @@ class S3DirectoryFileReader : public DirectoryFileReader {
         // then sort by file names
         // assuming the directory contains files only, i.e. no
         // subdirectory
-        std::transform(this->file_stats.begin(), this->file_stats.end(),
-                       std::back_inserter(this->file_names_sizes),
-                       extract_file_name_size);
-        std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
-                  sort_by_name);
+        std::ranges::transform(this->file_stats,
+                               std::back_inserter(this->file_names_sizes),
+                               extract_file_name_size);
+        std::ranges::sort(this->file_names_sizes, sort_by_name);
 
         this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
     };
 
-    void initFileReader(const char *fname) {
+    void initFileReader(const char *fname) override {
         this->f_reader = new S3FileReader(fname, this->f_type_to_string(),
                                           this->csv_header, this->json_lines);
         this->f_reader->csv_header_bytes = this->csv_header_bytes;
@@ -667,9 +669,9 @@ void s3_open_file(const char *fname,
 
 PyMODINIT_FUNC PyInit_s3_reader(void) {
     PyObject *m;
-    MOD_DEF(m, "s3_reader", "No docs", NULL);
-    if (m == NULL)
-        return NULL;
+    MOD_DEF(m, "s3_reader", "No docs", nullptr);
+    if (m == nullptr)
+        return nullptr;
 
     // Both only ever called from C++
     SetAttrStringFromVoidPtr(m, init_s3_reader);

@@ -17,6 +17,7 @@
 #include <pyerrors.h>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 #include "../libs/_bodo_to_arrow.h"
 #include "../libs/_distributed.h"
@@ -388,7 +389,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         : PrimitiveBuilder(arrow_to_bodo_type(type->id()), length, is_nullable,
                            is_categorical, getTimeUnit(type)) {}
 
-    virtual void append(std::shared_ptr<arrow::ChunkedArray> chunked_arr) {
+    void append(std::shared_ptr<arrow::ChunkedArray> chunked_arr) override {
         if (!temp_zero_copy_fallback) {
             // Accumulate chunked_arr's in an ArrayVector. Concatenate in Arrow
             // and convert to Bodo with zero-copy in get_output
@@ -447,7 +448,7 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
-    virtual std::shared_ptr<array_info> get_output() {
+    std::shared_ptr<array_info> get_output() override {
         if (out_array == nullptr && !temp_zero_copy_fallback) {
             if (arrays.empty()) {
                 // Avoid empty call to concatenate
@@ -484,7 +485,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     StringBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t array_id = -1)
         : dtype(dtype), array_id(array_id) {}
 
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+    void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) override {
         // Reserve some space up front in case of multiple chunks.
         arrays.reserve(arrays.size() + chunked_arr->chunks().size());
         for (const std::shared_ptr<arrow::Array>& chunk :
@@ -519,7 +520,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
-    virtual std::shared_ptr<array_info> get_output() {
+    std::shared_ptr<array_info> get_output() override {
         if (out_array == nullptr) {
             if (arrays.empty()) {
                 out_array = alloc_string_array(dtype, 0, 0);
@@ -565,14 +566,14 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     DictionaryEncodedStringBuilder(int64_t length, int64_t dict_id = -1)
         : length(length), dict_id(dict_id) {}
 
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+    void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) override {
         // Store the chunks
         this->all_chunks.insert(this->all_chunks.end(),
                                 chunked_arr->chunks().begin(),
                                 chunked_arr->chunks().end());
     }
 
-    virtual std::shared_ptr<array_info> get_output() {
+    std::shared_ptr<array_info> get_output() override {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -670,7 +671,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+    void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) override {
         // unlike in other builders where we store the chunks, we incrementally
         // build the dictionary encoded array to save memory
         for (auto arr : chunked_arr->chunks()) {
@@ -691,7 +692,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         // needed anymore
     }
 
-    virtual std::shared_ptr<array_info> get_output() {
+    std::shared_ptr<array_info> get_output() override {
         if (out_array != nullptr) {
             return out_array;
         }
@@ -791,9 +792,10 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
  */
 class ArrowBuilder : public TableBuilder::BuilderColumn {
    public:
-    ArrowBuilder(std::shared_ptr<arrow::DataType> _dtype) : dtype(_dtype) {}
+    ArrowBuilder(std::shared_ptr<arrow::DataType> _dtype)
+        : dtype(std::move(_dtype)) {}
 
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+    void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) override {
         // XXX hopefully keeping the arrays around doesn't prevent other
         // intermediate Arrow arrays and tables from being deleted when not
         // needed anymore
@@ -801,7 +803,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
                       chunked_arr->chunks().end());
     }
 
-    virtual std::shared_ptr<array_info> get_output() {
+    std::shared_ptr<array_info> get_output() override {
         auto* pool = bodo::BufferPool::DefaultPtr();
         if (out_array != nullptr) {
             return out_array;
@@ -847,7 +849,7 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
                n_null_bytes);
     }
 
-    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {}
+    void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) override {}
 };
 
 TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
@@ -1064,7 +1066,7 @@ void ArrowReader::distribute_rows(PyObject* pieces_py) {
             PyObject* piece;
             // iterate through pieces next
             PyObject* iterator = PyObject_GetIter(pieces_py);
-            if (iterator == NULL) {
+            if (iterator == nullptr) {
                 throw std::runtime_error(
                     "ArrowReader::distribute_rows(): error getting pieces "
                     "iterator");
@@ -1072,7 +1074,7 @@ void ArrowReader::distribute_rows(PyObject* pieces_py) {
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
-                if (num_rows_piece_py == NULL) {
+                if (num_rows_piece_py == nullptr) {
                     throw std::runtime_error(
                         "ArrowReader::distribute_rows: _bodo_num_rows "
                         "attribute not in piece");
@@ -1131,7 +1133,7 @@ void ArrowReader::distribute_rows(PyObject* pieces_py) {
             PyObject* piece;
             // iterate through pieces next
             PyObject* iterator = PyObject_GetIter(pieces_py);
-            if (iterator == NULL) {
+            if (iterator == nullptr) {
                 throw std::runtime_error(
                     "ArrowReader::distribute_rows(): error getting "
                     "pieces iterator");
@@ -1139,7 +1141,7 @@ void ArrowReader::distribute_rows(PyObject* pieces_py) {
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
-                if (num_rows_piece_py == NULL) {
+                if (num_rows_piece_py == nullptr) {
                     throw std::runtime_error(
                         "ArrowReader::distribute_rows(): _bodo_num_rows "
                         "attribute not in piece");

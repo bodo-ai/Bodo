@@ -1,9 +1,6 @@
 #include <arrow/array.h>
 #include <arrow/table.h>
-#include "/tmp/datasketches-prefix/include/DataSketches/theta_constants.hpp"
 #include "/tmp/datasketches-prefix/include/DataSketches/theta_sketch.hpp"
-#include "/tmp/datasketches-prefix/include/DataSketches/theta_union.hpp"
-#include "_array_utils.h"
 #include "_bodo_common.h"
 
 /**

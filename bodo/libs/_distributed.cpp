@@ -1,17 +1,19 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_distributed.h"
+#include <fstream>
+
+#include <fmt/format.h>
 #include <mpi.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <ctime>
-#include <fstream>
 #include <vector>
+
 #include "_array_utils.h"
 #include "_dict_builder.h"
 #include "_shuffle.h"
 #include "_table_builder_utils.h"
-#include "fmt/format.h"
 
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
     defined(CHECK_LICENSE_PLATFORM)
@@ -924,16 +926,16 @@ std::shared_ptr<array_info> gather_array(std::shared_ptr<array_info> in_arr,
             }
             std::vector<std::shared_ptr<array_info>> child_arrays;
             child_arrays.reserve(in_arr->child_arrays.size());
-            for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
-                child_arrays.push_back(gather_array(
-                    in_arr->child_arrays[i], all_gather, is_parallel, mpi_root,
-                    n_pes, myrank, comm_ptr));
+            for (const auto &child_array : in_arr->child_arrays) {
+                child_arrays.push_back(gather_array(child_array, all_gather,
+                                                    is_parallel, mpi_root,
+                                                    n_pes, myrank, comm_ptr));
             }
             out_arr = alloc_struct(n_rows_tot, std::move(child_arrays));
         } else {
-            for (size_t i = 0; i < in_arr->child_arrays.size(); ++i) {
-                gather_array(in_arr->child_arrays[i], all_gather, is_parallel,
-                             mpi_root, n_pes, myrank, comm_ptr);
+            for (const auto &child_array : in_arr->child_arrays) {
+                gather_array(child_array, all_gather, is_parallel, mpi_root,
+                             n_pes, myrank, comm_ptr);
             }
         }
     } else if (arr_type == bodo_array_type::MAP) {
@@ -1101,7 +1103,7 @@ array_info *gather_array_py_entry(array_info *in_array, bool all_gather,
 static PyObject *get_rank_py_wrapper(PyObject *self, PyObject *args) {
     if (PyTuple_Size(args) != 0) {
         PyErr_SetString(PyExc_TypeError, "get_rank() does not take arguments");
-        return NULL;
+        return nullptr;
     }
     PyObject *rank_obj = PyLong_FromLong(dist_get_rank());
     return rank_obj;
@@ -1115,7 +1117,7 @@ static PyObject *get_rank_py_wrapper(PyObject *self, PyObject *args) {
 static PyObject *finalize_py_wrapper(PyObject *self, PyObject *args) {
     if (PyTuple_Size(args) != 0) {
         PyErr_SetString(PyExc_TypeError, "finalize() does not take arguments");
-        return NULL;
+        return nullptr;
     }
     PyObject *ret_obj = PyLong_FromLong(finalize());
     return ret_obj;
@@ -1125,22 +1127,23 @@ static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(get_rank_py_wrapper),
     declmethod(finalize_py_wrapper),
-    {NULL},
+    {nullptr},
 #undef declmethod
 };
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
     MOD_DEF(m, "hdist", "No docs", ext_methods);
-    if (m == NULL)
-        return NULL;
+    if (m == nullptr)
+        return nullptr;
 
     // make sure MPI is initialized, assuming this will be called
     // on all processes
     int is_initialized;
     MPI_Initialized(&is_initialized);
     if (!is_initialized)
-        CHECK_MPI(MPI_Init(NULL, NULL), "PyInit_hdist: MPI error on MPI_Init:");
+        CHECK_MPI(MPI_Init(nullptr, nullptr),
+                  "PyInit_hdist: MPI error on MPI_Init:");
 
 #if defined(CHECK_LICENSE_PLATFORM)
     int num_pes_plat;

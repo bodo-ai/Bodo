@@ -6,15 +6,13 @@
 #include <span>
 
 #include <arrow/api.h>
-#include "_mpi.h"
 
 #include "_array_hash.h"
-#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_bodo_to_arrow.h"
 #include "_dict_builder.h"
 #include "_distributed.h"
+#include "_mpi.h"
 
 /**
  * @brief Template used to handle the unmatchable rows in mpi_comm_info. This is
@@ -170,7 +168,7 @@ mpi_comm_info::mpi_comm_info(
     const std::shared_ptr<uint32_t[]>& hashes, bool is_parallel,
     const SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter,
     const uint8_t* keep_row_bitmask, bool keep_filter_misses, bool send_only)
-    : has_nulls(false), n_null_bytes(0), row_dest(arrays[0]->length, -1) {
+    : has_nulls(false), row_dest(arrays[0]->length, -1) {
     tracing::Event ev("mpi_comm_info", is_parallel);
     const uint64_t& n_rows = arrays[0]->length;
     ev.add_attribute("n_rows", n_rows);

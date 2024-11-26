@@ -9,6 +9,7 @@
  */
 
 #include <mpi.h>
+
 #define NODISCARD(fn) [[nodiscard]] decltype(fn) fn
 
 NODISCARD(MPI_Abort);

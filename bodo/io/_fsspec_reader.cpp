@@ -10,7 +10,6 @@
 #include <arrow/status.h>
 
 #include "../libs/_bodo_common.h"
-#include "_bodo_file_reader.h"
 
 // Silence warnings from including generated code
 PUSH_IGNORED_COMPILER_ERROR("-Wreturn-type-c-linkage")
@@ -171,7 +170,7 @@ static PyObject *finalize_fsspec_py_wrapper(PyObject *self, PyObject *args) {
     if (PyTuple_Size(args) != 0) {
         PyErr_SetString(PyExc_TypeError,
                         "finalize_fsspec() does not take arguments");
-        return NULL;
+        return nullptr;
     }
     PyObject *ret_obj = PyLong_FromLong(finalize_fsspec());
     return ret_obj;
@@ -180,15 +179,15 @@ static PyObject *finalize_fsspec_py_wrapper(PyObject *self, PyObject *args) {
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) {#func, (PyCFunction)func, METH_VARARGS, NULL}
     declmethod(finalize_fsspec_py_wrapper),
-    {NULL},
+    {nullptr},
 #undef declmethod
 };
 
 PyMODINIT_FUNC PyInit_fsspec_reader(void) {
     PyObject *m;
     MOD_DEF(m, "fsspec_reader", "No docs", ext_methods);
-    if (m == NULL)
-        return NULL;
+    if (m == nullptr)
+        return nullptr;
 
     return m;
 }

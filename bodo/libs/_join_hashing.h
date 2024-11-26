@@ -1,7 +1,6 @@
 #pragma once
 
-#include "_array_hash.h"
-#include "_bodo_common.h"
+#include "_array_utils.h"
 
 /** This code tests if two rows in the same "table" are equal given a list
  * of column numbers. The table is defined as a

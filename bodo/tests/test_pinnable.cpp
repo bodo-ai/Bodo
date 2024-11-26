@@ -1,5 +1,4 @@
 /// bodo::pinnable tests
-
 #include <set>
 #include <sstream>
 
@@ -68,7 +67,7 @@ void equality_check(const Iterator1 &begin1, const Iterator1 &end1,
     }
 }
 
-// This is a test harness that takens a templatized functor class and
+// This is a test harness that takes a templatized functor class and
 // a pinnable type. The functor is constructed with the given
 // arguments.
 //
@@ -115,7 +114,7 @@ void simple_pin(const std::string &nm, Args &&...args) {
 
         auto seed(random());
 
-        srand(seed);  // Need to keeep the random seed the same for all three
+        srand(seed);  // Need to keep the random seed the same for all three
                       // tests
 
         normal(ref);

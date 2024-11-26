@@ -4,16 +4,15 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
-#include <iostream>
 #include <random>
 #include <span>
 #include <vector>
-#include "_mpi.h"
 
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_tdigest.h"
 #include "_distributed.h"
+#include "_mpi.h"
 
 #define root 0
 
@@ -81,9 +80,9 @@ void compute_series_monotonicity_py_entry(double *res, array_info *arr,
 
 PyMODINIT_FUNC PyInit_quantile_alg(void) {
     PyObject *m;
-    MOD_DEF(m, "quantile_alg", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "quantile_alg", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();
@@ -627,7 +626,10 @@ local_global_stat_nan nb_entries_global(std::shared_ptr<array_info> arr,
                                         bool parallel) {
     std::pair<int64_t, int64_t> pair = nb_entries_local<T, DType>(arr);
     if (!parallel) {
-        return {pair.first, pair.second, pair.first, pair.second};
+        return {.glob_nb_ok = pair.first,
+                .glob_nb_miss = pair.second,
+                .loc_nb_ok = pair.first,
+                .loc_nb_miss = pair.second};
     }
     int64_t loc_nb_ok = pair.first, loc_nb_miss = pair.second, glob_nb_ok = 0,
             glob_nb_miss = 0;
@@ -637,7 +639,10 @@ local_global_stat_nan nb_entries_global(std::shared_ptr<array_info> arr,
     CHECK_MPI(MPI_Allreduce(&loc_nb_miss, &glob_nb_miss, 1, MPI_LONG_LONG_INT,
                             MPI_SUM, MPI_COMM_WORLD),
               "nb_entries_global: MPI error on MPI_Allreduce:");
-    return {glob_nb_ok, glob_nb_miss, loc_nb_ok, loc_nb_miss};
+    return {.glob_nb_ok = glob_nb_ok,
+            .glob_nb_miss = glob_nb_miss,
+            .loc_nb_ok = loc_nb_ok,
+            .loc_nb_miss = loc_nb_miss};
 }
 
 /** Effective computation of the median

@@ -1,8 +1,11 @@
 #include "_theta_sketches.h"
 #include <arrow/python/api.h>
+#include <algorithm>
+#include "/tmp/datasketches-prefix/include/DataSketches/theta_union.hpp"
+
+#include "_array_utils.h"
 #include "_distributed.h"
 #include "_mpi.h"
-#include "_shuffle.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -67,9 +70,9 @@ CompactSketchCollection::merge_parallel_sketches() {
                     offset_t length = end_offset - start_offset;
                     std::string serialized_str(&raw_data_ptr[start_offset],
                                                length);
-                    serialized_collection.push_back(serialized_str);
+                    serialized_collection.emplace_back(serialized_str);
                 } else {
-                    serialized_collection.push_back(std::nullopt);
+                    serialized_collection.emplace_back(std::nullopt);
                 }
                 combined_idx++;
             }
@@ -122,9 +125,9 @@ CompactSketchCollection::serialize_sketches() {
         if (this->sketches[col_idx].has_value()) {
             std::stringstream serialized;
             this->sketches[col_idx].value().serialize(serialized);
-            result.push_back(serialized.str());
+            result.emplace_back(serialized.str());
         } else {
-            result.push_back(std::nullopt);
+            result.emplace_back(std::nullopt);
         }
     }
     return result;
@@ -177,7 +180,8 @@ std::unique_ptr<array_info> CompactSketchCollection::compute_ndv() {
         alloc_nullable_array_no_nulls(n_fields, Bodo_CTypes::FLOAT64);
     for (size_t col_idx = 0; col_idx < n_fields; col_idx++) {
         if (local_estimates[col_idx] < 0) {
-            arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(col_idx, 0);
+            arr->set_null_bit<bodo_array_type::NULLABLE_INT_BOOL>(col_idx,
+                                                                  false);
         } else {
             arr->data1<bodo_array_type::NULLABLE_INT_BOOL, double>()[col_idx] =
                 local_estimates[col_idx];
@@ -195,7 +199,7 @@ inline void insert_numeric_buffer_theta_sketch(
     } else {
         // Convert to little endian
         std::string str = std::string(initial_bytes, n_bytes);
-        std::reverse(std::begin(str), std::end(str));
+        std::ranges::reverse(str);
         const char *bytes = str.c_str();
         sketch.update(bytes, n_bytes);
     }
@@ -271,7 +275,7 @@ void insert_theta_sketch_decimal_column_helper(
                     // relevant n_bytes are at the begining)
                     const char *initial_bytes = (raw_values + (16 * row));
                     std::string str = std::string(initial_bytes, n_bytes);
-                    std::reverse(std::begin(str), std::end(str));
+                    std::ranges::reverse(str);
                     const char *bytes = str.c_str();
                     sketch.update(bytes, n_bytes);
                 }
@@ -551,9 +555,9 @@ void delete_theta_sketches_py_entrypt(UpdateSketchCollection *sketches) {
 
 PyMODINIT_FUNC PyInit_theta_sketches(void) {
     PyObject *m;
-    MOD_DEF(m, "theta_sketches", "No docs", NULL);
-    if (m == NULL) {
-        return NULL;
+    MOD_DEF(m, "theta_sketches", "No docs", nullptr);
+    if (m == nullptr) {
+        return nullptr;
     }
 
     bodo_common_init();

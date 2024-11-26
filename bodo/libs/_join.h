@@ -22,11 +22,8 @@ const int64_t DEFAULT_BLOCK_SIZE_BYTES = 500 * 1024;
  * @param l_ind index in left table
  * @param r_ind index in right table
  */
-typedef bool (*cond_expr_fn_t)(array_info** left_table,
-                               array_info** right_table, void** left_data1,
-                               void** right_data1, void** left_null_bitmap,
-                               void** right_null_bitmap, int64_t l_ind,
-                               int64_t r_ind);
+using cond_expr_fn_t = bool (*)(array_info**, array_info**, void**, void**,
+                                void**, void**, int64_t, int64_t);
 
 /**
  * @brief Same as previous function type, but processes data in batches and sets
@@ -47,11 +44,9 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
  * @param right_block_start start index for right table loop
  * @param right_block_end end index for right table loop
  */
-typedef void (*cond_expr_fn_batch_t)(
-    array_info** left_table, array_info** right_table, void** left_data1,
-    void** right_data1, void** left_null_bitmap, void** right_null_bitmap,
-    uint8_t* match_arr, int64_t left_block_start, int64_t left_block_end,
-    int64_t right_block_start, int64_t right_block_end);
+using cond_expr_fn_batch_t = void (*)(array_info**, array_info**, void**,
+                                      void**, void**, void**, uint8_t*, int64_t,
+                                      int64_t, int64_t, int64_t);
 
 /** This function does the joining of the table and returns the joined
  * table
@@ -228,61 +223,3 @@ int get_bcast_join_threshold();
 
 std::shared_ptr<table_info> rebalance_join_output(
     std::shared_ptr<table_info> original_output);
-
-template <bool is_left_outer, bool is_right_outer, bool non_equi_condition,
-          typename Allocator>
-void nested_loop_join_table_local(
-    std::shared_ptr<table_info> left_table,
-    std::shared_ptr<table_info> right_table, cond_expr_fn_batch_t cond_func,
-    bool parallel_trace, bodo::vector<int64_t>& left_idxs,
-    bodo::vector<int64_t>& right_idxs,
-    bodo::vector<uint8_t>& left_row_is_matched,
-    bodo::vector<uint8_t, Allocator>& right_row_is_matched,
-    int64_t right_offset = 0);
-
-template <typename BitMapAllocator>
-void add_unmatched_rows(bodo::vector<uint8_t, BitMapAllocator>& bit_map,
-                        size_t n_rows, bodo::vector<int64_t>& table_idxs,
-                        bodo::vector<int64_t>& other_table_idxs,
-                        bool needs_reduction, int64_t offset = 0);
-
-std::shared_ptr<table_info> create_out_table(
-    std::shared_ptr<table_info> left_table,
-    std::shared_ptr<table_info> right_table, bodo::vector<int64_t>& left_idxs,
-    bodo::vector<int64_t>& right_idxs, bool* key_in_output,
-    int64_t* use_nullable_arr_type, uint64_t* cond_func_left_columns,
-    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
-    uint64_t cond_func_right_column_len);
-
-/**
- * @brief Create data structures for column data to match the format
- * expected by cond_func. We create three vectors:
- * the array_infos (which handle general types), and data1/nullbitmap pointers
- * as a fast path for accessing numeric data. These include both keys
- * and data columns as either can be used in the cond_func.
- * Defined in _nested_loop_join.cpp
- *
- * @param table Input table
- * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
- * std::vector<void*>> Vectors of array info, data1, and null bitmap pointers
- */
-std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
-get_gen_cond_data_ptrs(std::shared_ptr<table_info> table);
-
-/**
- * @brief Populate existing data structures with column data to match the
- * format expected by cond_func. We append pointers to three vectors:
- * array_infos (which handle general types), and data1/nullbitmap pointers
- * as a fast path for accessing numeric data. These include both keys
- * and data columns as either can be used in the cond_func.
- * Defined in _nested_loop_join.cpp
- *
- * @param table Input table
- * @param table_infos Pointer to output vector of array infos
- * @param col_ptrs Pointer to output vector of data1 pointers
- * @param null_bitmaps Pointer to output vector of null_bitmap pointers
- */
-void get_gen_cond_data_ptrs(std::shared_ptr<table_info> table,
-                            std::vector<array_info*>* array_infos,
-                            std::vector<void*>* col_ptrs,
-                            std::vector<void*>* null_bitmaps);

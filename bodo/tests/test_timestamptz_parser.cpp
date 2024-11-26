@@ -20,7 +20,7 @@ static bodo::tests::suite tests([] {
     }
     bodo::tests::test("test_consume_char", [] {
         std::string_view ts_str = "a";
-        Parser parser{ts_str};
+        Parser parser{.ts_str = ts_str};
         int v = parser.consume_char('a');
         bodo::tests::check(v == 0);
         bodo::tests::check(parser.pos == 1);
@@ -95,7 +95,7 @@ static bodo::tests::suite tests([] {
         {
             std::string_view ts_str =
                 "\"2020-01-02 03:04:05.000000000 +06:07\"";
-            Parser parser{ts_str};
+            Parser parser{.ts_str = ts_str};
             auto [ts, tz] = parser.parse_timestamptz();
             bodo::tests::check(tz == 367);
             bodo::tests::check(ts == 1577912225000000000);
@@ -104,7 +104,7 @@ static bodo::tests::suite tests([] {
         {
             std::string_view ts_str =
                 "\"2020-01-02 03:04:05.123456789 -06:07\"";
-            Parser parser{ts_str};
+            Parser parser{.ts_str = ts_str};
             auto [ts, tz] = parser.parse_timestamptz();
             bodo::tests::check(tz == -367);
             bodo::tests::check(ts == 1577956265123456789);
@@ -113,7 +113,7 @@ static bodo::tests::suite tests([] {
 
     bodo::tests::test("test_parse_ttz_0_offset", [] {
         std::string_view ts_str = "\"2020-01-02 03:04:05.000000000 Z\"";
-        Parser parser{ts_str};
+        Parser parser{.ts_str = ts_str};
         auto [ts, tz] = parser.parse_timestamptz();
         bodo::tests::check(tz == 0);
         bodo::tests::check(ts == 1577934245000000000);
@@ -122,7 +122,7 @@ static bodo::tests::suite tests([] {
     bodo::tests::test("test_parse_ttz_0_offset_with_ns", [] {
         {
             std::string_view ts_str = "\"2020-01-02 03:04:05.123456789 Z\"";
-            Parser parser{ts_str};
+            Parser parser{.ts_str = ts_str};
             auto [ts, tz] = parser.parse_timestamptz();
             bodo::tests::check(tz == 0);
             bodo::tests::check(ts == 1577934245123456789);
@@ -130,7 +130,7 @@ static bodo::tests::suite tests([] {
 
         {
             std::string_view ts_str = "\"2020-01-02 03:04:05.100000000 Z\"";
-            Parser parser{ts_str};
+            Parser parser{.ts_str = ts_str};
             auto [ts, tz] = parser.parse_timestamptz();
             bodo::tests::check(tz == 0);
             bodo::tests::check(ts == 1577934245100000000);

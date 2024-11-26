@@ -1,9 +1,9 @@
 // Copyright (C) 2023 Bodo Inc. All rights reserved.
 #include "_nested_loop_join.h"
-#include "_array_operations.h"
+
 #include "_array_utils.h"
 #include "_bodo_common.h"
-#include "_dict_builder.h"
+#include "_distributed.h"
 #include "_nested_loop_join_impl.h"
 #include "_shuffle.h"
 
@@ -94,12 +94,11 @@ table_info* nested_loop_join_table(
             bodo::vector<uint8_t> other_row_is_matched(n_bytes_other, 0);
 
 #ifndef JOIN_TABLE_LOCAL_DISTRIBUTED
-#define JOIN_TABLE_LOCAL_DISTRIBUTED(                                          \
-    left_table_outer, right_table_outer, non_equi_condition,                   \
-    left_table_outer_exp, right_table_outer_exp, non_equi_condition_exp)       \
+#define JOIN_TABLE_LOCAL_DISTRIBUTED(left_table_outer, right_table_outer,      \
+                                     left_table_outer_exp,                     \
+                                     right_table_outer_exp)                    \
     if (left_table_outer == left_table_outer_exp &&                            \
-        right_table_outer == right_table_outer_exp &&                          \
-        non_equi_condition == non_equi_condition_exp) {                        \
+        right_table_outer == right_table_outer_exp) {                          \
         for (int p = 0; p < n_pes; p++) {                                      \
             std::shared_ptr<table_info> bcast_table_chunk =                    \
                 broadcast_table(bcast_table, bcast_table, nullptr,             \
@@ -109,23 +108,19 @@ table_info* nested_loop_join_table(
             size_t n_bytes_bcast =                                             \
                 is_bcast_outer ? (bcast_table_chunk->nrows() + 7) >> 3 : 0;    \
             bcast_row_is_matched.resize(n_bytes_bcast);                        \
-            std::fill(bcast_row_is_matched.begin(),                            \
-                      bcast_row_is_matched.end(), 0);                          \
+            std::ranges::fill(bcast_row_is_matched, 0);                        \
                                                                                \
             bodo::vector<int64_t> left_idxs;                                   \
             bodo::vector<int64_t> right_idxs;                                  \
             if (left_table_bcast) {                                            \
                 nested_loop_join_table_local<left_table_outer_exp,             \
-                                             right_table_outer_exp,            \
-                                             non_equi_condition_exp>(          \
+                                             right_table_outer_exp>(           \
                     bcast_table_chunk, other_table, cond_func, parallel_trace, \
                     left_idxs, right_idxs, bcast_row_is_matched,               \
                     other_row_is_matched);                                     \
             } else {                                                           \
-                nested_loop_join_table_local<                                  \
-                    left_table_outer_exp, right_table_outer_exp,               \
-                    non_equi_condition_exp,                                    \
-                    bodo::STLBufferPoolAllocator<std::uint8_t>>(               \
+                nested_loop_join_table_local<left_table_outer_exp,             \
+                                             right_table_outer_exp>(           \
                     other_table, bcast_table_chunk, cond_func, parallel_trace, \
                     left_idxs, right_idxs, other_row_is_matched,               \
                     bcast_row_is_matched);                                     \
@@ -157,26 +152,13 @@ table_info* nested_loop_join_table(
         }                                                                      \
     }
 #endif
-            bool non_equi_condition = cond_func != nullptr;
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, true, true, true);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, true, true, false);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, true, false, true);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, true, false,
-                                         false);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, false, true, true);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, false, true,
-                                         false);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, false, false,
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer, true,
                                          true);
-            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer,
-                                         non_equi_condition, false, false,
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer, true,
+                                         false);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer, false,
+                                         true);
+            JOIN_TABLE_LOCAL_DISTRIBUTED(is_left_outer, is_right_outer, false,
                                          false);
 #undef JOIN_TABLE_LOCAL_DISTRIBUTED
 
@@ -223,36 +205,24 @@ table_info* nested_loop_join_table(
             bodo::vector<uint8_t> right_row_is_matched(n_bytes_right, 0);
 
 #ifndef JOIN_TABLE_LOCAL_REPLICATED
-#define JOIN_TABLE_LOCAL_REPLICATED(                                       \
-    left_table_outer, right_table_outer, non_equi_condition,               \
-    left_table_outer_exp, right_table_outer_exp, non_equi_condition_exp)   \
+#define JOIN_TABLE_LOCAL_REPLICATED(left_table_outer, right_table_outer,   \
+                                    left_table_outer_exp,                  \
+                                    right_table_outer_exp)                 \
     if (left_table_outer == left_table_outer_exp &&                        \
-        right_table_outer == right_table_outer_exp &&                      \
-        non_equi_condition == non_equi_condition_exp) {                    \
+        right_table_outer == right_table_outer_exp) {                      \
         nested_loop_join_table_local<left_table_outer_exp,                 \
-                                     right_table_outer_exp,                \
-                                     non_equi_condition_exp>(              \
+                                     right_table_outer_exp>(               \
             left_table, right_table, cond_func, parallel_trace, left_idxs, \
             right_idxs, left_row_is_matched, right_row_is_matched);        \
     }
 #endif
-            bool non_equi_condition = cond_func != nullptr;
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, true, true, true);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, true, true, false);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, true, false, true);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, true, false, false);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, false, true, true);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, false, true, false);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, false, false, true);
-            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer,
-                                        non_equi_condition, false, false,
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer, true,
+                                        true);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer, true,
+                                        false);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer, false,
+                                        true);
+            JOIN_TABLE_LOCAL_REPLICATED(is_left_outer, is_right_outer, false,
                                         false);
 #undef JOIN_TABLE_LOCAL_REPLICATED
 
@@ -288,7 +258,7 @@ table_info* nested_loop_join_table(
         return new table_info(*out_table);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
+        return nullptr;
     }
 }
 
@@ -380,51 +350,4 @@ std::shared_ptr<table_info> create_out_table(
     right_table.reset();
 
     return std::make_shared<table_info>(out_arrs);
-}
-
-// Header and docstring are defined in _join.h
-std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
-get_gen_cond_data_ptrs(std::shared_ptr<table_info> table) {
-    std::vector<array_info*> array_infos;
-    std::vector<void*> col_ptrs;
-    std::vector<void*> null_bitmaps;
-
-    // get raw array_info pointers for cond_func
-    get_gen_cond_data_ptrs(table, &array_infos, &col_ptrs, &null_bitmaps);
-    return std::make_tuple(array_infos, col_ptrs, null_bitmaps);
-}
-
-// Header and docstring are defined in _join.h
-void get_gen_cond_data_ptrs(std::shared_ptr<table_info> table,
-                            std::vector<array_info*>* array_infos,
-                            std::vector<void*>* col_ptrs,
-                            std::vector<void*>* null_bitmaps) {
-    array_infos->reserve(table->ncols());
-    col_ptrs->reserve(table->ncols());
-    null_bitmaps->reserve(table->ncols());
-
-    for (const std::shared_ptr<array_info>& arr : table->columns) {
-        array_infos->push_back(arr.get());
-        col_ptrs->push_back(static_cast<void*>(arr->data1()));
-        null_bitmaps->push_back(static_cast<void*>(arr->null_bitmask()));
-    }
-}
-
-// Header and docstring are defined in _join.h
-void nested_loop_join_handle_dict_encoded(
-    std::shared_ptr<table_info> left_table,
-    std::shared_ptr<table_info> right_table, bool left_parallel,
-    bool right_parallel) {
-    // make all dictionaries global (necessary for broadcast and potentially
-    // other operations)
-    for (std::shared_ptr<array_info> a : left_table->columns) {
-        if (a->arr_type == bodo_array_type::DICT) {
-            make_dictionary_global_and_unique(a, left_parallel);
-        }
-    }
-    for (std::shared_ptr<array_info> a : right_table->columns) {
-        if (a->arr_type == bodo_array_type::DICT) {
-            make_dictionary_global_and_unique(a, right_parallel);
-        }
-    }
 }
