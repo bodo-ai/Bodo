@@ -1,6 +1,10 @@
 #!/bin/bash
 set -exo pipefail
 
+# Package Setup
+eval "$(micromamba shell hook -s posix)"
+micromamba activate bodosql_build
+
 CHANNEL_NAME=${1:-bodo-binary}
 OS_DIR=${2:-linux-64}
 BODO_VERSION=${3:-}
@@ -10,19 +14,7 @@ USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
 TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
-# ARM builds use miniforge to cross compile instead of conda
-export PATH=$HOME/miniforge3/bin:$PATH
-set +x
-source activate bodo_build
-set -x
-
-label=""
-if [[ "$OBFUSCATE" == 1 ]] && [[ -n "$IS_RELEASE" ]]\
-    && [[ "$CHANNEL_NAME" == "bodo.ai" ]]; then
-    # If we have a major release upload with our main anaconda label
-    label="main"
-fi
-
+label="main"
 PACKAGE_DIR=$HOME/conda-bld/$OS_DIR
 
 for package in `ls $PACKAGE_DIR/bodo*.conda`; do
@@ -37,12 +29,10 @@ curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANN
 
 # Block on checking if the reindex has failed.
 set +e
-if [[ $OS_DIR != "osx-arm64" ]]; then
-    exit_status=1
-    while [[ $exit_status != 0 ]]
-    do
-        sleep 30
-        conda search bodo="${BODO_VERSION}" -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${CHANNEL_NAME}/${OS_DIR}
-        exit_status=$?
-    done
-fi
+exit_status=1
+while [[ $exit_status != 0 ]]
+do
+    sleep 30
+    conda search bodo="${BODO_VERSION}" -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${CHANNEL_NAME}/${OS_DIR}
+    exit_status=$?
+done
