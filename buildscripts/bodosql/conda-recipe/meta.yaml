@@ -34,5 +34,5 @@ test:
 about:
 home: https://bodo.ai/
 license: Proprietary
-license_file: LICENSE.md
+license_file: LICENSE
 summary: Bodo SQL Engine

@@ -27,10 +27,6 @@ requirements:
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
     - sccache
-    # This should be installed automatically as a depended of the cpp compiler,
-    # but we need to explicitly specify it so that we can pin the version with
-    # the variant file for pip.
-    - libstdcxx-ng  # [linux64]
 
   host:
     - python
@@ -57,14 +53,12 @@ requirements:
     - libcurl ~= 8.0
     - hdf5 >=1.14.3,<1.14.4.0a0=mpi_mpich_* # [not win]
     - h5py
-    - mpich 4.2.3=h* # [not win]
+    - mpich 4.1.*=h* # [not win]
     - msmpi # [win]
     - vc # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
     - fftw >=3.3.10,<3.4.0a0=mpi_mpich_*
-    # See comment on build libstdcxx-ng above
-    - libstdcxx-ng  # [linux64]
     - requests
     - aws-sdk-cpp
     - zstd<=1.5.6
@@ -107,5 +101,5 @@ test:
 about:
   home: https://bodo.ai
   license: Proprietary
-  license_file: LICENSE.md
+  license_file: LICENSE
   summary: Python Supercomputing Analytics Platform
