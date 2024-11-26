@@ -6,6 +6,7 @@ requires = [
     "cython>=3.0,<3.1",
     "numpy>=1.24,<1.27",
     "pyarrow==17.0.0",
+    "pip"
 ]
 build-backend = "scikit_build_core.build"
 
@@ -192,7 +193,7 @@ build-frontend = { name = "pip", args = ["--no-build-isolation"] }
 [tool.cibuildwheel.macos]
 # Can't use pytest because we don't include tests in the wheel
 test-command = """
-mpiexec -n 2 python -c '\
+BODO_NUM_WORKERS=2 python -c '\
 import bodo
 import pandas as pd
 if bodo.get_rank() == 0:
