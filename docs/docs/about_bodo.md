@@ -4,23 +4,22 @@ hide:
   - footer
 ---
 
-# About Bodo
+# Bodo: High-Performance Python Compute Engine for Data and AI
 
-Bodo is a high performance SQL & Python compute engine that brings HPC and supercomputing techniques to data processing for the first time and combines them with database optimizations:
+Bodo is a cutting-edge compute engine that brings high-performance computing (HPC) speed
+and scalability to Python data and AI programs. Powered by an innovative auto-parallelizing
+just-in-time (JIT) compiler, Bodo transforms Python programs into highly optimized,
+parallel binaries without requiring code rewrites.
 
-![Image title](img/bodo-arch-light.svg#only-light){ align=right width=40% }
-![Image title](img/bodo-arch-dark.svg#only-dark){ align=right width=40% }
+Unlike traditional distributed computing frameworks, Bodo:
 
-- HPC compiler optimizes compute operations aggressively, leading to high efficiency for expensive compute-heavy queries.
-- HPC parallel architecture with MPI ensures maximum parallel execution efficiency and scalability.
-- Plugin architecture with Snowflake SQL compatibility and Iceberg storage as well as Snowflake native storage support breaks vendor lock-in and enables a multi-engine environment.
-    
+- Seamlessly supports native Python APIs like Pandas and NumPy.
+- Eliminates runtime overheads common in driver-executor models by leveraging Message Passing Interface (MPI) technology for true distributed execution.
 
 
-Bodo is delivered as a simple SaaS service and can be plugged into existing data stacks easily:
+## Key Features
 
-- Plugin Bodo SDK in your Airflow or other scripts to submit queries.
-- Use Bodo connectors for existing ETL tools to use Bodo immediately.
-- Bodo managed clusters stay in your own AWS/Azure account ensuring no data leaves your environment.
-
-**[Contact us](https://bodo.ai/contact/) to learn more about Bodo and how it can help you with your data processing needs.** 
+- Automatic optimization & parallelization of Python programs using Pandas and NumPy.
+- Linear scalability from laptops to large-scale clusters and supercomputers.
+- Advanced scalable I/O support for Iceberg, Snowflake, Parquet, CSV, and JSON with automatic filter pushdown and column pruning for optimized data access.
+- High-Performance SQL Engine that is natively integrated into Python.

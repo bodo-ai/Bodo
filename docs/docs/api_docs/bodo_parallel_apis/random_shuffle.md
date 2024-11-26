@@ -12,7 +12,7 @@ Manually shuffle data evenly across selected ranks.
 
 ### Example Usage
 
-Note that this example uses [SPMD mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
+Note that this example uses [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
     
 ```py
 import bodo

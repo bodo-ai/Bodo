@@ -1,4 +1,4 @@
-# Bodo Iceberg Quickstart (Local) {#quickstart-local-iceberg}
+# Bodo Iceberg Quick Start {#quickstart-local-iceberg}
 
 This quickstart guide will walk you through the process of creating and reading from an Iceberg table using Bodo on your local machine.
 

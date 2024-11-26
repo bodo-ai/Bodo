@@ -8,7 +8,7 @@ tags:
 
 ---
 
-# Getting started with the Bodo Platform {#bodoplatformquickstart}
+# Getting started with the Bodo Cloud Platform {#bodoplatformquickstart}
 
 
 This page provides a quick start guide to set up Bodo platform in your AWS account easily and quickly.

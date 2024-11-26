@@ -13,7 +13,7 @@ Distribute data manually by *scattering* data from one process to all processes.
       Currently, `bodo.scatterv` only supports scattering from rank 0.
 
 !!! note
-      The following examples use [SPMD mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
+      The following examples use [SPMD launch mode](../../bodo_parallelism/bodo_parallelism_basics.md#spmd).
 
 ### Example Usage
 
